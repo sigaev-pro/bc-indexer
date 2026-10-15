@@ -1,5 +1,7 @@
 # Стек компонентов: проектный baseline E00-03.03
 
+> Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
+
 2026-10-15. Технический выбор для последующей реализации; версии проверены по upstream manifests/releases, но совместная сборка и runtime не проверены. D21/D22 принимают Compose + Kubernetes и NATS внутри обеих сред. Эти ответы не утверждают HA, replicas, retention и storage backend.
 
 ## Компоненты и интеграция
@@ -12,9 +14,9 @@
 | Arbitrum Nitro adapter | Go в Nitro v3.12.1 с его собственным Geth; native Rust/cgo/WASM build dependencies | ArbOS/Stylus/native special paths; отдельная сборка и fixtures |
 | Arbitrum Classic adapter | Go + C++ AVM, Classic v1.4.7 candidate | Native result reader + consensus-neutral observer candidate; отдельный history runtime той же сети |
 | Polygon adapter | Go внутри Bor v2.10.2, Heimdall-v2 v0.12.2 | Native tx и StateSync/Finalize, отдельный optional legacy scope |
-| Canonical Coordinator | Библиотечный модуль адаптера/контура соответствующей сети | Отдельный общий сервис для всех сетей не вводится. При нескольких producers один владелец canonical/lifecycle state; интерфейс и placement уточняет .04 |
+| Canonical Coordinator | Библиотечный модуль адаптера/контура соответствующей сети | Отдельный общий сервис для всех сетей не вводится. Каждый producer/run владеет своим lifecycle state; единого владельца для устранения пересечений нет; см. STATE_OWNERSHIP |
 | Gateway/publisher | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0; один экземпляр роли publisher на сеть | Единый исходный код/binary для всех сетей, отдельный процесс и конфиг каждой сети; NATS SDK только здесь |
-| Wire schema | Protobuf proto3 с explicit presence и closed oneof | Одна versioned schema, native validators, transaction/block/coverage/lifecycle/parts из MESSAGE_CONTRACT |
+| Wire schema | Protobuf proto3 с explicit presence и closed oneof | Одна versioned schema, native validators, transaction/block metadata/lifecycle/parts из MESSAGE_CONTRACT |
 | Генерация Go | protoc 36.2 + protobuf-go/protoc-gen-go 1.36.12 | protoc-gen-go-grpc из согласованного source release grpc-go; точный module tag/commit и lock фиксируются E01/E02, не подменяются версией server SDK |
 | Rust transport/codec | tonic 0.14.6 + tonic-prost/tonic-prost-build 0.14.6; prost/prost-build 0.14.4 | Общая proto schema; встройка в Base Cargo graph проверяется E01/E02, upstream lock клиента не обновляется автоматически |
 | Adapter → Gateway | gRPC streaming; локальный UDS при совместном размещении, TCP+mTLS при сетевом соединении | Оба конца проверяют schema/profile/размер/целостность; production topology определяет endpoint, не семантику данных |

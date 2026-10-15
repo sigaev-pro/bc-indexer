@@ -10,7 +10,7 @@
 | E00-03.02 | Определить границу поставки и способы запуска | D21/D22: Compose + Kubernetes, NATS внутри обеих сред | DONE |
 | E00-03.03 | Закрепить стек и интеграции | [COMPONENT_STACK](COMPONENT_STACK.md): версии-кандидаты, common SDK и packaging; build-проверки в E01 | DONE — проектный baseline |
 | E00-03.04 | Определить владельцев состояния | [STATE_OWNERSHIP](STATE_OWNERSHIP.md): capture, lifecycle, IDs/bytes/parts, прогресс и ACK; physical storage зависит от REC | DONE — логическая модель |
-| E00-03.05 | Описать live и историю | Native executor/state, ресурсы, overlap и coverage; ARCH-03 открыт; command/reload зависит от JOB-01 | WAITING_USER |
+| E00-03.05 | Описать live и историю | D23–D25: отдельные pods, простая команда N–M, дубли допустимы, локальный прогресс до NATS; [результат](LIVE_HISTORY_DELIVERY.md) | DONE |
 | E00-03.06 | Определить границы доставки и поведение при сбоях | Передачи ответственности, PubAck/IngestAck, backpressure, retry/fencing; вопросы сохранности/потери диска/retention переданы в E00-06, ответы не предполагаются | TODO; зависит от REC |
 | E00-03.07 | Свести итог и проверить согласованность | Компонент → стек → интеграция → состояние → гарантии → fixture; документы согласованы, обязательные открытые решения закрыты либо явно вынесены за согласованный scope | TODO |
 
@@ -21,7 +21,7 @@
 ### Уже принято пользователем
 
 - Пять сетей: Ethereum Mainnet, BSC Mainnet, Base Mainnet, Arbitrum One, Polygon PoS.
-- Полные включённые транзакции и применимые детали; typed block/coverage/lifecycle. Самостоятельные изменения балансов вне транзакций optional по D17.
+- Полные включённые транзакции и применимые детали; typed block metadata/lifecycle. Самостоятельные изменения балансов вне транзакций optional по D17.
 - Конечная граница — нормализованные сообщения в NATS JetStream. Последующая обработка вне задачи.
 - Обычно одна транзакция — одно сообщение; крупная запись разбивается без усечения.
 - Каждая сеть имеет свой node/adapter/WAL/Gateway и служебный журнал. Общий NATS с раздельными потоками/subjects/лимитами; добавление сети не зависит от прогресса остальных.
@@ -37,12 +37,12 @@
 |---|---|---|---|
 | Native runtime каждой сети | Исполнить блок по native правилам и дать результаты/сигналы canonical chain | [CLIENT_MATRIX](CLIENT_MATRIX.md): Geth, BSC, Base, Nitro, Bor; Classic — отдельный historical runtime Arbitrum One | Build/toolchain доказательство, точные supporting clients и доступность historical inputs |
 | Adapter внутри native integration | Захватить все применимые transaction details и нормализовать | Go для Geth/BSC/Nitro/Bor; Rust для Base; Classic Go + C++ AVM observer candidate | Конкретные module boundaries, hook budgets и versioned decoders; E00-03.03/E01/E02 |
-| Canonical Coordinator | Связать execution с canonical inclusion, reorg/finality и lifecycle | Это роль контура одной сети; общесетевого coordinator нет | Где исполняется роль, кто хранит и изменяет activation/overlap state; E00-03.04 |
+| Canonical Coordinator | Связать execution с canonical inclusion, reorg/finality и lifecycle | Это роль контура одной сети; общесетевого coordinator нет | Lifecycle state каждого producer/run; E00-03.04 с поправкой D24 |
 | Adapter WAL | Удерживать собранные записи и pending delivery до согласованного ACK | Нужен служебный журнал; это не пользовательское downstream-хранилище | Backend, fsync/atomic boundary, пределы и очистка — после REC |
 | Adapter → Gateway | Передать проверяемую versioned запись или её части | Рабочий проект: Protobuf/gRPC, UDS локально / mTLS TCP между хостами | Зафиксировать baseline transport и library/build pins; E00-03.03 |
 | Gateway / publisher сети | Валидировать envelope/parts, регистрировать публикацию, отправлять в JetStream и подтверждать доставку | Отдельный Gateway каждой сети принят D19; общий сервис между сетями не вводится | Go/gRPC-Go/NATS Go client — кандидаты; ownership publication mapping и fencing — E00-03.04/06 |
 | NATS JetStream | Принять сообщения и выдать PubAck | D22: проект включает развёртывание в Kubernetes/Compose; общий NATS с раздельными streams/лимитами | Replicas/retention/discard — REC |
-| History worker | Выполнять выбранный диапазон через native runtime при продолжающемся live | N–M и независимость сетей приняты; Classic нужен только соответствующим диапазонам Arbitrum | Исполнение/ресурсы/overlap — E00-03.05; интерфейс команды и YAML — JOB-01 |
+| History worker | Выполнять выбранный диапазон через native runtime при продолжающемся live | N–M и независимость сетей приняты; Classic нужен только соответствующим диапазонам Arbitrum | Отдельный pod/process и команда приняты D23; YAML/reload/bootstrap — JOB-01/CFG |
 | Приёмочный считыватель | Проверить опубликованные данные против native fixtures | Тестовый инструмент, не промышленный downstream-компонент | Стек и воспроизводимые fixtures; E00-03.03/07, затем E01–E07 |
 | Конфигурации запуска | Запустить native компоненты сетей и NATS | D21/D22: Compose и Kubernetes входят в поставку | Sizing/recovery — REC; YAML/reload — E00-07/09 |
 
@@ -58,7 +58,7 @@
 |---|---|
 | Q5/Q6: клиенты, hooks, integration | E00-13/15 source research выполнены; E00-03.03 сводит решения, E01 проверяет исполнение |
 | Q7: fixtures/oracle/support | Исследовательские fixtures существуют; E00-03.07 связывает их с gate; runtime-проверки позже |
-| Q8/Q9: history inputs и live overlap | E00-03.05; control interface зависит от JOB-01 |
+| Q8/Q9: history inputs и live overlap | D23–D25 приняты; оставшиеся YAML/reload/bootstrap — JOB-01/CFG |
 | Q10/Q11: модель, IDs, lifecycle | E00-14/15 логическая схема; E00-03.04/06 определяют ответственность; compiled schema — E02 |
 | Q12/Q13: надёжность, storage, fencing, retention | E00-03.04/06; требования восстановления зависят от отдельного E00-06/REC |
 | Q14/Q15: итоговый стек, сборка, последовательность | E00-03.03/07; общий план после ответов уточняет E00-04 |
@@ -80,16 +80,16 @@ ARCH-01 не выбирает автоматически Helm, конкретн�
 
 [COMPONENT_STACK.md](COMPONENT_STACK.md): native builds отдельно; Gateway Go 1.27.2/gRPC-Go 1.84.0/nats.go 1.54.0, общая Protobuf schema и Rust tonic/prost transport. NATS SDK не навязывает Go 1.26 клиентам с Go 1.25. [NATS_DEPLOYMENT_STACK.md](research/NATS_DEPLOYMENT_STACK.md) подтверждает official Helm chart/server candidates и explicit JetStream/persistent volume configuration. Совместная сборка ещё не проверена.
 
-[STATE_OWNERSHIP.md](STATE_OWNERSHIP.md): coordinator отвечает за canonical lifecycle/event IDs/source bytes и overlap; adapter delivery writer — за fixed part layout и received ACK; Gateway — за publication mapping/chain_sequence/PubAck. Native runtime определяет каноничность. Read cursor не равен published coverage. Backend/fsync/crash-atomicity остаются REC.
+[STATE_OWNERSHIP.md](STATE_OWNERSHIP.md): native lifecycle bridge отвечает за наблюдения своего producer/run; adapter delivery writer — за event IDs/source bytes, fixed part layout и received ACK; Gateway — за publication mapping/chain_sequence/PubAck. Native runtime определяет каноничность. Read cursor не равен подтверждённой доставке. Backend/fsync/crash-atomicity остаются REC.
 
 Это технические проектные решения в рамках порученной детализации, не новые ответы пользователя и не runtime-приёмка.
 
-## E00-03.05 — текущий вопрос
+## E00-03.05 — завершён
 
-ARCH-03: допускаются ли дополнительные CPU/RAM и дисковое historical state для отдельного history-процесса сети по необходимости? Рекомендация — отдельный ограниченный ресурсами worker с тем же coordinator/Gateway. Альтернатива — измерить ресурсные затраты на POC до выбора. Требование продолжать live сохраняется в обоих случаях; общий runtime без измерений не считается удовлетворяющим ему.
+ARCH-03 закрыт D23: live и history — разные pods/processes, native historical state и ресурсы принадлежат своему worker. D24 разрешает overlap без дедупликации. D25 ограничивает контроль стадиями получения, WAL и NATS PubAck. Результат: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
 
 Ответ ожидается. Это выбор ресурсной модели, не повторный вопрос о наличии N–M и не открытие JOB-01 о командах/YAML. Отдельный процесс не обязательно означает вторую постоянно синхронизируемую полноценную ноду: native replay и достаточность state/archive проверяются по профилю сети. Недоступный диапазон нельзя молча обрезать.
 
 ## Точка продолжения
 
-E00-03.01–04 завершены в документальных границах. .05 ждёт ARCH-03. После ответа сначала записать решение в DECISIONS/PROJECT_STATUS, затем завершить схему live/history. .06 зависит от отдельного REC; не подставлять recommended sizing/HA/storage вместо отсутствующих требований. Код и deployments не создавались.
+E00-03.01–05 завершены как документы. Следующий .06: WAL/быстрое локальное хранилище, ACK и восстановление. Backend, durability, retention и потеря диска требуют отдельного REC. После обновлений и проверок сделать commit до следующего подэтапа. Код и deployments не создавались.

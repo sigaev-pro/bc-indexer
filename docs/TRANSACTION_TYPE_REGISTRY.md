@@ -1,12 +1,14 @@
 # Реестр native transaction types
 
+> Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
+
 E00-14, 2026-10-15. Проект нормативной модели для пяти сетей, основанный на закреплённых исходниках [CLIENT_MATRIX.md](CLIENT_MATRIX.md). Это не результат исполнения fixtures и не подтверждение активности каждого типа в Mainnet. Контракт сообщений: [MESSAGE_CONTRACT.md](MESSAGE_CONTRACT.md).
 
 ## Правила профиля
 
 Ключ варианта: `(network identity, execution profile, native type)`. Один byte type без сети и fork profile недостаточен. Профиль содержит commit клиента, версию адаптера, fork schedule и версию нормализации. Применимость определяется нативными правилами конкретного блока, включая timestamp/height/ArbOS version, а не текущими настройками head.
 
-В общей записи нет обязательных для всех типов signature, account nonce, gas price или получателя. Поля располагаются в конкретном варианте `oneof`; отсутствующее по модели поле не подменяется нулём. Типизированная execution projection отделена от исходных полей. Неизвестный тип, fork или обязательное поле останавливает объявление полноты соответствующего блока; транзакцию нельзя пропустить или выдать за обычную legacy.
+В общей записи нет обязательных для всех типов signature, account nonce, gas price или получателя. Поля располагаются в конкретном варианте `oneof`; отсутствующее по модели поле не подменяется нулём. Типизированная execution projection отделена от исходных полей. Неизвестный тип, неподдержанный fork или отсутствие обязательного поля дают явную ошибку обработки; успешная доставка такого блока не объявляется.
 
 `Q` — UInt256; `A` — Address20; `H` — Hash32; `B` — bytes. `Target` — `Call(A) | Create`; это явное различие, не нулевой адрес. Все поля варианта обязательны, кроме явно отмеченных optional. `[]` — упорядоченная последовательность, в том числе пустая. Нативные более узкие целые дополнительно проверяются на исходную разрядность.
 
@@ -77,7 +79,7 @@ Signed/contract/compressed/deposit variants и native result enums требую�
 
 Receipt source hash для Classic — native MessageID/request_id. Normalized hash kind=`NATIVE_REQUEST_ID`; raw kinds=`CLASSIC_REQUEST_BYTES | CLASSIC_AVM_VALUE`. Ethereum projection хранится отдельно и может отсутствовать. Native retryable projection создаёт dummy LegacyTx с нулевыми полями; эти значения не становятся исходными nonce/gas/signature.
 
-Полный source inventory читается из persisted AVM TxResult/BlockInfo log range, затем отдельно сверяется с Ethereum projection. Функция FilterEthTxResults способна исключать неподдающиеся конвертации результаты; нельзя считать projected body полным inventory. Каждый persisted результат явно классифицируется; control/batch input сам по себе не объявляется транзакцией. Unknown kind блокирует COMPLETE. Исследование показывает возможность фильтрации в коде; конкретные Mainnet примеры ещё требуют fixtures.
+Полный source inventory читается из persisted AVM TxResult/BlockInfo log range, с сохранением связи с Ethereum projection; отдельный runtime verifier полноты не вводится. Функция FilterEthTxResults способна исключать неподдающиеся конвертации результаты; нельзя считать projected body полным inventory. Каждый persisted результат явно классифицируется; control/batch input сам по себе не объявляется транзакцией. Unknown kind блокирует COMPLETE. Исследование показывает возможность фильтрации в коде; конкретные Mainnet примеры ещё требуют fixtures.
 
 Native GetBlockResults проверяет BlockInfo и декодирует TxResult из префикса длиной BlockStats.TxCount; остальные AVM logs не становятся транзакциями. Принадлежность результату блока задаётся этим native range, а не только IncomingRequest.L2BlockNumber: source допускает расхождение для RevertCode. Исходное поле request сохраняется отдельно, без переопределения канонического BlockRef.
 

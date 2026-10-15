@@ -1,5 +1,7 @@
 # Архитектура сбора и публикации в NATS
 
+> Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
+
 2026-10-15. D16 задаёт границу, D17–D19 фиксируют типизацию, части и топологию; D20 откладывает управление историей. Детальное ТЗ — [v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [план](DEVELOPMENT_PLAN.md), решения — [журнал](DECISIONS.md).
 
 ## Результат
@@ -18,7 +20,7 @@ Native node/executor → Adapter + Canonical Coordinator → локальный 
 |---|---|---|
 | Native node/executor | Родное исполнение live/import и истории, receipts, состояние, canonical/finality notifications | Клиенты/commits проверены по исходникам в CLIENT_MATRIX; native executor каждой сети, runtime-доказательство в E01 |
 | Adapter | Все транзакции, calls/logs/state changes и транзакционные balance actions; нормализация | Go для Geth/BSC/Nitro/Bor, Rust для Base; Classic — отдельный Go native reader + C++ AVM observer, требующий POC; pins и условия в CLIENT_MATRIX |
-| Canonical Coordinator | Отличает speculative execution от canonical inclusion, назначает lifecycle/порядок, связывает history/live | Модуль адаптера сети; logical ownership определён в STATE_OWNERSHIP, durable backend/atomicity — REC |
+| Canonical Coordinator | Отличает speculative execution от canonical inclusion, назначает lifecycle/порядок в пределах producer/run; не устраняет пересечения history/live | Модуль каждого producer/run; logical ownership определён в STATE_OWNERSHIP, durable backend/atomicity — REC |
 | WAL | Сохраняет нормализованные записи и прогресс до подтверждения публикации | Внутренний журнал доставки; backend/fsync/очистка выбираются после отдельного REC |
 | gRPC | Передача нормализованной записи адаптер → Gateway | Protobuf/gRPC — базовый контур; UDS локально или TCP с mTLS между хостами |
 | Gateway/publisher | Проверяет схему и целостность, ведёт publication journal, повторяет отправку, назначает publication order | Baseline E00-03.03: Go, gRPC-Go, nats.go; версии в COMPONENT_STACK, один активный издатель сети |
@@ -32,7 +34,7 @@ Native node/executor → Adapter + Canonical Coordinator → локальный 
 
 Принято D18: одна обычная транзакция — одно сообщение; превышающая лимит — несколько частей с общим event_id, part_index, part_count и digest. E00-14 описывает [логический контракт](MESSAGE_CONTRACT.md): TransportFrame с CompleteRecord либо RecordPart; digest исходных неизменяемых bytes, отдельная blockchain chronology и delivery sequence. Лимиты и компилируемая wire schema ещё не утверждены. Обрезать данные нельзя.
 
-Принято D17: общий строго типизированный контракт для всех поддерживаемых семейств. Обязательны транзакционные, block/coverage и reorg/finality сообщения. Системные изменения балансов вне транзакций — необязательное расширение; если оно существенно усложняет код, его можно не реализовывать, явно объявив границу покрытия. Родные системные транзакции и все их эффекты остаются обязательными.
+Принято D17: общий строго типизированный контракт для всех поддерживаемых семейств. Обязательны транзакционные, block metadata и reorg/finality сообщения. Системные изменения балансов вне транзакций — необязательное расширение; если оно существенно усложняет код, его можно не реализовывать, явно объявив границу покрытия. Родные системные транзакции и все их эффекты остаются обязательными.
 
 Общий контракт не означает обещания поддержки всех существующих блокчейнов. Первая поставка охватывает пять принятых сетей; новые семейства добавляют типизированные профили, сохраняя общие значения полей. Неприменимость поля отличается от отсутствия обязательных данных. Произвольный JSON или невалидируемые opaque extensions не заменяют схему.
 
@@ -42,21 +44,21 @@ Native node/executor → Adapter + Canonical Coordinator → локальный 
 
 По умолчанию стартовая история за 3 часа либо явно заданный начальный блок, затем live; команда N–M создаёт отдельное задание сети. D20: конкретный интерфейс и поведение YAML-reload обсуждаются отдельно. Приоритет — простота и эффективность; ответ JOB-01 не выбран.
 
-Предлагается отдельный history worker с native executor/state и лимитами ресурсов; live имеет приоритет. Доступ к историческому состоянию, pruning и воспроизводимость проверяются для каждой сети. Очередь сама по себе не обеспечивает изоляцию CPU/диска. Publication order не равен порядку блокчейна: history может поступать после более новых live-блоков.
+Принят отдельный pod/process history worker с native executor/state и лимитами ресурсов; live имеет приоритет. Доступ к историческому состоянию, pruning и воспроизводимость проверяются для каждой сети. Очередь сама по себе не обеспечивает изоляцию CPU/диска. Publication order не равен порядку блокчейна: history может поступать после более новых live-блоков.
 
 ## Граница подтверждения и приёмки
 
 Граница доставки: Gateway выдаёт IngestAck после PubAck записи; для разбиения — всех частей. Повторы возможны, идентичности стабильны (at-least-once). Параметры NATS retention и журнала ещё выбираются. Недоступность кластера, переполнение и восстановление — отдельный REC.
 
-Приёмочный считыватель проверяет сообщения в NATS по native fixtures всех пяти сетей: поля, действия, порядок, целостность частей, reorg/finality, повторы и полноту диапазона. Это тест, не промышленный компонент последующей обработки. Задержка live измеряется до PubAck.
+Приёмочный считыватель проверяет сообщения в NATS по native fixtures всех пяти сетей: поля, действия, порядок, целостность частей, reorg/finality, повторы и подтверждения доставки подготовленных сообщений. Это тест, не промышленный компонент последующей обработки. Задержка live измеряется до PubAck.
 
 ## Порядок финализации ТЗ
 
-Детальная последовательность E00-03: [план .01–.07](E00_03_COMPONENT_PLAN.md). .01–04 завершены как документы: D21/D22 принимают Compose/Kubernetes с NATS внутри обеих сред; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) — проектный baseline. .05 ждёт ARCH-03 о ресурсах history; .06 зависит от REC. Build/runtime доказательства остаются будущими этапами.
+Детальная последовательность E00-03: [план .01–.07](E00_03_COMPONENT_PLAN.md). .01–04 завершены как документы: D21/D22 принимают Compose/Kubernetes с NATS внутри обеих сред; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) — проектный baseline. .05 завершён по D23–D25; следующий .06 зависит от REC. Build/runtime доказательства остаются будущими этапами.
 
 1. Решения R07 получены: типы сообщений, условное разбиение и topology приняты. Отдельный пул управления историей/YAML отложен D20.
 2. E00-13 выполнен: source audit всех пяти клиентов, commits/toolchains, Base runtime и Polygon profile в CLIENT_MATRIX. E00-15 определил [Classic](research/ARBITRUM_CLASSIC_CAPTURE.md) и [legacy Bor](research/POLYGON_LEGACY_CAPTURE.md): отдельные native origins, inventory и ограничения. Исполнение, архивы и полнота ещё требуют POC.
-3. E00-14 выполнен как проект логической схемы: [реестр native типов](TRANSACTION_TYPE_REGISTRY.md), transaction/block/coverage/lifecycle, raw encodings и parts; E00-15 дополнил исторические профили. Следующий шаг E00-03 — свести стек компонентов, границы владения состоянием и оставшиеся гарантии. E02 затем закрывает точные extensions/all-epoch decoders, wire schema/validators/fixtures. Управление history job/YAML рассматривается отдельно по D20.
+3. E00-14 выполнен как проект логической схемы: [реестр native типов](TRANSACTION_TYPE_REGISTRY.md), transaction/block metadata/lifecycle, raw encodings и parts; E00-15 дополнил исторические профили. Следующий шаг E00-03 — свести стек компонентов, границы владения состоянием и оставшиеся гарантии. E02 затем закрывает точные extensions/all-epoch decoders, wire schema/validators/fixtures. Управление history job/YAML рассматривается отдельно по D20.
 4. Отдельный REC: гарантии до NATS, журналирование, ACK/retention, ошибки и восстановление тем же YAML.
 5. Численные ограничения live/history, критерии приёмки, окончательный стек и этапы с задачами; совместная проверка непротиворечивости.
 

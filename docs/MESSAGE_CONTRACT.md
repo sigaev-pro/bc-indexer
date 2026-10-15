@@ -1,6 +1,8 @@
 # Общий контракт сообщений до NATS.IO
 
-E00-14, 2026-10-15. Проект логического контракта; определения ниже заменяют старые proto/Any-заготовки §13–14 v3. Принятые границы D16–D20 сохраняются. Формат реализации — Protobuf с закрытыми `oneof` и versioned validators; компиляция, bindings и fixtures относятся к E02. Эта работа не вводит последующие хранилища или обработчики.
+E00-14, обновлено 2026-10-16 по D23–D25. Проект логического контракта; определения ниже заменяют старые proto/Any-заготовки §13–14 v3. Принятые границы D16–D20 сохраняются. Формат реализации — Protobuf с закрытыми `oneof` и versioned validators; компиляция, bindings и fixtures относятся к E02. Эта работа не вводит последующие хранилища или обработчики.
+
+D23–D25 отменяют source inventory verifier, BlockComplete/CoverageUpdated и согласование live/history overlap. Действующая граница: [получение → WAL → NATS ACK](LIVE_HISTORY_DELIVERY.md). Typed metadata и детали сохраняются; доставка не является доказательством полноты блока.
 
 ## 1. Типы и присутствие
 
@@ -14,7 +16,7 @@ E00-14, 2026-10-15. Проект логического контракта; оп
 | ProfileRef | network profile, client commit, adapter version, fork rules version, normalization version; зарегистрированный профиль |
 | FieldAvailability | `VALUE(T) | NOT_APPLICABLE | UNAVAILABLE(reason_code)`; применяется только к полям с определённой семантикой отсутствия |
 
-Отсутствующий scalar и корректный ноль различаются. Proto scalar с обязательным присутствием использует explicit presence и validator. Для `oneof` требуется ровно один вариант; неизвестные enum values, profile/type/schema versions не публикуются как нормализованные данные. Empty list допустим только при подтверждённой полноте соответствующего capture domain. `UNAVAILABLE` у обязательных transaction details блокирует complete; неприменимость доказывается профилем.
+Отсутствующий scalar и корректный ноль различаются. Proto scalar с обязательным присутствием использует explicit presence и validator. Для `oneof` требуется ровно один вариант; неизвестные enum values, profile/type/schema versions не публикуются как нормализованные данные. Empty list означает, что источник вернул пустой применимый набор; известная ошибка получения не маскируется пустым списком. Независимый verifier полноты не требуется. `UNAVAILABLE` у обязательных transaction details означает ошибку обработки; неприменимость доказывается профилем.
 
 Произвольные JSON, `Any`, map<string,bytes> не являются обходом типов. Bytes разрешены для hashes/addresses, calldata, code, logs data, source encoding и сериализованного транспортного payload. Каждое сетевое расширение имеет конкретную схему и version gate.
 
@@ -22,13 +24,13 @@ E00-14, 2026-10-15. Проект логического контракта; оп
 
 ## 2. Envelope и идентичность
 
-`Envelope={schema_version, network, profile_ref, event_id, source, capture_mode, payload}`.
+`Envelope={schema_version, network, profile_ref, event_id, producer_id, run_id, source, capture_mode, payload}`.
 
 `source={node_instance_id, writer_epoch, source_sequence}`. `capture_mode=LIVE|SYNC|BACKFILL`. Эти поля — provenance, не идентичность транзакции. `payload` — закрытый union из таблицы событий ниже. Версия wire schema не обязана совпадать с номером редакции Markdown v3.
 
 `BlockRef={number:u64,hash:Hash32,parent_hash:Hash32,timestamp:Timestamp}`. `InclusionRef={network,block_hash,native_origin,native_position,transaction_hash}`. Для native body transaction native_position — индекс в body, native_origin=`BLOCK_BODY`. Для `ARBITRUM_CLASSIC_AVM` позиция включает native AVM log/result index, а source transaction_hash имеет kind=NATIVE_REQUEST_ID; optional Ethereum projection index хранится отдельно. Правила и ограничения — [Classic profile](research/ARBITRUM_CLASSIC_CAPTURE.md). Нельзя идентифицировать включение одним tx hash либо считать Classic projection единственным inventory.
 
-`ActivationRef={inclusion_ref,activation_id}`. Для блока аналогично используется `BlockActivationRef={network,block_hash,activation_id}`. `event_id` обозначает неизменяемое событие; повтор передачи сохраняет ID и исходные байты. Разные события lifecycle имеют разные event_id. Формат ID, сохранение mapping и восстановление без локального состояния окончательно закрепляются в REC; вероятностная генерация нового ID на каждый retry запрещена.
+`ActivationRef={inclusion_ref,producer_id,run_id,activation_id}`. Для блока аналогично используется `BlockActivationRef={network,block_hash,producer_id,run_id,activation_id}`. `event_id` обозначает неизменяемое событие; повтор передачи сохраняет ID и исходные байты. Разные события lifecycle имеют разные event_id. Формат ID, сохранение mapping и восстановление без локального состояния окончательно закрепляются в REC; вероятностная генерация нового ID на каждый retry запрещена.
 
 ## 3. TransactionRecord
 
@@ -44,7 +46,7 @@ E00-14, 2026-10-15. Проект логического контракта; оп
 | actions | Причинные native balance actions, включая fee/refund/mint/burn и компенсирующие действия |
 | state_changes | Итоговый transaction-boundary diff затронутых accounts/storage после rollback, включая реально сохранённые fees/nonce |
 | execution_position | operation_index:u64 и execution BlockRef; при отличии от inclusion block связь задаёт профиль |
-| capture_coverage | Применимость/полнота receipt,calls,actions,state_changes,network details; отсутствие обязательного domain запрещает complete |
+| capture_status | Применимость receipt/calls/actions/state_changes/network details; известная ошибка сбора даёт ERROR, независимой сверки состава блока нет |
 
 `ExecutionProjection` — отдельный union `EvmMessage | NativeProtocolExecution`; последнее задаёт typed operation и адреса только если они имеют смысл. Execution sender нельзя заполнять нулём потому, что так отвечает универсальный accessor системной транзакции.
 
@@ -58,32 +60,22 @@ E00-14, 2026-10-15. Проект логического контракта; оп
 
 `AccountChange={address,existed_before,exists_after,balance_before,balance_after,nonce_before,nonce_after,code_before,code_after,storage_reset,storage_changes[]}`. `StorageChange={key:Hash32,before:Hash32,after:Hash32}`. Данные относятся к transaction boundary, не к последнему child frame. Code и storage reset семантика проверяются по fork, включая SELFDESTRUCT. Balance actions и итоговый diff — разные представления одного исполнения; их нельзя складывать друг с другом как независимые изменения.
 
-## 4. События и полнота блока
+## 4. События и передача блока
 
-| Payload | Обязательные данные и смысл |
+| Payload | Смысл |
 |---|---|
-| TransactionApplied | activation_ref, block_activation, record; исходное включение и все обязательные детали |
-| TransactionRemoved | activation_ref, revision, reorg_id, reason=`REORG`; отменяет конкретную активацию |
-| TransactionStatusChanged | activation_ref, revision, typed finality evidence; не создаёт новую активацию |
-| BlockApplied | block_activation, BlockRef, native transaction inventory, profile_ref, scope; metadata канонического блока, включая пустой |
-| BlockComplete | block_activation, revision, source inventory digest, transaction manifest, capture scope; все обязательные записи опубликованы |
-| BlockRemoved | block_activation, revision, reorg_id; отменяет утверждение о каноничности и полноте этой активации |
-| BlockStatusChanged | block_activation, revision, typed finality evidence |
-| CoverageUpdated | coverage_id, revision, диапазон [from,to], branch anchors, status, scope, reference на block manifests |
-| SystemBalanceApplied/Removed/StatusChanged | Optional отдельный typed record/activation/lifecycle вне транзакций; без выдуманного tx hash |
-| BorLegacyReceiptApplied/Removed/StatusChanged | Только при включении optional legacy расширения: typed auxiliary source receipt, отдельная identity и lifecycle; не TransactionRecord |
+| TransactionApplied | Нормализованное native включение, producer/run и его наблюдаемая активация |
+| TransactionRemoved / TransactionStatusChanged | Native reorg/finality observations; ссылки на активацию данного producer |
+| BlockApplied | Native BlockRef/header metadata, producer/run, source transaction count при наличии; пустой блок также публикуется |
+| BlockRemoved / BlockStatusChanged | Native lifecycle evidence данного producer/run |
+| SystemBalanceApplied/Removed/StatusChanged | Optional вне-транзакционный scope D17 |
+| BorLegacyReceiptApplied/Removed/StatusChanged | Optional typed auxiliary source receipt; не body transaction |
 
-BlockApplied не является событием начала обработки: это опубликованная metadata уже нативно исполненного канонического блока. Для каждого body item inventory хранит позицию, source hash и native type. BlockComplete manifest связывает inventory item с transaction activation, applied event_id и digest исходных bytes. Отдельные legacy records при их поддержке имеют отдельный inventory; не увеличивают body transaction count.
+BlockComplete и CoverageUpdated исключены D25. Source metadata не является результатом собственного пересчёта/сверки хеша или полного inventory. Для Classic сохраняются native AVM result identity и отдельная Ethereum projection; корректный native decoder обязателен, но production completeness verifier не добавляется.
 
-Для Classic обязательный source inventory строится по persisted AVM TxResult/BlockInfo range с явной классификацией результатов. Ethereum body — дополнительная projection; её count/index могут отличаться. Неизвестный или не преобразуемый result нельзя отбрасывать по поведению FilterEthTxResults. Native control records проверяются отдельно и не становятся искусственными транзакциями. Classic receipt/native outcome использует зарегистрированный ClassicResultCode вместе с общей execution classification; projection status не заменяет этот enum. Exact mapping и all-epoch validators — E02, engine=`CLASSIC_AVM`.
+Внутренний закрытый delivery batch содержит references фактически подготовленных сообщений блока. После durable сохранения batch/messages — WAL_SAVED; после PubAck всех этих сообщений/частей — NATS_ACKED. Это локальный учёт передачи, не утверждение, что источником выданы все данные блокчейна. Отдельное публичное событие прогресса/coverage и UI не требуются.
 
-Условие complete: inventory нативного блока и захваченные inclusion совпадают точно; все обязательные capture domains полны; все части соответствующих Applied получили PubAck. Одна сверка количества недостаточна. Затем публикуется сам BlockComplete; только его PubAck завершает публикацию блока. Пустой блок имеет пустой manifest и корректный BlockComplete. Большой inventory/manifest разбивается транспортом по тем же правилам, что transaction record.
-
-`CoverageStatus=COMPLETE|GAP|REVOKED`. Scope явно содержит транзакционные domains и `outside_transaction_balances=COLLECTED|NOT_COLLECTED`; COMPLETE относится только к объявленному scope. GAP имеет диапазон, branch anchor, registered reason и доступные детали, но не заменяет потерянные транзакции. COMPLETE требует непрерывной parent-linked последовательности BlockComplete без дыр. После reorg старое покрытие отзывается, новое утверждается только для новой ветки; stale revision не восстанавливает старую ветку. Локальный progress cursor не равен публикации coverage.
-
-Optional SystemBalanceRecord использует operation_index, typed cause, balance actions/diffs и отдельную активацию. Его детальная схема не является gate текущего обязательного transaction scope. Если расширение выключено, нельзя заявлять полную историю всех нативных балансов.
-
-E00-15 определяет `BorLegacyReceiptRecord` в [POLYGON_LEGACY_CAPTURE.md](research/POLYGON_LEGACY_CAPTURE.md): origin `BOR_LEGACY_SYNTHETIC_RECEIPT`, derived source receipt hash, synthetic receipt index, typed receipt/logs и `BOR_RECEIPT_STORAGE_RLP`. Scope — SOURCE_RECEIPT_ONLY. При включении такого optional record auxiliary inventory/coverage отделяется от body transactions и вне-транзакционных balance actions. Native success status не доказывает успех всех вызовов, а missing receipt не означает отсутствие действий. Wire fields и subjects расширения фиксируются только при его включении; наличие этой схемы не является решением пользователя включить его в первую поставку.
+Optional BorLegacyReceiptRecord описан в [POLYGON_LEGACY_CAPTURE.md](research/POLYGON_LEGACY_CAPTURE.md): source receipt/hash/index/encoding, без фиктивной transaction envelope. Его source-only ограничения сохраняются, auxiliary completeness verifier не вводится.
 
 ## 5. Lifecycle, finality и поздняя metadata
 
@@ -96,7 +88,7 @@ E00-15 определяет `BorLegacyReceiptRecord` в [POLYGON_LEGACY_CAPTURE.
 | REMOVED(A) | поздний StatusChanged/Applied(A) | Не реактивирует A |
 | REMOVED(A) | возвращение того же блока | Новый Applied(B), B≠A |
 
-Пересечение live/history одного канонического включения использует существующую активацию. При доставке Removed раньше Applied ссылка сохраняет смысл отмены; поздний Applied не оживляет удалённую активацию. Revision монотонна внутри объекта lifecycle, не между сетями. Порядок history относительно live не определяет состояние цепочки.
+Пересечение live/history может создать разные наблюдения и активации одного включения в разных producer/run. Общий registry и подавление повторов не требуются. При доставке Removed раньше Applied ссылка сохраняет смысл отмены; поздний Applied не оживляет удалённую активацию. Revision монотонна внутри объекта lifecycle данного producer/run, не между независимыми загрузками или сетями. Порядок history относительно live не определяет состояние цепочки.
 
 Finality — typed evidence, а не свободная строка и не универсальный confirmations counter. Варианты: Ethereum consensus safe/finalized; BSC native finality evidence; Base L2 safe/finalized с L1 block reference; Arbitrum L1 inclusion/settlement evidence; Polygon Heimdall/checkpoint evidence. Эти стадии не объявляются эквивалентными. Конкретные структуры evidence и availability guards требуют E02 fixtures для pinned clients.
 
@@ -120,7 +112,7 @@ NATS message ID должен стабильно различать `(network,eve
 
 ## 7. Маршрутизация
 
-Для каждой сети отдельные streams/subjects/limits. Сохраняется рабочий namespace ТЗ: `evm.v3.<chain_key>.<event_family>.<event_kind>`, где event_family=`tx|block|coverage|balance.system`. Event kind задаётся закрытым реестром: tx applied/removed/status; block applied/complete/removed/status; coverage updated; optional balance.system applied/removed/status. Transport version/schema version находятся внутри frame; изменение Markdown v3 само по себе не меняет subject.
+Для каждой сети отдельные streams/subjects/limits. Сохраняется рабочий namespace ТЗ: `evm.v3.<chain_key>.<event_family>.<event_kind>`, где event_family=`tx|block|balance.system`. Event kind задаётся закрытым реестром: tx applied/removed/status; block applied/removed/status; optional balance.system applied/removed/status. Transport version/schema version находятся внутри frame; изменение Markdown v3 само по себе не меняет subject.
 
 Точные stream configuration и правила миграции namespace закрепляются в E03. Полная запись и её части направляются в один subject своего logical event; identity сети из frame проверяется против route. Настройка stream topology/retention не входит в E00-14.
 
@@ -136,10 +128,10 @@ NATS message ID должен стабильно различать `(network,eve
 | Nitro EVM ↔ Stylus | Frame engines и native actions без потери меж-runtime причинности |
 | Classic native result ↔ Ethereum projection | Все source results учтены; CL-01…08 проверяют archive, декодирование, observer и неизменность native исполнения |
 | Bor StateSync / legacy synthetic | Body 0x7f и optional legacy source receipt не смешаны; fixtures POLY-L01…07 из исследования E00-15 |
-| Пустой блок / одна пропущенная tx | Первый получает Complete; второй — никогда |
+| Пустой блок / ошибка нормализации | Metadata пустого блока передаётся; известная ошибка даёт ERROR, а не NATS_ACKED |
 | Parts reorder/duplicates/corruption | Сборка по индексу, повторы идемпотентны, конфликт bytes/digest отклоняется |
-| Live/history overlap и reorg во время публикации | Одна активация на включение; отмена адресная, старый status не оживляет удалённое |
-| Неизвестный тип/версия/fork | Явная ошибка coverage; нет молчаливого пропуска |
-| Optional balances выключены | Transactions COMPLETE допустим; all-balance completeness не заявляется |
+| Live/history overlap и reorg во время публикации | Дубли разных runs допустимы; lifecycle references не смешиваются, ACK учитывает все части |
+| Неизвестный тип/версия/fork | Явная ошибка нормализации, без фиктивного поддержанного payload |
+| Optional balances выключены | Передаётся заявленный transaction scope; полнота всех балансов не заявляется |
 
 Это acceptance matrix будущих E01/E02/E03, не отчёт о пройденных тестах. E00-15 определил Classic/legacy source profiles и ограничения; их runtime-покрытие и архивы ещё не доказаны. Открыты точные network execution/finality extensions, Classic all-epoch decoders и validators (E02), ресурсные параметры/NATS delivery (E03/REC), история/YAML control (JOB-01, отложен пользователем).
