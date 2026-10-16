@@ -1,6 +1,6 @@
 # EVM Transaction Extractor — техническое задание v3, редакция Codex
 
-> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](docs/DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. Версии/bindings и crash-safe протокол завершаются в .06.
+> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](docs/DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](docs/research/ROCKSDB_STACK.md), [протокол и REC-T01–16](docs/ROCKSDB_DELIVERY_PROTOCOL.md).
 
 Актуализация 2026-10-16: D23–D25. Live/history — разные pods, команда N–M без согласования пересечений. Дедупликация и независимая проверка полноты блоков вне scope. Граница — получение native данных → WAL → NATS PubAck. [Текущий контракт доставки](docs/LIVE_HISTORY_DELIVERY.md) заменяет прежние coverage/overlap требования.
 
@@ -310,7 +310,7 @@ event_id идентифицирует конкретное событие дос
 
 source_sequence монотонен внутри writer_epoch. После потери состояния writer новая эпоха получает новый идентификатор.
 
-Gateway присваивает chain_sequence — общий монотонный номер регистрации события к публикации в потоке сети. Mapping event_id → chain_sequence сохраняется надёжно до публикации.
+Gateway присваивает chain_sequence в пределах publication_epoch своего store. Mapping event_id → publication_epoch/chain_sequence и точные frame bytes сохраняются Gateway и producer до публикации. При потере Gateway store pending события восстанавливаются из producer plan; новые события получают новый epoch.
 
 Порядок chain_sequence отражает назначение публикаций, а не block number, физический NATS stream sequence или завершение доставки всех частей. Исторические записи могут публиковаться одновременно с live-данными; части разных событий могут чередоваться.
 
@@ -351,7 +351,7 @@ E00-15 описал Classic/legacy origins и ограничения. Точны
 
 part_index начинается с нуля. Размер каждой сериализованной части, включая заголовки, должен укладываться в действующий лимит NATS max_payload; предел gRPC настраивается согласованно.
 
-chain_sequence=0 на участке Adapter → Gateway. При публикации Gateway устанавливает присвоенный номер во всех частях. Сама Envelope при этом не изменяется.
+PrepareBatch возвращает publication_epoch/chain_sequence; producer сохраняет plan и точные frame bytes sync до PublishBatch. Gateway не меняет эти bytes при retry. Сама Envelope не изменяется.
 
 В предлагаемом формате событие полно только при наличии всех частей и совпадении размера и SHA-256. Части не являются отдельными транзакциями. Сборку проверяет тест контракта; промышленная дальнейшая обработка не проектируется.
 
@@ -373,25 +373,25 @@ Adapter WAL хранит:
 - канонические активации транзакций и протокольных изменений балансов, порядок исполнения и checkpoints;
 - состояние подтверждения доставки.
 
-Gateway надёжно хранит mapping event_id → chain_sequence и состояние публикации.
+Gateway надёжно хранит mapping event_id → publication_epoch/chain_sequence и состояние публикации; producer держит durable plan до ACK cleanup.
 
 Подтверждение:
 
 1. Adapter надёжно сохраняет событие.
 2. Gateway получает и проверяет CompleteRecord либо все RecordPart.
-3. Gateway фиксирует событие и chain_sequence.
+3. Gateway резервирует publication plan; producer сохраняет plan/frame bytes, затем передаёт PublishBatch. Gateway сохраняет CLOSED перед отправкой.
 4. Gateway публикует CompleteRecord либо части в JetStream.
 5. JetStream возвращает PubAck для полной записи либо каждой части.
-6. Gateway отправляет IngestAck.
-7. Adapter помечает событие подтверждённым и позднее удаляет его из WAL.
+6. После PubAck всех сообщений/частей закрытого batch блока Gateway sync фиксирует NATS_ACKED и отправляет IngestAck(batch_id,digest,plan identity).
+7. Adapter sync фиксирует ACKED_CLEANUP/release_outbox и очищает payload batch; после release handshake удаляются временные ACK metadata. Подробности — ROCKSDB_DELIVERY_PROTOCOL.
 
-IngestAck означает подтверждённую публикацию события в JetStream; при выбранном chunking — всех частей. Это конец доставки текущего этапа. Подтверждение не означает бессрочного хранения: срок и лимиты задаются конфигурацией потока.
+IngestAck означает подтверждённую публикацию всех подготовленных сообщений и частей закрытого batch блока в JetStream. Это конец доставки текущего этапа; не доказательство полноты исходного блока и не подтверждение downstream обработки. Дальнейшее хранение после PubAck вне scope.
 
 Приёмка проверяет delivery ACK, типизацию, корректность нормализации выбранных fixtures и сборку parts. Независимый production verifier состава/хеша блока не требуется.
 
 Модель доставки — at-least-once. Повторы имеют стабильные идентификаторы; физическая единственность сообщения не обещается. Окно дедупликации JetStream не является бессрочной гарантией. Дальнейшая обработка за пределами этапа.
 
-При заполнении очередей/WAL приостанавливается historical replay или дальнейший import в контролируемой точке. Требования к сохранности имеют приоритет над продолжением выгрузки. Неограниченные буферы и молчаливое удаление данных запрещены.
+При недоступности NATS сбор продолжается в RocksDB без TTL и прикладной квоты. RAM/in-flight ограничены; ожидающие данные остаются на диске. Физическая ошибка записи/исчерпание диска не даёт права объявлять WAL_SAVED или продвигать capture checkpoint; сообщается ERROR без удаления pending данных. Backpressure RAM/движка не подменяется политикой удаления по возрасту/размеру.
 
 ## 17. NATS subjects
 
@@ -415,7 +415,7 @@ IngestAck означает подтверждённую публикацию с�
 - evm.v3.arbitrum-one.tx.applied
 - evm.v3.polygon-pos.tx.applied
 
-Рабочая схема — отдельный JetStream stream для subjects каждой сети, storage=file. Доставка подтверждается publish PubAck; consumer AckPolicy не является подтверждением публикации. Replicas, retention и окончательная stream configuration закрепляются отдельно в E03/REC.
+Рабочая схема — отдельный JetStream stream для subjects каждой сети, storage=file. Доставка подтверждается publish PubAck; consumer AckPolicy не является подтверждением публикации. Replicas=1 по D30; streams/credentials создаёт deployment, Gateway проверяет subjects/size и не управляет downstream retention.
 
 Перечисленные subjects описывают transaction/block metadata/lifecycle и optional system события. Отсутствие транзакционных сообщений не является доказательством отсутствия блока: пустой блок публикует metadata, входящую в его локальный delivery batch.
 
@@ -623,7 +623,7 @@ Atomic import/export представлены NativeTransaction с AvalancheAtom
 
 Стадии: RECEIVED → WAL_SAVED → NATS_ACKED; ERROR сохраняет стадию и причину. WAL_SAVED выставляется после durable записи сообщений и закрытого локального списка references. NATS_ACKED — после PubAck всех этих сообщений/частей. Read/replay cursor не является delivery ACK.
 
-Хранятся native identity/parent, mode/run, подготовленные event/part references, WAL offsets, cursor команды, ACK/error states. Gateway имеет свой publication journal сети. Для локального быстрого progress рекомендуется embedded KV; backend, атомарность, flush/cleanup и восстановление после потери диска выбираются в .06/REC. Общий writable файл между pods не используется.
+Хранятся native identity/parent, mode/run, подготовленные event/part references, WAL offsets, cursor команды, ACK/error states. Gateway имеет свой publication journal сети. Выбран RocksDB 10.4.2: grocksdb v1.10.2, Rust rocksdb 0.24.0 / sys 0.17.3+10.4.2. Атомарность, sync, cleanup и восстановление определены в [ROCKSDB_DELIVERY_PROTOCOL](docs/ROCKSDB_DELIVERY_PROTOCOL.md); сборки ещё не выполнены. Общий writable файл между pods не используется.
 
 Это учёт доставки, не индекс балансов, не dedup registry и не доказанное coverage. UI/API просмотра сейчас не проектируются. Полная модель: [STATE_OWNERSHIP.md](docs/STATE_OWNERSHIP.md), [LIVE_HISTORY_DELIVERY.md](docs/LIVE_HISTORY_DELIVERY.md).
 
@@ -841,7 +841,7 @@ Gateway проверяет:
 | До реализации | Утвердить гранулярность и нумерацию нативных операций | Fixtures со смешанным порядком tx/system, одинаковые позиции при replay |
 | До реализации | Согласовать модель состояний Coordinator, WAL и publisher | Таблица переходов, атомарные записи, правила fencing, overlap и crash recovery |
 | До реализации | Определить публикацию metadata, появляющихся после первой записи | Правила ожидания или typed updates для batch/settlement; запрет молчаливой неполноты |
-| До финализации доставки | Зафиксировать retention/discard NATS, объём WAL и условия очистки | Конфигурация и тесты простоя/переполнения; граница гарантии сохранности явная |
+| До реализации доставки | Реализовать принятый протокол .06 | WAL без TTL/квоты, cleanup после ACK, один NATS; REC-T01–16 и размеры transport/config проверяются в E03 |
 | До финализации доставки | Завершить принятое разбиение D18 | Точный размер, typed transport union, IDs частей, digest, ACK и тестовый валидатор |
 | До финализации доставки | Завершить строгий контракт D17 | Общие tx/block metadata/lifecycle типы, optional SystemBalance, registered extensions и валидаторы |
 | До приёмки | Уточнить большие записи и постоянные ошибки | Ограничение памяти, дисковый spool, политика остановки и исправления без пропусков |
@@ -870,7 +870,7 @@ Block metadata, включая пустой блок, и native reorg/finality o
 
 Проект разрабатывается как open-source продукт для самостоятельного развёртывания. Поставка включает исходники, воспроизводимую сборку, инструкции запуска, примеры .yml, схему сообщений и матрицу поддержанных сетей/диапазонов. Лицензия и публичный repository выбираются до публикации.
 
-По D21/D22 первая поставка включает готовые конфигурации Docker Compose для разработки/локального запуска и Kubernetes для production. NATS.IO разворачивается внутри каждой из этих сред; внешний готовый production-кластер не является обязательным предусловием. Технический baseline — официальный NATS Helm chart с проектными values в Kubernetes и официальный server image с volume в Compose, JetStream включён явно. Replicas/retention/recovery/sizing выбираются в отдельном REC, не наследуются молча из defaults chart.
+По D21/D22 первая поставка включает готовые конфигурации Docker Compose для разработки/локального запуска и Kubernetes для production. NATS.IO разворачивается внутри каждой из этих сред; внешний готовый production-кластер не является обязательным предусловием. Технический baseline — официальный NATS Helm chart с проектными values в Kubernetes и официальный server image с volume в Compose, JetStream включён явно. Replicas=1 по D30, recovery определён в .06, post-ACK retention вне scope. Resource sizing проверяется при реализации и не означает HA.
 
 Стек/версии-кандидаты общих компонентов: [COMPONENT_STACK](docs/COMPONENT_STACK.md); logical ownership lifecycle, IDs, journals и ACK: [STATE_OWNERSHIP](docs/STATE_OWNERSHIP.md). Native clients не переводятся на общий Go/Rust toolchain ради Gateway SDK. Эти документы не являются отчётом о сборке или развёртывании.
 

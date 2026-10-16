@@ -1,6 +1,6 @@
 # Live, история и учёт доставки — E00-03.05
 
-> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. Версии/bindings и crash-safe протокол завершаются в .06.
+> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](research/ROCKSDB_STACK.md), [протокол и REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md).
 
 2026-10-16. Приняты D23–D25. Этот документ заменяет прежние требования общего coordinator для live/history, дедупликации пересечений и доказанного coverage. Конечная граница — публикация полученных native данных в NATS.IO. Проверка содержимого на принимающей стороне и любые downstream-хранилища не проектируются.
 
@@ -42,13 +42,13 @@ Default начального диапазона «последние 3 часа�
 
 Задание заканчивается успешно, когда для каждой запрошенной высоты выполнен проход получения и доставки её подготовленного batch. Это контроль исполнения команды N–M, не доказательство полноты транзакций/балансов. Не вводятся BlockComplete/coverage COMPLETE, проверенный диапазонный отчёт или независимый oracle в production-пути.
 
-## Быстрое хранилище прогресса — предложение
+## Быстрое хранилище прогресса — принято D33
 
-Рекомендуется локальный embedded key-value journal в каждом writable контуре, с namespace сети и producer/run. Для WAL metadata и progress по возможности один transactional backend: это уменьшает количество согласуемых записей. Реализация backend и гарантии пока не выбраны; никаких утверждений о throughput/fsync без измерений.
+RocksDB каждого writable контура хранит pending messages и минимальное служебное состояние; отдельный сервер БД не нужен. [Pins](research/ROCKSDB_STACK.md) и [протокол записи/очистки](ROCKSDB_DELIVERY_PROTOCOL.md) закреплены в .06. После ACK архив статусов не сохраняется. Никаких throughput обещаний без измерений.
 
 Adapter хранит получение, WAL references и полученный IngestAck. Gateway хранит publication mapping и PubAck отдельных частей в своём журнале сети. Это разные факты. Разные pods не открывают один embedded DB файл на запись; общая per-network identity не означает shared writable volume. Отдельная серверная БД, общий job coordinator и сервис визуализации сейчас не добавляются.
 
-Минимальные поля: native identity/parent, producer/run/mode, стадия и время, closed batch marker, event/part references, WAL offsets, ACK/error state, cursor задания. Ключи blocks/jobs/messages служат только передаче, не запросам балансов и не дедупликации blockchain records. Состояние RECEIVED может быть наблюдаемым до durable записи; потеря такого наблюдения не должна превращаться в ложный WAL_SAVED. Конкретная атомарность/flush и очистка после ACK — .06/REC.
+Минимальные поля: native identity/parent, producer/run/mode, стадия и время, closed batch marker, event/part references, WAL offsets, ACK/error state, cursor задания. Ключи blocks/jobs/messages служат только передаче, не запросам балансов и не дедупликации blockchain records. Состояние RECEIVED может быть наблюдаемым до durable записи; потеря такого наблюдения не должна превращаться в ложный WAL_SAVED. Атомарность, sync, cleanup markers и release определены в ROCKSDB_DELIVERY_PROTOCOL.
 
 ## Lifecycle и сообщения
 
@@ -60,4 +60,4 @@ Metadata источника, native transaction types, receipt/logs/calls/action
 
 Будущие fixtures: разные live/history pods; N=M; неверный диапазон; недоступный блок; повтор N–M с допустимыми дублями; пустой блок; crash до/после WAL; потерянные ACK; частичная multipart publication; ERROR без delivered progress. Проверяются доставка и корректность нормализации выбранных примеров, не независимая полнота всего диапазона.
 
-E00-03.05 закрывает схему работы. Следующий .06 — выбрать служебный backend и точные гарантии WAL/ACK/retention/restart в отдельном REC. Перед переходом к нему — проверка документов и обязательный commit. Код, Job/Compose manifests и CLI сейчас не создаются.
+E00-03.05 закрывает схему работы, .06 — RocksDB/доставку/восстановление. Следующий .07 — итоговая проверка после commit. Код, Job/Compose manifests и CLI не создавались.

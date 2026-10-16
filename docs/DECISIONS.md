@@ -2,6 +2,8 @@
 
 ## Последнее решение — D33 (2026-10-16)
 
+Техническое завершение E00-03.06 (поручение «выполняй»): [RocksDB pins](research/ROCKSDB_STACK.md), [delivery protocol](ROCKSDB_DELIVERY_PROTOCOL.md). RocksDB 10.4.2 / grocksdb v1.10.2 / Rust rocksdb 0.24.0 + sys 0.17.3+10.4.2; sync WriteBatch; Prepare/Publish с durable producer plan и publication_epoch, ACKED cleanup/release, single-writer ownership и REC-T01–16. Это проектный baseline исполнителя, не новые ответы пользователя и не пройденная runtime-приёмка. E00-03.06/E00-06 закрыты как документы; .07 следующий после commit.
+
 - D33 accepted: пользователь утвердил RocksDB для локального WAL/служебного состояния. Embedded engine используется в Go/Rust компонентах с отдельными writable каталогами; отдельный сервер БД не вводится. Базовый вариант — обычный RocksDB; integrated BlobDB остаётся необязательной оптимизацией для будущих измерений, не второй обязательной реализацией.
 - Версии RocksDB и bindings, точный протокол durable записи/ACK/checkpoint/очистки и crash fixtures завершаются в E00-03.06. Выбор движка не означает успешные benchmark/build/runtime проверки и не закрывает весь подэтап.
 

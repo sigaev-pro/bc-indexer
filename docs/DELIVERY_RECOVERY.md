@@ -1,6 +1,6 @@
 # E00-03.06 — доставка и восстановление
 
-2026-10-16. Требования D26–D31 приняты. По D33 backend WAL/служебного состояния — RocksDB. Версии/bindings и точный crash-safe протокол остаются открытыми; этот документ не означает начало реализации.
+2026-10-16. E00-03.06 DONE как проектный контракт. Требования D26–D31 приняты, RocksDB выбран D33. [Pins](research/ROCKSDB_STACK.md) и [точный протокол/REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md) определены. Сборка и crash tests остаются этапами реализации.
 
 ## Граница ответственности
 
@@ -11,12 +11,12 @@
 ## Порядок работы
 
 1. Принять блок и нормализовать данные. RECEIVED сам по себе не гарантирует сохранность.
-2. Сохранить immutable сообщения/части и закрытый список references в WAL. Только после durable commit/flush присвоить WAL_SAVED. Точная реализация транзакции выбирается в оставшейся части .06.
+2. Сохранить immutable сообщения/части и закрытый список references в RocksDB sync WriteBatch; после всех payload commits атомарно закрыть READY и capture checkpoint. Только после успеха присвоить WAL_SAVED.
 3. Публиковать через Gateway. При временной ошибке повторять с задержкой, не ограничивая число попыток; ID, bytes и part layout при retry сохраняются. Повторы допустимы.
 4. Gateway учитывает PubAck каждого сообщения/части. Завершение блока возможно только после ACK всего batch; затем подтверждение возвращается producer.
 5. Перед удалением payload зафиксировать restart checkpoint. Удалять только подтверждённые batch; незавершённые сохранять. Минимальное рабочее состояние должно позволять продолжить pending batch и активный N–M, но архив доставленных блоков не нужен.
 
-Рекомендация реализации: удалять payload и обновлять checkpoint одной транзакцией embedded backend либо эквивалентным crash-safe протоколом. Это технический проект, не уже реализованная гарантия.
+Проектный протокол: после IngestAck атомарно фиксировать ACKED_CLEANUP/release_outbox; малый payload удалять в том же WriteBatch, большой — bounded пакетами под durable cleanup marker. Frontier не перескакивает pending batch. Publication plan сохраняется у producer до первой публикации, что позволяет восстановить точные frames после потери Gateway store. Подробности и release handshake — [ROCKSDB_DELIVERY_PROTOCOL](ROCKSDB_DELIVERY_PROTOCOL.md).
 
 ## Сценарии
 
@@ -39,13 +39,13 @@
 
 Текущая топология NATS: один instance, одна replica stream. Доступность предполагается, но каждая отправка всё равно ждёт реальный PubAck. После подтверждённой передачи хранение/удаление на стороне NATS и downstream не является гарантией сборщика. Этот этап не задаёт consumer policy или архив транзакций. Конкретные deployment defaults нельзя выдавать за согласованный срок хранения.
 
-## Оставшиеся задачи .06
+## Завершённые проектные задачи .06
 
-Исследование .06-B сохранено в [WAL_ENGINE_SELECTION](research/WAL_ENGINE_SELECTION.md) и [WAL_ALTERNATIVES](research/WAL_ALTERNATIVES.md). SQLite исключён D32; RocksDB принят D33. Sync WriteBatch — проектный baseline; integrated BlobDB остаётся возможной оптимизацией. Bindings/version ещё не выбраны, POC не выполнялся.
+Исследование .06-B сохранено в [WAL_ENGINE_SELECTION](research/WAL_ENGINE_SELECTION.md) и [WAL_ALTERNATIVES](research/WAL_ALTERNATIVES.md). SQLite исключён D32; RocksDB принят D33. Baseline: RocksDB 10.4.2, grocksdb v1.10.2, Rust rocksdb 0.24.0 / librocksdb-sys 0.17.3+10.4.2. Integrated BlobDB optional; POC не выполнялся.
 
 - [x] E00-03.06-A Зафиксировать требования REC и границы scope — D26–D31.
-- [ ] E00-03.06-B PARTIAL: RocksDB принят D33; осталось закрепить версии/bindings для Go/Rust и описать запись, flush и очистку без отдельной серверной БД.
-- [ ] E00-03.06-C Определить checkpoint, single-writer ownership, поведение Gateway после потери его журнала и уборку ACK metadata без постоянного архива.
-- [ ] E00-03.06-D Сопоставить каждый crash window с fixture; согласовать активные документы и закрыть .06.
+- [x] E00-03.06-B RocksDB/pins/API и sync WriteBatch/cleanup описаны; source evidence в ROCKSDB_STACK. Совместная сборка E01 не выполнена.
+- [x] E00-03.06-C Capture/READY checkpoint, single writer, publication_epoch/plan, Gateway recovery, ACK cleanup/release описаны в ROCKSDB_DELIVERY_PROTOCOL.
+- [x] E00-03.06-D Определены REC-T01–16, изменения отражены в контракте/стеке/плане. Тесты не выполнены; следующий документальный шаг .07 после commit.
 
 Никакие runtime-тесты, сборки и deployments на этом шаге не выполнены. После правок — проверки и commit; только затем следующий шаг.

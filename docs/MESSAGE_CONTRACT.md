@@ -30,7 +30,7 @@ D23–D25 отменяют source inventory verifier, BlockComplete/CoverageUpda
 
 `BlockRef={number:u64,hash:Hash32,parent_hash:Hash32,timestamp:Timestamp}`. `InclusionRef={network,block_hash,native_origin,native_position,transaction_hash}`. Для native body transaction native_position — индекс в body, native_origin=`BLOCK_BODY`. Для `ARBITRUM_CLASSIC_AVM` позиция включает native AVM log/result index, а source transaction_hash имеет kind=NATIVE_REQUEST_ID; optional Ethereum projection index хранится отдельно. Правила и ограничения — [Classic profile](research/ARBITRUM_CLASSIC_CAPTURE.md). Нельзя идентифицировать включение одним tx hash либо считать Classic projection единственным inventory.
 
-`ActivationRef={inclusion_ref,producer_id,run_id,activation_id}`. Для блока аналогично используется `BlockActivationRef={network,block_hash,producer_id,run_id,activation_id}`. `event_id` обозначает неизменяемое событие; повтор передачи сохраняет ID и исходные байты. Разные события lifecycle имеют разные event_id. Формат ID, сохранение mapping и восстановление без локального состояния окончательно закрепляются в REC; вероятностная генерация нового ID на каждый retry запрещена.
+`ActivationRef={inclusion_ref,producer_id,run_id,activation_id}`. Для блока аналогично используется `BlockActivationRef={network,block_hash,producer_id,run_id,activation_id}`. `event_id` обозначает неизменяемое событие; повтор передачи сохраняет ID и исходные байты. Разные события lifecycle имеют разные event_id. event_id=(producer_id,run_id,event_sequence); persistent counters и publication plan определены в [протоколе .06](ROCKSDB_DELIVERY_PROTOCOL.md); вероятностная генерация нового ID на каждый retry запрещена.
 
 ## 3. TransactionRecord
 
@@ -96,19 +96,19 @@ Finality — typed evidence, а не свободная строка и не у�
 
 ## 6. Транспорт и порядок
 
-`TransportFrame={transport_version,network,event_id,payload_digest,chain_sequence,payload}`.
+`TransportFrame={transport_version,network,event_id,payload_digest,publication_epoch,chain_sequence,payload}`.
 
 payload — ровно `CompleteRecord{envelope_bytes}` либо `RecordPart{part_index,part_count,total_bytes,data}`. envelope_bytes — bytes конкретной versioned Envelope, прошедшей validator; это транспортное кодирование, не разрешение opaque native payload. Маленькая запись передаётся одним CompleteRecord. Большая — частями с индексами 0..count−1. Каждая часть содержит одинаковые event_id/digest/count/total_bytes. Смешивать complete и parts в одном retry события нельзя.
 
 SHA-256 вычисляется по исходным сериализованным Envelope bytes. Они фиксируются один раз до передачи и повторяются побайтно. Part layout также фиксируется для retry. Digest проверяет транспорт; он не является универсальным tx hash или semantic event ID. [Protobuf serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/): повторная сериализация другим runtime/version не обязана дать те же bytes.
 
-Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. Он не превышает настроенные server/stream limits. Конкретные значения, retention и spool limits относятся к эксплуатационному контракту/REC; они пока не утверждены. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
+Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. Он не превышает настроенные server/stream limits. Конкретный max frame size задаётся transport/deployment конфигом и валидируется до отправки; pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
 
-Gateway назначает chain_sequence при регистрации публикации события; все части имеют один номер. Это порядок назначения событий одной сети, не block chronology, не NATS stream sequence и не гарантия порядка завершения частей. Части history и live могут чередоваться; лимиты очередей/приоритет live проектируются в transport stage. Межсетевого sequence нет.
+Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [ROCKSDB_DELIVERY_PROTOCOL](ROCKSDB_DELIVERY_PROTOCOL.md).
 
 Execution chronology задают block parent links, native transaction position, operation_index и action/frame order. Delivery chronology задают chain_sequence и transport metadata. `part_index` задаёт только сборку bytes. Нельзя сортировкой chain_sequence восстанавливать blockchain chronology.
 
-NATS message ID должен стабильно различать `(network,event_id,complete-or-part-index)`. После всех PubAck Gateway может подтвердить adapter конкретные event_id/digest/sequence. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable mapping/WAL, повторный запуск и потеря состояния — отдельный REC-пул, не закрытый этой схемой.
+NATS message ID должен стабильно различать `(network,event_id,complete-or-part-index)`. После всех PubAck Gateway может подтвердить adapter конкретные event_id/digest/sequence. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable plan/WAL, повторный запуск, потеря состояния и block-batch IngestAck/Release определены в ROCKSDB_DELIVERY_PROTOCOL.
 
 ## 7. Маршрутизация
 
@@ -134,4 +134,4 @@ NATS message ID должен стабильно различать `(network,eve
 | Неизвестный тип/версия/fork | Явная ошибка нормализации, без фиктивного поддержанного payload |
 | Optional balances выключены | Передаётся заявленный transaction scope; полнота всех балансов не заявляется |
 
-Это acceptance matrix будущих E01/E02/E03, не отчёт о пройденных тестах. E00-15 определил Classic/legacy source profiles и ограничения; их runtime-покрытие и архивы ещё не доказаны. Открыты точные network execution/finality extensions, Classic all-epoch decoders и validators (E02), ресурсные параметры/NATS delivery (E03/REC), история/YAML control (JOB-01, отложен пользователем).
+Это acceptance matrix будущих E01/E02/E03, не отчёт о пройденных тестах. E00-15 определил Classic/legacy source profiles и ограничения; их runtime-покрытие и архивы ещё не доказаны. Открыты точные network execution/finality extensions, Classic all-epoch decoders и validators (E02), измерение ресурсных параметров/реализация NATS delivery (E03), история/YAML control (JOB-01, отложен пользователем).

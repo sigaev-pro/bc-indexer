@@ -4,6 +4,12 @@
 
 ## Точка продолжения
 
+2026-10-16: E00-03.06 DONE как проектный контракт; E00-06 REC также DONE в текущем scope. [Pins](docs/research/ROCKSDB_STACK.md): RocksDB 10.4.2, grocksdb v1.10.2, Rust rocksdb 0.24.0 / librocksdb-sys 0.17.3+10.4.2; source/API evidence проверены. [Протокол](docs/ROCKSDB_DELIVERY_PROTOCOL.md): sync READY, durable publication plan/frame bytes, publication_epoch, block IngestAck, ACKED cleanup/release, single writer, recovery и REC-T01–16. Обновлены ТЗ, контракт, стек, владельцы состояния и план. Сборки/ABI/benchmarks/crash tests не выполнялись; это E01/E03/E05/E06. Следующий шаг после проверок и commit — E00-03.07, итоговая сверка архитектуры; реализация не начата. Более ранние записи ниже описывают историю закрытых вопросов, а не текущие блокеры.
+
+Проверка закрытия .06: 157 локальных ссылок/anchors без ошибок, 60 основных ID без дублей; git diff --check пройден, SHA-256 оригинального v2 совпал с исходным. Source/API pins проверены; runtime tests не запускались. Хеш контрольной фиксации смотреть в git log.
+
+История выполнения: E00-03.06-B/C/D были начаты по поручению «выполняй»; теперь закрыты как документы, результат выше. .07 до успешного commit не начинать.
+
 2026-10-16: D33 accepted — пользователь утвердил RocksDB. E00-03.06-B PARTIAL: движок выбран, версии engine/Go/Rust bindings и детали durable записи/очистки ещё открыты. Следующее действие внутри .06 — закрепить совместимые pins, затем завершить ACK/checkpoint/Gateway recovery и crash fixtures (.06-C/D). Обычный RocksDB — baseline, integrated BlobDB optional для будущих измерений. Реализация и benchmark не выполнялись; .06 целиком не закрыт. Результаты исследования ниже — история выбора, не повод повторно спрашивать о движке.
 
 2026-10-16: E00-03.06-B IN_PROGRESS — исследование завершено, выбор ещё открыт. SQLite исключён D32. [Рекомендация RocksDB](docs/research/WAL_ENGINE_SELECTION.md), [сравнение альтернатив](docs/research/WAL_ALTERNATIVES.md): baseline RocksDB + sync WriteBatch, integrated BlobDB как отдельный POC-кандидат для больших payload. Pebble — резерв для Go; MDBX/Badger/сегментный log имеют описанные tradeoffs. POC и benchmark не запускались, bindings/version не выбраны. Следующее действие — согласовать engine baseline и завершить протокол checkpoint/cleanup/Gateway в .06-C; .07 не начат. Проверки локальных ссылок и git diff --check выполняются перед коммитом; оригинальный v2 не менять.

@@ -1,6 +1,6 @@
 # Стек компонентов: проектный baseline E00-03.03
 
-> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. Версии/bindings и crash-safe протокол завершаются в .06.
+> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](research/ROCKSDB_STACK.md), [протокол и REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md).
 
 > Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
 
@@ -22,7 +22,7 @@
 | Генерация Go | protoc 36.2 + protobuf-go/protoc-gen-go 1.36.12 | protoc-gen-go-grpc из согласованного source release grpc-go; точный module tag/commit и lock фиксируются E01/E02, не подменяются версией server SDK |
 | Rust transport/codec | tonic 0.14.6 + tonic-prost/tonic-prost-build 0.14.6; prost/prost-build 0.14.4 | Общая proto schema; встройка в Base Cargo graph проверяется E01/E02, upstream lock клиента не обновляется автоматически |
 | Adapter → Gateway | gRPC streaming; локальный UDS при совместном размещении, TCP+mTLS при сетевом соединении | Оба конца проверяют schema/profile/размер/целостность; production topology определяет endpoint, не семантику данных |
-| WAL/publication journal | RocksDB embedded, отдельный каталог каждого владельца записи; принято D33 | Обычный RocksDB — baseline, integrated BlobDB optional; версии Go/Rust bindings, sync/cleanup протокол завершаются в .06; backup исключён D27 |
+| WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2; Rust rocksdb 0.24.0 / librocksdb-sys 0.17.3+10.4.2 | Sync WriteBatch, WAL enabled, отдельный каталог owner; [pins/API/build gates](research/ROCKSDB_STACK.md), [protocol](ROCKSDB_DELIVERY_PROTOCOL.md). BlobDB optional, backup исключён D27 |
 | Приёмочный harness | Go + тот же protobuf decoder + JetStream client | Только проверка опубликованных сообщений против fixtures; не промышленный downstream |
 | Локальный запуск | Docker Compose; NATS server с JetStream и отдельным volume, независимые сервисы сетей | Готовая конфигурация проекта по D21/D22; ресурсы native nodes остаются реальной нагрузкой, Compose не делает их лёгкими |
 | Production | Kubernetes; отдельные workload/volume/config контуры сетей; NATS внутри кластера | Официальная Helm chart nats/nats 2.15.1, отдельный server pin 2.15.1; [pins/values и ограничения](research/NATS_DEPLOYMENT_STACK.md) |
@@ -55,4 +55,4 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 Для каждого компонента определён язык/runtime, integration boundary и version candidate либо явная внешняя зависимость. Это закрывает .03 как проектный baseline, но не build/runtime gate. Проверки E01/E02: сборка каждого адаптера с bindings, совместимость Rust graph, gRPC transfer large record, независимый Gateway/NATS SDK build, одинаковая валидация wire fields и packaging с закреплёнными версиями.
 
-Следующий подэтап .04 определяет авторитетного владельца canonical/lifecycle, event IDs, source bytes, transport segmentation, publication mapping и ACK state. Он не выбирает physical WAL backend до REC.
+.04 задаёт владельцев состояния; .06 закрепляет RocksDB/pins и протокол доставки/очистки. Следующий .07 — итоговая проверка архитектуры. Совместные сборки и runtime tests остаются E01/E03.

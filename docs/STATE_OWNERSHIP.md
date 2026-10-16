@@ -1,6 +1,6 @@
 # Владение служебным состоянием — E00-03.04, уточнение D23–D25
 
-> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. Версии/bindings и crash-safe протокол завершаются в .06.
+> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](research/ROCKSDB_STACK.md), [протокол и REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md).
 
 2026-10-16. Вместо общего live/history coordinator используется независимое состояние получения и передачи каждого producer/run. Дедупликация пересечений и проверка содержимого блоков вне scope. Авторитетный контракт: [LIVE_HISTORY_DELIVERY.md](LIVE_HISTORY_DELIVERY.md).
 
@@ -12,12 +12,12 @@
 | Event ID, immutable Envelope bytes/digest | Delivery writer данного producer/run | Retry сохраняет ID/bytes; повтор команды может создать новые события для тех же блоков |
 | Outbound part layout | Adapter delivery writer | Фиксируется для retry; Gateway не перепаковывает pending событие молча |
 | RECEIVED / WAL_SAVED / полученный IngestAck | Adapter progress journal | WAL_SAVED требует закрытого batch и согласованной durable записи; read cursor недостаточен |
-| event_id → chain_sequence / pending публикация | Gateway journal сети | Только delivery identity, не dedup по block/tx hash или диапазонам |
+| event_id → publication_epoch/chain_sequence / pending публикация | Gateway journal сети | Plan дополнительно хранит producer до публикации; только delivery identity, не dedup по block/tx hash или диапазонам |
 | PubAck сообщений/частей | Gateway | NATS_ACKED только после всех ACK закрытого batch; потерянный ACK допускает повтор |
 | Параметры N–M / cursor задания | History producer/run | Простая конечная команда; нет общего job registry, устраняющего overlap |
 | Stream messages и retention | NATS JetStream | ACK не подтверждает downstream-валидацию или бессрочное хранение |
 
-Per-network служебное хранение означает namespaces и изолированные журналы, а не один embedded файл с несколькими writers из разных pods. Локальный embedded KV — техническая рекомендация; engine/flush/backup/cleanup ещё .06/REC. Adapter WAL и Gateway publication journal сохраняют собственные факты; без выбранной модели восстановления нельзя обещать атомарность между native import, двумя журналами и NATS.
+Per-network служебное хранение означает namespaces и изолированные журналы, а не один embedded файл с несколькими writers из разных pods. RocksDB принят D33; pins/flush/cleanup закреплены в [протоколе .06](ROCKSDB_DELIVERY_PROTOCOL.md). Adapter WAL и Gateway publication journal сохраняют собственные факты; общей транзакции между native import, двумя журналами и NATS нет. Разрывы закрываются native replay, durable publication plan и at-least-once retry.
 
 ## Проверяемое поведение
 
@@ -29,4 +29,4 @@ Per-network служебное хранение означает namespaces и �
 - Ошибка получения/нормализации/WAL: ERROR не становится успешной доставкой.
 - Снижение лимитов ниже уже сохранённой части: явная ошибка/остановка передачи; не усечение и не незаметная смена bytes/layout.
 
-Это логическое распределение ответственности, не пройденные тесты. Полный block-content verifier, range coverage oracle и downstream dedup отсутствуют. Следующий шаг — .06/REC: конкретный backend и гарантии восстановления.
+Это логическое распределение ответственности, не пройденные тесты. Полный block-content verifier, range coverage oracle и downstream dedup отсутствуют. E00-03.06 завершён как контракт; следующий шаг — .07, итоговая проверка.
