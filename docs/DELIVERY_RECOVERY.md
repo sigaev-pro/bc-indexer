@@ -41,6 +41,8 @@
 
 ## Оставшиеся задачи .06
 
+Исследование .06-B сохранено в [WAL_ENGINE_SELECTION](research/WAL_ENGINE_SELECTION.md) и [WAL_ALTERNATIVES](research/WAL_ALTERNATIVES.md). SQLite исключён D32. Предлагается RocksDB с sync WriteBatch; integrated BlobDB сравнивается отдельно для больших payload. Backend/bindings/version пока не утверждены, POC не выполнялся.
+
 - [x] E00-03.06-A Зафиксировать требования REC и границы scope — D26–D31.
 - [ ] E00-03.06-B Выбрать локальный backend WAL/metadata для Go/Rust компонентов; описать запись, flush и очистку без отдельной серверной БД.
 - [ ] E00-03.06-C Определить checkpoint, single-writer ownership, поведение Gateway после потери его журнала и уборку ACK metadata без постоянного архива.
