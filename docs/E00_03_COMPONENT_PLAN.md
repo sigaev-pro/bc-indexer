@@ -1,6 +1,6 @@
 # E00-03 — компоненты, стек и границы ответственности
 
-> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend и crash-safe протокол остаются техническими задачами .06.
+> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. Версии/bindings и crash-safe протокол завершаются в .06.
 
 2026-10-15. Пользователь поручил разбить E00-03 и выполнять поэтапно с сохранением результатов и необходимыми вопросами. Это проектирование; разработка и развёртывание не начаты. Принятые решения — [DECISIONS.md](DECISIONS.md); общая архитектура — [COLLECTION_ARCHITECTURE.md](COLLECTION_ARCHITECTURE.md).
 
@@ -13,7 +13,7 @@
 | E00-03.03 | Закрепить стек и интеграции | [COMPONENT_STACK](COMPONENT_STACK.md): версии-кандидаты, common SDK и packaging; build-проверки в E01 | DONE — проектный baseline |
 | E00-03.04 | Определить владельцев состояния | [STATE_OWNERSHIP](STATE_OWNERSHIP.md): capture, lifecycle, IDs/bytes/parts, прогресс и ACK; physical storage зависит от REC | DONE — логическая модель |
 | E00-03.05 | Описать live и историю | D23–D25: отдельные pods, простая команда N–M, дубли допустимы, локальный прогресс до NATS; [результат](LIVE_HISTORY_DELIVERY.md) | DONE |
-| E00-03.06 | Определить границы доставки и поведение при сбоях | Передачи ответственности, PubAck/IngestAck, backpressure, retry/fencing; требования REC приняты D26–D31; задачи .06-A–D в DELIVERY_RECOVERY | IN_PROGRESS; требования D26–D31 приняты, backend/atomicity ещё открыты |
+| E00-03.06 | Определить границы доставки и поведение при сбоях | Передачи ответственности, PubAck/IngestAck, backpressure, retry/fencing; требования REC приняты D26–D31; задачи .06-A–D в DELIVERY_RECOVERY | IN_PROGRESS; требования D26–D31 приняты, RocksDB принят D33; bindings/atomicity ещё открыты |
 | E00-03.07 | Свести итог и проверить согласованность | Компонент → стек → интеграция → состояние → гарантии → fixture; документы согласованы, обязательные открытые решения закрыты либо явно вынесены за согласованный scope | TODO |
 
 Выполняем подэтапы последовательно. Факты и независимые проверки можно готовить заранее, но зависимый выбор не считается принятым без ответа. Новые решения не пересматривают D16–D20 молча. E00-03.06 и финальный gate не могут быть DONE лишь потому, что REC отложен.
@@ -40,7 +40,7 @@
 | Native runtime каждой сети | Исполнить блок по native правилам и дать результаты/сигналы canonical chain | [CLIENT_MATRIX](CLIENT_MATRIX.md): Geth, BSC, Base, Nitro, Bor; Classic — отдельный historical runtime Arbitrum One | Build/toolchain доказательство, точные supporting clients и доступность historical inputs |
 | Adapter внутри native integration | Захватить все применимые transaction details и нормализовать | Go для Geth/BSC/Nitro/Bor; Rust для Base; Classic Go + C++ AVM observer candidate | Конкретные module boundaries, hook budgets и versioned decoders; E00-03.03/E01/E02 |
 | Canonical Coordinator | Связать execution с canonical inclusion, reorg/finality и lifecycle | Это роль контура одной сети; общесетевого coordinator нет | Lifecycle state каждого producer/run; E00-03.04 с поправкой D24 |
-| Adapter WAL | Удерживать собранные записи и pending delivery до согласованного ACK | Нужен служебный журнал; это не пользовательское downstream-хранилище | Backend, fsync/atomic boundary, пределы и очистка — после REC |
+| Adapter WAL | Удерживать собранные записи и pending delivery до согласованного ACK | Нужен служебный журнал; это не пользовательское downstream-хранилище | RocksDB принят D33; fsync/atomic boundary и очистка — остаток .06; требования REC приняты D26–D31 |
 | Adapter → Gateway | Передать проверяемую versioned запись или её части | Рабочий проект: Protobuf/gRPC, UDS локально / mTLS TCP между хостами | Зафиксировать baseline transport и library/build pins; E00-03.03 |
 | Gateway / publisher сети | Валидировать envelope/parts, регистрировать публикацию, отправлять в JetStream и подтверждать доставку | Отдельный Gateway каждой сети принят D19; общий сервис между сетями не вводится | Go/gRPC-Go/NATS Go client — кандидаты; ownership publication mapping и fencing — E00-03.04/06 |
 | NATS JetStream | Принять сообщения и выдать PubAck | D22: проект включает развёртывание в Kubernetes/Compose; общий NATS с раздельными streams/лимитами | Один instance/одна replica по D30; дальнейшее хранение после PubAck вне scope |

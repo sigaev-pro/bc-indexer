@@ -1,6 +1,6 @@
 # E00-03.06 — доставка и восстановление
 
-2026-10-16. Требования D26–D31 приняты. Технический выбор backend остаётся открытым; этот документ не означает начало реализации.
+2026-10-16. Требования D26–D31 приняты. По D33 backend WAL/служебного состояния — RocksDB. Версии/bindings и точный crash-safe протокол остаются открытыми; этот документ не означает начало реализации.
 
 ## Граница ответственности
 
@@ -41,10 +41,10 @@
 
 ## Оставшиеся задачи .06
 
-Исследование .06-B сохранено в [WAL_ENGINE_SELECTION](research/WAL_ENGINE_SELECTION.md) и [WAL_ALTERNATIVES](research/WAL_ALTERNATIVES.md). SQLite исключён D32. Предлагается RocksDB с sync WriteBatch; integrated BlobDB сравнивается отдельно для больших payload. Backend/bindings/version пока не утверждены, POC не выполнялся.
+Исследование .06-B сохранено в [WAL_ENGINE_SELECTION](research/WAL_ENGINE_SELECTION.md) и [WAL_ALTERNATIVES](research/WAL_ALTERNATIVES.md). SQLite исключён D32; RocksDB принят D33. Sync WriteBatch — проектный baseline; integrated BlobDB остаётся возможной оптимизацией. Bindings/version ещё не выбраны, POC не выполнялся.
 
 - [x] E00-03.06-A Зафиксировать требования REC и границы scope — D26–D31.
-- [ ] E00-03.06-B Выбрать локальный backend WAL/metadata для Go/Rust компонентов; описать запись, flush и очистку без отдельной серверной БД.
+- [ ] E00-03.06-B PARTIAL: RocksDB принят D33; осталось закрепить версии/bindings для Go/Rust и описать запись, flush и очистку без отдельной серверной БД.
 - [ ] E00-03.06-C Определить checkpoint, single-writer ownership, поведение Gateway после потери его журнала и уборку ACK metadata без постоянного архива.
 - [ ] E00-03.06-D Сопоставить каждый crash window с fixture; согласовать активные документы и закрыть .06.
 
