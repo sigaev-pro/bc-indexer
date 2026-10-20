@@ -21,7 +21,7 @@ RocksDB work вынесен из consensus-critical callback и async event loop
 
 ## 1. Capture и durable READY
 
-1. Перед приёмом новых событий создать или открыть состояние задания. History хранит N, M и run_id; live сохраняет однажды вычисленную стартовую границу. Restart с тем же диском не вычисляет заново «минус три часа». Изменение YAML не переписывает молча активный диапазон — CFG отдельно.
+1. Перед приёмом новых событий создать или открыть состояние owner. History хранит явные N, M и run_id; live — identity/capture checkpoint и pending состояние. D36 отменяет default три часа/start_block и auto-history при старте. Повтор отправки pending после restart сохраняется. Получение новых блоков за время остановки live ещё требует решения CFG-R3; не смешивать его с восстановлением ранее начатого batch.
 2. Получить native данные, нормализовать, сохранить STAGING, неизменяемые сообщения/части и references bounded sync WriteBatch пакетами. RECEIVED не является durable гарантийным состоянием.
 3. После успешного сохранения всех фактически подготовленных записей одним sync WriteBatch поставить READY/closed marker и продвинуть capture_checkpoint. Это WAL_SAVED. Для пустого блока batch содержит metadata; для lifecycle события используется такой же delivery protocol.
 4. Из STAGING отправка запрещена. После crash удалить незакрытый STAGING и повторить native capture от прежнего capture_checkpoint; IDs новой попытки не переиспользуют старые sequence. Публикации из незакрытого batch не было.

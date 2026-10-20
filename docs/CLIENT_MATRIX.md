@@ -52,7 +52,7 @@
 
 ## Историческое исполнение
 
-Общий способ — отдельное последовательное native replay, начиная с доступного parent state, с теми же chain rules и адаптером. Это предлагаемая реализация, не завершённая capability. Наличие bodies/receipts не заменяет state и повторное исполнение для внутренних вызовов. Source node может потребовать долгую синхронизацию/архив независимо от того, что сам extractor экспортирует только последние три часа. [Geth archive](https://geth.ethereum.org/docs/fundamentals/archive), [Base snapshots](https://docs.base.org/specifications/node-operators/snapshots), [Nitro/Bor ограничения](research/ARBITRUM_POLYGON_CLIENTS.md).
+Общий способ — отдельное последовательное native replay, начиная с доступного parent state, с теми же chain rules и адаптером. Это предлагаемая реализация, не завершённая capability. Наличие bodies/receipts не заменяет state и повторное исполнение для внутренних вызовов. Source node может потребовать долгую синхронизацию/архив независимо от того, что основной extractor по D36 экспортирует только live, а history-сервис выполняет явный N–M. [Geth archive](https://geth.ethereum.org/docs/fundamentals/archive), [Base snapshots](https://docs.base.org/specifications/node-operators/snapshots), [Nitro/Bor ограничения](research/ARBITRUM_POLYGON_CLIENTS.md).
 
 | Сеть | Условия и дополнительные проверки |
 |---|---|
