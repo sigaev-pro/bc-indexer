@@ -27,7 +27,7 @@ E00 Решения → E01 Проверка нативного захвата в
 
 Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects и лимитами. Live и команда N–M сохранены; управление YAML/history отложено пользователем D20.
 
-Принято D06: default при старте — последние три часа либо стартовый блок из YAML; live одновременно. Ранее принятый reload с автоматической догрузкой требует согласования с новой командой N–M в JOB-01; до ответа критерий приёмки reload не финализирован. Принято D08: восстановление запуском с тем же YAML; REC закрыт D26–D31; потеря диска требует нового run и ручной истории. HA/backup вне scope, RTO не обещается.
+Принято D06/D34/D35: первый старт — последние три часа либо блок из YAML, live одновременно. Изменение start_block применяется явным вызовом единого интерфейса, запускает догрузку выбранной сети без рестарта live и без Kubernetes-зависимости. Только start_block меняется без рестарта; точный диапазон/repeat/bootstrap остаются CFG-S03/S04. Ручная N–M независима. REC закрыт D26–D31; при потере диска новый run и ручная история, HA/backup вне scope, RTO не обещается.
 
 ## Стек по этапам
 
@@ -206,12 +206,12 @@ Gate: отдельно приняты Ethereum, BSC, Base, Arbitrum и Polygon; 
 | E00-03 | DONE | .01–07 закрыты как архитектурные документы; [итоговая матрица](E00_03_ARCHITECTURE_REVIEW.md); сборки/код/runtime не выполнялись |
 | E00-04 | OPEN | Итоговая последовательность/критерии/численные пороги и remaining supporting-client profiles |
 | E00-05 | PARTIAL | Локальный Git/commit workflow действует; remote/backup документов и разрешение на реализацию не приняты |
-| E00-07 | IN_PROGRESS | [CONFIG_CONTRACT](CONFIG_CONTRACT.md), CFG-S01 выполнен; ответы CFG-R1 ожидаются, точная schema/validation ещё открыты |
+| E00-07 | IN_PROGRESS | [CONFIG_CONTRACT](CONFIG_CONTRACT.md), CFG-S01/S02 DONE по D34/D35; CFG-S03/S04 открыты |
 | E00-08 | OPEN | Лицензия и repository/release workflow; публикация не разрешена автоматически |
 | E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
 | E00-11 | PARTIAL | Архитектурный блок проверен; весь пакет ТЗ ожидает CFG/приёмку/OSS и итоговое согласование |
 | E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
-| E00-09 | IN_PROGRESS | Команда и отдельные pods приняты D23; CFG-R1 уточняет auto-launch/reload/active job, bootstrap зависит от ответов |
+| E00-09 | IN_PROGRESS | Единый явный apply без Kubernetes-зависимости; CFG-R2 уточняет диапазон/повторные изменения, bootstrap ещё открыт |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |
 | E00-14 | DONE | Реестр native типов и логический контракт; proto/validators/fixtures не реализованы |
 | E00-15 | DONE | Source research и исторические typed profiles; runtime/архивы не приняты, fixtures перенесены в последующие этапы |
