@@ -206,12 +206,12 @@ Gate: отдельно приняты Ethereum, BSC, Base, Arbitrum и Polygon; 
 | E00-03 | DONE | .01–07 закрыты как архитектурные документы; [итоговая матрица](E00_03_ARCHITECTURE_REVIEW.md); сборки/код/runtime не выполнялись |
 | E00-04 | OPEN | Итоговая последовательность/критерии/численные пороги и remaining supporting-client profiles |
 | E00-05 | PARTIAL | Локальный Git/commit workflow действует; remote/backup документов и разрешение на реализацию не приняты |
-| E00-07 | OPEN | Следующий раунд: schema .yml, validation, reload/restart вместе с E00-09 |
+| E00-07 | IN_PROGRESS | [CONFIG_CONTRACT](CONFIG_CONTRACT.md), CFG-S01 выполнен; ответы CFG-R1 ожидаются, точная schema/validation ещё открыты |
 | E00-08 | OPEN | Лицензия и repository/release workflow; публикация не разрешена автоматически |
 | E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
 | E00-11 | PARTIAL | Архитектурный блок проверен; весь пакет ТЗ ожидает CFG/приёмку/OSS и итоговое согласование |
 | E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
-| E00-09 | PARTIAL | Команда и отдельные pods приняты D23; YAML/reload/bootstrap остаются JOB-01/CFG |
+| E00-09 | IN_PROGRESS | Команда и отдельные pods приняты D23; CFG-R1 уточняет auto-launch/reload/active job, bootstrap зависит от ответов |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |
 | E00-14 | DONE | Реестр native типов и логический контракт; proto/validators/fixtures не реализованы |
 | E00-15 | DONE | Source research и исторические typed profiles; runtime/архивы не приняты, fixtures перенесены в последующие этапы |
