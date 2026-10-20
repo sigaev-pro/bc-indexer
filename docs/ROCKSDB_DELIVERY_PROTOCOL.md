@@ -16,6 +16,7 @@ RocksDB work вынесен из consensus-critical callback и async event loop
 - local batch_seq — последовательность delivery batch данного run; не высота блока. Reorg/status тоже получают новые batch_seq. batch_id=(producer_id,run_id,batch_seq).
 - event_id=(producer_id,run_id,event_sequence): последовательность резервируется durable вместе с подготовкой. События и parts сохраняют исходные Envelope bytes, digest и layout. Неиспользованные sequence допустимы, повторное использование запрещено.
 - Prefixes producer: identity/job; capture_checkpoint; batch/<seq>/manifest,state; message/<seq>/<event>/<part>; publication_plan/<seq>; ack_cleanup/<seq>; release_outbox/<seq>. Manifest содержит block hash/parent/height и список фактически подготовленных references, не независимый native inventory.
+- Native lifecycle bridge дополнительно владеет минимальным lifecycle_state: references наблюдаемых активаций, counter и branch/status checkpoint. Изменения этого состояния фиксируются вместе с READY соответствующего observation batch. ACK cleanup не удаляет references, ещё необходимые для корректного Removed/Status/reinclusion; native профиль задаёт момент их безопасного удаления или воспроизводимый способ восстановления. Это рабочее состояние, не payload или архив доставленных блоков. Точные network finality/late-status правила проверяются в E02/E05; нельзя считать payload WAL единственным источником lifecycle identity.
 - Prefixes Gateway: instance_epoch/counter; active_session; batch/<id>/plan,frames,ackset; release_frontier/<run>. Payload Gateway временный, producer остаётся источником повторной отправки до IngestAck.
 
 ## 1. Capture и durable READY
@@ -77,7 +78,7 @@ Producer принимает только ACK всего своего закры�
 | REC-T11 | Disk-full / sync error / повреждение БД | явная ERROR, нет ложного READY/ACK и silent skip; automatic repair с отбрасыванием данных запрещён |
 | REC-T12 | Второй writer / старый stream после reconnect | второй opener/старый session отвергнут; только подтверждённое завершение writer позволяет замену |
 | REC-T13 | Producer volume потерян | новый run, ручной диапазон; нет ложного обещания восстановить прежний cursor из YAML |
-| REC-T14 | Native import опередил durable capture / reorg при restart | replay от сохранённой branch-aware позиции или ERROR при отсутствии state; нет тихого перехода на head |
+| REC-T14 | Native import опередил durable capture / reorg после ACK cleanup и restart | replay от сохранённой branch-aware позиции; Removed/Status с прежними activation references из lifecycle_state либо воспроизводимого native профиля; при отсутствии state ERROR, нет тихого перехода на head |
 | REC-T15 | Неверный digest, schema, ACK или лимит ниже pending part | явная ошибка, неизменные pending bytes сохранены |
 | REC-T16 | Final history CloseRun / потеря ReleaseAck / abandon старого run | служебные receipts очищаются без архива, pending не удаляются без NATS ACK |
 

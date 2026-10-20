@@ -40,12 +40,12 @@ E00 Решения → E01 Проверка нативного захвата в
 | E01–E07 Arbitrum One | Go Nitro v3.12.1 + Rust 1.93.0/cgo/WASM; Classic v1.4.7 — отдельный Go/C++ AVM backend | Nitro tracer + ArbOS/Stylus paths; Classic native inventory/cursor + consensus-neutral AVM observer candidate | Classic archive/toolchain/all-epoch decoder и state/action полнота не доказаны; [Classic fixtures](research/ARBITRUM_CLASSIC_CAPTURE.md) |
 | E01–E07 Polygon PoS | Go Bor v2.10.2 + Heimdall-v2 v0.12.2 | Live tracer + StateSync/Finalize; legacy source receipt — optional auxiliary, вне body count | Effective Go version, state-sync attribution, historical inputs; [legacy fixtures](research/POLYGON_LEGACY_CAPTURE.md) |
 | E02 общий контракт | Protocol Buffers v3, Go bindings; Rust bindings перед первым Rust-клиентом | Схемы из v3 после проверки модели; независимые валидаторы и fixtures | Версии protoc/plugins; нужен ли Buf; стратегия schema compatibility |
-| E03 Gateway | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0 — кандидаты .03 | Отдельный сервис сети; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) | Совместная сборка E01; fencing/storage по REC |
+| E03 Gateway | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0 — кандидаты .03 | Отдельный сервис сети; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) | Совместная сборка E01; fencing/storage определены .06, тесты E03/E05 |
 | E03 локальный WAL / journal | RocksDB 10.4.2; grocksdb v1.10.2; Rust rocksdb 0.24.0 / sys 0.17.3+10.4.2 | Sync WriteBatch, READY/ACKED cleanup, durable publication plan и release | [Pins](research/ROCKSDB_STACK.md), [REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md); build/runtime tests в E01/E03 |
 | E02–E07 тестовый считыватель | Go + protobuf bindings | Проверка bytes, полей, частей и lifecycle на выбранных примерах в NATS против native fixtures | Только приёмочный harness, не промышленный сервис обработки |
 | E00–E07 пользовательская конфигурация | YAML (.yml) обязателен; библиотека по выбранному языку | Валидируемые network profiles, loading bounds, подключения и документированное применение изменений | Schema/version, defaults, hot reload vs restart для каждого поля |
 | E04–E06 native backfill | Язык и родной executor каждого выбранного клиента | Последовательное исполнение диапазона от доступного state; отдельные ресурсы live/backfill | Стартовый state, pruning/retention, источники bodies/receipts и нагрузка по каждой сети |
-| E07 окружение и эксплуатация | D21/D22: Docker Compose для dev/local и Kubernetes для production, NATS внутри обеих сред; Linux containers baseline | Official NATS Helm chart + project values в Kubernetes; official server image + volume в Compose; [источники](research/NATS_DEPLOYMENT_STACK.md) | CPU/hardware, versions/digests/build fixtures, replicas/retention/REC, CI и thresholds |
+| E07 окружение и эксплуатация | D21/D22: Docker Compose для dev/local и Kubernetes для production, NATS внутри обеих сред; Linux containers baseline | Official NATS Helm chart + project values в Kubernetes; official server image + volume в Compose; [источники](research/NATS_DEPLOYMENT_STACK.md) | CPU/hardware, versions/digests/build fixtures, один NATS replicas=1, принятый REC, CI и thresholds; post-ACK retention вне scope |
 | E08 дополнительные сети/клиенты | Go или Rust по нативному клиенту | Повторное использование проверенного контракта; собственные execution/canonical integrations | Приоритет после первого контура, commits, runtime и покрытие |
 
 Матрица конкретных клиентов и проверенных исходников — [CLIENT_MATRIX.md](CLIENT_MATRIX.md); это source-verified рекомендации, не проверенные сборки. Основания механизмов и история — DECISIONS.md. Внутренние WAL/journals и Rust crates остаются кандидатами. Прикладная обработка после NATS не входит.
@@ -56,9 +56,9 @@ E00 Решения → E01 Проверка нативного захвата в
 
 - [x] E00-01 Проверить исходные файлы, локальные инструменты и первичные документы. Артефакт: факты в DECISIONS.md; ограничения окружения отмечены отдельно от проектных решений.
 - [x] E00-02 Завершить исходную рамку: набор пяти сетей, YAML/история/live и сохранение действий приняты; точные mainnets подтверждены D13, Q1a закрыт. Восстановление вынесено в E00-06, новые уточнения команды и независимых процессов — в E00-09.
-- [ ] E00-03 Последовательно закрыть зависимые вопросы Q5–Q15. Готово: у каждого компонента есть версия/кандидат, способ интеграции, владелец состояния, граница надёжности и проверка.
+- [x] E00-03 Архитектурный блок .01–07 завершён: компоненты, pins/candidates, интеграция, владельцы состояния, доставка и проверки сведены в [итоговой матрице](E00_03_ARCHITECTURE_REVIEW.md). Не закрывает CFG/OSS/приёмку всего ТЗ и не разрешает реализацию.
 
-Декомпозиция и результаты: [E00_03_COMPONENT_PLAN.md](E00_03_COMPONENT_PLAN.md). Подэтапы: E00-03.01 карта компонентов → .02 граница поставки → .03 стек/интеграции → .04 владельцы состояния → .05 live/history → .06 доставка/сбои → .07 итоговая сверка. Каждый подэтап имеет собственный статус и артефакт; родитель остаётся открытым до закрытия необходимых решений. REC/YAML остаются отдельными зависимостями, а не выбранными по умолчанию ответами.
+Декомпозиция и результаты: [E00_03_COMPONENT_PLAN.md](E00_03_COMPONENT_PLAN.md). Подэтапы: E00-03.01 карта компонентов → .02 граница поставки → .03 стек/интеграции → .04 владельцы состояния → .05 live/history → .06 доставка/сбои → .07 итоговая сверка. Каждый подэтап имеет собственный статус и артефакт; родитель остаётся открытым до закрытия необходимых решений. REC закрыт D26–D31; YAML/reload остаются E00-07/E00-09 и не выбраны по умолчанию.
 
 - [ ] E00-04 Уточнить этапы и задачи по ответам; согласовать итоговое понимание Q16. Готово: все необходимые для первого этапа решения приняты; будущие исследования отмечены как исследования, не скрытые предположения.
 - [ ] E00-05 Зафиксировать способ версионирования/резервирования документов и разрешение на реализацию. Готово: выбранный процесс записан; созданные репозитории/remote отражены только при фактическом выполнении.
@@ -117,7 +117,7 @@ Gate: модель позволяет восстановить корректн�
 - [ ] E03-04 Реализовать накопление без TTL/прикладной квоты до NATS ACK, bounded RAM, retry и явные ошибки disk-full/config. Не удалять pending данные; post-ACK retention и HA не проектировать.
 - [ ] E03-05 Пройти REC-T01–16: crash до/после sync, потеря Gateway store/ACK, partial cleanup/release, single writer, late ACK. Готово: нет потери pending; повторы допустимы; никаких HA-гарантий.
 
-Gate: native fixtures всех пяти сетей опубликованы в NATS и сверены тестовым считывателем после согласованных сбоев. Полнота содержимого и подтверждение публикации проверяются отдельно.
+Gate: выбранные native fixtures пяти сетей опубликованы в NATS после согласованных сбоев. Тест сверяет ожидаемые поля/части и PubAck; production block completeness verifier не вводится.
 
 - [ ] E03-11 Доставлять block metadata и lifecycle в NATS, включая пустые блоки. Проверять PubAck всех частей; независимая проверка полноты содержимого вне scope.
 
@@ -134,18 +134,18 @@ Gate: отсутствие необъяснённых capture gaps на выбр
 
 ## E05 — каноничность, reorg, finality и restart
 
-Зависимости: E04 и durable guarantees E03. Стек: native notifications + Coordinator + выбранный журнал состояния.
+Зависимости: E04 и durable guarantees E03. Стек: native notifications + lifecycle bridge каждого producer/run + RocksDB.
 
 - [ ] E05-01 Реализовать canonical activation registry и финальные статусы. Готово: speculative capture не публикуется как canonical; статусы привязаны к правильной активации.
 - [ ] E05-02 Реализовать rollback/reapply транзакций и блоков. Готово: reinclusion и возврат ветки дают корректные активации. Системные события включаются в проверку только при реализации optional расширения.
 - [ ] E05-03 Закрыть crash window между нодой, WAL и publication journal согласно REC. При недоступных данных показывать явную ошибку; не объявлять успешную доставку.
 - [ ] E05-04 Проверить fencing и конкурентные источники. Готово: старый writer не публикует после смены; гонки capture/reorg/publish/status покрыты тестами выбранной топологии.
 
-Gate: выполнена матрица crash/reorg/finality без необнаруженных пропусков; повторы не создают ложных канонических активаций.
+Gate: crash/reorg/finality fixtures сохраняют correct references данного producer/run, включая restart после ACK cleanup. Retry сохраняет identity; разные runs вправе повторно публиковать то же включение. Production verifier/dedup не требуется.
 
 ## E06 — историческая выгрузка и учёт доставки
 
-Зависимости: E05, наличие native state перед диапазоном. Стек: native executor, отдельный history pod/process, WAL и локальный журнал доставки; backend выбирается в E00-03.06/REC. Никакого общего overlap coordinator, coverage report или UI.
+Зависимости: E05, наличие native state перед диапазоном. Стек: native executor, отдельный history pod/process, WAL и локальный журнал доставки; backend RocksDB и протокол выбраны в E00-03.06. Никакого общего overlap coordinator, coverage report или UI.
 
 - [ ] E06-01 Подготовить закреплённый диапазон, стартовое состояние и проверку исторических VM/forks. Готово: источники доступны и воспроизводимы; pruning не уничтожает необходимые данные.
 - [ ] E06-02 Реализовать последовательный replay с checkpoints. Готово: остановка/продолжение не требуют независимого полного восстановления state для каждой транзакции.
@@ -203,7 +203,14 @@ Gate: отдельно приняты Ethereum, BSC, Base, Arbitrum и Polygon; 
 |---|---|---|
 | E00-01 | DONE | Факты окружения и ссылки записаны в DECISIONS.md |
 | E00-02 | DONE | Точные mainnets приняты D13; начальная рамка сохранена, новые уточнения вынесены в E00-09 |
-| E00-03 | IN_PROGRESS | .01–04 DONE как документы; .02 принят D21/D22, .03–04 — technical baseline. .05 DONE по D23–D25; .06 DONE: RocksDB/pins/protocol; следующий .07 |
+| E00-03 | DONE | .01–07 закрыты как архитектурные документы; [итоговая матрица](E00_03_ARCHITECTURE_REVIEW.md); сборки/код/runtime не выполнялись |
+| E00-04 | OPEN | Итоговая последовательность/критерии/численные пороги и remaining supporting-client profiles |
+| E00-05 | PARTIAL | Локальный Git/commit workflow действует; remote/backup документов и разрешение на реализацию не приняты |
+| E00-07 | OPEN | Следующий раунд: schema .yml, validation, reload/restart вместе с E00-09 |
+| E00-08 | OPEN | Лицензия и repository/release workflow; публикация не разрешена автоматически |
+| E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
+| E00-11 | PARTIAL | Архитектурный блок проверен; весь пакет ТЗ ожидает CFG/приёмку/OSS и итоговое согласование |
+| E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
 | E00-09 | PARTIAL | Команда и отдельные pods приняты D23; YAML/reload/bootstrap остаются JOB-01/CFG |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |
 | E00-14 | DONE | Реестр native типов и логический контракт; proto/validators/fixtures не реализованы |

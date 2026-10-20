@@ -14,13 +14,13 @@
 
 ## Путь данных
 
-Native node/executor → Adapter + Canonical Coordinator → локальный WAL → gRPC → Gateway/publisher → NATS JetStream.
+Native node/executor → Adapter + Native lifecycle bridge → локальный WAL → gRPC → Gateway/publisher → NATS JetStream.
 
 | Узел | Ответственность | Стек и статус |
 |---|---|---|
 | Native node/executor | Родное исполнение live/import и истории, receipts, состояние, canonical/finality notifications | Клиенты/commits проверены по исходникам в CLIENT_MATRIX; native executor каждой сети, runtime-доказательство в E01 |
 | Adapter | Все транзакции, calls/logs/state changes и транзакционные balance actions; нормализация | Go для Geth/BSC/Nitro/Bor, Rust для Base; Classic — отдельный Go native reader + C++ AVM observer, требующий POC; pins и условия в CLIENT_MATRIX |
-| Canonical Coordinator | Отличает speculative execution от canonical inclusion, назначает lifecycle/порядок в пределах producer/run; не устраняет пересечения history/live | Модуль каждого producer/run; logical ownership определён в STATE_OWNERSHIP, durable RocksDB/atomicity — ROCKSDB_DELIVERY_PROTOCOL |
+| Native lifecycle bridge | Отличает speculative execution от canonical inclusion, назначает lifecycle/порядок в пределах producer/run; не устраняет пересечения history/live | Модуль каждого producer/run; logical ownership определён в STATE_OWNERSHIP, durable RocksDB/atomicity — ROCKSDB_DELIVERY_PROTOCOL |
 | WAL | Сохраняет нормализованные записи и прогресс до подтверждения публикации | RocksDB 10.4.2, sync WriteBatch; pins и cleanup в [протоколе](ROCKSDB_DELIVERY_PROTOCOL.md) |
 | gRPC | Передача нормализованной записи адаптер → Gateway | Protobuf/gRPC — базовый контур; UDS локально или TCP с mTLS между хостами |
 | Gateway/publisher | Проверяет схему и целостность, ведёт publication journal, повторяет отправку, назначает publication order | Baseline E00-03.03: Go, gRPC-Go, nats.go; версии в COMPONENT_STACK, один активный издатель сети |
@@ -48,17 +48,17 @@ Native node/executor → Adapter + Canonical Coordinator → локальный 
 
 ## Граница подтверждения и приёмки
 
-Граница доставки: Gateway выдаёт IngestAck после PubAck записи; для разбиения — всех частей. Повторы возможны, идентичности стабильны (at-least-once). D26–D33 и .06 фиксируют накопление без TTL/квоты до ACK и RocksDB recovery; post-ACK retention/HA вне scope. Точный [протокол](ROCKSDB_DELIVERY_PROTOCOL.md).
+Граница доставки: Gateway выдаёт IngestAck только после PubAck всех сообщений/частей закрытого block batch; ACK отдельной записи не разрешает очистить блок. Повторы возможны, идентичности стабильны (at-least-once). D26–D33 и .06 фиксируют накопление без TTL/квоты до ACK и RocksDB recovery; post-ACK retention/HA вне scope. Точный [протокол](ROCKSDB_DELIVERY_PROTOCOL.md).
 
 Приёмочный считыватель проверяет сообщения в NATS по native fixtures всех пяти сетей: поля, действия, порядок, целостность частей, reorg/finality, повторы и подтверждения доставки подготовленных сообщений. Это тест, не промышленный компонент последующей обработки. Задержка live измеряется до PubAck.
 
 ## Порядок финализации ТЗ
 
-Детальная последовательность E00-03: [план .01–.07](E00_03_COMPONENT_PLAN.md). .01–04 завершены как документы: D21/D22 принимают Compose/Kubernetes с NATS внутри обеих сред; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) — проектный baseline. .05 завершён по D23–D25; .06 завершён: RocksDB/pins/protocol; следующий .07. Build/runtime доказательства остаются будущими этапами.
+Детальная последовательность E00-03: [план .01–.07](E00_03_COMPONENT_PLAN.md). .01–04 завершены как документы: D21/D22 принимают Compose/Kubernetes с NATS внутри обеих сред; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) — проектный baseline. .05 завершён по D23–D25; .06 — RocksDB/pins/protocol; .07 — [итоговая сверка](E00_03_ARCHITECTURE_REVIEW.md). E00-03 DONE как архитектурный блок, весь E00 ещё IN_PROGRESS. Build/runtime доказательства остаются будущими этапами.
 
 1. Решения R07 получены: типы сообщений, условное разбиение и topology приняты. Отдельный пул управления историей/YAML отложен D20.
 2. E00-13 выполнен: source audit всех пяти клиентов, commits/toolchains, Base runtime и Polygon profile в CLIENT_MATRIX. E00-15 определил [Classic](research/ARBITRUM_CLASSIC_CAPTURE.md) и [legacy Bor](research/POLYGON_LEGACY_CAPTURE.md): отдельные native origins, inventory и ограничения. Исполнение, архивы и полнота ещё требуют POC.
-3. E00-14 выполнен как проект логической схемы: [реестр native типов](TRANSACTION_TYPE_REGISTRY.md), transaction/block metadata/lifecycle, raw encodings и parts; E00-15 дополнил исторические профили. Следующий шаг E00-03 — свести стек компонентов, границы владения состоянием и оставшиеся гарантии. E02 затем закрывает точные extensions/all-epoch decoders, wire schema/validators/fixtures. Управление history job/YAML рассматривается отдельно по D20.
+3. E00-14 выполнен как проект логической схемы: [реестр native типов](TRANSACTION_TYPE_REGISTRY.md), transaction/block metadata/lifecycle, raw encodings и parts; E00-15 дополнил исторические профили. E00-03 свёл стек компонентов, владельцев состояния и гарантии. E02 затем закрывает точные extensions/all-epoch decoders, wire schema/validators/fixtures. Управление history job/YAML рассматривается отдельно по D20.
 4. REC и .06 завершены как проект: [доставка и восстановление](DELIVERY_RECOVERY.md), [RocksDB protocol](ROCKSDB_DELIVERY_PROTOCOL.md). Runtime проверки остаются в плане реализации.
 5. Численные ограничения live/history, критерии приёмки, окончательный стек и этапы с задачами; совместная проверка непротиворечивости.
 

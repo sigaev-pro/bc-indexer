@@ -2,6 +2,8 @@
 
 ## Последнее решение — D33 (2026-10-16)
 
+2026-10-16 / E00-03.07: выполнена [итоговая сверка](E00_03_ARCHITECTURE_REVIEW.md) по существующим D16–D33. Уточнены block-batch ACK, запрет публикации STAGING, per-producer lifecycle_state после ACK cleanup, статусы и дальнейшие gates. E00-03 DONE как архитектурный блок; E00 целиком не завершён. Пользователь отдельно подтвердил границу работы: только ТЗ, без реализации. Следующий CFG/JOB-01; вопросы лицензии/приёмки/резервирования документов остаются открытыми. Новых пользовательских решений в этой сверке не предполагается.
+
 Техническое завершение E00-03.06 (поручение «выполняй»): [RocksDB pins](research/ROCKSDB_STACK.md), [delivery protocol](ROCKSDB_DELIVERY_PROTOCOL.md). RocksDB 10.4.2 / grocksdb v1.10.2 / Rust rocksdb 0.24.0 + sys 0.17.3+10.4.2; sync WriteBatch; Prepare/Publish с durable producer plan и publication_epoch, ACKED cleanup/release, single-writer ownership и REC-T01–16. Это проектный baseline исполнителя, не новые ответы пользователя и не пройденная runtime-приёмка. E00-03.06/E00-06 закрыты как документы; .07 следующий после commit.
 
 - D33 accepted: пользователь утвердил RocksDB для локального WAL/служебного состояния. Embedded engine используется в Go/Rust компонентах с отдельными writable каталогами; отдельный сервер БД не вводится. Базовый вариант — обычный RocksDB; integrated BlobDB остаётся необязательной оптимизацией для будущих измерений, не второй обязательной реализацией.

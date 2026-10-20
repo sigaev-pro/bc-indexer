@@ -8,7 +8,7 @@
 |---|---|---|
 | Native chain state, canonical head/finality | Native client сети | Gateway не определяет каноничность; native consensus validation сохраняется |
 | Capture attempt и prepared messages | Adapter live или history | Разные pods/processes, независимые run_id и cursors |
-| Наблюдаемый lifecycle/reorg/status | Native bridge данного producer | Не согласует активации с другими runs и не отбрасывает повторные включения |
+| Наблюдаемый lifecycle/reorg/status | Native bridge данного producer; durable lifecycle_state | References/counter/branch checkpoint сохраняются с READY, не удаляются ACK cleanup пока нужны Removed/Status. Нет общего registry между runs; подробные native finality правила E02/E05 |
 | Event ID, immutable Envelope bytes/digest | Delivery writer данного producer/run | Retry сохраняет ID/bytes; повтор команды может создать новые события для тех же блоков |
 | Outbound part layout | Adapter delivery writer | Фиксируется для retry; Gateway не перепаковывает pending событие молча |
 | RECEIVED / WAL_SAVED / полученный IngestAck | Adapter progress journal | WAL_SAVED требует закрытого batch и согласованной durable записи; read cursor недостаточен |
@@ -29,4 +29,4 @@ Per-network служебное хранение означает namespaces и �
 - Ошибка получения/нормализации/WAL: ERROR не становится успешной доставкой.
 - Снижение лимитов ниже уже сохранённой части: явная ошибка/остановка передачи; не усечение и не незаметная смена bytes/layout.
 
-Это логическое распределение ответственности, не пройденные тесты. Полный block-content verifier, range coverage oracle и downstream dedup отсутствуют. E00-03.06 завершён как контракт; следующий шаг — .07, итоговая проверка.
+Это логическое распределение ответственности, не пройденные тесты. Полный block-content verifier, range coverage oracle и downstream dedup отсутствуют. E00-03.06 завершён как контракт, .07 — [итоговая проверка](E00_03_ARCHITECTURE_REVIEW.md). Дальше CFG/JOB-01, только документация.

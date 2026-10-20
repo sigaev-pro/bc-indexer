@@ -16,7 +16,7 @@
 
 Каждый pin — срез исследования и рекомендуемая отправная точка, не бессрочно выбранный production release. Директивы языка и заявленные toolchains не равны проверенной сборке. Nitro Dockerfile дополнительно использует Go `1.25.9` в WASM builder; все effective versions фиксируются в build manifest. Полные ссылки на manifests, code paths и ограничения: [Ethereum/BSC](research/ETHEREUM_BSC_CLIENTS.md), [Base](research/BASE_CLIENT.md), [Arbitrum/Polygon](research/ARBITRUM_POLYGON_CLIENTS.md).
 
-Для общей части предлагается Go Gateway + protobuf/gRPC + NATS JetStream. Версии Go Gateway, bindings, NATS client/server и WAL backend относятся к следующему архитектурному шагу и не считаются выбранными этим исследованием. Нативные адаптеры остаются в языке клиента. Это позволяет не переносить EVM/runtime в общий сервис и не связывать Go-форки с несовместимыми зависимостями в один бинарник.
+Для общей части предлагается Go Gateway + protobuf/gRPC + NATS JetStream. Версии общего стека и RocksDB выбраны последующими E00-03.03/06: [COMPONENT_STACK](COMPONENT_STACK.md), [ROCKSDB_STACK](research/ROCKSDB_STACK.md). Эта source-матрица сама по себе не доказывает совместную сборку. Нативные адаптеры остаются в языке клиента. Это позволяет не переносить EVM/runtime в общий сервис и не связывать Go-форки с несовместимыми зависимостями в один бинарник.
 
 ## Что действительно подтверждено исходниками
 
