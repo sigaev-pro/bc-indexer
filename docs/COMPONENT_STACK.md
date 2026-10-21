@@ -26,8 +26,8 @@
 | Adapter → Gateway | gRPC streaming; локальный UDS при совместном размещении, TCP+mTLS при сетевом соединении | Оба конца проверяют schema/profile/размер/целостность; production topology определяет endpoint, не семантику данных |
 | WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2; Rust rocksdb 0.24.0 / librocksdb-sys 0.17.3+10.4.2 | Sync WriteBatch, WAL enabled, отдельный каталог owner; [pins/API/build gates](research/ROCKSDB_STACK.md), [protocol](ROCKSDB_DELIVERY_PROTOCOL.md). BlobDB optional, backup исключён D27 |
 | Приёмочный harness | Go + тот же protobuf decoder + JetStream client | Только проверка опубликованных сообщений против fixtures; не промышленный downstream |
-| Локальный запуск | Docker Compose; NATS server с JetStream и отдельным volume, независимые сервисы сетей | Готовая конфигурация проекта по D21/D22; ресурсы native nodes остаются реальной нагрузкой, Compose не делает их лёгкими |
-| Production | Kubernetes; отдельные workload/volume/config контуры сетей; NATS внутри кластера | Официальная Helm chart nats/nats 2.15.1, отдельный server pin 2.15.1; [pins/values и ограничения](research/NATS_DEPLOYMENT_STACK.md) |
+| Локальный запуск | Docker Compose: все execution/consensus/supporting-компоненты трёх нод, адаптеры, WAL/Gateway и NATS | Полная компоновка и конфигурация проекта по D43; [детализация](NODE_DEPLOYMENT_SPEC.md) |
+| Production | Kubernetes: все компоненты нод, адаптеры, независимые workload/volume/config контуры сетей и NATS | D43: готовим весь технический комплект; NATS chart/server candidates и [исследование](research/NATS_DEPLOYMENT_STACK.md) сохраняются; production-методика отдельно |
 
 Native pins и расхождения toolchains подробно сохранены в [CLIENT_MATRIX.md](CLIENT_MATRIX.md). Classic runtime ещё не доказан — [исследование](research/ARBITRUM_CLASSIC_CAPTURE.md). Новый baseline Gateway не изменяет compiler versions native клиентов.
 
