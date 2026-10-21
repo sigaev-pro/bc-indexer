@@ -1,5 +1,7 @@
 # Последовательность разработки и задачи
 
+> D51: DEP-03.2b.2b.3a DONE — приняты готовые заменяемые native configs и отдельный init-шаг окружения: первый старт создаёт необходимые файлы, рестарт сохраняет state/ключи; исходники `/config` read-only, изменяемые native файлы `/data/node`. Далее .3b — точные flags/init/mount mappings; DEP-03.3b и DEP-04 открыты. [Полный актуальный остаток согласований](REMAINING_AGREEMENTS.md) отделён от задач технической проверки и отложенного scope. Реализация не начата.
+
 > D50: DEP-03.2b.2b.2 DONE — [порты и экспонирование](NETWORK_PORTS.md) выбраны по делегированию пользователя: индивидуальные P2P-порты, Compose mappings, Kubernetes NodePort, LoadBalancer опционально. Далее .3 native flags/config keys и mount mappings, затем DEP-03.3b probes/shutdown. Пункт 2 E00-11 остаётся открытым; только ТЗ.
 
 > D49: DEP-03.2b.2b.1 DONE — приняты defaults Geth RPC 8545/Engine API 8551, Gateway 50051, публикация только P2P наружу, независимые внешние endpoints, каталоги и сохранение P2P-идентичности. [Подробности и оставшиеся задачи](NODE_DEPLOYMENT_SPEC.md): далее DEP-03.2b.2b.2 таблица P2P/native endpoints и экспонирование, затем .3 flags/mount mappings. Родительские задачи и E00-11 пункт 2 открыты; только документация.
