@@ -1,6 +1,8 @@
 # Последовательность разработки и задачи
 
-> D43: полный технический комплект нод и всех supporting-компонентов в Compose/Kubernetes входит в задачу, включая конфиги, соединения и тома. Отложенная open-source упаковка не исключает реализацию этого комплекта. Пункт 2 E00-11 разбит на DEP-01–04 в [NODE_DEPLOYMENT_SPEC](NODE_DEPLOYMENT_SPEC.md); только DEP-01 закрыт.
+> D47 (2026-10-21): DEP-03.2b.1 DONE — [набор кандидатов](research/DEPLOYMENT_VERSION_CANDIDATES.md) принят. Следующий шаг DEP-03.2b.2 — точные configs/flags, порты/P2P/mounts; затем DEP-03.3b probes/shutdown и DEP-04. Пункт 2 E00-11 остаётся IN_PROGRESS. D44–D46 уже закрыли DEP-02/03.1/03.2a/03.3a. Старые source audits сохраняются; новые Geth/Bor требуют delta review. Версии не означают проверенную сборку или разрешение начать реализацию.
+
+> D43: полный технический комплект нод и всех supporting-компонентов в Compose/Kubernetes входит в задачу, включая конфиги, соединения и тома. Отложенная open-source упаковка не исключает реализацию этого комплекта. Пункт 2 E00-11 разбит на DEP-01–04 в [NODE_DEPLOYMENT_SPEC](NODE_DEPLOYMENT_SPEC.md); DEP-01/02/03.1/03.2a/03.2b.1/03.3a закрыты, точные конфигурации и probes остаются открытыми.
 
 > D40: у каждой сети отдельные WAL адаптера и журнал Gateway, процессы и прогресс; общих multi-network writers нет. Требования производительности и методика production-тестирования исключены из текущего ТЗ. Сохраняются функциональная корректность native capture, нормализации и доставки, тестовые fixtures и протокол восстановления. Предложения 24 часа live / 30 минут outage не приняты.
 
@@ -40,11 +42,11 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 | Этап / компонент | Предлагаемый стек | Способ реализации | Что ещё выбрать |
 |---|---|---|---|
 | E00 документация | Markdown, журнал решений, короткие ADR | Документы в проекте с ID задач и точкой продолжения | Git-репозиторий/remote и схема резервирования |
-| E01–E07 Ethereum | Go + Geth v1.17.8, source-verified candidate | Встроенный live tracer + rollback-aware state journal + canonical bridge | Go patch build version и отдельный CL; [матрица](CLIENT_MATRIX.md) |
+| E01–E07 Ethereum | Go + Geth v1.17.9, кандидат D47; source delta audit открыт | Встроенный live tracer + rollback-aware state journal + canonical bridge | Go patch build version и отдельный CL; [матрица](CLIENT_MATRIX.md) |
 | E01–E07 BSC | Go + BSC v1.7.8, source-verified candidate | Отдельная сборка; обычный execution + Parlia Finalize/system tx | Alpha latest исключён; historical state/fixtures, [источники](research/ETHEREUM_BSC_CLIENTS.md) |
 | Отложено D42: Base | Rust 1.96.0 + base/base v1.5.0 с pinned base/reth | Native Base executor, включённый Inspector, per-tx state/receipts, ExEx | Реальный capture и active fork profile проверить; [источники](research/BASE_CLIENT.md) |
 | Отложено D42: Arbitrum One | Go Nitro v3.12.1 + Rust 1.93.0/cgo/WASM; Classic v1.4.7 — отдельный Go/C++ AVM backend | Nitro tracer + ArbOS/Stylus paths; Classic native inventory/cursor + consensus-neutral AVM observer candidate | Classic archive/toolchain/all-epoch decoder и state/action полнота не доказаны; [Classic fixtures](research/ARBITRUM_CLASSIC_CAPTURE.md) |
-| E01–E07 Polygon PoS | Go Bor v2.10.2 + Heimdall-v2 v0.12.2 | Live tracer + StateSync/Finalize; legacy source receipt — optional auxiliary, вне body count | Effective Go version, state-sync attribution, historical inputs; [legacy fixtures](research/POLYGON_LEGACY_CAPTURE.md) |
+| E01–E07 Polygon PoS | Go Bor v2.10.3 + Heimdall-v2 v0.12.2 | Live tracer + StateSync/Finalize; legacy source receipt — optional auxiliary, вне body count | Effective Go version, state-sync attribution, historical inputs; [legacy fixtures](research/POLYGON_LEGACY_CAPTURE.md) |
 | E02 общий контракт | Protocol Buffers v3, Go bindings; Rust bindings перед первым Rust-клиентом | Схемы из v3 после проверки модели; независимые валидаторы и fixtures | Версии protoc/plugins; нужен ли Buf; стратегия schema compatibility |
 | E03 Gateway | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0 — кандидаты .03 | Отдельный сервис сети; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) | Совместная сборка E01; fencing/storage определены .06, тесты E03/E05 |
 | E03 локальный WAL / journal | RocksDB 10.4.2; grocksdb v1.10.2; Rust rocksdb 0.24.0 / sys 0.17.3+10.4.2 | Sync WriteBatch, READY/ACKED cleanup, durable publication plan и release | [Pins](research/ROCKSDB_STACK.md), [REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md); build/runtime tests в E01/E03 |
@@ -216,7 +218,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | E00-07 | DONE | CFG-S01–05, LIVE_CONFIG_SPEC и D39; только документация, runtime-проверки остаются |
 | E00-08 | DEFERRED_BY_USER | D41: лицензия и open-source поставка отложены, текущее ТЗ не блокируют |
 | E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
-| E00-11 | PARTIAL | Пункт 1 закрыт D42; пункт 2 IN_PROGRESS: D46 закрывает DEP-03.2a/03.3a (размещение, DNS, secrets, готовность); далее DEP-03.2b версии/конфиги, DEP-03.3b probes и DEP-04; пункты 3–4 сверки не согласованы |
+| E00-11 | PARTIAL | Пункт 1 закрыт D42; пункт 2 IN_PROGRESS: D46 закрывает DEP-03.2a/03.3a (размещение, DNS, secrets, готовность); D47 закрывает DEP-03.2b.1 кандидаты версий; далее DEP-03.2b.2 конфиги, DEP-03.3b probes и DEP-04; пункты 3–4 сверки не согласованы |
 | E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
 | E00-09 | DEFERRED_BY_USER | D38: история и пропуски отложены; CFG-R4 снят |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |

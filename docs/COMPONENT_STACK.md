@@ -1,5 +1,7 @@
 # Стек компонентов: проектный baseline E00-03.03
 
+> D47 (2026-10-21): актуальный [набор кандидатов и источники](research/DEPLOYMENT_VERSION_CANDIDATES.md) заменяет прежние Geth/Bor pins: Geth 1.17.9, Prysm 7.3.0 для обеих независимых пар, Bor 2.10.3. Остальные согласованные версии сохранены. Старый source audit не подтверждает новые native hooks; совместная сборка/runtime, immutable images и полный dependency lock ещё не проверены.
+
 > D42 (2026-10-21): текущий этап — Ethereum Mainnet, BNB Smart Chain (BSC) Mainnet и Polygon PoS Mainnet. Base/Arbitrum и их адаптеры/fixtures отложены; исследования и типизированные расширения ниже сохранены справочно, не блокируют текущую версию. Исторические сценарии отложены D38. Действующие live-типы транзакций ETH/BSC/Polygon, включая native system types, остаются обязательными. У каждой сети собственные WAL и журнал Gateway.
 
 > D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](research/ROCKSDB_STACK.md), [протокол и REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md).
@@ -12,14 +14,14 @@
 
 | Компонент | Baseline | Реализация / граница |
 |---|---|---|
-| Ethereum native adapter | Go внутри Geth v1.17.8 | Native hooks/state journal + canonical notifications; отдельный client build |
-| Ethereum consensus | Prysm, выбран D44; версия/образ ещё не закреплены | Отдельный компонент основной Ethereum-ноды; layout контейнеров — DEP-03 |
+| Ethereum native adapter | Go внутри Geth v1.17.9 | Native hooks/state journal + canonical notifications; отдельный client build |
+| Ethereum consensus | Prysm 7.3.0, кандидат D47; image digest не закреплён | Отдельный компонент основной Ethereum-ноды; layout контейнеров — DEP-03 |
 | Polygon L1 источник | Отдельный Geth + Prysm, D44 | Собственная Ethereum-нода Polygon без нашего Ethereum-адаптера, со своими процессами/datadirs; основная Ethereum-нода не используется |
 | BSC native adapter | Go внутри BSC v1.7.8 | Обычные tx и Parlia Finalize capture; отдельный client build |
 | Отложено D42: Base native adapter | Rust 1.96.0, base/base v1.5.0 + pinned base/reth | Native executor + включённый Inspector, per-tx results, canonical ExEx |
 | Отложено D42: Arbitrum Nitro adapter | Go в Nitro v3.12.1 с его собственным Geth; native Rust/cgo/WASM build dependencies | ArbOS/Stylus/native special paths; отдельная сборка и fixtures |
 | Отложено D42: Arbitrum Classic adapter | Go + C++ AVM, Classic v1.4.7 candidate | Native result reader + consensus-neutral observer candidate; отдельный history runtime той же сети |
-| Polygon adapter | Go внутри Bor v2.10.2, Heimdall-v2 v0.12.2 | Native tx и StateSync/Finalize, отдельный optional legacy scope |
+| Polygon adapter | Go внутри Bor v2.10.3, Heimdall-v2 v0.12.2 | Native tx и StateSync/Finalize, отдельный optional legacy scope |
 | Canonical Coordinator | Библиотечный модуль адаптера/контура соответствующей сети | Отдельный общий сервис для всех сетей не вводится. Каждый producer/run владеет своим lifecycle state; единого владельца для устранения пересечений нет; см. STATE_OWNERSHIP |
 | Gateway/publisher | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0; один экземпляр роли publisher на сеть | Единый исходный код/binary для всех сетей, отдельный процесс и конфиг каждой сети; NATS SDK только здесь |
 | Wire schema | Protobuf proto3 с explicit presence и closed oneof | Одна versioned schema, native validators, transaction/block metadata/lifecycle/parts из MESSAGE_CONTRACT |

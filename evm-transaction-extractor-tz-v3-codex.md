@@ -1,5 +1,7 @@
 # EVM Transaction Extractor — техническое задание v3, редакция Codex
 
+> D47 (2026-10-21): приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для основного Ethereum и отдельного Polygon L1, BSC 1.7.8, Bor 2.10.3/Heimdall-v2 0.12.2, NATS server 2.15.1, RocksDB 10.4.2; gRPC-Go 1.84.0, nats.go 1.54.0, protoc 36.2 и protobuf-go 1.36.12. [Источники и ограничения](docs/research/DEPLOYMENT_VERSION_CANDIDATES.md). Source audit E00-13 ниже исторический: Geth 1.17.8/Bor 2.10.2 и их hashes не относятся к новым версиям. Изменения native hooks, совместная сборка/runtime и image digests ещё не проверены. Далее точные configs/порты/P2P/mounts и probes; только ТЗ.
+
 > D46: для каждого самостоятельного компонента Kubernetes StatefulSet replicas=1, собственные Service/PVC; Compose service и named volumes. Адреса по service DNS, конфиги отдельно от JWT/TLS/NATS credentials, каждой Geth/Prysm паре собственный JWT. Синхронизация и capture не ждут NATS; pending накапливается в WAL своей сети. Версии/точные native flags/probes ещё уточняются в [NODE_DEPLOYMENT_SPEC](docs/NODE_DEPLOYMENT_SPEC.md).
 
 > D45: выбран раздельный запуск каждого самостоятельного компонента — собственный Compose service/container и Kubernetes workload/Pod. Нет обязательного совместного размещения Geth/Prysm, Bor/Heimdall или Gateway. Адаптер остаётся встроенным в execution-клиент; WAL и журналы принадлежат своим owners. Сетевые endpoints конфигурируются; [карта 11 основных сервисов](docs/NODE_DEPLOYMENT_SPEC.md).
