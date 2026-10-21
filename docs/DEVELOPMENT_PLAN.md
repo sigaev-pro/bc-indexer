@@ -1,5 +1,7 @@
 # Последовательность разработки и задачи
 
+> D49: DEP-03.2b.2b.1 DONE — приняты defaults Geth RPC 8545/Engine API 8551, Gateway 50051, публикация только P2P наружу, независимые внешние endpoints, каталоги и сохранение P2P-идентичности. [Подробности и оставшиеся задачи](NODE_DEPLOYMENT_SPEC.md): далее DEP-03.2b.2b.2 таблица P2P/native endpoints и экспонирование, затем .3 flags/mount mappings. Родительские задачи и E00-11 пункт 2 открыты; только документация.
+
 > D48: DEP-03.2b.2a DONE — принята [гибкая модель конфигурации](NODE_DEPLOYMENT_SPEC.md): независимые YAML сборщика/Gateway каждой сети, native configs/args, Compose overrides/Kubernetes values, отдельные secrets, применение перезапуском. Далее DEP-03.2b.2b — согласовать конкретные defaults/порты/P2P/mounts, затем DEP-03.3b и DEP-04. Родительский DEP-03.2b.2 и E00-11 пункт 2 остаются открытыми; реализация не начата.
 
 > D47 (2026-10-21): DEP-03.2b.1 DONE — [набор кандидатов](research/DEPLOYMENT_VERSION_CANDIDATES.md) принят. Следующий шаг DEP-03.2b.2 — точные configs/flags, порты/P2P/mounts; затем DEP-03.3b probes/shutdown и DEP-04. Пункт 2 E00-11 остаётся IN_PROGRESS. D44–D46 уже закрыли DEP-02/03.1/03.2a/03.3a. Старые source audits сохраняются; новые Geth/Bor требуют delta review. Версии не означают проверенную сборку или разрешение начать реализацию.
