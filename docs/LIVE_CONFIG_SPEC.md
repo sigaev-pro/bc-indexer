@@ -1,5 +1,7 @@
 # CFG-S04 — конфигурация live/Gateway
 
+По D42 текущие сети — Ethereum, BSC и Polygon PoS. Base/Arbitrum отложены; их YAML-профили текущая поставка отвергает как неподдерживаемые. Исследования сохраняются справочно.
+
 2026-10-21. Технический проект для текущего scope D38. Заменяет активную часть [предыдущего draft](CONFIG_CLI_DRAFT.md). Команды и поля — проектные интерфейсы, ещё не реализованы. История и загрузка пропусков не входят в этот документ.
 
 ## Команды и исполнение
@@ -21,7 +23,7 @@ CLI не скачивает клиенты, не создаёт pods и не в�
 | Поле | Тип | Обязательность / значение |
 |---|---|---|
 | `schema_version` | integer | Обязательно, ровно `1` |
-| `network.profile` | enum | Обязательно, один из пяти профилей ниже |
+| `network.profile` | enum | Обязательно, один из трёх профилей ниже |
 | `native.kind` | enum | Обязательно live, соответствует профилю |
 | `delivery.gateway_endpoint` | URI | Обязательно live: `unix:///absolute/path` либо `https://host:port` |
 | `delivery.tls` | tagged object | Обязательно live: disabled для UDS, mutual для TCP |
@@ -44,8 +46,6 @@ CLI не скачивает клиенты, не создаёт pods и не в�
 |---|---|---|
 | ethereum-mainnet | geth | Go/Geth: native hooks/state journal, canonical notifications |
 | bsc-mainnet | bsc | Go/BSC: tx execution и Parlia Finalize |
-| base-mainnet | base-reth | Rust/Base: executor, Inspector, canonical ExEx |
-| arbitrum-one | nitro | Nitro Go и native зависимости: ArbOS/Stylus execution paths |
 | polygon-pos-mainnet | bor | Go/Bor: tx execution, StateSync/Finalize; supporting Heimdall |
 
 Сборки и toolchains закрепляются по [CLIENT_MATRIX](CLIENT_MATRIX.md) и [COMPONENT_STACK](COMPONENT_STACK.md). YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.

@@ -1,5 +1,7 @@
 # Реестр native transaction types
 
+> D42 (2026-10-21): текущий этап — Ethereum Mainnet, BNB Smart Chain (BSC) Mainnet и Polygon PoS Mainnet. Base/Arbitrum и их адаптеры/fixtures отложены; исследования и типизированные расширения ниже сохранены справочно, не блокируют текущую версию. Исторические сценарии отложены D38. Действующие live-типы транзакций ETH/BSC/Polygon, включая native system types, остаются обязательными. У каждой сети собственные WAL и журнал Gateway.
+
 > Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
 
 E00-14, 2026-10-15. Проект нормативной модели для пяти сетей, основанный на закреплённых исходниках [CLIENT_MATRIX.md](CLIENT_MATRIX.md). Это не результат исполнения fixtures и не подтверждение активности каждого типа в Mainnet. Контракт сообщений: [MESSAGE_CONTRACT.md](MESSAGE_CONTRACT.md).
