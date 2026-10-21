@@ -13,6 +13,8 @@
 | Компонент | Baseline | Реализация / граница |
 |---|---|---|
 | Ethereum native adapter | Go внутри Geth v1.17.8 | Native hooks/state journal + canonical notifications; отдельный client build |
+| Ethereum consensus | Prysm, выбран D44; версия/образ ещё не закреплены | Отдельный компонент основной Ethereum-ноды; layout контейнеров — DEP-03 |
+| Polygon L1 источник | Отдельный Geth + Prysm, D44 | Собственная Ethereum-нода Polygon без нашего Ethereum-адаптера, со своими процессами/datadirs; основная Ethereum-нода не используется |
 | BSC native adapter | Go внутри BSC v1.7.8 | Обычные tx и Parlia Finalize capture; отдельный client build |
 | Отложено D42: Base native adapter | Rust 1.96.0, base/base v1.5.0 + pinned base/reth | Native executor + включённый Inspector, per-tx results, canonical ExEx |
 | Отложено D42: Arbitrum Nitro adapter | Go в Nitro v3.12.1 с его собственным Geth; native Rust/cgo/WASM build dependencies | ArbOS/Stylus/native special paths; отдельная сборка и fixtures |
