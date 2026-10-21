@@ -1,5 +1,7 @@
 # Архитектура сбора и публикации в NATS
 
+> D45: все самостоятельные компоненты разнесены по отдельным Compose services и Kubernetes workloads/Pods. Geth/Prysm, Bor/Heimdall, Gateway и отдельная Ethereum-пара Polygon связаны конфигурируемыми сетевыми адресами; общего хоста не требуется. Адаптер встроен в execution-клиент, WAL embedded у owner. [Карта размещения](NODE_DEPLOYMENT_SPEC.md).
+
 > D43: полная компоновка и настройка execution/consensus/supporting-компонентов нод, адаптеров, собственных WAL/Gateway и NATS в Docker Compose/Kubernetes входит в задачу. Готовая внешняя нода не является обязательной предпосылкой. Процессы запускает оркестратор по подготовленным проектом конфигурациям; extractor не управляет его API. Детали и открытые решения: [NODE_DEPLOYMENT_SPEC](NODE_DEPLOYMENT_SPEC.md).
 
 > D40: каждая сеть владеет отдельными RocksDB WAL адаптера и журналом Gateway, процессами и прогрессом. Общий multi-network WAL, writer или координатор запрещён. Общий NATS — ранее принятая транспортная инфраструктура; его недоступность обрабатывается независимым накоплением WAL каждой сети. Performance требования и production-методика вне scope.

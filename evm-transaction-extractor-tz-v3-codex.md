@@ -1,5 +1,7 @@
 # EVM Transaction Extractor — техническое задание v3, редакция Codex
 
+> D45: выбран раздельный запуск каждого самостоятельного компонента — собственный Compose service/container и Kubernetes workload/Pod. Нет обязательного совместного размещения Geth/Prysm, Bor/Heimdall или Gateway. Адаптер остаётся встроенным в execution-клиент; WAL и журналы принадлежат своим owners. Сетевые endpoints конфигурируются; [карта 11 основных сервисов](docs/NODE_DEPLOYMENT_SPEC.md).
+
 > D44: основной Ethereum использует Geth с адаптером + Prysm. Polygon использует Bor с адаптером + Heimdall-v2 и собственную отдельную Ethereum-ноду Geth/Prysm без Ethereum-адаптера. Общих процессов/datadirs с Ethereum-extractor нет. Всё входит в Compose/Kubernetes комплект; версии Prysm и layout контейнеров/Pod ещё уточняются в [NODE_DEPLOYMENT_SPEC](docs/NODE_DEPLOYMENT_SPEC.md).
 
 > D43: в текущий ТЗ входит полный комплект нод Ethereum/BSC/Polygon и всех необходимых execution/consensus/supporting-компонентов, их компоновка, конфигурация и соединения в Docker Compose и Kubernetes. Также включены адаптеры, независимые WAL/Gateway и NATS. Проект готовит конфигурации окружения; extractor не управляет оркестратором. Предложение считать готовые ноды внешней предпосылкой отклонено. [Контракт развёртывания](docs/NODE_DEPLOYMENT_SPEC.md); сейчас только документация.
