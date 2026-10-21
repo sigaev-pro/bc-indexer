@@ -21,11 +21,11 @@ RocksDB work вынесен из consensus-critical callback и async event loop
 
 ## 1. Capture и durable READY
 
-1. Перед приёмом новых событий создать или открыть состояние owner. History хранит явные N, M и run_id; live — identity/capture checkpoint и pending состояние. D36 отменяет default три часа/start_block и auto-history при старте. Повтор отправки pending после restart сохраняется. Получение новых блоков за время остановки live ещё требует решения CFG-R3; не смешивать его с восстановлением ранее начатого batch.
+1. Перед приёмом новых событий создать или открыть состояние owner. History хранит явные N, M и run_id; live — identity/capture checkpoint и pending состояние. D36 отменяет default три часа/start_block и auto-history при старте. Повтор отправки pending после restart сохраняется. D37: поиск и догрузка новых блоков за время остановки live вне scope; восстанавливаются pending записи и конкретные ранее начатые batch, не весь разрыв до head.
 2. Получить native данные, нормализовать, сохранить STAGING, неизменяемые сообщения/части и references bounded sync WriteBatch пакетами. RECEIVED не является durable гарантийным состоянием.
 3. После успешного сохранения всех фактически подготовленных записей одним sync WriteBatch поставить READY/closed marker и продвинуть capture_checkpoint. Это WAL_SAVED. Для пустого блока batch содержит metadata; для lifecycle события используется такой же delivery protocol.
-4. Из STAGING отправка запрещена. После crash удалить незакрытый STAGING и повторить native capture от прежнего capture_checkpoint; IDs новой попытки не переиспользуют старые sequence. Публикации из незакрытого batch не было.
-5. Capture checkpoint — позиция native источника плюс branch identity, не максимальная увиденная высота. При restart native bridge проверяет актуальность ветки и восстанавливает соответствующие lifecycle observations. Native import и RocksDB не образуют общую транзакцию: разрыв закрывается повторным native чтением/replay. Если required state недоступен — явная ERROR, без пропуска до текущей головы.
+4. Из STAGING отправка запрещена. После crash восстановить native capture конкретного незакрытого STAGING по сохранённой block identity/replay descriptor, не сканируя разрыв до head; IDs новой попытки не переиспользуют старые sequence. Публикации из незакрытого batch не было.
+5. Capture checkpoint — позиция native источника плюс branch identity, не максимальная увиденная высота. При restart native bridge проверяет актуальность ветки и восстанавливает соответствующие lifecycle observations. Native import и RocksDB не образуют общую транзакцию: незавершённый ранее начатый capture восстанавливается повторным native чтением/replay конкретной записи. D37 исключает автоматическое сканирование/восполнение отсутствующего периода live. Если required state недоступен — явная ERROR, без пропуска до текущей головы.
 
 READY сохраняется независимо от состояния NATS. Новые блоки продолжают поступать в новые batch, пока физически возможна запись; нет TTL, прикладной квоты или удаления pending по возрасту.
 
@@ -78,7 +78,7 @@ Producer принимает только ACK всего своего закры�
 | REC-T11 | Disk-full / sync error / повреждение БД | явная ERROR, нет ложного READY/ACK и silent skip; automatic repair с отбрасыванием данных запрещён |
 | REC-T12 | Второй writer / старый stream после reconnect | второй opener/старый session отвергнут; только подтверждённое завершение writer позволяет замену |
 | REC-T13 | Producer volume потерян | новый run, ручной диапазон; нет ложного обещания восстановить прежний cursor из YAML |
-| REC-T14 | Native import опередил durable capture / reorg после ACK cleanup и restart | replay от сохранённой branch-aware позиции; Removed/Status с прежними activation references из lifecycle_state либо воспроизводимого native профиля; при отсутствии state ERROR, нет тихого перехода на head |
+| REC-T14 | Незакрытый ранее начатый capture / reorg после ACK cleanup и restart | восстановление конкретного batch/activation references либо ERROR при отсутствии state; нет сканирования всего пропущенного периода. Live продолжает текущие наблюдения по D37; отсутствие прежних данных не маркируется успешной доставкой |
 | REC-T15 | Неверный digest, schema, ACK или лимит ниже pending part | явная ошибка, неизменные pending bytes сохранены |
 | REC-T16 | Final history CloseRun / потеря ReleaseAck / abandon старого run | служебные receipts очищаются без архива, pending не удаляются без NATS ACK |
 

@@ -27,7 +27,7 @@ E00 Решения → E01 Проверка нативного захвата в
 
 Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects и лимитами. Live и команда N–M сохранены; управление YAML/history отложено пользователем D20.
 
-Принято D36: основной сборщик только live, history отдельным сервисом на узле ноды по N–M. Default три часа и история через start_block/reload/apply отменены. Единый интерфейс без Kubernetes-зависимости, независимые сети и RocksDB/ACK сохраняются. Граница получения пропущенных при остановке live блоков открыта CFG-R3.
+Принято D36: основной сборщик только live, history отдельным сервисом на узле ноды по N–M. Default три часа и история через start_block/reload/apply отменены. Единый интерфейс без Kubernetes-зависимости, независимые сети и RocksDB/ACK сохраняются. D37 закрывает CFG-R3: поиск пропусков и организация их восполнения вне scope; pending WAL доставляется автоматически.
 
 ## Стек по этапам
 
@@ -206,12 +206,12 @@ Gate: отдельно приняты Ethereum, BSC, Base, Arbitrum и Polygon; 
 | E00-03 | DONE | .01–07 закрыты как архитектурные документы; [итоговая матрица](E00_03_ARCHITECTURE_REVIEW.md); сборки/код/runtime не выполнялись |
 | E00-04 | OPEN | Итоговая последовательность/критерии/численные пороги и remaining supporting-client profiles |
 | E00-05 | PARTIAL | Локальный Git/commit workflow действует; remote/backup документов и разрешение на реализацию не приняты |
-| E00-07 | IN_PROGRESS | D36 применён; CONFIG_CONTRACT содержит новый live/history контракт, точная schema ещё CFG-S04 |
+| E00-07 | IN_PROGRESS | D36/D37 применены; CONFIG_CONTRACT: CFG-S01–03 DONE, точная schema/validation ещё CFG-S04 |
 | E00-08 | OPEN | Лицензия и repository/release workflow; публикация не разрешена автоматически |
 | E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
 | E00-11 | PARTIAL | Архитектурный блок проверен; весь пакет ТЗ ожидает CFG/приёмку/OSS и итоговое согласование |
 | E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
-| E00-09 | IN_PROGRESS | История только отдельной командой на узле ноды; старый CFG-R2 снят, CFG-R3 уточняет live restart |
+| E00-09 | IN_PROGRESS | D36/D37: live-only, явный history N–M, внешний учёт пропусков вне scope; CFG-S01–03 DONE, точный CLI ещё CFG-S04 |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |
 | E00-14 | DONE | Реестр native типов и логический контракт; proto/validators/fixtures не реализованы |
 | E00-15 | DONE | Source research и исторические typed profiles; runtime/архивы не приняты, fixtures перенесены в последующие этапы |
