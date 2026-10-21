@@ -1,5 +1,7 @@
 # Последовательность разработки и задачи
 
+> D50: DEP-03.2b.2b.2 DONE — [порты и экспонирование](NETWORK_PORTS.md) выбраны по делегированию пользователя: индивидуальные P2P-порты, Compose mappings, Kubernetes NodePort, LoadBalancer опционально. Далее .3 native flags/config keys и mount mappings, затем DEP-03.3b probes/shutdown. Пункт 2 E00-11 остаётся открытым; только ТЗ.
+
 > D49: DEP-03.2b.2b.1 DONE — приняты defaults Geth RPC 8545/Engine API 8551, Gateway 50051, публикация только P2P наружу, независимые внешние endpoints, каталоги и сохранение P2P-идентичности. [Подробности и оставшиеся задачи](NODE_DEPLOYMENT_SPEC.md): далее DEP-03.2b.2b.2 таблица P2P/native endpoints и экспонирование, затем .3 flags/mount mappings. Родительские задачи и E00-11 пункт 2 открыты; только документация.
 
 > D48: DEP-03.2b.2a DONE — принята [гибкая модель конфигурации](NODE_DEPLOYMENT_SPEC.md): независимые YAML сборщика/Gateway каждой сети, native configs/args, Compose overrides/Kubernetes values, отдельные secrets, применение перезапуском. Далее DEP-03.2b.2b — согласовать конкретные defaults/порты/P2P/mounts, затем DEP-03.3b и DEP-04. Родительский DEP-03.2b.2 и E00-11 пункт 2 остаются открытыми; реализация не начата.
