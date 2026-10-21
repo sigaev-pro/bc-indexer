@@ -1,5 +1,7 @@
 # Последовательность разработки и задачи
 
+> D48: DEP-03.2b.2a DONE — принята [гибкая модель конфигурации](NODE_DEPLOYMENT_SPEC.md): независимые YAML сборщика/Gateway каждой сети, native configs/args, Compose overrides/Kubernetes values, отдельные secrets, применение перезапуском. Далее DEP-03.2b.2b — согласовать конкретные defaults/порты/P2P/mounts, затем DEP-03.3b и DEP-04. Родительский DEP-03.2b.2 и E00-11 пункт 2 остаются открытыми; реализация не начата.
+
 > D47 (2026-10-21): DEP-03.2b.1 DONE — [набор кандидатов](research/DEPLOYMENT_VERSION_CANDIDATES.md) принят. Следующий шаг DEP-03.2b.2 — точные configs/flags, порты/P2P/mounts; затем DEP-03.3b probes/shutdown и DEP-04. Пункт 2 E00-11 остаётся IN_PROGRESS. D44–D46 уже закрыли DEP-02/03.1/03.2a/03.3a. Старые source audits сохраняются; новые Geth/Bor требуют delta review. Версии не означают проверенную сборку или разрешение начать реализацию.
 
 > D43: полный технический комплект нод и всех supporting-компонентов в Compose/Kubernetes входит в задачу, включая конфиги, соединения и тома. Отложенная open-source упаковка не исключает реализацию этого комплекта. Пункт 2 E00-11 разбит на DEP-01–04 в [NODE_DEPLOYMENT_SPEC](NODE_DEPLOYMENT_SPEC.md); DEP-01/02/03.1/03.2a/03.2b.1/03.3a закрыты, точные конфигурации и probes остаются открытыми.
