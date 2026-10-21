@@ -16,6 +16,8 @@
 
 ## Единые команды — проектные имена
 
+CFG-S04 IN_PROGRESS: поля, роли, проверки, exit codes и открытый раунд CFG-R4 сохранены в [CONFIG_CLI_DRAFT](CONFIG_CLI_DRAFT.md). Это предложение; команды resume и поведение будущей верхней границы требуют ответа. Профильные native schemas ещё предстоит уточнить.
+
 - Live: `extractor live --config <network.yml>`.
 - History: `extractor history --config <network.yml> --from N --to M`.
 
