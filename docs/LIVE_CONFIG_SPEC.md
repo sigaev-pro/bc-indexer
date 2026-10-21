@@ -1,5 +1,7 @@
 # CFG-S04 — конфигурация live/Gateway
 
+> D52: операционная готовность/синхронизация наблюдается по логам; управление штатными средствами Docker/Kubernetes, без отдельного API и обязательной детализации probes/shutdown таймаутов. Native граница H+1 и сохранение pending остаются. Default размера frame — 2 MiB, правила ниже.
+
 > D51: штатные native configs можно заменить целиком и дополнить аргументами. Окружение выполняет отдельный init-шаг, первый старт создаёт необходимые native файлы, рестарт сохраняет state/ключи. Исходники `/config` read-only; изменяемые native файлы находятся в `/data/node`. Это подготовка окружения, не новая команда CLI сборщика. Точные filenames/init/mount mappings остаются в [deployment-задачах](NODE_DEPLOYMENT_SPEC.md).
 
 > D50: [таблица endpoints и экспонирования](NETWORK_PORTS.md) закреплена по поручению пользователя. P2P overrides задаются native конфигурацией/окружением, не новыми произвольными ключами YAML сборщика. Gateway каждой сети использует внутренний service DNS и порт 50051, NATS — внутренний 4222. Значения настраиваемы; P2P NodePort не затрагивает приложение и не открывает его API наружу.
@@ -48,11 +50,22 @@ CLI не скачивает клиенты, не создаёт pods и не в�
 | `gateway.nats.server` | URI | Обязательно gateway: текущий единственный NATS instance |
 | `gateway.nats.tls` | tagged object | Обязательно gateway: disabled, server либо mutual |
 | `gateway.nats.credentials_file` | path | Optional gateway; отсутствие — без credentials |
+| `transport.max_frame_bytes` | positive integer | Optional gateway; default `2097152` (2 MiB), полная TransportFrame вместе с NATS headers; новые публикационные планы |
 | `runtime.log_level` | enum | Optional: debug/info/warn/error, default info |
 
 Объекты TLS: `mode: disabled` запрещает дополнительные поля; `server` требует `ca_file`; `mutual` требует `ca_file`, `cert_file`, `key_file`. Проверка имени сервера обязательна при TLS. Для NATS disabled соответствует `nats://`, остальные режимы — `tls://`. Server-only TLS для адаптер↔Gateway не разрешён. UDS защищается правами файловой системы. Противоречивые режимы — ошибка до запуска.
 
 Структура всего документа проверяется целиком. Обязательные поля, локальные файлы и credentials проверяются только для запускаемой роли. Live не требует чтения NATS credentials; отсутствующая секция другой роли допустима. Секций ClickHouse, history, coverage и startup-уведомлений нет.
+
+## Размер сообщения D52
+
+Gateway применяет `transport.max_frame_bytes` при формировании publication plan. Адаптер сохраняет полученные точные frames по принятому Prepare/Publish протоколу; второй независимый лимит разбиения в live YAML не вводится. Если полный record не помещается с envelope/headers, он разбивается на RecordPart, каждый в пределах лимита. Никакой размер транзакции не оправдывает усечение данных.
+
+В поставляемой конфигурации NATS `max_payload` задаётся явно `2097152`; stream MaxMsgSize также `2097152`. Полный размер frame и headers проверяется до отправки; gRPC send/receive пределы должны вмещать размер соответствующего RPC сообщения с его обёрткой, а не только bytes frame. RPC не должен объединять неограниченное число frames в одно сообщение. Проверка фактического сериализованного размера обязательна; ограничения NATS и gRPC должны быть согласованы с override лимита.
+
+Pending publication plan/bytes неизменны при restart и retry. Изменённый лимит применяется к новым планам; если сохранённые frames больше действующего лимита либо server/stream их не допускает, публикация останавливается с явной ошибкой конфигурации. Pending не удаляются и не разбиваются повторно; нужно восстановить достаточный лимит. Горячая перезагрузка не добавляется.
+
+Штатный NATS default — 1 MB по [документации](https://docs.nats.io/running-a-nats-service/configuration); он не гарантирует размещение полной нормализованной транзакции с calls/logs/state changes. Поэтому 2 MiB — предел сообщения, не обещание «любая транзакция одним сообщением».
 
 ## Native-профили
 
