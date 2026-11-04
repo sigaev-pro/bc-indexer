@@ -1,5 +1,7 @@
 # EVM Transaction Extractor — техническое задание v3, редакция Codex
 
+> DOC-REPAIR-04 / D60: [DEPLOYMENT_BOOTSTRAP_CONTRACT](docs/DEPLOYMENT_BOOTSTRAP_CONTRACT.md) задаёт init/partial recovery, exact native configuration, 14 volumes/11 services, trust и startup. Текущий Heimdall v0.13.2; первый Bor capture профиль без BlockSTM. Это проект, сборки/runtime не выполнялись.
+
 > DOC-REPAIR-03: [NATIVE_CAPTURE_PROTOCOL](docs/NATIVE_CAPTURE_PROTOCOL.md) задаёт durable admission до исполнения, hash state pins, owned snapshots, native decision bridge, Bor/BSC scopes, H bootstrap и lifecycle recovery. Это нормативное уточнение capture; runtime proof остаётся E01/E04/E05.
 
 > DOC-REPAIR / D56–D59: разрешены исправления проектной документации. [Актуальный статус всех 41 пунктов](docs/DESIGN_REPAIR_STATUS.md) отделяет SPECIFIED от ещё открытого и от будущих runtime gates. [Нормативный автомат доставки](docs/DELIVERY_STATE_MACHINE.md) уточняет ранний E00-03.06; D57/D58 определяют fatal stop, отдельный drain, безопасные паузы VM, state retention и ограничения capture profile; D59 не переносит ACKed историю. Ниже ссылки на аудит относятся к его историческому срезу, не отменяют последующие исправления.

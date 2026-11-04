@@ -1,5 +1,7 @@
 # Клиенты, стек и нативное получение данных
 
+> Актуализация 2026-11-05: D58 заменил Heimdall на v0.13.2. Текущие source pins и integration seams — [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md) / [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md); D60 отключает BlockSTM. Совместная сборка/runtime не выполнены. Таблица 2026-10-15 ниже остаётся исторической, hashes не переименованы.
+
 > D47 (2026-10-21): текущие кандидаты — Geth 1.17.9 + Prysm 7.3.0 (основной Ethereum и отдельный Polygon L1), BSC 1.7.8, Bor 2.10.3 + Heimdall-v2 0.12.2. [Источники и ограничения проверки](research/DEPLOYMENT_VERSION_CANDIDATES.md). Таблица source audit ниже сохраняет версии и hashes, проверенные 2026-10-15; это историческая база, а не pins новых Geth/Bor. Проверка изменений native hooks и совместного запуска ещё не выполнена.
 
 > D42 (2026-10-21): текущий этап — Ethereum Mainnet, BNB Smart Chain (BSC) Mainnet и Polygon PoS Mainnet. Base/Arbitrum и их адаптеры/fixtures отложены; исследования и типизированные расширения ниже сохранены справочно, не блокируют текущую версию. Исторические сценарии отложены D38. Действующие live-типы транзакций ETH/BSC/Polygon, включая native system types, остаются обязательными. У каждой сети собственные WAL и журнал Gateway.

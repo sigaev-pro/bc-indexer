@@ -14,6 +14,8 @@
 
 Bor baseline отклоняет `EnablePipelinedImportSRC`, `EnableParallelStatelessImport`, `EnablePreconfs` и принудительный parallel processor. Проверяются effective config и реальные execution paths, не только названия CLI flags. `WaitForPipelinedStateCommit` не используется как durability barrier: выбранный source возвращает nil также по timeout. [Bor blockchain.go](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/blockchain.go).
 
+D60 отдельно отключает BlockSTM/parallel EVM: `--parallelevm.enable=false --parallelevm.enforce=false`. Это не автоматическое следствие D58; пользователь подтвердил последовательное исполнение транзакций. Спекулятивные parallel attempts не входят в первый capture-профиль.
+
 Один observation guard сериализует операции данной ноды, меняющие capture/canonical/finality state. Порядок locks: observation guard → native locks. Вложенный native вызов передаёт guard token, не захватывает его повторно. Worker не берёт native locks и не читает mutable VM/StateDB; он владеет только переданными immutable chunks. Полная карта callers и проверка deadlock входят в E01, нельзя считать обычный chain event feed достаточным.
 
 ## Admission и source pin

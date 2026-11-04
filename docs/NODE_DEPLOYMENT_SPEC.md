@@ -1,5 +1,7 @@
 # Полный комплект нод для Compose и Kubernetes
 
+> DOC-REPAIR-04: [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md) задаёт init/config/mount/identity/trust/startup contracts и будущие проверки. D58 заменил Heimdall на v0.13.2; D60 отключил BlockSTM первого Bor capture-профиля. Ранние записи о незавершённой документальной детализации ниже — история задач; runtime ещё не выполнен.
+
 > D52: готовность и синхронизацию оператор наблюдает по логам. Запуск/остановка/restart выполняются штатными средствами Compose/Kubernetes; отдельные API/управляющие скрипты, спецификация probes и собственные shutdown таймауты сейчас не требуются. Принятые native H+1, сигналы, сохранение WAL и crash recovery остаются. NATS max_payload/stream MaxMsgSize — 2097152 байта (2 MiB), gRPC допускает frame с обёрткой; [транспортные правила](LIVE_CONFIG_SPEC.md).
 
 > D50: пользователь делегировал выбор портов и экспонирования. [NETWORK_PORTS](NETWORK_PORTS.md) задаёт точные P2P TCP/UDP порты каждого экземпляра, внутренние endpoints, Compose mappings и Kubernetes NodePort по умолчанию. Для P2P явно переопределяются native defaults ради одинаковых внутренних/внешних/объявляемых портов. LoadBalancer опционален; приложение не использует API Kubernetes. Этот документ и таблица описывают проект, а не выполненный deployment.
@@ -21,7 +23,7 @@
 
 D44: L1-нода Polygon — самостоятельный Geth/Prysm комплект внутри Polygon-контура, без нашего Ethereum-адаптера. Она не публикует Ethereum-транзакции в NATS и не использует WAL/Gateway Ethereum-контура. Datadirs, credentials и процессы отделены от основной Ethereum-ноды. Общий выбор ПО не означает общий экземпляр или общее состояние. Остановка основного Ethereum-контура не должна останавливать источник L1 для Polygon.
 
-D47: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обеих пар, BSC 1.7.8, Bor 2.10.3/Heimdall-v2 0.12.2. Совместимость и image digests ещё не подтверждены; [весь набор и источники](research/DEPLOYMENT_VERSION_CANDIDATES.md). D45 выбирает отдельный Compose service и Kubernetes workload/Pod для каждого самостоятельного компонента. Совместное размещение компонентов в контейнере/Pod не требуется.
+D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обеих пар, BSC 1.7.8, Bor 2.10.3/Heimdall-v2 0.13.2. Совместимость и image digests ещё не подтверждены; [весь набор и источники](research/DEPLOYMENT_VERSION_CANDIDATES.md). D45 выбирает отдельный Compose service и Kubernetes workload/Pod для каждого самостоятельного компонента. Совместное размещение компонентов в контейнере/Pod не требуется.
 
 ### Карта размещения D45
 

@@ -4,6 +4,10 @@
 
 ## Точка продолжения
 
+2026-11-05: DOC-REPAIR-04 SPECIFIED — 35/41 пунктов, DEPLOYMENT_BOOTSTRAP_CONTRACT и актуальные D58/D60 profiles. Повторный source review исправил BSC init: hash scheme обязателен уже при создании genesis DB. 48 MD / 373 локальные ссылки, 5 anchors, diff --check пройдены; v2 неизменен. Native/deployment source review завершён без оставшихся выявленных блокеров этого контракта; сборки, genesis payload validation, runtime не выполнялись. После commit — DOC-REPAIR-05: активный backlog, ранние proofs/harness, evidence и итоговая сверка.
+
+2026-11-05: DOC-REPAIR-04 IN_PROGRESS — native подэтап сохранён в 4fa0607, git status чист. Подготовка bootstrap/mount/secret/startup контракта и обновление текущего кандидата Heimdall по D58; исходные исторические source audit pins сохраняются.
+
 2026-11-05: DOC-REPAIR-03 SPECIFIED — 24/41 пунктов получили проверяемые контракты. Добавлен NATIVE_CAPTURE_PROTOCOL, receipt provenance; повторная сверка доставки закрыла RecoveryRelease, crash-safe RELEASING и Resume admission generation. Native review уточнил native-only replay, child-root durability, static/dependency/final input manifests и RECOVERY_ONLY hooks до recovery. Проверки: 47 MD / 356 локальных ссылок, включая 5 anchors; diff --check; v2 SHA-256 неизменен. Runtime gates не выполнены. После commit — DOC-REPAIR-04 bootstrap/config/trust и Heimdall v0.13.2.
 
 2026-11-05: DOC-REPAIR-03 IN_PROGRESS — доставка сохранена в c151551, git status чист после commit. Прорабатываются native admission, state pin, capture ownership и lifecycle recovery по D58; никаких runtime-результатов пока нет.

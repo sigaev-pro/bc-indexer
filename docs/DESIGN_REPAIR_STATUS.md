@@ -11,7 +11,7 @@
 | DOC-REPAIR-01 | Source signature, SELFDESTRUCT, pending activation и ранний Status | SPECIFIED; контракт ниже и в MESSAGE_CONTRACT/реестре типов |
 | DOC-REPAIR-02 | Delivery state machine, destination, drain, memory, versions | SPECIFIED; DELIVERY_STATE_MACHINE, D57–D59 |
 | DOC-REPAIR-03 | Native admission/state retention/capture/lifecycle | SPECIFIED; NATIVE_CAPTURE_PROTOCOL, D58 |
-| DOC-REPAIR-04 | Bootstrap/init/конфигурация/эксплуатация | OPEN; D58 выбрал Heimdall v0.13.2 и ordinary Bor import |
+| DOC-REPAIR-04 | Bootstrap/init/конфигурация/эксплуатация | SPECIFIED; DEPLOYMENT_BOOTSTRAP_CONTRACT, D58/D60 |
 | DOC-REPAIR-05 | Исполняемый план, evidence, итоговая сверка | OPEN |
 
 Подэтап завершается проверкой, документированием результата и отдельным commit до перехода дальше.
@@ -44,17 +44,17 @@
 | DLV-12 | SPECIFIED | Error classes, fatal stop, immutable READY без auto-re-ID |
 | DLV-13 | SPECIFIED | Expand/free space вне DB, recovery/drain, no drop |
 | OPS-01 | SPECIFIED | SealGeneration + durable switch handshake обоих owners |
-| OPS-02 | OPEN | Partial init |
-| OPS-03 | OPEN | Config generations |
-| OPS-04 | OPEN | Native paths/UID/mounts |
-| OPS-05 | OPEN | Secrets/peer trust |
-| OPS-06 | OPEN | NATS bootstrap/verify permissions |
-| OPS-07 | OPEN | Независимые startup автоматы |
-| OPS-08 | OPEN | Stop-confirm-start |
-| OPS-09 | OPEN | Owner/volume mapping |
-| OPS-10 | OPEN | Log events |
-| OPS-11 | OPEN | D58 Heimdall v0.13.2 принят; cold-start artifacts завершаются |
-| OPS-12 | OPEN | Peer role/network admission |
+| OPS-02 | SPECIFIED | Phased native init, durable ENV_READY, no key regeneration; BOOT-01 |
+| OPS-03 | SPECIFIED | Allowlisted atomic config generations и effective parser; CONFIG-01 |
+| OPS-04 | SPECIFIED | Native homes/UID/RO inputs/writable paths; MOUNT-01 |
+| OPS-05 | SPECIFIED | Environment CA, SAN/EKU, отдельные JWT, rotation; TRUST-01 |
+| OPS-06 | SPECIFIED | Bootstrap/runtime ACL и UserInfo account proof; NATS-01 |
+| OPS-07 | SPECIFIED | Независимые native/delivery автоматы, no cyclic health barrier; START-01 |
+| OPS-08 | SPECIFIED | Stop-confirm-start, storage attach fencing; REPLACE-01 |
+| OPS-09 | SPECIFIED | 14 volumes/11 services, backing-store identity; MOUNT-01 |
+| OPS-10 | SPECIFIED | Обязательные lifecycle/error control logs; LOG-01 |
+| OPS-11 | SPECIFIED | Exact source/artifact references, Heimdall mainnet genesis acquisition gate; ARTIFACT-01 |
+| OPS-12 | SPECIFIED | Peer identity deployment/network/role admission; TRUST-01 |
 | DEV-01 | OPEN | Native proof до delivery gate |
 | DEV-02 | OPEN | Ранний минимальный harness |
 | DEV-03 | OPEN | Независимые fixture oracles |
@@ -92,3 +92,7 @@
 ## Критерии DOC-REPAIR-03
 
 [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md): CAPTURE/PIN/OWNED/EXIST/SCOPE/RECEIPT/BRANCH/DECISION/PROFILE-01. Source pins и опасные native paths проверены по исходникам. Runtime completeness native patches, устойчивость при power loss и отсутствие deadlock должны быть доказаны до приёмки профиля; документальный статус SPECIFIED их не заменяет.
+
+## Критерии DOC-REPAIR-04
+
+[DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md): BOOT/CONFIG/MOUNT/TRUST/NATS/START/REPLACE/LOG/ARTIFACT-01. Текущие candidates согласованы с D58/D60. Source/metadata проверка не означает materialization большого Heimdall genesis, image builds или runtime parse. Эти доказательства входят в E01/E06/E07, не скрыты за SPECIFIED.

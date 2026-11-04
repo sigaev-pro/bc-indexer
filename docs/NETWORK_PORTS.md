@@ -1,5 +1,7 @@
 # Порты и экспонирование — D50
 
+> Точные native mappings, listener scopes и bootstrap — [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). D58 обновил Heimdall до v0.13.2, порты сохранены. CometBFT RPC 26657 baseline слушает loopback внутри Heimdall. По D52 отдельная probe/shutdown спецификация не вводится, обязательные состояния отражаются в logs.
+
 2026-10-21. DEP-03.2b.2b.2. Пользователь поручил выбрать удобный вариант самостоятельно. Только ТЗ; конфигурации не запускались. Все значения переопределяются по D48. Неизменны границы D49: наружу только P2P, внутренние API отдельно, собственная идентичность каждого клиента.
 
 ## P2P по экземплярам
@@ -57,8 +59,8 @@ WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и доп
 - [Geth CLI](https://geth.ethereum.org/docs/fundamentals/command-line-options): настраиваемые P2P/discovery, HTTP RPC/Engine API, NAT и JWT.
 - [BSC v1.7.8 flags](https://github.com/bnb-chain/bsc/blob/v1.7.8/cmd/utils/flags.go): P2P и RPC параметры native клиента.
 - [Prysm v7.3.0 shared flags](https://github.com/OffchainLabs/prysm/blob/v7.3.0/cmd/flags.go): отдельные p2p-tcp-port, p2p-quic-port, p2p-udp-port; [сетевые интерфейсы](https://docs.prylabs.network/docs/prysm-usage/p2p-host-ip).
-- [Bor v2.10.3 config](https://github.com/0xPolygon/bor/blob/v2.10.3/builder/files/config.toml): JSON-RPC и Heimdall REST; [Heimdall v0.12.2 config](https://github.com/0xPolygon/heimdall-v2/blob/v0.12.2/packaging/templates/config/mainnet/config.toml): P2P external_address и CometBFT RPC.
+- [Bor v2.10.3 config](https://github.com/0xPolygon/bor/blob/v2.10.3/builder/files/config.toml): JSON-RPC и Heimdall REST; [Heimdall v0.13.2 config](https://github.com/0xPolygon/heimdall-v2/blob/03090c94e7eaef344cd16efd6c968431c4041847/packaging/templates/config/mainnet/config.toml): P2P external_address и CometBFT RPC.
 - [Kubernetes Service](https://kubernetes.io/docs/concepts/services-networking/service/): NodePort range, TCP/UDP Services, ClusterIP и LoadBalancer.
 - [NATS configuration](https://docs.nats.io/running-a-nats-service/configuration): внутренний клиентский listener.
 
-Источники подтверждают интерфейсы; они не являются результатом запуска нашей конфигурации. Следующая задача DEP-03.2b.2b.3 — привязать таблицы к точным flags/config keys и mount mappings выбранных версий, без реализации. Затем DEP-03.3b — признаки синхронизации, probes и штатная остановка.
+Источники подтверждают интерфейсы; они не являются результатом запуска нашей конфигурации. Документальная привязка flags/config/init/mounts завершена в DEPLOYMENT_BOOTSTRAP_CONTRACT; parse/init/runtime tests остаются E01/E06. Готовность по logs и штатному управлению окружением соответствует D52.
