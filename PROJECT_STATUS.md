@@ -4,6 +4,10 @@
 
 ## Точка продолжения
 
+2026-11-05: DOC-REPAIR-03 SPECIFIED — 24/41 пунктов получили проверяемые контракты. Добавлен NATIVE_CAPTURE_PROTOCOL, receipt provenance; повторная сверка доставки закрыла RecoveryRelease, crash-safe RELEASING и Resume admission generation. Native review уточнил native-only replay, child-root durability, static/dependency/final input manifests и RECOVERY_ONLY hooks до recovery. Проверки: 47 MD / 356 локальных ссылок, включая 5 anchors; diff --check; v2 SHA-256 неизменен. Runtime gates не выполнены. После commit — DOC-REPAIR-04 bootstrap/config/trust и Heimdall v0.13.2.
+
+2026-11-05: DOC-REPAIR-03 IN_PROGRESS — доставка сохранена в c151551, git status чист после commit. Прорабатываются native admission, state pin, capture ownership и lifecycle recovery по D58; никаких runtime-результатов пока нет.
+
 2026-11-05: DOC-REPAIR-02 SPECIFIED — нормативный [автомат доставки](docs/DELIVERY_STATE_MACHINE.md) закрывает DLV-02…13 и OPS-01; всего 17/41 пунктов специфицированы, runtime не проверен. Зафиксирован D59: подтверждённую историю при cutover не переносим. Проверки: 46 MD, 341 локальная ссылка без отсутствующих файлов, git diff --check, неизменный SHA-256 v2. Следующий подэтап после commit: DOC-REPAIR-03, native admission/owned snapshots/decision markers. Разрешены только документы; код, deployment и push не выполнялись.
 
 2026-11-05: DOC-REPAIR-02 IN_PROGRESS / D57–D59 — DOC-REPAIR-01 завершён commit a6ff50c; проверки 45 MD/332 локальные ссылки, source/contract assertions и git diff --check пройдены, v2 неизменен. Теперь delivery state machine/D54/drain/versioning. Приняты удержание state/reject несовместимого backend, Heimdall v0.13.2, ordinary Bor import и VM-safe yield; D59 не переносит уже подтверждённую историю при cutover. Первый commit меняет только документацию; runtime/deployment/push отсутствуют. Следом native admission и bootstrap, затем план/итоговая сверка. Актуальные статусы — DESIGN_REPAIR_STATUS.

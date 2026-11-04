@@ -27,7 +27,8 @@ Gateway prefixes: `meta/{store_epoch,destination_binding}`, `session/<producer,r
 | Gateway CLOSED | PubAck части | Проверить ожидаемый stream и plan identity; учесть ACK | Повтор при потере bitmap допустим |
 | Gateway CLOSED | все PubAck batch | Sync NATS_ACKED с manifest/plan identity | IngestAck |
 | Producer SEALED | проверенный IngestAck | Sync ACKED_CLEANUP + release_outbox, затем bounded payload cleanup | Release только после локальной уборки |
-| Gateway NATS_ACKED | следующий ordered Release | Barrier publisher/callback, bounded cleanup; sync retired_prefix после уборки | ReleaseAck |
+| Gateway NATS_ACKED | следующий ordered Release | Barrier publisher/callback; sync RELEASING с cleanup_cursor, bounded cleanup | RELEASING; больше не публиковать |
+| Gateway RELEASING | очередной cleanup chunk / restart | Удалить chunk, sync cursor; последним atomic commit продвинуть retired_prefix и удалить RELEASING | ReleaseAck только после финального commit |
 | Producer cleanup завершён | ReleaseAck | Sync retired_prefix и удаление outbox | RETIRED; payload/plan отсутствуют |
 
 IngestAck проверяет batch/manifest/plan/destination; ACK части либо успешный gRPC write не заменяет его. Перед удалением любых recovery fragments должна существовать durable замена либо достаточные replay prerequisites. Старый attempt не смешивается с новым manifest. Любые bytes под существующим immutable event_id неизменны, даже до первой публикации.
@@ -50,6 +51,8 @@ Handshake перед replay передаёт authenticated producer/run identity
 
 Prepare/Publish с seq<=retired_prefix возвращает ALREADY_RETIRED, не создавая keys. Producer не признаёт неподтверждённый batch доставленным по этому ответу: он применим только к локальному ACKED/outbox либо уже retired. Конфликт с неподтверждённым state — ERROR. Архив старых digests для сравнения намеренно не создаётся.
 
+Если Gateway потерял store после IngestAck, producer уже мог удалить payload, сохранив ACKED/outbox следующего N при prefix=N−1. Для отсутствующего batch разрешён RecoveryRelease ровно N от текущего authenticated/fenced producer: его durable ACKED/outbox assertion содержит batch/plan/binding identity и полученный IngestAck. Gateway sync принимает assertion, затем продвигает prefix и отвечает ReleaseAck без требования повторить удалённый payload. Произвольный скачок, unACKed producer и конфликт существующей локальной записи запрещены. Это продолжение уже завершённой доставки, не новое подтверждение от NATS. RELEASING marker сохраняется до конца всей bounded уборки; отсутствие части keys после crash не повод публиковать снова.
+
 ## Fencing
 
 Gateway boot_nonce меняется при каждом процессе; producer хранит монотонную connection_generation. Challenge-response handshake аутентифицирован mTLS/UDS owner и связан с network/role/producer/run/binding; старый challenge не принимается в новом boot. Session switch и DB mutation проходят общий serialized ordering. Проверка token выполняется вместе с admission/commit, а не только при чтении RPC.
@@ -66,12 +69,16 @@ Gateway при подключении проверяет account, StreamInfo, su
 
 1. Остановить LIVE штатным способом и подтвердить отсутствие старого writer. Запустить ту же совместимую native сборку с `--extractor-mode=drain`; YAML содержит тот же store/binding. Перед recovery sync установить DRAIN, если он ещё не сохранён. DRAIN не включает новый H+1 capture и не выполняет sync-range выгрузку.
 2. Восстановить сохранённые capture/lifecycle intents; новые непредусмотренные live callbacks не создают обязательств. Доставить READY/SEALED; закончить ACKED_CLEANUP и ordered Release. Native источник нужен для незакрытого capture; его недоступность не даёт DRAINED.
-3. Producer фиксирует drain_id и batch_highwater, затем отправляет SealGeneration(binding_generation,drain_id,highwater). Gateway fencing barrier проверяет отсутствие незавершённых операций <=highwater и совпадение retired_prefix. Sync SEALED_GENERATION запрещает новые Prepare этой generation; повтор возвращает тот же SealAck.
+3. Producer фиксирует drain_id и batch_highwater, затем отправляет SealGeneration(binding_generation,admission_generation,drain_id,highwater). Gateway fencing barrier проверяет отсутствие незавершённых операций <=highwater и совпадение retired_prefix. Sync SEALED_GENERATION запрещает новые Prepare этой admission generation; повтор возвращает тот же SealAck.
 4. Producer sync сохраняет DRAINED с SealAck и завершается. Crash до этого продолжает DRAIN; новый LIVE не включается автоматически. Оба owners сохраняют identity/lifecycle, terminal prefix и seal evidence, очищают временные delivery payload/receipts. «Оба журнала очищены» не означает удалить DB/ключи.
-5. Для смены destination новый descriptor имеет новую generation; обе конфигурации указывают old/new binding и drain_id. Fenced handshake пишет Gateway SWITCH_PREPARED, producer sync новую binding, Gateway подтверждает SWITCH_COMMITTED. Повтор каждого шага идемпотентен; несовпадение generation блокирует capture. Команда LIVE выполняет этот handshake до снятия DRAINED, затем фиксирует новую H. Для возврата в LIVE без смены назначения также требуется явный restart с mode=live и завершённый seal handshake.
+5. Для смены destination новый descriptor имеет новую generation; обе конфигурации указывают old/new binding и drain_id. Fenced handshake пишет Gateway SWITCH_PREPARED, producer sync новую binding, Gateway подтверждает SWITCH_COMMITTED. Повтор каждого шага идемпотентен; несовпадение generation блокирует capture. Команда LIVE выполняет этот handshake, затем Resume до снятия DRAINED и фиксации новой H. Для возврата в LIVE без смены назначения также требуется явный restart с mode=live и Resume после завершённого seal.
 6. Старые SEALED generations не принимают новых данных. Упавший процесс завершает сохранённый switch, не угадывает нужную сторону по более свежему YAML. Если последний owner store потерян, операция требует восстановления seal/binding evidence от surviving owner; при недостатке evidence — ERROR, не bypass.
 
 D59: будущие Removed/Status сохраняют activation references, даже если исходный ACKed Applied был в прежнем назначении. Уже подтверждённая история не копируется. Новому stream не обещается самостоятельная полнота старых ссылок; downstream/copy вне scope.
+
+Resume использует отдельную монотонную admission_generation, не подменяет binding generation или connection_generation. Producer sync сохраняет ResumeIntent(old_seal,new_admission_generation,binding_digest), Gateway под barrier sync принимает ровно следующую generation, producer sync сохраняет LIVE после ответа. Повтор intent возвращает тот же результат. Capture заблокирован до финального producer commit. Все mutating RPC/session tokens привязаны также к admission_generation; поздние RPC старого seal отвергаются. При прежнем назначении binding не меняется. Crash между ответом Gateway и producer commit продолжает тот же ResumeIntent, а не увеличивает generation повторно. Store loss восстанавливает generation/intent от surviving owner до admission.
+
+Дополнительные FRONTIER/DRAIN fixtures: IngestAck → producer cleanup → потеря Gateway → RecoveryRelease без payload; crash после каждого Gateway cleanup chunk; drain → LIVE в прежний binding → новый batch → поздний RPC прежней admission generation.
 
 ## Размеры, headers, память
 

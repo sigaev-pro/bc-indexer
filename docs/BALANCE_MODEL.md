@@ -1,5 +1,7 @@
 # Действия и изменения нативных балансов
 
+> Текущий live scope D38 и [native capture contract](NATIVE_CAPTURE_PROTOCOL.md) уточняют исторические формулировки ниже. Before/after снимаются на точных native tx boundaries, existence/deletion — отдельным bridge; Bor block-alloc не входит в StateSync diff. SELFDESTRUCT представлен отдельным execution action в [MESSAGE_CONTRACT](MESSAGE_CONTRACT.md).
+
 > Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
 
 Статус: контракт сбора и нормализации до NATS.IO, D07/D10/D16/D17. Все транзакции и их эффекты обязательны. Изменения вне транзакций — optional, разрешено не реализовывать при усложнении кода. Детальная модель действий ещё не завершена.

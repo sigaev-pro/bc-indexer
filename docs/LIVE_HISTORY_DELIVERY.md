@@ -1,5 +1,7 @@
 # Live, история и учёт доставки — E00-03.05
 
+> D57/D58: H bootstrap, recovery начатого capture, known-branch targeted replay и lifecycle GC определены в [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md). Targeted recovery не включает сканирование пропусков/истории. Exact delivery states — [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md).
+
 > D38 (2026-10-21): загрузка истории и пропусков отложена. History N–M, replay диапазонов и history recovery ниже — будущий контекст, не требования текущего этапа. Сейчас только live-сбор, единая типизированная нормализация и доставка в NATS. Восстановление pending WAL и live reorg/finality сохраняются.
 
 > D36/D37 (2026-10-21): live не загружает стартовую историю и не ищет пропуски за время остановки. История запускается отдельным сервисом на узле ноды по явной команде N–M. Pending WAL повторно отправляется автоматически. Учёт запусков, отдельное уведомление в NATS, таблица ClickHouse и скрипт проверки отсутствующих данных — будущий внешний механизм вне текущего ТЗ; его сообщения и интерфейсы сейчас не определяются.

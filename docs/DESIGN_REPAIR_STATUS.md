@@ -10,7 +10,7 @@
 |---|---|---|
 | DOC-REPAIR-01 | Source signature, SELFDESTRUCT, pending activation и ранний Status | SPECIFIED; контракт ниже и в MESSAGE_CONTRACT/реестре типов |
 | DOC-REPAIR-02 | Delivery state machine, destination, drain, memory, versions | SPECIFIED; DELIVERY_STATE_MACHINE, D57–D59 |
-| DOC-REPAIR-03 | Native admission/state retention/capture/lifecycle | OPEN; D58 разрешил retention, capability restrictions и VM-safe yield |
+| DOC-REPAIR-03 | Native admission/state retention/capture/lifecycle | SPECIFIED; NATIVE_CAPTURE_PROTOCOL, D58 |
 | DOC-REPAIR-04 | Bootstrap/init/конфигурация/эксплуатация | OPEN; D58 выбрал Heimdall v0.13.2 и ordinary Bor import |
 | DOC-REPAIR-05 | Исполняемый план, evidence, итоговая сверка | OPEN |
 
@@ -21,16 +21,16 @@
 | ID | Статус документации | Контракт / оставшийся шаг |
 |---|---|---|
 | NAT-01 | SPECIFIED | AuthorizationSignature uint8, source tuples сохранены; AUTH fixtures |
-| NAT-02 | OPEN | Owned snapshot между hooks/worker |
-| NAT-03 | OPEN | Existence/creation/deletion source map |
+| NAT-02 | SPECIFIED | Owned safe-point chunks, worker без VM/StateDB; OWNED-01 |
+| NAT-03 | SPECIFIED | Pre-mutator existence bridge и tx finalization snapshot; EXIST-01 |
 | NAT-04 | SPECIFIED | SelfDestructAction, deletion vs monetary projection; SELF fixtures |
-| NAT-05 | OPEN | Bor block-alloc/StateSync scope barrier |
-| NAT-06 | OPEN | Receipt source/projection table |
+| NAT-05 | SPECIFIED | Native StateSync after до SYSTEM_POST block-alloc; SCOPE-01 |
+| NAT-06 | SPECIFIED | Receipt provenance, attempted/created/final existence; RECEIPT-01 |
 | NAT-07 | SPECIFIED | Removed для durable READY Applied независимо от PubAck |
 | NAT-08 | SPECIFIED | PENDING_APPLIED, full evidence snapshots, revision и terminal Removed |
-| NAT-09 | OPEN | Known block/side branch targeted recovery |
-| NAT-10 | OPEN | Durable lifecycle transition/reconciliation/GC |
-| DLV-01 | OPEN | D58 retention принят; source pin/admission контракт завершается |
+| NAT-09 | SPECIFIED | Guarded H bootstrap и known-branch corpus/replay; BRANCH-01 |
+| NAT-10 | SPECIFIED | Native decision marker/mirror/frontier и evidence GC; DECISION-01 |
+| DLV-01 | SPECIFIED | Hash state pin/capsule sync до ADMITTED; CAPTURE/PIN-01 |
 | DLV-02 | SPECIFIED | Stable delivery batch/attempt; CAPTURE_STAGING отдельно |
 | DLV-03 | SPECIFIED | Chunked Prepare, immutable reservation, owner handshake cleanup |
 | DLV-04 | SPECIFIED | Bootstrap retired_prefix от producer, lost ReleaseAck отдельно |
@@ -86,3 +86,9 @@
 ## Критерии DOC-REPAIR-02
 
 [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md) — нормативный автомат. Он задаёт переходы/closing markers, retired prefix, fencing и recovery для каждого durable состояния, pre-plan DestinationBinding и исполнимый drain/cutover. Там перечислены ATTEMPT/PREPARE/FRONTIER/FENCE/DEST/DRAIN/MEM/UPGRADE/POISON/ENOSPC fixtures. Старый RocksDB protocol помечен исходным изложением с явным приоритетом нового автомата. До реализации проверяются ссылки/согласованность; runtime fixture не заменяется мысленным walkthrough.
+
+Повторная сверка при подэтапе 03 добавила RecoveryRelease после потери Gateway и producer cleanup, durable RELEASING/cursor и отдельную admission_generation/Resume для возврата из drain в прежнее назначение. Эти контрпримеры расширяют FRONTIER/DRAIN fixtures, не создают новые продуктовые решения.
+
+## Критерии DOC-REPAIR-03
+
+[NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md): CAPTURE/PIN/OWNED/EXIST/SCOPE/RECEIPT/BRANCH/DECISION/PROFILE-01. Source pins и опасные native paths проверены по исходникам. Runtime completeness native patches, устойчивость при power loss и отсутствие deadlock должны быть доказаны до приёмки профиля; документальный статус SPECIFIED их не заменяет.

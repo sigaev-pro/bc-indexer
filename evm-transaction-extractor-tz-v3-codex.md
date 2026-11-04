@@ -1,5 +1,7 @@
 # EVM Transaction Extractor — техническое задание v3, редакция Codex
 
+> DOC-REPAIR-03: [NATIVE_CAPTURE_PROTOCOL](docs/NATIVE_CAPTURE_PROTOCOL.md) задаёт durable admission до исполнения, hash state pins, owned snapshots, native decision bridge, Bor/BSC scopes, H bootstrap и lifecycle recovery. Это нормативное уточнение capture; runtime proof остаётся E01/E04/E05.
+
 > DOC-REPAIR / D56–D59: разрешены исправления проектной документации. [Актуальный статус всех 41 пунктов](docs/DESIGN_REPAIR_STATUS.md) отделяет SPECIFIED от ещё открытого и от будущих runtime gates. [Нормативный автомат доставки](docs/DELIVERY_STATE_MACHINE.md) уточняет ранний E00-03.06; D57/D58 определяют fatal stop, отдельный drain, безопасные паузы VM, state retention и ограничения capture profile; D59 не переносит ACKed историю. Ниже ссылки на аудит относятся к его историческому срезу, не отменяют последующие исправления.
 
 > DOC-AUDIT-02 / D55 (2026-11-05): [актуальный реестр 41 проектной находки](docs/DEEP_DESIGN_AUDIT_2026_11_05.md) выявляет в том числе дефекты source-схемы и lifecycle, незавершённые capture/delivery/maintenance механизмы и риски порядка разработки. Их исправления ещё не внесены и не считаются принятыми автоматически. Завершение аудита не означает готовность этой редакции к реализации; остаётся только проектирование/документация.
