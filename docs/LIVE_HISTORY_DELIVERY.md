@@ -1,5 +1,7 @@
 # Live, история и учёт доставки — E00-03.05
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > D57/D58: H bootstrap, recovery начатого capture, known-branch targeted replay и lifecycle GC определены в [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md). Targeted recovery не включает сканирование пропусков/истории. Exact delivery states — [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md).
 
 > D38 (2026-10-21): загрузка истории и пропусков отложена. History N–M, replay диапазонов и history recovery ниже — будущий контекст, не требования текущего этапа. Сейчас только live-сбор, единая типизированная нормализация и доставка в NATS. Восстановление pending WAL и live reorg/finality сохраняются.

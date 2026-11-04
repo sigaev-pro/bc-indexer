@@ -1,6 +1,6 @@
 # Полный реестр требований и приёмки
 
-DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный текст сводится в root v3.
+DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
 Все runtime verdict сейчас **NOT_RUN**. Ни одна строка не означает успешный тест. Имена fixture families из предыдущих документов сохранены; новые WIRE/ID/LAYOUT/RPC/CUTOVER/DATA/FEE/FINAL/GC конкретизируют их. Сценарии должны быть воспроизводимы и проверяться независимым expected по IMPLEMENTATION_GATES. Для требований native semantics PASS нужен отдельно ETH/BSC/POLY; network-specific строки проверяются в своей сети. Optional extension проверяется только при объявленном включении и не блокирует default поставку.
 

@@ -1,8 +1,22 @@
 # Состояние проекта
 
-Обновлено: 2026-11-05. Текущий этап — проектирование; реализация не начата.
-
 ## Точка продолжения
+
+2026-11-05: **DOC-FINAL-01 / DOC-FINAL-02 DONE_DOCS_ONLY**. Чистовая [единая редакция ТЗ v3](evm-transaction-extractor-tz-v3-codex.md) завершена по D61–D63. Подэтап точных контрактов сохранён в d1668f7; финальная редактура — commit DOC-FINAL-02 в git log. Remote не публиковался.
+
+Разрешены только проектирование и документация. Неотвеченных пользовательских вопросов текущего раунда нет. Реализацию не начинать без отдельного последующего указания пользователя. После такого указания первая задача E01-01: независимые build graphs/ранний harness; затем E01-02: native admission/owned snapshots/pins/decision proofs отдельно ETH/BSC/POLY. Все E01–E07 TODO; build/runtime/crash/deployment verdict NOT_RUN.
+
+Результат: 41/41 исходных audit findings SPECIFIED; [63 требования и критерии приёмки](docs/ACCEPTANCE_REQUIREMENTS.md). D62 фиксирует оба источника BSC finality и отдельные фактические комиссионные движения. D63: Polygon recovery-state GC после checkpoint в finalized-состоянии собственной supporting L1; tx/status не ждут GC. Точные IDs/control/wire, drain/cutover, supporting identities и конфигурация включены в root. Архивные проектные материалы явно отделены от текущего контракта.
+
+[Финальная сверка](docs/FINAL_SPEC_REVIEW.md): 13 нормативных разделов root совпадают с тематическими файлами после преобразования heading/link paths; 63 REQ ID уникальны, все 41 audit ID покрыты. Проверены Markdown links/anchors и таблицы, git diff --check. Исходный v2 SHA-256: ea825f0f0c3b747133de216c5bb1b15bc4f1d0601380ff1b6c3c1a4b620bc634.
+
+Не выдавать source inspection за power-loss/runtime proof, проверенные image/ABI/toolchain locks либо полный bootstrap genesis payload. Новое поведенческое противоречие при реализации выносить на уточнение до зависимых правок; каждый законченный подэтап фиксировать отдельным commit.
+
+## История работы — не текущие задания
+
+Ниже сохранены прежние checkpoints. Их IN_PROGRESS, next steps и открытые вопросы относятся к указанному моменту; текущая задача и разрешения определены только в точке продолжения выше.
+
+2026-11-05: DOC-FINAL-02 IN_PROGRESS. Контракты DOC-FINAL-01 сохранены в d1668f7; git status чист. Чистовая консолидация единого нормативного v3, current-only message/type/stack/plan views, traceability и финальная проверка. Только документация.
 
 2026-11-05: DOC-FINAL-01 DONE_DOCS_ONLY / D61–D63. Добавлены CURRENT_SEMANTICS, CONTROL_WIRE_CONTRACT и ACCEPTANCE_REQUIREMENTS (63 уникальных требования с fixture/stage mapping); точная финальность ETH/BSC/Polygon, комиссии, supporting identity bootstrap, wire/ID/layout/RPC, maintenance/cutover и recovery SEALED согласованы между документами. Повторный source review уточнил BSC milliseconds, authoritative finality regression, ancestry direction и восстановление потерянных switch/resume replies. D62/D63 приняты; неотвеченных вопросов нет. Проверки: 54 MD / 407 local links / 43 anchors, 41 audit finding SPECIFIED, diff --check; v2 SHA-256 прежний. Runtime tests NOT_RUN. После commit — DOC-FINAL-02: чистовая консолидация root, удаление deferred требований из active contract, текущие state/index документы и финальная сверка. Реализация/deploy/push не разрешены.
 
@@ -72,7 +86,7 @@
 
 2026-10-21: CFG-S05 и E00-07 DONE как документация по четырём согласованным правкам D39. Ноду запускает окружение; live начинается с H+1 после синхронизации; pending WAL передаётся независимо. Активный CONFIG_CONTRACT очищен; основное ТЗ, LIVE_CONFIG_SPEC, архитектура и критерии плана согласованы. Проверки локальных ссылок и git diff --check пройдены; SHA-256 оригинала v2 неизменен. Код, runtime-тесты и deployment не выполнялись. Контрольный коммит D39/CFG-S05 — в git log. Далее E00-04: численные параметры приёмки и оставшиеся ограничения; E00 в целом не завершён. Новые изменения сначала согласовывать с пользователем.
 
-## История работы (не текущие задания)
+### Более ранние записи
 
 2026-10-21: CFG-S04 DONE как технический проект: [LIVE_CONFIG_SPEC](docs/LIVE_CONFIG_SPEC.md). Описаны команды, поля YAML, пять native-профилей, запуск встроенных адаптеров, проверки путей/identity/TLS и restart pending WAL. CONFIG_CLI_DRAFT архивный. Предложения CLI/native launch и gate live требуют итоговой сверки CFG-S05; они не объявлены реализованными или проверенными runtime. Следующий шаг — CFG-S05, синхронизация ТЗ/плана/критериев в live-only scope. История и пропуски отложены. Локальные ссылки и git diff --check пройдены, SHA-256 v2 неизменен. Только документы; контрольный коммит CFG-S04 — в git log.
 

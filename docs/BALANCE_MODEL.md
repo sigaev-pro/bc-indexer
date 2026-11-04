@@ -1,5 +1,7 @@
 # Действия и изменения нативных балансов
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > Текущий live scope D38 и [native capture contract](NATIVE_CAPTURE_PROTOCOL.md) уточняют исторические формулировки ниже. Before/after снимаются на точных native tx boundaries, existence/deletion — отдельным bridge; Bor block-alloc не входит в StateSync diff. SELFDESTRUCT представлен отдельным execution action в [MESSAGE_CONTRACT](MESSAGE_CONTRACT.md).
 
 > Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).

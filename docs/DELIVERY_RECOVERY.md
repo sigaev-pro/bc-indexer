@@ -1,5 +1,7 @@
 # E00-03.06 — доставка и восстановление
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > Актуальные переходы DOC-REPAIR-02: [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md). Восстановление идёт по marker: CAPTURE/DELIVERY_STAGING → конкретное восстановление; READY без SEALED → Prepare; SEALED → прежний plan без пересериализации; ACKED_CLEANUP → уборка; release_outbox → ordered Release. Не каждый restart проходит Prepare заново. D57 fatal local WAL завершает native процесс; отдельный DRAIN не включает новые наблюдения.
 
 > D38 (2026-10-21): загрузка истории и пропусков отложена. History N–M, replay диапазонов и history recovery ниже — будущий контекст, не требования текущего этапа. Сейчас только live-сбор, единая типизированная нормализация и доставка в NATS. Восстановление pending WAL и live reorg/finality сохраняются.

@@ -1,5 +1,7 @@
 # CFG-S04 — проект YAML и CLI
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > Архивный draft. Активный проект live/Gateway перенесён в [LIVE_CONFIG_SPEC](LIVE_CONFIG_SPEC.md). Этот файл сохраняется для истории обсуждения; его команды и поля не являются актуальным контрактом.
 
 > D38 (2026-10-21): текущий проект ограничен live/Gateway. Все нижеследующие предложения о history-командах, resume history, history_root, historical inputs, диапазонах и результате history-run отложены и не входят в текущую schema/CLI. CFG-R4.1/CFG-R4.2 сняты; ответы не нужны. Эти предложения сохранены как будущие заметки, не как принятые решения. Далее уточняются только поля live native.source и live/Gateway. Pending WAL и live reorg/finality остаются в scope.

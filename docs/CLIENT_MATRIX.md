@@ -1,5 +1,7 @@
 # Клиенты, стек и нативное получение данных
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > Актуализация 2026-11-05: D58 заменил Heimdall на v0.13.2. Текущие source pins и integration seams — [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md) / [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md); D60 отключает BlockSTM. Совместная сборка/runtime не выполнены. Таблица 2026-10-15 ниже остаётся исторической, hashes не переименованы.
 
 > D47 (2026-10-21): текущие кандидаты — Geth 1.17.9 + Prysm 7.3.0 (основной Ethereum и отдельный Polygon L1), BSC 1.7.8, Bor 2.10.3 + Heimdall-v2 0.12.2. [Источники и ограничения проверки](research/DEPLOYMENT_VERSION_CANDIDATES.md). Таблица source audit ниже сохраняет версии и hashes, проверенные 2026-10-15; это историческая база, а не pins новых Geth/Bor. Проверка изменений native hooks и совместного запуска ещё не выполнена.

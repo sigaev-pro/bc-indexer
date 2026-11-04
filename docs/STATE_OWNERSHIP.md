@@ -1,5 +1,7 @@
 # Владение служебным состоянием — E00-03.04, уточнение D23–D25
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > DOC-REPAIR-02: [нормативный автомат](DELIVERY_STATE_MACHINE.md) уточняет capture observation vs delivery batch, stable attempts, publisher/session fencing, ordered Release и bootstrap retired prefix. DestinationBinding сохраняется обоими owners до capture; native state не является Gateway journal. Drain сохраняет identity/lifecycle, удаляя только завершённое delivery-состояние.
 
 > D40: у каждой сети отдельный RocksDB WAL адаптера и отдельный RocksDB журнал Gateway, со своими writers, каталогами/томами, identity и прогрессом. Namespace в общей writable DB не заменяет эту изоляцию. Общего multi-network WAL или writer нет; рестарт и изменение одной сети не требуют действий остальных. Общий NATS сохраняется как транспортная инфраструктура; pending каждой сети хранится независимо. История отложена D38.

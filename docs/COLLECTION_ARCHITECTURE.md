@@ -1,5 +1,7 @@
 # Архитектура сбора и публикации в NATS
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > D57/D58: нормативные admission/owned snapshots/state pins/native decision markers и baseline restrictions — [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md); transport/recovery — [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md). Эти уточнения имеют приоритет перед ранними краткими описаниями ниже.
 
 > D45: все самостоятельные компоненты разнесены по отдельным Compose services и Kubernetes workloads/Pods. Geth/Prysm, Bor/Heimdall, Gateway и отдельная Ethereum-пара Polygon связаны конфигурируемыми сетевыми адресами; общего хоста не требуется. Адаптер встроен в execution-клиент, WAL embedded у owner. [Карта размещения](NODE_DEPLOYMENT_SPEC.md).

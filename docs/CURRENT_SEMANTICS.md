@@ -72,10 +72,10 @@ GC anchor — только header-derived AttestedSnapshot.finalized, canonical 
 
 | Evidence type | Точные поля |
 |---|---|
-| Milestone | source:SourceObservationRef, number?:u64, milestone_id:string, proposer:Address20, start/end/timestamp/total_difficulty:u64, end_hash:Hash32, outcome=OBSERVED|FUTURE_QUEUED|LOCALLY_VERIFIED|REJECTED |
-| Checkpoint | source, checkpoint_id?:u64, proposer, start/end/timestamp:u64, root_hash:Hash32, state=BUFFERED|STORED_ACKNOWLEDGED, locally_verified_end?:AnchorRef |
-| Whitelist | kind=MILESTONE|CHECKPOINT, anchor:AnchorRef, native_decision, source_evidence?:SourceObservationRef, ancestry_binding_digest:Hash32; принят только после canonical match |
-| NativeFinalized | basis=MILESTONE_WHITELIST|CHECKPOINT_WHITELIST, anchor:AnchorRef, whitelist_decision:NativeDecisionRef |
+| Milestone | source:SourceObservationRef, number?:u64, milestone_id:string, proposer:Address20, start/end/timestamp/total_difficulty:u64, end_hash:Hash32, outcome=OBSERVED\|FUTURE_QUEUED\|LOCALLY_VERIFIED\|REJECTED |
+| Checkpoint | source, checkpoint_id?:u64, proposer, start/end/timestamp:u64, root_hash:Hash32, state=BUFFERED\|STORED_ACKNOWLEDGED, locally_verified_end?:AnchorRef |
+| Whitelist | kind=MILESTONE\|CHECKPOINT, anchor:AnchorRef, native_decision, source_evidence?:SourceObservationRef, ancestry_binding_digest:Hash32; принят только после canonical match |
+| NativeFinalized | basis=MILESTONE_WHITELIST\|CHECKPOINT_WHITELIST, anchor:AnchorRef, whitelist_decision:NativeDecisionRef |
 | L1Checkpoint | l1_network:NetworkIdentity, supporting_node_id:Id16, root_chain_address:Address20, checkpoint_id:u64, header_block_id:UInt256, child_block_interval:u64, bor_start/end:u64, checkpoint_root:Hash32, bor_end_ref:AnchorRef, bor_range_binding_digest:Hash32, finalized_l1_anchor:AnchorRef, verification:FinalizedContractState |
 | FinalizedContractState | call_block_hash:Hash32, root_chain_params_digest/calldata_digest/result_digest:Hash32, result_created_at:UInt256, result_proposer:Address20 |
 

@@ -1,41 +1,29 @@
-# Стек компонентов: проектный baseline E00-03.03
+# Стек компонентов текущей поставки
 
-> D58/D60: Heimdall v0.13.2; Bor capture без BlockSTM и ускоренных import/preconfirmation paths. Source pins/packaging — [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md), recovery capabilities — [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md). Исторические предложения ниже подчинены scope D38–D42.
+D58–D63: Heimdall 0.13.2; hash state profiles; Bor без BlockSTM/ускоренных import/preconfirmation paths. Точные source refs — [bootstrap contract](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Immutable image/dependency locks и совместные runtime proofs — будущие E01/E06.
 
-> D47 (2026-10-21): актуальный [набор кандидатов и источники](research/DEPLOYMENT_VERSION_CANDIDATES.md) заменяет прежние Geth/Bor pins: Geth 1.17.9, Prysm 7.3.0 для обеих независимых пар, Bor 2.10.3. Остальные согласованные версии сохранены. Старый source audit не подтверждает новые native hooks; совместная сборка/runtime, immutable images и полный dependency lock ещё не проверены.
-
-> D42 (2026-10-21): текущий этап — Ethereum Mainnet, BNB Smart Chain (BSC) Mainnet и Polygon PoS Mainnet. Base/Arbitrum и их адаптеры/fixtures отложены; исследования и типизированные расширения ниже сохранены справочно, не блокируют текущую версию. Исторические сценарии отложены D38. Действующие live-типы транзакций ETH/BSC/Polygon, включая native system types, остаются обязательными. У каждой сети собственные WAL и журнал Gateway.
-
-> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](research/ROCKSDB_STACK.md), [протокол и REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md).
-
-> Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](LIVE_HISTORY_DELIVERY.md).
-
-2026-10-15. Технический выбор для последующей реализации; версии проверены по upstream manifests/releases, но совместная сборка и runtime не проверены. D21/D22 принимают Compose + Kubernetes и NATS внутри обеих сред. Эти ответы не утверждают HA, replicas, retention и storage backend.
+Тематическое представление [единого ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); изменения нормативного содержания синхронизируются с root в том же commit.
 
 ## Компоненты и интеграция
 
 | Компонент | Baseline | Реализация / граница |
 |---|---|---|
 | Ethereum native adapter | Go внутри Geth v1.17.9 | Native hooks/state journal + canonical notifications; отдельный client build |
-| Ethereum consensus | Prysm 7.3.0, кандидат D47; image digest не закреплён | Отдельный компонент основной Ethereum-ноды; layout контейнеров — DEP-03 |
+| Ethereum consensus | Prysm 7.3.0, кандидат D47; image digest не закреплён | Отдельный компонент основной Ethereum-ноды; отдельный service/StatefulSet по NODE_DEPLOYMENT_SPEC |
 | Polygon L1 источник | Отдельный Geth + Prysm, D44 | Собственная Ethereum-нода Polygon без нашего Ethereum-адаптера, со своими процессами/datadirs; основная Ethereum-нода не используется |
 | BSC native adapter | Go внутри BSC v1.7.8 | Обычные tx и Parlia Finalize capture; отдельный client build |
-| Отложено D42: Base native adapter | Rust 1.96.0, base/base v1.5.0 + pinned base/reth | Native executor + включённый Inspector, per-tx results, canonical ExEx |
-| Отложено D42: Arbitrum Nitro adapter | Go в Nitro v3.12.1 с его собственным Geth; native Rust/cgo/WASM build dependencies | ArbOS/Stylus/native special paths; отдельная сборка и fixtures |
-| Отложено D42: Arbitrum Classic adapter | Go + C++ AVM, Classic v1.4.7 candidate | Native result reader + consensus-neutral observer candidate; отдельный history runtime той же сети |
 | Polygon adapter | Go внутри Bor v2.10.3, Heimdall-v2 v0.13.2 | Native tx и StateSync/Finalize, отдельный optional legacy scope; последовательный профиль D60 |
-| Canonical Coordinator | Библиотечный модуль адаптера/контура соответствующей сети | Отдельный общий сервис для всех сетей не вводится. Каждый producer/run владеет своим lifecycle state; единого владельца для устранения пересечений нет; см. STATE_OWNERSHIP |
+| Canonical Coordinator | Библиотечный модуль адаптера/контура соответствующей сети | Отдельный общий сервис для всех сетей не вводится. Каждый producer/run владеет своим lifecycle state; единого владельца для устранения пересечений нет; см. NATIVE_CAPTURE_PROTOCOL |
 | Gateway/publisher | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0; один экземпляр роли publisher на сеть | Единый исходный код/binary для всех сетей, отдельный процесс и конфиг каждой сети; NATS SDK только здесь |
 | Wire schema | Protobuf proto3 с explicit presence и closed oneof | Одна versioned schema, native validators, transaction/block metadata/lifecycle/parts из MESSAGE_CONTRACT |
 | Генерация Go | protoc 36.2 + protobuf-go/protoc-gen-go 1.36.12 | protoc-gen-go-grpc из согласованного source release grpc-go; точный module tag/commit и lock фиксируются E01/E02, не подменяются версией server SDK |
-| Отложено D42: Rust transport/codec | tonic 0.14.6 + tonic-prost/tonic-prost-build 0.14.6; prost/prost-build 0.14.4 | Общая proto schema; встройка в Base Cargo graph проверяется E01/E02, upstream lock клиента не обновляется автоматически |
 | Adapter → Gateway | gRPC streaming; локальный UDS при совместном размещении, TCP+mTLS при сетевом соединении | Оба конца проверяют schema/profile/размер/целостность; production topology определяет endpoint, не семантику данных |
-| WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2; Rust bindings отложены D42 | Sync WriteBatch, WAL enabled, отдельный owner; [нормативный автомат](DELIVERY_STATE_MACHINE.md). BlobDB optional, backup исключён D27 |
+| WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2 | Sync WriteBatch, WAL enabled, отдельный owner; [нормативный автомат](DELIVERY_STATE_MACHINE.md). BlobDB optional, backup исключён D27 |
 | Приёмочный harness | Go + тот же protobuf decoder + JetStream client | Только проверка опубликованных сообщений против fixtures; не промышленный downstream |
 | Локальный запуск | Docker Compose: все execution/consensus/supporting-компоненты трёх нод, адаптеры, WAL/Gateway и NATS | Полная компоновка и конфигурация проекта по D43; [детализация](NODE_DEPLOYMENT_SPEC.md) |
 | Production | Kubernetes: все компоненты нод, адаптеры, независимые workload/volume/config контуры сетей и NATS | D43: готовим весь технический комплект; NATS chart/server candidates и [исследование](research/NATS_DEPLOYMENT_STACK.md) сохраняются; production-методика отдельно |
 
-Native pins и расхождения toolchains подробно сохранены в [CLIENT_MATRIX.md](CLIENT_MATRIX.md). Classic runtime ещё не доказан — [исследование](research/ARBITRUM_CLASSIC_CAPTURE.md). Новый baseline Gateway не изменяет compiler versions native клиентов.
+Native pins и расхождения toolchains подробно сохранены в [CLIENT_MATRIX.md](CLIENT_MATRIX.md). Новый baseline Gateway не изменяет compiler versions native клиентов.
 
 ## Почему SDK не встраивается во все native clients
 
@@ -43,7 +31,6 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 Источники: [grpc-go go.mod](https://github.com/grpc/grpc-go/blob/v1.84.0/go.mod), [nats.go go.mod](https://github.com/nats-io/nats.go/blob/v1.54.0/go.mod), [protobuf-go go.mod](https://github.com/protocolbuffers/protobuf-go/blob/v1.36.12/go.mod), [Go distributions](https://go.dev/dl/?mode=json). Go 1.27.2 — кандидат общего сервиса на дату проверки, не утверждение об установленном компиляторе проекта.
 
-Отложено D42: у tonic 0.14.6 workspace MSRV 1.88, у prost 0.14.4 — 1.85; это ниже source toolchain Base 1.96.0. Cargo graph проверяется только после возобновления Rust-профиля, не prerequisite E01–E07 текущих трёх Go клиентов.
 
 Источники: [tonic workspace](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/Cargo.toml), [tonic-prost](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost/Cargo.toml), [tonic-prost-build](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost-build/Cargo.toml), [prost](https://github.com/tokio-rs/prost/blob/v0.14.4/Cargo.toml).
 
@@ -51,8 +38,8 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 - Исходники native clients остаются на отдельных закреплённых commits; общий транспортный модуль не требует слияния их несовместимых Go/Cargo dependencies в один build graph.
 - Теги библиотек выше — кандидаты на дату проверки. Перед воспроизводимой сборкой E01 записывает commit/checksum, compiler, generator versions, dependency lock и image digest. В конфигурации поставки не используются плавающие `latest`.
-- Версии protoc, Go/Rust generators, runtimes и wire schema — разные величины. Они явно перечисляются в build manifest, не выводятся друг из друга.
-- Текущие Go fixtures проверяют поля/presence/oneof; cross-language Rust fixtures отложены D42. Protobuf bytes независимых сериализаций не обязаны совпадать; retries сохраняют исходные bytes/digest события.
+- Версии protoc, Go generators, runtimes и wire schema — разные величины. Они явно перечисляются в build manifest, не выводятся друг из друга.
+- Go fixtures проверяют поля/presence/oneof. Protobuf bytes независимых сериализаций не обязаны совпадать; retries сохраняют исходные bytes/digest события.
 - NATS server version, Helm chart version и appVersion фиксируются отдельно. Наличие Helm chart не выбирает автоматически cluster sizing, storage class или политику потери диска.
 - Конкретный Linux base image, CPU architectures и поддерживаемые Kubernetes/Compose versions закрепляются после build smoke tests; не заявляется поддержка каждой платформы из-за наличия Dockerfile.
 - YAML/restart определены LIVE_CONFIG_SPEC; parser/implementation E06. Hot reload, metrics и численные performance thresholds не являются открытыми обязательными задачами. Собственный orchestration/operator не добавляется.

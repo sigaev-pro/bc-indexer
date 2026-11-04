@@ -1,14 +1,35 @@
-# EVM Transaction Extractor — полное техническое задание v3
+# Техническое задание: native EVM transaction extractor
 
-> DOC-FINAL-01 / D61–D63: чистовая доводка выполняется. Точные актуальные data/finality contracts — [CURRENT_SEMANTICS](docs/CURRENT_SEMANTICS.md), control/config/cutover — [CONTROL_WIRE_CONTRACT](docs/CONTROL_WIRE_CONTRACT.md). После commit подэтапа полный текст ниже будет синхронизирован и очищен в DOC-FINAL-02. Реализация не разрешена.
+Чистовая редакция v3 · 2026-11-05 · DOC-FINAL-02 · решения D16–D63.
 
-2026-11-05. Актуальная редакция по D16–D60. Только проектирование и документация; реализация, сборки и runtime-проверки не начаты. Исходный evm-transaction-extractor-tz-v2.md сохранён без изменений.
+Это единый нормативный контракт текущей поставки. Тематические файлы docs содержат представления отдельных разделов и обновляются с этим файлом в одном commit. DECISIONS хранит принятые решения; PROJECT_STATUS — точку продолжения; research и архивные проектные материалы — происхождение решений, а не дополнительные требования. Обнаруженное расхождение исправляется до реализации затронутого механизма. Исходный v2 сохранён без изменений.
 
-Этот файл содержит действующие требования, контракты capture/delivery/сообщений, конфигурацию, deployment и порядок разработки. Детальные документы в docs/ сохраняются как редактируемые источники разделов и source evidence; для чтения текущего ТЗ не требуется восстанавливать цепочку исторических поправок. При дальнейшем изменении контракта обновляются соответствующий источник и эта редакция. Приоритет при противоречии: решения пользователя → конкретные normative native/delivery/bootstrap contracts → общие пояснения; противоречие устраняется, а не скрывается ссылкой.
+Разрешены проектирование и документация. Документальная готовность не означает разрешение реализации: E01–E07 требуют отдельного указания пользователя. Все build/runtime/crash/deployment gates сейчас NOT_RUN. Source inspection подтверждает описанные seams и ограничения, но не доказывает работоспособность будущего patch.
 
-Все 41 находки аудита получили статус SPECIFIED: механизм описан и связан с будущим fixture/gate. Это не означает 41 выполненный runtime proof и не гарантирует отсутствие новых дефектов. История находок: [аудит](docs/DEEP_DESIGN_AUDIT_2026_11_05.md); текущий [реестр исправлений](docs/DESIGN_REPAIR_STATUS.md); [журнал решений](docs/DECISIONS.md).
+## Содержание
 
-## Граница поставки
+1. [Назначение и сквозной процесс](#назначение-и-сквозной-процесс)
+2. [Семантика исходных данных](#семантика-исходных-данных)
+3. [Нативные балансы и причины изменений](#нативные-балансы-и-причины-изменений)
+4. [Контракт сообщений](#контракт-сообщений)
+5. [Реестр native типов](#реестр-native-типов)
+6. [Точные данные и финальность текущих сетей](#точные-данные-и-финальность-текущих-сетей)
+7. [Native capture и lifecycle recovery](#native-capture-и-lifecycle-recovery)
+8. [Durable delivery и смена назначения](#durable-delivery-и-смена-назначения)
+9. [Идентификаторы и служебный wire protocol](#идентификаторы-и-служебный-wire-protocol)
+10. [Live YAML и команды](#live-yaml-и-команды)
+11. [Состав и размещение нод](#состав-и-размещение-нод)
+12. [Bootstrap и окружение](#bootstrap-и-окружение)
+13. [Порты и экспонирование](#порты-и-экспонирование)
+14. [Стек и границы сборок](#стек-и-границы-сборок)
+15. [REC сценарии](#rec-сценарии)
+16. [План доказательств и границы модулей](#план-доказательств-и-границы-модулей)
+17. [Задачи разработки E01–E07](#задачи-разработки-e01e07)
+18. [Требования и приёмка](#требования-и-приёмка)
+
+## Назначение и сквозной процесс
+
+### Граница поставки
 
 Обязательный первый контур: **Ethereum Mainnet, BSC Mainnet, Polygon PoS Mainnet**. Встроенные native adapters собирают все включённые успешные/неуспешные транзакции, включая native system transactions, их применимые поля, calls/actions/receipt/logs/state changes, block metadata пустых блоков и lifecycle. Нормализованные данные доставляются в NATS JetStream. Приёмочный считыватель — тестовый инструмент, не промышленный downstream.
 
@@ -18,7 +39,7 @@
 
 Не входят: ABI/ERC-20/business decoding, mempool/симуляции, аналитическая БД, downstream consumer/dedup, production completeness verifier, HA/backup/multi-DC, post-ACK retention, performance SLO/hardware thresholds и production-методика. Base/Arbitrum и остальные будущие клиенты, Rust adapters, history/backfill, лицензия и публичная open-source упаковка отложены. Справочные типы этих профилей ниже не создают обязательных задач первого контура.
 
-## Сквозной flow и ответственность
+### Сквозной flow и ответственность
 
 1. Окружение подготавливает config/secrets/volumes/native bootstrap; ноду запускает штатная команда клиента с нашим adapter. Сам extractor не управляет Docker/Kubernetes API.
 2. Native bridge удерживает source state/inputs и sync сохраняет ADMITTED до принятого исполнения. Hooks передают owned данные, допускается safe-point yield вне callbacks.
@@ -34,26 +55,11 @@ Local fatal capture/WAL/normalization останавливает native проц
 
 D58/D60: hash capture provider с durable pins, обычный import; Bor без pipelined/stateless/preconfirmation paths и BlockSTM. Heimdall кандидат v0.13.2. Эти ограничения проверяются effective preflight; source-checked профиль ещё не является runtime-proven.
 
-## Содержание
-
-- [Семантика исходных данных](#семантика-исходных-данных)
-- [Нативные балансы и причины изменений](#нативные-балансы-и-причины-изменений)
-- [Контракт сообщений](#контракт-сообщений)
-- [Реестр native типов](#реестр-native-типов)
-- [Native capture и lifecycle recovery](#native-capture-и-lifecycle-recovery)
-- [Durable delivery и смена назначения](#durable-delivery-и-смена-назначения)
-- [Live YAML и команды](#live-yaml-и-команды)
-- [Bootstrap и окружение](#bootstrap-и-окружение)
-- [Порты и экспонирование](#порты-и-экспонирование)
-- [Стек и границы сборок](#стек-и-границы-сборок)
-- [REC сценарии](#rec-сценарии)
-- [План доказательств и границы модулей](#план-доказательств-и-границы-модулей)
-- [Задачи разработки E01–E07](#задачи-разработки-e01e07)
-
+D62: BSC early/header-attested finality различаются; GC только по header-attested Source. Все фактические комиссионные движения сохраняются отдельно от receipt summary. D63: Polygon GC ждёт checkpoint в finalized-состоянии собственной supporting L1-ноды; tx/status публикуются независимо. Полные правила — в точной семантике ниже.
 
 ## Семантика исходных данных
 
-### 4. Источник данных
+### Источник данных
 
 Экстрактор получает данные через:
 
@@ -68,7 +74,7 @@ RPC разрешается для диагностики и независимо
 
 Каждая текущая сеть исполняется своим native executor; BSC/Bor не исполняются через обычный Ethereum executor.
 
-### 5. Когда транзакция готова к публикации
+### Когда транзакция готова к публикации
 
 TransactionApplied публикуется, когда:
 
@@ -90,7 +96,7 @@ TransactionApplied публикуется, когда:
 
 SystemBalanceApplied публикуется после завершения родной операции, учёта rollback, подтверждения каноничности соответствующего включения и надёжного сохранения полной записи. Сам вызов balance hook не является основанием для публикации.
 
-### 6. Данные транзакции
+### Данные транзакции
 
 Сбор включает все транзакции, предоставленные native исполнением обработанного live-блока, с их исходными hash, index и родным type: успешные, неуспешные и родные системные транзакции. Internal calls остаются деталями родительской записи. По D25 отдельная production-сверка состава/числа записей и доказательство полноты блока в сборщик не входят; корректность capture проверяется на fixtures. Неизвестный тип или отсутствие обязательного поля дают явную ошибку, не молчаливый пропуск или успешную доставку проблемной записи. Неприменимое поле отличается от неизвестного/потерянного значения. Mempool и невключённые кандидаты вне scope.
 
@@ -116,7 +122,7 @@ SystemBalanceApplied публикуется после завершения ро
 
 Blob sidecars и содержимое blobs не входят в базовую запись транзакции: обязательны ссылки versioned hashes и применимые fee fields.
 
-### 7. Internal transactions
+### Internal transactions
 
 Internal transactions представлены деревом внутренних вызовов, связанным с одной внешней транзакцией. Собственного transaction hash у внутреннего вызова нет.
 
@@ -157,7 +163,7 @@ Internal transactions представлены деревом внутренни
 
 Будущие runtime требуют отдельного профиля; их варианты не входят в первый контур.
 
-### 8. Ошибки и отменённые внутренние вызовы
+### Ошибки и отменённые внутренние вызовы
 
 В дереве сохраняются:
 
@@ -180,7 +186,7 @@ Internal transactions представлены деревом внутренни
 
 State diff содержит только итоговые изменения, сохранившиеся после всех откатов. Неуспешная внешняя транзакция может сохранить изменения nonce, оплату комиссии и другие предусмотренные правилами сети эффекты.
 
-### 9. SELFDESTRUCT и создание контрактов
+### SELFDESTRUCT и создание контрактов
 
 SELFDESTRUCT хранится как отдельное действие внутри транзакции с привязкой к frame:
 
@@ -198,7 +204,7 @@ SELFDESTRUCT хранится как отдельное действие вну�
 
 Нельзя считать каждое действие SELFDESTRUCT удалением контракта: правила EIP-6780 сохраняют code и storage во многих случаях. Семантика определяется активными правилами конкретной сети и исторической высоты. Источник: [EIP-6780](https://eips.ethereum.org/EIPS/eip-6780).
 
-### 10. Logs и state diff
+### Logs и state diff
 
 Receipt.logs содержит только logs, сохранившиеся в окончательном receipt. Отменённые события не выдаются за события канонической транзакции.
 
@@ -227,12 +233,11 @@ Before/after относятся к границам одной транзакц�
 
 Записи balance/code/nonce вне основного вызова, но относящиеся к транзакции, также учитываются. Например, authorization processing EIP-7702 может менять code и nonce до основного вызова. Источник: [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702).
 
-
 ## Нативные балансы и причины изменений
 
-### 31. Полнота нативных балансов
+### Полнота нативных балансов
 
-#### 31.1. Обязательная граница покрытия
+#### Обязательная граница покрытия
 
 Для каждой поддержанной сети обязательны все транзакции и их применимые balance actions/before/after в текущем live-профиле. Сбор изменений вне транзакций необязателен по D17; допустимо отказаться от него при усложнении кода. Далее проверки самостоятельных системных операций относятся только к включённому расширению.
 
@@ -240,7 +245,7 @@ Before/after относятся к границам одной транзакц�
 
 Транзакционные изменения берутся из AccountChange. Для протокольных операций вне транзакций используется SystemBalanceRecord. Нельзя повторно публиковать транзакционные изменения в системном потоке или считать value каждого CallFrame самостоятельным переводом.
 
-#### 31.2. Гранулярность и rollback
+#### Гранулярность и rollback
 
 Необходимо сохранять действия, вызвавшие изменения нативных балансов, и их причинную связь с транзакцией, внутренним вызовом или протокольной операцией. Итоговый before/after на границах транзакции или системной операции сохраняется дополнительно для сверки состояния; он не заменяет историю действий.
 
@@ -252,7 +257,7 @@ Before/after относятся к границам одной транзакц�
 
 Сохранённые fee/nonce effects неуспешной транзакции учитываются по существующим требованиям. Системный поток не должен компенсировать ошибочно неполный транзакционный diff.
 
-#### 31.3. Захват и классификация
+#### Захват и классификация
 
 Каждый адаптер проверяет все транзакционные execution/state paths, включая родные системные транзакции текущего live-профиля. Самостоятельные системные balance paths исследуются для optional расширения и не блокируют основную поставку.
 
@@ -269,11 +274,11 @@ Before/after относятся к границам одной транзакц�
 
 Неизвестный транзакционный тип/путь даёт явную ошибку обработки блока. Неизвестная операция необязательного системного расширения не блокирует транзакции при отключённом расширении. Успешная доставка не объявляется доказательством полноты.
 
-#### 31.4. Проверка нормализации
+#### Проверка нормализации
 
 На разработческих fixtures проверяются before/after, actions, fees, rollback и сохранение +10/−10 при нулевом итоге. Это не обязательный production block/balance completeness verifier. При известной ошибке получения/декодирования запись не считается успешно доставленной; никаких выводов о полноте диапазона по NATS_ACKED.
 
-#### 31.5. Граница собранных наблюдений
+#### Граница собранных наблюдений
 
 Наблюдаемый live-период не задаёт начальных балансов ненаблюдавшихся адресов. Доступное исходное состояние необходимо native исполнению и проверяется отдельно.
 
@@ -282,7 +287,6 @@ Before/after относятся к границам одной транзакц�
 Публикуемые наблюдения содержат точные before/after и границы исполнения. Вычисление представлений после NATS не проектируется.
 
 Отсутствие наблюдений об адресе не кодируется как нулевой баланс. Конец блока отличается от конца последней транзакции, если после неё есть системные действия.
-
 
 ## Контракт сообщений
 
@@ -293,10 +297,10 @@ Before/after относятся к границам одной транзакц�
 | Hash32 / Address20 | Ровно 32 / 20 bytes; не произвольные строки |
 | UInt256 | Ровно 32 bytes, unsigned big endian; арифметика без float |
 | Delta256 | знак плюс UInt256 magnitude; отрицательный ноль запрещён |
-| Timestamp | seconds:u64 + nanos:u32 < 1e9 + precision=`SECONDS | MILLISECONDS | NANOSECONDS`; сохраняется доступная source precision |
+| Timestamp | seconds:u64 + nanos:u32 < 1e9 + precision=`SECONDS \| MILLISECONDS \| NANOSECONDS`; сохраняется доступная source precision |
 | NetworkIdentity | family=`EVM`, chain_id:UInt256, genesis_hash:Hash32; chain_key — только alias для маршрутизации |
 | ProfileRef | network profile, client commit, adapter version, fork rules version, normalization version; зарегистрированный профиль |
-| FieldAvailability | `VALUE(T) | NOT_APPLICABLE | UNAVAILABLE(reason_code)`; применяется только к полям с определённой семантикой отсутствия |
+| FieldAvailability | `VALUE(T) \| NOT_APPLICABLE \| UNAVAILABLE(reason_code)`; применяется только к полям с определённой семантикой отсутствия |
 
 Отсутствующий scalar и корректный ноль различаются. Proto scalar с обязательным присутствием использует explicit presence и validator. Для `oneof` требуется ровно один вариант; неизвестные enum values, profile/type/schema versions не публикуются как нормализованные данные. Empty list означает, что источник вернул пустой применимый набор; известная ошибка получения не маскируется пустым списком. Независимый verifier полноты не требуется. `UNAVAILABLE` у обязательных transaction details означает ошибку обработки; неприменимость доказывается профилем.
 
@@ -308,44 +312,44 @@ Before/after относятся к границам одной транзакц�
 
 `Envelope={schema_version, network, profile_ref, event_id, producer_id, run_id, source, capture_mode, payload}`.
 
-`source={node_instance_id, writer_epoch, source_sequence}`. `capture_mode=LIVE|SYNC|BACKFILL`. Эти поля — provenance, не идентичность транзакции. `payload` — закрытый union из таблицы событий ниже. Версия wire schema не обязана совпадать с номером редакции Markdown v3.
+`source={node_instance_id,writer_epoch,source_sequence}`. Текущий capture_mode=LIVE; recovery сохранённого live события не меняет его mode. SYNC/BACKFILL отложены и не принимаются первым live profile. `payload` — закрытый union ниже. Версия wire schema не выводится из номера Markdown v3.
 
-`BlockRef={number:u64,hash:Hash32,parent_hash:Hash32,timestamp:Timestamp}`. `InclusionRef={network,block_hash,native_origin,native_position,transaction_hash}`. Для native body transaction native_position — индекс в body, native_origin=`BLOCK_BODY`. Для `ARBITRUM_CLASSIC_AVM` позиция включает native AVM log/result index, а source transaction_hash имеет kind=NATIVE_REQUEST_ID; optional Ethereum projection index хранится отдельно. Правила и ограничения — [Classic profile](docs/research/ARBITRUM_CLASSIC_CAPTURE.md). Нельзя идентифицировать включение одним tx hash либо считать Classic projection единственным inventory.
+`BlockRef={number:u64,hash:Hash32,parent_hash:Hash32,timestamp:Timestamp}`. `InclusionRef={network,block_hash,native_origin=BLOCK_BODY,native_position:u64,transaction_hash:Hash32}`. Позиция — native body index, не номер receipt/прихода сообщения. Один tx hash не идентифицирует включение в ветку. Optional legacy receipt — отдельный auxiliary record, не fake body tx.
 
-`ActivationRef={inclusion_ref,producer_id,run_id,activation_id}`. Для блока аналогично используется `BlockActivationRef={network,block_hash,producer_id,run_id,activation_id}`. `event_id` обозначает неизменяемое событие; повтор передачи сохраняет ID и исходные байты. Разные события lifecycle имеют разные event_id. event_id=(producer_id,run_id,event_sequence); persistent counters и publication plan определены в [протоколе .06](#rec-сценарии); вероятностная генерация нового ID на каждый retry запрещена.
+`ActivationRef={inclusion_ref,producer_id,run_id,activation_id}`; `BlockActivationRef={network,block_hash,producer_id,run_id,activation_id}`. Разные lifecycle события имеют разные event_id; retries сохраняют ID и bytes. Persistent counters, fixed encodings и semantic/public identity boundary — CONTROL_WIRE_CONTRACT. Новый случайный event ID при retry запрещён.
 
 ### 3. TransactionRecord
 
 | Поле | Состав и правило |
 |---|---|
 | inclusion, block_activation | Связь с конкретной веткой и активацией блока |
-| native_payload | Ровно один вариант из [реестра типов](#реестр-native-типов); native type проверяется с сетью/fork |
-| source_hash | Значение native клиента; hash_kind=`NATIVE_TRANSACTION | IMPORTED_OVERRIDE | NATIVE_REQUEST_ID`; Bor synthetic receipt имеет отдельный auxiliary origin |
-| raw_encodings | Непустой список `{kind,bytes}`: `EVM_LEGACY_RLP | EIP2718_ENVELOPE | ARB_NATIVE_ENVELOPE | ARB_TRIE_VALUE | BOR_STATE_SYNC_ENVELOPE | CLASSIC_REQUEST_BYTES | CLASSIC_AVM_VALUE`; обязательный набор определяется вариантом |
-| execution_projection | Typed effective sender/target/value/input и provenance=`ENCODED | NATIVE_DERIVED | NOT_APPLICABLE`; исходные native поля не перезаписываются |
+| native_payload | Ровно один вариант из [реестра типов](docs/TRANSACTION_TYPE_REGISTRY.md); native type проверяется с сетью/fork |
+| source_hash | Native Hash32, hash_kind=NATIVE_TRANSACTION; Bor legacy receipt имеет отдельный auxiliary origin |
+| raw_encodings | Непустой список `{kind,bytes}`: EVM_LEGACY_RLP / EIP2718_ENVELOPE / BOR_STATE_SYNC_ENVELOPE по native варианту; source bytes без перекодирования |
+| execution_projection | Typed effective sender/target/value/input и provenance=`ENCODED \| NATIVE_DERIVED \| NOT_APPLICABLE`; исходные native поля не перезаписываются |
 | receipt | Typed outcome, fees/gas, committed logs и применимые network receipt details |
 | calls | Упорядоченные execution frames, включая failed/reverted calls |
 | actions | Причинные native balance actions, включая fee/refund/mint/burn и компенсирующие действия |
 | execution_actions | Типизированные действия исполнения, не сводимые к balance transfer; обязательный SelfDestructAction при его native исполнении |
 | state_changes | Итоговый transaction-boundary diff затронутых accounts/storage после rollback, включая реально сохранённые fees/nonce |
 | execution_position | operation_index:u64 и execution BlockRef; при отличии от inclusion block связь задаёт профиль |
-| capture_status | Применимость receipt/calls/actions/state_changes/network details; известная ошибка сбора даёт ERROR, независимой сверки состава блока нет |
+| capture_status | По receipt/calls/actions/state_changes/network details: CAPTURED либо NOT_APPLICABLE по profile. Известная ошибка — local fatal до READY, не публичная успешная запись с ERROR/пустыми обязательными details |
 
-`ExecutionProjection` — отдельный union `EvmMessage | NativeProtocolExecution`; последнее задаёт typed operation и адреса только если они имеют смысл. Execution sender нельзя заполнять нулём потому, что так отвечает универсальный accessor системной транзакции.
+`ExecutionProjection` — union EvmMessage / NativeProtocolExecution. `Effective<T>={value:T,provenance=ENCODED|NATIVE_DERIVED}`. EvmMessage: sender:Effective<Address20>, target?:Effective<Address20>, value:Effective<UInt256>, input:Effective<bytes>, nonce:Effective<u64>, gas_limit:u64, effective_gas_price:UInt256. Original caps/access/blob/authorization/signature остаются в native_payload. NativeProtocolExecution первого профиля: operation=BOR_STATE_SYNC, record_count:u64; source records — typed Bor payload. Отсутствующие в native протоколе sender/nonce/signature не заполняются нулём и не выдумываются.
 
-`Receipt`: native outcome=`Status(success:bool) | PreStatusStateRoot(Hash32)`; execution result=`SUCCESS | REVERT | FAILURE`; cumulative_gas_used и gas_used по применимости; effective_gas_price, blob_gas_used, blob_gas_price с явным присутствием. Отдельные optional Address20: attempted_create_address и created_contract (только успешное создание); итоговый existence находится в AccountChange. Logs, logs_bloom, source_receipt_encoding с encoding kind сохраняются отдельно от projection. Pre-Byzantium source root не превращается в RPC status: результат берётся из native execution. Field provenance и границы Bor/BSC — [NATIVE_CAPTURE_PROTOCOL](#native-capture-и-lifecycle-recovery). Network details — закрытые варианты; Base/Nitro относятся к отложенным профилям.
+`Receipt`: native outcome=`Status(success:bool) | PreStatusStateRoot(Hash32)`; execution result=`SUCCESS | REVERT | FAILURE`; cumulative_gas_used и gas_used по применимости; effective_gas_price, blob_gas_used, blob_gas_price с явным присутствием. Отдельные optional Address20: attempted_create_address и created_contract (только успешное создание); итоговый existence находится в AccountChange. Logs, logs_bloom, source_receipt_encoding с encoding kind сохраняются отдельно от projection. fee_summary и отдельные фактические BalanceEffects заданы в CURRENT_SEMANTICS; summary повторно не суммируется. Pre-Byzantium source root не превращается в RPC status: результат берётся из native execution. Field provenance и границы Bor/BSC — [NATIVE_CAPTURE_PROTOCOL](docs/NATIVE_CAPTURE_PROTOCOL.md). Network details — закрытые варианты ETH/BSC/Polygon.
 
 `BorReceiptDetails.source_log_scopes` — список `{transaction_log_index, scope=SYSTEM_PRE | TX_STATE_SYNC | SYSTEM_POST}` для source logs, атрибутируемых native instrumentation; порядок/bytes исходных logs не меняются. Native system log не выдаётся за действие StateSync tx. Полнота этой provenance проверяется SCOPE-01; отдельная публикация outside-tx событий остаётся optional. Field numbers и generated bindings — E02.
 
-`Log={address,topics:Hash32[],data,transaction_log_index,block_log_index}`. Receipt содержит только committed logs. Если сохраняются reverted log attempts, это отдельные execution actions с effects_committed=false, не receipt logs.
+`Log={address,topics:Hash32[],data,transaction_log_index,block_log_index}`. Receipt содержит только committed logs. Reverted log attempts не входят в receipt logs и не являются обязательным отдельным payload первой версии.
 
-`CallFrame={frame_id,parent_id?,execution_order,depth,engine,kind,context_address?,code_address?,msg_sender?,target?,value?,input,output,gas?,gas_used?,outcome,effects_committed,error_code?,revert_data?,created_address?}`. kind — закрытый набор CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/STYLUS_HOST_CALL/NATIVE_PROTOCOL; runtime-specific дополнительные поля требуют registered variant. `execution_order` отражает источник; сортировать только по depth нельзя. Успешный child внутри reverted ancestor имеет effects_committed=false.
+`CallFrame={frame_id,parent_id?,execution_order,depth,engine,kind,caller_address?,context_address?,code_address?,msg_sender?,target?,value?,input,output,gas?,gas_used?,outcome,effects_committed,error_code?,revert_data?,attempted_create_address?,created_address?}`. IDs/order/depth/gas — u64; addresses — Address20, value — UInt256, input/output/revert_data — bytes; outcome=SUCCESS|REVERT|FAILURE. error_code, если присутствует, — UTF-8 native diagnostic string в namespace profile_ref, без обещания общего межсетевого enum; revert_data сохраняется отдельно. Текущие engine=EVM|NATIVE_PROTOCOL и kind=CALL|CALLCODE|DELEGATECALL|STATICCALL|CREATE|CREATE2|NATIVE_PROTOCOL. Native protocol frame создаётся только при зарегистрированном source execution boundary. Поля creation/caller уточняет CURRENT_SEMANTICS. Успешный child внутри reverted ancestor имеет effects_committed=false; сортировка по depth не заменяет order.
 
-`BalanceAction={action_index,cause,engine,kind,from?,to?,amount,asset=NATIVE,effects_committed,rollback_scope?}`. kind: TRANSFER/MINT/BURN/FEE/REFUND/SELFDESTRUCT_TRANSFER; cause=`Frame(frame_id) | TransactionProtocol(registered_operation)`. Точный перечень network protocol operations — E02-05, до этого неизвестный cause не превращается в OTHER. Fee attribution сохраняет плательщика/получателя или burn, не предполагает обычную EVM-пару адресов для всех сетей. Gas refund units и native monetary refund различаются. +10 и −10 остаются двумя actions при нулевом diff.
+BalanceAction/BalanceEffect и closed TransactionProtocol operations заданы в CURRENT_SEMANTICS по D62. Cause включает Frame, ExecutionAction и TransactionProtocol. Все фактические gas purchase/return/fee credits сохранены, receipt fee_summary отдельный агрегат. Никакого OTHER для неизвестного source path и двойного учёта transfer callbacks. +10 и −10 остаются отдельными actions при нулевом итоге.
 
 `ExecutionAction={execution_action_id,execution_order,frame_id,payload}`: закрытый union, текущий обязательный вариант — `SelfDestructAction={contract_address,beneficiary,balance_at_entry,effects_committed,deletion_eligible_by_rules,deletion_committed}`. Все scalar имеют presence; addresses/amount соответствуют общим типам. `frame_id` ссылается на исполнявший opcode frame, а не на искусственный CALL. Native pseudo enter/exit для SELFDESTRUCT нормализуются в это действие и не создают второй transfer. `deletion_eligible_by_rules` описывает fork/creation eligibility, `deletion_committed` — сохранённый результат этого действия после rollback/finalization; при effects_committed=false deletion_committed=false. Конечное существование account проверяется отдельно через AccountChange, а не выводится только из opcode. Повторные/отменённые действия сохраняются со своим порядком, даже если сумма равна нулю. Денежная проекция использует `BalanceAction.cause=ExecutionAction(execution_action_id)` (добавленный вариант cause); execution action и его balance projection не суммируются как два изменения. Self-beneficiary/возможный burn следуют native fork rules, не универсальному правилу transfer. [EIP-6780](https://eips.ethereum.org/EIPS/eip-6780). Точные field numbers — E02; смысл полей фиксирован этим контрактом.
 
-`AccountChange={address,existed_before,exists_after,balance_before,balance_after,nonce_before,nonce_after,code_before,code_after,storage_reset,storage_changes[]}`. `StorageChange={key:Hash32,before:Hash32,after:Hash32}`. Данные относятся к transaction boundary, не к последнему child frame. Code и storage reset семантика проверяются по fork, включая SELFDESTRUCT. Balance actions и итоговый diff — разные представления одного исполнения; их нельзя складывать друг с другом как независимые изменения.
+`AccountChange={address,existed_before,exists_after,balance_before,balance_after,nonce_before,nonce_after,code_hash_before,code_hash_after,code_before,code_after,storage_reset,storage_changes[]}`. Address20, bool exists/reset, UInt256 balances, u64 nonce, Hash32 code hashes, bytes code. `StorageChange={key:Hash32,before:Hash32,after:Hash32}`. CURRENT_SEMANTICS определяет presence/order/reset. Данные относятся к tx boundary; actions и diff не суммируются как независимые изменения.
 
 ### 4. События и передача блока
 
@@ -385,13 +389,13 @@ Applied несёт initial lifecycle snapshot с revision=0; неизвестн�
 
 Native bridge отслеживает любую durable активацию с READY Applied, которая может быть опубликована; reorg создаёт Removed даже до первого Publish/PubAck Applied. Факт внешней доставки не угадывается. Прогресс наблюдения имеет batch/activation identity: одного `(run,block_number,block_hash)` недостаточно для двух активаций одной ветки. Applied, lifecycle state и его исходная revision фиксируются атомарно по протоколу WAL. Для событий до READY, не допускавшихся к публикации, применяются правила незакрытой попытки.
 
-Finality — typed evidence, а не свободная строка и не универсальный confirmations counter. Варианты: Ethereum consensus safe/finalized; BSC native finality evidence; Base L2 safe/finalized с L1 block reference; Arbitrum L1 inclusion/settlement evidence; Polygon Heimdall/checkpoint evidence. Эти стадии не объявляются эквивалентными. Конкретные структуры evidence и availability guards требуют E02 fixtures для pinned clients.
+Finality — closed EthereumEvidence/BscEvidence/PolygonEvidence по CURRENT_SEMANTICS. D62 различает BSC early votes/header-attested; D63 отделяет native Polygon status от L1 checkpoint GC. Safe/justified/milestone не объявляются универсально эквивалентными finalized; точные поля, availability, ancestry и regression rules определены, E02/E05 проверяют их реализацию.
 
 Поздняя finality передаётся StatusChanged. Отсутствующие обязательные execution details не разрешается выдавать как полную транзакцию с обещанием дослать. Если потребуется изменяемая non-finality metadata, до реализации вводится отдельный typed event/version с fixture; свободного patch JSON нет. Fork-specific L1/batch сведения, недоступные на данном этапе, имеют явно определённый pending статус, не нулевое выдуманное значение.
 
 ### 6. Транспорт и порядок
 
-Полный Prepare/Publish/Release, immutable header contract и bounded serialization задаёт [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения). Нормативная единица retry — сохранённый publication plan с destination и exact frame/header bytes, а не повторная сериализация record новой сборкой.
+Полный Prepare/Publish/Release, immutable header contract и bounded serialization задаёт [DELIVERY_STATE_MACHINE](docs/DELIVERY_STATE_MACHINE.md). Нормативная единица retry — сохранённый publication plan с destination и exact frame/header bytes, а не повторная сериализация record новой сборкой.
 
 `TransportFrame={transport_version,network,event_id,payload_digest,publication_epoch,chain_sequence,payload}`.
 
@@ -399,9 +403,9 @@ payload — ровно `CompleteRecord{envelope_bytes}` либо `RecordPart{par
 
 SHA-256 вычисляется по исходным сериализованным Envelope bytes. Они фиксируются один раз до передачи и повторяются побайтно. Part layout также фиксируется для retry. Digest проверяет транспорт; он не является универсальным tx hash или semantic event ID. [Protobuf serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/): повторная сериализация другим runtime/version не обязана дать те же bytes.
 
-Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. D52: default `transport.max_frame_bytes=2097152` (2 MiB) задаётся YAML Gateway и валидируется до отправки; NATS server/stream настроены на этот предел, gRPC учитывает собственную обёртку. Большая нормализованная транзакция передаётся несколькими RecordPart. Изменение лимита относится к новым планам; сохранённые pending bytes не перекодируются. При несовместимом уменьшении лимита — явная ошибка конфигурации до публикации, pending сохраняются до восстановления достаточного лимита. [Подробности](#live-yaml-и-команды). Pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
+Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. D52: default `transport.max_frame_bytes=2097152` (2 MiB) задаётся YAML Gateway и валидируется до отправки; NATS server/stream настроены на этот предел, gRPC учитывает собственную обёртку. Большая нормализованная транзакция передаётся несколькими RecordPart. Изменение лимита относится к новым планам; сохранённые pending bytes не перекодируются. При несовместимом уменьшении лимита — явная ошибка конфигурации до публикации, pending сохраняются до восстановления достаточного лимита. [Подробности](docs/LIVE_CONFIG_SPEC.md). Pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
 
-Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [ROCKSDB_DELIVERY_PROTOCOL](#rec-сценарии).
+Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [DELIVERY_STATE_MACHINE](docs/DELIVERY_STATE_MACHINE.md).
 
 Execution chronology задают block parent links, native transaction position, operation_index и action/frame order. Delivery chronology задают chain_sequence и transport metadata. `part_index` задаёт только сборку bytes. Нельзя сортировкой chain_sequence восстанавливать blockchain chronology.
 
@@ -409,7 +413,7 @@ NATS message ID должен стабильно различать `(network,eve
 
 ### 7. Маршрутизация
 
-Для каждой сети отдельные streams/subjects/limits. Сохраняется рабочий namespace ТЗ: `evm.v3.<chain_key>.<event_family>.<event_kind>`, где event_family=`tx|block|balance.system`. Event kind задаётся закрытым реестром: tx applied/removed/status; block applied/removed/status; optional balance.system applied/removed/status. Transport version/schema version находятся внутри frame; изменение Markdown v3 само по себе не меняет subject.
+Для каждой сети отдельные streams/subjects/limits: `evm.v3.<chain_key>.<event_family>.<event_kind>`. Текущие family=tx|block; optional balance.system|bor.legacy_receipt. Kind=applied|removed|status. Optional families разрешены только при declared profile feature; default первая версия outside-tx публикацию не включает, её включение требует соответствующих schema/fixtures. Markdown v3 не задаёт wire version.
 
 Полная запись и её части направляются в один subject своего logical event; identity сети из frame проверяется против route. D48: stream и subject prefix задаются в YAML Gateway. D54: logical destination (account/stream/subject mapping) фиксируется в durable publication plan и ACK; изменение назначения допускается только после завершения pending адаптера и Gateway. Смена URL того же назначения допустима после проверки идентичности. Подтверждения разных назначений не образуют общий NATS_ACKED. Перенос pending не проектируется; точная идентификация назначения и handshake/drain checks остаются E03. Post-ACK retention не входит в гарантию сборщика.
 
@@ -419,10 +423,7 @@ NATS message ID должен стабильно различать `(network,eve
 |---|---|
 | Failed tx + успешный child в reverted parent | Gas/nonce сохранены по native правилам; child actions не committed |
 | Компенсирующие transfers | Оба actions есть, net diff может быть 0 |
-| DEFERRED D42: Base deposit | Нет искусственной подписи/nonce; mint и deposit receipt fields сохранены |
 | BSC Parlia system | Фактический wire type/signature не потеряны; native Finalize capture проверен |
-| DEFERRED D42: Nitro retryable / imported legacy | Native payload отделён от projection; HashOverride и разные encodings проверены |
-| DEFERRED D42: Nitro EVM ↔ Stylus | Frame engines и native actions без потери меж-runtime причинности |
 | DEFERRED D38/D42: Classic native result ↔ Ethereum projection | Все source results учтены; CL-01…08 проверяют archive, декодирование, observer и неизменность native исполнения |
 | Bor StateSync / legacy synthetic | Body 0x7f и optional legacy source receipt не смешаны; fixtures POLY-L01…07 из исследования E00-15 |
 | Пустой блок / ошибка нормализации | Metadata пустого блока передаётся; известная ошибка даёт ERROR, а не NATS_ACKED |
@@ -431,20 +432,13 @@ NATS message ID должен стабильно различать `(network,eve
 | Неизвестный тип/версия/fork | Явная ошибка нормализации, без фиктивного поддержанного payload |
 | Optional balances выключены | Передаётся заявленный transaction scope; полнота всех балансов не заявляется |
 
-Это acceptance matrix будущих E01/E02/E03/E04/E05, не отчёт о пройденных тестах. E02 фиксирует compiled field numbers/closed validators текущих профилей; E03 проверяет delivery и bounded collector memory, без performance SLO. Classic/Base/Nitro и historical legacy fixtures явно deferred D38/D42; текущий Bor StateSync обязателен. История/YAML history control не входят в active backlog.
-
+Это acceptance matrix будущих E01/E02/E03/E04/E05, не отчёт о пройденных тестах. E02 фиксирует compiled field numbers/closed validators текущих профилей; E03 проверяет delivery и bounded collector memory, без performance SLO. Текущий Bor StateSync обязателен. Историческая выгрузка не входит в active backlog.
 
 ## Реестр native типов
 
-> D42 (2026-10-21): текущий этап — Ethereum Mainnet, BNB Smart Chain (BSC) Mainnet и Polygon PoS Mainnet. Base/Arbitrum и их адаптеры/fixtures отложены; исследования и типизированные расширения ниже сохранены справочно, не блокируют текущую версию. Исторические сценарии отложены D38. Действующие live-типы транзакций ETH/BSC/Polygon, включая native system types, остаются обязательными. У каждой сети собственные WAL и журнал Gateway.
-
-> Актуальная граница D23–D25 (2026-10-16): live и history работают в разных pod/process; история запускается простой командой N–M. Пересечения и повторные загрузки допускают дубли. Дедупликация и независимая проверка полноты блока выполняются за пределами сборщика. Здесь проверяется доставка подготовленных сообщений: RECEIVED → WAL_SAVED → NATS_ACKED. BlockComplete/coverage report и общий координатор устранения overlap не требуются. Подробности: [LIVE_HISTORY_DELIVERY](docs/LIVE_HISTORY_DELIVERY.md).
-
-E00-14, 2026-10-15. Проект нормативной модели для пяти сетей, основанный на закреплённых исходниках [CLIENT_MATRIX.md](docs/CLIENT_MATRIX.md). Это не результат исполнения fixtures и не подтверждение активности каждого типа в Mainnet. Контракт сообщений: [MESSAGE_CONTRACT.md](#контракт-сообщений).
-
 ### Правила профиля
 
-Ключ варианта: `(network identity, execution profile, native type)`. Один byte type без сети и fork profile недостаточен. Профиль содержит commit клиента, версию адаптера, fork schedule и версию нормализации. Применимость определяется нативными правилами конкретного блока, включая timestamp/height/ArbOS version, а не текущими настройками head.
+Ключ варианта: `(network identity, execution profile, native type)`. Один byte type без сети и fork profile недостаточен. Профиль содержит commit клиента, версию адаптера, fork schedule и версию нормализации. Применимость определяется нативными правилами конкретного блока, включая timestamp/height, а не текущими настройками head.
 
 В общей записи нет обязательных для всех типов signature, account nonce, gas price или получателя. Поля располагаются в конкретном варианте `oneof`; отсутствующее по модели поле не подменяется нулём. Типизированная execution projection отделена от исходных полей. Неизвестный тип, неподдержанный fork или отсутствие обязательного поля дают явную ошибку обработки; успешная доставка такого блока не объявляется.
 
@@ -454,7 +448,7 @@ E00-14, 2026-10-15. Проект нормативной модели для пя
 
 | ID / payload | Поля |
 |---|---|
-| `0x00 EvmLegacy` | nonce:u64, gas_price:Q, gas_limit:u64, target:Target, value:Q, input:B, signature:{v:Q,r:Q,s:Q}; replay_protection=`Unprotected | Eip155(chain_id:Q)` |
+| `0x00 EvmLegacy` | nonce:u64, gas_price:Q, gas_limit:u64, target:Target, value:Q, input:B, signature:{v:Q,r:Q,s:Q}; replay_protection=`Unprotected \| Eip155(chain_id:Q)` |
 | `0x01 EvmAccessList` | chain_id:Q, nonce:u64, gas_price:Q, gas_limit:u64, target:Target, value:Q, input:B, access_list:AccessEntry[], signature:TypedSignature |
 | `0x02 EvmDynamicFee` | chain_id:Q, nonce:u64, max_priority_fee_per_gas:Q, max_fee_per_gas:Q, gas_limit:u64, target:Target, value:Q, input:B, access_list:AccessEntry[], signature:TypedSignature |
 | `0x03 EvmBlob` | поля EvmDynamicFee, но target только `Call`; дополнительно max_fee_per_blob_gas:Q, blob_versioned_hashes:H[] |
@@ -467,63 +461,6 @@ Blob sidecars не являются обязательной частью вкл
 Это библиотека вариантов, а не разрешение всех пяти типов во всех сетях. ETH/BSC исходники определяют ID 0–4; Base/Nitro/Bor используют только варианты, разрешённые их собственными правилами в данном блоке. Fork validator обязателен. Наличие типа в исходнике само по себе не доказывает активацию.
 
 Источники: [Geth types](https://github.com/ethereum/go-ethereum/blob/a579077007b98217c3e253a66e4b452ca0c32b96/core/types/transaction.go), [BSC types](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/transaction.go).
-
-### Base
-
-| ID / payload | Поля и применимость |
-|---|---|
-| `0x7e BaseDeposit` | source_hash:H, from:A, target:Target, mint:Q с native bound u128, value:Q, gas_limit:u64, is_system_transaction:bool, input:B |
-
-Deposit не имеет обычной подписи и account nonce. `deposit_nonce` в receipt — отдельное optional поле, не основание синтезировать nonce исходной транзакции. `deposit_receipt_version` также optional и зависит от fork. `is_system_transaction` сохраняется из source и проверяется по fork, а не выводится из отсутствия подписи.
-
-Типизированный `BaseReceiptExtension`: deposit_nonce?:u64, deposit_receipt_version?:u64. Типизированный `BaseFeeDetails` по применимому fork: l1_base_fee:Q, l1_fee_overhead?:Q, l1_base_fee_scalar:Q, l1_blob_base_fee?:Q, l1_blob_base_fee_scalar?:Q, operator_fee_scalar?:Q, operator_fee_constant?:Q, da_footprint_gas_scalar?:u16, tx_l1_cost?:Q. Отсутствие данных отличается от неприменимости. Коэффициенты сохраняются как native integers; RPC float `l1FeeScalar` не используется как точный источник.
-
-Кодовые ветви будущих AA/Eip8130 (`0x79`) не считаются подтверждённым действующим Mainnet-контрактом. Новый fork требует отдельной версии реестра, полей, validator и fixtures до объявления покрытия.
-
-Источники: [deposit](https://github.com/base/base/blob/e0fe7fa0bef1dbeb27d1ccf05df0f8f9fa545832/crates/common/consensus/src/transaction/deposit.rs), [deposit receipt](https://github.com/base/base/blob/e0fe7fa0bef1dbeb27d1ccf05df0f8f9fa545832/crates/common/consensus/src/receipts/deposit.rs), [native fee information](https://github.com/base/base/blob/e0fe7fa0bef1dbeb27d1ccf05df0f8f9fa545832/crates/common/evm/src/l1block.rs). Конкретная nullable-семантика проверяется в E02 fixtures.
-
-### Arbitrum Nitro
-
-| ID / payload | Native поля |
-|---|---|
-| `0x64 ArbDeposit` | chain_id:Q, l1_request_id:H, from:A, to:A, value:Q |
-| `0x65 ArbUnsigned` | chain_id:Q, from:A, nonce:u64, gas_fee_cap:Q, gas:u64, target:Target, value:Q, data:B |
-| `0x66 ArbContract` | chain_id:Q, request_id:H, from:A, gas_fee_cap:Q, gas:u64, target:Target, value:Q, data:B |
-| `0x68 ArbRetry` | chain_id:Q, nonce:u64, from:A, gas_fee_cap:Q, gas:u64, target:Target, value:Q, data:B, ticket_id:H, refund_to:A, max_refund:Q, submission_fee_refund:Q |
-| `0x69 ArbSubmitRetryable` | chain_id:Q, request_id:H, from:A, l1_base_fee:Q, deposit_value:Q, gas_fee_cap:Q, gas:u64, retry_target:Target, retry_value:Q, beneficiary:A, max_submission_fee:Q, fee_refund_addr:A, retry_data:B |
-| `0x6a ArbInternal` | chain_id:Q, data:B |
-| `0x78 ArbLegacyImported` | legacy:EvmLegacy, hash_override:H, effective_gas_price:u64, l1_block_number:u64, sender_override?:A |
-
-У `0x64–0x6a` нет native signature: нулевые V/R/S из универсальных accessor не становятся подписью. Nonce есть у Unsigned и Retry, но Retry пропускает nonce check; у Deposit/Contract/SubmitRetryable/Internal такого поля нет. Deposit/Internal также не содержат native gas limit/fee cap.
-
-У Internal effective sender выводится как ArbOS address и помечается `DERIVED`. У SubmitRetryable исполнение обращается к ArbRetryableTx precompile с ABI calldata; это не `retry_target/retry_value/retry_data`. Сохраняются обе структуры: исходный вариант и execution projection с происхождением `NATIVE_DERIVED`. Обязательные сведения о взимании L1/L2 fees и retryable effects связываются с actions; более подробный состав `ArbitrumExecutionDetails` требует fixtures E02, не маскируется generic bytes.
-
-Encoding различается: custom `MarshalBinary` даёт type+RLP, но pinned `UnmarshalBinary` их отвергает; native `DecodeRLP` разрешает arb parsing. Для `0x78` `Hash()` возвращает hash_override, trie encoding использует embedded legacy, а MarshalBinary — wrapper. Поэтому обязательны source hash и encoding kind; правило `keccak(raw)==hash` применяется только там, где подтверждено профилем.
-
-Наличие `0x78` не решает extraction Arbitrum Classic. E00-15 определил отдельный native профиль ниже Nitro boundary 22 207 817, описанный далее. Его сборка, архив, observer и all-epoch decoders ещё не приняты runtime-проверками; историю от genesis нельзя объявлять полностью поддержанной.
-
-Источники: [native structs](https://github.com/OffchainLabs/go-ethereum/blob/5eee8f546e7602b7deeef7909f291bbebc77e233/core/types/arb_types.go), [encoding and hash](https://github.com/OffchainLabs/go-ethereum/blob/5eee8f546e7602b7deeef7909f291bbebc77e233/core/types/transaction.go), [legacy wrapper](https://github.com/OffchainLabs/go-ethereum/blob/5eee8f546e7602b7deeef7909f291bbebc77e233/core/types/arbitrum_legacy_tx.go), [sender](https://github.com/OffchainLabs/go-ethereum/blob/5eee8f546e7602b7deeef7909f291bbebc77e233/core/types/arbitrum_signer.go).
-
-### Arbitrum Classic: отдельный native origin
-
-Исследование E00-15: [ARBITRUM_CLASSIC_CAPTURE.md](docs/research/ARBITRUM_CLASSIC_CAPTURE.md). Classic v1.4.7 `dd4595f894b52c73a293a0c4bce9411afb12da12`, ArbOS source pin `234cf670016d675095110cd944cb82fde9c460b8`. Это Go + C++ AVM, а не ещё один Nitro/Geth tracer. Source pin не заменяет machine-code identity конкретной исторической эпохи.
-
-`ClassicNativeTransaction`: origin=`ARBITRUM_CLASSIC_AVM`, request_id:H, avm_log_index, native_result_tx_index, optional ethereum_projection_index; provenance={l1_sequence_number:Q,parent_request_id:H,index_in_parent:Q}; sender, block/timestamp metadata, native inbox kind, optional L2 subtype, native result enum, gas/fee data, typed payload. Точные типы индексов и gas/fee bounds сверяются с native decoder в E02, без усечения до u64.
-
-| Известный payload-кандидат | Подтверждённые native поля |
-|---|---|
-| ClassicUnsignedTransaction | MaxGas:Q, GasPriceBid:Q, SequenceNum:Q, DestAddress:A, Payment:Q, Data:B |
-| ClassicRetryable | Destination:A, Value:Q, Deposit:Q, MaxSubmissionCost:Q, CreditBack:A, Beneficiary:A, MaxGas:Q, GasPriceBid:Q, Data:B |
-
-Signed/contract/compressed/deposit variants и native result enums требуют отдельного закрытого mapping в E02. Значения parser constants и источники перечислены в исследовании; это не обещание применимости всех control/simulation kinds к Mainnet transactions. Raw request bytes сохраняются дополнительно, но не заменяют типизированные поля. Неподдержанный decoder означает неполное покрытие, а не generic payload, принятый как полный.
-
-Receipt source hash для Classic — native MessageID/request_id. Normalized hash kind=`NATIVE_REQUEST_ID`; raw kinds=`CLASSIC_REQUEST_BYTES | CLASSIC_AVM_VALUE`. Ethereum projection хранится отдельно и может отсутствовать. Native retryable projection создаёт dummy LegacyTx с нулевыми полями; эти значения не становятся исходными nonce/gas/signature.
-
-Полный source inventory читается из persisted AVM TxResult/BlockInfo log range, с сохранением связи с Ethereum projection; отдельный runtime verifier полноты не вводится. Функция FilterEthTxResults способна исключать неподдающиеся конвертации результаты; нельзя считать projected body полным inventory. Каждый persisted результат явно классифицируется; control/batch input сам по себе не объявляется транзакцией. Unknown kind блокирует COMPLETE. Исследование показывает возможность фильтрации в коде; конкретные Mainnet примеры ещё требуют fixtures.
-
-Native GetBlockResults проверяет BlockInfo и декодирует TxResult из префикса длиной BlockStats.TxCount; остальные AVM logs не становятся транзакциями. Принадлежность результату блока задаётся этим native range, а не только IncomingRequest.L2BlockNumber: source допускает расхождение для RevertCode. Исходное поле request сохраняется отдельно, без переопределения канонического BlockRef.
-
-Для всех calls/actions/diffs предложен native observer на уровне C++ AVM с декодированием семантики конкретной ArbOS эпохи. Нельзя переписать исторический ArbOS для добавления debug instructions и считать это тем же исполнением: machine hash, gas, logs и sends должны совпадать с baseline. Полнота observer и доступность архива остаются gate E01/AP-06, а не закрытым результатом E00-15.
 
 ### BSC / Parlia
 
@@ -545,18 +482,136 @@ Native `Finalize/applyTransaction` является обязательным cap
 
 Legacy source receipt содержит native status/logs, но не доказывает полноту calls/actions/diff. Writer создаёт receipt только при дополнительных logs; отсутствие записи не доказывает отсутствие system actions. Поэтому scope source receipt и scope полного system execution разделяются. Схема не обязывает включать это расширение вопреки D17.
 
-Источники: [state sync payload](https://github.com/0xPolygon/bor/blob/9c445ef603e71469e1c176d8e57e7cf94864ade7/core/types/tx_state_sync.go), [items](https://github.com/0xPolygon/bor/blob/9c445ef603e71469e1c176d8e57e7cf94864ade7/core/types/state_data.go), [legacy receipt](https://github.com/0xPolygon/bor/blob/9c445ef603e71469e1c176d8e57e7cf94864ade7/core/types/bor_receipt.go).
+Источники: [state sync payload](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/tx_state_sync.go), [items](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/state_data.go), [legacy receipt](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/bor_receipt.go).
 
 ### Capture engines и граница готовности
 
-`EngineKind = EVM | STYLUS | CLASSIC_AVM | NATIVE_PROTOCOL`. Engine задаётся на frame/action: одна транзакция Nitro может переходить между EVM и Stylus; Classic исполняет EVM-семантику внутри AVM. Go hooks применяются в Geth/BSC/Nitro/Bor; Base требует Rust inspector + native executor; Classic — Go native reader + C++ observer. Canonical notification не заменяет execution capture. Для native actions без EVM frame сохраняется typed cause, а не выдуманный CALL.
+Current EngineKind = EVM | NATIVE_PROTOCOL. Native protocol frames требуют явного зарегистрированного source boundary; это не фиктивный EVM call. Payload сохраняет raw source encoding и профильный native type. E01 доказывает реальные capture paths закреплённых клиентов; E02 фиксирует generated schema/validators; E04 проверяет каждую применимую разновидность, включая failed и native system execution. Неизвестный тип — явная ошибка, без skip. Runtime verdict NOT_RUN.
 
-E00-14 фиксирует карту вариантов и правила их представления; E00-15 дополняет её Classic origin и optional legacy Bor receipt. Компилируемые proto, точные registered network execution extensions, all-epoch decoders и fork validators — E02; native runtime-доказательства — E01/E04/E06. Эти зависимости запрещают объявлять полный протокол и всю историю поддержанными по одному source research.
+## Точные данные и финальность текущих сетей
 
+### Block, calls и account changes
+
+BlockRef.Timestamp сохраняет source precision. ETH/Bor: `seconds=header.Time`, `nanos=0`, precision=SECONDS. BSC: взять native `MilliTimestamp()`; `seconds=ms/1000`, `nanos=(ms%1000)*1000000`, precision=MILLISECONDS, с checked arithmetic. Pinned BSC вычисляет `Time*1000 + low_u64(MixDigest)`; это правило BSC, не интерпретация MixDigest как времени в Geth/Bor. Raw header.Time/MixDigest сохраняются без изменений. [BSC source](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/block.go#L166-L172).
+
+`BlockRecord={block_ref,block_activation,header,source_transaction_count:u64,initial_lifecycle}`; `BlockRef` содержит number:u64, hash/parent_hash:Hash32 и Timestamp. Source count берётся из native body представления выбранного клиента, не из независимого completeness verifier. Пустой блок даёт BlockApplied с count=0. `header.source_rlp` обязателен для текущих EVM profiles; hash из native source сохраняется, собственная перепроверка всего блока не вводится.
+
+Header common fields: parent_hash/uncle_hash/state_root/transactions_root/receipts_root/mix_digest:Hash32; beneficiary:Address20; logs_bloom:bytes256; difficulty:UInt256; number/gas_limit/gas_used/timestamp_seconds:u64; extra_data:bytes; nonce:bytes8. Optional fork fields: base_fee:UInt256; withdrawals_root/parent_beacon_block_root/requests_hash:Hash32; blob_gas_used/excess_blob_gas:u64. Geth дополнительно optional block_access_list_hash:Hash32 и slot_number:u64. Presence определяется native header/fork; отсутствующее поле не заполняется нулём. Bor ActualTime/AbortRecovery — локальные runtime поля, не consensus header и не source RLP; в публичный Header не включаются.
+
+Точные поля проверены по pinned [Geth Header](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/block.go), [BSC Header](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/block.go), [Bor Header](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/block.go). Наличие future-fork поля в source не означает его текущую активацию Mainnet.
+
+CallFrame сохраняет отдельно caller_address (native from), context_address, code_address, msg_sender и target; нельзя подменить одно другим при DELEGATECALL/delegated code. Для CREATE/CREATE2 `attempted_create_address` хранится, когда native определил адрес; `created_address` присутствует только при локальном успешном создании. `effects_committed=false` может отменять локальный успех ancestor revert; final existence берётся из AccountChange. Применимые input/output/gas/revert данные не обрезаются. Root frame id=0, parent отсутствует, depth=0; остальные parent IDs существуют, order соответствует native входу.
+
+AccountChange дополнительно содержит code_hash_before/code_hash_after:Hash32. Before/after code bytes обязательны при изменении; отсутствие account отделено exists-флагами, не пустым code. StorageChange отсортированы по raw key bytes для детерминированной нормализации; каждый key появляется один раз с tx initial/final значением. AccountChange упорядочены по raw address bytes; execution/action lists сохраняют native chronology. `storage_reset=true` обозначает удаление всего прежнего storage без перечисления всех ключей; subsequent writes после reset представлены явно. Общий state diff — только committed tx result. Reverted log attempts не входят в первый обязательный contract; receipt logs остаются source committed logs.
+
+### Balance actions и комиссия D62
+
+`BalanceAction={action_index:u64,execution_order:u64,cause,engine,kind,from?,to?,amount:UInt256,asset=NATIVE,effects_committed,rollback_scope?,balance_effects[]}`. `BalanceEffect={effect_index:u64,address:Address20,before:UInt256,after:UInt256,native_reason_code:u32}`. Reason code интерпретируется только вместе с ProfileRef/pinned native enum; raw unknown code нового профиля не принимается автоматически. BalanceEffect before/after относятся к самому действию; AccountChange — к целой tx.
+
+Cause — закрытый union: `Frame(frame_id)` / `ExecutionAction(execution_action_id)` / `TransactionProtocol{operation,operation_index,related_execution_actions[]}`. Operation registry v1: GAS_PURCHASE, GAS_RETURN, FEE_RECIPIENT_CREDIT, BSC_SYSTEM_EXECUTION, BOR_STATE_SYNC_EXECUTION, SELFDESTRUCT_FINALIZATION_BURN. BSC/Bor варианты допустимы только в source-registered native system path, не как OTHER для неизвестного действия. kind: TRANSFER/MINT/BURN/FEE/REFUND/SELFDESTRUCT_TRANSFER/NATIVE_PROTOCOL_CHANGE; последний сохраняет фактические effects известной native system операции без выдумывания экономической причины. Для нового обязательного source path расширяется versioned registry до выпуска supported profile.
+
+| Действие | Представление / правило |
+|---|---|
+| Native value transfer | Одна action объединяет debit/credit одного native transfer invocation; effects содержат обе стороны, в том числе self-transfer. Не образовывать две одинаковые transfers из пары callbacks |
+| Покупка газа | operation=GAS_PURCHASE, kind=FEE, from=payer, to отсутствует; amount=фактическое списание, один payer effect |
+| Денежный возврат | GAS_RETURN/REFUND, from отсутствует, to=payer; amount=фактический возврат. EVM gas refund counter units — другая величина |
+| Вознаграждение из комиссии | FEE_RECIPIENT_CREDIT/FEE, from отсутствует, to=native recipient; amount/credit effect точные. Отсутствующий from не означает mint или zero address |
+| SELFDESTRUCT | ExecutionAction сохраняет сам opcode, даже при balance=0; связанная monetary action содержит реальные native effects, не второй выдуманный CALL |
+| Finalization burn | SELFDESTRUCT_FINALIZATION_BURN/BURN с related action refs и фактическим debit; сам факт отсутствия recipient не доказывает burn |
+| Native system tx | Полная tx/calls, known protocol operations и реальные effects. Не добавлять самостоятельный outside-tx поток вместо обязательной tx |
+
+Effects одного transfer invocation собираются по integration operation ID; не угадываются по соседству одинаковых сумм. Каждый captured balance mutation принадлежит ровно одной action/effect. Одинаковый address может встретиться в нескольких effects по native порядку. Native rollback помечает исходные actions неcommitted; техническое восстановление journal не создаёт второй экономический перевод. Нулевой итог tx не удаляет её ненулевые встречные actions. CallFrame.value, ExecutionAction, BalanceAction и AccountChange — связанные представления; они не складываются друг с другом.
+
+`Receipt.fee_summary={payer?,gas_purchase_debit,gas_return_credit,net_charge,recipient_credits[]}`; все суммы UInt256, credits — `{address,amount}` в native order. Для применимой обычной tx `net_charge = gas_purchase_debit − gas_return_credit`, включает фактические native gas/blob charges из этих operations. Zero-fee system tx хранит применимые нули; неприменимый payer отсутствует. Native implicit burn определяется fee rules и сверяется отдельно; не выдумывать дополнительный payer debit поверх уже списанного газа. Receipt blob_gas_used/blob_gas_price и effective_gas_price сохраняются по применимости. Fee summary — агрегат actions, не дополнительное денежное событие.
+
+На fixtures сумма committed **address effects** согласуется с AccountChange каждой tx; сумма action.amount сама по себе не является суммой переводов или комиссией. Это test oracle, не production balance completeness verifier. Native balance reasons подтверждены [Geth](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/tracing/hooks.go), [BSC](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/tracing/hooks.go), [Bor](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/tracing/hooks.go). Данные из hook — основание capture; соответствие всех native paths доказывается E01/E04.
+
+### Общий lifecycle и evidence
+
+`AnchorRef={height:u64,hash:Hash32}`. `NativeDecisionRef={node_instance_id,producer_id,run_id,decision_sequence:u64}`. `EvidenceOrigin=NATIVE_LIVE|NATIVE_RESTART|RETAINED_DURABLE`. `ReferenceObservation=Known{block:AnchorRef,origin}|Unknown{reason=NOT_OBSERVED|NATIVE_REFERENCE_UNSET}`. All-zero hash не кодирует известный genesis; настоящий genesis имеет source hash.
+
+`LifecycleSnapshot={native_decision,observed_execution_head:AnchorRef,evidence}`; evidence — ровно EthereumEvidence/BscEvidence/PolygonEvidence, соответствующее profile. Applied revision=0; StatusChanged={activation_ref,revision>0,snapshot} — полная замена. Removed={activation_ref,revision>0,native_decision,reason=NATIVE_CANONICAL_CHANGE}; revision выделяется из того же activation counter, но terminal смысл не зависит от порядка доставки. Повтор native decision не создаёт новую revision. Projection статуса определяется ancestry точного activation block hash, не одним height.
+
+Неизвестный optional finality reference допустим на Applied; неизвестные обязательные execution details — capture error. Неудачный lookup известного обязательного header/snapshot не превращается в Unknown/genesis. Stale callback сам по себе не меняет snapshot: native bridge под observation guard читает согласованное состояние, сохраняет owned evidence и marker. После restart выполняется refresh и без нового head event; повтор уже сохранённого решения идемпотентен.
+
+### Ethereum evidence
+
+`EthereumEvidence={safe:ReferenceObservation,finalized:ReferenceObservation,safe_basis=CONSENSUS_SETTER|STARTUP_FINALIZED_FALLBACK|UNSET}` плюс common observed head. Known finalized покрывает activation, когда `isAncestorOrSelf(activation.block, finalized)` → ETH_FINALIZED; иначе такое же покрытие known safe → ETH_SAFE; известные references без покрытия → ETH_CANONICAL_UNFINALIZED; отсутствие необходимых references → ETH_FINALITY_UNKNOWN. Unknown safe не отменяет known finalized.
+
+Safe в pinned Geth может восстановиться из finalized после restart и стать ниже прежнего safe; новый snapshot с NATIVE_RESTART допускается. Zero hash в Engine forkchoice input — native no-op, не команда clear. Bridge наблюдает фактические SetSafe/SetFinalized/head mutations, включая их выполнение до возможной последующей FCU ошибки; одного успешного RPC status или ChainHeadEvent недостаточно. GC anchor — только durable accepted finalized на canonical execution ancestry, никогда safe. [Pinned source evidence и seams](docs/research/ETH_BSC_FINALITY_CONTRACT.md).
+
+### BSC evidence D62
+
+`BscEvidence={observed_native_header_head:AnchorRef,header_finality,native_effective_finalized:ReferenceObservation,effective_basis,early_observation}`. effective_basis=HEADER_SNAPSHOT|VOTE_POOL_QUORUM|GENESIS_FALLBACK|UNSET.
+
+`header_finality=AttestedSnapshot{snapshot_head,justified,finalized}|GenesisFallback{snapshot_head,genesis,reason=NO_ATTESTATION|PRE_PLATO}`; все refs — AnchorRef. Это merged native snapshot VoteData.Source/Target, не Source произвольно выбранной последней подписи.
+
+`early_observation=None|EarlyVoteEvidence{origin,evaluation_head,source_justified,vote_target,finalized_candidate,validator_snapshot_parent,validator_count:u64,quorum_count:u64,matching_vote_count:u64,evidence_digest:Hash32}`. Refs — AnchorRef. Bridge до публикации сохраняет owned snapshot фактически проверенных native vote envelopes/validator context в local evidence spool; digest связывает его, но не выдаётся за независимо проверяемый consensus certificate. После restart прежний vote observation может сохраняться только как RETAINED_DURABLE, не выдаваться за текущий VotePool.
+
+Для каждой activation отдельно вычисляются `header_status=FINALIZED_HEADER_ATTESTED|JUSTIFIED|NO_ATTESTED_FINALITY|CANONICAL_UNFINALIZED` и `early_status=VOTE_FINALIZED_OBSERVED|NOT_COVERED|NOT_OBSERVED`: сведения не сворачиваются в один безусловный finalized flag. Header Source должен покрывать activation по ancestry; header head и execution head предварительно согласуются. Early event side branch не финализирует canonical activation. Потеря transient early evidence допустима и не понижает durable GC anchor.
+
+GC anchor — только header-derived AttestedSnapshot.finalized, canonical ancestry и durable evidence. CurrentFinalBlock/LastFinalized hash сами по себе недостаточны: они могут содержать vote-derived результат. Нужен error-aware native snapshot accessor, не пересчёт через public getter, потерявший provenance. [Pinned исследование](docs/research/ETH_BSC_FINALITY_CONTRACT.md).
+
+### Polygon evidence и L1 GC D63
+
+`PolygonEvidence={milestone,checkpoint,milestone_whitelist,checkpoint_whitelist,native_finalized,l1_checkpoint}`. Для этих полей `Evidence<T>=Known(T)|NotObserved|Unavailable{reason=SOURCE_OFFLINE|SOURCE_SYNCING|STATE_UNAVAILABLE|CHECKPOINT_PENDING}`. Unavailable — конкретная попытка optional finality/GC lookup, не замена ошибке обязательного execution capture; не стирает retained accepted anchor. Native malformed/wrong identity — ошибка, не Unavailable.
+
+`HeimdallIdentity={chain_id:string,genesis_document_sha256:Hash32}`; digest относится к проверенному bootstrap genesis JSON, не подменяет block hash. `SourceObservationRef={source_store_identity:Id16,heimdall_identity,observation_id,request_sequence:u64,operation,selector,committed_heimdall_block?,response_digest:Hash32}`. Operation/selector union: MilestoneLatest/CheckpointLatest/CheckpointBuffer/ChainParams/CheckpointParams без selector; MilestoneByNumber/CheckpointByNumber с u64 number; MilestoneEvent с `{height:u64,event_ordinal:u64}`. Optional committed block — `{height:u64,hash:Hash32}`, только если реально получен. Никакого timestamp вместо доказанного source height/hash. Exact responses хранятся local по observation/request, не передаются как arbitrary JSON публичного evidence.
+
+| Evidence type | Точные поля |
+|---|---|
+| Milestone | source:SourceObservationRef, number?:u64, milestone_id:string, proposer:Address20, start/end/timestamp/total_difficulty:u64, end_hash:Hash32, outcome=OBSERVED\|FUTURE_QUEUED\|LOCALLY_VERIFIED\|REJECTED |
+| Checkpoint | source, checkpoint_id?:u64, proposer, start/end/timestamp:u64, root_hash:Hash32, state=BUFFERED\|STORED_ACKNOWLEDGED, locally_verified_end?:AnchorRef |
+| Whitelist | kind=MILESTONE\|CHECKPOINT, anchor:AnchorRef, native_decision, source_evidence?:SourceObservationRef, ancestry_binding_digest:Hash32; принят только после canonical match |
+| NativeFinalized | basis=MILESTONE_WHITELIST\|CHECKPOINT_WHITELIST, anchor:AnchorRef, whitelist_decision:NativeDecisionRef |
+| L1Checkpoint | l1_network:NetworkIdentity, supporting_node_id:Id16, root_chain_address:Address20, checkpoint_id:u64, header_block_id:UInt256, child_block_interval:u64, bor_start/end:u64, checkpoint_root:Hash32, bor_end_ref:AnchorRef, bor_range_binding_digest:Hash32, finalized_l1_anchor:AnchorRef, verification:FinalizedContractState |
+| FinalizedContractState | call_block_hash:Hash32, root_chain_params_digest/calldata_digest/result_digest:Hash32, result_created_at:UInt256, result_proposer:Address20 |
+
+Milestone hash — Bor end block hash, checkpoint root — range commitment; они не взаимозаменяемы. Whitelist без исходного сохранённого ответа допускает narrower Known Whitelist с absent source_evidence, не выдуманный checkpoint. Polygon native finalized выбирает milestone whitelist, затем checkpoint fallback; это native observation, которое Bor может пересмотреть при восстановлении. Projection отдельно показывает NATIVE_MILESTONE_COVERED / NATIVE_CHECKPOINT_COVERED / CANONICAL_NO_NATIVE_FINALITY и L1_CHECKPOINT_COVERED / L1_NOT_VERIFIED; без сопоставления block ancestry coverage не присваивается.
+
+Принятый D63 путь — `PolygonCheckpointObserver` внутри Bor adapter, без нового процесса или Ethereum tx extractor. Network reads выполняются вне hooks/native locks. Endpoint собственной Polygon L1-ноды и Heimdall задаётся окружением; expected chain/contract binding проверяется по bootstrap identity/params, не выбирается по случайному RPC ответу.
+
+1. Получить native stored checkpoint и chain/checkpoint params от собственного Heimdall; сохранить exact responses, interval/RootChain address и source identity. Если callbacks не содержат number/height, не изобретать их; для L1 проверки нужен checkpoint ID из полного query.
+2. Получить finalized F у собственной Polygon L1 Geth. При отсутствии F сохранить pins и повторить позже; не использовать latest/safe/число confirmations.
+3. Вычислить checked UInt256 `checkpoint_id * child_chain_block_interval`; вызвать RootChain.headerBlocks с selector `0x41539d4a` и u256 аргументом через `eth_call` в `{blockHash:F.hash,requireCanonical:true}`.
+4. Строго декодировать root/start/end/createdAt/proposer; сверить root/range/proposer с checkpoint и параметры до/после чтения. Проверить canonical ancestry F относительно текущего собственного L1 finalized, не только высоту. Несовпадение нового candidate не повышает anchor.
+5. Native Bor verifier вычисляет checkpoint root по закреплённым header inputs и непрерывной canonical range; повторно сверяет end hash/ancestry под observation guard. Только после durable source evidence/decision/accepted anchor разрешён существующий GC protocol.
+
+Own-L1 RPC здесь — служебная finality evidence нативной зависимости Polygon, не источник транзакций extractor. Receipt locator/subscription не требуются; receipt-based вариант в research — справочная альтернатива, не второй обязательный протокол.
+
+При pruning state у F можно сделать **новое** observation с более новым finalized block; сохранённое old evidence не переписывается. Неизвестная сеть/contract, malformed result или конфликт ниже уже принятого anchor — source invariant error. Недоступность L1/Heimdall задерживает GC, обычная публикация готовых Polygon records продолжается. Drain не ждёт будущего checkpoint ради очистки уже завершённой доставки: остающиеся lifecycle/pins — retained native state, не новый delivery pending. Сохранённый незавершённый GC decision разрешается/отклоняется безопасно до seal; новый optional GC poll в DRAIN не запускается.
+
+Checkpoint commits number/time/txRoot/receiptRoot; полный Bor header/stateRoot в leaf не входит. GC опирается на этот commitment **и** проверенную local Bor ancestry/native consensus, не обещает независимый криптографический proof всех state fields. Source fields, exact REST/RPC и граница — [pinned Polygon research](docs/research/POLYGON_FINALITY_CONTRACT.md).
+
+### Provisioning supporting identities
+
+`finality.polygon.sources_file` — строгий UTF-8 JSON без unknown/duplicate fields, комментариев и подстановок. Схема: `{schema_version:1,l1:{deployment_id:Id16,role:"POLYGON_L1_EXECUTION",endpoint:URI,network:NetworkIdentity},heimdall:{deployment_id:Id16,role:"POLYGON_HEIMDALL",endpoint:URI,chain_id:string,genesis_document_sha256:Hash32}}`; JSON-кодирование NetworkIdentity/Id16/Hash32 совпадает с DestinationBinding. Endpoint L1 точно совпадает с `l1_endpoint`, Heimdall — с effective native Bor config. Весь файл имеет `sources_binding_digest=SHA256(file_bytes)`, включённый в обе source evidence; whitespace меняет этот digest, не deployment ID. Evidence хранит digest и проверенные identity fields, поэтому последующая замена файла не меняет прежнюю provenance.
+
+Environment bootstrap один раз создаёт crypto-random Id16 для каждого нового supporting datadir; сохраняет `extractor-deployment-id` внутри корня соответствующего native volume, без использования native DB keys. Эти IDs переживают restart/recreate контейнера с тем же volume. Новый store получает новый ID; клонирование одного ID для двух одновременно работающих stores запрещено. Bootstrap формирует `/etc/extractor/polygon-sources.json` (Compose read-only bind / Kubernetes ConfigMap) из этих IDs и проверенных network/genesis/roles; один и тот же artifact передаётся observer. Потеря identity-файла при существующем store — bootstrap error. После намеренной замены supporting store bootstrap обновляет manifest; старые evidence сохраняют старые IDs, новый source допускается только после identity/ancestry checks, без сброса retained irreversible anchor.
+
+`supporting_node_id` и `source_store_identity` — эти deployment IDs, **не удалённая RPC-аттестация процесса**. Own-source routing обеспечивают private service network, service name и trust/config окружения. RPC проверяет chain/genesis/Heimdall identity, checkpoint и finalized ancestry; одинаковая Ethereum network identity основного и supporting Geth сама не доказывает роль. Никакого `admin` RPC, нового сервиса или вымышленного `getNodeId` не требуется.
+
+### Durable anchor и очистка
+
+Для каждого статуса направление ancestry одно: `isAncestorOrSelf(activation.block, evidence_anchor)`; номер блока сам по себе недостаточен. ETH safe/finalized, BSC attested Source/Target и Polygon locally verified projection применяют именно это направление. GC дополнительно требует соответствующего irreversible evidence и остальных условий ниже.
+
+Authoritative native finalized setter, принявший высоту ниже durable irreversible anchor либо несовместимый hash/branch, — fatal invariant даже при прежнем canonical head. Это новое принятое native решение; его нельзя объявить stale getter/callback. Нулевой no-op, startup fallback/отсутствие RAM marker и delayed observation таким setter decision не являются. Fixture FINAL/GC включает same-head finalized regression и проверяет остановку до очистки/новой публикации.
+
+Общий `AcceptedGcAnchor={network,bor_or_execution_anchor:AnchorRef,native_decision,evidence_digest,profile_ref}`; для Polygon содержит полный L1Checkpoint evidence. Native-only callbacks/safe/early votes/whitelist не заменяют указанный для сети anchor. Его принятие и последующее освобождение refs/pins — отдельные sync decisions; payload ACK не является GC.
+
+Удаление требует одновременно: canonical-finalized либо terminal removed entity находится в покрытой anchor области; отсутствуют относящиеся pending capture/transition/replay/delivery; остаются достаточные compact anchor/ancestry/decision-frontier records. Noncanonical ветка ниже anchor освобождается только при доказанном расхождении с закреплённой canonical ancestry. Live pending pin никогда не снимается только из-за высоты. При отсутствии доказательств сохранить state, без TTL/угаданных confirmations.
+
+Fatal regression — **новое authoritative canonical решение**, не содержащее сохранённый irreversible anchor либо имеющее другой hash на его высоте. Stale callback, lower safe, пропавший VotePool, отстающий Heimdall или недоступный header не являются доказанным regression. Они требуют refresh/retry или блокируют GC. После подтверждённого конфликта нода останавливается по D57; удалённое по принятой финальности прошлое состояние не обещается восстановить.
+
+### Проверки текущей семантики
+
+DATA-01: все применимые header/call/account fields, presence/ноль, пустой блок, CREATE attempt vs success, storage reset. FEE-01: gas purchase/return/recipient credits, blob charge, same payer/recipient, zero-fee system tx, revert и +10/−10; суммы address effects согласованы с tx state, receipt aggregate не удваивает поток. FINAL-ETH: safe fallback, setter до FCU error, finality-only без head, stale event. FINAL-BSC: header snapshot/early VotePool отдельно, restart loss, side branch, source lookup failure. FINAL-POLY: milestone purge, persisted whitelist без source reply, L1 pending/pruned state, exact hash-pinned call/root/ancestry, checkpoint params drift, native publication при unavailable GC. GC-01: crash каждого accepted-anchor/pin-release marker, active pending, removed branch, stale observation vs доказанный конфликт. Всё это будущие E01/E02/E04/E05 fixtures, не результаты реализации.
 
 ## Native capture и lifecycle recovery
 
-2026-11-05 · DOC-REPAIR-03 · D57/D58. Нормативное уточнение [архитектуры](docs/COLLECTION_ARCHITECTURE.md), [модели изменений](#нативные-балансы-и-причины-изменений) и раннего описания capture в [RocksDB protocol](#rec-сценарии). Это проект native patches; наличие подходящих upstream API не доказывает работу будущей сборки. E01/E04/E05 остаются обязательными gates.
+Exact current data/finality/GC semantics — [CURRENT_SEMANTICS](docs/CURRENT_SEMANTICS.md), D62/D63. Semantic identity и связь decision→batch — [CONTROL_WIRE_CONTRACT](docs/CONTROL_WIRE_CONTRACT.md). GC не использует generic native finalized getter без provenance.
+
+2026-11-05 · DOC-REPAIR-03 · D57/D58. Нормативное уточнение [архитектуры](docs/COLLECTION_ARCHITECTURE.md), [модели изменений](docs/BALANCE_MODEL.md) и раннего описания capture в [RocksDB protocol](docs/ROCKSDB_DELIVERY_PROTOCOL.md). Это проект native patches; наличие подходящих upstream API не доказывает работу будущей сборки. E01/E04/E05 остаются обязательными gates.
 
 ### Поддержанный профиль и владельцы
 
@@ -576,7 +631,7 @@ D60 отдельно отключает BlockSTM/parallel EVM: `--parallelevm.en
 
 ### Admission и source pin
 
-`observation_id=(producer_id,run_id,observation_sequence)` относится к native наблюдению, а не к transport batch. Observation counter выделяется durable; отсутствие публичных событий у rejected/side-branch observation не создаёт дыр в delivery sequence. Последний выделяется отдельно по [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения).
+`observation_id=(producer_id,run_id,observation_sequence)` относится к native наблюдению, а не к transport batch. Observation counter выделяется durable; отсутствие публичных событий у rejected/side-branch observation не создаёт дыр в delivery sequence. Последний выделяется отдельно по [DELIVERY_STATE_MACHINE](docs/DELIVERY_STATE_MACHINE.md).
 
 1. На native boundary проверить block/profile и необходимые до исполнения native условия. Начать `INPUT_PREPARING`; сетевой кандидат ещё не считается принятым capture.
 2. Защитить parent root от native удаления. Для hash provider: удержать root в trie cache, выполнить `triedb.Commit(parentRoot,false)`, затем `nativeDB.SyncKeyValue()`. RAM `Reference` без flush/sync не является durable pin.
@@ -604,6 +659,8 @@ Bor recording resolver сохраняет exact request identity и exact respon
 | FATAL_CAPTURE_ERROR | Нельзя безопасно сохранить/нормализовать данные | Остановить native процесс; сохранить восстановимые данные, не выдавать consensus-invalid |
 
 EXEC_READY содержит **record corpus без публичной activation/event identity**, а не уже опубликованный Envelope. Спекулятивный branch не публикуется сам по себе. Только native canonical/lifecycle решение определяет activation, revisions и public events. При повторном применении той же branch возможен reuse corpus с новой activation.
+
+Canonical decision сначала закрывает semantic descriptors: activation refs/revisions/source_sequence/kind и stable entity ordinals. Decision→batch allocation atomic; только затем DELIVERY_STAGING выделяет event IDs и строит Envelope. Retry этой стадии не меняет semantic IDs/revisions; повтор native marker находит прежний batch либо retained applied-decision frontier.
 
 Crash после EXEC_READY до native state commit может уничтожить mutable StateDB. Corpus не заменяет полное native state: optional system scopes могут в нём отсутствовать. Для завершения штатного import разрешён native-only replay из parent pin и сохранённой capsule; он не заменяет corpus и не создаёт новые public IDs/bytes. Сравниваются profile/input digest, native resulting state root/receipt commitments и применимые captured outcomes. Несовпадение — source invariant error. READY/SEALED transport replay сам по себе native execution не требует.
 
@@ -647,7 +704,7 @@ BSC system tx capture использует реальные hash/index/payload �
 | created contract | Только успешное native создание; отдельно final existence после rollback/SELFDESTRUCT |
 | source receipt | Исходное кодирование сохраняется отдельно от производной projection; адрес попытки не переименовывается в успешное создание |
 
-[Geth state_processor](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/state_processor.go) — источник makeReceipt; публичные поля задаёт [MESSAGE_CONTRACT](#контракт-сообщений).
+[Geth state_processor](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/state_processor.go) — источник makeReceipt; публичные поля задаёт [MESSAGE_CONTRACT](docs/MESSAGE_CONTRACT.md).
 
 ### Startup, known branch и lifecycle GC
 
@@ -675,10 +732,11 @@ ACK payload не удаляет lifecycle refs, revisions и нужные replay
 
 Source inspection выполнена; сборки, fault injection и эти fixtures пока не запускались. При невозможности pin/decision bridge хотя бы для одного обязательного path профиль не принимается; ослабление guarantees требует нового решения пользователя.
 
-
 ## Durable delivery и смена назначения
 
-2026-11-05. D26–D33, D52, D54, D57–D59. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](#rec-сценарии). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable Envelope bytes.
+Точные identities, binding JSON/digests, manifest/reservation bytes, wrapper layout, RPC/errors и исполнимый cutover заданы в [CONTROL_WIRE_CONTRACT](docs/CONTROL_WIRE_CONTRACT.md). Ниже — автомат состояний этого же протокола, не отдельная альтернативная схема.
+
+2026-11-05. D26–D33, D52, D54, D57–D59. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](docs/ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable Envelope bytes.
 
 ### Identity, режимы и atomicity
 
@@ -710,6 +768,8 @@ Gateway prefixes: `meta/{store_epoch,destination_binding}`, `session/<producer,r
 | Producer cleanup завершён | ReleaseAck | Sync retired_prefix и удаление outbox | RETIRED; payload/plan отсутствуют |
 
 IngestAck проверяет batch/manifest/plan/destination; ACK части либо успешный gRPC write не заменяет его. Перед удалением любых recovery fragments должна существовать durable замена либо достаточные replay prerequisites. Старый attempt не смешивается с новым manifest. Любые bytes под существующим immutable event_id неизменны, даже до первой публикации.
+
+До DELIVERY_STAGING уже durable semantic descriptors с activation/revision/source identity; retry attempt меняет только public event reservations. Decision→batch_id и batch counter сохраняются атомарно, повтор native marker не выделяет новый batch. В ACKED/outbox сохраняется весь IngestAck, включая issuer_store_epoch и layout_manifest_digest, до producer cleanup; он требуется RecoveryRelease после Gateway loss.
 
 ### Prepare и повторные попытки
 
@@ -747,9 +807,9 @@ Gateway при подключении проверяет account, StreamInfo, su
 
 1. Остановить LIVE штатным способом и подтвердить отсутствие старого writer. Запустить ту же совместимую native сборку с `--extractor-mode=drain`; YAML содержит тот же store/binding. Перед recovery sync установить DRAIN, если он ещё не сохранён. DRAIN не включает новый H+1 capture и не выполняет sync-range выгрузку.
 2. Восстановить сохранённые capture/lifecycle intents; новые непредусмотренные live callbacks не создают обязательств. Доставить READY/SEALED; закончить ACKED_CLEANUP и ordered Release. Native источник нужен для незакрытого capture; его недоступность не даёт DRAINED.
-3. Producer фиксирует drain_id и batch_highwater, затем отправляет SealGeneration(binding_generation,admission_generation,drain_id,highwater). Gateway fencing barrier проверяет отсутствие незавершённых операций <=highwater и совпадение retired_prefix. Sync SEALED_GENERATION запрещает новые Prepare этой admission generation; повтор возвращает тот же SealAck.
+3. Только после исчерпания native obligations, ещё способных создать batch, producer фиксирует drain_id/highwater и отправляет SealGeneration(binding_generation,admission_generation,drain_id,highwater). Gateway barrier проверяет отсутствие незавершённых операций <=highwater и совпадение retired_prefix. Sync SEALED_GENERATION запрещает Prepare этой admission generation; повтор возвращает тот же SealAck. Retained pins, ожидающие будущего finalized anchor, не требуют нового capture и не блокируют DRAINED.
 4. Producer sync сохраняет DRAINED с SealAck и завершается. Crash до этого продолжает DRAIN; новый LIVE не включается автоматически. Оба owners сохраняют identity/lifecycle, terminal prefix и seal evidence, очищают временные delivery payload/receipts. «Оба журнала очищены» не означает удалить DB/ключи.
-5. Для смены destination новый descriptor имеет новую generation; обе конфигурации указывают old/new binding и drain_id. Fenced handshake пишет Gateway SWITCH_PREPARED, producer sync новую binding, Gateway подтверждает SWITCH_COMMITTED. Повтор каждого шага идемпотентен; несовпадение generation блокирует capture. Команда LIVE выполняет этот handshake, затем Resume до снятия DRAINED и фиксации новой H. Для возврата в LIVE без смены назначения также требуется явный restart с mode=live и Resume после завершённого seal.
+5. Для смены destination обе роли получают desired descriptor следующей generation через binding_file; old binding/seal/drain_id берутся из store. Gateway desired mismatch входит в AWAIT_SWITCH, сохраняя прежнее active назначение. Native explicit LIVE sync создаёт SwitchIntent; PrepareSwitch → producer binding commit → CommitSwitch завершают переход. Затем Resume до снятия DRAINED/фиксации H. Для прежнего binding Switch пропускается, Resume обязателен. Необъявленные YAML keys old/new/drain_id не вводятся.
 6. Старые SEALED generations не принимают новых данных. Упавший процесс завершает сохранённый switch, не угадывает нужную сторону по более свежему YAML. Если последний owner store потерян, операция требует восстановления seal/binding evidence от surviving owner; при недостатке evidence — ERROR, не bypass.
 
 D59: будущие Removed/Status сохраняют activation references, даже если исходный ACKed Applied был в прежнем назначении. Уже подтверждённая история не копируется. Новому stream не обещается самостоятельная полнота старых ссылок; downstream/copy вне scope.
@@ -789,16 +849,147 @@ Preflight versions: `store_format,plan_format,wire_schema,validator_profile,nati
 
 ATTEMPT-01 — повторные STAGING, pruning source, сохранение последней копии. PREPARE-01 — lost chunks/replies, conflict digest, новый limit. FRONTIER-01 — 100 retired, потеря Gateway, batch101 и поздний Publish50. FENCE-01 — barriers token/commit/Release/PubAck. DEST-01 — READY до Prepare, иной target после loss. DRAIN-01 — crash каждого seal/switch шага, оба owners, постоянный live вход до остановки. MEM-01 — большой record/manifest без роста working set. UPGRADE-01 — reader capabilities, pending старой версии, отказ persistent format change даже после drain. POISON-01 и ENOSPC-01 — отсутствие false ACK/drop и корректный recovery. Эти fixtures не запускались; DOC-REPAIR закрывает проектные переходы, не E03 runtime gate.
 
+## Идентификаторы и служебный wire protocol
+
+DOC-FINAL-01 · 2026-11-05. Точный логический контракт первой версии для ETH/BSC/POLY. Дополняет [автомат доставки](docs/DELIVERY_STATE_MACHINE.md) и [YAML](docs/LIVE_CONFIG_SPEC.md). Это документация, не созданные proto/bindings или выполненные тесты.
+
+### Базовые кодирования и идентичности
+
+`Id16` — 16 bytes; новые независимые identity генерируются криптографическим RNG и сохраняются до использования. Текстовая форма — 32 lowercase hex characters без `0x`. `Hash32`/`UInt256` — 32 bytes, текст 64 lowercase hex без `0x`; `UInt256` big endian. Счётчики — checked unsigned u64: начало 1, ноль только для пустого frontier; ordinal/index начинается 0. Overflow — явная ошибка до записи/публикации, не wrap/reuse.
+
+| Поле | Жизненный цикл |
+|---|---|
+| producer_id, run_id:Id16 | Создаются при первом создании adapter store; сохраняются при restart/drain/Resume. Новая H не создаёт новый run. Новый store после потери диска имеет новые IDs; чужой pending run не присваивается |
+| node_instance_id:Id16 | Persistent identity native datadir, связанная с chain/genesis; восстановление adapter проверяет её |
+| writer_epoch:Id16 | Новый provenance ID каждого native процесса; исходный epoch в уже созданных descriptors не переписывается. Не заменяет server-side fencing |
+| store_epoch:Id16 | Persistent Gateway store identity; новый store имеет новый epoch. publication_epoch plan — issuer store_epoch, включая replay старого epoch |
+| reservation_id, drain_id, switch_id, resume_id, request_id:Id16 | ID соответствующего объекта/операции, сохраняется при повторе той же durable операции |
+| boot_nonce, challenge:Id16 | Случайные значения процесса/handshake; старый challenge не действует в новом boot |
+| session_token:bytes32 | Непредсказуемый token текущей authenticated session; не логируется. Только поверх mTLS или разрешённого authenticated UDS |
+| binding/admission/connection generation:u64 | Разные счётчики, initial=1; binding меняет назначение, admission — новый capture после seal, connection — новую RPC session |
+
+`event_id = producer_id16 || run_id16 || event_sequence_u64be` (40 bytes). `batch_id` и `observation_id` используют ту же форму с **отдельными** batch/observation counters. `source_sequence` — отдельный durable счётчик semantic descriptors, не event_sequence и не номер блока. `activation_id = native_decision_sequence_u64be || entity_ordinal_u64be`, всегда квалифицирован producer/run в ActivationRef; block entity получает ordinal 0, tx entities — body index+1; optional entities следуют после native body count в native order. Новое применение ветки имеет новый decision sequence. `execution_action_id`, frame/action indices и revision — u64 в пределах указанной tx/activation; revision Applied=0, updates>0.
+
+Семантический manifest фиксирует event kind, source provenance/sequence, activation refs и revisions **до DELIVERY_STAGING**. Native decision→batch_id и batch counter фиксируются одним sync commit. Повтор decision marker находит прежнюю связь; после cleanup от повтора защищает applied-decision frontier. Decision без public events не выделяет batch. Attempt allocation сохраняет `{attempt_generation,event_sequence_base,event_count}` атомарно; event ordinal задаёт ID. Retry до READY может сменить только public event IDs/Envelope attempt, не semantic identity/revision. После READY IDs/bytes неизменны независимо от Prepare.
+
+### DestinationBinding file
+
+`destination.binding_file` — путь к **желаемому** descriptor. JSON UTF-8, без duplicate/unknown keys, comments/BOM. Никаких env substitutions. Порядок ключей/whitespace не имеют значения. Старый binding, seal, drain_id и generation берутся только из durable store; не из новых YAML полей.
+
+| JSON field | Формат |
+|---|---|
+| schema_version | JSON integer 1 |
+| destination_id | Id16 hex, постоянная identity линии конфигурации сети |
+| generation | Canonical decimal string положительного u64, без leading zeros/знака |
+| network.family | Строка `EVM` |
+| network.chain_id | UInt256 hex |
+| network.genesis_hash | Hash32 hex |
+| expected_account | Непустая UTF-8 строка без управляющих символов; точное поле account UserInfo, не display name |
+| stream | Непустое буквальное имя stream, проходит правила pinned NATS server; wildcard запрещён |
+| subject_prefix | Непустые разделённые точками tokens; без whitespace, wildcard и пустых tokens |
+| descriptor_digest | Hash32 hex по формуле ниже |
+
+В бинарных формулах `LP(s)=u32be(length(UTF8(s))) || UTF8(s)`; Unicode normalization отсутствует. Length overflow/невалидный UTF-8 отвергаются. Полный JSON descriptor ограничен 16 KiB; config check проверяет также размер полного PrepareSwitch с wrapper/SealAck/identity ≤256 KiB. Descriptor, который нельзя передать допустимым RPC, отвергается до запуска. В network digest family EVM кодируется byte `0x01`:
+
+`network_digest = SHA256(UTF8("extractor.network.v1") || 0x00 || 0x01 || chain_id32 || genesis32)`.
+
+`descriptor_digest = SHA256(UTF8("extractor.binding.v1") || 0x00 || destination_id16 || generation_u64be || 0x01 || chain_id32 || genesis32 || LP(expected_account) || LP(stream) || LP(subject_prefix))`.
+
+Digest не включает собственное поле, URL, TLS/credentials или frame limit. Changing account/stream/prefix требует следующей binding generation той же destination_id и DRAINED. Изменять network identity в существующем store нельзя. Same generation+different content — конфликт; неожиданный скачок generation запрещён. Gateway YAML stream/subject_prefix должны точно совпасть с descriptor: это проверяемые дубли, не альтернативный route. Fresh stores сверяют desired descriptor между owners до первого сетевого обмена; offline adapter уже сохраняет binding до capture.
+
+### READY manifest и reservation
+
+Descriptor события: `{ordinal:u64,event_id:40 bytes,event_family:u16,event_kind:u16,envelope_length:u64,envelope_sha256:Hash32}`. Family registry v1: tx=1, block=2, balance.system=3, bor.legacy_receipt=4; последние два optional. Kind: applied=1, removed=2, status=3. Unknown value — ошибка, OTHER отсутствует.
+
+Manifest bytes — `UTF8("extractor.manifest.v1") || 0x00 || event_count_u64be || descriptors_in_ordinal_order`, каждый descriptor — перечисленные поля в фиксированном порядке и big endian. Manifest digest — SHA256 этих bytes. Ordinals непрерывны 0…N−1, event IDs уникальны; empty public batch не создаётся. Entries/chunks хранятся на диске; closing marker содержит count/digest, не весь список.
+
+Reservation seed binary v1: domain `extractor.reservation.v1` + zero byte, затем `reservation_id16,issuer_store_epoch16,batch_id40,manifest_digest32,event_count_u64be,sequence_base_u64be,binding_digest32,frame_limit_u64be,transport_version_u32be,layout_version_u32be,header_version_u32be`. Все версии первой схемы =1. `plan_digest=SHA256(seed_bytes)`; seed неизменен и возвращается побайтно при Prepare retry. Record chain_sequence=base+ordinal с overflow check. Gateway может импортировать прежний seed из SEALED producer после store loss; issuer epoch не переписывается на новый.
+
+### TransportFrame layout v1
+
+Этот небольшой transport wrapper имеет закреплённые field numbers; общие Envelope field numbers генерируются в E02 и не нужны для вычисления длины уже сохранённых envelope_bytes.
+
+| Message | Fields: tag → type |
+|---|---|
+| NetworkIdentity | 1 family(enum EVM=1), 2 chain_id(bytes32), 3 genesis_hash(bytes32) |
+| TransportFrame | 1 transport_version(u32), 2 network(message), 3 event_id(bytes40), 4 payload_digest(bytes32), 5 publication_epoch(bytes16), 6 chain_sequence(u64), oneof: 7 complete(message) / 8 part(message) |
+| CompleteRecord | 1 envelope_bytes(bytes) |
+| RecordPart | 1 part_index(u64), 2 part_count(u64), 3 total_bytes(u64), 4 data(bytes) |
+
+Каждый указанный scalar присутствует, включая part_index=0. Canonical wrapper encoding v1: ascending tag order, minimal unsigned varints, обычные protobuf length-delimited fields, no unknown fields/duplicates. Envelope внутри — исходные immutable bytes, их независимая reserialization запрещена. Это локально определённое wrapper encoding, не утверждение о каноничности произвольного Protobuf. `EncodedFrameSize` — точная сумма key/varint/length/data sizes этой таблицы, без приблизительного overhead.
+
+`Nats-Msg-Id = "ex1." + base64url_no_padding(network_digest32 || producer_id16 || run_id16 || event_sequence8 || form1 || part_index8)`. COMPLETE: form=0,index=0; PART: form=1,index=i. Header bytes ровно `NATS/1.0\r\nNats-Msg-Id: <id>\r\nNats-Expected-Stream: <stream>\r\n\r\n` в этом порядке, без status line/дополнительных headers. Reply inbox не входит в эти bytes. `F=transport.max_frame_bytes` учитывает wrapper + эти header bytes.
+
+Layout v1:
+1. Если точный COMPLETE с фактическими metadata/headers помещается в F, выбрать COMPLETE.
+2. Иначе найти наибольшее целое C>=1, для которого PART с data длиной C, part_index=U64_MAX, part_count=U64_MAX и фактическим total_bytes помещается в F. Это консервативная проверка overhead без циклической зависимости count/size. Размер headers фиксирован по длине tuple, stream из seed binding.
+3. Count=ceil(total_bytes/C), part i содержит bytes `[i*C,min((i+1)*C,total_bytes))`. Checked arithmetic для всех длин/offsets; overflow отвергается без truncate.
+4. Before SEALED проверить фактический размер/digest каждой frame. При C<1 вернуть LIMIT_INCOMPATIBLE, сохранить READY; pending SEALED не перепланировать.
+
+Layout manifest entries: `{ordinal,form,capacity,part_count,total_bytes}` в фиксированном порядке, u64 big endian кроме form byte; COMPLETE capacity=total_bytes,count=1. `layout_manifest_digest=SHA256(domain "extractor.layout.v1" + zero + plan_digest + count_u64be + entries)`. При BeginPublish Gateway сверяет детерминированный layout; неизвестная version не принимается. Control/chunk RPC<=256 KiB с wrapper, data chunk<=64 KiB; fragment offset относится к одной frame, не обязательно совпадает с RecordPart boundary. Максимум WriteBatch — 1 MiB. Это ограничения рабочих буферов, не предел размера транзакции.
+
+### Служебные запросы и ответы
+
+После authenticated handshake mutating RPC включает `{protocol_version=1,request_id,session_token,producer_id,run_id,connection_generation,admission_generation,binding_digest}`. Token check и commit сериализованы. mTLS проверяет deployment/network/role; challenge echo внутри authenticated transport подтверждает текущий boot, дополнительный неописанный signing key не вводится. Business idempotency — identity/manifest/offset/intent, а не только request_id.
+
+Recovery CommitSwitch/Resume использует authenticated `MAINTENANCE` session: Gateway допускает old/new binding и admission generation **только для точного сохранённого transition intent** (switch_id/resume_id, drain_id, old/new digests/generations, issuer epoch). Сначала сопоставляется durable intent/receipt, затем возвращается прежний результат; потерянный ответ после commit не превращается в неразрешимый SESSION_STALE. Если transition ещё не был принят, его начало допустимо только из текущей sealed identity по обычным правилам. MAINTENANCE не принимает новые Prepare/Publish/Seal; конфликтующий либо retired intent отвергается. После завершения перехода producer открывает новую обычную session с действующей identity. Старый session_token не переносится через рестарт или соединение.
+
+При потере Gateway store `BeginPublish` для producer SEALED сначала открывает `IMPORT_SEALED`: exact исходные seed/digests плюс повтор исходного READY manifest через `PrepareChunk`/`FinalizePrepare` с mode=IMPORT_SEALED. Chunk offset/checksum/idempotency те же, но **новые reservation/sequence не выделяются**; issuer epoch сохраняется из исходного seed. До проверки полного manifest digest, ordinal/event identities, routing kind, lengths и детерминированного layout state остаётся неготовым к CLOSED. Затем PublishChunk передаёт исходные frames; recovered manifest и bytes фиксируются по обычному atomic IngestAck правилу. Другой manifest/seed для того же batch — IMMUTABLE_CONFLICT. Эта ветка допускается только при доказанном fresh-store recovery по DELIVERY_STATE_MACHINE; не обходит fencing либо cutover.
+
+| RPC | Дополнительные request fields | Успешный response |
+|---|---|---|
+| HelloChallenge | producer/run, role, network | boot_nonce, challenge |
+| OpenSession | echoed challenge, mode, stored binding, desired binding digest, durable retired_prefix, admission/connection generation, имеющиеся seal/switch/resume evidence | session_token, Gateway binding/generation/prefix/state; recovery action из NONE/REPLAY/FINISH_RELEASE/FINISH_SWITCH/FINISH_RESUME |
+| BeginPrepare | batch_id, manifest_digest, event_count, descriptor_bytes_total | resume_offset либо exact saved reservation |
+| PrepareChunk | batch_id, manifest_digest, offset, chunk_sha256, bytes | durable next_offset |
+| FinalizePrepare | batch_id, manifest_digest | exact seed bytes, plan_digest |
+| BeginPublish | batch_id, seed bytes, plan_digest, layout_manifest_digest | saved state/resume cursors |
+| PublishChunk | batch_id, plan_digest, event ordinal, frame index, offset, chunk_sha256, bytes | durable next_offset |
+| FinalizePublish | batch_id, plan_digest, manifest_digest, layout_manifest_digest | CLOSED; не IngestAck |
+| GetBatchState | batch_id, plan_digest | PREPARED/RECEIVING/CLOSED/NATS_ACKED/RELEASING/RETIRED либо NOT_FOUND; IngestAck только если durable |
+| Release | batch_id, manifest_digest, plan_digest | ReleaseAck(batch_id,retired_prefix) |
+| RecoveryRelease | batch_id, exact saved IngestAck, durable ACKED/outbox assertion | ReleaseAck после sync, только следующий seq и отсутствие conflicting pending |
+| SealGeneration | binding/admission generation, drain_id, batch_highwater | SealAck(drain_id,binding_digest,admission_generation,highwater,issuer_store_epoch) |
+| PrepareSwitch | old SealAck, old binding digest, desired descriptor, switch_id | SwitchPrepared(switch_id,old/new digest,drain_id,admission_generation,issuer_store_epoch) |
+| CommitSwitch | switch_id, exact SwitchPrepared, producer durable-commit assertion | SwitchCommitted с той же identity |
+| Resume | old SealAck, resume_id, active binding digest, next admission generation | ResumeAck(resume_id,binding_digest,old/new admission generation,drain_id,issuer_store_epoch) |
+
+`IngestAck={batch_id,manifest_digest,plan_digest,layout_manifest_digest,binding_digest,issuer_store_epoch}`. Producer сохраняет **весь ACK** в ACKED/outbox до cleanup, чтобы RecoveryRelease не требовал утраченного payload. Seal/Switch/Resume ответы связывают весь intent; совпадения одного номера недостаточно. Handshake/control evidence имеет fixed versioned schema, не JSON opaque map. Конкретные generated RPC tags — E02; значения/validation/порядок commit заданы здесь.
+
+Chunk retries: одинаковые offset/bytes/digest возвращают тот же next_offset; конфликт записанного диапазона — IMMUTABLE_CONFLICT; пропуск offset — OFFSET_MISMATCH с ожидаемым cursor. Закрытие manifest/batch возможно только после проверки всех contiguous chunks. GET/ChunkAck не является разрешением удалить producer payload.
+
+### Ошибки протокола
+
+Ответ error: `{code,request_id,owner_state,field_path?,retry_action,detail_redacted}`. Code registry v1: TRANSIENT_UNAVAILABLE, SESSION_STALE, OFFSET_MISMATCH, IDENTITY_MISMATCH, BINDING_MISMATCH, MODE_CONFLICT, DRAIN_REQUIRED, GENERATION_CONFLICT, IMMUTABLE_CONFLICT, INVALID_DESCRIPTOR, INVALID_PAYLOAD, LIMIT_INCOMPATIBLE, VERSION_UNSUPPORTED, ALREADY_RETIRED, STORE_FATAL. Retry action: RETRY_BACKOFF / RECONNECT / RESUME_AT_OFFSET / FIX_CONFIG / DRAIN_OLD_BUILD / STOP_LOCAL_OWNER / DIAGNOSE_IMMUTABLE.
+
+ALREADY_RETIRED допустим только для producer ACKED/outbox/retired, не подтверждает unACKed batch. CONFIG_BLOCKED/invalid pending не меняет bytes и не удаляет batch. STORE_FATAL прекращает соответствующего owner по D57. Неизвестный code/version обрабатывается как protocol incompatibility с сохранением данных; никакого fallback success. gRPC status является transport categorization, не заменяет typed error и durable ACK.
+
+### Управляемый restart, drain, cutover
+
+1. Stop LIVE и подтвердить отсутствие старого writer. С прежним binding запустить ту же совместимую native сборку `--extractor-mode=drain`.
+2. Закрыть сохранённые **native** obligations, способные создать delivery batch; доставить/очистить все batches и ordered Release. Только затем сохранить drain_id/highwater и выполнить SealGeneration.
+3. Sync DRAINED+SealAck; native процесс завершается. Для обычного resume оставить desired binding прежним. Для cutover подготовить следующий descriptor, новый stream окружением и обновить `binding_file` обоих owners; Gateway stream/prefix согласовать.
+4. Gateway с отличающимся desired binding открывается в AWAIT_SWITCH: старый binding остаётся active durable, разрешены только recovery/maintenance handshake, новые публикации в desired route запрещены. Наличие файла нового descriptor не активирует его.
+5. Запустить native `--extractor-mode=live`. Из DRAINED store получить old binding/seal/drain_id, sync SwitchIntent, пройти PrepareSwitch → producer durable binding commit → CommitSwitch. Никаких old_binding/drain_id YAML keys нет.
+6. При прежнем binding Switch пропускается. В обоих случаях durable ResumeIntent/ResumeAck открывают следующую admission generation; только после producer LIVE commit и нового H разрешён capture. Crash продолжает тот же intent, не увеличивает generation снова.
+
+Если desired config меняется ещё раз во время switch, сначала требуется вернуть config к сохранённому intent и закончить его; новый switch не перепрыгивает незавершённый. Gateway store loss восстанавливает identity/prefix/seal/switch evidence от surviving producer; insufficient evidence блокирует переход. Producer loss не восстанавливает старый run из Gateway: новый run и явная диагностика оставшихся obligations по принятой политике потери диска. Forced discard/migration не добавляются.
+
+### Проверки
+
+Обязательные граничные случаи RPC/CUTOVER: потерянный CommitSwitch/Resume ответ после смены session identity; recovery через MAINTENANCE без приёма data RPC; fresh-store IMPORT_SEALED с исходным chunked manifest; descriptor 16 KiB плюс полный wrapper, превышение bound отвергается config check.
+
+WIRE-01: binding digest не зависит от JSON formatting, меняется при любом identity поле; duplicate keys/unknown fields/overflow отвергаются. ID-01: restart/attempt/decision replay сохраняет semantic identity и не создаёт второй batch. LAYOUT-01: COMPLETE на границе F, PART на 1 byte больше, большие varints/counts, C<1, override limit и exact headers. RPC-01: chunks/retries/errors, lost replies и saved ACK. CUTOVER-01: native pending перед seal, AWAIT_SWITCH, crash каждого switch/resume commit, desired config drift, store loss. Все fixtures будущие; этот документ не объявляет PASS.
 
 ## Live YAML и команды
 
-> Нормативные effective native configs, mounts/UID, trust bootstrap, peer role/network admission и startup — [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение). Для поставляемого окружения credentials/TLS обязательны по этому профилю, даже если общий YAML допускает иные явно выбранные transport modes.
+> Нормативные effective native configs, mounts/UID, trust bootstrap, peer role/network admission и startup — [DEPLOYMENT_BOOTSTRAP_CONTRACT](docs/DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Для поставляемого окружения credentials/TLS обязательны по этому профилю, даже если общий YAML допускает иные явно выбранные transport modes.
 
 > D52: операционная готовность/синхронизация наблюдается по логам; управление штатными средствами Docker/Kubernetes, без отдельного API и обязательной детализации probes/shutdown таймаутов. Native граница H+1 и сохранение pending остаются. Default размера frame — 2 MiB, правила ниже.
 
 > D51: штатные native configs можно заменить целиком и дополнить аргументами. Окружение выполняет отдельный init-шаг, первый старт создаёт необходимые native файлы, рестарт сохраняет state/ключи. Исходники `/config` read-only; изменяемые native файлы находятся в `/data/node`. Это подготовка окружения, не новая команда CLI сборщика. Точные filenames/init/mount mappings остаются в [deployment-задачах](docs/NODE_DEPLOYMENT_SPEC.md).
 
-> D50: [таблица endpoints и экспонирования](#порты-и-экспонирование) закреплена по поручению пользователя. P2P overrides задаются native конфигурацией/окружением, не новыми произвольными ключами YAML сборщика. Gateway каждой сети использует внутренний service DNS и порт 50051, NATS — внутренний 4222. Значения настраиваемы; P2P NodePort не затрагивает приложение и не открывает его API наружу.
+> D50: [таблица endpoints и экспонирования](docs/NETWORK_PORTS.md) закреплена по поручению пользователя. P2P overrides задаются native конфигурацией/окружением, не новыми произвольными ключами YAML сборщика. Gateway каждой сети использует внутренний service DNS и порт 50051, NATS — внутренний 4222. Значения настраиваемы; P2P NodePort не затрагивает приложение и не открывает его API наружу.
 
 > D49: defaults deployment — Gateway `50051/TCP`, WAL `/data/wal`, журнал Gateway `/data/journal`, configs `/config` и secrets `/run/secrets` только для чтения. Процессы имеют собственные volumes; пути/порты переопределяемы. RPC/Engine API/Gateway/NATS не публикуются наружу по умолчанию. Это значения шаблонов окружения, не отмена обязательных полей схемы YAML. [Полный контракт defaults](docs/NODE_DEPLOYMENT_SPEC.md).
 
@@ -850,10 +1041,17 @@ CLI не скачивает клиенты, не создаёт pods и не в�
 | `gateway.nats.subject_prefix` | string | Обязательно gateway: префикс без wildcard; default-профили используют `evm.v3.<chain_key>`, suffix берётся из закрытого реестра MESSAGE_CONTRACT |
 | `transport.max_frame_bytes` | positive integer | Optional gateway; default `2097152` (2 MiB), полная TransportFrame вместе с NATS headers; новые публикационные планы |
 | `runtime.log_level` | enum | Optional: debug/info/warn/error, default info |
+| `finality.polygon.l1_endpoint` | URI | Обязательно только polygon live: собственный supporting Geth, http/https JSON-RPC; не основной Ethereum extractor |
+| `finality.polygon.sources_file` | path | Обязательно только polygon live: read-only `/etc/extractor/polygon-sources.json`, bootstrap identities/roles/endpoints по CURRENT_SEMANTICS; абсолютный path |
+| `finality.polygon.l1_tls` | tagged object | Обязательно только polygon live: disabled при http, server/mutual при https; стандартные поля TLS ниже |
+| `finality.polygon.expected_root_chain_address` | string | Обязательно только polygon live: 40 lowercase hex без 0x, address из проверенного mainnet bootstrap/chain params |
+| `finality.polygon.expected_child_block_interval` | positive u64 | Обязательно только polygon live: значение из проверенного bootstrap/checkpoint params, без float/narrowing |
 
 Объекты TLS: `mode: disabled` запрещает дополнительные поля; `server` требует `ca_file`; `mutual` требует `ca_file`, `cert_file`, `key_file`. Проверка имени сервера обязательна при TLS. Для NATS disabled соответствует `nats://`, остальные режимы — `tls://`. Server-only TLS для адаптер↔Gateway не разрешён. UDS защищается правами файловой системы. Противоречивые режимы — ошибка до запуска.
 
 Структура всего документа проверяется целиком. Обязательные поля, локальные файлы и credentials проверяются только для запускаемой роли. Live не требует чтения NATS credentials; отсутствующая секция другой роли допустима. Секций ClickHouse, history, coverage и startup-уведомлений нет.
+
+D63: finality.polygon разрешён только polygon live. Heimdall endpoint берётся из effective native Bor config; expected L1 network — Ethereum Mainnet profile собственного Polygon L1 комплекта. Expected RootChain address/interval генерируются окружением из проверенных bootstrap chain parameters и сверяются с online responses, не принимаются автоматически из произвольного ответа. Значения и supporting node identity сохраняются в evidence. Нет fallback на основной Ethereum extractor. Wrong configured identity — CONFIG error; временная недоступность correct supporting source задерживает только GC. Observer в LIVE выполняет один цикл не чаще раза в 10 секунд, deadline отдельного network read 10 секунд; это технические defaults, не SLO. DRAIN не начинает новые optional polls и разрешает только сохранённый GC decision.
 
 ### Размер сообщения D52
 
@@ -867,13 +1065,13 @@ Pending publication plan/bytes неизменны при restart и retry. Из�
 
 ### Смена назначения NATS — D54
 
-Точный нормативный порядок D54/D57/D59: [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения). Binding задаётся окружением до первого capture и сохраняется обоими owners; local READY без Prepare уже имеет destination. Drain и switch проходят durable generation barrier, а не проверку пустоты RAM.
+Точный нормативный порядок D54/D57/D59: [DELIVERY_STATE_MACHINE](docs/DELIVERY_STATE_MACHINE.md). Binding задаётся окружением до первого capture и сохраняется обоими owners; local READY без Prepare уже имеет destination. Drain и switch проходят durable generation barrier, а не проверку пустоты RAM.
 
-`stream` и `subject_prefix` проверяются вместе с network identity и доступным NATS account при online handshake. Это конфигурация существующего назначения; Gateway не создаёт streams и не меняет их административно. Точные правила идентификации account/назначения и их проверки при reconnect требуется завершить в E03 до реализации этого протокола; совпадение URL или имени stream само по себе недостаточно.
+`stream` и `subject_prefix` должны совпасть с desired DestinationBinding. Gateway проверяет точное account поле UserInfo, stream/subjects/limits и descriptor digest по [CONTROL_WIRE_CONTRACT](docs/CONTROL_WIRE_CONTRACT.md); URL не identity. Stream создаёт environment bootstrap, runtime Gateway не выполняет административный create/update.
 
 Publication plan и ACK относятся к одному сохранённому логическому назначению. При наличии незавершённой доставки у адаптера или Gateway смена account/stream/subject mapping отклоняется до публикации; pending и исходные настройки назначения сохраняются. Смена адреса или credentials, по-прежнему ведущих в тот же account/stream/subjects, не является переносом данных, но требует проверки назначения. Неопределённость этой проверки не разрешает объединять ACK.
 
-Для перенастройки назначения остановить новые live-наблюдения, завершить pending и обмен подтверждениями в прежнем назначении, проверить сохранённые состояния обоих owners, затем изменить конфигурацию и перезапустить контур. Только пустой Gateway или очередь RAM не доказывают завершение producer pending; при недоступности необходимого состояния переход не подтверждается. После перезапуска новые наблюдения начинаются с новой H+1 по D39. Если прежнее назначение недоступно, данные сохраняются, а смена блокируется; принудительный перенос pending в текущий scope не входит. Post-ACK retention/потеря NATS store остаются вне гарантии сборщика по D30–D31.
+Для cutover выполнить старый binding drain до DRAINED; заменить binding_file обеих ролей на desired descriptor и согласовать Gateway stream/prefix. Старые binding/seal/drain_id читаются из store, дополнительных YAML keys нет. Gateway с desired mismatch входит в AWAIT_SWITCH; native explicit LIVE завершает persisted Switch/Resume до новой H. Полная последовательность — CONTROL_WIRE_CONTRACT. Пустой Gateway/RAM не доказывает завершение native/producer obligations. При недоступном старом назначении pending сохраняются, cutover блокируется; forced migration отсутствует. Post-ACK retention/потеря NATS store вне гарантии D30–D31.
 
 ### Native-профили
 
@@ -883,7 +1081,7 @@ Publication plan и ACK относятся к одному сохранённо�
 | bsc-mainnet | bsc | Go/BSC: tx execution и Parlia Finalize |
 | polygon-pos-mainnet | bor | Go/Bor: tx execution, StateSync/Finalize; supporting Heimdall |
 
-Сборки и toolchains закрепляются по [CLIENT_MATRIX](docs/CLIENT_MATRIX.md) и [COMPONENT_STACK](#стек-и-границы-сборок). YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.
+Сборки и toolchains закрепляются по [CLIENT_MATRIX](docs/CLIENT_MATRIX.md) и [COMPONENT_STACK](docs/COMPONENT_STACK.md). YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.
 
 **Общий интерфейс, native параметры.** Аргументы запуска, datadir, consensus/rollup/Heimdall соединения и JWT задаются штатной конфигурацией native клиента и окружением. Они не дублируются в YAML адаптера. Общий параметр подключения YAML является частью нашей native интеграции; команды Gateway/config check остаются отдельными. Native capture не заменяется RPC.
 
@@ -896,7 +1094,7 @@ Publication plan и ACK относятся к одному сохранённо�
 1. Проверить CLI/YAML, пути, типы, профиль и эффективную native конфигурацию до открытия writable состояния. Ошибка не должна частично применять настройки.
 2. Эксклюзивно открыть состояние owner. Native datadir, live_dir и gateway_dir не могут совпадать или быть вложены друг в друга; symlinks разрешаются перед сравнением. Второй writer получает ошибку.
 3. Сверить сохранённые network/profile, роль, wire schema/build identity. Несовместимый WAL не удалять и не переинициализировать молча. Сеть нельзя сменить, сохранив прежний каталог.
-4. До native recovery установить hooks/decision bridge в RECOVERY_ONLY; разрешить сохранённые ADMITTED/EXEC_READY/markers и lifecycle по NATIVE_CAPTURE_PROTOCOL. Независимо восстановить pending по [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения), сохраняя IDs/bytes/parts. Новый safe live capture не ждёт NATS, но не обходит незавершённые native obligations.
+4. До native recovery установить hooks/decision bridge в RECOVERY_ONLY; разрешить сохранённые ADMITTED/EXEC_READY/markers и lifecycle по NATIVE_CAPTURE_PROTOCOL. Независимо восстановить pending по [DELIVERY_STATE_MACHINE](docs/DELIVERY_STATE_MACHINE.md), сохраняя IDs/bytes/parts. Новый safe live capture не ждёт NATS, но не обходит незавершённые native obligations.
 5. По D39 после синхронизации ноды зафиксировать текущую каноническую голову H (высоту и hash); начать новый live-сбор с H+1. Начальная синхронизация не выгружает прошлые блоки. Фиксация H согласована с native подпиской так, чтобы события после границы не потерялись. При рестарте для новых наблюдений фиксируется новая H, а pending WAL передаётся независимо. Это начальная граница, не постоянный фильтр по высоте: последующие reorg/finality обрабатываются native lifecycle bridge, в том числе относительно сохранённых активаций.
 6. Получать native события, нормализовать, сохранять в WAL, передавать через Gateway до NATS PubAck. Не обходить диапазон старого checkpoint→head. Восстановление конкретного незакрытого capture, текущие reorg/finality сохраняют существующий контракт.
 
@@ -924,10 +1122,138 @@ D40 исключает требования производительности
 
 CFG-S04/CFG-S05 завершены как документация с уточнениями D39: нода запускается окружением, live начинается с H+1 после синхронизации. CFG-R4 снят. E00-04 закрыт D40 в границе функционального ТЗ, без performance требований и production-методики. Runtime-проверки и реализация не выполнялись.
 
+## Состав и размещение нод
+
+### Состав и ответственность
+
+| Контур | Что проект должен скомпоновать и настроить | Что ещё уточнить |
+|---|---|---|
+| Ethereum | Geth с native-адаптером + Prysm (D44), их соединение и credentials, собственные native datadirs, RocksDB WAL адаптера, Gateway и его журнал | Кандидат Prysm 7.3.0 принят D47; образы, совместимость и параметры запуска уточняются; отдельные контейнеры/Pods приняты D45 |
+| BSC | BSC-клиент с native-адаптером и штатным консенсусом, native datadir, собственные WAL/Gateway/журнал | Точная контейнерная конфигурация закреплённого клиента |
+| Polygon PoS | Bor с native-адаптером + Heimdall-v2, отдельные Geth/Prysm для Polygon L1 по D44, необходимые соединения, собственные native datadirs, WAL/Gateway/журнал | Кандидаты версий приняты D47; точная конфигурация и образы уточняются; отдельный контейнер/Pod каждого компонента принят D45 |
+| NATS | Один ранее принятый NATS JetStream внутри Compose/Kubernetes, persistent storage, подключение независимых Gateway, раздельные streams/subjects | Полная связанная конфигурация; HA/DC-топология не вводится |
+
+Исходные native candidates сохраняются в [CLIENT_MATRIX](docs/CLIENT_MATRIX.md), стек компонентов — [COMPONENT_STACK](docs/COMPONENT_STACK.md). Кандидат версии не означает доказанную совместимость сборки. Добавление validator duties/staking не требуется для сбора данных и не предполагается автоматически.
+
+### Обязательное описание для обеих сред
+
+D44: L1-нода Polygon — самостоятельный Geth/Prysm комплект внутри Polygon-контура, без нашего Ethereum-адаптера. Она не публикует Ethereum-транзакции в NATS и не использует WAL/Gateway Ethereum-контура. Datadirs, credentials и процессы отделены от основной Ethereum-ноды. Общий выбор ПО не означает общий экземпляр или общее состояние. Остановка основного Ethereum-контура не должна останавливать источник L1 для Polygon.
+
+D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обеих пар, BSC 1.7.8, Bor 2.10.3/Heimdall-v2 0.13.2. Совместимость и image digests ещё не подтверждены; [весь набор и источники](docs/research/DEPLOYMENT_VERSION_CANDIDATES.md). D45 выбирает отдельный Compose service и Kubernetes workload/Pod для каждого самостоятельного компонента. Совместное размещение компонентов в контейнере/Pod не требуется.
+
+#### Карта размещения D45
+
+Имена ниже — проектные идентификаторы. По D46 каждая строка соответствует отдельному сервису Compose и отдельному StatefulSet Kubernetes с replicas=1, собственными Service и PVC. Это 11 основных сервисов, не 11 обязательных серверов. Точные manifests ещё не реализованы.
+
+| Контур | Компонент | Собственное состояние |
+|---|---|---|
+| Ethereum | eth-geth с нашим адаптером | Native datadir и отдельный RocksDB WAL адаптера |
+| Ethereum | eth-prysm | Consensus datadir |
+| Ethereum | eth-gateway | RocksDB publication journal |
+| BSC | bsc-node с нашим адаптером | Native datadir и отдельный RocksDB WAL адаптера |
+| BSC | bsc-gateway | RocksDB publication journal |
+| Polygon | polygon-bor с нашим адаптером | Native datadir и отдельный RocksDB WAL адаптера |
+| Polygon | polygon-heimdall | Собственный datadir Heimdall |
+| Polygon | polygon-l1-geth без адаптера | Собственный Ethereum execution datadir |
+| Polygon | polygon-l1-prysm | Собственный Ethereum consensus datadir |
+| Polygon | polygon-gateway | RocksDB publication journal |
+| Общая инфраструктура | nats | JetStream file storage одного инстанса |
+
+Адаптер и embedded RocksDB не выделяются в дополнительные процессы/Pods. Каждый writable каталог принадлежит одному owner. D45 не разрешает параллельных writers, совместного datadir или автоматического multi-node failover. Размещение/перезапуск owner должно сохранять его состояние по ранее принятому recovery-контракту.
+
+Компоненты связываются конфигурируемыми сетевыми endpoints: service DNS в Kubernetes/Compose либо заданные адреса. Связи не предполагают localhost или общий хост. Для adapter→Gateway применяется ранее принятый TCP/gRPC с mTLS; native связи используют штатную аутентификацию, в том числе Engine API/JWT для каждой отдельной Geth/Prysm пары. NATS остаётся общим транспортом. Точные адреса, порты и передача secrets — DEP-03.2.
+
+Каждый компонент можно размещать и перезапускать отдельно. Это не устраняет зависимость Geth от Prysm или Bor от Heimdall/L1: их недоступность отражается в готовности соответствующей ноды. Остальные сетевые контуры не переконфигурируются и не ожидают её прогресса; pending WAL сохраняется независимо.
+
+- Полный список services/workloads, их роли, образы/сборки и закреплённые версии. Сборки execution-клиентов содержат наш адаптер, остальные компоненты подключаются согласованными штатными интерфейсами.
+- Штатные native configs, YAML адаптера/Gateway и способ передачи их процессам. Проект готовит согласованный комплект: пользователь не должен самостоятельно угадывать недостающие связи компонентов.
+- Сетевые адреса/порты между компонентами, аутентификация, JWT/TLS/credentials и способ их предоставления без включения рабочих секретов в примеры.
+- Persistent volumes/datadirs отдельно для native клиентов и RocksDB каждого owner. Общая writable DB сетей запрещена; нет второго writer одного каталога при рестарте/замене процесса.
+- Условия готовности компонентов и порядок подключения, а не только факт старта контейнера. Live активируется с H+1 после синхронизации по D39. Pending WAL не ждёт синхронизации для своей повторной доставки, если компоненты доставки могут работать.
+- Независимый запуск, остановка и изменение конфигурации контура каждой сети. Native dependencies внутри сети допускаются; общего координатора прогресса и зависимости от extractor другой сети нет. Общий NATS сохраняет согласованную роль транспорта.
+- Штатная остановка, сохранение томов и восстановление pending по существующему RocksDB-протоколу. Автоматическое удаление данных и загрузка исторических пропусков не добавляются.
+
+Docker Compose используется для локального/dev запуска, Kubernetes — для production-размещения. Один и тот же функциональный контракт применяется к обеим средам. Сборщик не вызывает их API для создания/управления процессами: окружение исполняет подготовленные проектом конфигурации. Выбор конкретного Kubernetes packaging и окончательных templates не объявляется принятым этим документом.
+
+### Настройки размещения и связей D46
+
+**Хранение.** StatefulSet каждого компонента владеет собственными PVC. В Compose используются собственные named volumes. Для execution-клиента с адаптером native datadir и RocksDB WAL размещаются раздельно; publication journal принадлежит отдельному Gateway. Количество PVC определяется набором этих отдельных хранилищ, а не правилом «ровно один том на сеть». Единственный writer сохраняется при обновлении/рестарте; replicas=1 не заменяет соблюдение этого правила. Перенос зависит от возможностей StorageClass/тома и не означает автоматический failover.
+
+**Соединения.** Конфиги содержат service DNS и порты, не IP конкретного контейнера/Pod. Смена IP не требует правки клиентов. Основные связи:
+
+| Отправитель/клиент | Получатель | Назначение |
+|---|---|---|
+| eth-prysm | eth-geth | Engine API своей Ethereum-ноды |
+| polygon-l1-prysm | polygon-l1-geth | Engine API отдельной L1-ноды Polygon |
+| polygon-heimdall | polygon-l1-geth и polygon-bor | Штатные L1/Bor подключения |
+| polygon-bor | polygon-heimdall | Штатный интерфейс Bor/Heimdall |
+| Адаптер внутри eth-geth / bsc-node / polygon-bor | eth-gateway / bsc-gateway / polygon-gateway соответственно | gRPC с mTLS |
+| Каждый Gateway | nats | Публикация и получение PubAck |
+
+Таблица не заменяет version-specific native настройки: точные методы, порты и дополнительные обязательные связи сверяются при закреплении версий. Внутренние service DNS не заменяют native P2P соединения; публикация P2P-портов также должна войти в полную конфигурацию.
+
+**Конфиги и секреты.** Обычные параметры — отдельные YAML и штатные конфиги клиентов. JWT/TLS-ключи/NATS credentials передаются отдельными секретами или файлами. JWT основной Geth/Prysm пары не используется парой Polygon L1. Каждый процесс получает только нужные ему файлы. Конкретные mounts/пути описываются в шаблонах; генерация рабочих значений не выполняется на этапе ТЗ.
+
+**Готовность.** Ноды начинают синхронизацию независимо от Gateway/NATS. Готовность к native capture наступает после синхронизации по сетевому профилю; фиксируются H/hash, новые live-блоки собираются с H+1. Pending WAL передаётся независимо от новой live-границы. Отказ Gateway/NATS не означает остановку готового capture, пока доступна durable запись. Native зависимости внутри сети сохраняются, но нет глобального барьера readiness между сетями. Временная недоступность downstream сама по себе не является причиной перезапускать исправный producer через liveness probe. D52: операционное наблюдение по логам и штатное управление окружением; отдельная детализация probes/shutdown не требуется.
+
+### Гибкая конфигурация D48
+
+Один сетевой контур получает собственный YAML сборщика и отдельный YAML Gateway. Конфиги Ethereum, BSC и Polygon не объединяются в обязательный общий файл; обновление настроек сети не требует перезапуска других сетей. У общего NATS собственный конфиг сервера, отличный от настроек подключения Gateway.
+
+| Уровень | Что настраивается | Способ передачи |
+|---|---|---|
+| Встроенный сборщик одной сети | Сеть, WAL, endpoint своего Gateway, TLS, параметры доставки | Типизированный YAML через проектный `--extractor-config` |
+| Gateway одной сети | NATS, subjects/streams, журнал, входящее соединение и TLS | Собственный YAML через `--config` |
+| Native клиенты | Все поддерживаемые выбранной версией штатные настройки, дополнительные аргументы | Родные файлы конфигурации и аргументы запуска; без проектного allowlist и копирования всего upstream schema в YAML сборщика |
+| Окружение | Версии/образы, порты, P2P-адреса, каталоги, ресурсы, размещение | Compose overrides либо Kubernetes values; приложение не читает API оркестратора |
+| Секреты | JWT, TLS-ключи/сертификаты, NATS credentials | Отдельные файлы, ссылки в конфигурации; отдельный JWT у каждой Geth/Prysm пары |
+
+Комплект должен содержать готовые согласованные defaults для трёх сетей и обеих сред. Пользователь меняет только нужные настройки. Произвольный выбор upstream параметров/образов не означает доказанную совместимость произвольной сборки с native адаптером; проверенные кандидаты D47 и обязательные интерфейсы сохраняются.
+
+Изменение применяется перезапуском затронутого компонента. Watcher/hot reload не требуются. Сохранённые WAL/журнал обслуживаются по принятому протоколу; restart не добавляет загрузку истории или пропусков. Изменение native конфигурации не выполняется командой сборщика: процесс запускает окружение. Типизированный YAML сборщика/Gateway продолжает запрещать неизвестные ключи; свобода native аргументов относится к отдельному уровню.
+
+Общие defaults портов и каталогов приняты D49 ниже. Таблица P2P/native endpoints закреплена D50 в NETWORK_PORTS; flags/mount mappings определены в DEPLOYMENT_BOOTSTRAP_CONTRACT; native parser/runtime verification остаётся E01/E06. Здесь описано ТЗ, не готовые deploy-файлы.
+
+### Defaults портов, доступа и каталогов D49
+
+Все значения этого раздела переопределяются через модель D48. Внутренние native порты сохраняются штатными: Geth HTTP RPC — `8545/TCP`, Engine API — `8551/TCP`; это относится к обеим независимым Geth/Prysm парам. Основание: [параметры Geth](https://geth.ethereum.org/docs/fundamentals/command-line-options). Gateway каждой сети использует проектный `50051/TCP` с ранее принятым gRPC/mTLS. Номер RPC-порта сам по себе не требует включать ненужные API. Остальные интерфейсы перечислены в NETWORK_PORTS по D50.
+
+Одинаковые внутренние порты не конфликтуют между отдельными контейнерами/Pod с собственными сетевыми пространствами. Наружу по умолчанию публикуется только P2P; RPC, Engine API, Gateway и NATS доступны внутри окружения. Для локальной диагностики допускается опциональная публикация на `127.0.0.1`. Это не отменяет JWT/mTLS/credentials на внутренних соединениях.
+
+Внешние P2P-адреса и порты, bootnodes/seeds задаются отдельно для каждого экземпляра. Если несколько клиентов используют один публичный IP, их внешние порты должны различаться для одного транспортного протокола. Это касается и основной Ethereum-ноды, и отдельного Ethereum L1-комплекта Polygon. Объявляемый клиентом адрес/порт должен соответствовать реально доступному endpoint; одной настройки перенаправления порта недостаточно для описания P2P-конфигурации. Таблица TCP/UDP и способ экспонирования в Kubernetes закреплены D50 в NETWORK_PORTS.
+
+| Путь внутри контейнера | Назначение | Доступ |
+|---|---|---|
+| `/config` | Конфигурация соответствующего процесса | Только чтение |
+| `/run/secrets` | Только необходимые процессу секреты | Только чтение |
+| `/data/node` | Native данные конкретного клиента | Чтение/запись, собственный persistent volume |
+| `/data/wal` | RocksDB WAL встроенного адаптера | Чтение/запись, отдельно от native datadir |
+| `/data/journal` | RocksDB журнал Gateway своей сети | Чтение/запись, собственный persistent volume |
+| `/data/jetstream` | File storage NATS | Чтение/запись, собственный persistent volume |
+
+Каждый процесс получает только нужные каталоги. Повторение пути в разных контейнерах не означает общий volume/PVC: разные native клиенты, сети и владельцы состояния изолированы. Polygon L1 Geth не получает WAL адаптера. Физические пути хоста и storage параметры настраиваются отдельно; принятые пути не навязывают размещение на одном узле.
+
+P2P-ключ/идентичность сохраняется в persistent native state либо связанном с ним постоянном расположении, соответствующем конфигурации клиента. Обычный перезапуск не генерирует новую идентичность. Точные имена native файлов и flags для кандидатов D47 ещё сверяются; проект не меняет upstream формат ключей.
+
+### Подготовка конфигов и native файлов D51
+
+Комплект содержит готовые штатные конфиги выбранных клиентов. Пользователь может заменить файл целиком и задать дополнительные native аргументы по D48. Исходные файлы монтируются в `/config` только для чтения; файлы, которые native клиент должен изменять, располагаются в его собственном `/data/node`. Секреты остаются отдельными файлами согласно D49.
+
+Перед запуском native процесса окружение выполняет отдельный init-шаг: на первом старте создаёт необходимые каталоги и native файлы. Повторный запуск сохраняет существующее состояние цепочки и ключи, не выполняет разрушительную повторную инициализацию и не генерирует новую P2P-идентичность. Сборщик не управляет этим шагом и не запускает ноду.
+
+Механика init для Compose/Kubernetes, точные native команды, filenames и mount mappings описываются в DEP-03.2b.2b.3b. Необходимо различить обновляемые пользовательские настройки и сохраняемые native state/ключи: применение нового конфига при рестарте не должно затирать состояние. D51 не выбирает молча универсальное копирование всех файлов `/config` поверх существующего datadir. Файлы реального deployment сейчас не создаются.
+
+### Сохраняемые границы (D38–D42)
+
+История и пропуски отложены D38; performance требования и production-методика исключены D40; лицензия и публичная поставка отложены D41; Base/Arbitrum отложены D42. Эти решения не отменяют описанный здесь полный технический комплект трёх нод. Функциональные проверки конфигурации/совместимости относятся к будущей реализации, не объявляются уже выполненными.
 
 ## Bootstrap и окружение
 
-2026-11-05 · DOC-REPAIR-04 · D43–D52/D57–D59. Нормативная детализация [состава нод](docs/NODE_DEPLOYMENT_SPEC.md), [портов](#порты-и-экспонирование) и [live YAML](#live-yaml-и-команды). Здесь описаны будущие init/runtime contracts; Compose/Kubernetes файлы, секреты, образы и процессы ещё не создавались.
+Polygon bootstrap также создаёт persistent supporting deployment IDs и read-only `/etc/extractor/polygon-sources.json` по CURRENT_SEMANTICS. Файл связывает роли/адреса/chain identities с deployment provenance; Geth RPC не выдаёт эти IDs и не доказывает роль supporting service. Identity-файлы находятся в существующих native volumes, новый volume не нужен.
+
+D63 добавляет только control evidence внутри Bor adapter: доступ к собственному polygon-l1-geth HTTP RPC для hash-pinned finalized RootChain read. Новый сервис/volume/ETH tx extractor не добавляется. Строгие YAML keys — LIVE_CONFIG_SPEC; finality/GC — CURRENT_SEMANTICS. Bootstrap сохраняет проверенные RootChain address/child interval и supporting L1 identity вместе с конфигурацией; отсутствие online L1 задерживает GC, не готовую Polygon delivery.
+
+2026-11-05 · DOC-REPAIR-04 · D43–D52/D57–D59. Нормативная детализация [состава нод](docs/NODE_DEPLOYMENT_SPEC.md), [портов](docs/NETWORK_PORTS.md) и [live YAML](docs/LIVE_CONFIG_SPEC.md). Здесь описаны будущие init/runtime contracts; Compose/Kubernetes файлы, секреты, образы и процессы ещё не создавались.
 
 ### Source baseline и артефакты
 
@@ -1001,7 +1327,7 @@ Heimdall effective overrides: config.toml `[p2p] laddr="tcp://0.0.0.0:30656"`, `
 
 Порты P2P точно из NETWORK_PORTS: eth-geth 30303; bsc-node 30311; Bor 30312; Polygon L1 Geth 30313; Heimdall TCP30656; eth-prysm TCP/QUIC31300 и discovery31200; Polygon L1 Prysm TCP/QUIC31310 и discovery31210. Listener/advertise/NAT/Compose mapping/NodePort меняются согласованно. RPC namespaces `eth/net/web3` и Bor `bor` включаются только по нужным native dependencies; wildcard CORS/admin/txpool не являются default.
 
-Native parser определяет precedence TOML/YAML/args; preflight проверяет **effective** значения после этого precedence. Overrides не могут обойти chain identity, hash pin provider, ordinary Bor import и ownership ограничения [NATIVE_CAPTURE_PROTOCOL](#native-capture-и-lifecycle-recovery). Неизвестные upstream options проверяются самим pinned parser. Полный rendered config digest и redacted effective settings входят в manifest.
+Native parser определяет precedence TOML/YAML/args; preflight проверяет **effective** значения после этого precedence. Overrides не могут обойти chain identity, hash pin provider, ordinary Bor import и ownership ограничения [NATIVE_CAPTURE_PROTOCOL](docs/NATIVE_CAPTURE_PROTOCOL.md). Неизвестные upstream options проверяются самим pinned parser. Полный rendered config digest и redacted effective settings входят в manifest.
 
 Capture baseline Geth/BSC задаёт `--state.scheme hash --gcmode full`; Bor TOML — верхнеуровневый quoted key `"state.scheme"="hash"`, `gcmode="full"`, `syncmode="full"`. `history.state` — настройка path backend, она не заменяет durable pins. Сам hash scheme без retention patches тоже недостаточен. У supporting Polygon L1 нет capture pins, его профиль остаётся отдельным.
 
@@ -1017,7 +1343,7 @@ State scheme задаётся уже при создании native DB/genesis �
 
 NATS environment bootstrap и runtime Gateway используют разные credentials. Bootstrap создаёт только configured streams, сверяет существующие; compatible UPDATE допускается только для явно заданной config revision. Никаких автоматических DELETE/PURGE/reset при несовпадении. Runtime: publish в закрытый subject namespace своей сети; request `$JS.API.INFO`, `$JS.API.STREAM.INFO.<stream>`, `$SYS.REQ.USER.INFO`; subscribe только в собственный reply inbox prefix. CREATE/UPDATE/DELETE/PURGE/consumer admin runtime не получает. Environment обязан обеспечить UserInfo responder/permissions и проверяемую account identity; невозможность проверки блокирует публикацию, не заменяется сравнением URL. [NATS account API](https://docs.nats.io/reference/jetstream/api/account), [stream API](https://docs.nats.io/reference/jetstream/api/stream), [UserInfo](https://github.com/nats-io/nats.docs/blob/master/release_notes/whats_new_210.md).
 
-Bootstrap выпускает общий immutable DestinationBinding, который оба owners сохраняют до capture. Expected account/stream/subjects/metadata/limits проверяются Gateway online. NATS server max_payload и stream max_msg_size должны пропускать фактические frame+headers; default проекта 2 MiB, plan size immutable. Отсутствующий/чужой stream даёт CONFIG_BLOCKED; bootstrap созданного окружения не является разрешением уничтожить прежнюю историю. Drain/cutover/Resume — только по [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения).
+Bootstrap выпускает общий immutable DestinationBinding, который оба owners сохраняют до capture. Expected account/stream/subjects/metadata/limits проверяются Gateway online. NATS server max_payload и stream max_msg_size должны пропускать фактические frame+headers; default проекта 2 MiB, plan size immutable. Отсутствующий/чужой stream даёт CONFIG_BLOCKED; bootstrap созданного окружения не является разрешением уничтожить прежнюю историю. Drain/cutover/Resume — только по [DELIVERY_STATE_MACHINE](docs/DELIVERY_STATE_MACHINE.md).
 
 В NATS v2.15.1 `b2fd3efc7456b11b06a54877ad6f6ccfb911edb4` JetStream создаёт default internal system account при его отсутствии, USER.INFO service автоматически импортируется в обычные accounts. Gateway не нужны system credentials или wildcard `$SYS.>`: сравнивается поле `account` ответа (не display `account_name`). Bootstrap проверяет фактический responder/import/ACL своей конфигурации. [JetStream source](https://github.com/nats-io/nats-server/blob/b2fd3efc7456b11b06a54877ad6f6ccfb911edb4/server/jetstream.go), [UserInfo routing/response](https://github.com/nats-io/nats-server/blob/b2fd3efc7456b11b06a54877ad6f6ccfb911edb4/server/events.go).
 
@@ -1042,10 +1368,9 @@ BOOT-01 — interrupted init в каждой phase, сохранение keys/st
 
 Эти критерии закрывают проектные OPS-02…12; E01/E06/E07 не завершены. Image/toolchain/ABI locks, genesis payload proof и runtime smoke tests остаются явными gates, а не скрытыми предположениями о работающей поставке.
 
-
 ## Порты и экспонирование
 
-> Точные native mappings, listener scopes и bootstrap — [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение). D58 обновил Heimdall до v0.13.2, порты сохранены. CometBFT RPC 26657 baseline слушает loopback внутри Heimdall. По D52 отдельная probe/shutdown спецификация не вводится, обязательные состояния отражаются в logs.
+> Точные native mappings, listener scopes и bootstrap — [DEPLOYMENT_BOOTSTRAP_CONTRACT](docs/DEPLOYMENT_BOOTSTRAP_CONTRACT.md). D58 обновил Heimdall до v0.13.2, порты сохранены. CometBFT RPC 26657 baseline слушает loopback внутри Heimdall. По D52 отдельная probe/shutdown спецификация не вводится, обязательные состояния отражаются в logs.
 
 2026-10-21. DEP-03.2b.2b.2. Пользователь поручил выбрать удобный вариант самостоятельно. Только ТЗ; конфигурации не запускались. Все значения переопределяются по D48. Неизменны границы D49: наружу только P2P, внутренние API отдельно, собственная идентичность каждого клиента.
 
@@ -1110,7 +1435,6 @@ WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и доп
 
 Источники подтверждают интерфейсы; они не являются результатом запуска нашей конфигурации. Документальная привязка flags/config/init/mounts завершена в DEPLOYMENT_BOOTSTRAP_CONTRACT; parse/init/runtime tests остаются E01/E06. Готовность по logs и штатному управлению окружением соответствует D52.
 
-
 ## Стек и границы сборок
 
 ### Компоненты и интеграция
@@ -1118,25 +1442,21 @@ WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и доп
 | Компонент | Baseline | Реализация / граница |
 |---|---|---|
 | Ethereum native adapter | Go внутри Geth v1.17.9 | Native hooks/state journal + canonical notifications; отдельный client build |
-| Ethereum consensus | Prysm 7.3.0, кандидат D47; image digest не закреплён | Отдельный компонент основной Ethereum-ноды; layout контейнеров — DEP-03 |
+| Ethereum consensus | Prysm 7.3.0, кандидат D47; image digest не закреплён | Отдельный компонент основной Ethereum-ноды; отдельный service/StatefulSet по NODE_DEPLOYMENT_SPEC |
 | Polygon L1 источник | Отдельный Geth + Prysm, D44 | Собственная Ethereum-нода Polygon без нашего Ethereum-адаптера, со своими процессами/datadirs; основная Ethereum-нода не используется |
 | BSC native adapter | Go внутри BSC v1.7.8 | Обычные tx и Parlia Finalize capture; отдельный client build |
-| Отложено D42: Base native adapter | Rust 1.96.0, base/base v1.5.0 + pinned base/reth | Native executor + включённый Inspector, per-tx results, canonical ExEx |
-| Отложено D42: Arbitrum Nitro adapter | Go в Nitro v3.12.1 с его собственным Geth; native Rust/cgo/WASM build dependencies | ArbOS/Stylus/native special paths; отдельная сборка и fixtures |
-| Отложено D42: Arbitrum Classic adapter | Go + C++ AVM, Classic v1.4.7 candidate | Native result reader + consensus-neutral observer candidate; отдельный history runtime той же сети |
 | Polygon adapter | Go внутри Bor v2.10.3, Heimdall-v2 v0.13.2 | Native tx и StateSync/Finalize, отдельный optional legacy scope; последовательный профиль D60 |
-| Canonical Coordinator | Библиотечный модуль адаптера/контура соответствующей сети | Отдельный общий сервис для всех сетей не вводится. Каждый producer/run владеет своим lifecycle state; единого владельца для устранения пересечений нет; см. STATE_OWNERSHIP |
+| Canonical Coordinator | Библиотечный модуль адаптера/контура соответствующей сети | Отдельный общий сервис для всех сетей не вводится. Каждый producer/run владеет своим lifecycle state; единого владельца для устранения пересечений нет; см. NATIVE_CAPTURE_PROTOCOL |
 | Gateway/publisher | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0; один экземпляр роли publisher на сеть | Единый исходный код/binary для всех сетей, отдельный процесс и конфиг каждой сети; NATS SDK только здесь |
 | Wire schema | Protobuf proto3 с explicit presence и closed oneof | Одна versioned schema, native validators, transaction/block metadata/lifecycle/parts из MESSAGE_CONTRACT |
 | Генерация Go | protoc 36.2 + protobuf-go/protoc-gen-go 1.36.12 | protoc-gen-go-grpc из согласованного source release grpc-go; точный module tag/commit и lock фиксируются E01/E02, не подменяются версией server SDK |
-| Отложено D42: Rust transport/codec | tonic 0.14.6 + tonic-prost/tonic-prost-build 0.14.6; prost/prost-build 0.14.4 | Общая proto schema; встройка в Base Cargo graph проверяется E01/E02, upstream lock клиента не обновляется автоматически |
 | Adapter → Gateway | gRPC streaming; локальный UDS при совместном размещении, TCP+mTLS при сетевом соединении | Оба конца проверяют schema/profile/размер/целостность; production topology определяет endpoint, не семантику данных |
-| WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2; Rust bindings отложены D42 | Sync WriteBatch, WAL enabled, отдельный owner; [нормативный автомат](#durable-delivery-и-смена-назначения). BlobDB optional, backup исключён D27 |
+| WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2 | Sync WriteBatch, WAL enabled, отдельный owner; [нормативный автомат](docs/DELIVERY_STATE_MACHINE.md). BlobDB optional, backup исключён D27 |
 | Приёмочный harness | Go + тот же protobuf decoder + JetStream client | Только проверка опубликованных сообщений против fixtures; не промышленный downstream |
 | Локальный запуск | Docker Compose: все execution/consensus/supporting-компоненты трёх нод, адаптеры, WAL/Gateway и NATS | Полная компоновка и конфигурация проекта по D43; [детализация](docs/NODE_DEPLOYMENT_SPEC.md) |
 | Production | Kubernetes: все компоненты нод, адаптеры, независимые workload/volume/config контуры сетей и NATS | D43: готовим весь технический комплект; NATS chart/server candidates и [исследование](docs/research/NATS_DEPLOYMENT_STACK.md) сохраняются; production-методика отдельно |
 
-Native pins и расхождения toolchains подробно сохранены в [CLIENT_MATRIX.md](docs/CLIENT_MATRIX.md). Classic runtime ещё не доказан — [исследование](docs/research/ARBITRUM_CLASSIC_CAPTURE.md). Новый baseline Gateway не изменяет compiler versions native клиентов.
+Native pins и расхождения toolchains подробно сохранены в [CLIENT_MATRIX.md](docs/CLIENT_MATRIX.md). Новый baseline Gateway не изменяет compiler versions native клиентов.
 
 ### Почему SDK не встраивается во все native clients
 
@@ -1144,7 +1464,6 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 Источники: [grpc-go go.mod](https://github.com/grpc/grpc-go/blob/v1.84.0/go.mod), [nats.go go.mod](https://github.com/nats-io/nats.go/blob/v1.54.0/go.mod), [protobuf-go go.mod](https://github.com/protocolbuffers/protobuf-go/blob/v1.36.12/go.mod), [Go distributions](https://go.dev/dl/?mode=json). Go 1.27.2 — кандидат общего сервиса на дату проверки, не утверждение об установленном компиляторе проекта.
 
-Отложено D42: у tonic 0.14.6 workspace MSRV 1.88, у prost 0.14.4 — 1.85; это ниже source toolchain Base 1.96.0. Cargo graph проверяется только после возобновления Rust-профиля, не prerequisite E01–E07 текущих трёх Go клиентов.
 
 Источники: [tonic workspace](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/Cargo.toml), [tonic-prost](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost/Cargo.toml), [tonic-prost-build](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost-build/Cargo.toml), [prost](https://github.com/tokio-rs/prost/blob/v0.14.4/Cargo.toml).
 
@@ -1152,14 +1471,19 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 - Исходники native clients остаются на отдельных закреплённых commits; общий транспортный модуль не требует слияния их несовместимых Go/Cargo dependencies в один build graph.
 - Теги библиотек выше — кандидаты на дату проверки. Перед воспроизводимой сборкой E01 записывает commit/checksum, compiler, generator versions, dependency lock и image digest. В конфигурации поставки не используются плавающие `latest`.
-- Версии protoc, Go/Rust generators, runtimes и wire schema — разные величины. Они явно перечисляются в build manifest, не выводятся друг из друга.
-- Текущие Go fixtures проверяют поля/presence/oneof; cross-language Rust fixtures отложены D42. Protobuf bytes независимых сериализаций не обязаны совпадать; retries сохраняют исходные bytes/digest события.
+- Версии protoc, Go generators, runtimes и wire schema — разные величины. Они явно перечисляются в build manifest, не выводятся друг из друга.
+- Go fixtures проверяют поля/presence/oneof. Protobuf bytes независимых сериализаций не обязаны совпадать; retries сохраняют исходные bytes/digest события.
 - NATS server version, Helm chart version и appVersion фиксируются отдельно. Наличие Helm chart не выбирает автоматически cluster sizing, storage class или политику потери диска.
 - Конкретный Linux base image, CPU architectures и поддерживаемые Kubernetes/Compose versions закрепляются после build smoke tests; не заявляется поддержка каждой платформы из-за наличия Dockerfile.
 - YAML/restart определены LIVE_CONFIG_SPEC; parser/implementation E06. Hot reload, metrics и численные performance thresholds не являются открытыми обязательными задачами. Собственный orchestration/operator не добавляется.
 
 Релизы/модули для проверки: [gRPC-Go 1.84.0](https://github.com/grpc/grpc-go/releases/tag/v1.84.0), [nats.go 1.54.0](https://github.com/nats-io/nats.go/releases/tag/v1.54.0), [protoc 36.2](https://github.com/protocolbuffers/protobuf/releases/tag/v36.2), [protobuf-go 1.36.12](https://github.com/protocolbuffers/protobuf-go/releases/tag/v1.36.12), [grpc generator module](https://github.com/grpc/grpc-go/blob/v1.84.0/cmd/protoc-gen-go-grpc/go.mod).
 
+### Проверяемый результат подэтапа
+
+Для каждого компонента определён язык/runtime, boundary и version candidate. Это проект, не build/runtime gate. Проверки E01/E02/E03: отдельные builds ETH/BSC/Bor, native seams, bindings, large records, Gateway/NATS и validators. Независимые expected results/evidence — IMPLEMENTATION_GATES. Rust graph отложен.
+
+.04/.06/.07 — исторические архитектурные подэтапы. Текущие normative contracts: NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, DEPLOYMENT_BOOTSTRAP_CONTRACT и IMPLEMENTATION_GATES. Следующий шаг определяется PROJECT_STATUS; CFG live закрыт, JOB/history deferred. Реализация требует отдельного указания.
 
 ## REC сценарии
 
@@ -1179,7 +1503,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 | REC-T10 | NATS offline; затем reconnect | накопление без прикладной квоты, bounded RAM, retry/drain; новые блоки продолжают capture при доступном диске |
 | REC-T11 | Disk-full / sync error / повреждение БД | явная ERROR, нет ложного READY/ACK и silent skip; automatic repair с отбрасыванием данных запрещён |
 | REC-T12 | Второй writer / старый stream после reconnect | второй opener/старый session отвергнут; только подтверждённое завершение writer позволяет замену |
-| REC-T13 | Producer volume потерян | Новый run с явной потерей прежних локальных obligations; старый Gateway state не уничтожается автоматически. YAML не восстанавливает cursor/payload. Ручной history диапазон DEFERRED D38, гарантия полной потери диска не добавляется |
+| REC-T13 | Producer volume потерян | Новый run с явной потерей прежних локальных obligations; старый Gateway state не уничтожается автоматически. YAML не восстанавливает cursor/payload. Историческая выгрузка исключена; гарантия восстановления после полной потери диска не добавляется |
 | REC-T14 | Незакрытый ранее начатый capture / reorg после ACK cleanup и restart | восстановление конкретного batch/activation references либо ERROR при отсутствии state; нет сканирования всего пропущенного периода. Live продолжает текущие наблюдения по D37; отсутствие прежних данных не маркируется успешной доставкой |
 | REC-T15 | Неверный digest, schema, ACK или лимит ниже pending part | явная ошибка, неизменные pending bytes сохранены |
 | REC-T16 | Live drain/Seal/Resume и потеря ReleaseAck; history CloseRun DEFERRED | Durable DRAIN/DRAINED, admission generations, ordered Release/frontiers; нет новых admissions в drain, поздний old RPC не воскрешает state, pending без ACK не удаляется |
@@ -1187,10 +1511,9 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 Fixtures выполняются для текущих Go journals и Gateway/NATS в E01/E03/E05/E06 по IMPLEMENTATION_GATES; Rust/history variants DEFERRED D38/D42. Данные и expected имеют независимое происхождение. Это tests разработки, не production completeness verifier. Исторический .06 не закрывает ни один runtime gate; актуальный проект — NATIVE_CAPTURE_PROTOCOL/DELIVERY_STATE_MACHINE.
 
-
 ## План доказательств и границы модулей
 
-2026-11-05 · DOC-REPAIR-05. Уточнение [DEVELOPMENT_PLAN](#задачи-разработки-e01e07), последовательность D40 **E01 → E02 → E03 → E04 → E05 → E06 → E07 сохраняется**. Все перечисленные ниже code/build/runtime tasks имеют статус TODO до отдельного разрешения на реализацию. SPECIFIED в [реестре исправлений](docs/DESIGN_REPAIR_STATUS.md) означает только готовый проверяемый проект.
+2026-11-05 · DOC-REPAIR-05. Уточнение [DEVELOPMENT_PLAN](docs/DEVELOPMENT_PLAN.md), последовательность D40 **E01 → E02 → E03 → E04 → E05 → E06 → E07 сохраняется**. Все перечисленные ниже code/build/runtime tasks имеют статус TODO до отдельного разрешения на реализацию. SPECIFIED в [реестре исправлений](docs/DESIGN_REPAIR_STATUS.md) означает только готовый проверяемый проект.
 
 ### Ранний harness и зависимости gates
 
@@ -1299,8 +1622,31 @@ Mutation sanity gate: намеренно испорченные parity handling,
 
 Ни одна строка этой таблицы не утверждает выполненный runtime proof. В каждом gate сохраняется конкретный verdict и ссылки на фактические артефакты.
 
-
 ## Задачи разработки E01–E07
+
+### Правила выполнения
+
+По D53 сейчас разрешены только проектирование и документация. Исходный R01 закрыт; завершение E00 не разрешает реализацию автоматически. Этапы E01–E08 описывают будущую работу по отдельному указанию. Версии клиента, библиотек, runtime, хранилищ и инфраструктуры нельзя выбирать по наличию на машине.
+
+Каждая задача имеет постоянный ID. Статусы: TODO, IN_PROGRESS, BLOCKED, DONE, DONE_DOCS_ONLY, DEFERRED_BY_USER, OPTIONAL, REMOVED/OUT_OF_SCOPE. По умолчанию незавершённая задача без явной пометки — TODO; deferred/optional не входят в обязательный gate. DONE требует артефакта и evidence по IMPLEMENTATION_GATES. Перед началом записать ID в PROJECT_STATUS; после завершения сохранить результат, проверки, следующий шаг и commit. SPECIFIED документации не является DONE реализации.
+
+Крупную задачу перед исполнением разбивать на подзадачи с суффиксами .1, .2 и отдельными критериями; уже присвоенные ID не переиспользовать. Коммиты, публикации и деплой фиксировать только после фактического выполнения с hash/URL и результатом проверки. Сохранение файлов не означает наличие удалённой резервной копии.
+
+### Принятая последовательность
+
+E00 Решения → E01 Native-захват трёх сетей → E02 Общая типизированная схема → E03 Независимая доставка каждой сети через собственные WAL/Gateway в NATS → E04 Полные детали транзакций → E05 Reorg и восстановление каждой сети → E06 Live-конфигурация и доставка → E07 Функциональная приёмка трёх сетей → E08 Другие сети. История отложена, не блокирует цепочку.
+
+Принято D16: конечный результат — унифицированные сообщения в NATS.IO. Последующая обработка исключена из этапов, стека и приёмки. Проверяющий считыватель — только тестовый инструмент.
+
+Действующая граница D36–D42: live без полного snapshot адресов, без истории и поиска пропусков; хронологические связи и детали сохраняются в сообщениях. Open-source намерение сохраняется, лицензия/публикация отложены D41. YAML live/Gateway и применение перезапуском описаны в LIVE_CONFIG_SPEC по D39/D48; найденные технические пробелы не возвращают закрытый выбор hot reload.
+
+Принято D42: первый контур — Ethereum Mainnet, BSC Mainnet и Polygon PoS. Все три проверяются в E01 до общей схемы E02; Base/Arbitrum отложены.
+
+Задачи текущего этапа выполняются отдельно для ETH/BSC/POLY; родитель закрывается после трёх сетей. Подзадачи .BASE/.ARB отложены D42. Исторические задачи отложены D38. Каждая сеть имеет собственные WAL, журнал Gateway и процессы; evidence хранится раздельно.
+
+Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects. Команда N–M отложена D38; текущий live YAML и restart приняты D39/D48.
+
+Принято D36: основной сборщик только live, history отдельным сервисом на узле ноды по N–M. Default три часа и история через start_block/reload/apply отменены. Единый интерфейс без Kubernetes-зависимости, независимые сети и RocksDB/ACK сохраняются. D37 закрывает CFG-R3: поиск пропусков и организация их восполнения вне scope; pending WAL доставляется автоматически.
 
 ### E01 — воспроизводимая сборка и доказательство захвата
 
@@ -1403,9 +1749,124 @@ Gate: полный live stack трёх сетей воспроизводится
 
 Gate: отдельно приняты Ethereum, BSC и Polygon; обязательны согласованные функциональные критерии всех трёх сетей. Base/Arbitrum этот gate не блокируют.
 
+## Требования и приёмка
 
-## Готовность и следующее действие
+DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
-Все 41 проектные находки специфицированы; DEP-04 и DOC-CONSOLIDATE завершены как документация. Runtime E01–E07 не выполнялся. Известные build/native integration/artifact риски перечислены в gates, включая полный Heimdall genesis payload proof, dependency/image locks, pin/marker coverage и power-loss tests. Исследование исходников не заменяет эти результаты.
+Все runtime verdict сейчас **NOT_RUN**. Ни одна строка не означает успешный тест. Имена fixture families из предыдущих документов сохранены; новые WIRE/ID/LAYOUT/RPC/CUTOVER/DATA/FEE/FINAL/GC конкретизируют их. Сценарии должны быть воспроизводимы и проверяться независимым expected по IMPLEMENTATION_GATES. Для требований native semantics PASS нужен отдельно ETH/BSC/POLY; network-specific строки проверяются в своей сети. Optional extension проверяется только при объявленном включении и не блокирует default поставку.
 
-Следующее действие после отдельного указания на реализацию: E01-01 — pinned builds, artifacts и минимальный native harness трёх сетей, затем E01-02 observation/recovery seams. При новой развилке поведения задать вопрос до зависимых изменений. Без такого указания остаёмся в проектировании и документации.
+### Scope и результат
+
+| ID | Требование | Проверка и ожидаемый результат / этап |
+|---|---|---|
+| REQ-SCP-01 | Первый контур ровно ETH/BSC/POLY Mainnet | CONFIG-01: три accepted profiles; Base/Arbitrum/testnet/неизвестный profile отвергнут, не запускается другой клиент; E01/E06 |
+| REQ-SCP-02 | Native источник, NATS — конечная граница | E07 path audit: hooks/StateDB/receipts native, JSON-RPC/debug_trace не основной tx feed; нет аналитического writer/consumer продукта |
+| REQ-SCP-03 | Только новый live H+1, pending независимо | BRANCH/START: initial sync и downtime range не экспортируются; сохранённые obligations завершены, новый boundary записан без окна; E01/E05/E06 |
+| REQ-SCP-04 | Успешные/failed/native system tx обязательны | E04 corpus: ordinary/failed/BSC system/Bor StateSync и пустой блок; unknown type вызывает error без skip |
+| REQ-SCP-05 | Outside-tx balance/legacy receipt optional | E04-02: default выключен, source execution сохраняется, tx effects не теряются; при включении отдельные typed records/fixtures без fake tx |
+| REQ-SCP-06 | Нет обещаний downstream/HA/полноты/истории/performance | E07 scope audit: ни PubAck, ни fixture PASS не обозначены archive/HA/global balance completeness; отсутствуют запрещённые компоненты |
+
+### Native capture
+
+| ID | Требование | Проверка и ожидаемый результат / этап |
+|---|---|---|
+| REQ-CAP-01 | Отдельные pinned client builds и реальные paths | PROFILE-01: transfer/system/canonical callers реально проходят bridge; synthetic runner сопоставлен native import; E01 |
+| REQ-CAP-02 | Durable admission до принятого execution | CAPTURE-01: crash до/после ADMITTED; до него нет принятого obligation, после него replay не теряется; E01/E05 |
+| REQ-CAP-03 | Hash provider и persistent state/input pins | PIN-01: потерять RAM trie cache, pruning живого pin/wrong datadir/path backend; recovery либо preflight reject, не silent skip; E01/E05 |
+| REQ-CAP-04 | Static inputs + append-only consumed dependencies | CAPTURE: crash после ответа Heimdall до передачи; retry использует прежний ответ/sequence, final digest закрыт; E01/E05 |
+| REQ-CAP-05 | Owned snapshot без mutable alias | OWNED-01: overlapping CALL input/output, delayed worker, соседние tx одного key; исходные значения не изменились; E01/E04 |
+| REQ-CAP-06 | Bounded collector RAM, safe-point backpressure | OWNED/MEM: один field/tx/manifest больше буфера, slow disk/receiver; chunks/spool без потери, I/O/wait вне hooks; E01/E03/E04 |
+| REQ-CAP-07 | Corpus/child-root/decision/mirror durable ordering | CAPTURE/DECISION: power loss у каждого marker, native-only replay не меняет public IDs/bytes; E01/E05 |
+| REQ-CAP-08 | Semantic identity стабильна до transport attempt | ID-01: crash/retry DELIVERY_STAGING/native marker; прежние activation/revision/source, ровно один batch allocation; E02/E03/E05 |
+| REQ-CAP-09 | Bor/BSC native scopes не смешиваются | SCOPE: StateSync after до block-alloc; BSC actualTx/nonce/finalise; execution result совпадает с native; E01/E04 |
+| REQ-CAP-10 | Local fatal завершает соответствующую ноду | POISON/ENOSPC: normalization/corruption/sync failure — exit без false READY; соседние сети продолжаются; E03/E05/E07 |
+
+### Данные и нормализация
+
+| ID | Требование | Проверка и ожидаемый результат / этап |
+|---|---|---|
+| REQ-DAT-01 | Closed typed schema, presence и exact integer widths | DATA/schema: unknown enums/version, lengths, missing vs zero, malformed union; reject без ANY/JSON fallback; E02 |
+| REQ-DAT-02 | Source tx/receipt encodings и native поля | AUTH/DATA: byte equality, тип/подпись/access/blob/auth fields и native-derived projection раздельны; E02/E04 |
+| REQ-DAT-03 | Authorization tuples сохраняются без фильтрации | AUTH-01…04: invalid parity/nonce/chain tuple, duplicates, root revert; source tuples не теряются; E02/E04 |
+| REQ-DAT-04 | Полное call tree применимых native calls | DATA: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, value=0, caller/context/code, parent/order; E04 |
+| REQ-DAT-05 | Outcome/rollback/committed различаются | DATA/SELF: успешный child при reverted ancestor, caught failure; attempted trace сохранён, final state без отменённых effects; E04 |
+| REQ-DAT-06 | SELFDESTRUCT отдельное действие | SELF-01…04: zero balance/self-beneficiary/old/new contract/ancestor revert; action, monetary effects и deletion не смешаны; E02/E04 |
+| REQ-DAT-07 | Точный tx boundary state diff/existence | EXIST/DATA: empty CREATE, delete/reset/recreate, touched storage twice, fees/auth вне root; initial/final и code hashes точны; E04 |
+| REQ-DAT-08 | Все monetary actions, компенсации и D62 fees | FEE-01: gross purchase/refund/credits, same recipient/payer, blob/zero-fee; address effects согласованы с state, aggregate не удваивает; E04 |
+| REQ-DAT-09 | Receipt/log/create provenance | RECEIPT/DATA: native status/revert/gas price, failed CREATE attempt vs success, log indices/scopes, no reverted receipt logs; E02/E04 |
+| REQ-DAT-10 | Полные native block metadata, включая empty | DATA: исходный header/fork fields/RLP/count, zero tx, optional fields отсутствуют корректно, не synthetic completeness report; E02/E04 |
+
+### Lifecycle, finality и GC
+
+| ID | Требование | Проверка и ожидаемый результат / этап |
+|---|---|---|
+| REQ-LIF-01 | Только native canonical activation публикуется | BRANCH: rejected/speculative block не Applied; known branch без callback получает corpus/replay до decision; E01/E05 |
+| REQ-LIF-02 | READY Applied всегда может получить Removed | LIFE-01/02: reorg до publish/после одной part; отмена сохраняется независимо от PubAck; E02/E05 |
+| REQ-LIF-03 | Reordered lifecycle детерминирован | LIFE-03/04: Status r2/r1 до Applied, Removed до Applied, same-revision conflict, reapply новый A; terminal смысл сохранён; E02/E05 |
+| REQ-LIF-04 | Finality-only/restart события не теряются | FINAL/DECISION: setter/event без нового block, crash marker/mirror, повтор; ровно правильный snapshot/revision; E01/E05 |
+| REQ-LIF-05 | Ethereum safe/finalized semantics точны | FINAL-ETH: safe startup fallback допустим, zero FCU no-op, actual setter before RPC error; GC только finalized ancestry; same-head authoritative finalized regression ниже accepted anchor — fatal; E01/E05 |
+| REQ-LIF-06 | BSC early/header evidence разделены | FINAL-BSC: VotePool-only, merged header snapshot, side branch, restart loss, missing lookup; GC только accepted header Source; E01/E05 |
+| REQ-LIF-07 | Polygon native statuses отдельно от D63 anchor | FINAL-POLY: milestone purge/whitelist-only, checkpoint root vs end hash, exact finalized contract read; публикация не ждёт L1 GC; E01/E05 |
+| REQ-LIF-08 | GC не теряет pending/нужную ancestry | GC-01: no anchor/pending/replay сохраняют pins; crash release, removed branch, same-head finality regression и доказанный anchor conflict; нет TTL guesses; E05 |
+
+### Доставка и обслуживание
+
+| ID | Требование | Проверка и ожидаемый результат / этап |
+|---|---|---|
+| REQ-DLV-01 | Единственные durable owners, sync closing markers | REC/journal: reopen/power loss каждого state, незакрытые chunks не публикуются; E03 |
+| REQ-DLV-02 | Stable batch/attempt/counters без sequence дыр | ATTEMPT/ID: native rejected/no-events не выделяет batch; attempt не меняет semantic IDs, overflow fatal; E02/E03 |
+| REQ-DLV-03 | Prepare/reservation идемпотентны | PREPARE/RPC: потеря replies/chunks, same/conflicting digest, Gateway loss до SEALED; сохранённый seed повторяется; E03 |
+| REQ-DLV-04 | Exact wrapper/layout/header/bytes | LAYOUT: COMPLETE/PART boundary, order/digest/size, SHA/MsgID vectors; после SEALED никакой reserialization; E02/E03 |
+| REQ-DLV-05 | End-to-end ACK всех частей одного назначения | REC/NATS: partial PubAck, wrong stream, lost bitmap/IngestAck, reordered parts; ChunkAck/CLOSED не разрешают producer cleanup; E03 |
+| REQ-DLV-06 | Producer/Gateway cleanup crash-safe | FRONTIER/REC: ACKED/outbox, RELEASING chunks, lost ReleaseAck, recovery без payload; prefix не перескакивает batch; E03 |
+| REQ-DLV-07 | Store loss использует surviving owner evidence | REC/FRONTIER: Gateway rebuilt с prefix/SEALED plans; producer loss не получает ложный старый cursor; E03/E05 |
+| REQ-DLV-08 | Late session/callback не воскрешает state | FENCE: пауза check→commit, reconnect/Release, late PubAck/Publish retired; old owner отвергнут; E03/E05 |
+| REQ-DLV-09 | Binding задаётся до offline capture | WIRE/DEST: same account/different URL, wrong account/stream/prefix/metadata; canonical digest и pre-plan READY связаны; E02/E03/E06 |
+| REQ-DLV-10 | Drain закрывает native и delivery obligations | DRAIN: pending native способен создать batch, highwater после него; no new admission/poll, retained GC pins допустимы; E05/E06 |
+| REQ-DLV-11 | Cutover/Resume соответствуют YAML | CUTOVER: desired descriptor only, AWAIT_SWITCH, crash каждого intent/commit, old binding LIVE Resume и late old generation; E03/E06 |
+| REQ-DLV-12 | ACKed history не мигрирует D59 | DEST/LIFE: новый Removed/Status с прежним Applied reference, только новое назначение; старый ACKed payload не экспортируется; E05/E06 |
+| REQ-DLV-13 | Retry/ENOSPC/poison не удаляют pending | POISON/ENOSPC/MEM: transient backoff, CONFIG_BLOCKED, disk expansion/recovery, immutable conflict; нет drop/auto re-ID; E03/E05 |
+| REQ-DLV-14 | Upgrade capabilities до mutation | UPGRADE: old-build drain для wire/plan, compatible replay exact bytes, incompatible remaining store reject даже DRAINED; E03/E05/E06 |
+
+### Конфигурация и окружение
+
+| ID | Требование | Проверка и ожидаемый результат / этап |
+|---|---|---|
+| REQ-OPS-01 | Strict role YAML и effective native validation | CONFIG: unknown/duplicate keys, relative paths, native overrides/profile/pruning/Bor parallel flags, check без mutation; E01/E06 |
+| REQ-OPS-02 | 11 services/14 volumes, самостоятельные owners | MOUNT: actual backing volume identities, permissions/UID, separate Polygon L1 и JWT; одинаковый container path не означает shared DB; E06 |
+| REQ-OPS-03 | Partial init не разрушает keys/state | BOOT: crash каждой phase, existing nonempty home/wrong genesis/missing ENV_READY, BSC hash init; safe resume/reject; E01/E06 |
+| REQ-OPS-04 | Config generation заменяет только allowlist | CONFIG: изменённый native config применён после restart, ключи/genesis/state сохранены, невозможный mix отвергнут; E06 |
+| REQ-OPS-05 | mTLS/SAN/EKU/network/role admission | TRUST: чужой CA/SAN/role/network/deployment, credential rotation и UDS ownership; reject до store mutation; E03/E06 |
+| REQ-OPS-06 | Минимальные NATS ACL и проверка account | NATS: runtime publish/INFO/UserInfo/reply allowed, admin denied; bootstrap не PURGE/reset чужой stream; E03/E06 |
+| REQ-OPS-07 | P2P mapping/advertise и внутренние API | CONFIG/START: назначенные ports во всех слоях, only P2P external, required native links reachable, no localhost inter-service assumption; E06 |
+| REQ-OPS-08 | Independent startup и stop-confirm-start | START/REPLACE: NATS outage, Bor/Heimdall retry, delayed old writer, native sync отдельно от delivery; E06 |
+| REQ-OPS-09 | Обязательные control logs без secrets | LOG: все states/errors видны при отключённом debug, правильная identity, SIGKILL не выдаёт graceful STOPPED; E06/E07 |
+| REQ-OPS-10 | Артефакты/совместимость доказаны перед runtime acceptance | ARTIFACT: pinned source/patch/toolchain/image, mainnet genesis SHA/parse, wrong artifact reject, clean bootstrap; E01/E06 |
+
+### Разработка и граница готовности
+
+| ID | Требование | Проверка и ожидаемый результат / этап |
+|---|---|---|
+| REQ-DEV-01 | Порядок E01→E07 без позднего открытия source seam | План/evidence: native proof E01, delivery E03, combined E05; ни одного DONE по ещё будущему proof |
+| REQ-DEV-02 | Independent expected и воспроизводимый harness | Fixture passport/seed/input hash + mutation sanity; clean environment без скрытой ноды автора; E01/E02/E07 |
+| REQ-DEV-03 | Separate builds и bounded module interfaces | Dependency review: core без внутренних типов трёх fork сразу, NATS SDK только Gateway, Rust/history не prerequisites; E01 |
+| REQ-DEV-04 | Evidence traceability и честные verdict | Каждый run с REQ/finding/task/fixture/input/expected/build/actual/fault; новый source/profile invalidates затронутый PASS; каждый gate |
+| REQ-DEV-05 | Функциональная приёмка трёх независимых сетей | E07: все mandatory REQ имеют PASS по применимости, optional/deferred явно помечены; runtime не заменяется source inspection/MD lint |
+
+### Definition of ready для документации
+
+Перед завершением DOC-FINAL: один нормативный root; ни одной поведенческой развилки без ответа; current schemas/IDs/config/операционные переходы замкнуты; каждый обязательный REQ имеет ожидаемый результат и этап; future-proof задачи отделены от неопределённых требований; deferred scope вынесен из основного текста. Проверки ссылок/anchors, source-backed claims и неизменности v2 обязательны. Идеальность будущей реализации не обещается; новые факты возвращаются в decisions/requirements до изменения guarantees.
+
+### Definition of done для реализации
+
+E01–E07 выполняются только после отдельного указания. NOT_RUN не PASS; audit SPECIFIED не runtime DONE. Нельзя понизить требование ради успешного gate. При counterexample сохраняются input/actual/expected, исправляется механизм, повторяются затронутые proofs. Финальный пакет содержит build/artifact locks, configs/runbook и воспроизводимые evidence всех применимых требований; публикация remote/deployment требует отдельного поручения.
+
+## Готовность и точка начала разработки
+
+Документальная готовность: 41/41 находки исходного аудита SPECIFIED; 63 требования имеют критерии приёмки и этапы; D62/D63 внесены, неотвеченных продуктовых вопросов этого раунда нет. Это не утверждение, что дальнейшая реализация не выявит новых дефектов.
+
+После отдельного разрешения реализации начать E01-01: независимые build graphs и ранний harness; затем E01-02: native admission/owned snapshots/pins/decision markers отдельно ETH/BSC/POLY. Ни один общий delivery mock не заменяет native proof. Неудачный gate останавливает зависимый этап; изменение поведения сначала документируется и при необходимости согласуется.
+
+Каждый законченный подэтап: результат и evidence в PROJECT_STATUS/плане, необходимые проверки, локальный Git commit, чистый git status перед следующим подэтапом. Remote publication, runtime deployment и выпуск не выполняются без отдельного указания. Текущая точка — проектирование; сохранённые исторические next steps не активируют задачи.
+
+Полная проверка документов и её ограничения — [FINAL_SPEC_REVIEW](docs/FINAL_SPEC_REVIEW.md).

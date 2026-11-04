@@ -1,6 +1,6 @@
-# Состояние согласований после D60
+# Состояние согласований после D63
 
-2026-11-05. Live-only Ethereum/BSC/Polygon до NATS. D16–D60 повторно не открываются. [Реестр исправлений](DESIGN_REPAIR_STATUS.md) и [traceability/gates](IMPLEMENTATION_GATES.md) фиксируют проект каждого из 41 пунктов. Source inspection и документальная сверка не являются runtime proof. Неотвеченных продуктовых вопросов текущего раунда нет; E01–E07 ещё TODO и требуют отдельного разрешения на реализацию.
+2026-11-05. Live-only Ethereum/BSC/Polygon до NATS. D16–D63 повторно не открываются. [Реестр исправлений](DESIGN_REPAIR_STATUS.md) и [traceability/gates](IMPLEMENTATION_GATES.md) фиксируют проект каждого из 41 пунктов. Source inspection и документальная сверка не являются runtime proof. Неотвеченных продуктовых вопросов текущего раунда нет; E01–E07 ещё TODO и требуют отдельного разрешения на реализацию.
 
 ## Последний список вопросов закрыт
 
@@ -10,6 +10,13 @@
 4. **Документы:** локального Git достаточно, remote/дополнительный backup сейчас не требуется. E00-05 закрыт как процесс; публикация не разрешена.
 5. **Дальнейший результат:** D53/D56 — проектирование, аудит и исправление документов. DOC-CONSOLIDATE завершён: [единое полное ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); реализация запрещена без последующего указания.
 6. **Смена назначения:** D54 — NATS account/stream/subject mapping меняются только после завершения pending адаптера и Gateway; другой адрес того же назначения допустим после проверки. Перенос pending не проектируется.
+
+## Закрытые решения D62–D63
+
+- BSC: early VotePool и header-attested finality публикуются раздельно; GC только по header-derived Source.
+- Комиссии: фактические gas purchase/return/recipient credits сохраняются отдельно; receipt summary не добавляется к ним повторно.
+- Polygon: recovery-state GC после checkpoint, проверенного в finalized состоянии собственного supporting Ethereum L1. Публикация tx/status не ждёт этого GC.
+- Точные IDs, wire/control/cutover, supporting identities и 63 критерия приёмки определены; открытых вопросов текущего раунда нет.
 
 ## Проработанные механизмы и оставшиеся доказательства
 

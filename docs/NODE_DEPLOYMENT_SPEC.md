@@ -1,12 +1,8 @@
 # Полный комплект нод для Compose и Kubernetes
 
-> DOC-REPAIR-04: [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md) задаёт init/config/mount/identity/trust/startup contracts и будущие проверки. D58 заменил Heimdall на v0.13.2; D60 отключил BlockSTM первого Bor capture-профиля. Ранние записи о незавершённой документальной детализации ниже — история задач; runtime ещё не выполнен.
+11 основных сервисов, 14 persistent volumes; три сети независимы. Bootstrap/identity/config permissions — [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md), Polygon D63 observer/sources binding — [CURRENT_SEMANTICS](CURRENT_SEMANTICS.md). Документация готова, runtime/deployment не выполнялись.
 
-> D52: готовность и синхронизацию оператор наблюдает по логам. Запуск/остановка/restart выполняются штатными средствами Compose/Kubernetes; отдельные API/управляющие скрипты, спецификация probes и собственные shutdown таймауты сейчас не требуются. Принятые native H+1, сигналы, сохранение WAL и crash recovery остаются. NATS max_payload/stream MaxMsgSize — 2097152 байта (2 MiB), gRPC допускает frame с обёрткой; [транспортные правила](LIVE_CONFIG_SPEC.md).
-
-> D50: пользователь делегировал выбор портов и экспонирования. [NETWORK_PORTS](NETWORK_PORTS.md) задаёт точные P2P TCP/UDP порты каждого экземпляра, внутренние endpoints, Compose mappings и Kubernetes NodePort по умолчанию. Для P2P явно переопределяются native defaults ради одинаковых внутренних/внешних/объявляемых портов. LoadBalancer опционален; приложение не использует API Kubernetes. Этот документ и таблица описывают проект, а не выполненный deployment.
-
-2026-10-21. D43 accepted: ответственность проекта включает компоновку и настройку всех необходимых компонентов трёх сетей. Только ТЗ; файлы реального развёртывания, образы и запуск пока не создаются. Это техническая часть системы, не отложенная open-source публикация.
+Тематическое представление [единого ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); изменения нормативного содержания синхронизируются с root в том же commit.
 
 ## Состав и ответственность
 
@@ -96,7 +92,7 @@ Docker Compose используется для локального/dev запу
 
 Изменение применяется перезапуском затронутого компонента. Watcher/hot reload не требуются. Сохранённые WAL/журнал обслуживаются по принятому протоколу; restart не добавляет загрузку истории или пропусков. Изменение native конфигурации не выполняется командой сборщика: процесс запускает окружение. Типизированный YAML сборщика/Gateway продолжает запрещать неизвестные ключи; свобода native аргументов относится к отдельному уровню.
 
-Общие defaults портов и каталогов приняты D49 ниже. Таблица P2P/native endpoints закреплена D50 в NETWORK_PORTS; соответствующие выбранным версиям flags/mount mappings ещё открыты. Здесь описано ТЗ, не готовые deploy-файлы.
+Общие defaults портов и каталогов приняты D49 ниже. Таблица P2P/native endpoints закреплена D50 в NETWORK_PORTS; flags/mount mappings определены в DEPLOYMENT_BOOTSTRAP_CONTRACT; native parser/runtime verification остаётся E01/E06. Здесь описано ТЗ, не готовые deploy-файлы.
 
 ## Defaults портов, доступа и каталогов D49
 
@@ -140,7 +136,7 @@ P2P-ключ/идентичность сохраняется в persistent nativ
 - [x] DEP-03.2 SPECIFIED: кандидаты/source pins и workload/config/endpoint/volume contract закреплены; совместимость сборок/image digests доказывается E01/E06.
 - [x] DEP-03.2a D46: приняты StatefulSet/Service/PVC, named volumes, service DNS и разделение configs/secrets.
 - [x] DEP-03.2b SPECIFIED: D47/D58/D60 и точные native interfaces; build/runtime TODO.
-- [x] DEP-03.2b.1 D47: кандидаты версий согласованы; совместная сборка/runtime не проверены, source delta audit и image digests остаются открытыми.
+- [x] DEP-03.2b.1 D47: кандидаты версий согласованы; совместная сборка/runtime не проверены, source inspection выполнен; image digests/build/runtime proofs остаются E01/E06.
 - [x] DEP-03.2b.2 SPECIFIED: значения/defaults и override constraints определены для обеих сред; operator-specific addresses/secrets задаются при deployment.
 - [x] DEP-03.2b.2a D48: независимые YAML сборщика/Gateway каждой сети, штатные native configs/args, Compose overrides/Kubernetes values, отдельные secrets и restart компонента.
 - [x] DEP-03.2b.2b SPECIFIED: defaults/flags/ports/mounts/source pins определены; image digests — будущий build artifact.

@@ -1,5 +1,7 @@
 # RocksDB: запись, доставка и восстановление — E00-03.06
 
+> Исторический проектный материал / source evidence. Сохранён для происхождения решений; прежние scope, next steps и схемы не являются действующим контрактом. Текущее поведение полностью задано в [ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md), задачи — [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md). Из этого файла нельзя добавлять требования в текущую реализацию.
+
 > DOC-REPAIR-02 (2026-11-05): актуальный нормативный автомат — [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md). Он задаёт stable batch/attempt, chunked Prepare, ordered Release/bootstrap retired_prefix, fencing, destination до Prepare, drain/cutover, headers/memory/errors/versions. Нижеследующие разделы 1–4 сохранены как исходное изложение E00-03.06; при расхождении применяется новый автомат. REC-T01–17 сохраняются как набор будущих проверок и дополняются fixtures нового контракта. Это проект, не пройденные runtime gates.
 
 > D38 (2026-10-21): загрузка истории и пропусков отложена. History N–M, replay диапазонов и history recovery ниже — будущий контекст, не требования текущего этапа. Сейчас только live-сбор, единая типизированная нормализация и доставка в NATS. Восстановление pending WAL и live reorg/finality сохраняются.

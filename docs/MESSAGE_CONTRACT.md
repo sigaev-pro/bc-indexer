@@ -1,12 +1,8 @@
-# Общий контракт сообщений до NATS.IO
+# Контракт сообщений текущей поставки
 
-Действующий контракт — ETH/BSC/POLY live. Точные Header/Call/Account/Balance/Fee/finality поля и GC определены в [CURRENT_SEMANTICS](CURRENT_SEMANTICS.md); identities/wire/control — [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). Отложенные профили находятся в research/реестре типов и не входят в обязательный payload union первой версии.
+ETH/BSC/POLY Mainnet, live-only. Точные finality/header/fee semantics — [CURRENT_SEMANTICS](CURRENT_SEMANTICS.md); ID/control/serialization — [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). Runtime проверок ещё нет.
 
-> D42 (2026-10-21): текущий этап — Ethereum Mainnet, BNB Smart Chain (BSC) Mainnet и Polygon PoS Mainnet. Base/Arbitrum и их адаптеры/fixtures отложены; исследования и типизированные расширения ниже сохранены справочно, не блокируют текущую версию. Исторические сценарии отложены D38. Действующие live-типы транзакций ETH/BSC/Polygon, включая native system types, остаются обязательными. У каждой сети собственные WAL и журнал Gateway.
-
-E00-14, обновлено 2026-10-16 по D23–D25. Проект логического контракта; определения ниже заменяют старые proto/Any-заготовки §13–14 v3. Принятые границы D16–D20 сохраняются. Формат реализации — Protobuf с закрытыми `oneof` и versioned validators; компиляция, bindings и fixtures относятся к E02. Эта работа не вводит последующие хранилища или обработчики.
-
-D23–D25 отменяют source inventory verifier, BlockComplete/CoverageUpdated и согласование live/history overlap. Действующая граница: [получение → WAL → NATS ACK](LIVE_HISTORY_DELIVERY.md). Typed metadata и детали сохраняются; доставка не является доказательством полноты блока.
+Тематическое представление [единого ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); изменения нормативного содержания синхронизируются с root в том же commit.
 
 ## 1. Типы и присутствие
 
@@ -15,10 +11,10 @@ D23–D25 отменяют source inventory verifier, BlockComplete/CoverageUpda
 | Hash32 / Address20 | Ровно 32 / 20 bytes; не произвольные строки |
 | UInt256 | Ровно 32 bytes, unsigned big endian; арифметика без float |
 | Delta256 | знак плюс UInt256 magnitude; отрицательный ноль запрещён |
-| Timestamp | seconds:u64 + nanos:u32 < 1e9 + precision=`SECONDS | MILLISECONDS | NANOSECONDS`; сохраняется доступная source precision |
+| Timestamp | seconds:u64 + nanos:u32 < 1e9 + precision=`SECONDS \| MILLISECONDS \| NANOSECONDS`; сохраняется доступная source precision |
 | NetworkIdentity | family=`EVM`, chain_id:UInt256, genesis_hash:Hash32; chain_key — только alias для маршрутизации |
 | ProfileRef | network profile, client commit, adapter version, fork rules version, normalization version; зарегистрированный профиль |
-| FieldAvailability | `VALUE(T) | NOT_APPLICABLE | UNAVAILABLE(reason_code)`; применяется только к полям с определённой семантикой отсутствия |
+| FieldAvailability | `VALUE(T) \| NOT_APPLICABLE \| UNAVAILABLE(reason_code)`; применяется только к полям с определённой семантикой отсутствия |
 
 Отсутствующий scalar и корректный ноль различаются. Proto scalar с обязательным присутствием использует explicit presence и validator. Для `oneof` требуется ровно один вариант; неизвестные enum values, profile/type/schema versions не публикуются как нормализованные данные. Empty list означает, что источник вернул пустой применимый набор; известная ошибка получения не маскируется пустым списком. Независимый verifier полноты не требуется. `UNAVAILABLE` у обязательных transaction details означает ошибку обработки; неприменимость доказывается профилем.
 
@@ -44,7 +40,7 @@ D23–D25 отменяют source inventory verifier, BlockComplete/CoverageUpda
 | native_payload | Ровно один вариант из [реестра типов](TRANSACTION_TYPE_REGISTRY.md); native type проверяется с сетью/fork |
 | source_hash | Native Hash32, hash_kind=NATIVE_TRANSACTION; Bor legacy receipt имеет отдельный auxiliary origin |
 | raw_encodings | Непустой список `{kind,bytes}`: EVM_LEGACY_RLP / EIP2718_ENVELOPE / BOR_STATE_SYNC_ENVELOPE по native варианту; source bytes без перекодирования |
-| execution_projection | Typed effective sender/target/value/input и provenance=`ENCODED | NATIVE_DERIVED | NOT_APPLICABLE`; исходные native поля не перезаписываются |
+| execution_projection | Typed effective sender/target/value/input и provenance=`ENCODED \| NATIVE_DERIVED \| NOT_APPLICABLE`; исходные native поля не перезаписываются |
 | receipt | Typed outcome, fees/gas, committed logs и применимые network receipt details |
 | calls | Упорядоченные execution frames, включая failed/reverted calls |
 | actions | Причинные native balance actions, включая fee/refund/mint/burn и компенсирующие действия |
@@ -55,13 +51,13 @@ D23–D25 отменяют source inventory verifier, BlockComplete/CoverageUpda
 
 `ExecutionProjection` — union EvmMessage / NativeProtocolExecution. `Effective<T>={value:T,provenance=ENCODED|NATIVE_DERIVED}`. EvmMessage: sender:Effective<Address20>, target?:Effective<Address20>, value:Effective<UInt256>, input:Effective<bytes>, nonce:Effective<u64>, gas_limit:u64, effective_gas_price:UInt256. Original caps/access/blob/authorization/signature остаются в native_payload. NativeProtocolExecution первого профиля: operation=BOR_STATE_SYNC, record_count:u64; source records — typed Bor payload. Отсутствующие в native протоколе sender/nonce/signature не заполняются нулём и не выдумываются.
 
-`Receipt`: native outcome=`Status(success:bool) | PreStatusStateRoot(Hash32)`; execution result=`SUCCESS | REVERT | FAILURE`; cumulative_gas_used и gas_used по применимости; effective_gas_price, blob_gas_used, blob_gas_price с явным присутствием. Отдельные optional Address20: attempted_create_address и created_contract (только успешное создание); итоговый existence находится в AccountChange. Logs, logs_bloom, source_receipt_encoding с encoding kind сохраняются отдельно от projection. Pre-Byzantium source root не превращается в RPC status: результат берётся из native execution. Field provenance и границы Bor/BSC — [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md). Network details — закрытые варианты; Base/Nitro относятся к отложенным профилям.
+`Receipt`: native outcome=`Status(success:bool) | PreStatusStateRoot(Hash32)`; execution result=`SUCCESS | REVERT | FAILURE`; cumulative_gas_used и gas_used по применимости; effective_gas_price, blob_gas_used, blob_gas_price с явным присутствием. Отдельные optional Address20: attempted_create_address и created_contract (только успешное создание); итоговый existence находится в AccountChange. Logs, logs_bloom, source_receipt_encoding с encoding kind сохраняются отдельно от projection. fee_summary и отдельные фактические BalanceEffects заданы в CURRENT_SEMANTICS; summary повторно не суммируется. Pre-Byzantium source root не превращается в RPC status: результат берётся из native execution. Field provenance и границы Bor/BSC — [NATIVE_CAPTURE_PROTOCOL](NATIVE_CAPTURE_PROTOCOL.md). Network details — закрытые варианты ETH/BSC/Polygon.
 
 `BorReceiptDetails.source_log_scopes` — список `{transaction_log_index, scope=SYSTEM_PRE | TX_STATE_SYNC | SYSTEM_POST}` для source logs, атрибутируемых native instrumentation; порядок/bytes исходных logs не меняются. Native system log не выдаётся за действие StateSync tx. Полнота этой provenance проверяется SCOPE-01; отдельная публикация outside-tx событий остаётся optional. Field numbers и generated bindings — E02.
 
-`Log={address,topics:Hash32[],data,transaction_log_index,block_log_index}`. Receipt содержит только committed logs. Если сохраняются reverted log attempts, это отдельные execution actions с effects_committed=false, не receipt logs.
+`Log={address,topics:Hash32[],data,transaction_log_index,block_log_index}`. Receipt содержит только committed logs. Reverted log attempts не входят в receipt logs и не являются обязательным отдельным payload первой версии.
 
-`CallFrame={frame_id,parent_id?,execution_order,depth,engine,kind,caller_address?,context_address?,code_address?,msg_sender?,target?,value?,input,output,gas?,gas_used?,outcome,effects_committed,error_code?,revert_data?,attempted_create_address?,created_address?}`. IDs/order/depth/gas — u64; addresses — Address20, value — UInt256, input/output/revert_data — bytes; outcome=SUCCESS|REVERT|FAILURE. Текущие engine=EVM|NATIVE_PROTOCOL и kind=CALL|CALLCODE|DELEGATECALL|STATICCALL|CREATE|CREATE2|NATIVE_PROTOCOL. Native protocol frame создаётся только при зарегистрированном source execution boundary. Поля creation/caller уточняет CURRENT_SEMANTICS. Успешный child внутри reverted ancestor имеет effects_committed=false; сортировка по depth не заменяет order.
+`CallFrame={frame_id,parent_id?,execution_order,depth,engine,kind,caller_address?,context_address?,code_address?,msg_sender?,target?,value?,input,output,gas?,gas_used?,outcome,effects_committed,error_code?,revert_data?,attempted_create_address?,created_address?}`. IDs/order/depth/gas — u64; addresses — Address20, value — UInt256, input/output/revert_data — bytes; outcome=SUCCESS|REVERT|FAILURE. error_code, если присутствует, — UTF-8 native diagnostic string в namespace profile_ref, без обещания общего межсетевого enum; revert_data сохраняется отдельно. Текущие engine=EVM|NATIVE_PROTOCOL и kind=CALL|CALLCODE|DELEGATECALL|STATICCALL|CREATE|CREATE2|NATIVE_PROTOCOL. Native protocol frame создаётся только при зарегистрированном source execution boundary. Поля creation/caller уточняет CURRENT_SEMANTICS. Успешный child внутри reverted ancestor имеет effects_committed=false; сортировка по depth не заменяет order.
 
 BalanceAction/BalanceEffect и closed TransactionProtocol operations заданы в CURRENT_SEMANTICS по D62. Cause включает Frame, ExecutionAction и TransactionProtocol. Все фактические gas purchase/return/fee credits сохранены, receipt fee_summary отдельный агрегат. Никакого OTHER для неизвестного source path и двойного учёта transfer callbacks. +10 и −10 остаются отдельными actions при нулевом итоге.
 
@@ -123,7 +119,7 @@ SHA-256 вычисляется по исходным сериализованн�
 
 Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. D52: default `transport.max_frame_bytes=2097152` (2 MiB) задаётся YAML Gateway и валидируется до отправки; NATS server/stream настроены на этот предел, gRPC учитывает собственную обёртку. Большая нормализованная транзакция передаётся несколькими RecordPart. Изменение лимита относится к новым планам; сохранённые pending bytes не перекодируются. При несовместимом уменьшении лимита — явная ошибка конфигурации до публикации, pending сохраняются до восстановления достаточного лимита. [Подробности](LIVE_CONFIG_SPEC.md). Pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
 
-Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [ROCKSDB_DELIVERY_PROTOCOL](ROCKSDB_DELIVERY_PROTOCOL.md).
+Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md).
 
 Execution chronology задают block parent links, native transaction position, operation_index и action/frame order. Delivery chronology задают chain_sequence и transport metadata. `part_index` задаёт только сборку bytes. Нельзя сортировкой chain_sequence восстанавливать blockchain chronology.
 
@@ -141,10 +137,7 @@ NATS message ID должен стабильно различать `(network,eve
 |---|---|
 | Failed tx + успешный child в reverted parent | Gas/nonce сохранены по native правилам; child actions не committed |
 | Компенсирующие transfers | Оба actions есть, net diff может быть 0 |
-| DEFERRED D42: Base deposit | Нет искусственной подписи/nonce; mint и deposit receipt fields сохранены |
 | BSC Parlia system | Фактический wire type/signature не потеряны; native Finalize capture проверен |
-| DEFERRED D42: Nitro retryable / imported legacy | Native payload отделён от projection; HashOverride и разные encodings проверены |
-| DEFERRED D42: Nitro EVM ↔ Stylus | Frame engines и native actions без потери меж-runtime причинности |
 | DEFERRED D38/D42: Classic native result ↔ Ethereum projection | Все source results учтены; CL-01…08 проверяют archive, декодирование, observer и неизменность native исполнения |
 | Bor StateSync / legacy synthetic | Body 0x7f и optional legacy source receipt не смешаны; fixtures POLY-L01…07 из исследования E00-15 |
 | Пустой блок / ошибка нормализации | Metadata пустого блока передаётся; известная ошибка даёт ERROR, а не NATS_ACKED |
@@ -153,4 +146,4 @@ NATS message ID должен стабильно различать `(network,eve
 | Неизвестный тип/версия/fork | Явная ошибка нормализации, без фиктивного поддержанного payload |
 | Optional balances выключены | Передаётся заявленный transaction scope; полнота всех балансов не заявляется |
 
-Это acceptance matrix будущих E01/E02/E03/E04/E05, не отчёт о пройденных тестах. E02 фиксирует compiled field numbers/closed validators текущих профилей; E03 проверяет delivery и bounded collector memory, без performance SLO. Classic/Base/Nitro и historical legacy fixtures явно deferred D38/D42; текущий Bor StateSync обязателен. История/YAML history control не входят в active backlog.
+Это acceptance matrix будущих E01/E02/E03/E04/E05, не отчёт о пройденных тестах. E02 фиксирует compiled field numbers/closed validators текущих профилей; E03 проверяет delivery и bounded collector memory, без performance SLO. Текущий Bor StateSync обязателен. Историческая выгрузка не входит в active backlog.

@@ -1,43 +1,18 @@
 # Последовательность разработки и задачи
 
-> Актуальный нормативный план DOC-REPAIR-05: [IMPLEMENTATION_GATES](IMPLEMENTATION_GATES.md) задаёт ранний native proof/harness, независимые эталоны, модули, evidence и traceability всех 41 находки. E01–E07 ещё TODO. Исторические сводки ниже не заменяют обновлённые задачи/gates. D58/D60: Heimdall 0.13.2, hash capture profile, Bor без ускоренных import/preconfirmation paths и BlockSTM.
+DOC-FINAL-02, D61–D63. Документальное проектирование завершено; E01–E07 TODO, реализация только по отдельному указанию пользователя. [Gates](IMPLEMENTATION_GATES.md) задают порядок proofs/evidence; [63 требования](ACCEPTANCE_REQUIREMENTS.md) — критерии приёмки. 41/41 находки аудита SPECIFIED, runtime NOT_RUN.
 
-> D55 / DOC-AUDIT-02 (2026-11-05): [углублённый аудит и предложенная детализация E01–E07](DEEP_DESIGN_AUDIT_2026_11_05.md) выявили 41 проектную проблему/пробел. Этот реестр не означает выполненные исправления; порядок checkpoints и дополнительные fixtures пока предложения в согласованной границе. Перед реализацией затронутого механизма закрыть соответствующие P1. Согласованная последовательность D40 не меняется молча, код не разрешён.
-
-> Актуализация 2026-11-04 / D53–D54: [аудит и технический остаток](DESIGN_AUDIT_2026_11_04.md). Разрешены только проектирование и документация; перенос pending в другое NATS назначение исключён, смена — после drain обоих owners. Ниже D52 и более ранние сводки сохранены как история принятых решений; их прежние «следующие шаги» заменены текущим PROJECT_STATUS и таблицей активных задач в конце документа.
-
-> D52: согласования по логам готовности и штатному управлению Docker/Kubernetes закрыты; DEP-03.3b DONE без отдельной probe/shutdown спецификации. E00-11 пункт 3 — лимит frame 2 MiB, разбиение и immutable pending по LIVE_CONFIG_SPEC. E00-05 DONE: локального Git достаточно; код только по последующему указанию. Пользователь далее определит оформление результата. Техническая детализация .3b и итоговая сверка DEP-04 ещё не выполнены, E00-11 не объявляется завершённым.
-
-> D51: DEP-03.2b.2b.3a DONE — приняты готовые заменяемые native configs и отдельный init-шаг окружения: первый старт создаёт необходимые файлы, рестарт сохраняет state/ключи; исходники `/config` read-only, изменяемые native файлы `/data/node`. Далее .3b — точные flags/init/mount mappings; DEP-03.3b и DEP-04 открыты. [Полный актуальный остаток согласований](REMAINING_AGREEMENTS.md) отделён от задач технической проверки и отложенного scope. Реализация не начата.
-
-> D50: DEP-03.2b.2b.2 DONE — [порты и экспонирование](NETWORK_PORTS.md) выбраны по делегированию пользователя: индивидуальные P2P-порты, Compose mappings, Kubernetes NodePort, LoadBalancer опционально. Далее .3 native flags/config keys и mount mappings, затем DEP-03.3b probes/shutdown. Пункт 2 E00-11 остаётся открытым; только ТЗ.
-
-> D49: DEP-03.2b.2b.1 DONE — приняты defaults Geth RPC 8545/Engine API 8551, Gateway 50051, публикация только P2P наружу, независимые внешние endpoints, каталоги и сохранение P2P-идентичности. [Подробности и оставшиеся задачи](NODE_DEPLOYMENT_SPEC.md): далее DEP-03.2b.2b.2 таблица P2P/native endpoints и экспонирование, затем .3 flags/mount mappings. Родительские задачи и E00-11 пункт 2 открыты; только документация.
-
-> D48: DEP-03.2b.2a DONE — принята [гибкая модель конфигурации](NODE_DEPLOYMENT_SPEC.md): независимые YAML сборщика/Gateway каждой сети, native configs/args, Compose overrides/Kubernetes values, отдельные secrets, применение перезапуском. Далее DEP-03.2b.2b — согласовать конкретные defaults/порты/P2P/mounts, затем DEP-03.3b и DEP-04. Родительский DEP-03.2b.2 и E00-11 пункт 2 остаются открытыми; реализация не начата.
-
-> D47 (2026-10-21): DEP-03.2b.1 DONE — [набор кандидатов](research/DEPLOYMENT_VERSION_CANDIDATES.md) принят. Следующий шаг DEP-03.2b.2 — точные configs/flags, порты/P2P/mounts; затем DEP-03.3b probes/shutdown и DEP-04. Пункт 2 E00-11 остаётся IN_PROGRESS. D44–D46 уже закрыли DEP-02/03.1/03.2a/03.3a. Старые source audits сохраняются; новые Geth/Bor требуют delta review. Версии не означают проверенную сборку или разрешение начать реализацию.
-
-> D43: полный технический комплект нод и всех supporting-компонентов в Compose/Kubernetes входит в задачу, включая конфиги, соединения и тома. Отложенная open-source упаковка не исключает реализацию этого комплекта. Пункт 2 E00-11 разбит на DEP-01–04 в [NODE_DEPLOYMENT_SPEC](NODE_DEPLOYMENT_SPEC.md); DEP-01/02/03.1/03.2a/03.2b.1/03.3a закрыты, точные конфигурации и probes остаются открытыми.
-
-> D40: у каждой сети отдельные WAL адаптера и журнал Gateway, процессы и прогресс; общих multi-network writers нет. Требования производительности и методика production-тестирования исключены из текущего ТЗ. Сохраняются функциональная корректность native capture, нормализации и доставки, тестовые fixtures и протокол восстановления. Предложения 24 часа live / 30 минут outage не приняты.
-
-> D38 (2026-10-21): история и загрузка пропусков отложены целиком. Исторические задачи E06 (включая replay диапазонов, history CLI и history restart) — DEFERRED_BY_USER, не критерии текущей поставки. E00-07/CFG-S04 продолжаются только для live/Gateway. Pending WAL и live reorg/finality остаются в scope. Смешанные задачи ниже выполняются только в live-части.
-
-> D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](research/ROCKSDB_STACK.md), [протокол и REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md).
-
-Статус: каркас разработки в границе D16 с решениями D17–D20 — сбор, нормализация, NATS.IO. Сейчас финализируется архитектурное ТЗ; реализация не начата. Стек закрепляется после проверки клиентов. Обновлено: 2026-10-15.
-Текущие решения: [DECISIONS.md](DECISIONS.md). Точка продолжения: [PROJECT_STATUS.md](../PROJECT_STATUS.md).
+Тематическое представление [единого ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); изменения нормативного содержания синхронизируются с root в том же commit.
 
 ## Правила выполнения
 
 По D53 сейчас разрешены только проектирование и документация. Исходный R01 закрыт; завершение E00 не разрешает реализацию автоматически. Этапы E01–E08 описывают будущую работу по отдельному указанию. Версии клиента, библиотек, runtime, хранилищ и инфраструктуры нельзя выбирать по наличию на машине.
 
-Каждая задача имеет постоянный ID. Статусы: TODO, IN_PROGRESS, BLOCKED, DONE, DEFERRED_BY_USER, OPTIONAL, REMOVED/OUT_OF_SCOPE. По умолчанию незавершённая задача без явной пометки — TODO; deferred/optional не входят в обязательный gate. DONE требует артефакта и evidence по IMPLEMENTATION_GATES. Перед началом записать ID в PROJECT_STATUS; после завершения сохранить результат, проверки, следующий шаг и commit. SPECIFIED документации не является DONE реализации.
+Каждая задача имеет постоянный ID. Статусы: TODO, IN_PROGRESS, BLOCKED, DONE, DONE_DOCS_ONLY, DEFERRED_BY_USER, OPTIONAL, REMOVED/OUT_OF_SCOPE. По умолчанию незавершённая задача без явной пометки — TODO; deferred/optional не входят в обязательный gate. DONE требует артефакта и evidence по IMPLEMENTATION_GATES. Перед началом записать ID в PROJECT_STATUS; после завершения сохранить результат, проверки, следующий шаг и commit. SPECIFIED документации не является DONE реализации.
 
 Крупную задачу перед исполнением разбивать на подзадачи с суффиксами .1, .2 и отдельными критериями; уже присвоенные ID не переиспользовать. Коммиты, публикации и деплой фиксировать только после фактического выполнения с hash/URL и результатом проверки. Сохранение файлов не означает наличие удалённой резервной копии.
 
-## Предлагаемая последовательность
+## Принятая последовательность
 
 E00 Решения → E01 Native-захват трёх сетей → E02 Общая типизированная схема → E03 Независимая доставка каждой сети через собственные WAL/Gateway в NATS → E04 Полные детали транзакций → E05 Reorg и восстановление каждой сети → E06 Live-конфигурация и доставка → E07 Функциональная приёмка трёх сетей → E08 Другие сети. История отложена, не блокирует цепочку.
 
@@ -55,17 +30,15 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 
 ## Стек по этапам
 
-| Этап / компонент | Предлагаемый стек | Способ реализации | Что ещё выбрать |
+| Этап / компонент | Стек | Способ реализации | Что ещё выбрать |
 |---|---|---|---|
 | E00 документация | Markdown, журнал решений, короткие ADR | Документы с ID и точкой продолжения | D52: локальный Git принят, remote/backup не требуются |
 | E01–E07 Ethereum | Go + Geth v1.17.9, source seams проверены | Native capture/pin/decision bridge; отдельный build | Toolchain/build proof; Prysm выбран, runtime ещё не проверен |
 | E01–E07 BSC | Go + BSC v1.7.8, source-verified candidate | Обычный execution + Parlia system tx | Live fixtures/recovery inputs и отдельный build proof |
-| Отложено D42: Base | Rust 1.96.0 + base/base v1.5.0 с pinned base/reth | Native Base executor, включённый Inspector, per-tx state/receipts, ExEx | Реальный capture и active fork profile проверить; [источники](research/BASE_CLIENT.md) |
-| Отложено D42: Arbitrum One | Go Nitro v3.12.1 + Rust 1.93.0/cgo/WASM; Classic v1.4.7 — отдельный Go/C++ AVM backend | Nitro tracer + ArbOS/Stylus paths; Classic native inventory/cursor + consensus-neutral AVM observer candidate | Classic archive/toolchain/all-epoch decoder и state/action полнота не доказаны; [Classic fixtures](research/ARBITRUM_CLASSIC_CAPTURE.md) |
 | E01–E07 Polygon PoS | Go Bor v2.10.3 + Heimdall-v2 v0.13.2 | Последовательный native capture D58/D60, StateSync scopes; legacy outside-tx optional | Build/runtime и ARTIFACT-01, live source inputs; historical fixtures deferred |
-| E02 общий контракт | Protocol Buffers v3, Go bindings; Rust bindings перед первым Rust-клиентом | Схемы из v3 после проверки модели; независимые валидаторы и fixtures | Версии protoc/plugins; нужен ли Buf; стратегия schema compatibility |
+| E02 общий контракт | Protocol Buffers v3, Go bindings | Схемы из v3 после проверки модели; независимые валидаторы и fixtures | Версии protoc/plugins; нужен ли Buf; стратегия schema compatibility |
 | E03 Gateway | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0 — кандидаты .03 | Отдельный сервис сети; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) | Совместная сборка E01; fencing/storage определены .06, тесты E03/E05 |
-| E03 локальный WAL / journal | RocksDB 10.4.2; grocksdb v1.10.2; Rust crates DEFERRED D42 | Sync WriteBatch, READY/ACKED cleanup, immutable plan и release | [Pins](research/ROCKSDB_STACK.md), [REC-T01–17](ROCKSDB_DELIVERY_PROTOCOL.md); build/runtime tests E01/E03 |
+| E03 локальный WAL / journal | RocksDB 10.4.2; grocksdb v1.10.2 | Sync WriteBatch, READY/ACKED cleanup, immutable plan и release | [Pins](research/ROCKSDB_STACK.md), [REC-T01–17](ROCKSDB_DELIVERY_PROTOCOL.md); build/runtime tests E01/E03 |
 | E02–E07 тестовый считыватель | Go + protobuf bindings | Проверка bytes, полей, частей и lifecycle на выбранных примерах в NATS против native fixtures | Только приёмочный harness, не промышленный сервис обработки |
 | E00–E07 пользовательская конфигурация | Strict YAML live/Gateway + штатные native configs | LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT | Restart принят; schema/parser/build smoke E01/E06, hot reload не открыт |
 | DEFERRED_BY_USER D38: native backfill | Native executors | Диапазоны/history CLI вне текущей поставки | Не prerequisite E01–E07 |
@@ -234,7 +207,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | E00-07 | DONE | CFG-S01–05, LIVE_CONFIG_SPEC и D39; только документация, runtime-проверки остаются |
 | E00-08 | DEFERRED_BY_USER | D41: лицензия и open-source поставка отложены, текущее ТЗ не блокируют |
 | E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
-| E00-11 | DONE_DOCS_ONLY | Все 41 findings SPECIFIED; native/delivery/bootstrap, DEP-04 и единое root v3 завершены. Runtime E01–E07 TODO; завершение документации не разрешает реализацию |
+| E00-11 | DONE_DOCS_ONLY | Все 41 findings SPECIFIED; 63 требования с приёмкой, D62/D63, native/delivery/bootstrap, DEP-04 и единое root v3 завершены. Runtime E01–E07 TODO; завершение документации не разрешает реализацию |
 | E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
 | E00-09 | DEFERRED_BY_USER | D38: история и пропуски отложены; CFG-R4 снят |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |
