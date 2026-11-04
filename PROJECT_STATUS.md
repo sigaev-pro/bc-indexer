@@ -4,6 +4,10 @@
 
 ## Точка продолжения
 
+2026-11-05: DOC-AUDIT-02 DONE / D55 как аудит — [подробный реестр](docs/DEEP_DESIGN_AUDIT_2026_11_05.md): 41 находка, 29 P1 и 12 P2; native semantics, delivery/recovery, bootstrap/config/operations и порядок разработки. У каждого пункта source, сценарий, последствие, предложение и будущий fixture. Проверены exact upstream refs и конкретные Geth/Bor/EIP факты; runtime/сборок нет. Исправления НЕ завершены, предложения не стали принятыми решениями. Новых самостоятельных продуктовых вопросов нет. Следующий рекомендуемый документальный шаг: NAT-01/04/07/08, затем native ownership/intent, delivery state machine/D54/memory/versioning, bootstrap; после этого консолидация и DEP-04. Только проектирование/документация, без реализации/deployment/push. Контрольный коммит аудита — в git log; предыдущая фиксация 8a88e5f.
+
+Проверки DOC-AUDIT-02: 44 Markdown-файла, 325 локальных ссылок/anchors без ошибок; все 41 ID уникальны, у каждого есть source/предложение/fixture; git diff --check пройден. SHA-256 v2 остался `ea825f0f0c3b747133de216c5bb1b15bc4f1d0601380ff1b6c3c1a4b620bc634`. Изменены только шесть Markdown-файлов. Native/delivery выводы прошли повторную сверку; неподтверждённая гипотеза о receipt bloom исключена. Пост-коммитная точка: аудит закончен, исправление 41 находки не начато, публикация/deployment отсутствуют.
+
 2026-11-05: финальная фиксация DOC-AUDIT-01 — устранены два оставшихся расхождения порядка Prepare/layout в v3 и DELIVERY_RECOVERY. Аудит и согласование D54 закончены, консолидация и технические T01–T05 ниже остаются. Проверены 43 Markdown-файла / 305 локальных ссылок и anchors без ошибок, git diff --check пройден; SHA-256 v2 неизменен, все 19 изменённых файлов — Markdown. Контрольный коммит этой фиксации — в git log; remote не публиковать. Точка продолжения — документальная детализация capture intent/destination checks и deployment, без реализации.
 
 2026-11-04: DOC-AUDIT-01 DONE / D53–D54 — [аудит](docs/DESIGN_AUDIT_2026_11_04.md) и исправления действующих документов. Пользователь принял запрет смены logical destination NATS до завершения pending; URL того же назначения может меняться после проверки. Исправлены scope/gates/ADR, YAML stream/subjects, владельцы part layout и границы Gateway lifecycle validation. Единственный вопрос раунда закрыт; технические T01–T05 остаются открытыми, особенно durable intent до STAGING и точная проверка destination/drain. DOC-CONSOLIDATE и DEP-04 не завершены. Следующее действие: документально проработать T01/T02 и .3b/pins, затем собрать единое ТЗ и провести DEP-04. Код/runtime/deployment/push не разрешены; эта контрольная точка коммитится до следующего подэтапа.
@@ -136,8 +140,11 @@ JOB-01/YAML отложен пользователем D20 для отдельн�
 - [Балансовые данные](docs/BALANCE_MODEL.md) — действия, сложные случаи и контракт нормализации.
 - [Словарь](CONTEXT.md) — термины.
 - [Повторный аудит](docs/DESIGN_AUDIT_2026_11_04.md) — исправленные противоречия, D54 и технический остаток T01–T05.
+- [Глубокий аудит flow и разработки](docs/DEEP_DESIGN_AUDIT_2026_11_05.md) — актуальные 41 открытая находка, приоритеты, counterexamples и предложенная детализация этапов.
 
 ## Известные пробелы
+
+Актуальный детальный реестр: DOC-AUDIT-02, NAT-01–10 / DLV-01–13 / OPS-01–12 / DEV-01–06. T01–T05 предыдущего аудита сохранены как более крупные группы; их нельзя считать закрытыми наличием нового отчёта. Среди новых подтверждённых дефектов: source authorization signature, представление SELFDESTRUCT, отмена pending Applied и ранний StatusChanged; среди критичных механизмов — snapshot mutable hooks, capture/lifecycle intent, frontiers/fencing, drain и destination до Prepare, bounded serialization, init/cutover/upgrade.
 
 Точный wire schema, network execution/finality variants, action enums и validators требуют E02; lifecycle reconciliation/GC — E05. До закрытия REC-T01 нужно устранить неописанное окно crash до durable capture descriptor. Prepare/plan после D52 и destination/ACK/drain checks D54 требуют технической детализации E03. Кандидаты клиентов/библиотек и RocksDB выбраны; остаются source/image pins, delta audit Geth/Bor, native config/init/mount mappings и DEP-04. Сборки/runtime не доказаны. Исторические Classic/Bor legacy и Base/Arbitrum не входят в текущий gate; performance требования сняты D40. Полный список — T01–T05 в аудите.
 
