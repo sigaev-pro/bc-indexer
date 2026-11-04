@@ -25,6 +25,7 @@
 | Команда | Назначение |
 |---|---|
 | Штатная команда native клиента с параметром `--extractor-config network.yml` | Запускается окружением; встроенный адаптер получает общий YAML. Имя параметра — проектный интерфейс нашей сборки, не существующий upstream флаг |
+| Та же native команда с `--extractor-mode=drain` | D57: только восстановление сохранённых обязательств и доставка; нет нового live boundary/capture, exit после durable DRAINED |
 | `extractor gateway --config gateway.yml` | Gateway одной сети, доставка в NATS; отдельный файл этого контура |
 | `extractor config check --config network.yml --role live` | Проверка YAML и локальных предпосылок выбранной роли: live либо gateway |
 
@@ -40,6 +41,7 @@ CLI не скачивает клиенты, не создаёт pods и не в�
 |---|---|---|
 | `schema_version` | integer | Обязательно, ровно `1` |
 | `network.profile` | enum | Обязательно, один из трёх профилей ниже |
+| `destination.binding_file` | path | Обязательно обеим ролям: один immutable DestinationBinding данного контура, без NATS credentials; digest/network/generation сверяются с сохранённым state |
 | `native.kind` | enum | Обязательно live, соответствует профилю |
 | `delivery.gateway_endpoint` | URI | Обязательно live: `unix:///absolute/path` либо `https://host:port` |
 | `delivery.tls` | tagged object | Обязательно live: disabled для UDS, mutual для TCP |
@@ -70,6 +72,8 @@ Pending publication plan/bytes неизменны при restart и retry. Из�
 Штатный NATS default — 1 MB по [документации](https://docs.nats.io/running-a-nats-service/configuration); он не гарантирует размещение полной нормализованной транзакции с calls/logs/state changes. Поэтому 2 MiB — предел сообщения, не обещание «любая транзакция одним сообщением».
 
 ## Смена назначения NATS — D54
+
+Точный нормативный порядок D54/D57/D59: [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md). Binding задаётся окружением до первого capture и сохраняется обоими owners; local READY без Prepare уже имеет destination. Drain и switch проходят durable generation barrier, а не проверку пустоты RAM.
 
 `stream` и `subject_prefix` проверяются вместе с network identity и доступным NATS account при online handshake. Это конфигурация существующего назначения; Gateway не создаёт streams и не меняет их административно. Точные правила идентификации account/назначения и их проверки при reconnect требуется завершить в E03 до реализации этого протокола; совпадение URL или имени stream само по себе недостаточно.
 
@@ -105,6 +109,12 @@ Publication plan и ACK относятся к одному сохранённо�
 Не вводятся TTL, квота pending или удаление при недоступности NATS. Физическая ошибка записи явная; WAL_SAVED не объявляется без durable записи. Готовность источника и готовность публикации — разные состояния.
 
 ## Валидация и остановка
+
+`--extractor-mode=live|drain` — именованный проектный параметр native сборки, не произвольный override YAML. Новый store по умолчанию LIVE. Сохранённый незавершённый DRAIN после crash возобновляется в DRAIN; явный live до его завершения отвергается. После DRAINED возврат в LIVE требует явно указанного mode=live и завершённого seal/switch handshake. Этот режим не существует в upstream без нашей интеграции.
+
+D57: fatal локального WAL/normalization останавливает весь native процесс соответствующей сети; Gateway journal fatal останавливает Gateway, не все сборщики. Transient transport outage допускает продолжение safe local capture по D28. D58 разрешает VM-safe yield вне hooks для bounded snapshot/spooling; unsupported pruning/backend/import modes отвергаются preflight.
+
+Upgrade preflight разделяет build ID и store/plan/wire/native profile capabilities. Совместимые версии повторяют старые bytes. Несовместимый wire/plan upgrade — после drain старой сборкой. Несовместимый persistent store format не становится допустимым после drain: lifecycle/identity ещё существуют; без поддержанной read compatibility такой переход/rollback запрещён до записи, auto-migration нет.
 
 Ошибка содержит код, путь поля и причину, без секретов и полного дампа native argv. `config check` не создаёт DB/stream/run, не запускает ноду, не публикует данные и не обещает доступность сети. Online handshake выполняется при запуске выбранной роли.
 

@@ -1,5 +1,7 @@
 # Владение служебным состоянием — E00-03.04, уточнение D23–D25
 
+> DOC-REPAIR-02: [нормативный автомат](DELIVERY_STATE_MACHINE.md) уточняет capture observation vs delivery batch, stable attempts, publisher/session fencing, ordered Release и bootstrap retired prefix. DestinationBinding сохраняется обоими owners до capture; native state не является Gateway journal. Drain сохраняет identity/lifecycle, удаляя только завершённое delivery-состояние.
+
 > D40: у каждой сети отдельный RocksDB WAL адаптера и отдельный RocksDB журнал Gateway, со своими writers, каталогами/томами, identity и прогрессом. Namespace в общей writable DB не заменяет эту изоляцию. Общего multi-network WAL или writer нет; рестарт и изменение одной сети не требуют действий остальных. Общий NATS сохраняется как транспортная инфраструктура; pending каждой сети хранится независимо. История отложена D38.
 
 > D26–D31 (2026-10-16): [текущие требования доставки и восстановления](DELIVERY_RECOVERY.md). Restart с сохранённым диском автоматический; после потери диска история задаётся заново N–M. WAL копится без TTL/прикладной квоты до подтверждения NATS всех сообщений/частей блока. После ACK payload и временные статусы очищаются; остаётся минимальное рабочее состояние для restart. Сейчас один NATS; HA/backup и дальнейшая судьба подтверждённых данных вне scope. Backend принят D33: RocksDB. E00-03.06 завершён как проект: [pins](research/ROCKSDB_STACK.md), [протокол и REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md).
