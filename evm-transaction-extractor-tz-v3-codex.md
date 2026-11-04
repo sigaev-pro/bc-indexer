@@ -717,20 +717,22 @@ Gateway проверяет:
 | Каталог | Содержание |
 |---|---|
 | protocol/proto | Общая схема и typed extensions |
+| protocol/validators | Versioned validators, bounded field/disk-index checks |
 | gateway | gRPC, durable publication journal, NATS publisher |
-| adapters/go-core | Calls, state/balance normalization, protobuf, WAL, transport |
+| core/capture, core/normalization | Owned chunks, spool, DTO и normalizer без fork-specific imports |
+| core/delivery, core/journal | Durable producer state machine, immutable plan, RocksDB |
 | adapters/geth | Geth integration |
 | adapters/bsc | BSC integration и compatibility shims |
-| adapters/nitro | Nitro/ArbOS integration |
-| adapters/avalanche | Исторический Coreth и современный C-Chain path |
-| adapters/rust-core | Общие Rust protocol/WAL/transport components |
-| adapters/reth | Inspector и ExEx integration |
-| adapters/zksync | EraVM/MultiVM integration |
-| backfill | Планирование диапазонов и native replay workers |
+| adapters/bor | Bor StateSync/native decision/pin bridge |
+| config | Project YAML, role/profile/binding validation |
+| deploy/compose, deploy/kubernetes, deploy/init | User stack, native templates, bootstrap, owner mapping |
 | fixtures | Эталонные транзакции и сценарии |
+| test/harness, test/evidence | Независимые expected outputs, fault injection, manifests |
 | docs | Клиенты, версии, границы поддержки и инструкции эксплуатации |
 
 Общий код отделяется от client-specific integration. Для каждого клиента поддерживается минимальный набор изменений, закреплённый upstream commit и проверка совместимости обновлений.
+
+Geth/BSC/Bor имеют отдельные build graphs; общий core не импортирует несовместимые внутренние fork types. Rust/Nitro/Reth/ZKsync/Avalanche/backfill не prerequisites текущего контура. Полный план/traceability — [IMPLEMENTATION_GATES](docs/IMPLEMENTATION_GATES.md).
 
 ## 29. Проверка и критерии приёмки
 

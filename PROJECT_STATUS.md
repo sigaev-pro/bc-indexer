@@ -4,6 +4,10 @@
 
 ## Точка продолжения
 
+2026-11-05: DOC-REPAIR-05 SPECIFIED — все 41/41 находки имеют нормативный контракт и fixture/stage mapping в IMPLEMENTATION_GATES. Исправлены active/deferred backlog, ранний native proof и harness, partial/full REC-T01, independent oracles/evidence, module graphs; DEP-04 документально завершён. Повторный review уточнил обязательный reorg BSC system tx/Bor StateSync и deferred Rust. Проверки: 49 MD / 375 локальных ссылок, все 41 ID покрыты ровно один раз, diff --check, v2 неизменен. Runtime E01–E07 TODO. После commit — DOC-CONSOLIDATE, собрать действующий полный root MD и убрать устаревшие next steps; код не начинать.
+
+2026-11-05: DOC-REPAIR-05 IN_PROGRESS — bootstrap сохранён в 9b1c652, git status чист. Завершаются DEV-01…06, traceability fixtures/этапов, исправление действующих gates/backlog и DEP-04 сверка. Только документация.
+
 2026-11-05: DOC-REPAIR-04 SPECIFIED — 35/41 пунктов, DEPLOYMENT_BOOTSTRAP_CONTRACT и актуальные D58/D60 profiles. Повторный source review исправил BSC init: hash scheme обязателен уже при создании genesis DB. 48 MD / 373 локальные ссылки, 5 anchors, diff --check пройдены; v2 неизменен. Native/deployment source review завершён без оставшихся выявленных блокеров этого контракта; сборки, genesis payload validation, runtime не выполнялись. После commit — DOC-REPAIR-05: активный backlog, ранние proofs/harness, evidence и итоговая сверка.
 
 2026-11-05: DOC-REPAIR-04 IN_PROGRESS — native подэтап сохранён в 4fa0607, git status чист. Подготовка bootstrap/mount/secret/startup контракта и обновление текущего кандидата Heimdall по D58; исходные исторические source audit pins сохраняются.

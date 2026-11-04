@@ -135,23 +135,23 @@ P2P-ключ/идентичность сохраняется в persistent nativ
 
 - [x] DEP-01 Зафиксировать полный deployment scope по D43 и ответственность проекта.
 - [x] DEP-02 D44: выбран Prysm; Polygon использует собственный отдельный Ethereum L1-комплект Geth/Prysm. Не зависит от основной Ethereum-ноды/extractor. Подробное размещение и версии — DEP-03.
-- [ ] DEP-03 Описать для трёх сетей точные процессы, соединения, конфиги/секреты, каталоги и условия готовности в Compose/Kubernetes.
+- [x] DEP-03 SPECIFIED: процессы/config/init/trust/ownership/startup описаны в DEPLOYMENT_BOOTSTRAP_CONTRACT; runtime E01/E06.
 - [x] DEP-03.1 D45: каждый компонент — отдельный service/container и workload/Pod; карта 11 основных сервисов выше.
-- [ ] DEP-03.2 Закрепить совместимые версии и описать конкретные workload types, native конфиги, endpoints/credentials и persistent volumes без обязательного совместного размещения.
+- [x] DEP-03.2 SPECIFIED: кандидаты/source pins и workload/config/endpoint/volume contract закреплены; совместимость сборок/image digests доказывается E01/E06.
 - [x] DEP-03.2a D46: приняты StatefulSet/Service/PVC, named volumes, service DNS и разделение configs/secrets.
-- [ ] DEP-03.2b Версии и точная конфигурация; закрывается после следующих подзадач.
+- [x] DEP-03.2b SPECIFIED: D47/D58/D60 и точные native interfaces; build/runtime TODO.
 - [x] DEP-03.2b.1 D47: кандидаты версий согласованы; совместная сборка/runtime не проверены, source delta audit и image digests остаются открытыми.
-- [ ] DEP-03.2b.2 Конфигурация обеих сред: модель принята, конкретные значения остаются открытыми.
+- [x] DEP-03.2b.2 SPECIFIED: значения/defaults и override constraints определены для обеих сред; operator-specific addresses/secrets задаются при deployment.
 - [x] DEP-03.2b.2a D48: независимые YAML сборщика/Gateway каждой сети, штатные native configs/args, Compose overrides/Kubernetes values, отдельные secrets и restart компонента.
-- [ ] DEP-03.2b.2b Defaults native configs/flags, портов, P2P и mounts для обеих сред; source/image pins остаются открытыми.
+- [x] DEP-03.2b.2b SPECIFIED: defaults/flags/ports/mounts/source pins определены; image digests — будущий build artifact.
 - [x] DEP-03.2b.2b.1 D49: внутренние Geth/Gateway порты, только P2P наружу, независимые внешние адреса/порты, пути контейнеров и сохранение P2P-идентичности.
 - [x] DEP-03.2b.2b.2 D50: [таблица P2P/native endpoints](NETWORK_PORTS.md), Compose port mappings и Kubernetes NodePort; LoadBalancer опционален. Решение принято агентом по поручению пользователя.
-- [ ] DEP-03.2b.2b.3 Native flags/config keys и mount mappings выбранных версий, с отдельным указанием незакреплённых pins.
+- [x] DEP-03.2b.2b.3 SPECIFIED: native flags/config/mount mappings и оставшиеся artifact gates записаны.
 - [x] DEP-03.2b.2b.3a D51: готовые заменяемые native configs, init-шаг окружения, создание недостающих native файлов при первом старте, сохранение state/ключей при рестарте, read-only `/config` и writable файлы в `/data/node`.
-- [ ] DEP-03.2b.2b.3b Описать точные native flags/config keys, filenames/mount mappings и команды init обеих сред, применение обновлённого конфига без перезаписи state/ключей; проверить remaining source/image pins.
+- [x] DEP-03.2b.2b.3b SPECIFIED: DEPLOYMENT_BOOTSTRAP_CONTRACT, включая partial init, config generations, hash scheme при BSC init, mainnet genesis gate, role/network trust и source pins.
 - [x] DEP-03.3 D46/D52: независимость готовности и pending сохранена; операционная готовность по логам, управление средствами окружения. Детальная probe/shutdown спецификация не требуется.
 - [x] DEP-03.3a D46: принята независимая готовность и продолжение capture в WAL при недоступности Gateway/NATS.
 - [x] DEP-03.3b D52: синхронизация/готовность/ошибки видны в логах; native адаптер сообщает зафиксированную границу H/hash и старт H+1. Стандартное управление Docker/Kubernetes. Детализация probe-команд и собственных shutdown таймаутов снята пользователем; требования сохранности pending не отменены.
-- [ ] DEP-04 Сверить технический комплект с live YAML, независимостью сетей, WAL/NATS; внести критерии будущей функциональной проверки. Только после этого закрывать пункт 2.
+- [x] DEP-04 SPECIFIED: YAML/native modes, binding/drain/Resume, 11 services/14 volumes, независимость и NATS boundary сверены; BOOT/CONFIG/MOUNT/TRUST/NATS/START/REPLACE/LOG/ARTIFACT criteria и evidence/stage mapping в IMPLEMENTATION_GATES. Runtime не выполнен.
 
-Оставшаяся техническая детализация — DEP-03.2b.2b.3b native configs/init/mounts и DEP-04 сверка; DEP-03.3b закрыт D52 без отдельной probe-спецификации. Принятые D45–D52 решения повторно не выбирать. Пользователь далее задаст оформление текущего результата. [Актуальный остаток](REMAINING_AGREEMENTS.md). Архитектурный документ не является разрешением начать реализацию, сборку или deployment.
+Документальная детализация DEP-01…04 завершена; текущие runtime/artifact gates — E01/E06/E07 и IMPLEMENTATION_GATES. Консолидация root MD отслеживается отдельно в PROJECT_STATUS. Решения повторно не выбирать; архитектурный документ не разрешает реализацию, сборку или deployment.

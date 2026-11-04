@@ -30,7 +30,7 @@
 | Генерация Go | protoc 36.2 + protobuf-go/protoc-gen-go 1.36.12 | protoc-gen-go-grpc из согласованного source release grpc-go; точный module tag/commit и lock фиксируются E01/E02, не подменяются версией server SDK |
 | Отложено D42: Rust transport/codec | tonic 0.14.6 + tonic-prost/tonic-prost-build 0.14.6; prost/prost-build 0.14.4 | Общая proto schema; встройка в Base Cargo graph проверяется E01/E02, upstream lock клиента не обновляется автоматически |
 | Adapter → Gateway | gRPC streaming; локальный UDS при совместном размещении, TCP+mTLS при сетевом соединении | Оба конца проверяют schema/profile/размер/целостность; production topology определяет endpoint, не семантику данных |
-| WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2; Rust rocksdb 0.24.0 / librocksdb-sys 0.17.3+10.4.2 | Sync WriteBatch, WAL enabled, отдельный каталог owner; [pins/API/build gates](research/ROCKSDB_STACK.md), [protocol](ROCKSDB_DELIVERY_PROTOCOL.md). BlobDB optional, backup исключён D27 |
+| WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2; Rust bindings отложены D42 | Sync WriteBatch, WAL enabled, отдельный owner; [нормативный автомат](DELIVERY_STATE_MACHINE.md). BlobDB optional, backup исключён D27 |
 | Приёмочный harness | Go + тот же protobuf decoder + JetStream client | Только проверка опубликованных сообщений против fixtures; не промышленный downstream |
 | Локальный запуск | Docker Compose: все execution/consensus/supporting-компоненты трёх нод, адаптеры, WAL/Gateway и NATS | Полная компоновка и конфигурация проекта по D43; [детализация](NODE_DEPLOYMENT_SPEC.md) |
 | Production | Kubernetes: все компоненты нод, адаптеры, независимые workload/volume/config контуры сетей и NATS | D43: готовим весь технический комплект; NATS chart/server candidates и [исследование](research/NATS_DEPLOYMENT_STACK.md) сохраняются; production-методика отдельно |
@@ -43,7 +43,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 Источники: [grpc-go go.mod](https://github.com/grpc/grpc-go/blob/v1.84.0/go.mod), [nats.go go.mod](https://github.com/nats-io/nats.go/blob/v1.54.0/go.mod), [protobuf-go go.mod](https://github.com/protocolbuffers/protobuf-go/blob/v1.36.12/go.mod), [Go distributions](https://go.dev/dl/?mode=json). Go 1.27.2 — кандидат общего сервиса на дату проверки, не утверждение об установленном компиляторе проекта.
 
-У tonic 0.14.6 workspace MSRV 1.88, у prost 0.14.4 — 1.85; это ниже source toolchain Base 1.96.0. Этого достаточно для предварительного выбора, но не для доказательства Cargo dependency compatibility. Точный lock/dependency graph проверяется в E01; при конфликте меняется транспортный crate pin, а не молча весь upstream runtime.
+Отложено D42: у tonic 0.14.6 workspace MSRV 1.88, у prost 0.14.4 — 1.85; это ниже source toolchain Base 1.96.0. Cargo graph проверяется только после возобновления Rust-профиля, не prerequisite E01–E07 текущих трёх Go клиентов.
 
 Источники: [tonic workspace](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/Cargo.toml), [tonic-prost](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost/Cargo.toml), [tonic-prost-build](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost-build/Cargo.toml), [prost](https://github.com/tokio-rs/prost/blob/v0.14.4/Cargo.toml).
 
@@ -52,15 +52,15 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 - Исходники native clients остаются на отдельных закреплённых commits; общий транспортный модуль не требует слияния их несовместимых Go/Cargo dependencies в один build graph.
 - Теги библиотек выше — кандидаты на дату проверки. Перед воспроизводимой сборкой E01 записывает commit/checksum, compiler, generator versions, dependency lock и image digest. В конфигурации поставки не используются плавающие `latest`.
 - Версии protoc, Go/Rust generators, runtimes и wire schema — разные величины. Они явно перечисляются в build manifest, не выводятся друг из друга.
-- Go и Rust fixtures проверяют одинаковую семантику полей/presence/oneof; protobuf bytes не обязаны быть одинаковыми после независимой сериализации. Для retries сохраняются исходные bytes/digest конкретного события.
+- Текущие Go fixtures проверяют поля/presence/oneof; cross-language Rust fixtures отложены D42. Protobuf bytes независимых сериализаций не обязаны совпадать; retries сохраняют исходные bytes/digest события.
 - NATS server version, Helm chart version и appVersion фиксируются отдельно. Наличие Helm chart не выбирает автоматически cluster sizing, storage class или политику потери диска.
 - Конкретный Linux base image, CPU architectures и поддерживаемые Kubernetes/Compose versions закрепляются после build smoke tests; не заявляется поддержка каждой платформы из-за наличия Dockerfile.
-- YAML schema/reload и их библиотеки остаются E00-07/09; метрики и численные пороги — E07. Не добавляем orchestration/operator как обязательный собственный runtime-сервис.
+- YAML/restart определены LIVE_CONFIG_SPEC; parser/implementation E06. Hot reload, metrics и численные performance thresholds не являются открытыми обязательными задачами. Собственный orchestration/operator не добавляется.
 
 Релизы/модули для проверки: [gRPC-Go 1.84.0](https://github.com/grpc/grpc-go/releases/tag/v1.84.0), [nats.go 1.54.0](https://github.com/nats-io/nats.go/releases/tag/v1.54.0), [protoc 36.2](https://github.com/protocolbuffers/protobuf/releases/tag/v36.2), [protobuf-go 1.36.12](https://github.com/protocolbuffers/protobuf-go/releases/tag/v1.36.12), [grpc generator module](https://github.com/grpc/grpc-go/blob/v1.84.0/cmd/protoc-gen-go-grpc/go.mod).
 
 ## Проверяемый результат подэтапа
 
-Для каждого компонента определён язык/runtime, integration boundary и version candidate либо явная внешняя зависимость. Это закрывает .03 как проектный baseline, но не build/runtime gate. Проверки E01/E02: сборка каждого адаптера с bindings, совместимость Rust graph, gRPC transfer large record, независимый Gateway/NATS SDK build, одинаковая валидация wire fields и packaging с закреплёнными версиями.
+Для каждого компонента определён язык/runtime, boundary и version candidate. Это проект, не build/runtime gate. Проверки E01/E02/E03: отдельные builds ETH/BSC/Bor, native seams, bindings, large records, Gateway/NATS и validators. Независимые expected results/evidence — IMPLEMENTATION_GATES. Rust graph отложен.
 
-.04 задаёт владельцев состояния; .06 закрепляет RocksDB/pins и протокол доставки/очистки; .07 завершает [архитектурную сверку](E00_03_ARCHITECTURE_REVIEW.md). Совместные сборки и runtime tests остаются E01/E03. Следующий шаг ТЗ — CFG/JOB-01, не реализация.
+.04/.06/.07 — исторические архитектурные подэтапы. Текущие normative contracts: NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, DEPLOYMENT_BOOTSTRAP_CONTRACT и IMPLEMENTATION_GATES. Следующий шаг определяется PROJECT_STATUS; CFG live закрыт, JOB/history deferred. Реализация требует отдельного указания.

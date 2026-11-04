@@ -1,6 +1,6 @@
-# Состояние согласований после D55
+# Состояние согласований после D60
 
-2026-11-05. Срез текущего live-only ТЗ для Ethereum/BSC/Polygon до NATS. Принятые D16–D55 решения повторно не открываются. [Первый аудит](DESIGN_AUDIT_2026_11_04.md), вопрос о смене назначения и [глубокий аудит](DEEP_DESIGN_AUDIT_2026_11_05.md) завершены как проверки документов; исправление 41 технической находки не завершено. Независимых неотвеченных продуктовых вопросов текущего раунда нет. Незавершённые задачи реализации E01–E07 не являются автоматически новыми вопросами пользователю.
+2026-11-05. Live-only Ethereum/BSC/Polygon до NATS. D16–D60 повторно не открываются. [Реестр исправлений](DESIGN_REPAIR_STATUS.md) и [traceability/gates](IMPLEMENTATION_GATES.md) фиксируют проект каждого из 41 пунктов. Source inspection и документальная сверка не являются runtime proof. Неотвеченных продуктовых вопросов текущего раунда нет; E01–E07 ещё TODO и требуют отдельного разрешения на реализацию.
 
 ## Последний список вопросов закрыт
 
@@ -8,20 +8,20 @@
 2. **Управление:** стандартные Docker Compose/Kubernetes запуск, остановка и restart. Отдельный API/управляющий сервис и собственные shutdown таймауты не детализируются. Сохранение pending и crash recovery остаются.
 3. **Сообщение:** default `transport.max_frame_bytes=2097152` в YAML Gateway, NATS max_payload/stream MaxMsgSize согласованы на 2 MiB. Большие записи разбиваются. Pending frames не перекодируются; несовместимое уменьшение лимита — явная ошибка до публикации.
 4. **Документы:** локального Git достаточно, remote/дополнительный backup сейчас не требуется. E00-05 закрыт как процесс; публикация не разрешена.
-5. **Дальнейший результат:** D53 подтвердил только проектирование и документацию, аудит с вопросами по существу. Консолидация единого ТЗ ещё не выполнена. Реализация остаётся запрещённой без последующего указания.
+5. **Дальнейший результат:** D53/D56 — проектирование, аудит и исправление документов. DOC-CONSOLIDATE собирает итоговый root MD; реализация запрещена без последующего указания.
 6. **Смена назначения:** D54 — NATS account/stream/subject mapping меняются только после завершения pending адаптера и Gateway; другой адрес того же назначения допустим после проверки. Перенос pending не проектируется.
 
-## Что ещё дописать/проверить технически
+## Проработанные механизмы и оставшиеся доказательства
 
-Актуальный подробный backlog — NAT/DLV/OPS/DEV в DOC-AUDIT-02. Начать рекомендуется с конкретных дефектов NAT-01/04/07/08, затем завершить native observation/delivery state machines и bootstrap. Ниже — крупные группы прежнего аудита, не замена новому реестру.
+Нормативные механизмы — [native capture](NATIVE_CAPTURE_PROTOCOL.md), [delivery](DELIVERY_STATE_MACHINE.md), [bootstrap](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Порядок разработки и независимые fixtures/evidence — IMPLEMENTATION_GATES. Исторический аудит сохраняет исходные находки; текущий статус берётся из DESIGN_REPAIR_STATUS.
 
-- **DEP-03.2b.2b.3b:** точные native flags/config keys, filenames/mounts и механика init Compose/Kubernetes, в том числе обновление пользовательских настроек без перезаписи state/ключей. Принцип принят D51; уточнения, которые меняют поведение, сначала согласовывать.
-- **Pins/источники:** закрепить способ получения образов/сборок, source/toolchain pins и проверить изменения native hooks Geth/Bor. Не выдавать source audit за совместную сборку/runtime. Digests собственных сборок и runtime-проверки появляются на стадии реализации, не изобретаются в ТЗ. Если потребуется смена принятых кандидатов D47 — отдельное согласование.
-- **Capture/delivery:** устранить неописанное crash-окно до durable descriptor в REC-T01; детализировать Prepare/layout после D52 и destination identity/ACK/reconnect/drain checks D54. Политика выбрана, технические доказательства ещё отсутствуют.
-- **Typed lifecycle:** точные execution/finality variants и правила восстановления/удаления activation references — E02/E05; canonical authority остаётся у native bridge.
-- **DEP-04 / E00-11:** итоговая сверка всех документов, YAML, независимых WAL и границы NATS; явные критерии будущих функциональных проверок. Финальное подтверждение пакета после устранения противоречий.
+- **DEP-03.2b.2b.3b:** init/config/paths/UID/mounts определены; generated файлы и native parser/runtime checks — E01/E06.
+- **Pins/артефакты:** exact native source refs закреплены, Heimdall обновлён D58. Toolchain/dependency/image locks и полный payload proof mainnet genesis — E01/E06, не выдуманные результаты документации.
+- **Capture/delivery:** admission/pins/decision markers, owned snapshots, Prepare/Release/fencing, drain/cutover/Resume спроектированы. Power-loss/native completeness доказательства — E01/E03/E05.
+- **Typed lifecycle:** контракт source/actions/revisions/terminal Removed и GC определён. Proto field numbers/компиляция/валидаторы и native outcomes — E02/E04/E05.
+- **DEP-04 / E00-11:** документальная сверка и критерии проверки входят в DOC-REPAIR-05; единый root MD — DOC-CONSOLIDATE. Принятие документов не запускает E01.
 
-Этот технический остаток не объявлен выполненным и не превращается в повторное интервью по закрытым вопросам. Следующий документальный шаг — T01/T02 и .3b/pins, затем консолидация и DEP-04. Новые вопросы нужны только при обнаружении новой развилки поведения либо необходимости изменить согласованный scope/кандидат.
+Закрытые развилки D57–D60: local fatal останавливает ноду; отдельный drain; несовместимый upgrade после drain при читаемом оставшемся store, автоматических migrations нет; native retention и safe-point yield; Heimdall v0.13.2; Bor ordinary import без BlockSTM; ACKed history не мигрирует. Новый вопрос нужен при новой развилке поведения/ослаблении guarantee, а не для каждого технического шага.
 
 ## Не возвращать в текущие согласования
 

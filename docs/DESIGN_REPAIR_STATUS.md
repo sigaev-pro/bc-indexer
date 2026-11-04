@@ -12,7 +12,7 @@
 | DOC-REPAIR-02 | Delivery state machine, destination, drain, memory, versions | SPECIFIED; DELIVERY_STATE_MACHINE, D57–D59 |
 | DOC-REPAIR-03 | Native admission/state retention/capture/lifecycle | SPECIFIED; NATIVE_CAPTURE_PROTOCOL, D58 |
 | DOC-REPAIR-04 | Bootstrap/init/конфигурация/эксплуатация | SPECIFIED; DEPLOYMENT_BOOTSTRAP_CONTRACT, D58/D60 |
-| DOC-REPAIR-05 | Исполняемый план, evidence, итоговая сверка | OPEN |
+| DOC-REPAIR-05 | Исполняемый план, evidence, итоговая сверка | SPECIFIED; IMPLEMENTATION_GATES, обновлённый DEVELOPMENT_PLAN |
 
 Подэтап завершается проверкой, документированием результата и отдельным commit до перехода дальше.
 
@@ -55,12 +55,12 @@
 | OPS-10 | SPECIFIED | Обязательные lifecycle/error control logs; LOG-01 |
 | OPS-11 | SPECIFIED | Exact source/artifact references, Heimdall mainnet genesis acquisition gate; ARTIFACT-01 |
 | OPS-12 | SPECIFIED | Peer identity deployment/network/role admission; TRUST-01 |
-| DEV-01 | OPEN | Native proof до delivery gate |
-| DEV-02 | OPEN | Ранний минимальный harness |
-| DEV-03 | OPEN | Независимые fixture oracles |
-| DEV-04 | OPEN | Очистка active backlog |
-| DEV-05 | OPEN | Актуальные module boundaries |
-| DEV-06 | OPEN | Evidence manifest и stop conditions |
+| DEV-01 | SPECIFIED | Native seams E01, delivery proof E03, combined REC E05 |
+| DEV-02 | SPECIFIED | Ранний fixture/bootstrap harness с явными inputs/commands |
+| DEV-03 | SPECIFIED | Independent expected provenance, fault seeds, mutation sanity |
+| DEV-04 | SPECIFIED | Явные deferred/optional задачи и live-only gates |
+| DEV-05 | SPECIFIED | Core DTO, отдельные Geth/BSC/Bor graphs, bootstrap/config modules |
+| DEV-06 | SPECIFIED | Evidence manifest, traceability всех 41 ID, stop conditions |
 
 ## Критерии DOC-REPAIR-01
 
@@ -96,3 +96,7 @@
 ## Критерии DOC-REPAIR-04
 
 [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md): BOOT/CONFIG/MOUNT/TRUST/NATS/START/REPLACE/LOG/ARTIFACT-01. Текущие candidates согласованы с D58/D60. Source/metadata проверка не означает materialization большого Heimdall genesis, image builds или runtime parse. Эти доказательства входят в E01/E06/E07, не скрыты за SPECIFIED.
+
+## Критерии DOC-REPAIR-05
+
+[IMPLEMENTATION_GATES](IMPLEMENTATION_GATES.md) содержит все 41 ID, normative contract, fixture и первый/итоговый proof. DEVELOPMENT_PLAN сохраняет E01→E07 и постоянные task IDs; history rows явно deferred, hot reload/remote/performance не открыты повторно. DEP-04 завершён как документальная сверка. Все 41 пункта SPECIFIED, все implementation/runtime gates пока TODO; это не утверждение об отсутствии будущих дефектов реализации.

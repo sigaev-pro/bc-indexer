@@ -71,22 +71,22 @@ D54: несовместимая смена назначения при pending �
 
 | ID | Точка/ошибка | Проверяемый результат |
 |---|---|---|
-| REC-T01 | Crash до STAGING или внутри него | capture_checkpoint не продвинут, из незакрытого batch ничего не опубликовано; native replay конкретного capture. Для crash до durable descriptor механизм пока НЕ ОПРЕДЕЛЁН: требуется устранить это окно и проверить границу на native fixtures; сценарий не считается закрытым заявлением о replay |
+| REC-T01 | Crash на native admission/исполнении/decision/delivery staging | NATIVE_CAPTURE_PROTOCOL задаёт pin + static capsule + ADMITTED до исполнения, dependency log, EXEC_READY, child-root/decision marker и READY mirror. E01 доказывает native seam, E03 delivery часть, E05 полный matrix. До ADMITTED кандидат не принят; после него obligation не теряется. Runtime proof ещё TODO |
 | REC-T02 | Crash после READY, до Prepare | исходные bytes/ID восстановлены, публикация продолжается |
 | REC-T03 | Потерян Prepare reply / Gateway store до producer plan commit | повтор reservation; прежний неподтверждённый plan ещё ничего не публиковал |
 | REC-T04 | Gateway store потерян после публикации части | durable producer plan восстанавливает те же frame bytes/epoch/sequence; повторы допустимы |
 | REC-T05 | Crash Gateway после PubAck, до записи bitmap | повтор тех же сообщений, IngestAck только после всех ACK |
 | REC-T06 | Потерян IngestAck | Gateway повторяет receipt или сообщения; producer payload сохранён |
-| REC-T07 | Crash внутри producer cleanup/Release | ACKED marker предотвращает потерю pending; уборка/release идемпотентны |
+| REC-T07 | Crash внутри producer/Gateway cleanup/Release | ACKED_CLEANUP/outbox и RELEASING/cursor переживают каждый chunk; lost Gateway допускает authenticated RecoveryRelease следующего ACKed batch без удалённого payload |
 | REC-T08 | Поздний блок ACKed раньше раннего | ранний payload сохранён, frontier не перескакивает дыру |
 | REC-T09 | Пустой блок / multipart | metadata доставляется; ACK части не завершает batch |
 | REC-T10 | NATS offline; затем reconnect | накопление без прикладной квоты, bounded RAM, retry/drain; новые блоки продолжают capture при доступном диске |
 | REC-T11 | Disk-full / sync error / повреждение БД | явная ERROR, нет ложного READY/ACK и silent skip; automatic repair с отбрасыванием данных запрещён |
 | REC-T12 | Второй writer / старый stream после reconnect | второй opener/старый session отвергнут; только подтверждённое завершение writer позволяет замену |
-| REC-T13 | Producer volume потерян | новый run, ручной диапазон; нет ложного обещания восстановить прежний cursor из YAML |
+| REC-T13 | Producer volume потерян | Новый run с явной потерей прежних локальных obligations; старый Gateway state не уничтожается автоматически. YAML не восстанавливает cursor/payload. Ручной history диапазон DEFERRED D38, гарантия полной потери диска не добавляется |
 | REC-T14 | Незакрытый ранее начатый capture / reorg после ACK cleanup и restart | восстановление конкретного batch/activation references либо ERROR при отсутствии state; нет сканирования всего пропущенного периода. Live продолжает текущие наблюдения по D37; отсутствие прежних данных не маркируется успешной доставкой |
 | REC-T15 | Неверный digest, schema, ACK или лимит ниже pending part | явная ошибка, неизменные pending bytes сохранены |
-| REC-T16 | Final history CloseRun / потеря ReleaseAck / abandon старого run | служебные receipts очищаются без архива, pending не удаляются без NATS ACK |
+| REC-T16 | Live drain/Seal/Resume и потеря ReleaseAck; history CloseRun DEFERRED | Durable DRAIN/DRAINED, admission generations, ordered Release/frontiers; нет новых admissions в drain, поздний old RPC не воскрешает state, pending без ACK не удаляется |
 | REC-T17 | Часть batch подтверждена; изменены account/stream/subjects; restart или потеря Gateway store | несовместимая смена отвергнута до публикации, исходные bytes/plan сохранены; ACK разных назначений не закрывают batch. Смена адреса того же назначения проверяется отдельно; изменение назначения допускается после подтверждённого drain обоих owners |
 
-Fixtures выполняются для Go/Rust journal и интеграции с Gateway/NATS в E01/E03/E05/E06. Данные blockchain берутся из выбранных fixtures; это тест доставки, не production verifier полноты. .06 закрывает проектные решения, не выполнение этих тестов. Следующий документальный шаг — .07 после проверки и commit.
+Fixtures выполняются для текущих Go journals и Gateway/NATS в E01/E03/E05/E06 по IMPLEMENTATION_GATES; Rust/history variants DEFERRED D38/D42. Данные и expected имеют независимое происхождение. Это tests разработки, не production completeness verifier. Исторический .06 не закрывает ни один runtime gate; актуальный проект — NATIVE_CAPTURE_PROTOCOL/DELIVERY_STATE_MACHINE.

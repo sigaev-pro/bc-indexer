@@ -1,5 +1,7 @@
 # Последовательность разработки и задачи
 
+> Актуальный нормативный план DOC-REPAIR-05: [IMPLEMENTATION_GATES](IMPLEMENTATION_GATES.md) задаёт ранний native proof/harness, независимые эталоны, модули, evidence и traceability всех 41 находки. E01–E07 ещё TODO. Исторические сводки ниже не заменяют обновлённые задачи/gates. D58/D60: Heimdall 0.13.2, hash capture profile, Bor без ускоренных import/preconfirmation paths и BlockSTM.
+
 > D55 / DOC-AUDIT-02 (2026-11-05): [углублённый аудит и предложенная детализация E01–E07](DEEP_DESIGN_AUDIT_2026_11_05.md) выявили 41 проектную проблему/пробел. Этот реестр не означает выполненные исправления; порядок checkpoints и дополнительные fixtures пока предложения в согласованной границе. Перед реализацией затронутого механизма закрыть соответствующие P1. Согласованная последовательность D40 не меняется молча, код не разрешён.
 
 > Актуализация 2026-11-04 / D53–D54: [аудит и технический остаток](DESIGN_AUDIT_2026_11_04.md). Разрешены только проектирование и документация; перенос pending в другое NATS назначение исключён, смена — после drain обоих owners. Ниже D52 и более ранние сводки сохранены как история принятых решений; их прежние «следующие шаги» заменены текущим PROJECT_STATUS и таблицей активных задач в конце документа.
@@ -31,7 +33,7 @@
 
 По D53 сейчас разрешены только проектирование и документация. Исходный R01 закрыт; завершение E00 не разрешает реализацию автоматически. Этапы E01–E08 описывают будущую работу по отдельному указанию. Версии клиента, библиотек, runtime, хранилищ и инфраструктуры нельзя выбирать по наличию на машине.
 
-Каждая задача имеет постоянный ID. Статусы: TODO, IN_PROGRESS, BLOCKED, DONE. По умолчанию все незавершённые задачи ниже — TODO; таблица активных задач содержит исключения. DONE требует указанного артефакта и результата проверки. Перед началом задачи записать ID в PROJECT_STATUS.md; после завершения отметить checkbox, сохранить evidence и следующую задачу.
+Каждая задача имеет постоянный ID. Статусы: TODO, IN_PROGRESS, BLOCKED, DONE, DEFERRED_BY_USER, OPTIONAL, REMOVED/OUT_OF_SCOPE. По умолчанию незавершённая задача без явной пометки — TODO; deferred/optional не входят в обязательный gate. DONE требует артефакта и evidence по IMPLEMENTATION_GATES. Перед началом записать ID в PROJECT_STATUS; после завершения сохранить результат, проверки, следующий шаг и commit. SPECIFIED документации не является DONE реализации.
 
 Крупную задачу перед исполнением разбивать на подзадачи с суффиксами .1, .2 и отдельными критериями; уже присвоенные ID не переиспользовать. Коммиты, публикации и деплой фиксировать только после фактического выполнения с hash/URL и результатом проверки. Сохранение файлов не означает наличие удалённой резервной копии.
 
@@ -47,7 +49,7 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 
 Задачи текущего этапа выполняются отдельно для ETH/BSC/POLY; родитель закрывается после трёх сетей. Подзадачи .BASE/.ARB отложены D42. Исторические задачи отложены D38. Каждая сеть имеет собственные WAL, журнал Gateway и процессы; evidence хранится раздельно.
 
-Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects и лимитами. Live и команда N–M сохранены; управление YAML/history отложено пользователем D20.
+Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects. Команда N–M отложена D38; текущий live YAML и restart приняты D39/D48.
 
 Принято D36: основной сборщик только live, history отдельным сервисом на узле ноды по N–M. Default три часа и история через start_block/reload/apply отменены. Единый интерфейс без Kubernetes-зависимости, независимые сети и RocksDB/ACK сохраняются. D37 закрывает CFG-R3: поиск пропусков и организация их восполнения вне scope; pending WAL доставляется автоматически.
 
@@ -55,19 +57,19 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 
 | Этап / компонент | Предлагаемый стек | Способ реализации | Что ещё выбрать |
 |---|---|---|---|
-| E00 документация | Markdown, журнал решений, короткие ADR | Документы в проекте с ID задач и точкой продолжения | Git-репозиторий/remote и схема резервирования |
-| E01–E07 Ethereum | Go + Geth v1.17.9, кандидат D47; source delta audit открыт | Встроенный live tracer + rollback-aware state journal + canonical bridge | Go patch build version и отдельный CL; [матрица](CLIENT_MATRIX.md) |
-| E01–E07 BSC | Go + BSC v1.7.8, source-verified candidate | Отдельная сборка; обычный execution + Parlia Finalize/system tx | Alpha latest исключён; historical state/fixtures, [источники](research/ETHEREUM_BSC_CLIENTS.md) |
+| E00 документация | Markdown, журнал решений, короткие ADR | Документы с ID и точкой продолжения | D52: локальный Git принят, remote/backup не требуются |
+| E01–E07 Ethereum | Go + Geth v1.17.9, source seams проверены | Native capture/pin/decision bridge; отдельный build | Toolchain/build proof; Prysm выбран, runtime ещё не проверен |
+| E01–E07 BSC | Go + BSC v1.7.8, source-verified candidate | Обычный execution + Parlia system tx | Live fixtures/recovery inputs и отдельный build proof |
 | Отложено D42: Base | Rust 1.96.0 + base/base v1.5.0 с pinned base/reth | Native Base executor, включённый Inspector, per-tx state/receipts, ExEx | Реальный capture и active fork profile проверить; [источники](research/BASE_CLIENT.md) |
 | Отложено D42: Arbitrum One | Go Nitro v3.12.1 + Rust 1.93.0/cgo/WASM; Classic v1.4.7 — отдельный Go/C++ AVM backend | Nitro tracer + ArbOS/Stylus paths; Classic native inventory/cursor + consensus-neutral AVM observer candidate | Classic archive/toolchain/all-epoch decoder и state/action полнота не доказаны; [Classic fixtures](research/ARBITRUM_CLASSIC_CAPTURE.md) |
-| E01–E07 Polygon PoS | Go Bor v2.10.3 + Heimdall-v2 v0.12.2 | Live tracer + StateSync/Finalize; legacy source receipt — optional auxiliary, вне body count | Effective Go version, state-sync attribution, historical inputs; [legacy fixtures](research/POLYGON_LEGACY_CAPTURE.md) |
+| E01–E07 Polygon PoS | Go Bor v2.10.3 + Heimdall-v2 v0.13.2 | Последовательный native capture D58/D60, StateSync scopes; legacy outside-tx optional | Build/runtime и ARTIFACT-01, live source inputs; historical fixtures deferred |
 | E02 общий контракт | Protocol Buffers v3, Go bindings; Rust bindings перед первым Rust-клиентом | Схемы из v3 после проверки модели; независимые валидаторы и fixtures | Версии protoc/plugins; нужен ли Buf; стратегия schema compatibility |
 | E03 Gateway | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0 — кандидаты .03 | Отдельный сервис сети; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) | Совместная сборка E01; fencing/storage определены .06, тесты E03/E05 |
-| E03 локальный WAL / journal | RocksDB 10.4.2; grocksdb v1.10.2; Rust rocksdb 0.24.0 / sys 0.17.3+10.4.2 | Sync WriteBatch, READY/ACKED cleanup, durable publication plan и release | [Pins](research/ROCKSDB_STACK.md), [REC-T01–16](ROCKSDB_DELIVERY_PROTOCOL.md); build/runtime tests в E01/E03 |
+| E03 локальный WAL / journal | RocksDB 10.4.2; grocksdb v1.10.2; Rust crates DEFERRED D42 | Sync WriteBatch, READY/ACKED cleanup, immutable plan и release | [Pins](research/ROCKSDB_STACK.md), [REC-T01–17](ROCKSDB_DELIVERY_PROTOCOL.md); build/runtime tests E01/E03 |
 | E02–E07 тестовый считыватель | Go + protobuf bindings | Проверка bytes, полей, частей и lifecycle на выбранных примерах в NATS против native fixtures | Только приёмочный harness, не промышленный сервис обработки |
-| E00–E07 пользовательская конфигурация | YAML (.yml) обязателен; библиотека по выбранному языку | Валидируемые network profiles, loading bounds, подключения и документированное применение изменений | Schema/version, defaults, hot reload vs restart для каждого поля |
-| E04–E06 native backfill | Язык и родной executor каждого выбранного клиента | Последовательное исполнение диапазона от доступного state; отдельные ресурсы live/backfill | Стартовый state, pruning/retention, источники bodies/receipts и нагрузка по каждой сети |
-| E07 окружение и эксплуатация | D21/D22: Docker Compose для dev/local и Kubernetes для production, NATS внутри обеих сред; Linux containers baseline | Official NATS Helm chart + project values в Kubernetes; official server image + volume в Compose; [источники](research/NATS_DEPLOYMENT_STACK.md) | CPU/hardware, versions/digests/build fixtures, один NATS replicas=1, принятый REC, CI и thresholds; post-ACK retention вне scope |
+| E00–E07 пользовательская конфигурация | Strict YAML live/Gateway + штатные native configs | LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT | Restart принят; schema/parser/build smoke E01/E06, hot reload не открыт |
+| DEFERRED_BY_USER D38: native backfill | Native executors | Диапазоны/history CLI вне текущей поставки | Не prerequisite E01–E07 |
+| E06–E07 окружение | Compose/Kubernetes, один NATS replicas=1 | Полный комплект и bootstrap по DEPLOYMENT_BOOTSTRAP_CONTRACT | Immutable builds/images и функциональные fixtures; hardware/performance thresholds и post-ACK HA вне scope |
 | E08 дополнительные сети/клиенты | Go или Rust по нативному клиенту | Повторное использование проверенного контракта; собственные execution/canonical integrations | Приоритет после первого контура, commits, runtime и покрытие |
 
 Матрица конкретных клиентов и проверенных исходников — [CLIENT_MATRIX.md](CLIENT_MATRIX.md); это source-verified рекомендации, не проверенные сборки. Основания механизмов и история — DECISIONS.md. Внутренние WAL/journals и Rust crates остаются кандидатами. Прикладная обработка после NATS не входит.
@@ -103,16 +105,16 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 
 Зависимости: E00; для всех трёх сетей определены варианты сети, кандидаты клиентов и границы прототипов. Стек: родной клиент и его язык для каждой сети. Минимальный тестовый execution harness, затем реальный client import path. Один общий Ethereum-прототип не закрывает E01.
 
-- [ ] E01-01 Закрепить исходники, toolchain и способ интеграции; настроить воспроизводимую сборку. Готово: чистая сборка, versions/commit и точная команда сохранены.
-- [ ] E01-02 Составить карту транзакционных capture paths, state mutations и canonical notifications. Готово: все родные типы транзакций и обязательные поля имеют источник; изменения вне транзакций учитываются отдельно как optional.
+- [ ] E01-01 Закрепить source/patch/toolchain/dependency/artifact pins, отдельные builds и минимальный fixture/bootstrap harness. Готово: clean build и команды, inputs/state/supporting services/test credentials известны до proof; нет скрытой авторской ноды. Подзадачи/manifest — IMPLEMENTATION_GATES.
+- [ ] E01-02 Доказать карту native callers, admission/owned snapshots/state pins/decision markers всех трёх сетей по NATIVE_CAPTURE_PROTOCOL. Готово: обязательные типы/поля имеют источник; minimal bridge работает в реальном import path, bypass запрещён; outside-tx публикация optional.
 - [ ] E01-03 Захватить transfer, nested call/revert, fee effects, родные системные транзакции и пустой блок. Готово: полные tx records/before/after сверены с независимым результатом. Вне-транзакционные начисления проверяются только при реализации расширения.
-- [ ] E01-04 Проверить стабильные границы операций и повтор исполнения одного fixture. Готово: воспроизводимые результаты/позиции и описанные ограничения корректности.
+- [ ] E01-04 Проверить стабильные offsets и повтор fixture, power loss на ранних admission/pin/EXEC_READY/decision seams, native-only replay и H guard. Готово: независимый expected/evidence; ранняя часть REC-T01 доказана до E02, полный matrix остаётся E05.
 
 - [ ] E01-05 Проверить извлечение поддержанных native типов на fixtures всех трёх сетей, включая failed/system для текущих live fork-профилей; исторические переходы отложены D38. Неизвестный тип даёт явную ошибку. Независимый production verifier состава каждого блока не требуется (D25).
 
 Отложенный контекст D38/D42: Classic/исторические Polygon fixtures из E00-15 не обязательны для текущего live-этапа. Исследования и fixture IDs сохранены. В live остаются все действующие native tx/system types, включая Polygon StateSync, с корректной атрибуцией эффектов.
 
-Gate: если обязательный путь не наблюдаем, доработка интеграции или пересмотр клиента предшествуют созданию универсального production capture. Неполный POC не объявляется полной поддержкой сети.
+Gate: по каждой ETH/BSC/POLY доказаны обязательные observation/recovery seams и связь harness с реальным native path. Missing path/pin/decision barrier останавливает этап; E02 не строится на заведомо невосстановимом источнике. Полная семантика/transport matrix остаются E04/E05.
 
 ## E02 — модель событий и тестовый валидатор
 
@@ -133,13 +135,13 @@ Gate: модель позволяет восстановить корректн�
 
 Зависимости: E02, решения о storage и отказах. Стек: Go, gRPC, выбранное durable storage, NATS JetStream; protobuf bytes из E02.
 
-- [ ] E03-01 Реализовать RocksDB journals по pinned stack и ROCKSDB_DELIVERY_PROTOCOL: sync READY, publication plan/frame bytes, ACKED_CLEANUP/release/frontiers. Готово: API, native version и crash/reopen проверки пройдены.
+- [ ] E03-01 Реализовать RocksDB journals по DELIVERY_STATE_MACHINE: bounded closing commits, READY/SEALED, ACKED_CLEANUP/RELEASING, RecoveryRelease/frontiers, admission generations. Готово: pinned API/build и crash/reopen проверки, старый protocol — история и REC каталог.
 - [ ] E03-02 Реализовать gRPC и формат размеров/частей по MSG-02. Готово: большие события и повторная публикация проверены без усечения; тест восстанавливает исходные bytes.
 - [ ] E03-03 Подключить JetStream и сквозной ACK. IngestAck только после PubAck всех подготовленных сообщений/частей в одном logical destination durable plan; retry сохраняет ID, bytes и маршрут. D54: смена account/stream/subjects запрещена до завершения pending адаптера и Gateway; identity/reconnect/drain checks обязательны. Доставка at-least-once, дубли допустимы.
 - [ ] E03-04 Реализовать накопление без TTL/прикладной квоты до NATS ACK, bounded RAM, retry и явные ошибки disk-full/config. Не удалять pending данные; post-ACK retention и HA не проектировать.
-- [ ] E03-05 Пройти применимые live-сценарии REC-T01–17: crash до/после sync, потеря Gateway store/ACK, partial cleanup/release, single writer, late ACK, смена назначения. REC-T01 требует предварительно устранить неописанное окно до durable capture descriptor. History-сценарии отложены D38. Готово: нет потери pending; повторы допустимы; никаких HA-гарантий.
+- [ ] E03-05 Пройти delivery часть REC-T01–17 и ATTEMPT/PREPARE/FRONTIER/FENCE/DRAIN/DEST/MEM/UPGRADE/POISON/ENOSPC от заданного durable intent/READY. Native admission proof уже в E01; совмещённый multi-block/native fault matrix — E05. History variants DEFERRED D38. Полный REC-T01 пока не отмечать PASS.
 
-Gate: выбранные native fixtures трёх сетей опубликованы в NATS после согласованных сбоев. Тест сверяет ожидаемые поля/части и PubAck; production block completeness verifier не вводится.
+Gate: delivery-only guarantees и integration smoke с native fixtures трёх сетей доказаны отдельно. Тест сверяет expected fields/parts/ACK/bytes/destination; полный native crash matrix ещё TODO E05. Production completeness verifier не вводится.
 
 - [ ] E03-11 Доставлять block metadata и lifecycle в NATS, включая пустые блоки. Проверять PubAck всех частей; независимая проверка полноты содержимого вне scope.
 
@@ -159,31 +161,31 @@ Gate: отсутствие необъяснённых capture gaps на выбр
 Зависимости: E04 и durable guarantees E03. Стек: native notifications + lifecycle bridge каждого producer/run + RocksDB.
 
 - [ ] E05-01 Реализовать canonical activation registry и финальные статусы. Готово: speculative capture не публикуется как canonical; статусы привязаны к правильной активации.
-- [ ] E05-02 Реализовать rollback/reapply транзакций и блоков. Готово: reinclusion и возврат ветки дают корректные активации. Системные события включаются в проверку только при реализации optional расширения.
-- [ ] E05-03 Закрыть crash window между нодой, WAL и publication journal согласно REC. При недоступных данных показывать явную ошибку; не объявлять успешную доставку.
+- [ ] E05-02 Реализовать rollback/reapply транзакций и блоков. Готово: reinclusion/возврат ветки дают корректные активации, включая обязательные BSC native system tx и Bor StateSync. Только самостоятельные outside-tx SystemBalanceEvent проверяются при включённом optional расширении.
+- [ ] E05-03 Завершить комбинированный native/WAL/Gateway matrix на seams, уже доказанных в E01/E03: reorg/finality, child-root/marker, GC, restart после cleanup, DRAIN/Resume/upgrades. Недоступные inputs дают явную ошибку. Это полный REC-T01 proof, не первое исследование возможности восстановления.
 - [ ] E05-04 Проверить fencing и конкурентные источники. Готово: старый writer не публикует после смены; гонки capture/reorg/publish/status покрыты тестами выбранной топологии.
 
 Gate: crash/reorg/finality fixtures сохраняют correct references данного producer/run, включая restart после ACK cleanup. Retry сохраняет identity; разные runs вправе повторно публиковать то же включение. Production verifier/dedup не требуется.
 
 ## E06 — live-конфигурация и учёт доставки; исторические задачи отложены
 
-Зависимости: E05, наличие native state перед диапазоном. Стек: native executor, отдельный history pod/process, WAL и локальный журнал доставки; backend RocksDB и протокол выбраны в E00-03.06. Никакого общего overlap coordinator, coverage report или UI.
+Зависимости: E05 и ранний harness E01/E03. Стек: live YAML/native configs/init, Compose/Kubernetes, независимые owners, RocksDB/NATS. Полный user deployment по DEPLOYMENT_BOOTSTRAP_CONTRACT. История/диапазоны не prerequisites.
 
-- [ ] E06-01 Подготовить закреплённый диапазон, стартовое состояние и проверку исторических VM/forks. Готово: источники доступны и воспроизводимы; pruning не уничтожает необходимые данные.
-- [ ] E06-02 Реализовать последовательный replay с checkpoints. Готово: остановка/продолжение не требуют независимого полного восстановления state для каждой транзакции.
-- [ ] E06-03 Проверить допустимые пересечения live/history и повторные команды. Разные run_id могут публиковать одинаковые блоки; publication order отделён от native execution order. Дедупликация вне scope (D24).
+- [ ] E06-01 DEFERRED_BY_USER D38: исторический диапазон, state и исторические VM/forks.
+- [ ] E06-02 DEFERRED_BY_USER D38: последовательный history replay с checkpoints.
+- [ ] E06-03 DEFERRED_BY_USER D38: пересечения live/history и повторные history commands.
 - [x] E06-04 REMOVED_BY_D25: coverage report и независимая проверка полноты диапазона исключены из сборщика. ID сохранён для истории решений; не является незавершённой задачей поставки.
-- [ ] E06-05 Пройти тестовые диапазоны всех трёх сетей. Сохранить границы N–M, ошибки, время/ресурсы и статусы доставки; не выдавать результат за доказательство полноты данных блока.
+- [ ] E06-05 DEFERRED_BY_USER D38: исторические тестовые диапазоны N–M.
 - [x] E06-06 REMOVED_BY_D36: вычисление стартовой истории за три часа отменено; ID сохранён, задача не входит в поставку.
 - [ ] E06-07 Реализовать YAML live/Gateway по LIVE_CONFIG_SPEC и D39: native запуск окружением, валидация профиля и подключения YAML адаптера, без history/apply и Kubernetes API.
-- [ ] E06-08 Проверить сохранение служебного прогресса при reload/restart по CFG/REC. История доставки не используется для устранения пересечений или запрета повторной команды.
+- [ ] E06-08 Проверить сохранение live/delivery progress при restart, config generation replacement, DRAIN/Resume и несовместимых версиях. Hot reload отсутствует. History-часть DEFERRED D38.
 - [ ] E06-09 Проверить live с H+1 после синхронизации: согласованность фиксации H и подписки, независимая доставка pending WAL, отсутствие выгрузки начальной синхронизации и влияния на другие сети.
-- [ ] E06-10 Реализовать простую команду history --config network.yml --from N --to M: отдельный pod/Job или Compose process, включительные границы, конечный run_id, результат доставки. Без UI и постоянного management API.
-- [ ] E06-11 Проверить параллельный live и отдельный history pod: live продолжает работу, лимиты ресурсов соблюдены, native state доступен; пересечения и повторы разрешены.
-- [ ] E06-12 Реализовать локальный журнал RECEIVED → WAL_SAVED → NATS_ACKED в RocksDB по протоколу .06. Ключ включает network/producer/run/block hash; успех требует PubAck всех подготовленных сообщений и частей. Известные ошибки сохраняются; журнал не устраняет повторы и не доказывает полноту блока.
+- [ ] E06-10 DEFERRED_BY_USER D38: history CLI N–M и отдельный Job/process.
+- [ ] E06-11 DEFERRED_BY_USER D38: параллельный live/history и resource overlap.
+- [ ] E06-12 Подключить user config/logs к уже реализованным native/delivery журналам: ADMITTED/EXEC_READY/decision и READY/SEALED/NATS_ACKED/RETIRED. Не создавать второй параллельный журнал ради старых упрощённых названий RECEIVED/WAL_SAVED. Нет dedup/completeness verifier.
 - [ ] E06-13 После согласования DEP-01–04 реализовать полный Compose/Kubernetes комплект трёх сетей по D43: native сборки с адаптерами, consensus/supporting clients, конфиги/секреты/соединения, независимые тома/WAL/Gateway и один NATS. Готово: конфигурации описывают все необходимые компоненты, функциональные startup/readiness/restart проверки подтверждают их связи. Performance и production-методика не входят.
 
-Gate: все данные первой поставки воспроизводимы; для полной истории отдельно проверены исторические переходы и доступность входных данных.
+Gate: полный live stack трёх сетей воспроизводится по сохранённым commands/config/artifact manifests, проходит BOOT/CONFIG/MOUNT/TRUST/NATS/START/REPLACE/LOG/ARTIFACT fixtures. Исторические задачи не участвуют. Ранний harness не заменяет пользовательский комплект.
 
 ## E07 — приёмка и первая поставка
 
@@ -232,7 +234,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | E00-07 | DONE | CFG-S01–05, LIVE_CONFIG_SPEC и D39; только документация, runtime-проверки остаются |
 | E00-08 | DEFERRED_BY_USER | D41: лицензия и open-source поставка отложены, текущее ТЗ не блокируют |
 | E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
-| E00-11 | PARTIAL | D52/D54 закрывают логи/управление, frame 2 MiB, локальный Git и запрет смены назначения при pending; [аудит](DESIGN_AUDIT_2026_11_04.md) выполнен. .3b native configs/mounts, доказательства capture/recovery и финальная DEP-04 сверка остаются; консолидация не завершена, реализации нет |
+| E00-11 | PARTIAL | Все 41 findings SPECIFIED, native/delivery/bootstrap contracts и DEP-04 сверка завершены. Осталась DOC-CONSOLIDATE сборка единого root MD; E01–E07 runtime proofs не являются условием документального DONE и не выполнены |
 | E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
 | E00-09 | DEFERRED_BY_USER | D38: история и пропуски отложены; CFG-R4 снят |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |
@@ -240,7 +242,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | E00-15 | DONE | Source research и исторические typed profiles; runtime/архивы не приняты, fixtures перенесены в последующие этапы |
 | E00-06 | DONE | D26–D31: требования REC приняты; RocksDB protocol/REC-T01–16 определены в .06, runtime tests будущие |
 
-Ключевые риски реализации: доступность historical state, native system paths, разрыв node/WAL и branch-aware replay, late L2 metadata, ACK cleanup/release, bounded RAM и физические write stalls, ресурсы больших записей. Их проверки находятся в E01/E03/E04/E05/E06 и REC-T01–16; post-ACK архив/HA вне scope.
+Ключевые текущие риски: durable pins/capsules, native system paths/decision callers, owned snapshots, node/WAL boundary, lifecycle replay, ACK cleanup/release/fencing, bounded RAM/write stalls и bootstrap identity. [IMPLEMENTATION_GATES](IMPLEMENTATION_GATES.md) связывает каждый с fixture/этапом/stop condition. Historical state и late Base/Arbitrum metadata относятся к deferred scope; post-ACK архив/HA вне scope.
 
 ## Снятые задачи
 
