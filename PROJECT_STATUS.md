@@ -4,6 +4,14 @@
 
 ## Точка продолжения
 
+2026-11-05: DOC-REPAIR-01…05, DEP-04, DOC-CONSOLIDATE и E00-11 DONE_DOCS_ONLY. Все 41/41 находки SPECIFIED; неотвеченных пользовательских развилок нет. Полное актуальное ТЗ — evm-transaction-extractor-tz-v3-codex.md (1409 строк): scope, typed messages, native capture, delivery/drain/cutover, YAML, bootstrap/ports/stack, REC и E01–E07 с evidence. Старые безусловные требования истории/sync-выгрузки убраны из root v3. Исходный v2 не изменён.
+
+Итоговые проверки: 49 Markdown-файлов, 392 локальные ссылки (включая 43 anchors) без ошибок; все 41 ID покрыты traceability ровно один раз; пять полных нормативных разделов root побайтно совпадают с источниками после нормализации заголовков/локальных ссылок. git diff --check пройден; SHA-256 v2 `ea825f0f0c3b747133de216c5bb1b15bc4f1d0601380ff1b6c3c1a4b620bc634`. Только Markdown changes. Контрольные commits подэтапов: a6ff50c, c151551, 4fa0607, 9b1c652, 574bb99; commit консолидации — последний git log.
+
+Точная следующая задача: оставаться в проектировании до отдельного указания пользователя. После разрешения реализации — E01-01 (.build/.supporting/.harness/.artifacts), затем E01-02 admission/ownership/pin/decision proofs ETH/BSC/POLY. Все E01–E07 TODO; сборок/runtime/deployment/push не было. Не выдавать source inspection за доказательство power-loss durability, pin/marker caller coverage, совместимости images/ABI или проверки полного Heimdall genesis payload. Новые поведенческие развилки выносить пользователю до зависимых изменений.
+
+2026-11-05: DOC-CONSOLIDATE IN_PROGRESS — 574bb99 сохранил DOC-REPAIR-05, git status чист. Все 41/41 пункта SPECIFIED. Сборка полного актуального root v3 из проверенных normative contracts; устранение устаревших требований истории и прежних next steps. Последняя проверка подэтапа 05: 49 MD / 374 ссылки (уточнение предыдущей записи 375), 5 anchors, без ошибок. Код/runtime не выполнять.
+
 2026-11-05: DOC-REPAIR-05 SPECIFIED — все 41/41 находки имеют нормативный контракт и fixture/stage mapping в IMPLEMENTATION_GATES. Исправлены active/deferred backlog, ранний native proof и harness, partial/full REC-T01, independent oracles/evidence, module graphs; DEP-04 документально завершён. Повторный review уточнил обязательный reorg BSC system tx/Bor StateSync и deferred Rust. Проверки: 49 MD / 375 локальных ссылок, все 41 ID покрыты ровно один раз, diff --check, v2 неизменен. Runtime E01–E07 TODO. После commit — DOC-CONSOLIDATE, собрать действующий полный root MD и убрать устаревшие next steps; код не начинать.
 
 2026-11-05: DOC-REPAIR-05 IN_PROGRESS — bootstrap сохранён в 9b1c652, git status чист. Завершаются DEV-01…06, traceability fixtures/этапов, исправление действующих gates/backlog и DEP-04 сверка. Только документация.

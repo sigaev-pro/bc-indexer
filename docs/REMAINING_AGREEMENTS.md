@@ -8,7 +8,7 @@
 2. **Управление:** стандартные Docker Compose/Kubernetes запуск, остановка и restart. Отдельный API/управляющий сервис и собственные shutdown таймауты не детализируются. Сохранение pending и crash recovery остаются.
 3. **Сообщение:** default `transport.max_frame_bytes=2097152` в YAML Gateway, NATS max_payload/stream MaxMsgSize согласованы на 2 MiB. Большие записи разбиваются. Pending frames не перекодируются; несовместимое уменьшение лимита — явная ошибка до публикации.
 4. **Документы:** локального Git достаточно, remote/дополнительный backup сейчас не требуется. E00-05 закрыт как процесс; публикация не разрешена.
-5. **Дальнейший результат:** D53/D56 — проектирование, аудит и исправление документов. DOC-CONSOLIDATE собирает итоговый root MD; реализация запрещена без последующего указания.
+5. **Дальнейший результат:** D53/D56 — проектирование, аудит и исправление документов. DOC-CONSOLIDATE завершён: [единое полное ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); реализация запрещена без последующего указания.
 6. **Смена назначения:** D54 — NATS account/stream/subject mapping меняются только после завершения pending адаптера и Gateway; другой адрес того же назначения допустим после проверки. Перенос pending не проектируется.
 
 ## Проработанные механизмы и оставшиеся доказательства
@@ -19,7 +19,7 @@
 - **Pins/артефакты:** exact native source refs закреплены, Heimdall обновлён D58. Toolchain/dependency/image locks и полный payload proof mainnet genesis — E01/E06, не выдуманные результаты документации.
 - **Capture/delivery:** admission/pins/decision markers, owned snapshots, Prepare/Release/fencing, drain/cutover/Resume спроектированы. Power-loss/native completeness доказательства — E01/E03/E05.
 - **Typed lifecycle:** контракт source/actions/revisions/terminal Removed и GC определён. Proto field numbers/компиляция/валидаторы и native outcomes — E02/E04/E05.
-- **DEP-04 / E00-11:** документальная сверка и критерии проверки входят в DOC-REPAIR-05; единый root MD — DOC-CONSOLIDATE. Принятие документов не запускает E01.
+- **DEP-04 / E00-11:** документальная сверка, критерии и единый root MD завершены. Принятие документов не запускает E01; неизвестных ответов пользователя сейчас нет.
 
 Закрытые развилки D57–D60: local fatal останавливает ноду; отдельный drain; несовместимый upgrade после drain при читаемом оставшемся store, автоматических migrations нет; native retention и safe-point yield; Heimdall v0.13.2; Bor ordinary import без BlockSTM; ACKed history не мигрирует. Новый вопрос нужен при новой развилке поведения/ослаблении guarantee, а не для каждого технического шага.
 

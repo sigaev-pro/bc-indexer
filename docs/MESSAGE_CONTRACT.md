@@ -139,16 +139,16 @@ NATS message ID должен стабильно различать `(network,eve
 |---|---|
 | Failed tx + успешный child в reverted parent | Gas/nonce сохранены по native правилам; child actions не committed |
 | Компенсирующие transfers | Оба actions есть, net diff может быть 0 |
-| Base deposit | Нет искусственной подписи/nonce; mint и deposit receipt fields сохранены |
+| DEFERRED D42: Base deposit | Нет искусственной подписи/nonce; mint и deposit receipt fields сохранены |
 | BSC Parlia system | Фактический wire type/signature не потеряны; native Finalize capture проверен |
-| Nitro retryable / imported legacy | Native payload отделён от projection; HashOverride и разные encodings проверены |
-| Nitro EVM ↔ Stylus | Frame engines и native actions без потери меж-runtime причинности |
-| Classic native result ↔ Ethereum projection | Все source results учтены; CL-01…08 проверяют archive, декодирование, observer и неизменность native исполнения |
+| DEFERRED D42: Nitro retryable / imported legacy | Native payload отделён от projection; HashOverride и разные encodings проверены |
+| DEFERRED D42: Nitro EVM ↔ Stylus | Frame engines и native actions без потери меж-runtime причинности |
+| DEFERRED D38/D42: Classic native result ↔ Ethereum projection | Все source results учтены; CL-01…08 проверяют archive, декодирование, observer и неизменность native исполнения |
 | Bor StateSync / legacy synthetic | Body 0x7f и optional legacy source receipt не смешаны; fixtures POLY-L01…07 из исследования E00-15 |
 | Пустой блок / ошибка нормализации | Metadata пустого блока передаётся; известная ошибка даёт ERROR, а не NATS_ACKED |
 | Parts reorder/duplicates/corruption | Сборка по индексу, повторы идемпотентны, конфликт bytes/digest отклоняется |
-| Live/history overlap и reorg во время публикации | Дубли разных runs допустимы; lifecycle references не смешиваются, ACK учитывает все части |
+| Live reorg во время публикации; history overlap DEFERRED D38 | Дубли разных runs допустимы; lifecycle references не смешиваются, ACK учитывает все части |
 | Неизвестный тип/версия/fork | Явная ошибка нормализации, без фиктивного поддержанного payload |
 | Optional balances выключены | Передаётся заявленный transaction scope; полнота всех балансов не заявляется |
 
-Это acceptance matrix будущих E01/E02/E03, не отчёт о пройденных тестах. E00-15 определил Classic/legacy source profiles и ограничения; их runtime-покрытие и архивы ещё не доказаны. Открыты точные network execution/finality extensions, Classic all-epoch decoders и validators (E02), измерение ресурсных параметров/реализация NATS delivery (E03), история/YAML control (JOB-01, отложен пользователем).
+Это acceptance matrix будущих E01/E02/E03/E04/E05, не отчёт о пройденных тестах. E02 фиксирует compiled field numbers/closed validators текущих профилей; E03 проверяет delivery и bounded collector memory, без performance SLO. Classic/Base/Nitro и historical legacy fixtures явно deferred D38/D42; текущий Bor StateSync обязателен. История/YAML history control не входят в active backlog.

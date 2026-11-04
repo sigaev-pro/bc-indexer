@@ -92,7 +92,7 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 - [ ] E00-09 DEFERRED_BY_USER (D38): история, диапазоны и history CLI/YAML отложены.
 
 - [x] E00-10 Привести ТЗ и план к D16. Готово: граница NATS, последующие компоненты сняты, R07 и точка продолжения сохранены.
-- [ ] E00-11 Завершить архитектурное описание. Готово: проверенная матрица трёх клиентов, модель действий/блоков, формат сообщений, роли процессов, гарантии и порядок работ согласованы; предложения отделены от решений.
+- [x] E00-11 DONE как документация: D16–D60, все 41 findings SPECIFIED, native/message/delivery/bootstrap contracts, DEP-04, IMPLEMENTATION_GATES и единое root v3. Source inspection не является runtime proof; E01–E07 TODO и требуют отдельного указания.
 
 - [x] E00-12 Зафиксировать D17–D20 в ТЗ, архитектуре и плане. Готово: полнота всех транзакций обязательна, системные балансные изменения optional, типизация/части/topology приняты, JOB-01 отложен.
 
@@ -234,7 +234,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | E00-07 | DONE | CFG-S01–05, LIVE_CONFIG_SPEC и D39; только документация, runtime-проверки остаются |
 | E00-08 | DEFERRED_BY_USER | D41: лицензия и open-source поставка отложены, текущее ТЗ не блокируют |
 | E00-10 | DONE | Граница NATS и снятие downstream задач отражены в действующем ТЗ |
-| E00-11 | PARTIAL | Все 41 findings SPECIFIED, native/delivery/bootstrap contracts и DEP-04 сверка завершены. Осталась DOC-CONSOLIDATE сборка единого root MD; E01–E07 runtime proofs не являются условием документального DONE и не выполнены |
+| E00-11 | DONE_DOCS_ONLY | Все 41 findings SPECIFIED; native/delivery/bootstrap, DEP-04 и единое root v3 завершены. Runtime E01–E07 TODO; завершение документации не разрешает реализацию |
 | E00-12 | DONE | D17–D20 сохранены с последующими уточнениями D23–D33 |
 | E00-09 | DEFERRED_BY_USER | D38: история и пропуски отложены; CFG-R4 снят |
 | E00-13 | DONE | CLIENT_MATRIX и три исследования; ограничения и source pins проверены |
