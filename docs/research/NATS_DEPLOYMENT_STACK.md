@@ -26,6 +26,6 @@ JetStream file storage в локальной среде сохраняется �
 
 ## Открытые границы
 
-Не выбраны число NATS pods и stream replicas, retention, storage class/размер, failure domains, backup/restore, допустимая потеря данных и время восстановления. Они относятся к REC и расчёту нагрузки; chart defaults не принимаются молча. Server replicas и stream replicas — разные параметры.
+Уточнение после D30–D31/D52: один NATS instance и одна stream replica; post-ACK retention, HA/backup и гарантии пережить потерю NATS вне scope. Default полного frame с headers — 2 MiB, server/stream limits согласованы в LIVE_CONFIG_SPEC. Storage class/размер и точные deployment artifacts остаются технической детализацией; chart defaults не принимаются молча. Server replicas и stream replicas — разные параметры. Это обновление проектного статуса, не новая проверка upstream версий.
 
 Не выбраны версии Kubernetes/Helm/Compose в матрице поддержки: проверить совместимость с выбранным chart при подготовке deployment artifacts. Не выполнены Helm render/lint, Compose config, запуск контейнеров, PubAck/persistence/failover tests. Текущий результат — документированный кандидат стека, не runtime-приёмка.

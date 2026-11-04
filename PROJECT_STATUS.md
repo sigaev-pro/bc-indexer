@@ -4,6 +4,12 @@
 
 ## Точка продолжения
 
+2026-11-05: финальная фиксация DOC-AUDIT-01 — устранены два оставшихся расхождения порядка Prepare/layout в v3 и DELIVERY_RECOVERY. Аудит и согласование D54 закончены, консолидация и технические T01–T05 ниже остаются. Проверены 43 Markdown-файла / 305 локальных ссылок и anchors без ошибок, git diff --check пройден; SHA-256 v2 неизменен, все 19 изменённых файлов — Markdown. Контрольный коммит этой фиксации — в git log; remote не публиковать. Точка продолжения — документальная детализация capture intent/destination checks и deployment, без реализации.
+
+2026-11-04: DOC-AUDIT-01 DONE / D53–D54 — [аудит](docs/DESIGN_AUDIT_2026_11_04.md) и исправления действующих документов. Пользователь принял запрет смены logical destination NATS до завершения pending; URL того же назначения может меняться после проверки. Исправлены scope/gates/ADR, YAML stream/subjects, владельцы part layout и границы Gateway lifecycle validation. Единственный вопрос раунда закрыт; технические T01–T05 остаются открытыми, особенно durable intent до STAGING и точная проверка destination/drain. DOC-CONSOLIDATE и DEP-04 не завершены. Следующее действие: документально проработать T01/T02 и .3b/pins, затем собрать единое ТЗ и провести DEP-04. Код/runtime/deployment/push не разрешены; эта контрольная точка коммитится до следующего подэтапа.
+
+2026-10-22: DOC-CONSOLIDATE IN_PROGRESS — по поручению пользователя собрать действующее ТЗ в один MD в корне без дополнительных вопросов. Сохранить источники и оригинал v2; совместить актуальные D16–D52, контракт сообщений, WAL/recovery, deployment, YAML и этапы, явно вынести оставшиеся технические проверки. После проверки создать коммит. Код/deployment не разрешены.
+
 2026-10-22: фиксация D52 завершена. Операционная готовность по логам; управление Docker/Kubernetes без отдельной probe/shutdown спецификации; frame default 2 MiB, NATS лимиты согласованы, pending bytes неизменны; локального Git достаточно. DEP-03.3b и E00-05 DONE, E00-11 пункт 3 закрыт. Проверены локальные ссылки и git diff --check; SHA-256 v2 неизменен. Контрольный коммит D52 — в git log. Ожидать обещанного указания пользователя по оформлению результата, закрытые вопросы повторно не задавать. Техническая детализация .3b/pins и DEP-04 сверка ещё не выполнены; E00-11 не объявлен завершённым. Только документы, без реализации/runtime/deployment/push.
 
 2026-10-21: D51 принят; DEP-03.2b.2b.3a DONE — штатные заменяемые configs/init-шаг окружения, сохранение state/ключей, read-only `/config` и writable native файлы `/data/node` зафиксированы в ТЗ и deployment/live документах. [REMAINING_AGREEMENTS](docs/REMAINING_AGREEMENTS.md) содержит актуальные согласования отдельно от технической детализации и отложенного scope. Проверены локальные ссылки и git diff --check; SHA-256 v2 неизменен. Контрольный коммит D51 — в git log. Далее .3b точные flags/config keys/init/mount mappings, затем DEP-03.3b готовность/остановка, E00-11 размер frame, E00-05 backup документов и разделение финализации ТЗ/разрешения на реализацию; DEP-04 итоговая сверка. E00-11 остаётся открыт. Только документация, без runtime/deployment/push.
@@ -102,25 +108,26 @@ JOB-01/YAML отложен пользователем D20 для отдельн�
 
 ## Подтверждено
 
-- Ethereum Mainnet, BSC Mainnet, Base Mainnet, Arbitrum One, Polygon PoS — первый контур; общая модель проверяется на всех пяти.
+- Ethereum Mainnet, BSC Mainnet и Polygon PoS — текущий обязательный контур по D42; Base/Arbitrum отложены.
 - Каждая сеть — независимый процесс/контейнер/pod с собственным конфигом; добавление/изменение одной не перезапускает остальные.
 - Все включённые в блоки транзакции обязательны: успешные, failed и родные системные типы со всеми применимыми деталями/действиями. Изменения вне транзакций — необязательное расширение по D17.
-- При старте выбранная история, default 3 часа; затем live. Полного snapshot балансов всех адресов нет.
-- Команда N–M должна собирать и публиковать историю параллельно live. Связь с автоматической догрузкой при YAML-reload ещё не решена.
-- Проект open-source; пользователь настраивает сети и параметры через .yml. Лицензия и публикация ещё не выбраны.
-- Основная единица — одна транзакция; крупные записи разбиваются на части. Все сообщения строго типизированы и унифицированы; точные схемы и лимиты ещё завершаются.
-- Конечная граница — NATS.IO; JetStream остаётся базовым транспортом проекта. Параметры хранения/ACK/лимитов должны быть явно закреплены.
+- После синхронизации ноды фиксируется H; новые live-наблюдения начинаются с H+1. Pending WAL передаётся независимо, saved lifecycle/reorg/finality сохраняются; snapshot всех адресов не нужен.
+- История N–M, startup history и поиск пропусков отложены D38. YAML применяется рестартом, без hot reload.
+- Open-source намерение сохраняется; лицензия и публикация отложены D41. Отдельные YAML live/Gateway, native configs/args и Compose/Kubernetes overrides приняты D48/D51.
+- Основная единица — одна транзакция; крупные записи разбиваются на части. Default полного frame с NATS headers — 2 MiB по D52; part layout определяет Gateway, producer сохраняет immutable plan/bytes. Точная wire schema ещё требует E02.
+- Конечная граница — NATS JetStream PubAck. Один NATS instance/stream replica; отдельные RocksDB WAL и Gateway journals сетей. Pending без TTL/прикладной квоты до ACK всего delivery batch; post-ACK судьба данных вне гарантии сборщика.
+- D54: logical destination NATS можно менять только после завершения pending адаптера и Gateway; ACK разных назначений не суммируются. Проверка same-destination при смене адреса обязательна.
 - Оригинал v2 неизменяем. Работа ведётся в v3-codex. Все решения, задачи и текущая точка сохраняются в файлах.
 
 ## Документы
 
 - [Стек компонентов](docs/COMPONENT_STACK.md) — версии-кандидаты, изоляция native toolchains и NATS packaging.
-- [Владельцы состояния](docs/STATE_OWNERSHIP.md) — lifecycle/IDs/bytes/parts, publication mapping и ACK без выбора physical backend.
+- [Владельцы состояния](docs/STATE_OWNERSHIP.md) — lifecycle/IDs/bytes/parts, publication mapping/destination и ACK; RocksDB принят D33.
 - [E00-03 по шагам](docs/E00_03_COMPONENT_PLAN.md) — .01–.07, карта компонентов, текущие вопросы и критерии завершения.
 - [Classic historical capture](docs/research/ARBITRUM_CLASSIC_CAPTURE.md) — source profiles, original inventory, observer candidate и fixtures CL-01…08.
 - [Polygon legacy capture](docs/research/POLYGON_LEGACY_CAPTURE.md) — separate receipt, optional scope, native replay и fixtures POLY-L01…07.
 - [Реестр native типов](docs/TRANSACTION_TYPE_REGISTRY.md) — поля, применимость, encoding/hash особенности и ограничения пяти сетей.
-- [Контракт сообщений](docs/MESSAGE_CONTRACT.md) — логическая схема, полнота блока, lifecycle, parts и будущие acceptance fixtures.
+- [Контракт сообщений](docs/MESSAGE_CONTRACT.md) — логическая схема, block metadata, lifecycle, parts/destination и будущие fixtures; без production verifier полноты.
 - [Матрица клиентов](docs/CLIENT_MATRIX.md) — проверенные исходники, рекомендации стека, capture/history ограничения и будущие POC.
 - [Краткая архитектура](docs/COLLECTION_ARCHITECTURE.md) — компоненты, границы, стек-кандидат и порядок финализации.
 - [Рабочее ТЗ v3](evm-transaction-extractor-tz-v3-codex.md) — детальные требования; строгие типы и разбиение приняты, точный protobuf ещё проект.
@@ -128,10 +135,11 @@ JOB-01/YAML отложен пользователем D20 для отдельн�
 - [План и задачи](docs/DEVELOPMENT_PLAN.md) — E00–E08; снятые ID не переиспользуются.
 - [Балансовые данные](docs/BALANCE_MODEL.md) — действия, сложные случаи и контракт нормализации.
 - [Словарь](CONTEXT.md) — термины.
+- [Повторный аудит](docs/DESIGN_AUDIT_2026_11_04.md) — исправленные противоречия, D54 и технический остаток T01–T05.
 
 ## Известные пробелы
 
-Логические block/coverage/parts и общий каркас actions описаны; точные network execution/finality variants, protocol action enums, field numbers и validators ещё требуют E02. Source paths найдены, но сборки/полнота не доказаны. Classic AVM observer, all-epoch decoder/machine identity и archive compatibility требуют CL-01…08; guide image v1.4.6 отличается от candidate source v1.4.7. Bor legacy auxiliary source receipt имеет собственный scope и не доказывает все system actions; native historical inputs и attribution требуют POLY-L01…07. Future Base types/forks не приравниваются к активным. Toolchain Bor/Nitro имеет расхождения; client pin не гарантирует historical state. Trace overhead измерить, WAL backend/transport versions ещё выбрать.
+Точный wire schema, network execution/finality variants, action enums и validators требуют E02; lifecycle reconciliation/GC — E05. До закрытия REC-T01 нужно устранить неописанное окно crash до durable capture descriptor. Prepare/plan после D52 и destination/ACK/drain checks D54 требуют технической детализации E03. Кандидаты клиентов/библиотек и RocksDB выбраны; остаются source/image pins, delta audit Geth/Bor, native config/init/mount mappings и DEP-04. Сборки/runtime не доказаны. Исторические Classic/Bor legacy и Base/Arbitrum не входят в текущий gate; performance требования сняты D40. Полный список — T01–T05 в аудите.
 
 ## Проверки
 

@@ -20,9 +20,9 @@
 
 Данные блокчейнов собраны, нормализованы и опубликованы в кластер NATS.IO. Последующие передача, обработка и хранение не проектируются. Сейчас результат работы — согласованное ТЗ; разработка кода ещё не начата.
 
-Сети первого контура: Ethereum Mainnet, BSC Mainnet, Base Mainnet, Arbitrum One, Polygon PoS. Каждая сеть имеет независимый процесс и конфигурацию; изменение одной не требует перезапуска остальных.
+Сети первого контура по D42: Ethereum Mainnet, BSC Mainnet и Polygon PoS. Base/Arbitrum отложены. Каждая сеть имеет независимый процесс и конфигурацию; изменение одной не требует перезапуска остальных.
 
-Матрица клиентов и concrete source pins проверена в E00-13: [CLIENT_MATRIX.md](CLIENT_MATRIX.md). Рекомендуемый набор — Go Geth/BSC/Nitro/Bor, Rust Base; сопутствующие consensus/runtime компоненты остаются внутри соответствующего профиля сети. Это source-verified стек-кандидат; сборки и capture fixtures ещё не выполнены.
+Историческая матрица пяти клиентов и source pins исследована в E00-13: [CLIENT_MATRIX.md](CLIENT_MATRIX.md). Текущий набор — Go Geth/BSC/Bor, Prysm для Ethereum и отдельная Geth/Prysm-пара для L1 Polygon, Heimdall для Polygon. Кандидаты D47 не равны прежним source pins: нужен delta audit Geth/Bor. Сборки и capture fixtures ещё не выполнены; Rust Base/Nitro остаются отложенным контекстом.
 
 ## Путь данных
 
@@ -44,7 +44,7 @@ Native node/executor → Adapter + Native lifecycle bridge → локальны�
 
 Единые network/block/transaction identities; полные transaction/receipt/log/call данные; точные значения без float; native order; причины изменений балансов и rollback; typed extensions для сетевых отличий. Нормализация не подменяет родное исполнение, не добавляет выдуманные транзакции и не сокращает детали.
 
-Принято D18: одна обычная транзакция — одно сообщение; превышающая лимит — несколько частей с общим event_id, part_index, part_count и digest. E00-14 описывает [логический контракт](MESSAGE_CONTRACT.md): TransportFrame с CompleteRecord либо RecordPart; digest исходных неизменяемых bytes, отдельная blockchain chronology и delivery sequence. Лимиты и компилируемая wire schema ещё не утверждены. Обрезать данные нельзя.
+Принято D18: одна обычная транзакция — одно сообщение; превышающая лимит — несколько частей с общим event_id, part_index, part_count и digest. E00-14 описывает [логический контракт](MESSAGE_CONTRACT.md): TransportFrame с CompleteRecord либо RecordPart; digest исходных неизменяемых bytes, отдельная blockchain chronology и delivery sequence. D52 задаёт default 2 MiB для полного frame с NATS headers; Gateway определяет part layout, producer сохраняет plan/bytes до публикации. Компилируемая wire schema остаётся E02. Обрезать данные нельзя. D54 запрещает менять логическое назначение NATS до завершения pending.
 
 Принято D17: общий строго типизированный контракт для всех поддерживаемых семейств. Обязательны транзакционные, block metadata и reorg/finality сообщения. Системные изменения балансов вне транзакций — необязательное расширение; если оно существенно усложняет код, его можно не реализовывать, явно объявив границу покрытия. Родные системные транзакции и все их эффекты остаются обязательными.
 

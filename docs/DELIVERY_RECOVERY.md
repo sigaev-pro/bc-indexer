@@ -15,9 +15,9 @@
 ## Порядок работы
 
 1. Принять блок и нормализовать данные. RECEIVED сам по себе не гарантирует сохранность.
-2. Сохранить immutable сообщения/части и закрытый список references в RocksDB sync WriteBatch; после всех payload commits атомарно закрыть READY и capture checkpoint. Только после успеха присвоить WAL_SAVED.
-3. Публиковать через Gateway. При временной ошибке повторять с задержкой, не ограничивая число попыток; ID, bytes и part layout при retry сохраняются. Повторы допустимы.
-4. Gateway учитывает PubAck каждого сообщения/части. Завершение блока возможно только после ACK всего batch; затем подтверждение возвращается producer.
+2. Сохранить immutable Envelope bytes и закрытый список references в RocksDB sync WriteBatch; после всех payload commits атомарно закрыть READY и capture checkpoint. Только после успеха присвоить WAL_SAVED. Локальные фрагменты хранения не являются транспортными частями; открытое окно до durable capture descriptor описано в REC-T01.
+3. Через Prepare получить от Gateway plan с epoch/sequence, logical destination и part layout по D52; сохранить plan и точные сериализованные frames до PublishBatch. При временной ошибке повторять с задержкой, не ограничивая число попыток; ID, bytes и part layout при retry сохраняются. Повторы допустимы.
+4. Gateway учитывает PubAck каждого сообщения/части в сохранённом logical destination. Завершение блока возможно только после ACK всего batch в этом назначении; затем подтверждение возвращается producer. D54 запрещает смену назначения до завершения pending адаптера и Gateway; ACK разных назначений не суммируются.
 5. Перед удалением payload зафиксировать restart checkpoint. Удалять только подтверждённые batch; незавершённые сохранять. Минимальное рабочее состояние должно позволять продолжить pending batch и активный N–M, но архив доставленных блоков не нужен.
 
 Проектный протокол: после IngestAck атомарно фиксировать ACKED_CLEANUP/release_outbox; малый payload удалять в том же WriteBatch, большой — bounded пакетами под durable cleanup marker. Frontier не перескакивает pending batch. Publication plan сохраняется у producer до первой публикации, что позволяет восстановить точные frames после потери Gateway store. Подробности и release handshake — [ROCKSDB_DELIVERY_PROTOCOL](ROCKSDB_DELIVERY_PROTOCOL.md).

@@ -12,10 +12,10 @@
 | Capture attempt и prepared messages | Adapter live или history | Разные pods/processes, независимые run_id и cursors |
 | Наблюдаемый lifecycle/reorg/status | Native bridge данного producer; durable lifecycle_state | References/counter/branch checkpoint сохраняются с READY, не удаляются ACK cleanup пока нужны Removed/Status. Нет общего registry между runs; подробные native finality правила E02/E05 |
 | Event ID, immutable Envelope bytes/digest | Delivery writer данного producer/run | Retry сохраняет ID/bytes; повтор команды может создать новые события для тех же блоков |
-| Outbound part layout | Adapter delivery writer | Фиксируется для retry; Gateway не перепаковывает pending событие молча |
+| Outbound part layout | Gateway при Prepare; Adapter delivery writer сохраняет plan и frame bytes | D52: Gateway выбирает разбиение по своему лимиту; после durable plan layout/bytes неизменны для retry |
 | RECEIVED / WAL_SAVED / полученный IngestAck | Adapter progress journal | WAL_SAVED требует закрытого batch и согласованной durable записи; read cursor недостаточен |
 | event_id → publication_epoch/chain_sequence / pending публикация | Gateway journal сети | Plan дополнительно хранит producer до публикации; только delivery identity, не dedup по block/tx hash или диапазонам |
-| PubAck сообщений/частей | Gateway | NATS_ACKED только после всех ACK закрытого batch; потерянный ACK допускает повтор |
+| Logical destination и PubAck сообщений/частей | Gateway; producer хранит destination вместе с plan | D54: NATS_ACKED только после всех ACK закрытого batch в одном назначении; потерянный ACK допускает повтор, смена назначения при pending запрещена |
 | Параметры N–M / cursor задания | History producer/run | Простая конечная команда; нет общего job registry, устраняющего overlap |
 | Stream messages и retention | NATS JetStream | ACK не подтверждает downstream-валидацию или бессрочное хранение |
 
@@ -30,5 +30,6 @@ Per-network служебное хранение означает namespaces и �
 - Reorg: producer публикует native lifecycle observations со своими references; объединение нескольких наблюдателей относится к принимающей стороне.
 - Ошибка получения/нормализации/WAL: ERROR не становится успешной доставкой.
 - Снижение лимитов ниже уже сохранённой части: явная ошибка/остановка передачи; не усечение и не незаметная смена bytes/layout.
+- Смена NATS account/stream/subjects при pending: явная ошибка до публикации; подтверждения разных назначений не суммируются. Замена адреса того же назначения проверяется отдельно по D54.
 
-Это логическое распределение ответственности, не пройденные тесты. Полный block-content verifier, range coverage oracle и downstream dedup отсутствуют. E00-03.06 завершён как контракт, .07 — [итоговая проверка](E00_03_ARCHITECTURE_REVIEW.md). Дальше CFG/JOB-01, только документация.
+Это логическое распределение ответственности, не пройденные тесты. Полный block-content verifier, range coverage oracle и downstream dedup отсутствуют. E00-03.06 завершён как контракт, .07 — [историческая итоговая проверка](E00_03_ARCHITECTURE_REVIEW.md). CFG закрыт D39, история отложена D38; текущие технические пробелы — в [аудите](DESIGN_AUDIT_2026_11_04.md). Только документация.
