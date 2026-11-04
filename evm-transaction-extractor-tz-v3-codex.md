@@ -276,6 +276,8 @@ SELFDESTRUCT хранится как отдельное действие вну�
 
 Для CREATE/CREATE2 сохраняются input создания, output, результат и созданный адрес; итоговый code включается в AccountChange.
 
+Точный логический SelfDestructAction и связь с денежной проекцией определены в [MESSAGE_CONTRACT](docs/MESSAGE_CONTRACT.md). Нулевой balance не удаляет действие; fork eligibility, сохранённый deletion effect и конечный AccountChange различаются. Для authorization source tuple используется отдельная AuthorizationSignature с uint8 parity; ошибка отдельного tuple не является ошибкой всей включённой транзакции. Applied/StatusChanged/Removed имеют правила раннего Status, полных evidence snapshots и terminal Removed в том же контракте.
+
 Нельзя считать каждое действие SELFDESTRUCT удалением контракта: правила EIP-6780 сохраняют code и storage во многих случаях. Семантика определяется активными правилами конкретной сети и исторической высоты. Источник: [EIP-6780](https://eips.ethereum.org/EIPS/eip-6780).
 
 ## 10. Logs и state diff
@@ -312,12 +314,12 @@ Before/after относятся к границам одной транзакц�
 | Событие | Смысл |
 |---|---|
 | TransactionApplied | Полная запись канонического включения транзакции |
-| TransactionRemoved | Ранее опубликованное включение отменено |
+| TransactionRemoved | Durable активация включения отменена; Applied может ещё ожидать публикации |
 | TransactionStatusChanged | Изменились статусы финальности конкретного включения |
 | BlockApplied | Native metadata блока, включая пустой; не доказательство полноты |
 | BlockRemoved / BlockStatusChanged | Отмена активации блока и typed finality evidence |
 | SystemBalanceApplied | Полная запись протокольного изменения нативных балансов |
-| SystemBalanceRemoved | Ранее опубликованная активация протокольного изменения отменена |
+| SystemBalanceRemoved | Durable активация протокольного изменения отменена; Applied может быть pending (optional поток) |
 | SystemBalanceStatusChanged | Изменились статусы финальности протокольного изменения |
 
 Прикладных событий начала, окончания и промежуточных этапов обработки блока нет.
@@ -466,7 +468,7 @@ D48: `gateway.nats.stream` и `gateway.nats.subject_prefix` задают выб�
 При reorg:
 
 1. Определить старые включения транзакций и протокольных изменений балансов в отменяемой ветке.
-2. Для ранее опубликованных включений выдать TransactionRemoved или SystemBalanceRemoved.
+2. Для durable активаций с READY Applied, которые уже опубликованы или ещё могут быть доставлены, выдать TransactionRemoved или optional SystemBalanceRemoved. Не ждать PubAck Applied; отмена может прийти раньше него. Незакрытые попытки обрабатываются по протоколу capture/recovery, а не объявляются опубликованными.
 3. Отменять старую ветку от вершины вниз; внутри блока — по убыванию общего operation_index с учётом правил deferred execution профиля сети.
 4. Выдать TransactionApplied и SystemBalanceApplied для новой ветки по возрастанию высоты и общего порядка исполнения.
 5. Сохранить ссылки на активацию своего producer/run; parts могут чередоваться. Пересечение backfill/live и повторные наблюдения допустимы.
