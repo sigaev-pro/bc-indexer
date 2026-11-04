@@ -58,10 +58,17 @@ CLI не скачивает клиенты, не создаёт pods и не в�
 | `gateway.nats.subject_prefix` | string | Обязательно gateway: префикс без wildcard; default-профили используют `evm.v3.<chain_key>`, suffix берётся из закрытого реестра MESSAGE_CONTRACT |
 | `transport.max_frame_bytes` | positive integer | Optional gateway; default `2097152` (2 MiB), полная TransportFrame вместе с NATS headers; новые публикационные планы |
 | `runtime.log_level` | enum | Optional: debug/info/warn/error, default info |
+| `finality.polygon.l1_endpoint` | URI | Обязательно только polygon live: собственный supporting Geth, http/https JSON-RPC; не основной Ethereum extractor |
+| `finality.polygon.sources_file` | path | Обязательно только polygon live: read-only `/etc/extractor/polygon-sources.json`, bootstrap identities/roles/endpoints по CURRENT_SEMANTICS; абсолютный path |
+| `finality.polygon.l1_tls` | tagged object | Обязательно только polygon live: disabled при http, server/mutual при https; стандартные поля TLS ниже |
+| `finality.polygon.expected_root_chain_address` | string | Обязательно только polygon live: 40 lowercase hex без 0x, address из проверенного mainnet bootstrap/chain params |
+| `finality.polygon.expected_child_block_interval` | positive u64 | Обязательно только polygon live: значение из проверенного bootstrap/checkpoint params, без float/narrowing |
 
 Объекты TLS: `mode: disabled` запрещает дополнительные поля; `server` требует `ca_file`; `mutual` требует `ca_file`, `cert_file`, `key_file`. Проверка имени сервера обязательна при TLS. Для NATS disabled соответствует `nats://`, остальные режимы — `tls://`. Server-only TLS для адаптер↔Gateway не разрешён. UDS защищается правами файловой системы. Противоречивые режимы — ошибка до запуска.
 
 Структура всего документа проверяется целиком. Обязательные поля, локальные файлы и credentials проверяются только для запускаемой роли. Live не требует чтения NATS credentials; отсутствующая секция другой роли допустима. Секций ClickHouse, history, coverage и startup-уведомлений нет.
+
+D63: finality.polygon разрешён только polygon live. Heimdall endpoint берётся из effective native Bor config; expected L1 network — Ethereum Mainnet profile собственного Polygon L1 комплекта. Expected RootChain address/interval генерируются окружением из проверенных bootstrap chain parameters и сверяются с online responses, не принимаются автоматически из произвольного ответа. Значения и supporting node identity сохраняются в evidence. Нет fallback на основной Ethereum extractor. Wrong configured identity — CONFIG error; временная недоступность correct supporting source задерживает только GC. Observer в LIVE выполняет один цикл не чаще раза в 10 секунд, deadline отдельного network read 10 секунд; это технические defaults, не SLO. DRAIN не начинает новые optional polls и разрешает только сохранённый GC decision.
 
 ## Размер сообщения D52
 
@@ -77,11 +84,11 @@ Pending publication plan/bytes неизменны при restart и retry. Из�
 
 Точный нормативный порядок D54/D57/D59: [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md). Binding задаётся окружением до первого capture и сохраняется обоими owners; local READY без Prepare уже имеет destination. Drain и switch проходят durable generation barrier, а не проверку пустоты RAM.
 
-`stream` и `subject_prefix` проверяются вместе с network identity и доступным NATS account при online handshake. Это конфигурация существующего назначения; Gateway не создаёт streams и не меняет их административно. Точные правила идентификации account/назначения и их проверки при reconnect требуется завершить в E03 до реализации этого протокола; совпадение URL или имени stream само по себе недостаточно.
+`stream` и `subject_prefix` должны совпасть с desired DestinationBinding. Gateway проверяет точное account поле UserInfo, stream/subjects/limits и descriptor digest по [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md); URL не identity. Stream создаёт environment bootstrap, runtime Gateway не выполняет административный create/update.
 
 Publication plan и ACK относятся к одному сохранённому логическому назначению. При наличии незавершённой доставки у адаптера или Gateway смена account/stream/subject mapping отклоняется до публикации; pending и исходные настройки назначения сохраняются. Смена адреса или credentials, по-прежнему ведущих в тот же account/stream/subjects, не является переносом данных, но требует проверки назначения. Неопределённость этой проверки не разрешает объединять ACK.
 
-Для перенастройки назначения остановить новые live-наблюдения, завершить pending и обмен подтверждениями в прежнем назначении, проверить сохранённые состояния обоих owners, затем изменить конфигурацию и перезапустить контур. Только пустой Gateway или очередь RAM не доказывают завершение producer pending; при недоступности необходимого состояния переход не подтверждается. После перезапуска новые наблюдения начинаются с новой H+1 по D39. Если прежнее назначение недоступно, данные сохраняются, а смена блокируется; принудительный перенос pending в текущий scope не входит. Post-ACK retention/потеря NATS store остаются вне гарантии сборщика по D30–D31.
+Для cutover выполнить старый binding drain до DRAINED; заменить binding_file обеих ролей на desired descriptor и согласовать Gateway stream/prefix. Старые binding/seal/drain_id читаются из store, дополнительных YAML keys нет. Gateway с desired mismatch входит в AWAIT_SWITCH; native explicit LIVE завершает persisted Switch/Resume до новой H. Полная последовательность — CONTROL_WIRE_CONTRACT. Пустой Gateway/RAM не доказывает завершение native/producer obligations. При недоступном старом назначении pending сохраняются, cutover блокируется; forced migration отсутствует. Post-ACK retention/потеря NATS store вне гарантии D30–D31.
 
 ## Native-профили
 

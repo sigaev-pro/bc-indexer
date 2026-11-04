@@ -1,5 +1,7 @@
 # Native capture, state retention и lifecycle recovery
 
+Exact current data/finality/GC semantics — [CURRENT_SEMANTICS](CURRENT_SEMANTICS.md), D62/D63. Semantic identity и связь decision→batch — [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). GC не использует generic native finalized getter без provenance.
+
 2026-11-05 · DOC-REPAIR-03 · D57/D58. Нормативное уточнение [архитектуры](COLLECTION_ARCHITECTURE.md), [модели изменений](BALANCE_MODEL.md) и раннего описания capture в [RocksDB protocol](ROCKSDB_DELIVERY_PROTOCOL.md). Это проект native patches; наличие подходящих upstream API не доказывает работу будущей сборки. E01/E04/E05 остаются обязательными gates.
 
 ## Поддержанный профиль и владельцы
@@ -48,6 +50,8 @@ Bor recording resolver сохраняет exact request identity и exact respon
 | FATAL_CAPTURE_ERROR | Нельзя безопасно сохранить/нормализовать данные | Остановить native процесс; сохранить восстановимые данные, не выдавать consensus-invalid |
 
 EXEC_READY содержит **record corpus без публичной activation/event identity**, а не уже опубликованный Envelope. Спекулятивный branch не публикуется сам по себе. Только native canonical/lifecycle решение определяет activation, revisions и public events. При повторном применении той же branch возможен reuse corpus с новой activation.
+
+Canonical decision сначала закрывает semantic descriptors: activation refs/revisions/source_sequence/kind и stable entity ordinals. Decision→batch allocation atomic; только затем DELIVERY_STAGING выделяет event IDs и строит Envelope. Retry этой стадии не меняет semantic IDs/revisions; повтор native marker находит прежний batch либо retained applied-decision frontier.
 
 Crash после EXEC_READY до native state commit может уничтожить mutable StateDB. Corpus не заменяет полное native state: optional system scopes могут в нём отсутствовать. Для завершения штатного import разрешён native-only replay из parent pin и сохранённой capsule; он не заменяет corpus и не создаёт новые public IDs/bytes. Сравниваются profile/input digest, native resulting state root/receipt commitments и применимые captured outcomes. Несовпадение — source invariant error. READY/SEALED transport replay сам по себе native execution не требует.
 

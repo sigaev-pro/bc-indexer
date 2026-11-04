@@ -1,5 +1,7 @@
 # Нормативный автомат доставки — DOC-REPAIR-02
 
+Точные identities, binding JSON/digests, manifest/reservation bytes, wrapper layout, RPC/errors и исполнимый cutover заданы в [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). Ниже — автомат состояний этого же протокола, не отдельная альтернативная схема.
+
 2026-11-05. D26–D33, D52, D54, D57–D59. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable Envelope bytes.
 
 ## Identity, режимы и atomicity
@@ -32,6 +34,8 @@ Gateway prefixes: `meta/{store_epoch,destination_binding}`, `session/<producer,r
 | Producer cleanup завершён | ReleaseAck | Sync retired_prefix и удаление outbox | RETIRED; payload/plan отсутствуют |
 
 IngestAck проверяет batch/manifest/plan/destination; ACK части либо успешный gRPC write не заменяет его. Перед удалением любых recovery fragments должна существовать durable замена либо достаточные replay prerequisites. Старый attempt не смешивается с новым manifest. Любые bytes под существующим immutable event_id неизменны, даже до первой публикации.
+
+До DELIVERY_STAGING уже durable semantic descriptors с activation/revision/source identity; retry attempt меняет только public event reservations. Decision→batch_id и batch counter сохраняются атомарно, повтор native marker не выделяет новый batch. В ACKED/outbox сохраняется весь IngestAck, включая issuer_store_epoch и layout_manifest_digest, до producer cleanup; он требуется RecoveryRelease после Gateway loss.
 
 ## Prepare и повторные попытки
 
@@ -69,9 +73,9 @@ Gateway при подключении проверяет account, StreamInfo, su
 
 1. Остановить LIVE штатным способом и подтвердить отсутствие старого writer. Запустить ту же совместимую native сборку с `--extractor-mode=drain`; YAML содержит тот же store/binding. Перед recovery sync установить DRAIN, если он ещё не сохранён. DRAIN не включает новый H+1 capture и не выполняет sync-range выгрузку.
 2. Восстановить сохранённые capture/lifecycle intents; новые непредусмотренные live callbacks не создают обязательств. Доставить READY/SEALED; закончить ACKED_CLEANUP и ordered Release. Native источник нужен для незакрытого capture; его недоступность не даёт DRAINED.
-3. Producer фиксирует drain_id и batch_highwater, затем отправляет SealGeneration(binding_generation,admission_generation,drain_id,highwater). Gateway fencing barrier проверяет отсутствие незавершённых операций <=highwater и совпадение retired_prefix. Sync SEALED_GENERATION запрещает новые Prepare этой admission generation; повтор возвращает тот же SealAck.
+3. Только после исчерпания native obligations, ещё способных создать batch, producer фиксирует drain_id/highwater и отправляет SealGeneration(binding_generation,admission_generation,drain_id,highwater). Gateway barrier проверяет отсутствие незавершённых операций <=highwater и совпадение retired_prefix. Sync SEALED_GENERATION запрещает Prepare этой admission generation; повтор возвращает тот же SealAck. Retained pins, ожидающие будущего finalized anchor, не требуют нового capture и не блокируют DRAINED.
 4. Producer sync сохраняет DRAINED с SealAck и завершается. Crash до этого продолжает DRAIN; новый LIVE не включается автоматически. Оба owners сохраняют identity/lifecycle, terminal prefix и seal evidence, очищают временные delivery payload/receipts. «Оба журнала очищены» не означает удалить DB/ключи.
-5. Для смены destination новый descriptor имеет новую generation; обе конфигурации указывают old/new binding и drain_id. Fenced handshake пишет Gateway SWITCH_PREPARED, producer sync новую binding, Gateway подтверждает SWITCH_COMMITTED. Повтор каждого шага идемпотентен; несовпадение generation блокирует capture. Команда LIVE выполняет этот handshake, затем Resume до снятия DRAINED и фиксации новой H. Для возврата в LIVE без смены назначения также требуется явный restart с mode=live и Resume после завершённого seal.
+5. Для смены destination обе роли получают desired descriptor следующей generation через binding_file; old binding/seal/drain_id берутся из store. Gateway desired mismatch входит в AWAIT_SWITCH, сохраняя прежнее active назначение. Native explicit LIVE sync создаёт SwitchIntent; PrepareSwitch → producer binding commit → CommitSwitch завершают переход. Затем Resume до снятия DRAINED/фиксации H. Для прежнего binding Switch пропускается, Resume обязателен. Необъявленные YAML keys old/new/drain_id не вводятся.
 6. Старые SEALED generations не принимают новых данных. Упавший процесс завершает сохранённый switch, не угадывает нужную сторону по более свежему YAML. Если последний owner store потерян, операция требует восстановления seal/binding evidence от surviving owner; при недостатке evidence — ERROR, не bypass.
 
 D59: будущие Removed/Status сохраняют activation references, даже если исходный ACKed Applied был в прежнем назначении. Уже подтверждённая история не копируется. Новому stream не обещается самостоятельная полнота старых ссылок; downstream/copy вне scope.
