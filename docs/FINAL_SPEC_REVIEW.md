@@ -31,8 +31,8 @@
 
 Source inspection закреплённых клиентов использован для точных контрактов, включая BSC milliseconds, фактические setter paths, Bor milestone recovery и checkpoint commitment. Это не runtime proof и не независимая проверка консенсуса.
 
-## Что остаётся при реализации
+## Требования к реализации как содержание ТЗ
 
-E01–E07 полностью впереди: независимые builds/toolchain locks, native pin/admission/ownership/decision proofs, compiled schema/validators, durable delivery, полный corpus трёх сетей, crash/reorg/GC matrix, generated окружения и end-to-end приёмка. Immutable image digests, ABI/toolchain compatibility, полный bootstrap genesis payload и power-loss durability нельзя объявлять проверенными по тексту ТЗ.
+ТЗ описывает E01–E07: независимые builds/toolchain locks, native pin/admission/ownership/decision proofs, compiled schema/validators, durable delivery, corpus трёх сетей, crash/reorg/GC matrix, generated окружения и end-to-end приёмку. По D64 это спецификация требований, не наша будущая работа. Immutable image digests, ABI/toolchain compatibility, bootstrap genesis payload и power-loss durability нельзя объявлять проверенными по тексту.
 
-После отдельного указания пользователя первая задача — E01-01, затем E01-02 отдельно для ETH/BSC/POLY. Отрицательный proof останавливает зависимый этап и возвращает проектное противоречие на уточнение. Завершение документации не является разрешением реализации или обещанием отсутствия будущих дефектов.
+D64 отменяет прежнюю точку начала реализации: её не будет никогда в рамках нашей работы. E01–E07 и порядок E01-01/E01-02 сохранены только как содержание ТЗ для описываемой системы. Дальнейшая задача — находить и устранять противоречия и пробелы в ТЗ, уточнять требования и сохранять проверяемые критерии; готовность документации не переводит работу к коду.
