@@ -1,8 +1,10 @@
 # Подробное ТЗ для исполнителя решений
 
+<!-- Служебные правила: .project/AGENTS.md. Точка продолжения: .project/PROJECT_STATUS.md. Перед изменением документов прочитать оба файла. -->
+
 **Для кого:** для человека или ИИ, которому нужно одинаково понимать утверждённые требования, границы компонентов, ожидаемые результаты и проверочные сценарии.  
 **Парный документ:** [ТЗ для принимающего решения](TZ_DECISION_MAKER.md).  
-**Статус:** адресная редакция D66 от 2026-11-05 по [каноническому ТЗ v3](evm-transaction-extractor-tz-v3-codex.md). Принятое поведение сохранено.
+**Статус:** адресная редакция D66 от 2026-11-05 по [каноническому ТЗ v3](.project/evm-transaction-extractor-tz-v3-codex.md). Принятое поведение сохранено.
 
 В рамках нашей работы создаётся только ТЗ: реализации не будет никогда. Описания задач, программных компонентов, сборок и испытаний ниже — требования к проектируемой системе, не поручение их выполнять. `NOT_RUN` означает, что испытание не запускалось; его нельзя читать как «прошло успешно».
 
@@ -242,7 +244,7 @@
 | [D — Конфигурация и окружение](#приложение-d-конфигурация-и-окружение) | YAML/CLI, компоненты/volumes, bootstrap, trust, ports, source pins |
 | [E — Приёмка и декомпозиция](#приложение-e-приёмка-и-декомпозиция) | REQ, атомарные AC, REC families, gates/evidence, task graph и карточки |
 
-Тематические файлы docs — синхронизируемые представления; нормативный контракт целиком находится здесь. Термины — [CONTEXT](CONTEXT.md), принятые решения — [DECISIONS](docs/DECISIONS.md), текущая документальная задача — [PROJECT_STATUS](PROJECT_STATUS.md). [Финальная сверка и карта grill](docs/FINAL_SPEC_REVIEW.md) показывают покрытие вопросов и границы проведённых проверок.
+Тематические файлы docs — синхронизируемые представления; нормативный контракт целиком находится здесь. Термины — [CONTEXT](.project/CONTEXT.md), принятые решения — [DECISIONS](.project/docs/DECISIONS.md), текущая документальная задача — [PROJECT_STATUS](.project/PROJECT_STATUS.md). [Финальная сверка и карта grill](.project/docs/FINAL_SPEC_REVIEW.md) показывают покрытие вопросов и границы проведённых проверок.
 
 ## Приложение A. Данные и семантика
 
@@ -555,7 +557,7 @@ BlockComplete и CoverageUpdated исключены D25. Source metadata не я
 
 Внутренний закрытый delivery batch содержит references фактически подготовленных сообщений блока. После durable сохранения batch/messages — WAL_SAVED; после PubAck всех этих сообщений/частей — NATS_ACKED. Это локальный учёт передачи, не утверждение, что источником выданы все данные блокчейна. Отдельное публичное событие прогресса/coverage и UI не требуются.
 
-Optional BorLegacyReceiptRecord описан в [POLYGON_LEGACY_CAPTURE.md](docs/research/POLYGON_LEGACY_CAPTURE.md): source receipt/hash/index/encoding, без фиктивной transaction envelope. Его source-only ограничения сохраняются, auxiliary completeness verifier не вводится.
+Optional BorLegacyReceiptRecord описан в [POLYGON_LEGACY_CAPTURE.md](.project/docs/research/POLYGON_LEGACY_CAPTURE.md): source receipt/hash/index/encoding, без фиктивной transaction envelope. Его source-only ограничения сохраняются, auxiliary completeness verifier не вводится.
 
 #### 5. Lifecycle, finality и поздняя metadata
 
@@ -645,7 +647,7 @@ NATS message ID должен стабильно различать `(network,eve
 
 `AccessEntry={address:A, storage_keys:H[]}`. `TypedSignature={y_parity:0|1,r:Q,s:Q}` относится к внешней typed transaction. `AuthorizationSignature={y_parity:u8,r:Q,s:Q}` и `Authorization={chain_id:Q,address:A,nonce:u64,signature:AuthorizationSignature}` сохраняют исходный authorization tuple. Порядок и дубликаты source lists сохраняются. Нельзя отвергать целую включённую native транзакцию потому, что отдельный tuple имеет parity вне 0/1, неверную подпись, chain_id/nonce или неприменимую authority: native может пропустить tuple и продолжить обработку. Проверки исходной разрядности остаются обязательными; source tuple не заменяется результатом signature recovery. Валидность внешней транзакции и применимость tuple — разные проверки. [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702), [выбранный Geth source](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/tx_setcode.go).
 
-Blob sidecars не являются обязательной частью включённой execution transaction: сохраняются поля native body, blob hashes и применимый receipt; доступность blob data не подменяется обещанием полного DA-архива. Fixtures AUTH-01–04 определены в [реестре исправлений](docs/DESIGN_REPAIR_STATUS.md); runtime-проверки ещё не выполнены.
+Blob sidecars не являются обязательной частью включённой execution transaction: сохраняются поля native body, blob hashes и применимый receipt; доступность blob data не подменяется обещанием полного DA-архива. Fixtures AUTH-01–04 определены в [реестре исправлений](.project/docs/DESIGN_REPAIR_STATUS.md); runtime-проверки ещё не выполнены.
 
 Это библиотека вариантов, а не разрешение всех пяти типов во всех сетях. ETH/BSC исходники определяют ID 0–4; Base/Nitro/Bor используют только варианты, разрешённые их собственными правилами в данном блоке. Fork validator обязателен. Наличие типа в исходнике само по себе не доказывает активацию.
 
@@ -667,7 +669,7 @@ Native `Finalize/applyTransaction` является обязательным cap
 
 Нет native signature/chain ID/account nonce/gas/calldata обычной транзакции. Network identity остаётся обязательной в envelope. Zero-address значения accessor не обозначают фактические execution sender/receiver: исполнение использует BorSystemAddress и настроенный state receiver; они отражаются в execution projection/calls.
 
-До Madhugiri (Mainnet boundary 80 084 800) отдельный synthetic receipt имеет derived hash `keccak("matic-bor-receipt-" || uint64BE(block_number) || block_hash)` и позицию после обычных receipts. Он не является body transaction типа 0x7f; dummy LegacyTx из helper не превращается в настоящую подписанную транзакцию. E00-15 определяет optional `BorLegacyReceiptRecord` с origin `BOR_LEGACY_SYNTHETIC_RECEIPT`, storage receipt encoding и отдельным inventory: [исследование и схема](docs/research/POLYGON_LEGACY_CAPTURE.md). Body transactions остаются обязательными на всей истории; optional публикация legacy records не означает optional исполнение state sync самим узлом.
+До Madhugiri (Mainnet boundary 80 084 800) отдельный synthetic receipt имеет derived hash `keccak("matic-bor-receipt-" || uint64BE(block_number) || block_hash)` и позицию после обычных receipts. Он не является body transaction типа 0x7f; dummy LegacyTx из helper не превращается в настоящую подписанную транзакцию. E00-15 определяет optional `BorLegacyReceiptRecord` с origin `BOR_LEGACY_SYNTHETIC_RECEIPT`, storage receipt encoding и отдельным inventory: [исследование и схема](.project/docs/research/POLYGON_LEGACY_CAPTURE.md). Body transactions остаются обязательными на всей истории; optional публикация legacy records не означает optional исполнение state sync самим узлом.
 
 Legacy source receipt содержит native status/logs, но не доказывает полноту calls/actions/diff. Writer создаёт receipt только при дополнительных logs; отсутствие записи не доказывает отсутствие system actions. Поэтому scope source receipt и scope полного system execution разделяются. Схема не обязывает включать это расширение вопреки D17.
 
@@ -727,7 +729,7 @@ Effects одного transfer invocation собираются по integration o
 
 `EthereumEvidence={safe:ReferenceObservation,finalized:ReferenceObservation,safe_basis=CONSENSUS_SETTER|STARTUP_FINALIZED_FALLBACK|UNSET}` плюс common observed head. Known finalized покрывает activation, когда `isAncestorOrSelf(activation.block, finalized)` → ETH_FINALIZED; иначе такое же покрытие known safe → ETH_SAFE; известные references без покрытия → ETH_CANONICAL_UNFINALIZED; отсутствие необходимых references → ETH_FINALITY_UNKNOWN. Unknown safe не отменяет known finalized.
 
-Safe в pinned Geth может восстановиться из finalized после restart и стать ниже прежнего safe; новый snapshot с NATIVE_RESTART допускается. Zero hash в Engine forkchoice input — native no-op, не команда clear. Bridge наблюдает фактические SetSafe/SetFinalized/head mutations, включая их выполнение до возможной последующей FCU ошибки; одного успешного RPC status или ChainHeadEvent недостаточно. GC anchor — только durable accepted finalized на canonical execution ancestry, никогда safe. [Pinned source evidence и seams](docs/research/ETH_BSC_FINALITY_CONTRACT.md).
+Safe в pinned Geth может восстановиться из finalized после restart и стать ниже прежнего safe; новый snapshot с NATIVE_RESTART допускается. Zero hash в Engine forkchoice input — native no-op, не команда clear. Bridge наблюдает фактические SetSafe/SetFinalized/head mutations, включая их выполнение до возможной последующей FCU ошибки; одного успешного RPC status или ChainHeadEvent недостаточно. GC anchor — только durable accepted finalized на canonical execution ancestry, никогда safe. [Pinned source evidence и seams](.project/docs/research/ETH_BSC_FINALITY_CONTRACT.md).
 
 #### BSC evidence D62
 
@@ -739,7 +741,7 @@ Safe в pinned Geth может восстановиться из finalized по�
 
 Для каждой activation отдельно вычисляются `header_status=FINALIZED_HEADER_ATTESTED|JUSTIFIED|NO_ATTESTED_FINALITY|CANONICAL_UNFINALIZED` и `early_status=VOTE_FINALIZED_OBSERVED|NOT_COVERED|NOT_OBSERVED`: сведения не сворачиваются в один безусловный finalized flag. Header Source должен покрывать activation по ancestry; header head и execution head предварительно согласуются. Early event side branch не финализирует canonical activation. Потеря transient early evidence допустима и не понижает durable GC anchor.
 
-GC anchor — только header-derived AttestedSnapshot.finalized, canonical ancestry и durable evidence. CurrentFinalBlock/LastFinalized hash сами по себе недостаточны: они могут содержать vote-derived результат. Нужен error-aware native snapshot accessor, не пересчёт через public getter, потерявший provenance. [Pinned исследование](docs/research/ETH_BSC_FINALITY_CONTRACT.md).
+GC anchor — только header-derived AttestedSnapshot.finalized, canonical ancestry и durable evidence. CurrentFinalBlock/LastFinalized hash сами по себе недостаточны: они могут содержать vote-derived результат. Нужен error-aware native snapshot accessor, не пересчёт через public getter, потерявший provenance. [Pinned исследование](.project/docs/research/ETH_BSC_FINALITY_CONTRACT.md).
 
 #### Polygon evidence и L1 GC D63
 
@@ -770,7 +772,7 @@ Own-L1 RPC здесь — служебная finality evidence нативной 
 
 При pruning state у F можно сделать **новое** observation с более новым finalized block; сохранённое old evidence не переписывается. Неизвестная сеть/contract, malformed result или конфликт ниже уже принятого anchor — source invariant error. Недоступность L1/Heimdall задерживает GC, обычная публикация готовых Polygon records продолжается. Drain не ждёт будущего checkpoint ради очистки уже завершённой доставки: остающиеся lifecycle/pins — retained native state, не новый delivery pending. Сохранённый незавершённый GC decision разрешается/отклоняется безопасно до seal; новый optional GC poll в DRAIN не запускается.
 
-Checkpoint commits number/time/txRoot/receiptRoot; полный Bor header/stateRoot в leaf не входит. GC опирается на этот commitment **и** проверенную local Bor ancestry/native consensus, не обещает независимый криптографический proof всех state fields. Source fields, exact REST/RPC и граница — [pinned Polygon research](docs/research/POLYGON_FINALITY_CONTRACT.md).
+Checkpoint commits number/time/txRoot/receiptRoot; полный Bor header/stateRoot в leaf не входит. GC опирается на этот commitment **и** проверенную local Bor ancestry/native consensus, не обещает независимый криптографический proof всех state fields. Source fields, exact REST/RPC и граница — [pinned Polygon research](.project/docs/research/POLYGON_FINALITY_CONTRACT.md).
 
 #### Provisioning supporting identities
 
@@ -802,7 +804,7 @@ DATA-01: все применимые header/call/account fields, presence/нол
 
 Exact current data/finality/GC semantics — [CURRENT_SEMANTICS](#точные-данные-и-финальность-текущих-сетей), D62/D63. Semantic identity и связь decision→batch — [CONTROL_WIRE_CONTRACT](#идентификаторы-и-служебный-wire-protocol). GC не использует generic native finalized getter без provenance.
 
-2026-11-05 · DOC-REPAIR-03 · D57/D58. Нормативное уточнение [архитектуры](docs/COLLECTION_ARCHITECTURE.md), [модели изменений](docs/BALANCE_MODEL.md) и раннего описания capture в [RocksDB protocol](docs/ROCKSDB_DELIVERY_PROTOCOL.md). Это проект native patches; наличие подходящих upstream API не доказывает работу будущей сборки. E01/E04/E05 остаются обязательными gates.
+2026-11-05 · DOC-REPAIR-03 · D57/D58. Нормативное уточнение [архитектуры](.project/docs/COLLECTION_ARCHITECTURE.md), [модели изменений](.project/docs/BALANCE_MODEL.md) и раннего описания capture в [RocksDB protocol](.project/docs/ROCKSDB_DELIVERY_PROTOCOL.md). Это проект native patches; наличие подходящих upstream API не доказывает работу будущей сборки. E01/E04/E05 остаются обязательными gates.
 
 #### Поддержанный профиль и владельцы
 
@@ -929,7 +931,7 @@ Source inspection выполнена; сборки, fault injection и эти fi
 
 Точные identities, binding JSON/digests, manifest/reservation bytes, wrapper layout, RPC/errors и исполнимый cutover заданы в [CONTROL_WIRE_CONTRACT](#идентификаторы-и-служебный-wire-protocol). Ниже — автомат состояний этого же протокола, не отдельная альтернативная схема.
 
-2026-11-05. D26–D33, D52, D54, D57–D59. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](docs/ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable Envelope bytes.
+2026-11-05. D26–D33, D52, D54, D57–D59. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](.project/docs/ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable Envelope bytes.
 
 #### Identity, режимы и atomicity
 
@@ -1198,7 +1200,7 @@ WIRE-01: binding digest не зависит от JSON formatting, меняетс
 
 По D42 текущие сети — Ethereum, BSC и Polygon PoS. Base/Arbitrum отложены; их YAML-профили текущая поставка отвергает как неподдерживаемые. Исследования сохраняются справочно.
 
-2026-10-21. Технический проект для текущего scope D38. Заменяет активную часть [предыдущего draft](docs/CONFIG_CLI_DRAFT.md). Команды и поля — проектные интерфейсы, ещё не реализованы. История и загрузка пропусков не входят в этот документ.
+2026-10-21. Технический проект для текущего scope D38. Заменяет активную часть [предыдущего draft](.project/docs/CONFIG_CLI_DRAFT.md). Команды и поля — проектные интерфейсы, ещё не реализованы. История и загрузка пропусков не входят в этот документ.
 
 #### Команды и исполнение
 
@@ -1276,7 +1278,7 @@ Publication plan и ACK относятся к одному сохранённо�
 | bsc-mainnet | bsc | Go/BSC: tx execution и Parlia Finalize |
 | polygon-pos-mainnet | bor | Go/Bor: tx execution, StateSync/Finalize; supporting Heimdall |
 
-Сборки и toolchains закрепляются по [CLIENT_MATRIX](docs/CLIENT_MATRIX.md) и [COMPONENT_STACK](#стек-и-границы-сборок). YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.
+Сборки и toolchains закрепляются по [CLIENT_MATRIX](.project/docs/CLIENT_MATRIX.md) и [COMPONENT_STACK](#стек-и-границы-сборок). YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.
 
 **Общий интерфейс, native параметры.** Аргументы запуска, datadir, consensus/rollup/Heimdall соединения и JWT задаются штатной конфигурацией native клиента и окружением. Они не дублируются в YAML адаптера. Общий параметр подключения YAML является частью нашей native интеграции; команды Gateway/config check остаются отдельными. Native capture не заменяется RPC.
 
@@ -1328,13 +1330,13 @@ CFG-S04/CFG-S05 завершены как документация с уточн
 | Polygon PoS | Bor с native-адаптером + Heimdall-v2, отдельные Geth/Prysm для Polygon L1 по D44, необходимые соединения, собственные native datadirs, WAL/Gateway/журнал | Кандидаты версий приняты D47; точная конфигурация и образы уточняются; отдельный контейнер/Pod каждого компонента принят D45 |
 | NATS | Один ранее принятый NATS JetStream внутри Compose/Kubernetes, persistent storage, подключение независимых Gateway, раздельные streams/subjects | Полная связанная конфигурация; HA/DC-топология не вводится |
 
-Исходные native candidates сохраняются в [CLIENT_MATRIX](docs/CLIENT_MATRIX.md), стек компонентов — [COMPONENT_STACK](#стек-и-границы-сборок). Кандидат версии не означает доказанную совместимость сборки. Добавление validator duties/staking не требуется для сбора данных и не предполагается автоматически.
+Исходные native candidates сохраняются в [CLIENT_MATRIX](.project/docs/CLIENT_MATRIX.md), стек компонентов — [COMPONENT_STACK](#стек-и-границы-сборок). Кандидат версии не означает доказанную совместимость сборки. Добавление validator duties/staking не требуется для сбора данных и не предполагается автоматически.
 
 #### Обязательное описание для обеих сред
 
 D44: L1-нода Polygon — самостоятельный Geth/Prysm комплект внутри Polygon-контура, без нашего Ethereum-адаптера. Она не публикует Ethereum-транзакции в NATS и не использует WAL/Gateway Ethereum-контура. Datadirs, credentials и процессы отделены от основной Ethereum-ноды. Общий выбор ПО не означает общий экземпляр или общее состояние. Остановка основного Ethereum-контура не должна останавливать источник L1 для Polygon.
 
-D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обеих пар, BSC 1.7.8, Bor 2.10.3/Heimdall-v2 0.13.2. Совместимость и image digests ещё не подтверждены; [весь набор и источники](docs/research/DEPLOYMENT_VERSION_CANDIDATES.md). D45 выбирает отдельный Compose service и Kubernetes workload/Pod для каждого самостоятельного компонента. Совместное размещение компонентов в контейнере/Pod не требуется.
+D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обеих пар, BSC 1.7.8, Bor 2.10.3/Heimdall-v2 0.13.2. Совместимость и image digests ещё не подтверждены; [весь набор и источники](.project/docs/research/DEPLOYMENT_VERSION_CANDIDATES.md). D45 выбирает отдельный Compose service и Kubernetes workload/Pod для каждого самостоятельного компонента. Совместное размещение компонентов в контейнере/Pod не требуется.
 
 ##### Карта размещения D45
 
@@ -1452,7 +1454,7 @@ D63 добавляет только control evidence внутри Bor adapter: �
 
 #### Source baseline и артефакты
 
-Geth 1.17.9 `9dffe6e976cbbb87a84c5fd395448f0950290def`; BSC 1.7.8 `cdb7548b5baacfdae92f9f63437d6456411665f3`; Bor 2.10.3 `a16f123d9b4f41a552a3a98d93a0340430838576`; Prysm 7.3.0 `d01132449756e217d7f6c460e780174c34139b41` для обеих независимых пар. Остальные версии — [принятые кандидаты](docs/research/DEPLOYMENT_VERSION_CANDIDATES.md). Source pin не заменяет patch commit/image digest/build proof.
+Geth 1.17.9 `9dffe6e976cbbb87a84c5fd395448f0950290def`; BSC 1.7.8 `cdb7548b5baacfdae92f9f63437d6456411665f3`; Bor 2.10.3 `a16f123d9b4f41a552a3a98d93a0340430838576`; Prysm 7.3.0 `d01132449756e217d7f6c460e780174c34139b41` для обеих независимых пар. Остальные версии — [принятые кандидаты](.project/docs/research/DEPLOYMENT_VERSION_CANDIDATES.md). Source pin не заменяет patch commit/image digest/build proof.
 
 D58 меняет только Heimdall на **v0.13.2**, commit `03090c94e7eaef344cd16efd6c968431c4041847`. Go 1.26.10, upstream replacements CometBFT `v0.3.11-polygon`, Cosmos SDK `v0.2.17-polygon`. [Release](https://github.com/0xPolygon/heimdall-v2/releases/tag/v0.13.2), [go.mod](https://github.com/0xPolygon/heimdall-v2/blob/03090c94e7eaef344cd16efd6c968431c4041847/go.mod). Изменение необходимо после Karwar; совместный runtime с Bor ещё не проверен.
 
@@ -1649,9 +1651,9 @@ WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и доп
 | WAL/publication journal | RocksDB 10.4.2; Go grocksdb v1.10.2 | Sync WriteBatch, WAL enabled, отдельный owner; [нормативный автомат](#durable-delivery-и-смена-назначения). BlobDB optional, backup исключён D27 |
 | Приёмочный harness | Go + тот же protobuf decoder + JetStream client | Только проверка опубликованных сообщений против fixtures; не промышленный downstream |
 | Локальный запуск | Docker Compose: все execution/consensus/supporting-компоненты трёх нод, адаптеры, WAL/Gateway и NATS | Полная компоновка и конфигурация проекта по D43; [детализация](#состав-и-размещение-нод) |
-| Production | Kubernetes: все компоненты нод, адаптеры, независимые workload/volume/config контуры сетей и NATS | D43: готовим весь технический комплект; NATS chart/server candidates и [исследование](docs/research/NATS_DEPLOYMENT_STACK.md) сохраняются; production-методика отдельно |
+| Production | Kubernetes: все компоненты нод, адаптеры, независимые workload/volume/config контуры сетей и NATS | D43: готовим весь технический комплект; NATS chart/server candidates и [исследование](.project/docs/research/NATS_DEPLOYMENT_STACK.md) сохраняются; production-методика отдельно |
 
-Native pins и расхождения toolchains подробно сохранены в [CLIENT_MATRIX.md](docs/CLIENT_MATRIX.md). Новый baseline Gateway не изменяет compiler versions native клиентов.
+Native pins и расхождения toolchains подробно сохранены в [CLIENT_MATRIX.md](.project/docs/CLIENT_MATRIX.md). Новый baseline Gateway не изменяет compiler versions native клиентов.
 
 #### Почему SDK не встраивается во все native clients
 
@@ -2035,7 +2037,7 @@ Fixtures выполняются для текущих Go journals и Gateway/NAT
 
 ### План доказательств и границы модулей
 
-D64: документальные требования к доказательствам для проектируемой системы. Порядок из [DEVELOPMENT_PLAN](#задачи-разработки-e01e07) **E01 → E02 → E03 → E04 → E05 → E06 → E07** сохраняется как содержание ТЗ; code/build/runtime tasks не выполняются в нашей работе и не ожидают разрешения. SPECIFIED в [реестре исправлений](docs/DESIGN_REPAIR_STATUS.md) означает готовый проверяемый проект.
+D64: документальные требования к доказательствам для проектируемой системы. Порядок из [DEVELOPMENT_PLAN](#задачи-разработки-e01e07) **E01 → E02 → E03 → E04 → E05 → E06 → E07** сохраняется как содержание ТЗ; code/build/runtime tasks не выполняются в нашей работе и не ожидают разрешения. SPECIFIED в [реестре исправлений](.project/docs/DESIGN_REPAIR_STATUS.md) означает готовый проверяемый проект.
 
 #### Ранний harness и зависимости gates
 
@@ -2275,7 +2277,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 
 2026-11-05. Только проектирование и документация, D64. Этот файл описывает задачи **проектируемого процесса**, а не разрешает их выполнение. Код продукта, сборки, runtime-тесты и deployment не выполняются. Все runtime verdict — **NOT_RUN**. Существующие parent ID E01–E07 сохранены; дочерние ID уточняют результат, не переиспользуют снятые ID.
 
-Нормативное поведение задаёт [единое ТЗ](evm-transaction-extractor-tz-v3-codex.md). [DEVELOPMENT_PLAN](#задачи-разработки-e01e07) сохраняет parent-задачи и историю scope. Здесь определены владельцы, артефакты, зависимости и привязка к [ACCEPTANCE_CASES](#атомарные-сценарии-приёмки); [ACCEPTANCE_REQUIREMENTS](#требования-и-приёмка) остаётся реестром 63 REQ. Изменение поведения через задачу запрещено: обнаруженное противоречие возвращается в ТЗ и решения.
+Нормативное поведение задаёт [единое ТЗ](.project/evm-transaction-extractor-tz-v3-codex.md). [DEVELOPMENT_PLAN](#задачи-разработки-e01e07) сохраняет parent-задачи и историю scope. Здесь определены владельцы, артефакты, зависимости и привязка к [ACCEPTANCE_CASES](#атомарные-сценарии-приёмки); [ACCEPTANCE_REQUIREMENTS](#требования-и-приёмка) остаётся реестром 63 REQ. Изменение поведения через задачу запрещено: обнаруженное противоречие возвращается в ТЗ и решения.
 
 #### Правила чтения карточек и графа
 
