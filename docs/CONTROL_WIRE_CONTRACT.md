@@ -44,7 +44,7 @@ DOC-FINAL-01 · 2026-11-05. Точный логический контракт �
 
 `descriptor_digest = SHA256(UTF8("extractor.binding.v1") || 0x00 || destination_id16 || generation_u64be || 0x01 || chain_id32 || genesis32 || LP(expected_account) || LP(stream) || LP(subject_prefix))`.
 
-Digest не включает собственное поле, URL, TLS/credentials или frame limit. Changing account/stream/prefix требует следующей binding generation той же destination_id и DRAINED. Изменять network identity в существующем store нельзя. Same generation+different content — конфликт; неожиданный скачок generation запрещён. Gateway YAML stream/subject_prefix должны точно совпасть с descriptor: это проверяемые дубли, не альтернативный route. Fresh stores сверяют desired descriptor между owners до первого сетевого обмена; offline adapter уже сохраняет binding до capture.
+Digest не включает собственное поле, URL, TLS/credentials или frame limit. Changing account/stream/prefix требует следующей binding generation той же destination_id и DRAINED. Изменять network identity в существующем store нельзя. Same generation+different content — конфликт; неожиданный скачок generation запрещён. Gateway YAML stream/subject_prefix должны точно совпасть с descriptor: это проверяемые дубли, не альтернативный route. Каждый owner сохраняет свой desired binding локально до создания обязательств; offline adapter делает это до capture. Между owners descriptor сверяется при первом authenticated handshake, до Prepare/Publish; отсутствие Gateway не запрещает безопасный offline capture.
 
 ## READY manifest и reservation
 

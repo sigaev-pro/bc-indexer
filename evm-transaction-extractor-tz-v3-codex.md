@@ -895,7 +895,7 @@ DOC-FINAL-01 · 2026-11-05. Точный логический контракт �
 
 `descriptor_digest = SHA256(UTF8("extractor.binding.v1") || 0x00 || destination_id16 || generation_u64be || 0x01 || chain_id32 || genesis32 || LP(expected_account) || LP(stream) || LP(subject_prefix))`.
 
-Digest не включает собственное поле, URL, TLS/credentials или frame limit. Changing account/stream/prefix требует следующей binding generation той же destination_id и DRAINED. Изменять network identity в существующем store нельзя. Same generation+different content — конфликт; неожиданный скачок generation запрещён. Gateway YAML stream/subject_prefix должны точно совпасть с descriptor: это проверяемые дубли, не альтернативный route. Fresh stores сверяют desired descriptor между owners до первого сетевого обмена; offline adapter уже сохраняет binding до capture.
+Digest не включает собственное поле, URL, TLS/credentials или frame limit. Changing account/stream/prefix требует следующей binding generation той же destination_id и DRAINED. Изменять network identity в существующем store нельзя. Same generation+different content — конфликт; неожиданный скачок generation запрещён. Gateway YAML stream/subject_prefix должны точно совпасть с descriptor: это проверяемые дубли, не альтернативный route. Каждый owner сохраняет свой desired binding локально до создания обязательств; offline adapter делает это до capture. Между owners descriptor сверяется при первом authenticated handshake, до Prepare/Publish; отсутствие Gateway не запрещает безопасный offline capture.
 
 ### READY manifest и reservation
 
@@ -1667,14 +1667,14 @@ Gate: по каждой ETH/BSC/POLY доказаны обязательные o
 
 Зависимости: E01, решения о гранулярности и порядке. Стек: protobuf, Go, детерминированные fixtures; пока без обязательного внешнего сервиса.
 
-- [ ] E02-01 Зафиксировать transaction/system records, IDs, execution order, activation lifecycle и late metadata. Готово: таблица переходов и схемы покрывают выбранные fixtures без искусственных транзакций.
+- [ ] E02-01 Представить закреплённые transaction/system records, IDs, execution order, activation lifecycle и late metadata в типизированной схеме. Готово: схема и валидаторы точно отражают MESSAGE_CONTRACT/CURRENT_SEMANTICS без искусственных транзакций; принятые значения и переходы не переопределяются.
 - [ ] E02-02 Создать компилируемые proto и versioned validators. Готово: bindings генерируются воспроизводимо; malformed/conflicting records отклоняются с конкретной причиной.
 - [ ] E02-03 Реализовать тестовый валидатор событий. Готово: поля, apply/remove/reapply/status и стабильные IDs проверены на fixtures; промышленный consumer не создаётся.
-- [ ] E02-04 Утвердить протокол v3 и правила совместимости. Готово: спорные поля из рабочей редакции разобраны для всех трёх сетей; сетевые различия имеют явное представление.
-- [ ] E02-05 Определить модель транзакционных balance actions. Готово: причинные связи, rollback, fees и нулевой итог представлены без потери действий; самостоятельные системные эффекты — optional и не блокируют gate.
+- [ ] E02-04 Проверить соответствие схемы нормативному wire/control контракту и правилам совместимости. Готово: размеры/кодировки/versions/unknown fields имеют однозначную проверку; immutable pending и несовместимый store-format обработаны по принятому контракту, без повторного выбора политики.
+- [ ] E02-05 Отразить закреплённую модель транзакционных balance actions/effects в схеме и валидаторах. Готово: причинные связи, rollback, gas purchase/return/recipient credits и отдельный fee summary представлены без потери и двойного учёта; outside-tx расширение optional.
 - [ ] E02-08 Добавить block metadata: hash, parent, height, native counts при наличии, lifecycle, включая пустые блоки. Локальный delivery batch связывает подготовленные сообщения с прогрессом доставки; без BlockComplete.
 
-- [ ] E02-10 Завершить строгий общий контракт типов. Готово: versioned envelope, однозначный payload type, обязательные/неприменимые поля, зарегистрированные typed extensions, политика неизвестной версии и fixtures трёх сетей; произвольный JSON не заменяет обязательные поля. Свободные bytes только для исходных бинарных данных и транспортных частей.
+- [ ] E02-10 Проверить полноту строгого общего контракта типов по MESSAGE_CONTRACT/CURRENT_SEMANTICS/реестру native типов. Готово: versioned envelope, payload oneof, обязательные/неприменимые поля, registered extensions и unknown-version behavior соответствуют ТЗ; malformed fixtures трёх сетей отвергнуты. Произвольный JSON не заменяет обязательные поля.
 
 Gate: модель позволяет восстановить корректные нативные балансы на выбранных сценариях и объяснить каждую отмену независимо от транспорта.
 
@@ -1750,6 +1750,8 @@ Gate: полный live stack трёх сетей воспроизводится
 Gate: отдельно приняты Ethereum, BSC и Polygon; обязательны согласованные функциональные критерии всех трёх сетей. Base/Arbitrum этот gate не блокируют.
 
 ## Требования и приёмка
+
+Родительские REQ раскрыты в [156 атомарных сценариях](docs/ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](docs/TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
