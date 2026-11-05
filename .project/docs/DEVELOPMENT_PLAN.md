@@ -1,6 +1,6 @@
 # Последовательность разработки и задачи
 
-Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 185 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
+Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 187 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
 
 D64: этот документ описывает порядок разработки проектируемой системы как часть ТЗ. Реализация никогда не входит в нашу работу; E01–E07 не являются исполняемым backlog агента. [Gates](IMPLEMENTATION_GATES.md) и [63 требования](ACCEPTANCE_REQUIREMENTS.md) задают проверяемое содержание ТЗ. 41/41 находки аудита SPECIFIED; runtime NOT_RUN.
 

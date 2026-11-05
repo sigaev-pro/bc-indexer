@@ -19,7 +19,7 @@
 | Как не потерять уже принятую работу при сбое | [Приложение B](#приложение-b-native-capture-и-recovery): допуск исполнения, сохранённые входы, удержание состояния, восстановление |
 | Как доставлять данные и разбирать потерянные ответы | [Приложение C](#приложение-c-delivery-и-control): журналы, идентификаторы, разбиение записей, подтверждения и переключение назначения |
 | Какие процессы, конфигурация и хранилища нужны | [Приложение D](#приложение-d-конфигурация-и-окружение): YAML, команды, версии клиентов, запуск, права, секреты, порты |
-| Как сформулировать отдельную задачу и проверить её результат | [Приложение E](#приложение-e-приёмка-и-декомпозиция): 63 требования, 185 сценариев, 68 задач, зависимости и полные карточки |
+| Как сформулировать отдельную задачу и проверить её результат | [Приложение E](#приложение-e-приёмка-и-декомпозиция): 63 требования, 187 сценариев, 68 задач, зависимости и полные карточки |
 
 Краткое описание помогает ориентироваться. Если оно опускает подробность, это не отменяет точного правила приложения. Если две формулировки действительно несовместимы, нужно зафиксировать противоречие и устранить его в ТЗ; самостоятельно менять гарантию внутри задачи нельзя.
 
@@ -234,7 +234,7 @@
 
 ## 6. Приёмка, декомпозиция и фиксация
 
-- **63 родительских REQ** фиксируют обязательства. **185 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
+- **63 родительских REQ** фиксируют обязательства. **187 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
 - Задача в справочной декомпозиции имеет результат, ответственный модуль, точные зависимости и ссылки на REQ/AC/контракт. Начальный native proof, delivery-only proof и combined recovery proof разделены. Описание задачи не разрешает её исполнение по D64.
 - Все обязательные REQ покрываются AC и задачами; каждый AC имеет владельца и точный task mapping; граф зависимостей не содержит циклов. Optional/deferred явно отмечены.
 - Runtime NOT_RUN не заменяется документальным SPECIFIED. Source inspection не доказывает power-loss, совместимость сборки или фактическое прохождение теста.
@@ -1366,6 +1366,8 @@ CLI не скачивает клиенты, не создаёт pods и не в�
 
 #### Общая схема YAML v1
 
+D78: общее разрешение относительных путей применяется к `storage.live_dir` и `storage.gateway_dir`; база — каталог выбранного YAML, независимо от cwd процесса. Например, для `/srv/extractor/config/eth.yml` значение `../wal/eth` означает `/srv/extractor/wal/eth` при запуске из любого рабочего каталога. Относительный аргумент `--config` сначала выбирает сам YAML относительно cwd; дальнейшая база полей — каталог этого файла. Явное field-specific ограничение имеет приоритет: `finality.polygon.sources_file` требует абсолютный путь даже при существующем файле рядом с YAML. Разрешение путей не создаёт каталоги или DB; collector/Gateway и config check используют одно правило, а абсолютные storage paths сохраняют своё назначение.
+
 Один YAML — одна сеть и конфигурация соответствующей роли: файл сборщика и отдельный файл Gateway по D48. Ниже общий словарь полей с обязательностью по роли; отдельный файл не требует копировать настройки другой роли. `config check --config` получает путь к проверяемому файлу. Изменения применяются рестартом соответствующего компонента, watcher отсутствует. Неизвестные и дублирующиеся ключи запрещены на всех уровнях схемы сборщика/Gateway. Нет скрытой подстановки environment или произвольных CLI overrides этой схемы. Относительные пути разрешаются относительно YAML-файла. Это не ограничивает штатные native configs/args и настройки окружения: ими управляют Compose overrides/Kubernetes values отдельно от YAML сборщика.
 
 | Поле | Тип | Обязательность / значение |
@@ -1843,7 +1845,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 ### Требования и приёмка
 
-Родительские REQ раскрыты в [185 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [187 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -1926,7 +1928,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 
 | ID | Требование | Проверка и ожидаемый результат / этап |
 |---|---|---|
-| REQ-OPS-01 | Strict role YAML и effective native validation | CONFIG: unknown/duplicate keys, relative paths, native overrides/profile/pruning/Bor parallel flags, check без mutation; E01/E06 |
+| REQ-OPS-01 | Strict role YAML и effective native validation | CONFIG: unknown/duplicate keys; relative storage paths от каталога YAML, sources_file Polygon absolute-only; native overrides/profile/pruning/Bor parallel flags, check без mutation; E01/E06 |
 | REQ-OPS-02 | 11 services/14 volumes, самостоятельные owners | MOUNT: actual backing volume identities, permissions/UID, separate Polygon L1 и JWT; одинаковый container path не означает shared DB; E06 |
 | REQ-OPS-03 | Partial init не разрушает keys/state | BOOT: crash каждой phase, existing nonempty home/wrong genesis/missing ENV_READY, BSC hash init; safe resume/reject; E01/E06 |
 | REQ-OPS-04 | Config generation заменяет только allowlist | CONFIG: изменённый native config применён после restart, ключи/genesis/state сохранены, невозможный mix отвергнут; E06 |
@@ -2151,9 +2153,11 @@ D64: это критерии приёмки описываемой систем�
 
 | AC ID | REQ | Given | When / точный fault | Then: наблюдаемое и запрещённое | Owner | Stage |
 |---|---|---|---|---|---|---|
-| AC-OPS-01-01 | REQ-OPS-01 | ALL: role YAML с unknown/duplicate key, relative path либо неправильным scalar | Config check без запуска продукта | Конкретная field error; нет writable state mutation, silent coercion/default неизвестного key | config | E06 |
+| AC-OPS-01-01 | REQ-OPS-01 | ALL: role YAML с unknown/duplicate key либо неправильным scalar | Config check без запуска продукта | Конкретная field error; нет writable state mutation, silent coercion/default неизвестного key; relative path сам по себе не ошибка | config | E06 |
 | AC-OPS-01-02 | REQ-OPS-01 | ALL: override нарушает hash/pruning profile; POLY включает запрещённый parallel/preconfirmation/BlockSTM | Проверка effective native profile до admission | Конфигурация отвергнута до capture; args/env precedence не обходит обязательные constraints | config | E01 |
 | AC-OPS-01-03 | REQ-OPS-01 | ALL: допустимые native args/env/config overrides | Проверка effective config до admission | Итоговые разрешённые значения отражены в effective profile; скрытого возврата к default или запрета всех overrides нет | config | E01 |
+| AC-OPS-01-04 | REQ-OPS-01 | ALL: валидные role YAML с относительными storage.live_dir / storage.gateway_dir, остальные локальные предпосылки выполнены | Config check одного и того же YAML из разных cwd; затем сравнение разрешённых путей | Relative storage paths приняты и указывают на те же каталоги относительно директории YAML, не cwd; check не создаёт каталог/DB/stream/run и не запускает ноду | config | E06 |
+| AC-OPS-01-05 | REQ-OPS-01 | POLY live: finality.polygon.sources_file задан относительным путём к существующему файлу | Config check без запуска продукта | Ошибка именно поля finality.polygon.sources_file как absolute-only; наличие файла рядом с YAML не отменяет ограничение; нет создания/изменения state | config | E06 |
 | AC-OPS-02-01 | REQ-OPS-02 | ALL: Compose и Kubernetes topology | Сопоставить 11 services, 14 owner volumes и реальные connections | Независимые owners и Polygon L1 stack/JWT пары; никакой общий multi-network WAL/Gateway store | deploy | E06 |
 | AC-OPS-02-02 | REQ-OPS-02 | ALL: разные paths указывают на один backing volume либо неверные UID/permissions | Mount/owner preflight | Конфликт отказан до writable открытия; одинаковый container path сам по себе не доказывает sharing | deploy | E06 |
 | AC-OPS-03-01 | REQ-OPS-03 | ALL: fresh init с phase manifest | Power loss в каждой PREPARE/NATIVE_INIT/INSTALL_CONFIG/VERIFY/ENV_READY границе | Retry продолжает безопасную phase; существующие keys/state сохранены, один каталог не считается ENV_READY | deploy | E06 |
@@ -2581,7 +2585,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e06-07-yaml"></a>E06-07.yaml | `config`; ETH/BSC/POLY | Strict role config/effective native preflight и side-effect-free check; только declared keys/profiles/modes, binding_file — desired descriptor | E02-02.codec → descriptor parser; E05-03.drain → mode contract | CONFIG, CONTROL |
+| <a id="task-e06-07-yaml"></a>E06-07.yaml | `config`; ETH/BSC/POLY | Strict role config/effective native preflight и side-effect-free check; storage paths от YAML, Polygon sources_file absolute-only; только declared keys/profiles/modes, binding_file — desired descriptor | E02-02.codec → descriptor parser; E05-03.drain → mode contract | CONFIG, CONTROL |
 | <a id="task-e06-13-artifact_lock"></a>E06-13.artifact_lock | `deploy/artifacts`; ETH/BSC/POLY | User artifact manifest: source/patch/toolchain/image/genesis identity; неправильный artifact отвергается до init | E01-01.builds → build manifest; E06-07.yaml → profile identity | BOOT, STACK |
 | <a id="task-e06-13-init"></a>E06-13.init | `deploy/init`; ETH/BSC/POLY | Idempotent phase-driven native init; повтор/partial init сохраняет keys/state и проверяет genesis/ENV_READY | E06-13.artifact_lock → verified artifacts; E06-07.yaml → paths/profile | BOOT |
 | <a id="task-e06-13-topology"></a>E06-13.topology | `deploy/compose+kubernetes`; ETH/BSC/POLY | 11 services/14 volumes с проверяемыми backing owners; adapter/Gateway и Polygon L1 изолированы | E06-13.init → initialized homes; E06-07.yaml → role stores | TOPO, BOOT |
@@ -2615,7 +2619,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 #### REQ/AC → ответственный task
 
-Все 63 REQ и 185 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 187 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -2689,7 +2693,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DLV-14 | AC-DLV-14-01 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-14 | AC-DLV-14-02 | [E05-03.upgrade](#task-e05-03-upgrade) | E05 |
 | REQ-DLV-14 | AC-DLV-14-03 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |
-| REQ-OPS-01 | AC-OPS-01-01 | [E06-07.yaml](#task-e06-07-yaml) | E06 |
+| REQ-OPS-01 | AC-OPS-01-01, AC-OPS-01-04…AC-OPS-01-05 | [E06-07.yaml](#task-e06-07-yaml) | E06 |
 | REQ-OPS-01 | AC-OPS-01-02…AC-OPS-01-03 | [E01-02.pins](#task-e01-02-pins) | E01 |
 | REQ-OPS-02 | AC-OPS-02-01…AC-OPS-02-02 | [E06-13.topology](#task-e06-13-topology) | E06 |
 | REQ-OPS-03 | AC-OPS-03-01, AC-OPS-03-03 | [E06-13.init](#task-e06-13-init) | E06 |

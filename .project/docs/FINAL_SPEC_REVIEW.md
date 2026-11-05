@@ -1,5 +1,7 @@
 # Финальная сверка и карта полного grill
 
+Актуализация D78 / DOC-F01-FIX-01: F01 закрыт в документации — relative storage paths от каталога YAML, отдельный absolute-only sources_file Polygon, две новые проверки config check. Текущий каталог: 63 REQ / 187 AC / 68 child tasks / 7 gates. Закрыты F11/F03/F12/F13/F01; остальные 9 находок требуют отдельного решения. Runtime NOT_RUN. Ниже — исторические точки проверки.
+
 Актуализация D77 / DOC-F13-FIX-01: F13 закрыт в документации — exact stream metadata identity, bootstrap/read-back/preservation, Gateway checks и cutover/idempotency. Текущий каталог: 63 REQ / 185 AC / 68 child tasks / 7 gates. Закрыты F11/F03/F12/F13, остальные 10 находок требуют отдельного решения. Source review NATS выполнен; runtime NOT_RUN. Ниже — исторические точки проверки.
 
 Актуализация D75–D76 / DOC-F12-FIX-01: F12 закрыт в документации — exact native receipt registry, consensus/storage и common/network fields, bounded byte-equivalent writer. Проверены pinned source codecs, не runtime. Текущий каталог: 63 REQ / 178 AC / 68 child tasks / 7 gates. Закрыты F11/F03/F12, остальные 11 находок требуют отдельного решения. Ниже — исторические точки со своими числами; runtime NOT_RUN.

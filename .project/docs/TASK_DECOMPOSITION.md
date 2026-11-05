@@ -120,7 +120,7 @@
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e06-07-yaml"></a>E06-07.yaml | `config`; ETH/BSC/POLY | Strict role config/effective native preflight и side-effect-free check; только declared keys/profiles/modes, binding_file — desired descriptor | E02-02.codec → descriptor parser; E05-03.drain → mode contract | CONFIG, CONTROL |
+| <a id="task-e06-07-yaml"></a>E06-07.yaml | `config`; ETH/BSC/POLY | Strict role config/effective native preflight и side-effect-free check; storage paths от YAML, Polygon sources_file absolute-only; только declared keys/profiles/modes, binding_file — desired descriptor | E02-02.codec → descriptor parser; E05-03.drain → mode contract | CONFIG, CONTROL |
 | <a id="task-e06-13-artifact_lock"></a>E06-13.artifact_lock | `deploy/artifacts`; ETH/BSC/POLY | User artifact manifest: source/patch/toolchain/image/genesis identity; неправильный artifact отвергается до init | E01-01.builds → build manifest; E06-07.yaml → profile identity | BOOT, STACK |
 | <a id="task-e06-13-init"></a>E06-13.init | `deploy/init`; ETH/BSC/POLY | Idempotent phase-driven native init; повтор/partial init сохраняет keys/state и проверяет genesis/ENV_READY | E06-13.artifact_lock → verified artifacts; E06-07.yaml → paths/profile | BOOT |
 | <a id="task-e06-13-topology"></a>E06-13.topology | `deploy/compose+kubernetes`; ETH/BSC/POLY | 11 services/14 volumes с проверяемыми backing owners; adapter/Gateway и Polygon L1 изолированы | E06-13.init → initialized homes; E06-07.yaml → role stores | TOPO, BOOT |
@@ -154,7 +154,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 185 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 187 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -228,7 +228,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DLV-14 | AC-DLV-14-01 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-14 | AC-DLV-14-02 | [E05-03.upgrade](#task-e05-03-upgrade) | E05 |
 | REQ-DLV-14 | AC-DLV-14-03 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |
-| REQ-OPS-01 | AC-OPS-01-01 | [E06-07.yaml](#task-e06-07-yaml) | E06 |
+| REQ-OPS-01 | AC-OPS-01-01, AC-OPS-01-04…AC-OPS-01-05 | [E06-07.yaml](#task-e06-07-yaml) | E06 |
 | REQ-OPS-01 | AC-OPS-01-02…AC-OPS-01-03 | [E01-02.pins](#task-e01-02-pins) | E01 |
 | REQ-OPS-02 | AC-OPS-02-01…AC-OPS-02-02 | [E06-13.topology](#task-e06-13-topology) | E06 |
 | REQ-OPS-03 | AC-OPS-03-01, AC-OPS-03-03 | [E06-13.init](#task-e06-13-init) | E06 |
