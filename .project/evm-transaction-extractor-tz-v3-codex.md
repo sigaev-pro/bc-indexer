@@ -1,6 +1,6 @@
 # Техническое задание: native EVM transaction extractor
 
-Редакция D16–D74 · 2026-11-05. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
+Редакция D16–D76 · 2026-11-05. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
 
 Цель нашей работы по D64 — только идеальное ТЗ. Реализации не будет никогда. Указанные ниже программные компоненты, этапы, тесты и артефакты описывают проектируемую систему, а не задачи на исполнение агентом. Runtime verdict всех сценариев — NOT_RUN.
 
@@ -77,7 +77,7 @@
 
 ## 6. Приёмка, декомпозиция и фиксация
 
-- **63 родительских REQ** фиксируют обязательства. **172 AC-сценария** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
+- **63 родительских REQ** фиксируют обязательства. **178 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
 - Задача в справочной декомпозиции имеет результат, ответственный модуль, точные зависимости и ссылки на REQ/AC/контракт. Начальный native proof, delivery-only proof и combined recovery proof разделены. Описание задачи не разрешает её исполнение по D64.
 - Все обязательные REQ покрываются AC и задачами; каждый AC имеет владельца и точный task mapping; граф зависимостей не содержит циклов. Optional/deferred явно отмечены.
 - Runtime NOT_RUN не заменяется документальным SPECIFIED. Source inspection не доказывает power-loss, совместимость сборки или фактическое прохождение теста.
@@ -395,6 +395,41 @@ D74: calls, execution_actions и actions используют один tx-local 
 
 `AccountChange={address,existed_before,exists_after,balance_before,balance_after,nonce_before,nonce_after,code_hash_before,code_hash_after,code_before,code_after,storage_reset,storage_changes[]}`. Address20, bool exists/reset, UInt256 balances, u64 nonce, Hash32 code hashes, bytes code. `StorageChange={key:Hash32,before:Hash32,after:Hash32}`. CURRENT_SEMANTICS определяет presence/order/reset. Данные относятся к tx boundary; actions и diff не суммируются как независимые изменения.
 
+##### 3.1. Исходное receipt-кодирование D75–D76
+
+`SourceReceiptEncoding={kind:ReceiptEncodingKind,native_type?:u32,bytes}`. kind и непустые bytes обязательны; наличие native_type определяется таблицей. Это закрытый registry v1 внутри logical schema v2 D73, не новый transport version. Нулевой/неизвестный enum, неверная применимость origin/network/profile и отсутствующий обязательный receipt отвергаются до READY. Поле bytes передаётся по D73 через BlobRef/BlobChunk; размер не разрешает усечение.
+
+| Enum value / kind | Применимость и native_type | Точный byte contract |
+|---|---|---|
+| 1 LEGACY_CONSENSUS_RLP | Обязательный body receipt с native Receipt.Type=0; native_type обязательно присутствует и равен 0 | RLP списка consensus-полей native receipt; нет ведущего type byte 0 |
+| 2 TYPED_CONSENSUS_ENVELOPE | Обязательный body receipt с ненулевым native type; native_type обязателен, 1…127, только разрешённые сетью/fork registry значения | Один исходный type byte, затем native consensus receipt RLP. Внешняя RLP-string wrapper не добавляется |
+| 3 BOR_LEGACY_STORAGE_RLP | Только optional BorLegacyReceiptRecord origin=BOR_LEGACY_SYNTHETIC_RECEIPT; native_type отсутствует: storage bytes не содержат type byte | Исходный raw storage RLP native Bor receipt, без перекодирования в consensus receipt и без добавления Bloom |
+
+Значение 0 зарезервировано как INVALID, не default-успех. Для обязательных ETH/BSC/Polygon body tx `Receipt.source_receipt_encoding` содержит ровно один вариант 1/2. native_type берётся из фактического native Receipt и сверяется с реальной включённой транзакцией по pinned profile, у BSC — после actualTx substitution. Отдельного выдуманного BSC system type нет. Bor StateSync body type 0x7f использует вариант 2 с native_type=127; обычные Bor body receipts — 1/2 по фактическому type. Наличие type в коде не разрешает его вне активных native fork rules.
+
+Эталон вариантов 1/2 — результат `Receipt.MarshalBinary` закреплённого клиента на исходном native Receipt после штатного формирования consensus fields. `Receipt.EncodeRLP` для typed receipt имеет дополнительную внешнюю RLP-string упаковку, поэтому его полный результат не взаимозаменяем с MarshalBinary. Consensus содержимое — PostStateOrStatus, CumulativeGasUsed, Bloom и Logs; log сохраняет native address/topics/data. Status=0/1 и применимый pre-status state root не заменяются нашим execution outcome. Контракт не утверждает, что bytes были получены из сетевого пакета: это точное native consensus-кодирование исходного результата. Источники кодеков: [Geth](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/receipt.go), [BSC](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/receipt.go), [Bor](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/receipt.go).
+
+D76: API MarshalBinary с полным возвращаемым byte array не является обязательным collector path. Допустим потоковый writer/адаптация native-кодека с побайтно тем же результатом из owned native receipt fields в disk spool; длины вложенного RLP рассчитываются проходами по spool без полного дополнительного receipt/log-data буфера. Это не сборка из нормализованных Receipt/Log и не изменение native исполнения, fork rules или consensus bytes. Native reader/codec commit фиксирует ProfileRef. Ошибка кодека или несогласованные source данные — явная normalization error, не fallback в storage/JSON/пустые bytes. Дополнительная память collector ограничена независимо от размера receipt; существующая память native execution оценивается отдельно по D58. До READY bytes фиксируются с логической записью, после READY повторная генерация вместо сохранённых bytes запрещена.
+
+Validator проверяет точное RLP framing по выбранному kind, допустимые scalar widths/status-root, native_type/profile/origin и отсутствие trailing bytes; для общих consensus-полей проверяет согласованность с типизированным Receipt. Чтение/проверка крупного encoded receipt также потоковые: decoder не обязан создавать полный массив bytes или второе дерево native Receipt/Logs. Length overflow, truncated/невалидный RLP и расхождение обязательных source полей не проходят READY/CLOSED. Форматные проверки не заменяют независимый native byte oracle при приёмке.
+
+Consensus bytes не содержат gas_used отдельной tx, effective/blob gas price, fee_summary, transaction/block hash, индексы включения/logs, attempted/created address или Bor provenance. Эти данные остаются в общих типизированных Receipt/Log/TransactionRecord и берутся из своих native источников; отсутствие в consensus bytes не означает отсутствие в публичной записи. Обязательное значение 0 отличается от отсутствующего/неприменимого. Перекодирование consensus bytes ради включения этих полей запрещено.
+
+Для optional Bor legacy `raw_encoding` имеет тип SourceReceiptEncoding, kind=3, native_type absent. Сохраняется raw storage value, соответствующее native `ReadBorReceiptRLP`, с decode-проверкой native storage codec; нельзя повторно кодировать derived Receipt и выдавать его за исходные storage bytes. Storage consensus-подмножество не содержит Bloom; доступные derived bloom/hash/index сохраняются отдельно в source_receipt/auxiliary metadata с native provenance. Source-only status не доказывает исполнение всех system calls. При включённом optional профиле corrupt/missing обязательный source не превращается в пустую успешную auxiliary запись. Kind 3 запрещён в body Receipt, а kinds 1/2 запрещены вместо raw_encoding legacy auxiliary. Источник: [Bor raw storage reader](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/rawdb/bor_receipt.go). Историческое имя BOR_RECEIPT_STORAGE_RLP из исследования заменено этим registry; alias на wire не принимается.
+
+##### 3.2. Применимость receipt network details D75
+
+`Receipt.network_details` — обязательный closed oneof: EthReceiptDetails / BscReceiptDetails / BorReceiptDetails. Отсутствие дополнительных полей не означает отсутствующий Receipt или отсутствие его общих полей.
+
+| Профиль обязательной body tx | Дополнительные поля первого профиля |
+|---|---|
+| ETH | EthReceiptDetails — явно присутствующий пустой typed variant; дополнительных полей нет |
+| BSC, включая system tx | BscReceiptDetails — явно присутствующий пустой typed variant; общие gas/log/fee поля сохраняются в Receipt |
+| Polygon, обычная body tx | BorReceiptDetails с присутствующим пустым source_log_scopes; обычные receipt logs принадлежат этой tx |
+| Polygon StateSync 0x7f | BorReceiptDetails.source_log_scopes описывает каждый исходный receipt log ровно один раз по transaction_log_index, в порядке source logs; SYSTEM_PRE / TX_STATE_SYNC / SYSTEM_POST определяются native instrumentation |
+
+Для StateSync без logs список source_log_scopes пуст. Повторы/пропуски/индекс вне исходного receipt и неизвестный scope запрещены. Provenance не фильтрует/переставляет logs и не меняет consensus bytes; SYSTEM_PRE/POST не становятся действиями StateSync tx. Reverted log attempts не добавляются в receipt. Неподходящий network variant, unknown extra field или неподдержанный native extension требуют явной ошибки и versioned registry/profile update до поддержки; Any/JSON map и выдуманные нулевые поля не допускаются. Optional legacy Bor — отдельный auxiliary payload со своей схемой, не этот body oneof.
+
 #### 4. События и передача блока
 
 | Payload | Смысл |
@@ -531,6 +566,8 @@ Producer использует disk spool и несколько проходов:
 `Q` — UInt256; `A` — Address20; `H` — Hash32; `B` — bytes. `Target` — `Call(A) | Create`; это явное различие, не нулевой адрес. Все поля варианта обязательны, кроме явно отмеченных optional. `[]` — упорядоченная последовательность, в том числе пустая. Нативные более узкие целые дополнительно проверяются на исходную разрядность.
 
 #### Стандартные EVM-варианты
+
+D75–D76: receipt encoding registry отдельно определён в [MESSAGE_CONTRACT](#контракт-сообщений). Body receipt type соответствует фактическому native type после системных подстановок: 0 → LEGACY_CONSENSUS_RLP, разрешённый ненулевой type → TYPED_CONSENSUS_ENVELOPE; Bor StateSync 0x7f сохраняет этот type byte. Optional legacy Bor storage receipt имеет отдельный BOR_LEGACY_STORAGE_RLP без native_type, не новый body transaction variant. Пустые ETH/BSC receipt details — явно typed отсутствие дополнительных полей, а не отсутствие общих Receipt fields.
 
 | ID / payload | Поля |
 |---|---|
@@ -824,7 +861,7 @@ BSC system tx capture использует реальные hash/index/payload �
 | execution failure/revert | Native root execution result + receipt status; Go callback err не единственный признак EVM failure |
 | attempted CREATE address | Execution attempt, может существовать при failed constructor |
 | created contract | Только успешное native создание; отдельно final existence после rollback/SELFDESTRUCT |
-| source receipt | Исходное кодирование сохраняется отдельно от производной projection; адрес попытки не переименовывается в успешное создание |
+| source receipt | D75–D76: body consensus bytes по native MarshalBinary byte contract, полученные из исходного native Receipt потоковым byte-equivalent writer в spool; storage/typed outer RLP wrapper не подменяют этот формат. Derived projection сохраняется отдельно |
 
 [Geth state_processor](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/state_processor.go) — источник makeReceipt; публичные поля задаёт [MESSAGE_CONTRACT](#контракт-сообщений).
 
@@ -1617,7 +1654,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 ### Требования и приёмка
 
-Родительские REQ раскрыты в [172 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [178 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -1654,14 +1691,14 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | ID | Требование | Проверка и ожидаемый результат / этап |
 |---|---|---|
 | REQ-DAT-01 | Closed typed schema, presence и exact integer widths | DATA/schema: unknown enums/version, lengths, missing vs zero, malformed union; reject без ANY/JSON fallback; E02 |
-| REQ-DAT-02 | Source tx/receipt encodings и native поля | AUTH/DATA: byte equality, тип/подпись/access/blob/auth fields и native-derived projection раздельны; E02/E04 |
+| REQ-DAT-02 | Source tx/receipt encodings и native поля | AUTH/DATA: closed consensus/storage registry, exact native bytes/type/origin, bounded byte-equivalent receipt writer; тип/подпись/access/blob/auth fields и projection раздельны; E02/E04 |
 | REQ-DAT-03 | Authorization tuples сохраняются без фильтрации | AUTH-01…04: invalid parity/nonce/chain tuple, duplicates, root revert; source tuples не теряются; E02/E04 |
 | REQ-DAT-04 | Полное call tree и общий tx-local порядок | DATA: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, value=0, caller/context/code; общий execution_order calls/actions, отдельные body/protocol/effect indices; E04 |
 | REQ-DAT-05 | Outcome/rollback/committed и публичные scopes различаются | DATA/SELF: scope tree/refs/reused native ID; ancestor/caught revert; сохранённые fees/nonce/authorization; validator и стабильные order/scopes при recovery; E02/E04 |
 | REQ-DAT-06 | SELFDESTRUCT отдельное действие | SELF-01…04: zero balance/self-beneficiary/old/new contract/ancestor revert; opcode/projection связаны одним order, finalization burn отдельный; action, monetary effects и deletion не смешаны; E02/E04 |
 | REQ-DAT-07 | Точный tx boundary state diff/existence | EXIST/DATA: empty CREATE, delete/reset/recreate, touched storage twice, fees/auth вне root; initial/final и code hashes точны; E04 |
 | REQ-DAT-08 | Все monetary actions, компенсации и D62 fees | FEE-01: gross purchase/refund/credits, same recipient/payer, blob/zero-fee; address effects согласованы с state, aggregate не удваивает; E04 |
-| REQ-DAT-09 | Receipt/log/create provenance | RECEIPT/DATA: native status/revert/gas price, failed CREATE attempt vs success, log indices/scopes, no reverted receipt logs; E02/E04 |
+| REQ-DAT-09 | Receipt/log/create provenance и network details | RECEIPT/DATA: native status/revert/gas price, failed CREATE attempt vs success, common fields отдельно от consensus bytes, typed ETH/BSC empty extras и точная Bor scope mapping, no reverted receipt logs; E02/E04 |
 | REQ-DAT-10 | Полные native block metadata, включая empty | DATA: исходный header/fork fields/RLP/count, zero tx, optional fields отсутствуют корректно, не synthetic completeness report; E02/E04 |
 
 #### Lifecycle, finality и GC
@@ -1791,6 +1828,10 @@ D64: это критерии приёмки описываемой систем�
 | AC-DAT-01-01 | REQ-DAT-01 | ALL: корректные нули, отсутствующие optional поля, предельные числа | Encode/decode и validator | Presence и точные integer bytes сохраняются; ноль не превращается в отсутствие | proto | E02 |
 | AC-DAT-01-02 | REQ-DAT-01 | ALL: malformed lengths/union, unknown enum/profile/schema | Validation до READY | Конкретный отказ; нет ANY/JSON fallback, silently accepted unknown или default scalar | proto | E02 |
 | AC-DAT-02-01 | REQ-DAT-02 | ALL: применимые native tx и source receipt encodings | Нормализация и доставка record | Source bytes совпадают побайтно; signature/access/blob/auth и derived projection не перезаписывают друг друга | normalize | E04 |
+| AC-DAT-02-02 | REQ-DAT-02 | ALL: native legacy/typed receipts, BSC actual system tx, Bor StateSync 0x7f; success/failure и применимый state-root variant | Сравнение SourceReceiptEncoding с независимыми pinned native codec vectors | Kind/native_type/presence точны; bytes совпадают с MarshalBinary, typed prefix сохранён без outer RLP wrapper, legacy без ведущего type 0; source outcome не заменён projection | normalize | E04 |
+| AC-DAT-02-03 | REQ-DAT-02 | ALL: storage RLP в body, typed outer wrapper, wrong/missing native_type, type/fork/network mismatch, unknown kind, corrupt/trailing bytes | Отдельная registry/decoder validator-проверка каждого нарушения | Каждый вариант отвергнут до READY, нет fallback или выбора формата только по сходству bytes; 0 native_type legacy отличается от absent | proto | E02 |
+| AC-DAT-02-04 | REQ-DAT-02 | POLY: optional legacy auxiliary включён; raw storage receipt, derived metadata и body StateSync рядом в corpus | Кодирование и типизированная нормализация разных origins | Auxiliary raw_encoding=3 с native_type absent и exact raw bytes; Bloom/metadata отдельно, не дописаны в storage bytes; body использует 1/2, inventories не смешаны | normalize | E04 |
+| AC-DAT-02-05 | REQ-DAT-02 | ALL: source receipt с большим logs/data; RLP length boundaries; synthetic поле >2 GiB | Потоковые native-equivalent writer/validator, disk spool и D73 fragments; независимая проверка bytes/hash/length | Нет полного дополнительного receipt/data буфера или decoded object graph в collector/validator; длины/type prefix точны, данные не сокращены; малые vectors совпадают с pinned MarshalBinary, большой vector проверяется независимым oracle, а не тем же writer | normalize | E04 |
 | AC-DAT-03-01 | REQ-DAT-03 | ALL по применимости authorization current profile: invalid parity/nonce/chain, duplicates, root revert | Native обработка authorization list | Все исходные tuples и порядок сохранены, включая skipped invalid; tx signature rules не применены ошибочно к tuple parity | normalize | E04 |
 | AC-DAT-04-01 | REQ-DAT-04 | ALL: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, zero value | Исполнение заданного call graph | Tree, parent/order, caller/context/code/msg_sender и применимые bytes/gas точны; нет пропущенного precompile или фиктивного frame | normalize | E04 |
 | AC-DAT-04-02 | REQ-DAT-04 | ALL: gas purchase, root/child entry, value transfer, protocol credits; body position отличается от protocol index | Сопоставление с independent native operation chronology | Один непрерывный execution_order для операций всех списков; entry раньше своего transfer/children; Frame cause не создаёт равенство order; body/protocol/effect indices имеют разные области | normalize | E04 |
@@ -1812,6 +1853,8 @@ D64: это критерии приёмки описываемой систем�
 | AC-DAT-08-03 | REQ-DAT-08 | ALL: payer совпадает с recipient, self-transfer, +10/−10 | Сопоставление committed effects с state diff | Сумма адресных дельт согласована с tx state; встречные actions сохранены, callbacks одного transfer не удвоены | normalize | E04 |
 | AC-DAT-09-01 | REQ-DAT-09 | ALL: failed/success CREATE и constructor revert | Построение receipt projection | Attempted address отличается от successful created_contract; native outcome/gas price взяты из верного source, не из одного OnTxEnd.err | normalize | E04 |
 | AC-DAT-09-02 | REQ-DAT-09 | ALL: committed и reverted logs; POLY native system log scopes | Построение receipt/log projection | Source order/bytes/indices сохранены; reverted attempts не receipt logs, SYSTEM_PRE/POST не выданы за StateSync effects | normalize | E04 |
+| AC-DAT-09-03 | REQ-DAT-09 | ALL: receipt network-details oneof и общие поля с нулями/absence | Positive и wrong/absent/unknown network variant vectors | ETH/BSC имеют явный пустой typed variant, Polygon BorReceiptDetails; общие gas/prices/fees/indices/create поля не потеряны из-за отсутствия в consensus bytes; неверный variant/extra отвергнут | proto | E02 |
+| AC-DAT-09-04 | REQ-DAT-09 | POLY: обычная body tx; StateSync с SYSTEM_PRE/TX_STATE_SYNC/SYSTEM_POST и без logs | Сверка scope mapping с независимым native provenance; missing/duplicate/out-of-range entries | Ordinary scopes пусты; каждый StateSync source log имеет ровно один scope в source order; повреждённая карта отвергнута; provenance не меняет logs/consensus bytes | normalize | E04 |
 | AC-DAT-10-01 | REQ-DAT-10 | ALL: empty/nonempty block и применимые optional header fields | BlockApplied normalization | Полные header/RLP/count/presence; empty count=0; Timestamp сохраняет source precision, включая BSC milliseconds | normalize | E04 |
 
 #### Lifecycle, finality и GC
@@ -1991,7 +2034,7 @@ D64: документальные требования к доказательс
 | Этап / существующие ID | Что доказать до выхода | Что ещё не считается доказанным |
 |---|---|---|
 | E01-01…05, отдельно .ETH/.BSC/.POLY | Изолированные pinned builds; минимальный native fixture runner; реальные execution/canonical/finality callers; admission/pin/owned snapshot/decision marker seam; native-only recovery; отсутствие bypass обязательного пути | Полный protobuf, production transport и вся семантика E04 ещё не готовы |
-| E02-01…05/08/10 | Компилируемые схемы/валидаторы, AUTH/SELF/LIFE, receipt provenance, immutable IDs/bytes; D73 typed RecordFragment/tree/blob codec без монолитной Envelope, exact transport layout и streaming manifests; AC-DLV-04-05…09/12; D74 общий order/scopes validator AC-DAT-05-03; closed extension registry | Работа с настоящим NATS и весь native crash matrix ещё не приняты |
+| E02-01…05/08/10 | Компилируемые схемы/валидаторы, AUTH/SELF/LIFE, receipt provenance, immutable IDs/bytes; D73 typed RecordFragment/tree/blob codec без монолитной Envelope, exact transport layout и streaming manifests; AC-DLV-04-05…09/12; D74 общий order/scopes validator AC-DAT-05-03; D75 receipt registry/network details AC-DAT-02-03/09-03; closed extension registry | Работа с настоящим NATS и весь native crash matrix ещё не приняты |
 | E03-01…05/11 | Реальные RocksDB/gRPC/NATS, delivery-only fault matrix от durable intent/READY; Prepare/Release/fencing/destination/drain; integration smoke с E01 fixtures | Полная комбинация native multi-block reorg/finality+delivery не называется пройденной до E05 |
 | E04-01/03/04 | Все обязательные native tx paths/fields выбранных трёх live profiles, включая native system tx; rollback/existence/fees/SELFDESTRUCT/Bor scopes; большой hook field и worker stalls | Исторические профили, optional outside-tx extension и performance SLO не являются gate |
 | E05-01…04 | Полный native→WAL→Gateway→NATS crash/reorg/finality/restart matrix; durable H и known-branch replay; cleanup/GC/late callback, downgrade/upgrade/drain | HA, backup и восстановление потерянного ACKed NATS store не обещаются |
@@ -2279,7 +2322,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | <a id="task-e02-01-semantic_descriptors"></a>E02-01.semantic_descriptors | `protocol/semantic`; ETH/BSC/POLY | Manifest semantic identity: activation/revision/source стабильны до delivery attempts; decision→batch выделяется один раз | E01-02.decision_bridge → decision interface | MSG, CONTROL, NATIVE |
 | <a id="task-e02-05-actions_model"></a>E02-05.actions_model | `protocol/balance`; ETH/BSC/POLY | Типизированная модель native monetary actions, общий execution_order, cause equality и RollbackScope refs/tree/validator; receipt summary не суммируется как второе движение | E01-03.smoke_corpus → reference effects | MSG, SEM |
 | <a id="task-e02-08-block_metadata"></a>E02-08.block_metadata | `protocol/block`; ETH/BSC/POLY | Block metadata/lifecycle schema, включая empty; native source counts не превращены в completeness assertion | E01-05.type_paths → профильные native поля | MSG, SEM |
-| <a id="task-e02-10-closed_profiles"></a>E02-10.closed_profiles | `protocol/profiles`; ETH/BSC/POLY | Закрытый реестр payload/extensions/presence с exact native widths и applicability; unsupported version не получает ANY fallback | E01-05.type_paths → source variants | TYPES, SEM, MSG |
+| <a id="task-e02-10-closed_profiles"></a>E02-10.closed_profiles | `protocol/profiles`; ETH/BSC/POLY | Закрытый реестр payload/extensions/presence, D75 receipt kinds/native_type/origins/network details с exact widths/applicability; unsupported version не получает ANY fallback | E01-05.type_paths → source variants | TYPES, SEM, MSG |
 | <a id="task-e02-02-schemas"></a>E02-02.schemas | `protocol/proto`; COMMON | Воспроизводимые schema/bindings и structural validators: required presence, oneof, lengths, unknown values определены | E02-01.semantic_descriptors → identities; E02-05.actions_model → action schema; E02-08.block_metadata → block schema; E02-10.closed_profiles → variants | MSG, CONTROL |
 | <a id="task-e02-02-codec"></a>E02-02.codec | `protocol/codec`; COMMON | Bounded typed RecordFragment/tree/blob codec, streaming manifests и exact transport layout/headers/digests; полная Envelope не сериализуется одним message, крупное поле также дробится | E02-02.schemas → typed messages/validators | CONTROL, DELIVERY |
 | <a id="task-e02-03-lifecycle_validator"></a>E02-03.lifecycle_validator | `test/lifecycle_validator`; ETH/BSC/POLY | Тестовый lifecycle automaton: reordered Applied/Removed/Status, revision conflicts и reinclusion имеют однозначный результат; production consumer не создаётся | E02-02.schemas → lifecycle messages; E02-01.semantic_descriptors → identity invariants | MSG, SEM |
@@ -2310,7 +2353,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
 | <a id="task-e04-01-calls"></a>E04-01.calls | `core/normalization/calls`; ETH/BSC/POLY | Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed; успешный child не переживает ancestor rollback | E02-02.schemas → call variants; E02-05.actions_model → order/scopes; E01-05.type_paths → native paths | MSG, SEM |
-| <a id="task-e04-01-receipts"></a>E04-01.receipts | `adapters/<client>/receipts`; ETH/BSC/POLY | Native receipt/source encoding/log/create projection; source и derived значения не подменяют друг друга | E01-05.type_paths → receipt origins | MSG, SEM, TYPES |
+| <a id="task-e04-01-receipts"></a>E04-01.receipts | `adapters/<client>/receipts`; ETH/BSC/POLY | Native receipt consensus/storage registry, D76 bounded byte-equivalent writer, log/create/network-details projection; source и derived значения не подменяют друг друга | E01-05.type_paths → receipt origins; E02-10.closed_profiles → receipt registry; E02-02.codec → D73 fragments/spool | MSG, SEM, TYPES |
 | <a id="task-e04-01-authorization"></a>E04-01.authorization | `core/normalization/authorization`; ETH/BSC/POLY по native applicability | Исходные authorization tuples, включая invalid/duplicate, сохранены; validation внешней tx не фильтрует tuples | E04-01.receipts → native outcome; E02-10.closed_profiles → source widths | TYPES, SEM |
 | <a id="task-e04-01-block_record"></a>E04-01.block_record | `core/normalization/block`; ETH/BSC/POLY | Native BlockApplied projection: header/RLP/count/optional presence и source timestamp precision точны для empty и nonempty blocks | E02-08.block_metadata → typed block schema; E01-05.type_paths → source header variants | MSG, SEM |
 | <a id="task-e04-03-state_diff"></a>E04-03.state_diff | `core/normalization/state`; ETH/BSC/POLY | Transaction-boundary existence/balance/nonce/code/storage before/after; rollback/empty account/reset корректны | E04-01.calls → scopes; E01-02.owned_capture → immutable snapshots | MSG, SEM |
@@ -2376,7 +2419,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 #### REQ/AC → ответственный task
 
-Все 63 REQ и 172 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 178 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -2401,7 +2444,8 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-CAP-09 | AC-CAP-09-01 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-CAP-10 | AC-CAP-10-01 | [E05-03.full_crash_matrix](#task-e05-03-full_crash_matrix) | E05 |
 | REQ-DAT-01 | AC-DAT-01-01…AC-DAT-01-02 | [E02-02.schemas](#task-e02-02-schemas) | E02 |
-| REQ-DAT-02 | AC-DAT-02-01 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
+| REQ-DAT-02 | AC-DAT-02-03 | [E02-10.closed_profiles](#task-e02-10-closed_profiles) | E02 |
+| REQ-DAT-02 | AC-DAT-02-01…AC-DAT-02-02, AC-DAT-02-04…AC-DAT-02-05 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-DAT-03 | AC-DAT-03-01 | [E04-01.authorization](#task-e04-01-authorization) | E04 |
 | REQ-DAT-04 | AC-DAT-04-01…AC-DAT-04-02 | [E04-01.calls](#task-e04-01-calls) | E04 |
 | REQ-DAT-05 | AC-DAT-05-03 | [E02-05.actions_model](#task-e02-05-actions_model) | E02 |
@@ -2410,7 +2454,8 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DAT-06 | AC-DAT-06-01…AC-DAT-06-04 | [E04-01.selfdestruct](#task-e04-01-selfdestruct) | E04 |
 | REQ-DAT-07 | AC-DAT-07-01…AC-DAT-07-02 | [E04-03.state_diff](#task-e04-03-state_diff) | E04 |
 | REQ-DAT-08 | AC-DAT-08-01…AC-DAT-08-03 | [E04-03.balance_actions](#task-e04-03-balance_actions) | E04 |
-| REQ-DAT-09 | AC-DAT-09-01…AC-DAT-09-02 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
+| REQ-DAT-09 | AC-DAT-09-03 | [E02-10.closed_profiles](#task-e02-10-closed_profiles) | E02 |
+| REQ-DAT-09 | AC-DAT-09-01…AC-DAT-09-02, AC-DAT-09-04 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-DAT-10 | AC-DAT-10-01 | [E04-01.block_record](#task-e04-01-block_record) | E04 |
 | REQ-LIF-01 | AC-LIF-01-01…AC-LIF-01-02 | [E05-01.registry](#task-e05-01-registry) | E05 |
 | REQ-LIF-02 | AC-LIF-02-01 | [E05-02.reorg](#task-e05-02-reorg) | E05 |
@@ -2481,7 +2526,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | E02-01.semantic_descriptors | Schema сохраняет смысл semantic ref/activation/revision и не смешивает их с delivery attempt ID; vectors проверяют widths/presence | AC-DAT-01-01…AC-DAT-01-02, AC-LIF-03-01…AC-LIF-03-03 |
 | E02-05.actions_model | Schema выражает action/link/fee component, общий order и rollback scopes; валидатор отвергает неоднозначные/невозможные ссылки и committed rollback, zero/absence различимы | AC-DAT-01-01…AC-DAT-01-02, AC-DAT-05-03 |
 | E02-08.block_metadata | Schema выражает empty block, native header fields, counts и source timestamp precision без BlockComplete | AC-DAT-01-01…AC-DAT-01-02 |
-| E02-10.closed_profiles | Каждая принятая variant имеет typed schema/applicability/width; unknown profile отвергается | AC-DAT-01-02 |
+| E02-10.closed_profiles | Каждая variant имеет typed schema/applicability/width; receipt kind/origin/type и network details однозначны; unknown profile отвергается | AC-DAT-01-02, AC-DAT-02-03, AC-DAT-09-03 |
 | E02-04.compatibility | Матрица read/replay/new-write перечисляет exact versions и prewrite rejection; unsupported field/schema/profile vectors отвергаются | AC-DAT-01-02 |
 | E03-11.block_lifecycle | Полученные NATS records/parts совпадают с минимальным independent corpus, empty block сохранён; один transport ACK не считается полным | AC-DLV-04-03, AC-DLV-05-01…AC-DLV-05-03 |
 | E06-13.artifact_lock | Manifest связан с materialized source/patch/toolchain/image/genesis digests и native parse evidence; metadata-only не принят | AC-OPS-10-02 |

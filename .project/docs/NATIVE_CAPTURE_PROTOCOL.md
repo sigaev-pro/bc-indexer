@@ -95,7 +95,7 @@ BSC system tx capture использует реальные hash/index/payload �
 | execution failure/revert | Native root execution result + receipt status; Go callback err не единственный признак EVM failure |
 | attempted CREATE address | Execution attempt, может существовать при failed constructor |
 | created contract | Только успешное native создание; отдельно final existence после rollback/SELFDESTRUCT |
-| source receipt | Исходное кодирование сохраняется отдельно от производной projection; адрес попытки не переименовывается в успешное создание |
+| source receipt | D75–D76: body consensus bytes по native MarshalBinary byte contract, полученные из исходного native Receipt потоковым byte-equivalent writer в spool; storage/typed outer RLP wrapper не подменяют этот формат. Derived projection сохраняется отдельно |
 
 [Geth state_processor](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/state_processor.go) — источник makeReceipt; публичные поля задаёт [MESSAGE_CONTRACT](MESSAGE_CONTRACT.md).
 

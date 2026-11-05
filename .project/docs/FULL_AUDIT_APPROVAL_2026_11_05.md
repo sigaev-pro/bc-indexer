@@ -2,15 +2,15 @@
 
 DOC-FULL-AUDIT-01 / D71. Проверенная редакция: `61afb7a`. [Краткое ТЗ](../../TZ_DECISION_MAKER.md), [подробное ТЗ](../../TZ_EXECUTOR.md), нормативные тематические документы, решения и словарь проверены до границы D70: предусмотренные данные в стандартизированном формате, подтверждённо доставленные в NATS JetStream. D64: исключительно документация, без реализации.
 
-**Текущий статус: F11 (D73) и F03 (D74) приняты и исправлены в документации (DOC_FIXED); остальные 12 предложений НА СОГЛАСОВАНИИ.** Доказательства исходных дефектов и номера строк ниже относятся к указанному audit commit. Архивные исследования и прежние решения не считаются конкурирующими действующими требованиями. DOC_FIXED не означает runtime PASS.
+**Текущий статус: F11 (D73), F03 (D74), F12 (D75–D76) приняты и исправлены в документации (DOC_FIXED); остальные 11 предложений НА СОГЛАСОВАНИИ.** Доказательства исходных дефектов и номера строк ниже относятся к указанному audit commit. Архивные исследования и прежние решения не считаются конкурирующими действующими требованиями. DOC_FIXED не означает runtime PASS.
 
-**Порядок по D72–D74:** пользователь выбрал разбор по одному, затем утвердил F11 и модель F03. Остальные 12 пунктов ожидают отдельного обсуждения. Следующий рекомендуемый пункт — F12 (точное native receipt-кодирование).
+**Порядок по D72–D76:** пользователь выбрал разбор по одному, затем утвердил F11, F03 и F12 с уточнением потокового byte-equivalent кодирования. Остальные 11 пунктов ожидают отдельного обсуждения. Следующий рекомендуемый пункт — F13 (точная схема stream metadata NATS).
 
 ## Результат
 
 Подтверждены **14 групп замечаний**: 10 ранее известных перепроверены; 4 новых — F11–F14. Это реестр подтверждённых находок, не обещание отсутствия любых неизвестных ошибок. F08/F09 — опасные для чтения формулировки, но более точные разделы уже задают безопасное поведение; они не объявляются доказанными дефектами самого протокола.
 
-В 10 группах можно согласовать текст с уже принятым поведением: F01/F02/F04–F10/F14. Из четырёх дополнений технического контракта F11/F03 приняты и внесены; F12/F13 ещё требуют решения. Никакое из предложений не требует расширять проект за NATS или начинать реализацию.
+В 10 группах можно согласовать текст с уже принятым поведением: F01/F02/F04–F10/F14. Из четырёх дополнений технического контракта F11/F03/F12 приняты и внесены; F13 ещё требует решения. Никакое из предложений не требует расширять проект за NATS или начинать реализацию.
 
 | Приоритет | Что он означает в этом отчёте |
 |---|---|
@@ -140,15 +140,17 @@ DOC-FULL-AUDIT-01 / D71. Проверенная редакция: `61afb7a`. [К
 
 ### F12 · P1 · Не задан точный публичный receipt encoding registry
 
+**DOC_FIXED / D75–D76:** в MESSAGE_CONTRACT закреплены SourceReceiptEncoding, enum values 1/2/3, native_type presence, consensus/storage origin applicability, typed prefix без outer RLP wrapper, exact native sources, общий Receipt отдельно от consensus bytes и closed network details. Native MarshalBinary — эталон; пользователь отдельно разрешил потоковую byte-equivalent адаптацию из native Receipt в spool, чтобы не нарушать F11 bounded memory. Optional raw Bor storage bytes не перекодируются; историческое имя registry явно заменено. Проверены pinned receipt.go Geth/BSC/Bor и Bor rawdb/bor_receipt.go. Добавлены AC-DAT-02-02…05, AC-DAT-09-03…04, E02/E04 mapping; оба ТЗ и нормативные зеркала синхронизированы. Проверки документации — PROJECT_STATUS; runtime NOT_RUN.
+
 **Доказательство:** `TZ_EXECUTOR.md:533` требует `source_receipt_encoding` с encoding kind и closed ETH/BSC/Polygon details; конкретного enum кодирования нет. Bor source_log_scopes определены на `:535`; эквивалентная точная таблица применимости receipt details для остальных профилей отсутствует.
 
 Это не косметика: pinned native clients имеют разные представления receipt. Consensus `MarshalBinary` и `ReceiptForStorage.EncodeRLP` не эквивалентны; storage-представление, например, не содержит Bloom. Проверены исходники [Geth](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/receipt.go), [BSC](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/receipt.go) и [Bor](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/receipt.go).
 
 **Контрпример:** два исполнителя сохраняют consensus bytes и storage RLP соответственно под неопределённым `encoding kind`. Оба считают байты native, но один стандартный decoder не может интерпретировать их по фиксированному контракту.
 
-**Предлагаемый выбор на утверждение:** для обязательных body tx использовать native consensus encoding: `LEGACY_CONSENSUS_RLP` либо `TYPED_CONSENSUS_ENVELOPE` с исходным receipt type byte. Формирование — штатный pinned native codec, без реконструкции из наших нормализованных полей. Typed network details: ETH/BSC — явно зафиксированное отсутствие дополнительных полей первого профиля, Bor — определённые source_log_scopes; обязательные общие поля остаются в Receipt. Optional legacy Bor storage receipt имеет отдельный `BOR_LEGACY_STORAGE_RLP` и не выдаётся за consensus body receipt. Новые native extras требуют явного registry/profile update, не opaque map.
+**Принятый выбор D75, уточнение D76:** для обязательных body tx использовать native consensus encoding: `LEGACY_CONSENSUS_RLP` либо `TYPED_CONSENSUS_ENVELOPE` с исходным receipt type byte. Эталон — штатный pinned native codec, вывод допускает bounded byte-equivalent writer без реконструкции из наших нормализованных полей. Typed network details: ETH/BSC — явно зафиксированное отсутствие дополнительных полей первого профиля, Bor — определённые source_log_scopes; обязательные общие поля остаются в Receipt. Optional legacy Bor storage receipt имеет отдельный `BOR_LEGACY_STORAGE_RLP` и не выдаётся за consensus body receipt. Новые native extras требуют явного registry/profile update, не opaque map.
 
-**Приёмка:** golden native bytes для legacy/typed/BSC system/Bor StateSync; storage RLP не принимается как consensus; zero/absence и исходные logs не изменяются. [BSC receipt codec](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/receipt.go). REQ-DAT-01/02/09; `E02-10.closed_profiles`, `E04-01.receipts`. Это предложенная конкретизация, не уже принятый codec.
+**Приёмка:** golden native bytes для legacy/typed/BSC system/Bor StateSync; storage RLP не принимается как consensus; zero/absence и исходные logs не изменяются; большой receipt не требует полного дополнительного буфера. [BSC receipt codec](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/receipt.go). REQ-DAT-01/02/09; `E02-10.closed_profiles`, `E04-01.receipts`. Контракт принят; native fixture/streaming writer не реализованы и не запускались.
 
 ### F13 · P2 · Проверка stream metadata обязательна, но её схема отсутствует
 

@@ -1,5 +1,7 @@
 # Polygon: legacy Bor receipts и нативный захват
 
+Уточнение D75–D76 (2026-11-05): нормативный receipt registry теперь в [MESSAGE_CONTRACT](../MESSAGE_CONTRACT.md). Старое предложенное имя BOR_RECEIPT_STORAGE_RLP ниже заменено на BOR_LEGACY_STORAGE_RLP (native_type absent); alias на wire не принимается. Историческое исследование и его исходный client pin ниже сохранены; текущий pinned raw storage reader отдельно проверен и указан в нормативном контракте.
+
 E00-15, 2026-10-15. Проверены исходники Bor v2.10.2, commit `9c445ef603e71469e1c176d8e57e7cf94864ade7`. Исследование исходников; нода, архив, replay и fixtures не запускались. Контекст: [матрица клиентов](../CLIENT_MATRIX.md), [реестр типов](../TRANSACTION_TYPE_REGISTRY.md).
 
 ## Вывод и граница D17

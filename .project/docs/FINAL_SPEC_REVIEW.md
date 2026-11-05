@@ -1,5 +1,7 @@
 # Финальная сверка и карта полного grill
 
+Актуализация D75–D76 / DOC-F12-FIX-01: F12 закрыт в документации — exact native receipt registry, consensus/storage и common/network fields, bounded byte-equivalent writer. Проверены pinned source codecs, не runtime. Текущий каталог: 63 REQ / 178 AC / 68 child tasks / 7 gates. Закрыты F11/F03/F12, остальные 11 находок требуют отдельного решения. Ниже — исторические точки со своими числами; runtime NOT_RUN.
+
 Актуализация D74 / DOC-F03-FIX-01: F03 закрыт в документации — общий tx-local порядок, causal equality, публичные scopes и native rollback semantics. Текущий каталог: 63 REQ / 172 AC / 68 child tasks / 7 gates. Закрыты F11/F03, остальные 12 находок полного аудита требуют отдельного решения. Ниже сохранены предыдущие точки проверки со своими историческими числами; runtime NOT_RUN.
 
 Актуализация D73 / DOC-F11-FIX-01: F11 закрыт в документации — bounded typed fragments до сериализации, крупные поля/коллекции, exact manifests/transport/recovery/all-fragments ACK. Текущий каталог: 63 REQ, 164 AC, 68 child tasks и 7 gates. Остальные 13 находок [полного аудита](FULL_AUDIT_APPROVAL_2026_11_05.md) ещё не согласованы; итоговое ТЗ пока не объявляется бездефектным. Ниже сохранена историческая проверка D65 со своими числами. Runtime NOT_RUN.

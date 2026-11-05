@@ -68,6 +68,41 @@ D74: calls, execution_actions и actions используют один tx-local 
 
 `AccountChange={address,existed_before,exists_after,balance_before,balance_after,nonce_before,nonce_after,code_hash_before,code_hash_after,code_before,code_after,storage_reset,storage_changes[]}`. Address20, bool exists/reset, UInt256 balances, u64 nonce, Hash32 code hashes, bytes code. `StorageChange={key:Hash32,before:Hash32,after:Hash32}`. CURRENT_SEMANTICS определяет presence/order/reset. Данные относятся к tx boundary; actions и diff не суммируются как независимые изменения.
 
+### 3.1. Исходное receipt-кодирование D75–D76
+
+`SourceReceiptEncoding={kind:ReceiptEncodingKind,native_type?:u32,bytes}`. kind и непустые bytes обязательны; наличие native_type определяется таблицей. Это закрытый registry v1 внутри logical schema v2 D73, не новый transport version. Нулевой/неизвестный enum, неверная применимость origin/network/profile и отсутствующий обязательный receipt отвергаются до READY. Поле bytes передаётся по D73 через BlobRef/BlobChunk; размер не разрешает усечение.
+
+| Enum value / kind | Применимость и native_type | Точный byte contract |
+|---|---|---|
+| 1 LEGACY_CONSENSUS_RLP | Обязательный body receipt с native Receipt.Type=0; native_type обязательно присутствует и равен 0 | RLP списка consensus-полей native receipt; нет ведущего type byte 0 |
+| 2 TYPED_CONSENSUS_ENVELOPE | Обязательный body receipt с ненулевым native type; native_type обязателен, 1…127, только разрешённые сетью/fork registry значения | Один исходный type byte, затем native consensus receipt RLP. Внешняя RLP-string wrapper не добавляется |
+| 3 BOR_LEGACY_STORAGE_RLP | Только optional BorLegacyReceiptRecord origin=BOR_LEGACY_SYNTHETIC_RECEIPT; native_type отсутствует: storage bytes не содержат type byte | Исходный raw storage RLP native Bor receipt, без перекодирования в consensus receipt и без добавления Bloom |
+
+Значение 0 зарезервировано как INVALID, не default-успех. Для обязательных ETH/BSC/Polygon body tx `Receipt.source_receipt_encoding` содержит ровно один вариант 1/2. native_type берётся из фактического native Receipt и сверяется с реальной включённой транзакцией по pinned profile, у BSC — после actualTx substitution. Отдельного выдуманного BSC system type нет. Bor StateSync body type 0x7f использует вариант 2 с native_type=127; обычные Bor body receipts — 1/2 по фактическому type. Наличие type в коде не разрешает его вне активных native fork rules.
+
+Эталон вариантов 1/2 — результат `Receipt.MarshalBinary` закреплённого клиента на исходном native Receipt после штатного формирования consensus fields. `Receipt.EncodeRLP` для typed receipt имеет дополнительную внешнюю RLP-string упаковку, поэтому его полный результат не взаимозаменяем с MarshalBinary. Consensus содержимое — PostStateOrStatus, CumulativeGasUsed, Bloom и Logs; log сохраняет native address/topics/data. Status=0/1 и применимый pre-status state root не заменяются нашим execution outcome. Контракт не утверждает, что bytes были получены из сетевого пакета: это точное native consensus-кодирование исходного результата. Источники кодеков: [Geth](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/receipt.go), [BSC](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/receipt.go), [Bor](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/receipt.go).
+
+D76: API MarshalBinary с полным возвращаемым byte array не является обязательным collector path. Допустим потоковый writer/адаптация native-кодека с побайтно тем же результатом из owned native receipt fields в disk spool; длины вложенного RLP рассчитываются проходами по spool без полного дополнительного receipt/log-data буфера. Это не сборка из нормализованных Receipt/Log и не изменение native исполнения, fork rules или consensus bytes. Native reader/codec commit фиксирует ProfileRef. Ошибка кодека или несогласованные source данные — явная normalization error, не fallback в storage/JSON/пустые bytes. Дополнительная память collector ограничена независимо от размера receipt; существующая память native execution оценивается отдельно по D58. До READY bytes фиксируются с логической записью, после READY повторная генерация вместо сохранённых bytes запрещена.
+
+Validator проверяет точное RLP framing по выбранному kind, допустимые scalar widths/status-root, native_type/profile/origin и отсутствие trailing bytes; для общих consensus-полей проверяет согласованность с типизированным Receipt. Чтение/проверка крупного encoded receipt также потоковые: decoder не обязан создавать полный массив bytes или второе дерево native Receipt/Logs. Length overflow, truncated/невалидный RLP и расхождение обязательных source полей не проходят READY/CLOSED. Форматные проверки не заменяют независимый native byte oracle при приёмке.
+
+Consensus bytes не содержат gas_used отдельной tx, effective/blob gas price, fee_summary, transaction/block hash, индексы включения/logs, attempted/created address или Bor provenance. Эти данные остаются в общих типизированных Receipt/Log/TransactionRecord и берутся из своих native источников; отсутствие в consensus bytes не означает отсутствие в публичной записи. Обязательное значение 0 отличается от отсутствующего/неприменимого. Перекодирование consensus bytes ради включения этих полей запрещено.
+
+Для optional Bor legacy `raw_encoding` имеет тип SourceReceiptEncoding, kind=3, native_type absent. Сохраняется raw storage value, соответствующее native `ReadBorReceiptRLP`, с decode-проверкой native storage codec; нельзя повторно кодировать derived Receipt и выдавать его за исходные storage bytes. Storage consensus-подмножество не содержит Bloom; доступные derived bloom/hash/index сохраняются отдельно в source_receipt/auxiliary metadata с native provenance. Source-only status не доказывает исполнение всех system calls. При включённом optional профиле corrupt/missing обязательный source не превращается в пустую успешную auxiliary запись. Kind 3 запрещён в body Receipt, а kinds 1/2 запрещены вместо raw_encoding legacy auxiliary. Источник: [Bor raw storage reader](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/rawdb/bor_receipt.go). Историческое имя BOR_RECEIPT_STORAGE_RLP из исследования заменено этим registry; alias на wire не принимается.
+
+### 3.2. Применимость receipt network details D75
+
+`Receipt.network_details` — обязательный closed oneof: EthReceiptDetails / BscReceiptDetails / BorReceiptDetails. Отсутствие дополнительных полей не означает отсутствующий Receipt или отсутствие его общих полей.
+
+| Профиль обязательной body tx | Дополнительные поля первого профиля |
+|---|---|
+| ETH | EthReceiptDetails — явно присутствующий пустой typed variant; дополнительных полей нет |
+| BSC, включая system tx | BscReceiptDetails — явно присутствующий пустой typed variant; общие gas/log/fee поля сохраняются в Receipt |
+| Polygon, обычная body tx | BorReceiptDetails с присутствующим пустым source_log_scopes; обычные receipt logs принадлежат этой tx |
+| Polygon StateSync 0x7f | BorReceiptDetails.source_log_scopes описывает каждый исходный receipt log ровно один раз по transaction_log_index, в порядке source logs; SYSTEM_PRE / TX_STATE_SYNC / SYSTEM_POST определяются native instrumentation |
+
+Для StateSync без logs список source_log_scopes пуст. Повторы/пропуски/индекс вне исходного receipt и неизвестный scope запрещены. Provenance не фильтрует/переставляет logs и не меняет consensus bytes; SYSTEM_PRE/POST не становятся действиями StateSync tx. Reverted log attempts не добавляются в receipt. Неподходящий network variant, unknown extra field или неподдержанный native extension требуют явной ошибки и versioned registry/profile update до поддержки; Any/JSON map и выдуманные нулевые поля не допускаются. Optional legacy Bor — отдельный auxiliary payload со своей схемой, не этот body oneof.
+
 ## 4. События и передача блока
 
 | Payload | Смысл |

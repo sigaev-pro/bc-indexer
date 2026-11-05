@@ -4,6 +4,9 @@
 
 ## Language
 
+**Исходное receipt-кодирование**:
+Типизированные bytes результата: native consensus-кодирование для body tx либо отдельный raw storage RLP optional Bor legacy receipt. Это не JSON-RPC projection и не все поля Receipt. Вид, native type и origin проверяются по D75; потоковый writer D76 сохраняет точные native bytes без полного дополнительного буфера.
+
 **Порядок исполнения / execution_order**:
 Единый tx-local номер наблюдаемой операции для calls, execution actions и balance actions. Вход во frame имеет свою позицию; SELFDESTRUCT и его явно связанная денежная проекция — одну общую. Индексы списков, body position и transport order не заменяют этот порядок.
 

@@ -14,6 +14,8 @@ ETH/BSC/POLY. Source profile и активные fork rules определяют
 
 ## Стандартные EVM-варианты
 
+D75–D76: receipt encoding registry отдельно определён в [MESSAGE_CONTRACT](MESSAGE_CONTRACT.md). Body receipt type соответствует фактическому native type после системных подстановок: 0 → LEGACY_CONSENSUS_RLP, разрешённый ненулевой type → TYPED_CONSENSUS_ENVELOPE; Bor StateSync 0x7f сохраняет этот type byte. Optional legacy Bor storage receipt имеет отдельный BOR_LEGACY_STORAGE_RLP без native_type, не новый body transaction variant. Пустые ETH/BSC receipt details — явно typed отсутствие дополнительных полей, а не отсутствие общих Receipt fields.
+
 | ID / payload | Поля |
 |---|---|
 | `0x00 EvmLegacy` | nonce:u64, gas_price:Q, gas_limit:u64, target:Target, value:Q, input:B, signature:{v:Q,r:Q,s:Q}; replay_protection=`Unprotected \| Eip155(chain_id:Q)` |
