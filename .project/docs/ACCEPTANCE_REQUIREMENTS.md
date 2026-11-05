@@ -1,6 +1,6 @@
 # Полный реестр требований и приёмки
 
-Родительские REQ раскрыты в [195 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [198 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -57,7 +57,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-LIF-04 | Finality-only/restart события не теряются | FINAL/DECISION: setter/event без нового block, crash marker/mirror, повтор; ровно правильный snapshot/revision; E01/E05 |
 | REQ-LIF-05 | Ethereum safe/finalized semantics точны | FINAL-ETH: safe startup fallback допустим, zero FCU no-op, actual setter before RPC error; GC только finalized ancestry; same-head authoritative finalized regression ниже accepted anchor — fatal; E01/E05 |
 | REQ-LIF-06 | BSC early/header evidence разделены | FINAL-BSC: VotePool-only, merged header snapshot, side branch, restart loss, missing lookup; GC только accepted header Source; E01/E05 |
-| REQ-LIF-07 | Polygon native statuses отдельно от D63 anchor | FINAL-POLY: milestone purge/whitelist-only, checkpoint root vs end hash, exact finalized contract read; публикация не ждёт L1 GC; E01/E05 |
+| REQ-LIF-07 | Polygon native statuses отдельно от D63 anchor | FINAL-POLY: milestone purge/whitelist-only, checkpoint root vs end hash, exact finalized contract read; D80 Hash32 sources_binding_digest в двух evidence types, сохранение при config replacement/replay; публикация не ждёт L1 GC; E01/E02/E05 |
 | REQ-LIF-08 | GC не теряет pending/нужную ancestry | GC-01: no anchor/pending/replay сохраняют pins; crash release, removed branch, same-head finality regression и доказанный anchor conflict; нет TTL guesses; E05 |
 
 ## Доставка и обслуживание
