@@ -1,4 +1,4 @@
-# Идентификаторы, binding и служебный протокол v1
+# Идентификаторы, binding и служебный протокол v2
 
 DOC-FINAL-01 · 2026-11-05. Точный логический контракт первой версии для ETH/BSC/POLY. Дополняет [автомат доставки](DELIVERY_STATE_MACHINE.md) и [YAML](LIVE_CONFIG_SPEC.md). Это документация, не созданные proto/bindings или выполненные тесты.
 
@@ -48,38 +48,38 @@ Digest не включает собственное поле, URL, TLS/credentia
 
 ## READY manifest и reservation
 
-Descriptor события: `{ordinal:u64,event_id:40 bytes,event_family:u16,event_kind:u16,envelope_length:u64,envelope_sha256:Hash32}`. Family registry v1: tx=1, block=2, balance.system=3, bor.legacy_receipt=4; последние два optional. Kind: applied=1, removed=2, status=3. Unknown value — ошибка, OTHER отсутствует.
+Descriptor события v2: `{ordinal:u64,event_id:40 bytes,event_family:u16,event_kind:u16,record_length:u64,record_digest:Hash32,fragment_count:u64,fragment_manifest_digest:Hash32}`. Следом идут fragment_count descriptors `{fragment_index:u64,encoded_length:u64,fragment_sha256:Hash32}`. Fragment indices непрерывны; encoded_length=1…65536; сумма длин равна record_length. Family registry v1: tx=1, block=2, balance.system=3, bor.legacy_receipt=4; последние два optional. Kind: applied=1, removed=2, status=3. Unknown value — ошибка, OTHER отсутствует.
 
-Manifest bytes — `UTF8("extractor.manifest.v1") || 0x00 || event_count_u64be || descriptors_in_ordinal_order`, каждый descriptor — перечисленные поля в фиксированном порядке и big endian. Manifest digest — SHA256 этих bytes. Ordinals непрерывны 0…N−1, event IDs уникальны; empty public batch не создаётся. Entries/chunks хранятся на диске; closing marker содержит count/digest, не весь список.
+`fragment_manifest_digest=SHA256(UTF8("extractor.fragments.v1") || 0x00 || event_id40 || fragment_count_u64be || fragment_descriptors_in_index_order)`. Manifest bytes — `UTF8("extractor.manifest.v2") || 0x00 || event_count_u64be || concat(event_descriptor || its_fragment_descriptors)` в ordinal order; каждый descriptor — перечисленные поля в фиксированном порядке и big endian. Manifest digest — SHA256 этих bytes. Ordinals непрерывны 0…N−1, event IDs уникальны; empty public batch не создаётся. Entries/chunks хранятся на диске; closing marker содержит count/digest, не весь список. Никакой event со всеми descriptors не обязан помещаться в один RPC/Protobuf/WriteBatch; поток descriptors допускает chunk boundary внутри фиксированной записи.
 
-Reservation seed binary v1: domain `extractor.reservation.v1` + zero byte, затем `reservation_id16,issuer_store_epoch16,batch_id40,manifest_digest32,event_count_u64be,sequence_base_u64be,binding_digest32,frame_limit_u64be,transport_version_u32be,layout_version_u32be,header_version_u32be`. Все версии первой схемы =1. `plan_digest=SHA256(seed_bytes)`; seed неизменен и возвращается побайтно при Prepare retry. Record chain_sequence=base+ordinal с overflow check. Gateway может импортировать прежний seed из SEALED producer после store loss; issuer epoch не переписывается на новый.
+Reservation seed binary v2: domain `extractor.reservation.v2` + zero byte, затем `reservation_id16,issuer_store_epoch16,batch_id40,manifest_digest32,event_count_u64be,sequence_base_u64be,binding_digest32,frame_limit_u64be,transport_version_u32be,layout_version_u32be,header_version_u32be,record_format_version_u32be,manifest_version_u32be`. Transport/layout/header/manifest=2, record_format=1. `plan_digest=SHA256(seed_bytes)`; seed неизменен и возвращается побайтно при Prepare retry. Record chain_sequence=base+ordinal с overflow check: один sequence на логическое событие, общий для всех его фрагментов. Gateway может импортировать прежний seed из SEALED producer после store loss; issuer epoch не переписывается на новый.
 
-## TransportFrame layout v1
+## TransportFrame layout v2
 
-Этот небольшой transport wrapper имеет закреплённые field numbers; общие Envelope field numbers генерируются в E02 и не нужны для вычисления длины уже сохранённых envelope_bytes.
+Этот небольшой transport wrapper имеет закреплённые field numbers. Он переносит один ограниченный RecordFragment из [MESSAGE_CONTRACT](MESSAGE_CONTRACT.md) целиком или частями; общего Envelope protobuf-message нет.
 
 | Message | Fields: tag → type |
 |---|---|
 | NetworkIdentity | 1 family(enum EVM=1), 2 chain_id(bytes32), 3 genesis_hash(bytes32) |
-| TransportFrame | 1 transport_version(u32), 2 network(message), 3 event_id(bytes40), 4 payload_digest(bytes32), 5 publication_epoch(bytes16), 6 chain_sequence(u64), oneof: 7 complete(message) / 8 part(message) |
-| CompleteRecord | 1 envelope_bytes(bytes) |
-| RecordPart | 1 part_index(u64), 2 part_count(u64), 3 total_bytes(u64), 4 data(bytes) |
+| TransportFrame | 1 transport_version(u32=2), 2 network(message), 3 event_id(bytes40), 4 record_digest(bytes32), 5 publication_epoch(bytes16), 6 chain_sequence(u64), oneof: 7 complete(message) / 8 part(message), 9 fragment_index(u64), 10 fragment_count(u64), 11 fragment_digest(bytes32), 12 record_format_version(u32=1) |
+| CompleteFragment | 1 fragment_bytes(bytes, 1…65536 bytes) |
+| FragmentPart | 1 part_index(u64), 2 part_count(u64), 3 fragment_total_bytes(u64, 1…65536), 4 data(bytes) |
 
-Каждый указанный scalar присутствует, включая part_index=0. Canonical wrapper encoding v1: ascending tag order, minimal unsigned varints, обычные protobuf length-delimited fields, no unknown fields/duplicates. Envelope внутри — исходные immutable bytes, их независимая reserialization запрещена. Это локально определённое wrapper encoding, не утверждение о каноничности произвольного Protobuf. `EncodedFrameSize` — точная сумма key/varint/length/data sizes этой таблицы, без приблизительного overhead.
+Каждый указанный scalar присутствует, включая fragment_index/part_index=0. Canonical wrapper encoding v2: ascending tag order, minimal unsigned varints, обычные protobuf length-delimited fields, no unknown fields/duplicates. Внутри — исходные immutable fragment bytes, их независимая reserialization запрещена. Это локально определённое wrapper encoding, не утверждение о каноничности произвольного Protobuf. `EncodedFrameSize` — точная сумма key/varint/length/data sizes этой таблицы, без приблизительного overhead.
 
-`Nats-Msg-Id = "ex1." + base64url_no_padding(network_digest32 || producer_id16 || run_id16 || event_sequence8 || form1 || part_index8)`. COMPLETE: form=0,index=0; PART: form=1,index=i. Header bytes ровно `NATS/1.0\r\nNats-Msg-Id: <id>\r\nNats-Expected-Stream: <stream>\r\n\r\n` в этом порядке, без status line/дополнительных headers. Reply inbox не входит в эти bytes. `F=transport.max_frame_bytes` учитывает wrapper + эти header bytes.
+`Nats-Msg-Id = "ex2." + base64url_no_padding(network_digest32 || producer_id16 || run_id16 || event_sequence8 || fragment_index8 || form1 || part_index8)`. Целые — big endian; tuple 89 bytes, ID 123 ASCII bytes с prefix. COMPLETE: form=0,part_index=0; PART: form=1,part_index=i. Header bytes ровно `NATS/1.0\r\nNats-Msg-Id: <id>\r\nNats-Expected-Stream: <stream>\r\n\r\n` в этом порядке, без status line/дополнительных headers. Reply inbox не входит в эти bytes. `F=transport.max_frame_bytes` учитывает wrapper + эти header bytes.
 
-Layout v1:
+Layout v2 применяется отдельно к каждой паре (event ordinal, fragment_index), в этом порядке:
 1. Если точный COMPLETE с фактическими metadata/headers помещается в F, выбрать COMPLETE.
-2. Иначе найти наибольшее целое C>=1, для которого PART с data длиной C, part_index=U64_MAX, part_count=U64_MAX и фактическим total_bytes помещается в F. Это консервативная проверка overhead без циклической зависимости count/size. Размер headers фиксирован по длине tuple, stream из seed binding.
-3. Count=ceil(total_bytes/C), part i содержит bytes `[i*C,min((i+1)*C,total_bytes))`. Checked arithmetic для всех длин/offsets; overflow отвергается без truncate.
+2. Иначе найти наибольшее целое 1<=C<=fragment_total_bytes, для которого PART с data длиной C, part_index=U64_MAX, part_count=U64_MAX и фактическими fragment metadata помещается в F. Это консервативная проверка overhead без циклической зависимости count/size. Размер headers фиксирован по длине tuple, stream из seed binding.
+3. Count=ceil(fragment_total_bytes/C), part i содержит bytes `[i*C,min((i+1)*C,fragment_total_bytes))`. Checked arithmetic для всех длин/offsets; overflow отвергается без truncate. Сборка одного RecordFragment ограничена 65536 bytes; полная запись декодируется потоком фрагментов.
 4. Before SEALED проверить фактический размер/digest каждой frame. При C<1 вернуть LIMIT_INCOMPATIBLE, сохранить READY; pending SEALED не перепланировать.
 
-Layout manifest entries: `{ordinal,form,capacity,part_count,total_bytes}` в фиксированном порядке, u64 big endian кроме form byte; COMPLETE capacity=total_bytes,count=1. `layout_manifest_digest=SHA256(domain "extractor.layout.v1" + zero + plan_digest + count_u64be + entries)`. При BeginPublish Gateway сверяет детерминированный layout; неизвестная version не принимается. Control/chunk RPC<=256 KiB с wrapper, data chunk<=64 KiB; fragment offset относится к одной frame, не обязательно совпадает с RecordPart boundary. Максимум WriteBatch — 1 MiB. Это ограничения рабочих буферов, не предел размера транзакции.
+Layout manifest entries: `{ordinal,fragment_index,form,capacity,part_count,fragment_total_bytes}` в фиксированном порядке, u64 big endian кроме form byte; COMPLETE capacity=fragment_total_bytes,part_count=1. `layout_manifest_digest=SHA256(domain "extractor.layout.v2" + zero + plan_digest + entry_count_u64be + entries)`. Entry count — checked сумма fragment_count всех событий; entries идут ordinal/fragment_index order. При BeginPublish Gateway сверяет детерминированный layout; неизвестная version не принимается. Control/chunk RPC<=256 KiB с wrapper, data chunk<=64 KiB; RPC byte_offset относится к одной TransportFrame, не к логической записи. Максимум WriteBatch — 1 MiB. Это ограничения рабочих буферов, не предел размера транзакции.
 
 ## Служебные запросы и ответы
 
-После authenticated handshake mutating RPC включает `{protocol_version=1,request_id,session_token,producer_id,run_id,connection_generation,admission_generation,binding_digest}`. Token check и commit сериализованы. mTLS проверяет deployment/network/role; challenge echo внутри authenticated transport подтверждает текущий boot, дополнительный неописанный signing key не вводится. Business idempotency — identity/manifest/offset/intent, а не только request_id.
+После authenticated handshake mutating RPC включает `{protocol_version=2,request_id,session_token,producer_id,run_id,connection_generation,admission_generation,binding_digest}`. Token check и commit сериализованы. mTLS проверяет deployment/network/role; challenge echo внутри authenticated transport подтверждает текущий boot, дополнительный неописанный signing key не вводится. Business idempotency — identity/manifest/offset/intent, а не только request_id.
 
 Recovery CommitSwitch/Resume использует authenticated `MAINTENANCE` session: Gateway допускает old/new binding и admission generation **только для точного сохранённого transition intent** (switch_id/resume_id, drain_id, old/new digests/generations, issuer epoch). Сначала сопоставляется durable intent/receipt, затем возвращается прежний результат; потерянный ответ после commit не превращается в неразрешимый SESSION_STALE. Если transition ещё не был принят, его начало допустимо только из текущей sealed identity по обычным правилам. MAINTENANCE не принимает новые Prepare/Publish/Seal; конфликтующий либо retired intent отвергается. После завершения перехода producer открывает новую обычную session с действующей identity. Старый session_token не переносится через рестарт или соединение.
 
@@ -93,9 +93,9 @@ Recovery CommitSwitch/Resume использует authenticated `MAINTENANCE` se
 | PrepareChunk | batch_id, manifest_digest, offset, chunk_sha256, bytes | durable next_offset |
 | FinalizePrepare | batch_id, manifest_digest | exact seed bytes, plan_digest |
 | BeginPublish | batch_id, seed bytes, plan_digest, layout_manifest_digest | saved state/resume cursors |
-| PublishChunk | batch_id, plan_digest, event ordinal, frame index, offset, chunk_sha256, bytes | durable next_offset |
+| PublishChunk | batch_id, plan_digest, event ordinal, fragment_index, frame index (0 для COMPLETE, part_index для PART), offset, chunk_sha256, bytes | durable next_offset для той же пары fragment/frame |
 | FinalizePublish | batch_id, plan_digest, manifest_digest, layout_manifest_digest | CLOSED; не IngestAck |
-| GetBatchState | batch_id, plan_digest | PREPARED/RECEIVING/CLOSED/NATS_ACKED/RELEASING/RETIRED либо NOT_FOUND; IngestAck только если durable |
+| GetBatchState | batch_id, plan_digest, optional cursor | PREPARED/RECEIVING/CLOSED/NATS_ACKED/RELEASING/RETIRED либо NOT_FOUND; IngestAck только если durable; bounded page cursors (event ordinal, fragment_index, frame index, next_offset), continuation при превышении RPC limit |
 | Release | batch_id, manifest_digest, plan_digest | ReleaseAck(batch_id,retired_prefix) |
 | RecoveryRelease | batch_id, exact saved IngestAck, durable ACKED/outbox assertion | ReleaseAck после sync, только следующий seq и отсутствие conflicting pending |
 | SealGeneration | binding/admission generation, drain_id, batch_highwater | SealAck(drain_id,binding_digest,admission_generation,highwater,issuer_store_epoch) |

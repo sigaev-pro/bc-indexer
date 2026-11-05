@@ -2,7 +2,7 @@
 
 Точные identities, binding JSON/digests, manifest/reservation bytes, wrapper layout, RPC/errors и исполнимый cutover заданы в [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). Ниже — автомат состояний этого же протокола, не отдельная альтернативная схема.
 
-2026-11-05. D26–D33, D52, D54, D57–D59. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable Envelope bytes.
+2026-11-05. D26–D33, D52, D54, D57–D59, D73. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable RecordFragment bytes логической Envelope.
 
 ## Identity, режимы и atomicity
 
@@ -39,11 +39,11 @@ IngestAck проверяет batch/manifest/plan/destination; ACK части л�
 
 ## Prepare и повторные попытки
 
-Prepare передаёт описания immutable Envelope: event_id, digest, byte length, event family/kind и ordinal. Весь manifest не помещается в один RPC/WriteBatch. Каждый chunk имеет стабильные offset/digest; closing manifest digest фиксирует порядок и состав. Повтор с тем же batch_id/manifest_digest возвращает сохранённую reservation. Другой digest после READY — ERROR.
+Prepare передаёт v2 event descriptors и упорядоченные descriptors всех immutable RecordFragment: event identity/kind/ordinal, record_length/digest, fragment_count/manifest digest, затем fragment_index/encoded_length/SHA256. Весь manifest и список фрагментов одного event не помещаются в один RPC/WriteBatch; передаются bounded chunks. Closing manifest digest фиксирует порядок и состав. READY требует полного schema/tree/blob/seal validation и durable fragment bytes/manifest. Повтор с тем же batch_id/manifest_digest возвращает сохранённую reservation. Другой digest после READY — ERROR.
 
 Reservation seed: `store_epoch,reservation_id,manifest_digest,event_count,sequence_base,destination_binding_digest,frame_limit,layout_version,header_version`. Событие получает chain_sequence=sequence_base+ordinal; это порядок регистрации, не blockchain chronology. Counter overflow проверяется до commit, значения не переиспользуются.
 
-Layout определяется Gateway по фиксированной версии алгоритма и фактическим длинам Envelope/headers. Producer сериализует frames и перед SEALED проверяет actual byte size. Изменение текущего лимита не меняет существующую reservation. Пока producer plan не SEALED, ни одна его часть не могла публиковаться. При потере Gateway такой незакрытый plan строится в новой plan generation после durable отказа от старой неопубликованной попытки; recovery inputs остаются. SEALED всегда повторяется с прежними epoch/sequence/layout/headers/bytes и не проходит новое распределение sequence.
+Layout определяется Gateway по фиксированной версии алгоритма и фактическим длинам каждого RecordFragment/headers. Producer сериализует frames и перед SEALED проверяет actual byte size. Изменение текущего лимита не меняет существующую reservation. Пока producer plan не SEALED, ни одна его часть не могла публиковаться. При потере Gateway такой незакрытый plan строится в новой plan generation после durable отказа от старой неопубликованной попытки; READY fragment bytes/IDs/digests остаются прежними. SEALED всегда повторяется с прежними epoch/sequence/layout/headers/bytes и не проходит новое распределение sequence.
 
 Partial uploads возобновляются по сохранённым offsets. Orphan PREPARING/PREPARED удаляется только через fenced owner handshake, доказывающий, что SEALED/публикации не было; неизвестность не является разрешением очистки. Потерянный producer означает ручную диагностику/abandon по прежнему контракту, не таймерное удаление CLOSED payload.
 
@@ -90,9 +90,9 @@ Resume использует отдельную монотонную admission_ge
 
 Immutable publication descriptor содержит exact subject и header template: `Nats-Msg-Id`, `Nats-Expected-Stream`. Другие прикладные headers запрещены без новой header_version. Message ID — версия кодирования + network digest + length-delimited producer/run/event_sequence + complete-or-part-index; конкретный бинарный tuple кодируется base64url без неоднозначной конкатенации. Reply inbox, connection ID и timeout — транспортные свойства, не часть immutable logical request.
 
-Plan сохраняет header bytes/версию и layout; actual TransportFrame+headers <=transport.max_frame_bytes (default 2 MiB). PubAck.Stream проверяется против plan. Полный Envelope digest не подменяется digest публикационного запроса. NATS documented expectation header: [официальный контракт](https://docs.nats.io/nats-concepts/jetstream/headers).
+Plan сохраняет header bytes/версию и layout; actual TransportFrame+headers <=transport.max_frame_bytes (default 2 MiB). PubAck.Stream проверяется против plan. record_digest не подменяется fragment_digest либо digest публикационного запроса. NATS_ACKED требует PubAck всех transport частей всех фрагментов всех событий manifest; seal ACK отдельно ничего не завершает. NATS documented expectation header: [официальный контракт](https://docs.nats.io/nats-concepts/jetstream/headers).
 
-Producer строит Envelope через disk spool/two-pass lengths и потоковый digest; не требует полного protobuf object graph в RAM. Gateway проверяет field chunks потоково; parent/cycle/unique-address проверки используют bounded disk-backed temporary indexes. Index keys очищаются после валидации/recovery; marker полного validation обязателен перед CLOSED. Capture snapshot/VM-safe yield и ограничение дополнительной памяти коллектора — native контракт D58; native память самой VM не считается ограниченной размером нашей transport queue.
+Producer кодирует логическую Envelope bounded RecordFragment через disk spool/несколько проходов; полное Envelope protobuf-message не создаётся даже на диске. Отдельное большое поле дробится до сериализации, максимум data в BlobChunk=16384 bytes, encoded RecordFragment<=65536 bytes. Gateway проверяет schema/tree/blob/seal потоково; parent/cycle/unique-address проверки используют bounded disk-backed temporary indexes. Index keys очищаются после валидации/recovery; marker полного validation обязателен перед CLOSED. Capture snapshot/VM-safe yield и ограничение дополнительной памяти коллектора — native контракт D58; native память самой VM не считается ограниченной размером нашей transport queue.
 
 ## Errors, ENOSPC, совместимость
 

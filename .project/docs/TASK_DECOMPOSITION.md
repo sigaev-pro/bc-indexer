@@ -59,7 +59,7 @@
 | <a id="task-e02-08-block_metadata"></a>E02-08.block_metadata | `protocol/block`; ETH/BSC/POLY | Block metadata/lifecycle schema, включая empty; native source counts не превращены в completeness assertion | E01-05.type_paths → профильные native поля | MSG, SEM |
 | <a id="task-e02-10-closed_profiles"></a>E02-10.closed_profiles | `protocol/profiles`; ETH/BSC/POLY | Закрытый реестр payload/extensions/presence с exact native widths и applicability; unsupported version не получает ANY fallback | E01-05.type_paths → source variants | TYPES, SEM, MSG |
 | <a id="task-e02-02-schemas"></a>E02-02.schemas | `protocol/proto`; COMMON | Воспроизводимые schema/bindings и structural validators: required presence, oneof, lengths, unknown values определены | E02-01.semantic_descriptors → identities; E02-05.actions_model → action schema; E02-08.block_metadata → block schema; E02-10.closed_profiles → variants | MSG, CONTROL |
-| <a id="task-e02-02-codec"></a>E02-02.codec | `protocol/codec`; COMMON | Bounded Envelope/wrapper/manifest codec и exact layout/headers/digests; ни усечения, ни общей protobuf canonicality не предполагается | E02-02.schemas → typed messages/validators | CONTROL, DELIVERY |
+| <a id="task-e02-02-codec"></a>E02-02.codec | `protocol/codec`; COMMON | Bounded typed RecordFragment/tree/blob codec, streaming manifests и exact transport layout/headers/digests; полная Envelope не сериализуется одним message, крупное поле также дробится | E02-02.schemas → typed messages/validators | CONTROL, DELIVERY |
 | <a id="task-e02-03-lifecycle_validator"></a>E02-03.lifecycle_validator | `test/lifecycle_validator`; ETH/BSC/POLY | Тестовый lifecycle automaton: reordered Applied/Removed/Status, revision conflicts и reinclusion имеют однозначный результат; production consumer не создаётся | E02-02.schemas → lifecycle messages; E02-01.semantic_descriptors → identity invariants | MSG, SEM |
 | <a id="task-e02-04-compatibility"></a>E02-04.compatibility | `protocol/compatibility`; COMMON | Read/replay/new-write capability matrix: immutable pending поддержан либо transition отвергнут; drain не разрешает несовместимый remaining metadata format | E02-02.codec → encoding versions | CONTROL, DELIVERY, CONFIG |
 
@@ -154,7 +154,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 156 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 164 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -203,8 +203,9 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DLV-03 | AC-DLV-03-01…AC-DLV-03-02 | [E03-02.rpc_streaming](#task-e03-02-rpc_streaming) | E03 |
 | REQ-DLV-03 | AC-DLV-03-03 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-03 | AC-DLV-03-04 | [E03-01.gateway_store](#task-e03-01-gateway_store) | E03 |
-| REQ-DLV-04 | AC-DLV-04-01…AC-DLV-04-02, AC-DLV-04-04 | [E02-02.codec](#task-e02-02-codec) | E02 |
-| REQ-DLV-04 | AC-DLV-04-03 | [E03-03.publisher](#task-e03-03-publisher) | E03 |
+| REQ-DLV-04 | AC-DLV-04-01…AC-DLV-04-02, AC-DLV-04-04…AC-DLV-04-09, AC-DLV-04-12 | [E02-02.codec](#task-e02-02-codec) | E02 |
+| REQ-DLV-04 | AC-DLV-04-03, AC-DLV-04-10 | [E03-03.publisher](#task-e03-03-publisher) | E03 |
+| REQ-DLV-04 | AC-DLV-04-11 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-05 | AC-DLV-05-01…AC-DLV-05-03 | [E03-03.publisher](#task-e03-03-publisher) | E03 |
 | REQ-DLV-06 | AC-DLV-06-01…AC-DLV-06-04 | [E03-01.cleanup](#task-e03-01-cleanup) | E03 |
 | REQ-DLV-07 | AC-DLV-07-01…AC-DLV-07-02, AC-DLV-07-04 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |

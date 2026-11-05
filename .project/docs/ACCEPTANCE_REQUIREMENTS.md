@@ -1,6 +1,6 @@
 # Полный реестр требований и приёмки
 
-Родительские REQ раскрыты в [156 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [164 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -67,7 +67,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DLV-01 | Единственные durable owners, sync closing markers | REC/journal: reopen/power loss каждого state, незакрытые chunks не публикуются; E03 |
 | REQ-DLV-02 | Stable batch/attempt/counters без sequence дыр | ATTEMPT/ID: native rejected/no-events не выделяет batch; attempt не меняет semantic IDs, overflow fatal; E02/E03 |
 | REQ-DLV-03 | Prepare/reservation идемпотентны | PREPARE/RPC: потеря replies/chunks, same/conflicting digest, Gateway loss до SEALED; сохранённый seed повторяется; E03 |
-| REQ-DLV-04 | Exact wrapper/layout/header/bytes | LAYOUT: COMPLETE/PART boundary, order/digest/size, SHA/MsgID vectors; после SEALED никакой reserialization; E02/E03 |
+| REQ-DLV-04 | Bounded typed fragments и exact wrapper/layout/header/bytes | FRAGMENT/LAYOUT: запись и отдельное поле >2 GiB без монолитного protobuf; schema/presence/blob coverage/seal; COMPLETE/PART boundary, order/digest/size, SHA/MsgID vectors; после READY fragment bytes, после SEALED transport bytes неизменны; all-fragments ACK; E02/E03 |
 | REQ-DLV-05 | End-to-end ACK всех частей одного назначения | REC/NATS: partial PubAck, wrong stream, lost bitmap/IngestAck, reordered parts; ChunkAck/CLOSED не разрешают producer cleanup; E03 |
 | REQ-DLV-06 | Producer/Gateway cleanup crash-safe | FRONTIER/REC: ACKED/outbox, RELEASING chunks, lost ReleaseAck, recovery без payload; prefix не перескакивает batch; E03 |
 | REQ-DLV-07 | Store loss использует surviving owner evidence | REC/FRONTIER: Gateway rebuilt с prefix/SEALED plans; producer loss не получает ложный старый cursor; E03/E05 |

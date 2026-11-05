@@ -1,6 +1,6 @@
 # Техническое задание: native EVM transaction extractor
 
-Редакция D16–D70 · 2026-11-05. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
+Редакция D16–D73 · 2026-11-05. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
 
 Цель нашей работы по D64 — только идеальное ТЗ. Реализации не будет никогда. Указанные ниже программные компоненты, этапы, тесты и артефакты описывают проектируемую систему, а не задачи на исполнение агентом. Runtime verdict всех сценариев — NOT_RUN.
 
@@ -52,7 +52,7 @@
 | Каноничность | Inclusion и activation различаются; Applied revision=0, последующие revisions упорядочены, Removed терминален для activation. Reinclusion получает новую activation |
 | Надёжность | Сохранённое obligation переживает допустимый restart. Повторы доставки разрешены; retry bytes/IDs/plan неизменны. Exactly-once и восстановление полной потери диска не обещаются |
 | Память и диск | Bounded buffers и chunking; hooks без disk/network I/O. Pending без TTL/прикладной квоты; ENOSPC не разрешает удаление данных |
-| Размер frame | Default 2 MiB вместе с headers; большие записи разбиваются. Неподходящий лимит не меняет сохранённые pending bytes |
+| Размер frame | Default 2 MiB вместе с headers; запись и крупные поля кодируются типизированными RecordFragment до сериализации (до 64 KiB каждый). Если fragment не помещается в frame, его bytes передаются частями. Неподходящий лимит не меняет сохранённые pending bytes |
 | Финальность / GC | ETH — accepted native finalized; BSC публикует early и header-attested evidence раздельно, GC только по header Source; Polygon GC — checkpoint в finalized состоянии собственной supporting L1 |
 | Остаточное состояние | ACKed payload cleanup и recovery-state GC независимы. Нужные pins/ancestry/evidence сохраняются; подтверждённый конфликт с принятым irreversible anchor — fatal |
 | Native profiles | Закреплённые clients и hash state provider с persistent pins. Первый Bor profile без pipelined/stateless/preconfirmation paths и BlockSTM |
@@ -77,7 +77,7 @@
 
 ## 6. Приёмка, декомпозиция и фиксация
 
-- **63 родительских REQ** фиксируют обязательства. **156 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
+- **63 родительских REQ** фиксируют обязательства. **164 AC-сценария** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
 - Задача в справочной декомпозиции имеет результат, ответственный модуль, точные зависимости и ссылки на REQ/AC/контракт. Начальный native proof, delivery-only proof и combined recovery proof разделены. Описание задачи не разрешает её исполнение по D64.
 - Все обязательные REQ покрываются AC и задачами; каждый AC имеет владельца и точный task mapping; граф зависимостей не содержит циклов. Optional/deferred явно отмечены.
 - Runtime NOT_RUN не заменяется документальным SPECIFIED. Source inspection не доказывает power-loss, совместимость сборки или фактическое прохождение теста.
@@ -438,19 +438,61 @@ Finality — closed EthereumEvidence/BscEvidence/PolygonEvidence по CURRENT_SE
 
 Полный Prepare/Publish/Release, immutable header contract и bounded serialization задаёт [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения). Нормативная единица retry — сохранённый publication plan с destination и exact frame/header bytes, а не повторная сериализация record новой сборкой.
 
-`TransportFrame={transport_version,network,event_id,payload_digest,publication_epoch,chain_sequence,payload}`.
+Одна логическая Envelope кодируется последовательностью ограниченных типизированных `RecordFragment`, затем каждый такой fragment упаковывается в `TransportFrame`. Envelope остаётся моделью данных, но единого сериализованного Envelope protobuf-message больше нет. Ни один этап не требует собрать его bytes или полное дерево объектов. Контракт фрагментов ниже — D73/F11; точные transport tags, manifests, headers и layout — [CONTROL_WIRE_CONTRACT](#идентификаторы-и-служебный-wire-protocol).
 
-payload — ровно `CompleteRecord{envelope_bytes}` либо `RecordPart{part_index,part_count,total_bytes,data}`. envelope_bytes — bytes конкретной versioned Envelope, прошедшей validator; это транспортное кодирование, не разрешение opaque native payload. Маленькая запись передаётся одним CompleteRecord. Большая — частями с индексами 0..count−1. Каждая часть содержит одинаковые event_id/digest/count/total_bytes. Смешивать complete и parts в одном retry события нельзя.
+Transport payload — `CompleteFragment{fragment_bytes}` либо `FragmentPart{part_index,part_count,fragment_total_bytes,data}`. COMPLETE/PART выбирается отдельно для каждого RecordFragment. Несколько фрагментов одной записи могут иметь разные формы; менять форму конкретного фрагмента в сохранённом plan нельзя. Все frames записи имеют одинаковые event_id, record_digest и chain_sequence; fragment_index различает сообщения структуры записи, part_index — транспортные части одного такого сообщения.
 
-SHA-256 вычисляется по исходным сериализованным Envelope bytes. Они фиксируются один раз до передачи и повторяются побайтно. Part layout также фиксируется для retry. Digest проверяет транспорт; он не является универсальным tx hash или semantic event ID. [Protobuf serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/): повторная сериализация другим runtime/version не обязана дать те же bytes.
+record_digest связывает упорядоченные исходные bytes всех содержательных RecordFragment; fragment_digest проверяет bytes одного фрагмента. Формула исключает завершающий seal из record_digest, чтобы не было самоссылки. READY фиксирует bytes фрагментов, SEALED дополнительно фиксирует transport layout/headers/bytes. Digest не заменяет tx hash или semantic event ID. [Protobuf serialization is not canonical](https://protobuf.dev/programming-guides/serialization-not-canonical/): повторная сериализация другим runtime/version вместо сохранённых bytes запрещена.
 
-Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. D52: default `transport.max_frame_bytes=2097152` (2 MiB) задаётся YAML Gateway и валидируется до отправки; NATS server/stream настроены на этот предел, gRPC учитывает собственную обёртку. Большая нормализованная транзакция передаётся несколькими RecordPart. Изменение лимита относится к новым планам; сохранённые pending bytes не перекодируются. При несовместимом уменьшении лимита — явная ошибка конфигурации до публикации, pending сохраняются до восстановления достаточного лимита. [Подробности](#live-yaml-и-команды). Pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
+Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. D52: default `transport.max_frame_bytes=2097152` (2 MiB) задаётся YAML Gateway и валидируется до отправки; NATS server/stream настроены на этот предел, gRPC учитывает собственную обёртку. Размер RecordFragment ограничен отдельно: 65536 bytes, независимо от NATS limit. При меньшем доступном frame фрагмент передаётся через FragmentPart. Изменение лимита относится к новым планам; сохранённые pending bytes не перекодируются. При несовместимом уменьшении лимита — явная ошибка конфигурации до публикации, pending сохраняются до восстановления достаточного лимита. [Подробности](#live-yaml-и-команды). Pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
 
 Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения).
 
 Execution chronology задают block parent links, native transaction position, operation_index и action/frame order. Delivery chronology задают chain_sequence и transport metadata. `part_index` задаёт только сборку bytes. Нельзя сортировкой chain_sequence восстанавливать blockchain chronology.
 
-NATS message ID должен стабильно различать `(network,event_id,complete-or-part-index)`. После PubAck всех сообщений/частей закрытого block batch Gateway sync фиксирует NATS_ACKED и подтверждает adapter batch_id/digest/plan identity. ACK одного event не разрешает очистить весь блок. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable plan/WAL, повторный запуск, потеря состояния и block-batch IngestAck/Release определены в ROCKSDB_DELIVERY_PROTOCOL.
+NATS message ID стабильно различает `(network,event_id,fragment_index,form,part_index)`. После PubAck всех transport frames всех RecordFragment всех событий закрытого block batch Gateway sync фиксирует NATS_ACKED и подтверждает adapter batch_id/digest/plan identity. ACK seal, одного фрагмента или event не разрешает очистить весь блок. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable plan/WAL, повторный запуск, потеря состояния и block-batch IngestAck/Release определены в ROCKSDB_DELIVERY_PROTOCOL.
+
+##### 6.1. Типизированный формат RecordFragment — D73
+
+Формат сохраняет все поля логической схемы из разделов 1–5, включая полные bytes, строки, списки, nested messages, native extensions и различие absent/empty/zero. Это закрытое типизированное представление дерева по schema_version: произвольные поля, opaque Any/JSON/map и неизвестные типы запрещены. Числа field_tag и type_key закрепляет единый versioned registry логической схемы в E02-02.schemas; fragment codec не придумывает их по порядку появления. Изменение registry проходит обычную проверку совместимости. Наличие codec не закрывает отдельные открытые вопросы о содержании native схем.
+
+Версии D73: logical schema_version=2; record_format_version=1; transport/layout/header/control/manifest/reservation=2. NetworkIdentity и DestinationBinding digest/schema остаются v1. Это замена прежнего wire-проекта, без автоматической миграции pending: несовместимые старые pending сначала drain старой сборкой по D59. Markdown v3 не является wire version.
+
+Каждый сериализованный RecordFragment, включая wrapper, имеет длину 1…65536 bytes. Внутри разрешён ровно один из четырёх payload. Точные tags:
+
+| Message | Fields: tag → type |
+|---|---|
+| RecordFragment | 1 record_format_version(u32=1), 2 event_id(bytes40), 3 fragment_index(u64), oneof: 4 header(RecordHeader) / 5 items(TypedItems) / 6 blobs(BlobChunks) / 7 seal(RecordSeal) |
+| RecordHeader | 1 schema_version(u32=2), 2 network(NetworkIdentity), 3 event_family(u32), 4 event_kind(u32), 5 root_type(u32), 6 node_count(u64), 7 blob_count(u64), 8 total_blob_bytes(u64), 9 fragment_count(u64) |
+| TypedItems | 1 items(repeated TypedItem) |
+| TypedItem | 1 node_id(u64), 2 parent_id(optional u64), 3 field_tag(optional u32), 4 element_index(optional u64), oneof: 5 message(MessageValue) / 6 list(ListValue) / 7 bool_value(bool) / 8 uint32_value(u32) / 9 uint64_value(u64) / 10 enum_value(u32) / 11 bytes_value(BlobRef) / 12 utf8_value(BlobRef) |
+| MessageValue | 1 type_key(u32), 2 direct_child_count(u64) |
+| ListValue | 1 count(u64) |
+| BlobRef | 1 blob_id(u64), 2 length(u64), 3 sha256(bytes32) |
+| BlobChunks | 1 chunks(repeated BlobChunk) |
+| BlobChunk | 1 blob_id(u64), 2 offset(u64), 3 data(bytes, 1…16384 bytes) |
+| RecordSeal | 1 fragment_count(u64), 2 content_bytes(u64), 3 record_digest(bytes32) |
+
+Все перечисленные поля обязательны, кроме трёх явно optional связей TypedItem и невыбранных oneof alternatives. Scalar zero/false присутствуют явно. Бинарное кодирование: tags по возрастанию, minimal unsigned varints, protobuf length-delimited, никаких unknown/duplicate singular fields; repeated только в указанном порядке. Bool только 0/1, enum только разрешённое registry значение. Логические UInt256, Hash32, Address20 представлены bytes_value с проверкой schema-specific длины/кодирования; подписанные/другие скаляры не вводятся этим форматом и требуют отдельной версии схемы. Это каноническое кодирование именно этого ограниченного формата, не любого Protobuf.
+
+Дерево типизированных узлов:
+
+1. node_id непрерывны от 0 в depth-first preorder. Узел 0 — message логической Envelope с root_type из header, без parent_id/field_tag/element_index. Остальные имеют parent_id<node_id. У message child есть field_tag из schema и нет element_index; поля идут по возрастанию tags. Тип и presence соответствуют schema, singular field не повторяется, oneof содержит только выбранную ветку.
+2. List — отдельный узел даже при count=0; его children имеют только element_index=0…count−1 и тип элемента из schema. MessageValue.direct_child_count и ListValue.count совпадают с фактическим числом непосредственных детей. Preorder запрещает вернуться в уже закрытое поддерево. Неограниченная вложенность проверяется disk-backed stack/index, без рекурсивного RAM object graph.
+3. Каждый bytes/UTF-8 узел имеет BlobRef, где blob_id=node_id. Поле length — число bytes, SHA-256 — digest исходного содержимого. Даже фиксированные hash/address bytes идут по этому правилу. Absent — нет узла; empty — есть BlobRef(length=0,SHA256(empty)), без BlobChunk. Дедупликация одинаковых значений разных полей не меняет их identity. UTF-8 проверяется инкрементально без normalization; граница chunk может разрезать многобайтовый символ.
+4. BlobChunks идут по возрастающему blob_id, затем offset. Для непустого blob offsets непрерывны от 0, размер очередного chunk=min(16384,remaining). Пропуски, пересечения, лишние bytes/chunks, неизвестный blob_id, неверный length/digest запрещены. Hash и длина каждого blob проверяются независимо от record_digest.
+
+Порядок фрагментов: index 0 — ровно один header; затем непустые TypedItems для всех узлов; затем непустые BlobChunks для всех непустых blobs; последний — ровно один seal. Индексы непрерывны, fragment_count включает header и seal. Nodes содержат только ограниченные scalars/refs, не содержимое blobs. Items и chunks упаковываются максимальным непустым префиксом соответствующего потока, который помещается в 65536 bytes с фактическим fragment_index и wrapper. Header и seal всегда отдельны. Один TypedItem обязан помещаться; текущая фиксированная таблица это обеспечивает. Пустые items/blobs fragments запрещены. Для маленькой Envelope также используются header/items/[blobs]/seal; отдельного монолитного fast path нет.
+
+Producer использует disk spool и несколько проходов: фиксирует дерево, lengths и blob hashes; рассчитывает индексы/разбиение items/blobs; после этого пишет header с итоговыми counts, затем фрагменты и seal. Header не участвует в упаковке items/blobs, поэтому подсчёт fragment_count не циклический. Списки и крупные поля поступают потоково; полный исходный blob, дерево либо запись не выделяются в памяти. Временные индексы, стек и manifest entries могут расти на диске; рабочие буферы ограничены fragment/RPC/WriteBatch лимитами. Disk exhaustion и capture backpressure сохраняют ранее принятые правила D57/D58, без сокращения данных.
+
+Для исходных bytes фрагментов B0…B(K−2), исключая seal B(K−1):
+
+`record_digest = SHA256(UTF8("extractor.record.v1") || 0x00 || concat(u64be(index) || u64be(length(Bi)) || Bi))`.
+
+`content_bytes=sum(length(B0)…length(B(K−2)))`; `record_length=content_bytes+length(seal)`; `fragment_digest[i]=SHA256(Bi)`, включая seal. Header и seal содержат один K; seal.record_digest совпадает с READY descriptor и transport metadata. Header metadata совпадает с логической Envelope и descriptor. Все счётчики, суммы, offsets и индексы — checked u64; overflow отвергается до READY, без wrap/truncate. Отдельного прикладного предела общего размера записи или поля нет; это не обещание бесконечного диска/счётчиков.
+
+Полная запись валидна только после проверки всех фрагментов, schema/tree/blob invariants, counts и seal digest. node_count>=1, fragment_count>=3; blob_count и total_blob_bytes равны числу BlobRef и сумме их lengths. Type keys и field tags положительны и принадлежат registry; Delta256 сохраняется составным message «знак + magnitude», а не новым signed scalar. Event identity, fragment_index/count, network и digests внутри фрагментов, manifest и transport wrapper согласованы. Получение seal отдельно не означает полноту. Независимый decoder может обходить дерево и blobs потоково через bounded disk-backed indexes; создавать downstream consumer в этом проекте не требуется. Конфликтующий повтор того же fragment/part index — ошибка; идентичный повтор идемпотентен. Gateway завершает validation до CLOSED и публикует только закрытую запись по принятому batch-протоколу. Предел одного Protobuf-message [меньше 2 GiB](https://protobuf.dev/programming-guides/proto-limits/#total-size-of-the-message) больше не ограничивает общий объём логической записи; подход соответствует [bounded messages для больших наборов данных](https://protobuf.dev/programming-guides/techniques/#large-data-sets).
 
 #### 7. Маршрутизация
 
@@ -781,7 +823,7 @@ Source inspection выполнена; сборки, fault injection и эти fi
 
 Точные identities, binding JSON/digests, manifest/reservation bytes, wrapper layout, RPC/errors и исполнимый cutover заданы в [CONTROL_WIRE_CONTRACT](#идентификаторы-и-служебный-wire-protocol). Ниже — автомат состояний этого же протокола, не отдельная альтернативная схема.
 
-2026-11-05. D26–D33, D52, D54, D57–D59. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](docs/ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable Envelope bytes.
+2026-11-05. D26–D33, D52, D54, D57–D59, D73. Этот документ уточняет и заменяет неоднозначные переходы [ROCKSDB_DELIVERY_PROTOCOL](docs/ROCKSDB_DELIVERY_PROTOCOL.md). Только технический проект; реализация/crash fixtures не выполнены. Native admission и source retention — отдельный контракт; сюда поступают durable capture obligations, затем immutable RecordFragment bytes логической Envelope.
 
 #### Identity, режимы и atomicity
 
@@ -818,11 +860,11 @@ IngestAck проверяет batch/manifest/plan/destination; ACK части л�
 
 #### Prepare и повторные попытки
 
-Prepare передаёт описания immutable Envelope: event_id, digest, byte length, event family/kind и ordinal. Весь manifest не помещается в один RPC/WriteBatch. Каждый chunk имеет стабильные offset/digest; closing manifest digest фиксирует порядок и состав. Повтор с тем же batch_id/manifest_digest возвращает сохранённую reservation. Другой digest после READY — ERROR.
+Prepare передаёт v2 event descriptors и упорядоченные descriptors всех immutable RecordFragment: event identity/kind/ordinal, record_length/digest, fragment_count/manifest digest, затем fragment_index/encoded_length/SHA256. Весь manifest и список фрагментов одного event не помещаются в один RPC/WriteBatch; передаются bounded chunks. Closing manifest digest фиксирует порядок и состав. READY требует полного schema/tree/blob/seal validation и durable fragment bytes/manifest. Повтор с тем же batch_id/manifest_digest возвращает сохранённую reservation. Другой digest после READY — ERROR.
 
 Reservation seed: `store_epoch,reservation_id,manifest_digest,event_count,sequence_base,destination_binding_digest,frame_limit,layout_version,header_version`. Событие получает chain_sequence=sequence_base+ordinal; это порядок регистрации, не blockchain chronology. Counter overflow проверяется до commit, значения не переиспользуются.
 
-Layout определяется Gateway по фиксированной версии алгоритма и фактическим длинам Envelope/headers. Producer сериализует frames и перед SEALED проверяет actual byte size. Изменение текущего лимита не меняет существующую reservation. Пока producer plan не SEALED, ни одна его часть не могла публиковаться. При потере Gateway такой незакрытый plan строится в новой plan generation после durable отказа от старой неопубликованной попытки; recovery inputs остаются. SEALED всегда повторяется с прежними epoch/sequence/layout/headers/bytes и не проходит новое распределение sequence.
+Layout определяется Gateway по фиксированной версии алгоритма и фактическим длинам каждого RecordFragment/headers. Producer сериализует frames и перед SEALED проверяет actual byte size. Изменение текущего лимита не меняет существующую reservation. Пока producer plan не SEALED, ни одна его часть не могла публиковаться. При потере Gateway такой незакрытый plan строится в новой plan generation после durable отказа от старой неопубликованной попытки; READY fragment bytes/IDs/digests остаются прежними. SEALED всегда повторяется с прежними epoch/sequence/layout/headers/bytes и не проходит новое распределение sequence.
 
 Partial uploads возобновляются по сохранённым offsets. Orphan PREPARING/PREPARED удаляется только через fenced owner handshake, доказывающий, что SEALED/публикации не было; неизвестность не является разрешением очистки. Потерянный producer означает ручную диагностику/abandon по прежнему контракту, не таймерное удаление CLOSED payload.
 
@@ -869,9 +911,9 @@ Resume использует отдельную монотонную admission_ge
 
 Immutable publication descriptor содержит exact subject и header template: `Nats-Msg-Id`, `Nats-Expected-Stream`. Другие прикладные headers запрещены без новой header_version. Message ID — версия кодирования + network digest + length-delimited producer/run/event_sequence + complete-or-part-index; конкретный бинарный tuple кодируется base64url без неоднозначной конкатенации. Reply inbox, connection ID и timeout — транспортные свойства, не часть immutable logical request.
 
-Plan сохраняет header bytes/версию и layout; actual TransportFrame+headers <=transport.max_frame_bytes (default 2 MiB). PubAck.Stream проверяется против plan. Полный Envelope digest не подменяется digest публикационного запроса. NATS documented expectation header: [официальный контракт](https://docs.nats.io/nats-concepts/jetstream/headers).
+Plan сохраняет header bytes/версию и layout; actual TransportFrame+headers <=transport.max_frame_bytes (default 2 MiB). PubAck.Stream проверяется против plan. record_digest не подменяется fragment_digest либо digest публикационного запроса. NATS_ACKED требует PubAck всех transport частей всех фрагментов всех событий manifest; seal ACK отдельно ничего не завершает. NATS documented expectation header: [официальный контракт](https://docs.nats.io/nats-concepts/jetstream/headers).
 
-Producer строит Envelope через disk spool/two-pass lengths и потоковый digest; не требует полного protobuf object graph в RAM. Gateway проверяет field chunks потоково; parent/cycle/unique-address проверки используют bounded disk-backed temporary indexes. Index keys очищаются после валидации/recovery; marker полного validation обязателен перед CLOSED. Capture snapshot/VM-safe yield и ограничение дополнительной памяти коллектора — native контракт D58; native память самой VM не считается ограниченной размером нашей transport queue.
+Producer кодирует логическую Envelope bounded RecordFragment через disk spool/несколько проходов; полное Envelope protobuf-message не создаётся даже на диске. Отдельное большое поле дробится до сериализации, максимум data в BlobChunk=16384 bytes, encoded RecordFragment<=65536 bytes. Gateway проверяет schema/tree/blob/seal потоково; parent/cycle/unique-address проверки используют bounded disk-backed temporary indexes. Index keys очищаются после валидации/recovery; marker полного validation обязателен перед CLOSED. Capture snapshot/VM-safe yield и ограничение дополнительной памяти коллектора — native контракт D58; native память самой VM не считается ограниченной размером нашей transport queue.
 
 #### Errors, ENOSPC, совместимость
 
@@ -944,38 +986,38 @@ Digest не включает собственное поле, URL, TLS/credentia
 
 #### READY manifest и reservation
 
-Descriptor события: `{ordinal:u64,event_id:40 bytes,event_family:u16,event_kind:u16,envelope_length:u64,envelope_sha256:Hash32}`. Family registry v1: tx=1, block=2, balance.system=3, bor.legacy_receipt=4; последние два optional. Kind: applied=1, removed=2, status=3. Unknown value — ошибка, OTHER отсутствует.
+Descriptor события v2: `{ordinal:u64,event_id:40 bytes,event_family:u16,event_kind:u16,record_length:u64,record_digest:Hash32,fragment_count:u64,fragment_manifest_digest:Hash32}`. Следом идут fragment_count descriptors `{fragment_index:u64,encoded_length:u64,fragment_sha256:Hash32}`. Fragment indices непрерывны; encoded_length=1…65536; сумма длин равна record_length. Family registry v1: tx=1, block=2, balance.system=3, bor.legacy_receipt=4; последние два optional. Kind: applied=1, removed=2, status=3. Unknown value — ошибка, OTHER отсутствует.
 
-Manifest bytes — `UTF8("extractor.manifest.v1") || 0x00 || event_count_u64be || descriptors_in_ordinal_order`, каждый descriptor — перечисленные поля в фиксированном порядке и big endian. Manifest digest — SHA256 этих bytes. Ordinals непрерывны 0…N−1, event IDs уникальны; empty public batch не создаётся. Entries/chunks хранятся на диске; closing marker содержит count/digest, не весь список.
+`fragment_manifest_digest=SHA256(UTF8("extractor.fragments.v1") || 0x00 || event_id40 || fragment_count_u64be || fragment_descriptors_in_index_order)`. Manifest bytes — `UTF8("extractor.manifest.v2") || 0x00 || event_count_u64be || concat(event_descriptor || its_fragment_descriptors)` в ordinal order; каждый descriptor — перечисленные поля в фиксированном порядке и big endian. Manifest digest — SHA256 этих bytes. Ordinals непрерывны 0…N−1, event IDs уникальны; empty public batch не создаётся. Entries/chunks хранятся на диске; closing marker содержит count/digest, не весь список. Никакой event со всеми descriptors не обязан помещаться в один RPC/Protobuf/WriteBatch; поток descriptors допускает chunk boundary внутри фиксированной записи.
 
-Reservation seed binary v1: domain `extractor.reservation.v1` + zero byte, затем `reservation_id16,issuer_store_epoch16,batch_id40,manifest_digest32,event_count_u64be,sequence_base_u64be,binding_digest32,frame_limit_u64be,transport_version_u32be,layout_version_u32be,header_version_u32be`. Все версии первой схемы =1. `plan_digest=SHA256(seed_bytes)`; seed неизменен и возвращается побайтно при Prepare retry. Record chain_sequence=base+ordinal с overflow check. Gateway может импортировать прежний seed из SEALED producer после store loss; issuer epoch не переписывается на новый.
+Reservation seed binary v2: domain `extractor.reservation.v2` + zero byte, затем `reservation_id16,issuer_store_epoch16,batch_id40,manifest_digest32,event_count_u64be,sequence_base_u64be,binding_digest32,frame_limit_u64be,transport_version_u32be,layout_version_u32be,header_version_u32be,record_format_version_u32be,manifest_version_u32be`. Transport/layout/header/manifest=2, record_format=1. `plan_digest=SHA256(seed_bytes)`; seed неизменен и возвращается побайтно при Prepare retry. Record chain_sequence=base+ordinal с overflow check: один sequence на логическое событие, общий для всех его фрагментов. Gateway может импортировать прежний seed из SEALED producer после store loss; issuer epoch не переписывается на новый.
 
-#### TransportFrame layout v1
+#### TransportFrame layout v2
 
-Этот небольшой transport wrapper имеет закреплённые field numbers; общие Envelope field numbers генерируются в E02 и не нужны для вычисления длины уже сохранённых envelope_bytes.
+Этот небольшой transport wrapper имеет закреплённые field numbers. Он переносит один ограниченный RecordFragment из [MESSAGE_CONTRACT](#контракт-сообщений) целиком или частями; общего Envelope protobuf-message нет.
 
 | Message | Fields: tag → type |
 |---|---|
 | NetworkIdentity | 1 family(enum EVM=1), 2 chain_id(bytes32), 3 genesis_hash(bytes32) |
-| TransportFrame | 1 transport_version(u32), 2 network(message), 3 event_id(bytes40), 4 payload_digest(bytes32), 5 publication_epoch(bytes16), 6 chain_sequence(u64), oneof: 7 complete(message) / 8 part(message) |
-| CompleteRecord | 1 envelope_bytes(bytes) |
-| RecordPart | 1 part_index(u64), 2 part_count(u64), 3 total_bytes(u64), 4 data(bytes) |
+| TransportFrame | 1 transport_version(u32=2), 2 network(message), 3 event_id(bytes40), 4 record_digest(bytes32), 5 publication_epoch(bytes16), 6 chain_sequence(u64), oneof: 7 complete(message) / 8 part(message), 9 fragment_index(u64), 10 fragment_count(u64), 11 fragment_digest(bytes32), 12 record_format_version(u32=1) |
+| CompleteFragment | 1 fragment_bytes(bytes, 1…65536 bytes) |
+| FragmentPart | 1 part_index(u64), 2 part_count(u64), 3 fragment_total_bytes(u64, 1…65536), 4 data(bytes) |
 
-Каждый указанный scalar присутствует, включая part_index=0. Canonical wrapper encoding v1: ascending tag order, minimal unsigned varints, обычные protobuf length-delimited fields, no unknown fields/duplicates. Envelope внутри — исходные immutable bytes, их независимая reserialization запрещена. Это локально определённое wrapper encoding, не утверждение о каноничности произвольного Protobuf. `EncodedFrameSize` — точная сумма key/varint/length/data sizes этой таблицы, без приблизительного overhead.
+Каждый указанный scalar присутствует, включая fragment_index/part_index=0. Canonical wrapper encoding v2: ascending tag order, minimal unsigned varints, обычные protobuf length-delimited fields, no unknown fields/duplicates. Внутри — исходные immutable fragment bytes, их независимая reserialization запрещена. Это локально определённое wrapper encoding, не утверждение о каноничности произвольного Protobuf. `EncodedFrameSize` — точная сумма key/varint/length/data sizes этой таблицы, без приблизительного overhead.
 
-`Nats-Msg-Id = "ex1." + base64url_no_padding(network_digest32 || producer_id16 || run_id16 || event_sequence8 || form1 || part_index8)`. COMPLETE: form=0,index=0; PART: form=1,index=i. Header bytes ровно `NATS/1.0\r\nNats-Msg-Id: <id>\r\nNats-Expected-Stream: <stream>\r\n\r\n` в этом порядке, без status line/дополнительных headers. Reply inbox не входит в эти bytes. `F=transport.max_frame_bytes` учитывает wrapper + эти header bytes.
+`Nats-Msg-Id = "ex2." + base64url_no_padding(network_digest32 || producer_id16 || run_id16 || event_sequence8 || fragment_index8 || form1 || part_index8)`. Целые — big endian; tuple 89 bytes, ID 123 ASCII bytes с prefix. COMPLETE: form=0,part_index=0; PART: form=1,part_index=i. Header bytes ровно `NATS/1.0\r\nNats-Msg-Id: <id>\r\nNats-Expected-Stream: <stream>\r\n\r\n` в этом порядке, без status line/дополнительных headers. Reply inbox не входит в эти bytes. `F=transport.max_frame_bytes` учитывает wrapper + эти header bytes.
 
-Layout v1:
+Layout v2 применяется отдельно к каждой паре (event ordinal, fragment_index), в этом порядке:
 1. Если точный COMPLETE с фактическими metadata/headers помещается в F, выбрать COMPLETE.
-2. Иначе найти наибольшее целое C>=1, для которого PART с data длиной C, part_index=U64_MAX, part_count=U64_MAX и фактическим total_bytes помещается в F. Это консервативная проверка overhead без циклической зависимости count/size. Размер headers фиксирован по длине tuple, stream из seed binding.
-3. Count=ceil(total_bytes/C), part i содержит bytes `[i*C,min((i+1)*C,total_bytes))`. Checked arithmetic для всех длин/offsets; overflow отвергается без truncate.
+2. Иначе найти наибольшее целое 1<=C<=fragment_total_bytes, для которого PART с data длиной C, part_index=U64_MAX, part_count=U64_MAX и фактическими fragment metadata помещается в F. Это консервативная проверка overhead без циклической зависимости count/size. Размер headers фиксирован по длине tuple, stream из seed binding.
+3. Count=ceil(fragment_total_bytes/C), part i содержит bytes `[i*C,min((i+1)*C,fragment_total_bytes))`. Checked arithmetic для всех длин/offsets; overflow отвергается без truncate. Сборка одного RecordFragment ограничена 65536 bytes; полная запись декодируется потоком фрагментов.
 4. Before SEALED проверить фактический размер/digest каждой frame. При C<1 вернуть LIMIT_INCOMPATIBLE, сохранить READY; pending SEALED не перепланировать.
 
-Layout manifest entries: `{ordinal,form,capacity,part_count,total_bytes}` в фиксированном порядке, u64 big endian кроме form byte; COMPLETE capacity=total_bytes,count=1. `layout_manifest_digest=SHA256(domain "extractor.layout.v1" + zero + plan_digest + count_u64be + entries)`. При BeginPublish Gateway сверяет детерминированный layout; неизвестная version не принимается. Control/chunk RPC<=256 KiB с wrapper, data chunk<=64 KiB; fragment offset относится к одной frame, не обязательно совпадает с RecordPart boundary. Максимум WriteBatch — 1 MiB. Это ограничения рабочих буферов, не предел размера транзакции.
+Layout manifest entries: `{ordinal,fragment_index,form,capacity,part_count,fragment_total_bytes}` в фиксированном порядке, u64 big endian кроме form byte; COMPLETE capacity=fragment_total_bytes,part_count=1. `layout_manifest_digest=SHA256(domain "extractor.layout.v2" + zero + plan_digest + entry_count_u64be + entries)`. Entry count — checked сумма fragment_count всех событий; entries идут ordinal/fragment_index order. При BeginPublish Gateway сверяет детерминированный layout; неизвестная version не принимается. Control/chunk RPC<=256 KiB с wrapper, data chunk<=64 KiB; RPC byte_offset относится к одной TransportFrame, не к логической записи. Максимум WriteBatch — 1 MiB. Это ограничения рабочих буферов, не предел размера транзакции.
 
 #### Служебные запросы и ответы
 
-После authenticated handshake mutating RPC включает `{protocol_version=1,request_id,session_token,producer_id,run_id,connection_generation,admission_generation,binding_digest}`. Token check и commit сериализованы. mTLS проверяет deployment/network/role; challenge echo внутри authenticated transport подтверждает текущий boot, дополнительный неописанный signing key не вводится. Business idempotency — identity/manifest/offset/intent, а не только request_id.
+После authenticated handshake mutating RPC включает `{protocol_version=2,request_id,session_token,producer_id,run_id,connection_generation,admission_generation,binding_digest}`. Token check и commit сериализованы. mTLS проверяет deployment/network/role; challenge echo внутри authenticated transport подтверждает текущий boot, дополнительный неописанный signing key не вводится. Business idempotency — identity/manifest/offset/intent, а не только request_id.
 
 Recovery CommitSwitch/Resume использует authenticated `MAINTENANCE` session: Gateway допускает old/new binding и admission generation **только для точного сохранённого transition intent** (switch_id/resume_id, drain_id, old/new digests/generations, issuer epoch). Сначала сопоставляется durable intent/receipt, затем возвращается прежний результат; потерянный ответ после commit не превращается в неразрешимый SESSION_STALE. Если transition ещё не был принят, его начало допустимо только из текущей sealed identity по обычным правилам. MAINTENANCE не принимает новые Prepare/Publish/Seal; конфликтующий либо retired intent отвергается. После завершения перехода producer открывает новую обычную session с действующей identity. Старый session_token не переносится через рестарт или соединение.
 
@@ -989,9 +1031,9 @@ Recovery CommitSwitch/Resume использует authenticated `MAINTENANCE` se
 | PrepareChunk | batch_id, manifest_digest, offset, chunk_sha256, bytes | durable next_offset |
 | FinalizePrepare | batch_id, manifest_digest | exact seed bytes, plan_digest |
 | BeginPublish | batch_id, seed bytes, plan_digest, layout_manifest_digest | saved state/resume cursors |
-| PublishChunk | batch_id, plan_digest, event ordinal, frame index, offset, chunk_sha256, bytes | durable next_offset |
+| PublishChunk | batch_id, plan_digest, event ordinal, fragment_index, frame index (0 для COMPLETE, part_index для PART), offset, chunk_sha256, bytes | durable next_offset для той же пары fragment/frame |
 | FinalizePublish | batch_id, plan_digest, manifest_digest, layout_manifest_digest | CLOSED; не IngestAck |
-| GetBatchState | batch_id, plan_digest | PREPARED/RECEIVING/CLOSED/NATS_ACKED/RELEASING/RETIRED либо NOT_FOUND; IngestAck только если durable |
+| GetBatchState | batch_id, plan_digest, optional cursor | PREPARED/RECEIVING/CLOSED/NATS_ACKED/RELEASING/RETIRED либо NOT_FOUND; IngestAck только если durable; bounded page cursors (event ordinal, fragment_index, frame index, next_offset), continuation при превышении RPC limit |
 | Release | batch_id, manifest_digest, plan_digest | ReleaseAck(batch_id,retired_prefix) |
 | RecoveryRelease | batch_id, exact saved IngestAck, durable ACKED/outbox assertion | ReleaseAck после sync, только следующий seq и отсутствие conflicting pending |
 | SealGeneration | binding/admission generation, drain_id, batch_highwater | SealAck(drain_id,binding_digest,admission_generation,highwater,issuer_store_epoch) |
@@ -1102,7 +1144,7 @@ D63: finality.polygon разрешён только polygon live. Heimdall endpo
 
 #### Размер сообщения D52
 
-Gateway применяет `transport.max_frame_bytes` при формировании publication plan и определяет part layout. До Prepare адаптер хранит неизменные Envelope bytes; локальные фрагменты хранения не задают сетевое разбиение. Адаптер сериализует и сохраняет точные frames по полученному plan, Gateway проверяет их перед публикацией; второй независимый лимит разбиения в live YAML не вводится. Если полный record не помещается с envelope/headers, он разбивается на RecordPart, каждый в пределах лимита. Никакой размер транзакции не оправдывает усечение данных.
+Gateway применяет `transport.max_frame_bytes` при формировании publication plan и определяет part layout для каждого RecordFragment. До Prepare адаптер хранит неизменные типизированные RecordFragment bytes (<=65536 bytes по версии формата D73), включая дробление крупных полей до сериализации. Это логическое кодирование независимо от NATS limit, а не локальное разбиение монолитной Envelope. Адаптер сохраняет точные frames по plan; Gateway проверяет их до публикации. Второй YAML limit не вводится. Если отдельный fragment с wrapper/headers не помещается, он передаётся FragmentPart. Никакой размер транзакции не оправдывает усечение данных.
 
 В поставляемой конфигурации NATS `max_payload` задаётся явно `2097152`; stream MaxMsgSize также `2097152`. Полный размер frame и headers проверяется до отправки; gRPC send/receive пределы должны вмещать размер соответствующего RPC сообщения с его обёрткой, а не только bytes frame. RPC не должен объединять неограниченное число frames в одно сообщение. Проверка фактического сериализованного размера обязательна; ограничения NATS и gRPC должны быть согласованы с override лимита.
 
@@ -1536,7 +1578,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 ### Требования и приёмка
 
-Родительские REQ раскрыты в [156 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [164 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -1603,7 +1645,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DLV-01 | Единственные durable owners, sync closing markers | REC/journal: reopen/power loss каждого state, незакрытые chunks не публикуются; E03 |
 | REQ-DLV-02 | Stable batch/attempt/counters без sequence дыр | ATTEMPT/ID: native rejected/no-events не выделяет batch; attempt не меняет semantic IDs, overflow fatal; E02/E03 |
 | REQ-DLV-03 | Prepare/reservation идемпотентны | PREPARE/RPC: потеря replies/chunks, same/conflicting digest, Gateway loss до SEALED; сохранённый seed повторяется; E03 |
-| REQ-DLV-04 | Exact wrapper/layout/header/bytes | LAYOUT: COMPLETE/PART boundary, order/digest/size, SHA/MsgID vectors; после SEALED никакой reserialization; E02/E03 |
+| REQ-DLV-04 | Bounded typed fragments и exact wrapper/layout/header/bytes | FRAGMENT/LAYOUT: запись и отдельное поле >2 GiB без монолитного protobuf; schema/presence/blob coverage/seal; COMPLETE/PART boundary, order/digest/size, SHA/MsgID vectors; после READY fragment bytes, после SEALED transport bytes неизменны; all-fragments ACK; E02/E03 |
 | REQ-DLV-05 | End-to-end ACK всех частей одного назначения | REC/NATS: partial PubAck, wrong stream, lost bitmap/IngestAck, reordered parts; ChunkAck/CLOSED не разрешают producer cleanup; E03 |
 | REQ-DLV-06 | Producer/Gateway cleanup crash-safe | FRONTIER/REC: ACKED/outbox, RELEASING chunks, lost ReleaseAck, recovery без payload; prefix не перескакивает batch; E03 |
 | REQ-DLV-07 | Store loss использует surviving owner evidence | REC/FRONTIER: Gateway rebuilt с prefix/SEALED plans; producer loss не получает ложный старый cursor; E03/E05 |
@@ -1771,10 +1813,18 @@ D64: это критерии приёмки описываемой систем�
 | AC-DLV-03-02 | REQ-DLV-03 | ALL: existing reservation/batch identity | Повтор с conflicting manifest/digest | Typed immutable conflict; старые данные сохранены, ID не перевыдан автоматически | gateway | E03 |
 | AC-DLV-03-03 | REQ-DLV-03 | ALL: producer READY, публикационный plan ещё не SEALED | Потерять Gateway store | Recovery формирует допустимую новую reservation/plan; producer READY остаётся последней полной копией | delivery | E03 |
 | AC-DLV-03-04 | REQ-DLV-03 | ALL: reservation/seed уже durable | Потерять FinalizePrepare reply и повторить request | Возвращаются прежние reservation/seed; новые sequence не выделены | gateway | E03 |
-| AC-DLV-04-01 | REQ-DLV-04 | ALL: полный CompleteRecord с headers имеет размер ровно F | Layout с точным wrapper/header overhead | Использован CompleteRecord; sizes/digest/MsgID совпадают с independent vectors, лишнее разбиение отсутствует | proto | E02 |
+| AC-DLV-04-01 | REQ-DLV-04 | ALL: один CompleteFragment с headers имеет размер ровно F | Layout с точным wrapper/header overhead | Использован CompleteFragment; sizes/digest/MsgID совпадают с independent vectors, лишнее разбиение отсутствует | proto | E02 |
 | AC-DLV-04-02 | REQ-DLV-04 | ALL: большие varints/counts, descriptor bound либо вычисленный C<1 | Проверка фактического frame+headers и config bound | Невместимый layout/config отвергнут; READY не потерян, oversized сообщение не отправлено | proto | E02 |
 | AC-DLV-04-03 | REQ-DLV-04 | ALL: SEALED exact frames/headers/MsgID | Restart, новый разрешённый frame limit, retry | Повторяются прежние bytes/layout/IDs; pending SEALED не сериализуется/планируется заново | delivery | E03 |
-| AC-DLV-04-04 | REQ-DLV-04 | ALL: полный CompleteRecord с headers имеет размер F+1 | Layout при том же F | Использованы RecordPart без усечения; каждая frame в limit, сборка bytes/digest/порядок совпадает с oracle | proto | E02 |
+| AC-DLV-04-04 | REQ-DLV-04 | ALL: один CompleteFragment с headers имеет размер F+1 | Layout при том же F | Использованы FragmentPart без усечения; каждая frame в limit, сборка одного fragment совпадает с oracle | proto | E02 |
+| AC-DLV-04-05 | REQ-DLV-04 | ALL: синтетическая логическая запись >2 GiB из многих узлов/полей | Потоковые encode/decode и независимая сверка полного содержания | Каждый encoded RecordFragment<=65536 bytes; нет полного Envelope protobuf/object graph, усечения или размера RAM пропорционально записи; counts/digests точны | proto | E02 |
+| AC-DLV-04-06 | REQ-DLV-04 | ALL: одно bytes/UTF-8 поле >2 GiB; UTF-8 символ пересекает chunk boundary | Потоковая генерация, spool, encode/decode, hash; без выделения полного поля | BlobChunk<=16384 bytes, field length/hash/content точны; проверка UTF-8 инкрементальна; память codec ограничена независимо от длины поля | proto | E02 |
+| AC-DLV-04-07 | REQ-DLV-04 | ALL: absent/empty/zero/false, пустые lists, nested oneof, повторяющиеся значения в list | Сверка schema-level oracle после encode/decode | Presence, выбранный тип, порядок/дубликаты и пустые значения сохранены; unknown fields/type/enum и conflicting oneof отвергнуты | proto | E02 |
+| AC-DLV-04-08 | REQ-DLV-04 | ALL: неверные parent/type/preorder/list index/count; missing/overlap/foreign blob; повреждённые header/seal/digest | Негативные vectors отдельно для каждого нарушения | Каждый vector отвергнут validator до READY/CLOSED; наличие seal не маскирует пропуск; independent vectors не получены тем же encoder | proto | E02 |
+| AC-DLV-04-09 | REQ-DLV-04 | ALL: границы 16384/65536, длинные varints; максимальная упаковка items/blobs и F с headers | Exact size/layout vectors; смена разрешённого F для ещё не SEALED plan | Границы учитывают wrapper; split только одного fragment; READY fragments одинаковы при разных F; ID различает event/fragment/form/part | proto | E02 |
+| AC-DLV-04-10 | REQ-DLV-04 | ALL: перестановка/идентичные повторы частей, конфликт bytes, отсутствующий fragment; ACK seal раньше остальных | Gateway validation и управляемые PubAck по всем fragment/frame identities | Идентичный повтор идемпотентен; конфликт/неполнота не дают CLOSED; NATS_ACKED/IngestAck только после полного набора PubAck всего batch | delivery | E03 |
+| AC-DLV-04-11 | REQ-DLV-04 | ALL: crash в READY и SEALED; Gateway store loss между fragment/frame chunks | Recovery/IMPORT_SEALED и продолжение bounded cursor pages | До SEALED меняется только transport plan при разрешённых условиях; после SEALED исходные seed/manifest/fragment/frame/header bytes/IDs восстановлены точно | delivery | E03 |
+| AC-DLV-04-12 | REQ-DLV-04 | ALL: u64 overflow lengths/counts/offset sums и неполный descriptor stream | Arithmetic/manifest negative vectors без физического выделения огромного объекта | Ошибка до READY/CLOSED; нет wrap/truncate, неоднозначного framing или false ACK; manifest/RPC/WriteBatch bounded при росте списка фрагментов | proto | E02 |
 | AC-DLV-05-01 | REQ-DLV-05 | ALL: multipart batch, подтверждены не все части | Удержать последний PubAck; variants последнего полученного ответа: ChunkAck, CLOSED, partial PubAck | Во всех variants IngestAck отсутствует; producer payload не очищен по transport/частичному ACK | gateway | E03 |
 | AC-DLV-05-02 | REQ-DLV-05 | ALL: NATS принял сообщение | Потерять PubAck либо crash до durable bitmap | Retry использует тот же ID/bytes; допустим дубль, но нет пропущенной части/false completed batch | gateway | E03 |
 | AC-DLV-05-03 | REQ-DLV-05 | ALL: все части подтверждены, NATS_ACKED durable | Потерять IngestAck и повторить запрос | Возвращается тот же полный bound ACK; NATS dedup window не объявлен exactly-once гарантией | gateway | E03 |
@@ -1894,7 +1944,7 @@ D64: документальные требования к доказательс
 | Этап / существующие ID | Что доказать до выхода | Что ещё не считается доказанным |
 |---|---|---|
 | E01-01…05, отдельно .ETH/.BSC/.POLY | Изолированные pinned builds; минимальный native fixture runner; реальные execution/canonical/finality callers; admission/pin/owned snapshot/decision marker seam; native-only recovery; отсутствие bypass обязательного пути | Полный protobuf, production transport и вся семантика E04 ещё не готовы |
-| E02-01…05/08/10 | Компилируемые схемы/валидаторы, AUTH/SELF/LIFE, receipt provenance, immutable IDs/bytes, transport/chunk layout, bounded serialization и spool; closed extension registry | Работа с настоящим NATS и весь native crash matrix ещё не приняты |
+| E02-01…05/08/10 | Компилируемые схемы/валидаторы, AUTH/SELF/LIFE, receipt provenance, immutable IDs/bytes; D73 typed RecordFragment/tree/blob codec без монолитной Envelope, exact transport layout и streaming manifests; AC-DLV-04-05…09/12; closed extension registry | Работа с настоящим NATS и весь native crash matrix ещё не приняты |
 | E03-01…05/11 | Реальные RocksDB/gRPC/NATS, delivery-only fault matrix от durable intent/READY; Prepare/Release/fencing/destination/drain; integration smoke с E01 fixtures | Полная комбинация native multi-block reorg/finality+delivery не называется пройденной до E05 |
 | E04-01/03/04 | Все обязательные native tx paths/fields выбранных трёх live profiles, включая native system tx; rollback/existence/fees/SELFDESTRUCT/Bor scopes; большой hook field и worker stalls | Исторические профили, optional outside-tx extension и performance SLO не являются gate |
 | E05-01…04 | Полный native→WAL→Gateway→NATS crash/reorg/finality/restart matrix; durable H и known-branch replay; cleanup/GC/late callback, downgrade/upgrade/drain | HA, backup и восстановление потерянного ACKed NATS store не обещаются |
@@ -2184,7 +2234,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | <a id="task-e02-08-block_metadata"></a>E02-08.block_metadata | `protocol/block`; ETH/BSC/POLY | Block metadata/lifecycle schema, включая empty; native source counts не превращены в completeness assertion | E01-05.type_paths → профильные native поля | MSG, SEM |
 | <a id="task-e02-10-closed_profiles"></a>E02-10.closed_profiles | `protocol/profiles`; ETH/BSC/POLY | Закрытый реестр payload/extensions/presence с exact native widths и applicability; unsupported version не получает ANY fallback | E01-05.type_paths → source variants | TYPES, SEM, MSG |
 | <a id="task-e02-02-schemas"></a>E02-02.schemas | `protocol/proto`; COMMON | Воспроизводимые schema/bindings и structural validators: required presence, oneof, lengths, unknown values определены | E02-01.semantic_descriptors → identities; E02-05.actions_model → action schema; E02-08.block_metadata → block schema; E02-10.closed_profiles → variants | MSG, CONTROL |
-| <a id="task-e02-02-codec"></a>E02-02.codec | `protocol/codec`; COMMON | Bounded Envelope/wrapper/manifest codec и exact layout/headers/digests; ни усечения, ни общей protobuf canonicality не предполагается | E02-02.schemas → typed messages/validators | CONTROL, DELIVERY |
+| <a id="task-e02-02-codec"></a>E02-02.codec | `protocol/codec`; COMMON | Bounded typed RecordFragment/tree/blob codec, streaming manifests и exact transport layout/headers/digests; полная Envelope не сериализуется одним message, крупное поле также дробится | E02-02.schemas → typed messages/validators | CONTROL, DELIVERY |
 | <a id="task-e02-03-lifecycle_validator"></a>E02-03.lifecycle_validator | `test/lifecycle_validator`; ETH/BSC/POLY | Тестовый lifecycle automaton: reordered Applied/Removed/Status, revision conflicts и reinclusion имеют однозначный результат; production consumer не создаётся | E02-02.schemas → lifecycle messages; E02-01.semantic_descriptors → identity invariants | MSG, SEM |
 | <a id="task-e02-04-compatibility"></a>E02-04.compatibility | `protocol/compatibility`; COMMON | Read/replay/new-write capability matrix: immutable pending поддержан либо transition отвергнут; drain не разрешает несовместимый remaining metadata format | E02-02.codec → encoding versions | CONTROL, DELIVERY, CONFIG |
 
@@ -2279,7 +2329,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 #### REQ/AC → ответственный task
 
-Все 63 REQ и 156 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 164 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -2328,8 +2378,9 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DLV-03 | AC-DLV-03-01…AC-DLV-03-02 | [E03-02.rpc_streaming](#task-e03-02-rpc_streaming) | E03 |
 | REQ-DLV-03 | AC-DLV-03-03 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-03 | AC-DLV-03-04 | [E03-01.gateway_store](#task-e03-01-gateway_store) | E03 |
-| REQ-DLV-04 | AC-DLV-04-01…AC-DLV-04-02, AC-DLV-04-04 | [E02-02.codec](#task-e02-02-codec) | E02 |
-| REQ-DLV-04 | AC-DLV-04-03 | [E03-03.publisher](#task-e03-03-publisher) | E03 |
+| REQ-DLV-04 | AC-DLV-04-01…AC-DLV-04-02, AC-DLV-04-04…AC-DLV-04-09, AC-DLV-04-12 | [E02-02.codec](#task-e02-02-codec) | E02 |
+| REQ-DLV-04 | AC-DLV-04-03, AC-DLV-04-10 | [E03-03.publisher](#task-e03-03-publisher) | E03 |
+| REQ-DLV-04 | AC-DLV-04-11 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-05 | AC-DLV-05-01…AC-DLV-05-03 | [E03-03.publisher](#task-e03-03-publisher) | E03 |
 | REQ-DLV-06 | AC-DLV-06-01…AC-DLV-06-04 | [E03-01.cleanup](#task-e03-01-cleanup) | E03 |
 | REQ-DLV-07 | AC-DLV-07-01…AC-DLV-07-02, AC-DLV-07-04 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
