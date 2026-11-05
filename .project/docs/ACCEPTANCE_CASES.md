@@ -106,7 +106,7 @@
 | AC-LIF-05-01 | REQ-LIF-05 | ETH: live safe выше finalized, оба ранее наблюдались | Restart с native safe=восстановленный finalized | Новый safe имеет startup provenance; lower safe не fatal и не основание GC | native | E05 |
 | AC-LIF-05-02 | REQ-LIF-05 | ETH: известны safe/finalized | FCU передаёт zero hash соответствующего поля | Прежний native reference не очищен; zero no-op не объявлен новой финальностью | native | E01 |
 | AC-LIF-05-03 | REQ-LIF-05 | ETH: finalized setter выполнен, последующая safe validation неуспешна | FCU возвращает error после setter | Evidence отражает фактическую native mutation, не пропущен из-за итогового RPC error; нет ложного safe | native | E01 |
-| AC-LIF-05-04 | REQ-LIF-05 | ETH: durable irreversible anchor F и прежний head | Новый authoritative SetFinalized ниже F или с несовместимым hash при том же head | Fatal stop до новой публикации/GC; событие не списано как stale callback | native | E05 |
+| AC-LIF-05-04 | REQ-LIF-05 | ETH: durable irreversible anchor F и прежний head | Новый authoritative SetFinalized ниже F или с несовместимым hash при том же head | Fatal stop native owner; нет READY/публикации событий конфликтующего решения и GC по нему; событие не списано как stale callback. Прежний корректный CLOSED pending следует обычному delivery protocol | native | E05 |
 | AC-LIF-06-01 | REQ-LIF-06 | BSC: merged snapshot Source/Target и более высокая vote-only finality | Native finality update | Header и early evidence имеют разные provenance/status; early не разрешает GC, snapshot не выдан за одну signed attestation | native | E05 |
 | AC-LIF-06-02 | REQ-LIF-06 | BSC: early evidence опубликовано/сохранено, header Source ещё ниже | Restart с пустым VotePool | Прежний evidence только RETAINED_DURABLE; нет fabricated fresh votes или понижения durable GC anchor | native | E05 |
 | AC-LIF-06-03 | REQ-LIF-06 | BSC: delayed side-branch либо same-height/different-hash finality callback | Callback после смены canonical branch | Reconciliation проверяет точную ancestry; чужой branch не финализирует текущую activation | native | E05 |
@@ -125,7 +125,7 @@
 | AC-LIF-08-02 | REQ-LIF-08 | ALL: anchor уже sync принят; покрытая canonical или доказанно расходящаяся removed branch | Power loss на pin-release marker/cleanup шаге | Restart завершает допустимый cleanup без двойного применения; нужные shared pins/compact ancestry сохранены | native | E05 |
 | AC-LIF-08-03 | REQ-LIF-08 | ALL: durable irreversible anchor, native canonical chain его сохраняет | Delayed stale observation ниже anchor | Refresh без false fatal; anchor/нужные pins не понижены по callback | native | E05 |
 | AC-LIF-08-04 | REQ-LIF-08 | ALL: candidate anchor вычислен, acceptance ещё не sync | Power loss до anchor commit | Непринятый candidate не разрешает cleanup; прежние pins/anchor сохранены | native | E05 |
-| AC-LIF-08-05 | REQ-LIF-08 | ALL: durable irreversible anchor | Новое authoritative canonical решение не содержит anchor | Fatal stop; нет продолжения GC/публикации или обещания восстановить уже удалённый state | native | E05 |
+| AC-LIF-08-05 | REQ-LIF-08 | ALL: durable irreversible anchor; отдельный ранее корректный CLOSED batch ожидает доставки | Новое authoritative canonical решение не содержит anchor | Fatal stop native owner; нет READY/публикации событий конфликтующего решения и GC по нему, удалённый state не обещан. Прежний CLOSED batch обслуживается обычным Gateway protocol; уже отправленные bytes не отзываются | native | E05 |
 
 ## Доставка и обслуживание
 
