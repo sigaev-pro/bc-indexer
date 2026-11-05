@@ -1,6 +1,6 @@
 # Полный реестр требований и приёмки
 
-Родительские REQ раскрыты в [164 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [172 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -39,9 +39,9 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DAT-01 | Closed typed schema, presence и exact integer widths | DATA/schema: unknown enums/version, lengths, missing vs zero, malformed union; reject без ANY/JSON fallback; E02 |
 | REQ-DAT-02 | Source tx/receipt encodings и native поля | AUTH/DATA: byte equality, тип/подпись/access/blob/auth fields и native-derived projection раздельны; E02/E04 |
 | REQ-DAT-03 | Authorization tuples сохраняются без фильтрации | AUTH-01…04: invalid parity/nonce/chain tuple, duplicates, root revert; source tuples не теряются; E02/E04 |
-| REQ-DAT-04 | Полное call tree применимых native calls | DATA: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, value=0, caller/context/code, parent/order; E04 |
-| REQ-DAT-05 | Outcome/rollback/committed различаются | DATA/SELF: успешный child при reverted ancestor, caught failure; attempted trace сохранён, final state без отменённых effects; E04 |
-| REQ-DAT-06 | SELFDESTRUCT отдельное действие | SELF-01…04: zero balance/self-beneficiary/old/new contract/ancestor revert; action, monetary effects и deletion не смешаны; E02/E04 |
+| REQ-DAT-04 | Полное call tree и общий tx-local порядок | DATA: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, value=0, caller/context/code; общий execution_order calls/actions, отдельные body/protocol/effect indices; E04 |
+| REQ-DAT-05 | Outcome/rollback/committed и публичные scopes различаются | DATA/SELF: scope tree/refs/reused native ID; ancestor/caught revert; сохранённые fees/nonce/authorization; validator и стабильные order/scopes при recovery; E02/E04 |
+| REQ-DAT-06 | SELFDESTRUCT отдельное действие | SELF-01…04: zero balance/self-beneficiary/old/new contract/ancestor revert; opcode/projection связаны одним order, finalization burn отдельный; action, monetary effects и deletion не смешаны; E02/E04 |
 | REQ-DAT-07 | Точный tx boundary state diff/existence | EXIST/DATA: empty CREATE, delete/reset/recreate, touched storage twice, fees/auth вне root; initial/final и code hashes точны; E04 |
 | REQ-DAT-08 | Все monetary actions, компенсации и D62 fees | FEE-01: gross purchase/refund/credits, same recipient/payer, blob/zero-fee; address effects согласованы с state, aggregate не удваивает; E04 |
 | REQ-DAT-09 | Receipt/log/create provenance | RECEIPT/DATA: native status/revert/gas price, failed CREATE attempt vs success, log indices/scopes, no reverted receipt logs; E02/E04 |

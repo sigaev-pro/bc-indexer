@@ -55,7 +55,7 @@
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
 | <a id="task-e02-01-semantic_descriptors"></a>E02-01.semantic_descriptors | `protocol/semantic`; ETH/BSC/POLY | Manifest semantic identity: activation/revision/source стабильны до delivery attempts; decision→batch выделяется один раз | E01-02.decision_bridge → decision interface | MSG, CONTROL, NATIVE |
-| <a id="task-e02-05-actions_model"></a>E02-05.actions_model | `protocol/balance`; ETH/BSC/POLY | Типизированная модель native monetary actions, causal links и rollback; receipt summary не суммируется как второе движение | E01-03.smoke_corpus → reference effects | MSG, SEM |
+| <a id="task-e02-05-actions_model"></a>E02-05.actions_model | `protocol/balance`; ETH/BSC/POLY | Типизированная модель native monetary actions, общий execution_order, cause equality и RollbackScope refs/tree/validator; receipt summary не суммируется как второе движение | E01-03.smoke_corpus → reference effects | MSG, SEM |
 | <a id="task-e02-08-block_metadata"></a>E02-08.block_metadata | `protocol/block`; ETH/BSC/POLY | Block metadata/lifecycle schema, включая empty; native source counts не превращены в completeness assertion | E01-05.type_paths → профильные native поля | MSG, SEM |
 | <a id="task-e02-10-closed_profiles"></a>E02-10.closed_profiles | `protocol/profiles`; ETH/BSC/POLY | Закрытый реестр payload/extensions/presence с exact native widths и applicability; unsupported version не получает ANY fallback | E01-05.type_paths → source variants | TYPES, SEM, MSG |
 | <a id="task-e02-02-schemas"></a>E02-02.schemas | `protocol/proto`; COMMON | Воспроизводимые schema/bindings и structural validators: required presence, oneof, lengths, unknown values определены | E02-01.semantic_descriptors → identities; E02-05.actions_model → action schema; E02-08.block_metadata → block schema; E02-10.closed_profiles → variants | MSG, CONTROL |
@@ -87,13 +87,13 @@
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e04-01-calls"></a>E04-01.calls | `core/normalization/calls`; ETH/BSC/POLY | Полное дерево применимых calls с context/code/sender/parent/order/outcome; successful child не означает committed effects | E02-02.schemas → call variants; E01-05.type_paths → native paths | MSG, SEM |
+| <a id="task-e04-01-calls"></a>E04-01.calls | `core/normalization/calls`; ETH/BSC/POLY | Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed; успешный child не переживает ancestor rollback | E02-02.schemas → call variants; E02-05.actions_model → order/scopes; E01-05.type_paths → native paths | MSG, SEM |
 | <a id="task-e04-01-receipts"></a>E04-01.receipts | `adapters/<client>/receipts`; ETH/BSC/POLY | Native receipt/source encoding/log/create projection; source и derived значения не подменяют друг друга | E01-05.type_paths → receipt origins | MSG, SEM, TYPES |
 | <a id="task-e04-01-authorization"></a>E04-01.authorization | `core/normalization/authorization`; ETH/BSC/POLY по native applicability | Исходные authorization tuples, включая invalid/duplicate, сохранены; validation внешней tx не фильтрует tuples | E04-01.receipts → native outcome; E02-10.closed_profiles → source widths | TYPES, SEM |
 | <a id="task-e04-01-block_record"></a>E04-01.block_record | `core/normalization/block`; ETH/BSC/POLY | Native BlockApplied projection: header/RLP/count/optional presence и source timestamp precision точны для empty и nonempty blocks | E02-08.block_metadata → typed block schema; E01-05.type_paths → source header variants | MSG, SEM |
 | <a id="task-e04-03-state_diff"></a>E04-03.state_diff | `core/normalization/state`; ETH/BSC/POLY | Transaction-boundary existence/balance/nonce/code/storage before/after; rollback/empty account/reset корректны | E04-01.calls → scopes; E01-02.owned_capture → immutable snapshots | MSG, SEM |
 | <a id="task-e04-01-selfdestruct"></a>E04-01.selfdestruct | `core/normalization/selfdestruct`; ETH/BSC/POLY | SELFDESTRUCT action, monetary movement и deletion раздельны при zero/self-beneficiary/revert/fork cases | E04-03.state_diff → boundary diff; E04-01.calls → call scopes | SEM, MSG |
-| <a id="task-e04-03-balance_actions"></a>E04-03.balance_actions | `core/normalization/balance`; ETH/BSC/POLY | Причинные денежные движения, fees/refunds/credits и компенсации; net-zero actions не исчезают, summary не удваивает effects | E04-03.state_diff → account delta; E04-01.receipts → fee summary; E02-05.actions_model → action schema | SEM, MSG |
+| <a id="task-e04-03-balance_actions"></a>E04-03.balance_actions | `core/normalization/balance`; ETH/BSC/POLY | Причинные денежные движения, fees/refunds/credits; native scope и стабильные order/IDs при capture recovery; net-zero actions не исчезают, summary не удваивает effects | E04-03.state_diff → account delta; E04-01.receipts → fee summary; E02-05.actions_model → action schema | SEM, MSG |
 | <a id="task-e04-04-import_pressure"></a>E04-04.import_pressure | `test/native_import`; ETH/BSC/POLY | Полный import path и large-field/slow-worker behavior; native results не меняются, collector memory bounded, системные scopes не смешаны | E04-03.balance_actions → full effects; E04-01.selfdestruct → action semantics; E04-01.block_record → full block projection; E01-02.owned_capture → safe-point seam | NATIVE, SEM, EVID |
 | <a id="task-e04-02-optional_scope"></a>E04-02.optional_scope | `protocol/optional_scope`; ETH/BSC/POLY | Scope declaration: default OFF без потери native tx effects; enabled outside-tx/legacy record только с объявленными typed fixtures | E04-03.balance_actions → обязательный tx scope | MSG, TYPES, SEM |
 
@@ -154,7 +154,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 164 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 172 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -181,9 +181,11 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DAT-01 | AC-DAT-01-01…AC-DAT-01-02 | [E02-02.schemas](#task-e02-02-schemas) | E02 |
 | REQ-DAT-02 | AC-DAT-02-01 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-DAT-03 | AC-DAT-03-01 | [E04-01.authorization](#task-e04-01-authorization) | E04 |
-| REQ-DAT-04 | AC-DAT-04-01 | [E04-01.calls](#task-e04-01-calls) | E04 |
-| REQ-DAT-05 | AC-DAT-05-01…AC-DAT-05-02 | [E04-01.calls](#task-e04-01-calls) | E04 |
-| REQ-DAT-06 | AC-DAT-06-01…AC-DAT-06-02 | [E04-01.selfdestruct](#task-e04-01-selfdestruct) | E04 |
+| REQ-DAT-04 | AC-DAT-04-01…AC-DAT-04-02 | [E04-01.calls](#task-e04-01-calls) | E04 |
+| REQ-DAT-05 | AC-DAT-05-03 | [E02-05.actions_model](#task-e02-05-actions_model) | E02 |
+| REQ-DAT-05 | AC-DAT-05-01…AC-DAT-05-02, AC-DAT-05-04…AC-DAT-05-05 | [E04-01.calls](#task-e04-01-calls) | E04 |
+| REQ-DAT-05 | AC-DAT-05-06…AC-DAT-05-07 | [E04-03.balance_actions](#task-e04-03-balance_actions) | E04 |
+| REQ-DAT-06 | AC-DAT-06-01…AC-DAT-06-04 | [E04-01.selfdestruct](#task-e04-01-selfdestruct) | E04 |
 | REQ-DAT-07 | AC-DAT-07-01…AC-DAT-07-02 | [E04-03.state_diff](#task-e04-03-state_diff) | E04 |
 | REQ-DAT-08 | AC-DAT-08-01…AC-DAT-08-03 | [E04-03.balance_actions](#task-e04-03-balance_actions) | E04 |
 | REQ-DAT-09 | AC-DAT-09-01…AC-DAT-09-02 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
@@ -255,7 +257,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | E01-03.smoke_corpus | Есть transfer/nested revert/fees/system/empty inputs с pinned provenance и ожидаемыми результатами; это минимальный corpus | AC-CAP-01-01, AC-CAP-07-01…AC-CAP-07-03 |
 | E01-05.type_paths | Каждый обязательный native type/path связан с source caller и минимальным входом; missing path явно FAIL | AC-CAP-01-01 |
 | E02-01.semantic_descriptors | Schema сохраняет смысл semantic ref/activation/revision и не смешивает их с delivery attempt ID; vectors проверяют widths/presence | AC-DAT-01-01…AC-DAT-01-02, AC-LIF-03-01…AC-LIF-03-03 |
-| E02-05.actions_model | Schema выражает каждый обязательный action/link/fee component и rollback без opaque fallback; zero/absence различимы | AC-DAT-01-01…AC-DAT-01-02 |
+| E02-05.actions_model | Schema выражает action/link/fee component, общий order и rollback scopes; валидатор отвергает неоднозначные/невозможные ссылки и committed rollback, zero/absence различимы | AC-DAT-01-01…AC-DAT-01-02, AC-DAT-05-03 |
 | E02-08.block_metadata | Schema выражает empty block, native header fields, counts и source timestamp precision без BlockComplete | AC-DAT-01-01…AC-DAT-01-02 |
 | E02-10.closed_profiles | Каждая принятая variant имеет typed schema/applicability/width; unknown profile отвергается | AC-DAT-01-02 |
 | E02-04.compatibility | Матрица read/replay/new-write перечисляет exact versions и prewrite rejection; unsupported field/schema/profile vectors отвергаются | AC-DAT-01-02 |

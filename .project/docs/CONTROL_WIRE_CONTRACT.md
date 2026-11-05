@@ -21,6 +21,8 @@ DOC-FINAL-01 · 2026-11-05. Точный логический контракт �
 
 Семантический manifest фиксирует event kind, source provenance/sequence, activation refs и revisions **до DELIVERY_STAGING**. Native decision→batch_id и batch counter фиксируются одним sync commit. Повтор decision marker находит прежнюю связь; после cleanup от повтора защищает applied-decision frontier. Decision без public events не выделяет batch. Attempt allocation сохраняет `{attempt_generation,event_sequence_base,event_count}` атомарно; event ordinal задаёт ID. Retry до READY может сменить только public event IDs/Envelope attempt, не semantic identity/revision. После READY IDs/bytes неизменны независимо от Prepare.
 
+D74: execution_order — отдельный единый tx-local счётчик от 1 для calls/execution_actions/balance actions. action_index, execution_action_id и frame_id сохраняют собственные пространства identity; scope_id=0 — транзакционная граница, следующие scope IDs выделяются по порядку создания native областей. Сравнение/повтор counters задаёт CURRENT_SEMANTICS; эти значения не входят в allocation event/source/batch/chain sequence и не меняются от D73 fragmentation/retry. `execution_position.operation_index` — body index блока, `TransactionProtocol.operation_index` — отдельный tx-local protocol index. Ни один из них не подменяет execution_order.
+
 ## DestinationBinding file
 
 `destination.binding_file` — путь к **желаемому** descriptor. JSON UTF-8, без duplicate/unknown keys, comments/BOM. Никаких env substitutions. Порядок ключей/whitespace не имеют значения. Старый binding, seal, drain_id и generation берутся только из durable store; не из новых YAML полей.
