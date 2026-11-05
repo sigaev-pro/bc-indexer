@@ -4,6 +4,9 @@
 
 ## Language
 
+**Метки идентичности NATS stream**:
+Обязательные строковые metadata extractor.network_digest и extractor.destination_id, вычисленные из DestinationBinding. Они обозначают сеть и линию назначения, не binding generation и не сохранность данных. Missing/malformed/mismatch блокирует публикацию; account/stream/subjects проверяются отдельно. Bootstrap не присваивает identity существующему немаркированному stream автоматически.
+
 **Исходное receipt-кодирование**:
 Типизированные bytes результата: native consensus-кодирование для body tx либо отдельный raw storage RLP optional Bor legacy receipt. Это не JSON-RPC projection и не все поля Receipt. Вид, native type и origin проверяются по D75; потоковый writer D76 сохраняет точные native bytes без полного дополнительного буфера.
 

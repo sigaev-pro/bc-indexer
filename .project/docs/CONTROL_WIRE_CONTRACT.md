@@ -48,6 +48,29 @@ D74: execution_order — отдельный единый tx-local счётчик
 
 Digest не включает собственное поле, URL, TLS/credentials или frame limit. Changing account/stream/prefix требует следующей binding generation той же destination_id и DRAINED. Изменять network identity в существующем store нельзя. Same generation+different content — конфликт; неожиданный скачок generation запрещён. Gateway YAML stream/subject_prefix должны точно совпасть с descriptor: это проверяемые дубли, не альтернативный route. Каждый owner сохраняет свой desired binding локально до создания обязательств; offline adapter делает это до capture. Между owners descriptor сверяется при первом authenticated handshake, до Prepare/Publish; отсутствие Gateway не запрещает безопасный offline capture.
 
+## Stream metadata identity D77
+
+Поля находятся в `StreamInfo.config.metadata` выбранного NATS stream: строковые key/value, не message headers, description или отдельный YAML descriptor. Поддержка map metadata проверена в [pinned NATS StreamConfig](https://github.com/nats-io/nats-server/blob/b2fd3efc7456b11b06a54877ad6f6ccfb911edb4/server/stream.go). Этот проект задаёт ровно два обязательных ключа; регистрация дополнительного generation/digest metadata не подразумевается.
+
+| Точный key | Формат value | Ожидаемое значение |
+|---|---|---|
+| extractor.network_digest | 64 ASCII lowercase hex characters, без 0x, пробелов или padding | Hex SHA-256 network_digest по формуле extractor.network.v1 выше, вычисленный из network выбранного DestinationBinding |
+| extractor.destination_id | 32 ASCII lowercase hex characters, без 0x/пробелов | Hex destination_id выбранного DestinationBinding, исходные Id16 bytes |
+
+Ключи чувствительны к регистру; значения сравниваются точно после проверки формата, без case folding/trim/Unicode normalization. Отсутствующий metadata map/ключ, пустая строка, неверный тип/длина/регистр или несовпадающее значение дают CONFIG_BLOCKED. Ошибка указывает stream/key и вид несоответствия, без credentials. Недоступный INFO/нет ответа — publication blocked/retry по действующей классификации ошибок, не доказательство missing либо совпадения. Неизвестные дополнительные metadata не участвуют в сравнении binding и сохраняются bootstrap; они не заменяют обязательный ключ.
+
+| Фаза | С чем сверять / результат |
+|---|---|
+| Подключение/reconnect Gateway и допуск CLOSED batch к публикации | С active durable binding и binding сохранённого plan; они обязаны совпасть. Старое успешное наблюдение не переносится на новое соединение или другой target. При возобновлении публикации после ошибки выполняется новая проверка |
+| AWAIT_SWITCH / первый PrepareSwitch | Новый target сверяется с desired descriptor из точного SwitchIntent; active binding пока старый, публикация в desired route запрещена. Неудача не даёт SwitchPrepared |
+| Первый CommitSwitch | Повторно проверить новый target перед durable активацией. Если producer уже сохранил новый binding, а проверка не прошла, сохранить intent и блокировку; не откатывать producer и не публиковать в старое назначение |
+| Retry уже durable CommitSwitch / Resume / Release | Вернуть сохранённый результат по прежним identity/idempotency правилам. Недоступность NATS либо metadata mismatch не отменяет уже committed control receipt. Разрешение новой публикации всё равно требует проверки текущего target |
+| Same-binding offline capture/recovery | Online metadata check — обязанность Gateway перед публикацией. Она не добавляет зависимости native capture от доступности NATS и не препятствует cleanup уже ACKed обязательств |
+
+Смена account/stream/prefix по-прежнему требует drain и согласованного control transition. В следующей generation той же destination_id метки остаются прежними, если network тот же. Новый stream получает те же ожидаемые две identity-метки до активации назначения. При смене только prefix generation/digest не записываются в stream metadata; subjects/account/stream name/limits и descriptor_digest проверяются отдельно. Совпадение двух меток не заменяет ни одной из этих проверок и не разрешает объединять ACK разных plans/destinations.
+
+Metadata проверяются в указанных точках; это конфигурационные утверждения окружения, не NATS atomic publish precondition и не доказательство сохранности истории. При обнаруженном mismatch новые публикации останавливаются, pending/bytes/plan сохраняются; уже отправленные frames нельзя отозвать. `Nats-Expected-Stream` и PubAck.Stream продолжают проверяться отдельно. Смена metadata не переписывает durable binding. Потеря/recreate NATS store после ACK не покрывается этими метками и не разрешает bootstrap скрыто восстанавливать историю.
+
 ## READY manifest и reservation
 
 Descriptor события v2: `{ordinal:u64,event_id:40 bytes,event_family:u16,event_kind:u16,record_length:u64,record_digest:Hash32,fragment_count:u64,fragment_manifest_digest:Hash32}`. Следом идут fragment_count descriptors `{fragment_index:u64,encoded_length:u64,fragment_sha256:Hash32}`. Fragment indices непрерывны; encoded_length=1…65536; сумма длин равна record_length. Family registry v1: tx=1, block=2, balance.system=3, bor.legacy_receipt=4; последние два optional. Kind: applied=1, removed=2, status=3. Unknown value — ошибка, OTHER отсутствует.

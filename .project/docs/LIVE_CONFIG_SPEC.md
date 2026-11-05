@@ -127,6 +127,8 @@ Upgrade preflight разделяет build ID и store/plan/wire/native profile 
 
 Ошибка содержит код, путь поля и причину, без секретов и полного дампа native argv. `config check` не создаёт DB/stream/run, не запускает ноду, не публикует данные и не обещает доступность сети. Online handshake выполняется при запуске выбранной роли.
 
+D77: NATS stream metadata extractor.network_digest/extractor.destination_id вычисляются из DestinationBinding; новых YAML overrides для них нет. Локальный config check проверяет descriptor и форматы, но не объявляет remote metadata сверенными. Gateway проверяет StreamInfo online по фазам CONTROL_WIRE_CONTRACT; missing/malformed/mismatch блокируют публикацию с CONFIG_BLOCKED, не меняют destination/pending и не запускают автоматическое исправление stream.
+
 Проектные exit codes: 0 — успешный check/штатное завершение; 2 — CLI/YAML/native config; 3 — занятое или несовместимое состояние; 4 — неподдержанная сборка/несовместимый источник; 5 — невосстановимая runtime/дисковая ошибка. Исходная native ошибка сохраняется в диагностике. Недоступность Gateway/NATS вызывает retry, не успешное завершение.
 
 SIGINT/SIGTERM прекращает новые чтения и закрывает состояние, сохраняя durable pending. Gateway CLI возвращает 130/143; native процесс сохраняет штатную обработку сигналов и exit codes, адаптер использует его shutdown hook. Остановка не ждёт бесконечно NATS PubAck. STAGING восстанавливается по протоколу; неподтверждённый payload не удаляется. SIGKILL восстанавливается следующим запуском как crash.

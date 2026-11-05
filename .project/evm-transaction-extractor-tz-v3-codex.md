@@ -1,6 +1,6 @@
 # Техническое задание: native EVM transaction extractor
 
-Редакция D16–D76 · 2026-11-05. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
+Редакция D16–D77 · 2026-11-05. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
 
 Цель нашей работы по D64 — только идеальное ТЗ. Реализации не будет никогда. Указанные ниже программные компоненты, этапы, тесты и артефакты описывают проектируемую систему, а не задачи на исполнение агентом. Runtime verdict всех сценариев — NOT_RUN.
 
@@ -77,7 +77,7 @@
 
 ## 6. Приёмка, декомпозиция и фиксация
 
-- **63 родительских REQ** фиксируют обязательства. **178 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
+- **63 родительских REQ** фиксируют обязательства. **185 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
 - Задача в справочной декомпозиции имеет результат, ответственный модуль, точные зависимости и ссылки на REQ/AC/контракт. Начальный native proof, delivery-only proof и combined recovery proof разделены. Описание задачи не разрешает её исполнение по D64.
 - Все обязательные REQ покрываются AC и задачами; каждый AC имеет владельца и точный task mapping; граф зависимостей не содержит циклов. Optional/deferred явно отмечены.
 - Runtime NOT_RUN не заменяется документальным SPECIFIED. Source inspection не доказывает power-loss, совместимость сборки или фактическое прохождение теста.
@@ -962,7 +962,7 @@ Internal publisher worker имеет publisher_generation и работает т
 
 Окружение создаёт общий immutable descriptor `DestinationBinding={destination_id,generation,network,expected_account,stream,subject_prefix,descriptor_digest}`. Оба процесса получают ссылку на него в YAML и сохраняют его до любых новых обязательств. Адаптер не получает NATS credentials. Первый offline capture уже имеет заданное назначение; это не онлайн-зависимость от Gateway/NATS. Потеря Gateway store не меняет binding READY/SEALED producer.
 
-Gateway при подключении проверяет account, StreamInfo, subjects/limits и binding metadata, заданные environment bootstrap; URL не является identity. Ответы UserInfo/AccountInfo/StreamInfo и необходимые request/reply permissions описывает deployment-контракт. Недоступная проверка — publication blocked; заведомое несовпадение — CONFIG_BLOCKED, без переназначения pending. Замена URL/credentials допустима только после проверки того же binding/account/stream/route. Потеря NATS store после ACK по-прежнему вне гарантии D30–D31; bootstrap не маскирует её автоматическим разрушительным recreate/reset.
+Gateway при подключении/reconnect и допуске CLOSED batch к публикации проверяет account, StreamInfo, subjects/limits и две metadata identity D77: extractor.network_digest / extractor.destination_id по [CONTROL_WIRE_CONTRACT](#идентификаторы-и-служебный-wire-protocol). URL не является identity. Ответы UserInfo/AccountInfo/StreamInfo и необходимые request/reply permissions описывает deployment-контракт. Недоступная проверка — publication blocked; missing/malformed/mismatch — CONFIG_BLOCKED, без переназначения pending. Замена URL/credentials допустима только после проверки того же binding/account/stream/route. Метки не содержат binding generation/digest и не заменяют отдельные проверки route/plan. Потеря NATS store после ACK по-прежнему вне гарантии D30–D31; bootstrap не маскирует её автоматическим разрушительным recreate/reset.
 
 #### Drain и cutover D54/D57/D59
 
@@ -971,7 +971,8 @@ Gateway при подключении проверяет account, StreamInfo, su
 3. Только после исчерпания native obligations, ещё способных создать batch, producer фиксирует drain_id/highwater и отправляет SealGeneration(binding_generation,admission_generation,drain_id,highwater). Gateway barrier проверяет отсутствие незавершённых операций <=highwater и совпадение retired_prefix. Sync SEALED_GENERATION запрещает Prepare этой admission generation; повтор возвращает тот же SealAck. Retained pins, ожидающие будущего finalized anchor, не требуют нового capture и не блокируют DRAINED.
 4. Producer sync сохраняет DRAINED с SealAck и завершается. Crash до этого продолжает DRAIN; новый LIVE не включается автоматически. Оба owners сохраняют identity/lifecycle, terminal prefix и seal evidence, очищают временные delivery payload/receipts. «Оба журнала очищены» не означает удалить DB/ключи.
 5. Для смены destination обе роли получают desired descriptor следующей generation через binding_file; old binding/seal/drain_id берутся из store. Gateway desired mismatch входит в AWAIT_SWITCH, сохраняя прежнее active назначение. Native explicit LIVE sync создаёт SwitchIntent; PrepareSwitch → producer binding commit → CommitSwitch завершают переход. Затем Resume до снятия DRAINED/фиксации H. Для прежнего binding Switch пропускается, Resume обязателен. Необъявленные YAML keys old/new/drain_id не вводятся.
-6. Старые SEALED generations не принимают новых данных. Упавший процесс завершает сохранённый switch, не угадывает нужную сторону по более свежему YAML. Если последний owner store потерян, операция требует восстановления seal/binding evidence от surviving owner; при недостатке evidence — ERROR, не bypass.
+6. До первого SwitchPrepared и первого durable CommitSwitch новый target проверяется по desired binding, включая обе stream metadata D77. Неудача сохраняет старую либо незавершённую transition state; producer commit не откатывается автоматически. Retry уже committed transition возвращает durable результат независимо от текущей доступности NATS; новые публикации отдельно блокируются до успешной identity-проверки.
+7. Старые SEALED generations не принимают новых данных. Упавший процесс завершает сохранённый switch, не угадывает нужную сторону по более свежему YAML. Если последний owner store потерян, операция требует восстановления seal/binding evidence от surviving owner; при недостатке evidence — ERROR, не bypass.
 
 D59: будущие Removed/Status сохраняют activation references, даже если исходный ACKed Applied был в прежнем назначении. Уже подтверждённая история не копируется. Новому stream не обещается самостоятельная полнота старых ссылок; downstream/copy вне scope.
 
@@ -1059,6 +1060,29 @@ D74: execution_order — отдельный единый tx-local счётчик
 `descriptor_digest = SHA256(UTF8("extractor.binding.v1") || 0x00 || destination_id16 || generation_u64be || 0x01 || chain_id32 || genesis32 || LP(expected_account) || LP(stream) || LP(subject_prefix))`.
 
 Digest не включает собственное поле, URL, TLS/credentials или frame limit. Changing account/stream/prefix требует следующей binding generation той же destination_id и DRAINED. Изменять network identity в существующем store нельзя. Same generation+different content — конфликт; неожиданный скачок generation запрещён. Gateway YAML stream/subject_prefix должны точно совпасть с descriptor: это проверяемые дубли, не альтернативный route. Каждый owner сохраняет свой desired binding локально до создания обязательств; offline adapter делает это до capture. Между owners descriptor сверяется при первом authenticated handshake, до Prepare/Publish; отсутствие Gateway не запрещает безопасный offline capture.
+
+#### Stream metadata identity D77
+
+Поля находятся в `StreamInfo.config.metadata` выбранного NATS stream: строковые key/value, не message headers, description или отдельный YAML descriptor. Поддержка map metadata проверена в [pinned NATS StreamConfig](https://github.com/nats-io/nats-server/blob/b2fd3efc7456b11b06a54877ad6f6ccfb911edb4/server/stream.go). Этот проект задаёт ровно два обязательных ключа; регистрация дополнительного generation/digest metadata не подразумевается.
+
+| Точный key | Формат value | Ожидаемое значение |
+|---|---|---|
+| extractor.network_digest | 64 ASCII lowercase hex characters, без 0x, пробелов или padding | Hex SHA-256 network_digest по формуле extractor.network.v1 выше, вычисленный из network выбранного DestinationBinding |
+| extractor.destination_id | 32 ASCII lowercase hex characters, без 0x/пробелов | Hex destination_id выбранного DestinationBinding, исходные Id16 bytes |
+
+Ключи чувствительны к регистру; значения сравниваются точно после проверки формата, без case folding/trim/Unicode normalization. Отсутствующий metadata map/ключ, пустая строка, неверный тип/длина/регистр или несовпадающее значение дают CONFIG_BLOCKED. Ошибка указывает stream/key и вид несоответствия, без credentials. Недоступный INFO/нет ответа — publication blocked/retry по действующей классификации ошибок, не доказательство missing либо совпадения. Неизвестные дополнительные metadata не участвуют в сравнении binding и сохраняются bootstrap; они не заменяют обязательный ключ.
+
+| Фаза | С чем сверять / результат |
+|---|---|
+| Подключение/reconnect Gateway и допуск CLOSED batch к публикации | С active durable binding и binding сохранённого plan; они обязаны совпасть. Старое успешное наблюдение не переносится на новое соединение или другой target. При возобновлении публикации после ошибки выполняется новая проверка |
+| AWAIT_SWITCH / первый PrepareSwitch | Новый target сверяется с desired descriptor из точного SwitchIntent; active binding пока старый, публикация в desired route запрещена. Неудача не даёт SwitchPrepared |
+| Первый CommitSwitch | Повторно проверить новый target перед durable активацией. Если producer уже сохранил новый binding, а проверка не прошла, сохранить intent и блокировку; не откатывать producer и не публиковать в старое назначение |
+| Retry уже durable CommitSwitch / Resume / Release | Вернуть сохранённый результат по прежним identity/idempotency правилам. Недоступность NATS либо metadata mismatch не отменяет уже committed control receipt. Разрешение новой публикации всё равно требует проверки текущего target |
+| Same-binding offline capture/recovery | Online metadata check — обязанность Gateway перед публикацией. Она не добавляет зависимости native capture от доступности NATS и не препятствует cleanup уже ACKed обязательств |
+
+Смена account/stream/prefix по-прежнему требует drain и согласованного control transition. В следующей generation той же destination_id метки остаются прежними, если network тот же. Новый stream получает те же ожидаемые две identity-метки до активации назначения. При смене только prefix generation/digest не записываются в stream metadata; subjects/account/stream name/limits и descriptor_digest проверяются отдельно. Совпадение двух меток не заменяет ни одной из этих проверок и не разрешает объединять ACK разных plans/destinations.
+
+Metadata проверяются в указанных точках; это конфигурационные утверждения окружения, не NATS atomic publish precondition и не доказательство сохранности истории. При обнаруженном mismatch новые публикации останавливаются, pending/bytes/plan сохраняются; уже отправленные frames нельзя отозвать. `Nats-Expected-Stream` и PubAck.Stream продолжают проверяться отдельно. Смена metadata не переписывает durable binding. Потеря/recreate NATS store после ACK не покрывается этими метками и не разрешает bootstrap скрыто восстанавливать историю.
 
 #### READY manifest и reservation
 
@@ -1274,6 +1298,8 @@ D57: fatal локального WAL/normalization останавливает в�
 Upgrade preflight разделяет build ID и store/plan/wire/native profile capabilities. Совместимые версии повторяют старые bytes. Несовместимый wire/plan upgrade — после drain старой сборкой. Несовместимый persistent store format не становится допустимым после drain: lifecycle/identity ещё существуют; без поддержанной read compatibility такой переход/rollback запрещён до записи, auto-migration нет.
 
 Ошибка содержит код, путь поля и причину, без секретов и полного дампа native argv. `config check` не создаёт DB/stream/run, не запускает ноду, не публикует данные и не обещает доступность сети. Online handshake выполняется при запуске выбранной роли.
+
+D77: NATS stream metadata extractor.network_digest/extractor.destination_id вычисляются из DestinationBinding; новых YAML overrides для них нет. Локальный config check проверяет descriptor и форматы, но не объявляет remote metadata сверенными. Gateway проверяет StreamInfo online по фазам CONTROL_WIRE_CONTRACT; missing/malformed/mismatch блокируют публикацию с CONFIG_BLOCKED, не меняют destination/pending и не запускают автоматическое исправление stream.
 
 Проектные exit codes: 0 — успешный check/штатное завершение; 2 — CLI/YAML/native config; 3 — занятое или несовместимое состояние; 4 — неподдержанная сборка/несовместимый источник; 5 — невосстановимая runtime/дисковая ошибка. Исходная native ошибка сохраняется в диагностике. Недоступность Gateway/NATS вызывает retry, не успешное завершение.
 
@@ -1510,6 +1536,12 @@ NATS environment bootstrap и runtime Gateway используют разные 
 
 Bootstrap выпускает общий immutable DestinationBinding, который оба owners сохраняют до capture. Expected account/stream/subjects/metadata/limits проверяются Gateway online. NATS server max_payload и stream max_msg_size должны пропускать фактические frame+headers; default проекта 2 MiB, plan size immutable. Отсутствующий/чужой stream даёт CONFIG_BLOCKED; bootstrap созданного окружения не является разрешением уничтожить прежнюю историю. Drain/cutover/Resume — только по [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения).
 
+D77: bootstrap вычисляет `extractor.network_digest` и `extractor.destination_id` из проверенного DestinationBinding в точных форматах [CONTROL_WIRE_CONTRACT](#идентификаторы-и-служебный-wire-protocol); отдельные редактируемые значения этих полей в YAML collector/Gateway не добавляются. При первоначальном CREATE configured stream оба ключа входят в тот же StreamConfig. После CREATE/compatible UPDATE требуется read-back StreamInfo и проверка identity/subjects/limits перед успехом bootstrap. Если CREATE столкнулся с уже существующим stream или после crash повторяется init, используется ветка проверки существующего stream, не безусловный UPDATE.
+
+У существующего stream оба ключа сначала проверяются. Missing/malformed/mismatch → CONFIG_BLOCKED с диагностикой; автоматическое добавление отсутствующей identity, перезапись чужого destination/network, DELETE/PURGE/reset/recreate запрещены даже для пустого stream. Compatible UPDATE по явно заданной config revision сохраняет две проверенные identity-метки и все посторонние metadata key/value из текущей конфигурации; серверная ошибка/limit не разрешают выбросить посторонние поля ради успеха. Такие конфигурационные изменения выполняются по штатному порядку владения окружением, не runtime Gateway. Повтор bootstrap не удаляет metadata, которые не перечислены в extractor descriptor.
+
+При cutover новый stream заранее создаётся/проверяется с метками той же network и destination_id. Изменение binding generation или subject prefix не требует менять metadata generation/digest: таких обязательных ключей нет. Existing initialized binding с исчезнувшим stream остаётся ошибкой по AC-OPS-06-02; первоначальное создание нового целевого stream не выдаётся за восстановление старой истории. Runtime credentials по-прежнему не получают CREATE/UPDATE/DELETE/PURGE.
+
 В NATS v2.15.1 `b2fd3efc7456b11b06a54877ad6f6ccfb911edb4` JetStream создаёт default internal system account при его отсутствии, USER.INFO service автоматически импортируется в обычные accounts. Gateway не нужны system credentials или wildcard `$SYS.>`: сравнивается поле `account` ответа (не display `account_name`). Bootstrap проверяет фактический responder/import/ACL своей конфигурации. [JetStream source](https://github.com/nats-io/nats-server/blob/b2fd3efc7456b11b06a54877ad6f6ccfb911edb4/server/jetstream.go), [UserInfo routing/response](https://github.com/nats-io/nats-server/blob/b2fd3efc7456b11b06a54877ad6f6ccfb911edb4/server/events.go).
 
 #### Startup, restart и наблюдаемость
@@ -1654,7 +1686,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 ### Требования и приёмка
 
-Родительские REQ раскрыты в [178 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [185 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -1726,7 +1758,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DLV-06 | Producer/Gateway cleanup crash-safe | FRONTIER/REC: ACKED/outbox, RELEASING chunks, lost ReleaseAck, recovery без payload; prefix не перескакивает batch; E03 |
 | REQ-DLV-07 | Store loss использует surviving owner evidence | REC/FRONTIER: Gateway rebuilt с prefix/SEALED plans; producer loss не получает ложный старый cursor; E03/E05 |
 | REQ-DLV-08 | Late session/callback не воскрешает state | FENCE: пауза check→commit, reconnect/Release, late PubAck/Publish retired; old owner отвергнут; E03/E05 |
-| REQ-DLV-09 | Binding задаётся до offline capture | WIRE/DEST: same account/different URL, wrong account/stream/prefix/metadata; canonical digest и pre-plan READY связаны; E02/E03/E06 |
+| REQ-DLV-09 | Binding до offline capture и exact stream metadata | WIRE/DEST: D77 network_digest/destination_id, форматы и missing/mismatch; same target/different URL, separate account/route checks, cutover и committed retry; canonical digest/pre-plan READY связаны; E02/E03/E06 |
 | REQ-DLV-10 | Drain закрывает native и delivery obligations | DRAIN: pending native способен создать batch, highwater после него; no new admission/poll, retained GC pins допустимы; E05/E06 |
 | REQ-DLV-11 | Cutover/Resume соответствуют YAML | CUTOVER: desired descriptor only, AWAIT_SWITCH, crash каждого intent/commit, old binding LIVE Resume и late old generation; E03/E06 |
 | REQ-DLV-12 | ACKed history не мигрирует D59 | DEST/LIFE: новый Removed/Status с прежним Applied reference, только новое назначение; старый ACKed payload не экспортируется; E05/E06 |
@@ -1742,7 +1774,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-OPS-03 | Partial init не разрушает keys/state | BOOT: crash каждой phase, existing nonempty home/wrong genesis/missing ENV_READY, BSC hash init; safe resume/reject; E01/E06 |
 | REQ-OPS-04 | Config generation заменяет только allowlist | CONFIG: изменённый native config применён после restart, ключи/genesis/state сохранены, невозможный mix отвергнут; E06 |
 | REQ-OPS-05 | mTLS/SAN/EKU/network/role admission | TRUST: чужой CA/SAN/role/network/deployment, credential rotation и UDS ownership; reject до store mutation; E03/E06 |
-| REQ-OPS-06 | Минимальные NATS ACL и проверка account | NATS: runtime publish/INFO/UserInfo/reply allowed, admin denied; bootstrap не PURGE/reset чужой stream; E03/E06 |
+| REQ-OPS-06 | Минимальные NATS ACL, bootstrap identity и проверка account | NATS: runtime publish/INFO/UserInfo/reply allowed, admin denied; D77 atomic config CREATE/read-back, existing metadata mismatch blocked, compatible UPDATE сохраняет посторонние keys; без retag/PURGE/reset; E03/E06 |
 | REQ-OPS-07 | P2P mapping/advertise и внутренние API | CONFIG/START: назначенные ports во всех слоях, only P2P external, required native links reachable, no localhost inter-service assumption; E06 |
 | REQ-OPS-08 | Independent startup и stop-confirm-start | START/REPLACE: NATS outage, Bor/Heimdall retry, delayed old writer, native sync отдельно от delivery; E06 |
 | REQ-OPS-09 | Обязательные control logs без secrets | LOG: все states/errors видны при отключённом debug, правильная identity, SIGKILL не выдаёт graceful STOPPED; E06/E07 |
@@ -1932,6 +1964,10 @@ D64: это критерии приёмки описываемой систем�
 | AC-DLV-09-02 | REQ-DLV-09 | ALL: прежний binding и альтернативный URL/credentials того же назначения | Online account/stream/route identity check успешен | Reconnect и exact replay разрешены; смена URL сама не меняет binding/pending | gateway | E03 |
 | AC-DLV-09-03 | REQ-DLV-09 | ALL: endpoint отвечает, но account/stream/route/metadata не совпадает с binding | Online identity check | CONFIG_BLOCKED, pending не перенаправлен и не изменён | gateway | E03 |
 | AC-DLV-09-04 | REQ-DLV-09 | ALL: pending, endpoint identity невозможно проверить | Identity query unavailable | Publication blocked/retry с сохранением pending; недоступность не считается доказанным совпадением | gateway | E03 |
+| AC-DLV-09-05 | REQ-DLV-09 | ALL: missing map/key, empty value, wrong case/length/type/hex, либо неверный network_digest/destination_id | Отдельные metadata vectors при connect/reconnect и допуске batch | CONFIG_BLOCKED; exact keys/values проверены без trim/case folding; pending/plan не изменены; посторонний похожий key не заменяет обязательный | gateway | E03 |
+| AC-DLV-09-06 | REQ-DLV-09 | ALL: после drain новый stream той же destination_id либо prefix-only следующая generation; обе metadata точны | PrepareSwitch/CommitSwitch и отдельная account/route/limits проверка | Новое назначение активируется по протоколу; generation/digest metadata не требуются, native offline capture policy не меняется | gateway | E03 |
+| AC-DLV-09-07 | REQ-DLV-09 | ALL: SwitchPrepared уже есть, producer сохранил desired binding, но metadata нового target изменилась | Первый CommitSwitch | CONFIG_BLOCKED, intent сохранён; нет durable активации неверного target, автоматического rollback producer или публикации в старый stream | gateway | E03 |
+| AC-DLV-09-08 | REQ-DLV-09 | ALL: CommitSwitch durable, ответ потерян; затем metadata mismatch либо NATS недоступен | MAINTENANCE retry того же transition | Возвращён сохранённый receipt; новая публикация отдельно blocked до успешной проверки; committed transition не переигран | gateway | E03 |
 | AC-DLV-10-01 | REQ-DLV-10 | ALL: DRAIN с pending native obligation, способным создать batch | Завершить recovery при поступающих новых live callbacks | Highwater фиксируется после старых obligations; новые admissions не создаются, early Seal/DRAINED запрещён | native | E05 |
 | AC-DLV-10-02 | REQ-DLV-10 | ALL: delivery завершена, retained GC pins ещё ожидают anchor | SealGeneration и штатное завершение drain | DRAINED достигнут без ожидания будущего GC anchor; pins сохранены, новый GC poll/capture не стартовал | delivery | E05 |
 | AC-DLV-10-03 | REQ-DLV-10 | ALL: Gateway seal принят, producer DRAINED ещё не sync | Power loss до producer DRAINED commit | Recovery остаётся DRAIN и завершает прежний seal/drain_id; LIVE не открывается | delivery | E05 |
@@ -1974,6 +2010,9 @@ D64: это критерии приёмки описываемой систем�
 | AC-OPS-06-01 | REQ-OPS-06 | ALL: проектные runtime NATS credentials | Publish и обязательные INFO/UserInfo/reply запросы | Нужные операции разрешены, identity check работоспособен при минимальном ACL | deploy | E03 |
 | AC-OPS-06-02 | REQ-OPS-06 | ALL: существующий initialized binding; ожидаемый stream/account отсутствует либо принадлежит другому назначению | Gateway check и повтор bootstrap существующего окружения | Явный отказ/CONFIG_BLOCKED; нет PURGE/reset чужого stream или скрытого post-ACK восстановления истории | deploy | E06 |
 | AC-OPS-06-03 | REQ-OPS-06 | ALL: те же runtime NATS credentials | Попытка admin operation | Operation запрещена; runtime credential не получает bootstrap/admin authority | deploy | E03 |
+| AC-OPS-06-04 | REQ-OPS-06 | ALL: первоначальный bootstrap configured stream, crash после CREATE либо ответ already exists от другого init того же descriptor | Повтор init и read-back StreamInfo | Оба metadata ключа создаются вместе с config; существующий корректный stream проверен, необоснованный UPDATE/reset не выполнен; успех только после read-back | deploy | E06 |
+| AC-OPS-06-05 | REQ-OPS-06 | ALL: существующий stream, включая пустой, с missing/malformed/wrong project metadata | Bootstrap при той же или новой config revision | CONFIG_BLOCKED; нет автоматического присвоения identity, retag, DELETE/PURGE/recreate; чужие data/config сохранены | deploy | E06 |
+| AC-OPS-06-06 | REQ-OPS-06 | ALL: проверенные project metadata плюс посторонние key/value; разрешённая compatible config revision | Bootstrap UPDATE и повторный запуск | Две identity-метки и посторонние metadata сохранены; read-back проверен; отсутствие generation/digest metadata допустимо; runtime не получает admin ACL | deploy | E06 |
 | AC-OPS-07-01 | REQ-OPS-07 | ALL: accepted port map для Compose/Kubernetes | Сверить native listen/advertise, mappings/Service/NodePort и internal links | Назначенные ports согласованы; наружу только P2P по контракту, межсервисные links не используют чужой localhost | deploy | E06 |
 | AC-OPS-08-01 | REQ-OPS-08 | ALL: supporting/native services стартуют независимо; NATS/Gateway unavailable; POLY Bor/Heimdall delayed | Разный порядок старта, затем восстановление зависимостей | Native sync и delivery status различимы; retry без startup deadlock, чужая сеть не ожидается | deploy | E06 |
 | AC-OPS-08-02 | REQ-OPS-08 | ALL: старый writer ещё жив/удерживает store | Replacement Pod/process пытается стартовать до подтверждённой остановки | Stop-confirm-start/owner locks не допускают двух writers; restart другой сети не нужен | deploy | E06 |
@@ -2338,10 +2377,10 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | <a id="task-e03-01-gateway_store"></a>E03-01.gateway_store | `gateway/journal`; COMMON | PREPARING/reservation/RECEIVING/CLOSED/ACKED/RELEASING store; reservation retry не выделяет новую sequence | E03-01.producer_store → batch/plan interface | DELIVERY, CONTROL |
 | <a id="task-e03-02-rpc_streaming"></a>E03-02.rpc_streaming | `gateway/ingest`; COMMON | Bounded chunk RPC и IMPORT_SEALED; offset/conflict/manifest validation предшествуют CLOSED | E03-01.gateway_store → Gateway transitions; E03-01.producer_store → producer transitions | CONTROL, DELIVERY |
 | <a id="task-e03-02-fencing"></a>E03-02.fencing | `gateway/session`; COMMON | Session/admission/publisher fencing: stale RPC/callback не создаёт state после barrier или Release | E03-02.rpc_streaming → mutating RPC boundary | CONTROL, DELIVERY |
-| <a id="task-e03-03-destination"></a>E03-03.destination | `gateway/destination`; COMMON | Pre-plan binding и online account/stream/route validation; mismatch не перенаправляет pending | E03-02.fencing → authenticated owner; E02-02.codec → binding digest | CONTROL, CONFIG, BOOT |
+| <a id="task-e03-03-destination"></a>E03-03.destination | `gateway/destination`; COMMON | Pre-plan binding и online account/stream/route plus exact D77 metadata validation; missing/mismatch не перенаправляет pending | E03-02.fencing → authenticated owner; E02-02.codec → binding digest | CONTROL, CONFIG, BOOT |
 | <a id="task-e03-03-publisher"></a>E03-03.publisher | `gateway/publisher`; COMMON | NATS PubAck → durable NATS_ACKED → IngestAck одного manifest/plan/destination; partial ACK не завершает batch | E03-03.destination → verified target; E03-02.rpc_streaming → CLOSED frames | DELIVERY, CONTROL, BOOT |
 | <a id="task-e03-01-cleanup"></a>E03-01.cleanup | `core/delivery/release`; COMMON | Ordered Release/RecoveryRelease/retired baseline обеих сторон, bounded RELEASING cleanup; ACKed payload не нужен после Gateway loss | E03-03.publisher → IngestAck; E03-02.fencing → barrier | DELIVERY, CONTROL |
-| <a id="task-e03-03-maintenance"></a>E03-03.maintenance | `core/delivery/maintenance`; COMMON | Seal/Switch/Resume и MAINTENANCE recovery от заданного quiesced producer; native quiescence не объявляется доказанной здесь | E03-01.cleanup → empty delivery frontier; E03-03.destination → binding; E03-02.fencing → session barrier | DELIVERY, CONTROL |
+| <a id="task-e03-03-maintenance"></a>E03-03.maintenance | `core/delivery/maintenance`; COMMON | Seal/Switch/Resume, D77 target metadata checks и idempotent committed receipt при NATS outage; MAINTENANCE recovery от заданного quiesced producer, без proof native quiescence | E03-01.cleanup → empty delivery frontier; E03-03.destination → binding; E03-02.fencing → session barrier | DELIVERY, CONTROL |
 | <a id="task-e03-04-pressure_errors"></a>E03-04.pressure_errors | `core/delivery/errors`; COMMON | Transient/config/poison/ENOSPC behavior и bounded queues; pending без TTL/квоты, local fatal и remote outage различаются | E03-03.publisher → retry points; E03-01.cleanup → cleanup points | DELIVERY, CONFIG |
 | <a id="task-e03-05-recovery_matrix"></a>E03-05.recovery_matrix | `test/delivery_faults`; COMMON | Delivery-only fault evidence от заданного durable INTENT/READY; Gateway loss/late RPC/partial cleanup проверены, full REC-T01 не присваивается | E03-03.maintenance → transition machine; E03-04.pressure_errors → error states; E02-04.compatibility → capability matrix | DELIVERY, CONTROL, EVID |
 | <a id="task-e03-11-block_lifecycle"></a>E03-11.block_lifecycle | `test/nats_smoke`; ETH/BSC/POLY | NATS smoke corpus block/tx/lifecycle/empty с parts/PubAck; не verifier полного блокчейна | E03-03.publisher → publish path; E01-03.smoke_corpus → native inputs; E02-03.lifecycle_validator → expected lifecycle | MSG, DELIVERY, EVID |
@@ -2390,7 +2429,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | <a id="task-e06-13-init"></a>E06-13.init | `deploy/init`; ETH/BSC/POLY | Idempotent phase-driven native init; повтор/partial init сохраняет keys/state и проверяет genesis/ENV_READY | E06-13.artifact_lock → verified artifacts; E06-07.yaml → paths/profile | BOOT |
 | <a id="task-e06-13-topology"></a>E06-13.topology | `deploy/compose+kubernetes`; ETH/BSC/POLY | 11 services/14 volumes с проверяемыми backing owners; adapter/Gateway и Polygon L1 изолированы | E06-13.init → initialized homes; E06-07.yaml → role stores | TOPO, BOOT |
 | <a id="task-e06-13-secrets"></a>E06-13.secrets | `deploy/trust`; ETH/BSC/POLY | CA/SAN/EKU/role/network admission, private keys/JWT/credentials и rotation; bootstrap admin не попадает Gateway | E06-07.yaml → connection roles | BOOT, CONFIG |
-| <a id="task-e06-13-nats_bootstrap"></a>E06-13.nats_bootstrap | `deploy/nats`; COMMON | Однократное создание/проверка NATS accounts/streams/metadata/ACL; runtime только publish/INFO/UserInfo/replies, без destructive reset | E06-13.secrets → trust material; E03-03.destination → expected binding | BOOT, CONTROL |
+| <a id="task-e06-13-nats_bootstrap"></a>E06-13.nats_bootstrap | `deploy/nats`; COMMON | Создание/проверка accounts/streams/ACL и D77 identity metadata; CREATE/read-back, отказ adoption missing keys, compatible UPDATE сохраняет посторонние keys; runtime без admin/reset | E06-13.secrets → trust material; E03-03.destination → expected binding | BOOT, CONTROL |
 | <a id="task-e06-13-network"></a>E06-13.network | `deploy/network`; ETH/BSC/POLY | Port mapping/advertise/internal links: наружу только согласованный P2P, межсервисные localhost ошибки отвергнуты | E06-13.topology → services; E06-13.secrets → authenticated connections | PORTS, BOOT, TOPO |
 | <a id="task-e06-08-config_replace"></a>E06-08.config_replace | `deploy/config_generation`; ETH/BSC/POLY | Config replacement меняет только allowlist, применим после restart; immutable state/keys/genesis не перетираются | E06-13.init → phase state; E06-07.yaml → validated desired config | BOOT, CONFIG |
 | <a id="task-e06-08-maintenance"></a>E06-08.maintenance | `test/user_maintenance`; ETH/BSC/POLY | Исполнимый пользовательский stop-confirm-start/drain/switch/Resume/upgrade сценарий, включая shared-volume и delayed-writer ошибки | E06-08.config_replace → config generations; E06-13.network → reachable services; E06-13.nats_bootstrap → target; E05-03.upgrade → version rules | BOOT, CONFIG, DELIVERY, CONTROL |
@@ -2419,7 +2458,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 #### REQ/AC → ответственный task
 
-Все 63 REQ и 178 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 185 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -2480,7 +2519,8 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DLV-07 | AC-DLV-07-01…AC-DLV-07-02, AC-DLV-07-04 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-07 | AC-DLV-07-03 | [E05-03.full_crash_matrix](#task-e05-03-full_crash_matrix) | E05 |
 | REQ-DLV-08 | AC-DLV-08-01…AC-DLV-08-02 | [E03-02.fencing](#task-e03-02-fencing) | E03 |
-| REQ-DLV-09 | AC-DLV-09-01…AC-DLV-09-04 | [E03-03.destination](#task-e03-03-destination) | E03 |
+| REQ-DLV-09 | AC-DLV-09-01…AC-DLV-09-05 | [E03-03.destination](#task-e03-03-destination) | E03 |
+| REQ-DLV-09 | AC-DLV-09-06…AC-DLV-09-08 | [E03-03.maintenance](#task-e03-03-maintenance) | E03 |
 | REQ-DLV-10 | AC-DLV-10-01…AC-DLV-10-04 | [E05-03.drain](#task-e05-03-drain) | E05 |
 | REQ-DLV-11 | AC-DLV-11-01 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |
 | REQ-DLV-11 | AC-DLV-11-02, AC-DLV-11-04…AC-DLV-11-07 | [E03-03.maintenance](#task-e03-03-maintenance) | E03 |
@@ -2501,7 +2541,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-OPS-05 | AC-OPS-05-01 | [E03-02.fencing](#task-e03-02-fencing) | E03 |
 | REQ-OPS-05 | AC-OPS-05-02…AC-OPS-05-03 | [E06-13.secrets](#task-e06-13-secrets) | E06 |
 | REQ-OPS-06 | AC-OPS-06-01, AC-OPS-06-03 | [E03-03.destination](#task-e03-03-destination) | E03 |
-| REQ-OPS-06 | AC-OPS-06-02 | [E06-13.nats_bootstrap](#task-e06-13-nats_bootstrap) | E06 |
+| REQ-OPS-06 | AC-OPS-06-02, AC-OPS-06-04…AC-OPS-06-06 | [E06-13.nats_bootstrap](#task-e06-13-nats_bootstrap) | E06 |
 | REQ-OPS-07 | AC-OPS-07-01 | [E06-13.network](#task-e06-13-network) | E06 |
 | REQ-OPS-08 | AC-OPS-08-01 | [E06-09.live_start](#task-e06-09-live_start) | E06 |
 | REQ-OPS-08 | AC-OPS-08-02 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |

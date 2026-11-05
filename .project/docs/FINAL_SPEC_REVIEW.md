@@ -1,5 +1,7 @@
 # Финальная сверка и карта полного grill
 
+Актуализация D77 / DOC-F13-FIX-01: F13 закрыт в документации — exact stream metadata identity, bootstrap/read-back/preservation, Gateway checks и cutover/idempotency. Текущий каталог: 63 REQ / 185 AC / 68 child tasks / 7 gates. Закрыты F11/F03/F12/F13, остальные 10 находок требуют отдельного решения. Source review NATS выполнен; runtime NOT_RUN. Ниже — исторические точки проверки.
+
 Актуализация D75–D76 / DOC-F12-FIX-01: F12 закрыт в документации — exact native receipt registry, consensus/storage и common/network fields, bounded byte-equivalent writer. Проверены pinned source codecs, не runtime. Текущий каталог: 63 REQ / 178 AC / 68 child tasks / 7 gates. Закрыты F11/F03/F12, остальные 11 находок требуют отдельного решения. Ниже — исторические точки со своими числами; runtime NOT_RUN.
 
 Актуализация D74 / DOC-F03-FIX-01: F03 закрыт в документации — общий tx-local порядок, causal equality, публичные scopes и native rollback semantics. Текущий каталог: 63 REQ / 172 AC / 68 child tasks / 7 gates. Закрыты F11/F03, остальные 12 находок полного аудита требуют отдельного решения. Ниже сохранены предыдущие точки проверки со своими историческими числами; runtime NOT_RUN.

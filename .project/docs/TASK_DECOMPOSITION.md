@@ -73,10 +73,10 @@
 | <a id="task-e03-01-gateway_store"></a>E03-01.gateway_store | `gateway/journal`; COMMON | PREPARING/reservation/RECEIVING/CLOSED/ACKED/RELEASING store; reservation retry не выделяет новую sequence | E03-01.producer_store → batch/plan interface | DELIVERY, CONTROL |
 | <a id="task-e03-02-rpc_streaming"></a>E03-02.rpc_streaming | `gateway/ingest`; COMMON | Bounded chunk RPC и IMPORT_SEALED; offset/conflict/manifest validation предшествуют CLOSED | E03-01.gateway_store → Gateway transitions; E03-01.producer_store → producer transitions | CONTROL, DELIVERY |
 | <a id="task-e03-02-fencing"></a>E03-02.fencing | `gateway/session`; COMMON | Session/admission/publisher fencing: stale RPC/callback не создаёт state после barrier или Release | E03-02.rpc_streaming → mutating RPC boundary | CONTROL, DELIVERY |
-| <a id="task-e03-03-destination"></a>E03-03.destination | `gateway/destination`; COMMON | Pre-plan binding и online account/stream/route validation; mismatch не перенаправляет pending | E03-02.fencing → authenticated owner; E02-02.codec → binding digest | CONTROL, CONFIG, BOOT |
+| <a id="task-e03-03-destination"></a>E03-03.destination | `gateway/destination`; COMMON | Pre-plan binding и online account/stream/route plus exact D77 metadata validation; missing/mismatch не перенаправляет pending | E03-02.fencing → authenticated owner; E02-02.codec → binding digest | CONTROL, CONFIG, BOOT |
 | <a id="task-e03-03-publisher"></a>E03-03.publisher | `gateway/publisher`; COMMON | NATS PubAck → durable NATS_ACKED → IngestAck одного manifest/plan/destination; partial ACK не завершает batch | E03-03.destination → verified target; E03-02.rpc_streaming → CLOSED frames | DELIVERY, CONTROL, BOOT |
 | <a id="task-e03-01-cleanup"></a>E03-01.cleanup | `core/delivery/release`; COMMON | Ordered Release/RecoveryRelease/retired baseline обеих сторон, bounded RELEASING cleanup; ACKed payload не нужен после Gateway loss | E03-03.publisher → IngestAck; E03-02.fencing → barrier | DELIVERY, CONTROL |
-| <a id="task-e03-03-maintenance"></a>E03-03.maintenance | `core/delivery/maintenance`; COMMON | Seal/Switch/Resume и MAINTENANCE recovery от заданного quiesced producer; native quiescence не объявляется доказанной здесь | E03-01.cleanup → empty delivery frontier; E03-03.destination → binding; E03-02.fencing → session barrier | DELIVERY, CONTROL |
+| <a id="task-e03-03-maintenance"></a>E03-03.maintenance | `core/delivery/maintenance`; COMMON | Seal/Switch/Resume, D77 target metadata checks и idempotent committed receipt при NATS outage; MAINTENANCE recovery от заданного quiesced producer, без proof native quiescence | E03-01.cleanup → empty delivery frontier; E03-03.destination → binding; E03-02.fencing → session barrier | DELIVERY, CONTROL |
 | <a id="task-e03-04-pressure_errors"></a>E03-04.pressure_errors | `core/delivery/errors`; COMMON | Transient/config/poison/ENOSPC behavior и bounded queues; pending без TTL/квоты, local fatal и remote outage различаются | E03-03.publisher → retry points; E03-01.cleanup → cleanup points | DELIVERY, CONFIG |
 | <a id="task-e03-05-recovery_matrix"></a>E03-05.recovery_matrix | `test/delivery_faults`; COMMON | Delivery-only fault evidence от заданного durable INTENT/READY; Gateway loss/late RPC/partial cleanup проверены, full REC-T01 не присваивается | E03-03.maintenance → transition machine; E03-04.pressure_errors → error states; E02-04.compatibility → capability matrix | DELIVERY, CONTROL, EVID |
 | <a id="task-e03-11-block_lifecycle"></a>E03-11.block_lifecycle | `test/nats_smoke`; ETH/BSC/POLY | NATS smoke corpus block/tx/lifecycle/empty с parts/PubAck; не verifier полного блокчейна | E03-03.publisher → publish path; E01-03.smoke_corpus → native inputs; E02-03.lifecycle_validator → expected lifecycle | MSG, DELIVERY, EVID |
@@ -125,7 +125,7 @@
 | <a id="task-e06-13-init"></a>E06-13.init | `deploy/init`; ETH/BSC/POLY | Idempotent phase-driven native init; повтор/partial init сохраняет keys/state и проверяет genesis/ENV_READY | E06-13.artifact_lock → verified artifacts; E06-07.yaml → paths/profile | BOOT |
 | <a id="task-e06-13-topology"></a>E06-13.topology | `deploy/compose+kubernetes`; ETH/BSC/POLY | 11 services/14 volumes с проверяемыми backing owners; adapter/Gateway и Polygon L1 изолированы | E06-13.init → initialized homes; E06-07.yaml → role stores | TOPO, BOOT |
 | <a id="task-e06-13-secrets"></a>E06-13.secrets | `deploy/trust`; ETH/BSC/POLY | CA/SAN/EKU/role/network admission, private keys/JWT/credentials и rotation; bootstrap admin не попадает Gateway | E06-07.yaml → connection roles | BOOT, CONFIG |
-| <a id="task-e06-13-nats_bootstrap"></a>E06-13.nats_bootstrap | `deploy/nats`; COMMON | Однократное создание/проверка NATS accounts/streams/metadata/ACL; runtime только publish/INFO/UserInfo/replies, без destructive reset | E06-13.secrets → trust material; E03-03.destination → expected binding | BOOT, CONTROL |
+| <a id="task-e06-13-nats_bootstrap"></a>E06-13.nats_bootstrap | `deploy/nats`; COMMON | Создание/проверка accounts/streams/ACL и D77 identity metadata; CREATE/read-back, отказ adoption missing keys, compatible UPDATE сохраняет посторонние keys; runtime без admin/reset | E06-13.secrets → trust material; E03-03.destination → expected binding | BOOT, CONTROL |
 | <a id="task-e06-13-network"></a>E06-13.network | `deploy/network`; ETH/BSC/POLY | Port mapping/advertise/internal links: наружу только согласованный P2P, межсервисные localhost ошибки отвергнуты | E06-13.topology → services; E06-13.secrets → authenticated connections | PORTS, BOOT, TOPO |
 | <a id="task-e06-08-config_replace"></a>E06-08.config_replace | `deploy/config_generation`; ETH/BSC/POLY | Config replacement меняет только allowlist, применим после restart; immutable state/keys/genesis не перетираются | E06-13.init → phase state; E06-07.yaml → validated desired config | BOOT, CONFIG |
 | <a id="task-e06-08-maintenance"></a>E06-08.maintenance | `test/user_maintenance`; ETH/BSC/POLY | Исполнимый пользовательский stop-confirm-start/drain/switch/Resume/upgrade сценарий, включая shared-volume и delayed-writer ошибки | E06-08.config_replace → config generations; E06-13.network → reachable services; E06-13.nats_bootstrap → target; E05-03.upgrade → version rules | BOOT, CONFIG, DELIVERY, CONTROL |
@@ -154,7 +154,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 178 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 185 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -215,7 +215,8 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DLV-07 | AC-DLV-07-01…AC-DLV-07-02, AC-DLV-07-04 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-07 | AC-DLV-07-03 | [E05-03.full_crash_matrix](#task-e05-03-full_crash_matrix) | E05 |
 | REQ-DLV-08 | AC-DLV-08-01…AC-DLV-08-02 | [E03-02.fencing](#task-e03-02-fencing) | E03 |
-| REQ-DLV-09 | AC-DLV-09-01…AC-DLV-09-04 | [E03-03.destination](#task-e03-03-destination) | E03 |
+| REQ-DLV-09 | AC-DLV-09-01…AC-DLV-09-05 | [E03-03.destination](#task-e03-03-destination) | E03 |
+| REQ-DLV-09 | AC-DLV-09-06…AC-DLV-09-08 | [E03-03.maintenance](#task-e03-03-maintenance) | E03 |
 | REQ-DLV-10 | AC-DLV-10-01…AC-DLV-10-04 | [E05-03.drain](#task-e05-03-drain) | E05 |
 | REQ-DLV-11 | AC-DLV-11-01 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |
 | REQ-DLV-11 | AC-DLV-11-02, AC-DLV-11-04…AC-DLV-11-07 | [E03-03.maintenance](#task-e03-03-maintenance) | E03 |
@@ -236,7 +237,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-OPS-05 | AC-OPS-05-01 | [E03-02.fencing](#task-e03-02-fencing) | E03 |
 | REQ-OPS-05 | AC-OPS-05-02…AC-OPS-05-03 | [E06-13.secrets](#task-e06-13-secrets) | E06 |
 | REQ-OPS-06 | AC-OPS-06-01, AC-OPS-06-03 | [E03-03.destination](#task-e03-03-destination) | E03 |
-| REQ-OPS-06 | AC-OPS-06-02 | [E06-13.nats_bootstrap](#task-e06-13-nats_bootstrap) | E06 |
+| REQ-OPS-06 | AC-OPS-06-02, AC-OPS-06-04…AC-OPS-06-06 | [E06-13.nats_bootstrap](#task-e06-13-nats_bootstrap) | E06 |
 | REQ-OPS-07 | AC-OPS-07-01 | [E06-13.network](#task-e06-13-network) | E06 |
 | REQ-OPS-08 | AC-OPS-08-01 | [E06-09.live_start](#task-e06-09-live_start) | E06 |
 | REQ-OPS-08 | AC-OPS-08-02 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |
