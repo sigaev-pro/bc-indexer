@@ -1,38 +1,48 @@
-# Финальная сверка ТЗ — DOC-FINAL-02
+# Финальная сверка и карта полного grill
 
-2026-11-05. Область: проектирование и документация ETH/BSC/POLY live extractor до NATS. [Единый нормативный документ](../evm-transaction-extractor-tz-v3-codex.md); исходный v2 неизменен. Реализация, сборки, runtime, deployment и push не выполнялись.
+2026-11-05 · DOC-FINALIZE-03 / D65. [Единое ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md) подготовлено как полная основа для grill: краткое ядро и все нормативные приложения в одном MD. По D64 наша работа навсегда ограничена проектированием и документацией; реализации, сборок, runtime-тестов, deployment и push не было.
 
-## Документальный результат
+## Устройство пакета
 
-- 41/41 находки исходного аудита имеют статус SPECIFIED и mapping на fixture/этап в [IMPLEMENTATION_GATES](IMPLEMENTATION_GATES.md). Это число относится к аудиту, не ко всему продукту.
-- [ACCEPTANCE_REQUIREMENTS](ACCEPTANCE_REQUIREMENTS.md): 63 уникальных требования — scope 6, capture 10, данные 10, lifecycle 8, delivery 14, эксплуатация 10, разработка 5. Все runtime verdict NOT_RUN.
-- Приняты D62: два источника BSC finality и полная детализация фактических комиссионных движений. Принят D63: Polygon recovery-state GC по checkpoint, проверенному в finalized состоянии собственной supporting Ethereum L1. Неотвеченных пользовательских вопросов текущего раунда нет.
-- Root v3 содержит текущие данные, native capture, durable delivery, ID/wire/control, YAML, полный состав нод/bootstrap/порты/стек, REC, gates, E01–E07 и приёмку. Отложенные сети/исторические режимы не являются текущими обязательными payload или задачами реализации. Старые проектные варианты помечены как исторические.
+- Краткое ядро: 95 строк, 1 461 слово — назначение, границы, ответственность компонентов, сквозной процесс, гарантии, отказы и правила приёмки. Число страниц не является техническим ограничением.
+- Приложения A–E сохраняют данные/семантику, capture/recovery, delivery/control, конфигурацию/окружение и приёмку/декомпозицию. Точные контракты не заменены кратким пересказом.
+- [63 родительских REQ](ACCEPTANCE_REQUIREMENTS.md) раскрыты в [156 атомарных AC](ACCEPTANCE_CASES.md). Один AC задаёт один исход; именованные эквивалентные variants и сети имеют самостоятельные verdict.
+- [68 child tasks / 7 gates](TASK_DECOMPOSITION.md): выход, owner, конкретные зависимости и точное назначение всех AC. Три полные карточки показывают native admission, delivery recovery и Polygon observer/GC evidence.
+- [Словарь](../CONTEXT.md): 51 термин, включая различия native/canonical, action/effect, run/process, readiness, ACK/cleanup/GC и drain/Resume/cutover. Исторические понятия помечены DEFERRED D38.
+- 41/41 находки прежнего аудита остаются SPECIFIED. Это исторический аудит, а не число всех требований и не runtime verdict.
 
-## Проверенные сквозные сценарии документации
+## Дерево полного grill
 
-| Сценарий | Определённый контракт / граница |
-|---|---|
-| Первый запуск и live boundary | Проверенный bootstrap и native readiness → durable H → новые live H+1; sync-история не экспортируется |
-| Обычная/failed/system tx, пустой блок | Pinned native paths; обязательные source encodings/receipt/calls/actions/state; metadata пустого блока |
-| Большая транзакция и давление памяти | Owned chunks, безопасная VM pause вне hooks; bounded buffers, без disk/network операций в hooks |
-| Crash до/после admission, execution и native commit | Persistent state/input pin, capsules/dependency log, EXEC_READY и native decision marker; targeted recovery принятого obligation |
-| Reorg, reinclusion и поздний status | Activation/revision/decision identity, Removed для durable Applied независимо от NATS ACK; новая activation после reinclusion |
-| Финальность и очистка | ETH actual setter, BSC header Source, Polygon L1-finalized checkpoint; подтверждённая regression ниже durable anchor — fatal; source outage задерживает GC |
-| ACK/retry/store loss | Immutable READY/SEALED bytes; full manifest/layout validation; IMPORT_SEALED без новой reservation; durable ACK/outbox/Release |
-| Drain/cutover/restart | Завершение обеих pending очередей; desired binding не активируется сам; сохранённый intent, MAINTENANCE recovery lost reply, новый LIVE admission после Resume |
-| Обновление версии или лимита | Pending bytes не меняются; incompatible wire upgrade после old-build drain; drain сам не мигрирует persistent store |
-| Ошибка диска/нормализации | Явная fatal ошибка owner; отсутствие успешного ACK/skip; никакого repair с отбрасыванием obligations |
-| Три сети и supporting-компоненты | Независимые stores/processes; 11 services / 14 volumes; own Polygon L1 routing и bootstrap deployment IDs, без фиктивной RPC-аттестации |
+Это карта покрытия интервью, не требование повторно согласовать принятые ответы. Родительские ветки задают предпосылки дочерних. Для каждого сценария сначала проверяется существующий контракт; пользователю задаётся вопрос только при реальном несовпадении ожидаемого результата или отсутствии решения.
 
-## Проверки документов
+| Ветка | Зависит от | Что проверяется конкретными сценариями | Основание ответа |
+|---|---|---|---|
+| G01. Назначение и scope | D64: только ТЗ | Три mainnet profiles; live H+1; failed/system tx и пустой блок; optional outside-tx; отсутствие history/consumer/HA обещаний | REQ-SCP-01…06; принятые D16/D17/D38/D42 |
+| G02. Источник и capture | G01 | Crash до/после ADMITTED; static inputs против consumed dependencies; mutable alias; большой trace; pins/pruning; EXEC_READY/child-root/native marker/mirror; recovery до LIVE | REQ-CAP-01…10, NATIVE_CAPTURE_PROTOCOL; D57/D58 |
+| G03. Модель данных | G01 | Source encodings и presence; signatures; CALL/CREATE/SELFDESTRUCT; child success при ancestor revert; committed logs; before/after; комиссии без двойного учёта; BSC milliseconds | REQ-DAT-01…10, MESSAGE_CONTRACT/CURRENT_SEMANTICS; D62 |
+| G04. Lifecycle и финальность | G02, G03 | Applied ещё не ACKed при reorg; reinclusion; finality без нового блока; BSC early/header provenance; Polygon purge milestone/L1 checkpoint; source outage против authoritative anchor regression | REQ-LIF-01…08; D62/D63 |
+| G05. Доставка | G02, G03 | READY/SEALED/CLOSED; COMPLETE/PART boundaries; потеря Prepare/PubAck/IngestAck/ReleaseAck; Gateway/producer store loss; fencing; corrupted immutable pending; backoff против fatal/blocked | REQ-DLV-01…09/12…14, DELIVERY_STATE_MACHINE/CONTROL_WIRE_CONTRACT; D26–D33/D54/D57 |
+| G06. Конфигурация и обслуживание | G04, G05 | Bootstrap crash и сохранение ключей; owner/network identities; effective profiles; supporting provenance; drain без будущей финальности; lost switch/Resume reply; destination change без переноса истории; wire/store compatibility | REQ-OPS-01…10, REQ-DLV-10…11/14; D43–D60/D63 |
+| G07. Проверяемость и задачи | G01–G06 | Независимый expected; точное место fault и наблюдаемый исход; ранний против полного proof; owner/output/dependencies; applicability и evidence; отсутствие циклов и непокрытых REQ/AC | REQ-DEV-01…05, ACCEPTANCE_CASES/TASK_DECOMPOSITION/IMPLEMENTATION_GATES |
+| G08. Фиксация ТЗ | G07 | Краткое ядро не меняет подробные гарантии; единый нормативный root; термины однозначны; история не добавляет требований; новые решения отделены от редакторских правок | D64/D65, этот отчёт, PROJECT_STATUS |
 
-Проверены 55 Markdown-файлов, 420 локальных links (в том числе 24 anchors), совпадение 13 включённых нормативных разделов root с тематическими файлами, уникальность 63 REQ ID и покрытие 41 audit ID, структура таблиц, отсутствие устаревших active next steps, git diff --check. Ошибок этих проверок нет. SHA-256 v2: `ea825f0f0c3b747133de216c5bb1b15bc4f1d0601380ff1b6c3c1a4b620bc634`.
+Новая пользовательская развилка в текущей документальной проверке не выявлена. Это не означает, что пользователь уже прошёл новое интервью по всем карточкам или что будущий контрпример невозможен. При новом ответе/контрпримере фиксируются ветка G, REQ/AC, исходный ожидаемый результат, изменение решения и затронутые зависимости. Соседние ветки не переоткрываются без причины.
 
-Source inspection закреплённых клиентов использован для точных контрактов, включая BSC milliseconds, фактические setter paths, Bor milestone recovery и checkpoint commitment. Это не runtime proof и не независимая проверка консенсуса.
+## Исправления финализации
 
-## Требования к реализации как содержание ТЗ
+1. Крупные REQ сохранены как родители; независимые positive/negative и pre/post outcomes получили отдельные AC IDs.
+2. REQ и AC связаны с конкретными child tasks, owners, артефактами и prerequisites. Ранний native proof не требует готового production transport; поздний composed proof не объявляется пройденным по раннему.
+3. E02 больше не предлагает заново «утвердить спорные поля» или «определить модель»: требуется соответствие уже закреплённым контрактам.
+4. Binding сохраняется каждым owner локально до obligations; cross-owner проверка происходит при первом authenticated handshake до Prepare/Publish, а не до любого сетевого обмена.
+5. Краткий startup flow исправлен после независимой сверки: RECOVERY_ONLY hooks/decision bridge до local recovery; static inputs/pins до ADMITTED, dynamic dependency observations durable по мере исполнения до передачи native ответа.
+6. Словарь отделяет действие от адресных effects и fee summary, transport cleanup от recovery GC, run от процесса, а live boundary от historical boundary.
 
-ТЗ описывает E01–E07: независимые builds/toolchain locks, native pin/admission/ownership/decision proofs, compiled schema/validators, durable delivery, corpus трёх сетей, crash/reorg/GC matrix, generated окружения и end-to-end приёмку. По D64 это спецификация требований, не наша будущая работа. Immutable image digests, ABI/toolchain compatibility, bootstrap genesis payload и power-loss durability нельзя объявлять проверенными по тексту.
+## Документальные проверки
 
-D64 отменяет прежнюю точку начала реализации: её не будет никогда в рамках нашей работы. E01–E07 и порядок E01-01/E01-02 сохранены только как содержание ТЗ для описываемой системы. Дальнейшая задача — находить и устранять противоречия и пробелы в ТЗ, уточнять требования и сохранять проверяемые критерии; готовность документации не переводит работу к коду.
+Проверены локальные ссылки и anchors, структура Markdown-таблиц, совпадение 15 включённых нормативных разделов с тематическими файлами после нормализации заголовков/ссылок, сохранение согласованных контрактов, полное покрытие 63 REQ и однозначное назначение 156 AC задачам. Граф 68 tasks и 7 gates не содержит неизвестных зависимостей или циклов; stages AC и tasks совпадают.
+
+Числа последнего полного прогона фиксируются в PROJECT_STATUS. git diff --check пройден. Исходный v2 сохранён: SHA-256 `ea825f0f0c3b747133de216c5bb1b15bc4f1d0601380ff1b6c3c1a4b620bc634`. Все изменения — документация.
+
+## Граница вывода
+
+SPECIFIED означает законченный проверяемый текст. Runtime каждого AC — NOT_RUN. Реальные fixture artifacts/запуски/evidence, image/dependency locks, build/ABI compatibility, bootstrap genesis payload и power-loss durability не создавались и не доказывались документацией. ТЗ определяет ожидаемое поведение и условия, при которых предполагаемый результат нельзя объявлять подтверждённым.
