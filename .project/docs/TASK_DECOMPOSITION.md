@@ -87,7 +87,7 @@
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e04-01-calls"></a>E04-01.calls | `core/normalization/calls`; ETH/BSC/POLY | Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed; успешный child не переживает ancestor rollback | E02-02.schemas → call variants; E02-05.actions_model → order/scopes; E01-05.type_paths → native paths | MSG, SEM |
+| <a id="task-e04-01-calls"></a>E04-01.calls | `core/normalization/calls`; ETH/BSC/POLY | Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed; D81 отличает attempted/локально успешный created_address от конечного existence; успешный child не переживает ancestor rollback | E02-02.schemas → call variants; E02-05.actions_model → order/scopes; E01-05.type_paths → native paths | MSG, SEM |
 | <a id="task-e04-01-receipts"></a>E04-01.receipts | `adapters/<client>/receipts`; ETH/BSC/POLY | Native receipt consensus/storage registry, D76 bounded byte-equivalent writer, log/create/network-details projection; source и derived значения не подменяют друг друга | E01-05.type_paths → receipt origins; E02-10.closed_profiles → receipt registry; E02-02.codec → D73 fragments/spool | MSG, SEM, TYPES |
 | <a id="task-e04-01-authorization"></a>E04-01.authorization | `core/normalization/authorization`; ETH/BSC/POLY по native applicability | Исходные authorization tuples, включая invalid/duplicate, сохранены; validation внешней tx не фильтрует tuples | E04-01.receipts → native outcome; E02-10.closed_profiles → source widths | TYPES, SEM |
 | <a id="task-e04-01-block_record"></a>E04-01.block_record | `core/normalization/block`; ETH/BSC/POLY | Native BlockApplied projection: header/RLP/count/optional presence и source timestamp precision точны для empty и nonempty blocks | E02-08.block_metadata → typed block schema; E01-05.type_paths → source header variants | MSG, SEM |
@@ -154,7 +154,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 198 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 199 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -183,7 +183,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DAT-02 | AC-DAT-02-03 | [E02-10.closed_profiles](#task-e02-10-closed_profiles) | E02 |
 | REQ-DAT-02 | AC-DAT-02-01…AC-DAT-02-02, AC-DAT-02-04…AC-DAT-02-05 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-DAT-03 | AC-DAT-03-01 | [E04-01.authorization](#task-e04-01-authorization) | E04 |
-| REQ-DAT-04 | AC-DAT-04-01…AC-DAT-04-02 | [E04-01.calls](#task-e04-01-calls) | E04 |
+| REQ-DAT-04 | AC-DAT-04-01…AC-DAT-04-03 | [E04-01.calls](#task-e04-01-calls) | E04 |
 | REQ-DAT-05 | AC-DAT-05-03 | [E02-05.actions_model](#task-e02-05-actions_model) | E02 |
 | REQ-DAT-05 | AC-DAT-05-01…AC-DAT-05-02, AC-DAT-05-04…AC-DAT-05-05 | [E04-01.calls](#task-e04-01-calls) | E04 |
 | REQ-DAT-05 | AC-DAT-05-06…AC-DAT-05-07 | [E04-03.balance_actions](#task-e04-03-balance_actions) | E04 |

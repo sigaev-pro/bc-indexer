@@ -4,7 +4,7 @@
 
 **Для кого:** для человека или ИИ, которому нужно одинаково понимать утверждённые требования, границы компонентов, ожидаемые результаты и проверочные сценарии.  
 **Парный документ:** [ТЗ для принимающего решения](TZ_DECISION_MAKER.md).  
-**Статус:** редакция D80 от 2026-11-05 по [каноническому ТЗ v3](.project/evm-transaction-extractor-tz-v3-codex.md). Прежние 14 замечаний аудита и IR-02 устранены в документации; IR-01/IR-03 остаются открытыми. Runtime NOT_RUN.
+**Статус:** редакция D81 от 2026-11-05 по [каноническому ТЗ v3](.project/evm-transaction-extractor-tz-v3-codex.md). Все 14 замечаний полного аудита и IR-01–IR-03 независимой рецензии устранены в документации. Runtime NOT_RUN.
 
 В рамках нашей работы создаётся только ТЗ: реализации не будет никогда. Описания задач, программных компонентов, сборок и испытаний ниже — требования к проектируемой системе, не поручение их выполнять. `NOT_RUN` означает, что испытание не запускалось; его нельзя читать как «прошло успешно».
 
@@ -19,7 +19,7 @@
 | Как не потерять уже принятую работу при сбое | [Приложение B](#приложение-b-native-capture-и-recovery): допуск исполнения, сохранённые входы, удержание состояния, восстановление |
 | Как доставлять данные и разбирать потерянные ответы | [Приложение C](#приложение-c-delivery-и-control): журналы, идентификаторы, разбиение записей, подтверждения и переключение назначения |
 | Какие процессы, конфигурация и хранилища нужны | [Приложение D](#приложение-d-конфигурация-и-окружение): YAML, команды, версии клиентов, запуск, права, секреты, порты |
-| Как сформулировать отдельную задачу и проверить её результат | [Приложение E](#приложение-e-приёмка-и-декомпозиция): 63 требования, 198 сценариев, 68 задач, зависимости и полные карточки |
+| Как сформулировать отдельную задачу и проверить её результат | [Приложение E](#приложение-e-приёмка-и-декомпозиция): 63 требования, 199 сценариев, 68 задач, зависимости и полные карточки |
 
 Краткое описание помогает ориентироваться. Если оно опускает подробность, это не отменяет точного правила приложения. Если две формулировки действительно несовместимы, нужно зафиксировать противоречие и устранить его в ТЗ; самостоятельно менять гарантию внутри задачи нельзя.
 
@@ -234,7 +234,7 @@
 
 ## 6. Приёмка, декомпозиция и фиксация
 
-- **63 родительских REQ** фиксируют обязательства. **198 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
+- **63 родительских REQ** фиксируют обязательства. **199 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
 - Задача в справочной декомпозиции имеет результат, ответственный модуль, точные зависимости и ссылки на REQ/AC/контракт. Начальный native proof, delivery-only proof и combined recovery proof разделены. Описание задачи не разрешает её исполнение по D64.
 - Все обязательные REQ покрываются AC и задачами; каждый AC имеет владельца и точный task mapping; граф зависимостей не содержит циклов. Optional/deferred явно отмечены.
 - Runtime NOT_RUN не заменяется документальным SPECIFIED. Source inspection не доказывает power-loss, совместимость сборки или фактическое прохождение теста.
@@ -337,25 +337,27 @@ Internal transactions представлены деревом внутренни
 
 Дерево передаётся плоским массивом CallFrame:
 
-- id — уникален внутри транзакции;
+- frame_id — уникален внутри транзакции;
 - parent_id — ссылка на родителя;
 - depth — глубина;
-- order — порядковый номер входа;
-- type — тип вызова;
-- from и to — инициатор и адрес назначения вызова;
+- execution_order — место входа в общем tx-local порядке операций;
+- engine и kind — среда исполнения и вид вызова по закрытому реестру;
+- caller_address и target — native инициатор и адрес назначения по применимости;
 - context_address — адрес, в чьём контексте меняется состояние;
 - code_address — адрес исполняемого кода;
 - msg_sender — фактический sender внутри вызова;
-- value — значение контекста вызова;
+- value — значение контекста вызова, не самостоятельное доказательство перевода;
 - input и output;
-- supplied gas и gas used, если применимы;
+- gas и gas_used, если применимы;
 - outcome — собственный результат вызова;
 - effects_committed — сохранились ли его обратимые эффекты в итоговом результате транзакции;
-- error и revert data;
-- created_address — адрес создаваемого контракта, когда определён;
-- runtime и native_type для сетевых разновидностей.
+- error_code и revert_data по применимости;
+- attempted_create_address — адрес попытки CREATE/CREATE2, если native его определил, включая неуспех;
+- created_address — адрес локально успешного создания; при constructor revert/failure отсутствует.
 
-Корневой вызов имеет id=0, depth=0 и отсутствующий parent_id.
+Это те же поля CallFrame из MESSAGE_CONTRACT, не отдельная схема. Поля runtime/native_type не добавляются к CallFrame: используются engine/kind и профиль Envelope. Локально успешное создание, отменённое предком, сохраняет created_address с effects_committed=false; конечное существование и code задаёт AccountChange. Неизвестный native адрес не подменяется нулём.
+
+Корневой вызов имеет frame_id=0, depth=0 и отсутствующий parent_id.
 
 Для DELEGATECALL, CALLCODE и делегированного кода адрес назначения, адрес кода и адрес состояния могут различаться. Их нельзя смешивать. Значение value в таком frame не означает отдельный перевод средств.
 
@@ -651,7 +653,7 @@ NATS message ID стабильно различает `(network,event_id,fragmen
 
 ##### 6.1. Типизированный формат RecordFragment — D73
 
-Формат сохраняет все поля логической схемы из разделов 1–5, включая полные bytes, строки, списки, nested messages, native extensions и различие absent/empty/zero. Это закрытое типизированное представление дерева по schema_version: произвольные поля, opaque Any/JSON/map и неизвестные типы запрещены. Числа field_tag и type_key закрепляет единый versioned registry логической схемы в E02-02.schemas; fragment codec не придумывает их по порядку появления. Изменение registry проходит обычную проверку совместимости. Наличие codec не закрывает отдельные открытые вопросы о содержании native схем.
+Формат сохраняет все поля логической схемы из разделов 1–5, включая полные bytes, строки, списки, nested messages, native extensions и различие absent/empty/zero. Это закрытое типизированное представление дерева по schema_version: произвольные поля, opaque Any/JSON/map и неизвестные типы запрещены. Числа field_tag и type_key закрепляет единый versioned registry логической схемы в E02-02.schemas; fragment codec не придумывает их по порядку появления. Изменение registry проходит обычную проверку совместимости. Логическое содержание текущих native схем определено этим контрактом и CURRENT_SEMANTICS. Числовой registry, generated bindings и результаты проверок — артефакты E02; они не являются ожидающими решения продуктовыми требованиями. Новый конкретный пробел регистрируется отдельно до изменения контракта.
 
 Версии D73: logical schema_version=2; record_format_version=1; transport/layout/header/control/manifest/reservation=2. NetworkIdentity и DestinationBinding digest/schema остаются v1. Это замена прежнего wire-проекта, без автоматической миграции pending: несовместимые старые pending сначала drain старой сборкой по D59. Markdown v3 не является wire version.
 
@@ -781,7 +783,7 @@ Header common fields: parent_hash/uncle_hash/state_root/transactions_root/receip
 
 Точные поля проверены по pinned [Geth Header](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/block.go), [BSC Header](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/block.go), [Bor Header](https://github.com/0xPolygon/bor/blob/a16f123d9b4f41a552a3a98d93a0340430838576/core/types/block.go). Наличие future-fork поля в source не означает его текущую активацию Mainnet.
 
-CallFrame сохраняет отдельно caller_address (native from), context_address, code_address, msg_sender и target; нельзя подменить одно другим при DELEGATECALL/delegated code. Для CREATE/CREATE2 `attempted_create_address` хранится, когда native определил адрес; `created_address` присутствует только при локальном успешном создании. `effects_committed=false` может отменять локальный успех ancestor revert; final existence берётся из AccountChange. Применимые input/output/gas/revert данные не обрезаются. Root frame id=0, parent отсутствует, depth=0; остальные parent IDs существуют, order соответствует native входу.
+CallFrame сохраняет отдельно caller_address (native from), context_address, code_address, msg_sender и target; нельзя подменить одно другим при DELEGATECALL/delegated code. Для CREATE/CREATE2 `attempted_create_address` хранится, когда native определил адрес; `created_address` присутствует только при локальном успешном создании. `effects_committed=false` может отменять локальный успех ancestor revert; final existence берётся из AccountChange. D81: attempted_create_address берётся из наблюдённого native вычисления/entry, а не из проверки возвращённого адреса на ненулевое значение: ранний native отказ может вернуть нулевой address после уже известного адреса попытки; адрес вместе с err после constructor execution также не доказывает локальный успех. [Проверка pinned CREATE/CREATE2 sources](.project/docs/research/IR01_CREATE_ADDRESS_REVIEW_2026_11_05.md) подтверждает это различие. Применимые input/output/gas/revert данные не обрезаются. Root frame id=0, parent отсутствует, depth=0; остальные parent IDs существуют, order соответствует native входу.
 
 AccountChange дополнительно содержит code_hash_before/code_hash_after:Hash32. Before/after code bytes обязательны при изменении; отсутствие account отделено exists-флагами, не пустым code. StorageChange отсортированы по raw key bytes для детерминированной нормализации; каждый key появляется один раз с tx initial/final значением. AccountChange упорядочены по raw address bytes; execution/action lists сохраняют native chronology. `storage_reset=true` обозначает удаление всего прежнего storage без перечисления всех ключей; subsequent writes после reset представлены явно. Общий state diff — только committed tx result. Reverted log attempts не входят в первый обязательный contract; receipt logs остаются source committed logs.
 
@@ -1346,7 +1348,7 @@ WIRE-01: binding digest не зависит от JSON formatting, меняетс
 
 > D49: defaults deployment — Gateway `50051/TCP`, WAL `/data/wal`, журнал Gateway `/data/journal`, configs `/config` и secrets `/run/secrets` только для чтения. Процессы имеют собственные volumes; пути/порты переопределяемы. RPC/Engine API/Gateway/NATS не публикуются наружу по умолчанию. Это значения шаблонов окружения, не отмена обязательных полей схемы YAML. [Полный контракт defaults](#состав-и-размещение-нод).
 
-> D48: каждая сеть имеет собственный YAML сборщика и отдельный YAML Gateway. Штатные native configs и дополнительные аргументы передаются окружением, не включаются в схему сборщика. Образы, порты/P2P, каталоги, ресурсы и размещение доступны через Compose overrides/Kubernetes values. Секреты отдельными файлами; изменения применяются перезапуском компонента. Проект предоставляет defaults для трёх сетей; конкретные значения ещё уточняются в [NODE_DEPLOYMENT_SPEC](#состав-и-размещение-нод).
+> D48: каждая сеть имеет собственный YAML сборщика и отдельный YAML Gateway. Штатные native configs и дополнительные аргументы передаются окружением, не включаются в схему сборщика. Образы, порты/P2P, каталоги, ресурсы и размещение доступны через Compose overrides/Kubernetes values. Секреты отдельными файлами; изменения применяются перезапуском компонента. Проект предоставляет defaults для трёх сетей; значения закреплены в [NODE_DEPLOYMENT_SPEC](#состав-и-размещение-нод), native flags/init — в [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение). Создание файлов окружения и runtime-проверка остаются результатами описанных задач E01/E06.
 
 > D46: endpoints используют service DNS, configs отделены от секретов, JWT у Geth/Prysm пар различаются. Каждый компонент — StatefulSet replicas=1 со своими Service/PVC, в Compose — сервис с named volumes. Готовность публикации не блокирует синхронизацию/capture и запись в WAL. Кандидаты версий и native init/config/flags заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение); build/runtime proof не выполнен. Отдельные probes/shutdown таймауты не требуются по D52.
 
@@ -1599,7 +1601,7 @@ P2P-ключ/идентичность сохраняется в persistent nativ
 
 Перед запуском native процесса окружение выполняет отдельный init-шаг: на первом старте создаёт необходимые каталоги и native файлы. Повторный запуск сохраняет существующее состояние цепочки и ключи, не выполняет разрушительную повторную инициализацию и не генерирует новую P2P-идентичность. Сборщик не управляет этим шагом и не запускает ноду.
 
-Механика init для Compose/Kubernetes, точные native команды, filenames и mount mappings описываются в DEP-03.2b.2b.3b. Необходимо различить обновляемые пользовательские настройки и сохраняемые native state/ключи: применение нового конфига при рестарте не должно затирать состояние. D51 не выбирает молча универсальное копирование всех файлов `/config` поверх существующего datadir. Файлы реального deployment сейчас не создаются.
+Механика init для Compose/Kubernetes, точные native команды, filenames и mount mappings определены в [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение); DEP-03.2b.2b.3b завершён документально. Обновляемые пользовательские настройки отделены от сохраняемых native state/ключей: применение нового конфига при рестарте не должно затирать состояние. D51 не выбирает молча универсальное копирование всех файлов `/config` поверх существующего datadir. Файлы реального deployment сейчас не создаются.
 
 #### Сохраняемые границы (D38–D42)
 
@@ -1855,7 +1857,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 ### Требования и приёмка
 
-Родительские REQ раскрыты в [198 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [199 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -1894,7 +1896,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DAT-01 | Closed typed schema, presence и exact integer widths | DATA/schema: unknown enums/version, lengths, missing vs zero, malformed union; reject без ANY/JSON fallback; E02 |
 | REQ-DAT-02 | Source tx/receipt encodings и native поля | AUTH/DATA: closed consensus/storage registry, exact native bytes/type/origin, bounded byte-equivalent receipt writer; тип/подпись/access/blob/auth fields и projection раздельны; E02/E04 |
 | REQ-DAT-03 | Authorization tuples сохраняются без фильтрации | AUTH-01…04: invalid parity/nonce/chain tuple, duplicates, root revert; source tuples не теряются; E02/E04 |
-| REQ-DAT-04 | Полное call tree и общий tx-local порядок | DATA: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, value=0, caller/context/code; общий execution_order calls/actions, отдельные body/protocol/effect indices; E04 |
+| REQ-DAT-04 | Полное call tree и общий tx-local порядок | DATA: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, value=0, caller/context/code; общий execution_order calls/actions, отдельные body/protocol/effect indices; D81 attempted/locally created address и ancestor rollback различены; E04 |
 | REQ-DAT-05 | Outcome/rollback/committed и публичные scopes различаются | DATA/SELF: scope tree/refs/reused native ID; ancestor/caught revert; сохранённые fees/nonce/authorization; validator и стабильные order/scopes при recovery; E02/E04 |
 | REQ-DAT-06 | SELFDESTRUCT отдельное действие | SELF-01…04: zero balance/self-beneficiary/old/new contract/ancestor revert; opcode/projection связаны одним order, finalization burn отдельный; action, monetary effects и deletion не смешаны; E02/E04 |
 | REQ-DAT-07 | Точный tx boundary state diff/existence | EXIST/DATA: empty CREATE, delete/reset/recreate, touched storage twice, fees/auth вне root; initial/final и code hashes точны; E04 |
@@ -2037,6 +2039,7 @@ D64: это критерии приёмки описываемой систем�
 | AC-DAT-03-01 | REQ-DAT-03 | ALL по применимости authorization current profile: invalid parity/nonce/chain, duplicates, root revert | Native обработка authorization list | Все исходные tuples и порядок сохранены, включая skipped invalid; tx signature rules не применены ошибочно к tuple parity | normalize | E04 |
 | AC-DAT-04-01 | REQ-DAT-04 | ALL: CALL/CALLCODE/DELEGATECALL/STATICCALL/CREATE/CREATE2/precompile, zero value | Исполнение заданного call graph | Tree, parent/order, caller/context/code/msg_sender и применимые bytes/gas точны; нет пропущенного precompile или фиктивного frame | normalize | E04 |
 | AC-DAT-04-02 | REQ-DAT-04 | ALL: gas purchase, root/child entry, value transfer, protocol credits; body position отличается от protocol index | Сопоставление с independent native operation chronology | Один непрерывный execution_order для операций всех списков; entry раньше своего transfer/children; Frame cause не создаёт равенство order; body/protocol/effect indices имеют разные области | normalize | E04 |
+| AC-DAT-04-03 | REQ-DAT-04 | ALL по native applicability: CREATE/CREATE2 с известным адресом и ранним отказом; constructor revert/failure; локальный success с ancestor revert; локальный success с сохранённым результатом | Нормализация CallFrame и сопоставление с независимыми native boundary observations | attempted_create_address сохраняет известный native адрес; created_address присутствует только при локальном success, в том числе при позднем ancestor revert с effects_committed=false. Конечное exists/code определяется AccountChange; неизвестный адрес не выдуман, отсутствие frame до native entry не заменено фиктивным вызовом | normalize | E04 |
 | AC-DAT-05-01 | REQ-DAT-05 | ALL: успешный child внутри reverted ancestor | Завершение tx и state finalization | Child outcome=SUCCESS, effects_committed=false; attempted trace сохранён, его effects отсутствуют в final state | normalize | E04 |
 | AC-DAT-05-02 | REQ-DAT-05 | ALL: failed/reverted child пойман родителем; parent tx успешна | Завершение tx и state finalization | Child outcome остаётся failure/revert и effects_committed=false; успешный parent не превращает child в committed success | normalize | E04 |
 | AC-DAT-05-03 | REQ-DAT-05 | ALL: schema vectors с duplicate/gap/overflow order, ложным равенством, чужими cause/owner/scope refs, циклом scope, absent вместо 0, committed effect в reverted scope | Отдельная validator-проверка каждого нарушения | Каждый vector отвергнут до READY; присутствующий scope 0 отличим от absent; валидные source-proven варианты принимаются без opaque fallback | proto | E02 |
@@ -2588,7 +2591,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e04-01-calls"></a>E04-01.calls | `core/normalization/calls`; ETH/BSC/POLY | Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed; успешный child не переживает ancestor rollback | E02-02.schemas → call variants; E02-05.actions_model → order/scopes; E01-05.type_paths → native paths | MSG, SEM |
+| <a id="task-e04-01-calls"></a>E04-01.calls | `core/normalization/calls`; ETH/BSC/POLY | Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed; D81 отличает attempted/локально успешный created_address от конечного existence; успешный child не переживает ancestor rollback | E02-02.schemas → call variants; E02-05.actions_model → order/scopes; E01-05.type_paths → native paths | MSG, SEM |
 | <a id="task-e04-01-receipts"></a>E04-01.receipts | `adapters/<client>/receipts`; ETH/BSC/POLY | Native receipt consensus/storage registry, D76 bounded byte-equivalent writer, log/create/network-details projection; source и derived значения не подменяют друг друга | E01-05.type_paths → receipt origins; E02-10.closed_profiles → receipt registry; E02-02.codec → D73 fragments/spool | MSG, SEM, TYPES |
 | <a id="task-e04-01-authorization"></a>E04-01.authorization | `core/normalization/authorization`; ETH/BSC/POLY по native applicability | Исходные authorization tuples, включая invalid/duplicate, сохранены; validation внешней tx не фильтрует tuples | E04-01.receipts → native outcome; E02-10.closed_profiles → source widths | TYPES, SEM |
 | <a id="task-e04-01-block_record"></a>E04-01.block_record | `core/normalization/block`; ETH/BSC/POLY | Native BlockApplied projection: header/RLP/count/optional presence и source timestamp precision точны для empty и nonempty blocks | E02-08.block_metadata → typed block schema; E01-05.type_paths → source header variants | MSG, SEM |
@@ -2655,7 +2658,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 #### REQ/AC → ответственный task
 
-Все 63 REQ и 198 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 199 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -2684,7 +2687,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DAT-02 | AC-DAT-02-03 | [E02-10.closed_profiles](#task-e02-10-closed_profiles) | E02 |
 | REQ-DAT-02 | AC-DAT-02-01…AC-DAT-02-02, AC-DAT-02-04…AC-DAT-02-05 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-DAT-03 | AC-DAT-03-01 | [E04-01.authorization](#task-e04-01-authorization) | E04 |
-| REQ-DAT-04 | AC-DAT-04-01…AC-DAT-04-02 | [E04-01.calls](#task-e04-01-calls) | E04 |
+| REQ-DAT-04 | AC-DAT-04-01…AC-DAT-04-03 | [E04-01.calls](#task-e04-01-calls) | E04 |
 | REQ-DAT-05 | AC-DAT-05-03 | [E02-05.actions_model](#task-e02-05-actions_model) | E02 |
 | REQ-DAT-05 | AC-DAT-05-01…AC-DAT-05-02, AC-DAT-05-04…AC-DAT-05-05 | [E04-01.calls](#task-e04-01-calls) | E04 |
 | REQ-DAT-05 | AC-DAT-05-06…AC-DAT-05-07 | [E04-03.balance_actions](#task-e04-03-balance_actions) | E04 |
