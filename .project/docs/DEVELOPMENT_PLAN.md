@@ -1,6 +1,6 @@
 # Последовательность разработки и задачи
 
-Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 187 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
+Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 195 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
 
 D64: этот документ описывает порядок разработки проектируемой системы как часть ТЗ. Реализация никогда не входит в нашу работу; E01–E07 не являются исполняемым backlog агента. [Gates](IMPLEMENTATION_GATES.md) и [63 требования](ACCEPTANCE_REQUIREMENTS.md) задают проверяемое содержание ТЗ. 41/41 находки аудита SPECIFIED; runtime NOT_RUN.
 
@@ -12,7 +12,7 @@ D64: этот документ описывает порядок разрабо�
 
 Каждая задача имеет постоянный ID. Статусы: TODO, IN_PROGRESS, BLOCKED, DONE, DONE_DOCS_ONLY, DEFERRED_BY_USER, OPTIONAL, REMOVED/OUT_OF_SCOPE. По умолчанию незавершённая задача без явной пометки — TODO; deferred/optional не входят в обязательный gate. DONE требует артефакта и evidence по IMPLEMENTATION_GATES. Перед началом записать ID в PROJECT_STATUS; после завершения сохранить результат, проверки, следующий шаг и commit. SPECIFIED документации не является DONE реализации.
 
-Крупную задачу перед исполнением разбивать на подзадачи с суффиксами .1, .2 и отдельными критериями; уже присвоенные ID не переиспользовать. Коммиты, публикации и деплой фиксировать только после фактического выполнения с hash/URL и результатом проверки. Сохранение файлов не означает наличие удалённой резервной копии.
+Декомпозиция текущих parent tasks закреплена единственным каталогом TASK_DECOMPOSITION. Новые child IDs при изменении ТЗ сначала добавляются туда с owner/output/dependencies/AC; параллельные сокращённые ID не создаются, существующие не переиспользуются. Коммиты, публикации и деплой фиксировать только после фактического выполнения с hash/URL и результатом проверки. Сохранение файлов не означает наличие удалённой резервной копии.
 
 ## Принятая последовательность
 
@@ -28,17 +28,17 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 
 Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects. Команда N–M отложена D38; текущий live YAML и restart приняты D39/D48.
 
-Принято D36: основной сборщик только live, history отдельным сервисом на узле ноды по N–M. Default три часа и история через start_block/reload/apply отменены. Единый интерфейс без Kubernetes-зависимости, независимые сети и RocksDB/ACK сохраняются. D37 закрывает CFG-R3: поиск пропусков и организация их восполнения вне scope; pending WAL доставляется автоматически.
+Историческая справка D36–D37: отдельный history сервис N–M обсуждался ранее, затем отложен D38 и не входит в текущие E01–E07. Default три часа/start_block/reload/apply отменены. Действуют live H+1, независимые сети, RocksDB/ACK; поиск пропусков вне scope, сохранённый pending доставляется автоматически.
 
 ## Стек по этапам
 
-| Этап / компонент | Стек | Способ реализации | Что ещё выбрать |
+| Этап / компонент | Стек | Способ реализации | Оставшийся артефакт или proof |
 |---|---|---|---|
 | E00 документация | Markdown, журнал решений, короткие ADR | Документы с ID и точкой продолжения | D52: локальный Git принят, remote/backup не требуются |
 | E01–E07 Ethereum | Go + Geth v1.17.9, source seams проверены | Native capture/pin/decision bridge; отдельный build | Toolchain/build proof; Prysm выбран, runtime ещё не проверен |
 | E01–E07 BSC | Go + BSC v1.7.8, source-verified candidate | Обычный execution + Parlia system tx | Live fixtures/recovery inputs и отдельный build proof |
 | E01–E07 Polygon PoS | Go Bor v2.10.3 + Heimdall-v2 v0.13.2 | Последовательный native capture D58/D60, StateSync scopes; legacy outside-tx optional | Build/runtime и ARTIFACT-01, live source inputs; historical fixtures deferred |
-| E02 общий контракт | Protocol Buffers v3, Go bindings | Схемы из v3 после проверки модели; независимые валидаторы и fixtures | Версии protoc/plugins; нужен ли Buf; стратегия schema compatibility |
+| E02 общий контракт | Protocol Buffers v3, Go bindings | Схемы из v3 после проверки модели; независимые валидаторы и fixtures | Воспроизводимый lock protoc/plugins в E02; compatibility уже задана контрактами, Buf не обязательный компонент |
 | E03 Gateway | Go 1.27.2, gRPC-Go 1.84.0, nats.go 1.54.0 — кандидаты .03 | Отдельный сервис сети; [стек](COMPONENT_STACK.md) и [владельцы состояния](STATE_OWNERSHIP.md) | Совместная сборка E01; fencing/storage определены .06, тесты E03/E05 |
 | E03 локальный WAL / journal | RocksDB 10.4.2; grocksdb v1.10.2 | Sync WriteBatch, READY/ACKED cleanup, immutable plan и release | [Pins](research/ROCKSDB_STACK.md), [REC-T01–17](ROCKSDB_DELIVERY_PROTOCOL.md); build/runtime tests E01/E03 |
 | E02–E07 тестовый считыватель | Go + protobuf bindings | Проверка bytes, полей, частей и lifecycle на выбранных примерах в NATS против native fixtures | Только приёмочный harness, не промышленный сервис обработки |
@@ -47,7 +47,7 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 | E06–E07 окружение | Compose/Kubernetes, один NATS replicas=1 | Полный комплект и bootstrap по DEPLOYMENT_BOOTSTRAP_CONTRACT | Immutable builds/images и функциональные fixtures; hardware/performance thresholds и post-ACK HA вне scope |
 | E08 дополнительные сети/клиенты | Go или Rust по нативному клиенту | Повторное использование проверенного контракта; собственные execution/canonical integrations | Приоритет после первого контура, commits, runtime и покрытие |
 
-Матрица конкретных клиентов и проверенных исходников — [CLIENT_MATRIX.md](CLIENT_MATRIX.md); это source-verified рекомендации, не проверенные сборки. Основания механизмов и история — DECISIONS.md. Внутренние WAL/journals и Rust crates остаются кандидатами. Прикладная обработка после NATS не входит.
+Текущие source/toolchain candidates заданы в DEPLOYMENT_BOOTSTRAP_CONTRACT и COMPONENT_STACK; CLIENT_MATRIX — историческое исследование. WAL/journals спроектированы на RocksDB; build/runtime proof не выполнен. Rust-клиенты вне текущих E01–E07. Прикладная обработка после NATS не входит.
 
 ## E00 — согласование и восстановимые документы
 

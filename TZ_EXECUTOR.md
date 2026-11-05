@@ -4,7 +4,7 @@
 
 **Для кого:** для человека или ИИ, которому нужно одинаково понимать утверждённые требования, границы компонентов, ожидаемые результаты и проверочные сценарии.  
 **Парный документ:** [ТЗ для принимающего решения](TZ_DECISION_MAKER.md).  
-**Статус:** адресная редакция D66 с уточнением границы D70 от 2026-11-05 по [каноническому ТЗ v3](.project/evm-transaction-extractor-tz-v3-codex.md). Принятое поведение сохранено.
+**Статус:** согласованная редакция D79 от 2026-11-05 по [каноническому ТЗ v3](.project/evm-transaction-extractor-tz-v3-codex.md). Все 14 замечаний аудита устранены в документации; runtime NOT_RUN.
 
 В рамках нашей работы создаётся только ТЗ: реализации не будет никогда. Описания задач, программных компонентов, сборок и испытаний ниже — требования к проектируемой системе, не поручение их выполнять. `NOT_RUN` означает, что испытание не запускалось; его нельзя читать как «прошло успешно».
 
@@ -19,7 +19,7 @@
 | Как не потерять уже принятую работу при сбое | [Приложение B](#приложение-b-native-capture-и-recovery): допуск исполнения, сохранённые входы, удержание состояния, восстановление |
 | Как доставлять данные и разбирать потерянные ответы | [Приложение C](#приложение-c-delivery-и-control): журналы, идентификаторы, разбиение записей, подтверждения и переключение назначения |
 | Какие процессы, конфигурация и хранилища нужны | [Приложение D](#приложение-d-конфигурация-и-окружение): YAML, команды, версии клиентов, запуск, права, секреты, порты |
-| Как сформулировать отдельную задачу и проверить её результат | [Приложение E](#приложение-e-приёмка-и-декомпозиция): 63 требования, 187 сценариев, 68 задач, зависимости и полные карточки |
+| Как сформулировать отдельную задачу и проверить её результат | [Приложение E](#приложение-e-приёмка-и-декомпозиция): 63 требования, 195 сценариев, 68 задач, зависимости и полные карточки |
 
 Краткое описание помогает ориентироваться. Если оно опускает подробность, это не отменяет точного правила приложения. Если две формулировки действительно несовместимы, нужно зафиксировать противоречие и устранить его в ТЗ; самостоятельно менять гарантию внутри задачи нельзя.
 
@@ -80,7 +80,7 @@
 | Envelope / record | Логическая типизированная запись о транзакции, блоке или изменении статуса; одного сериализованного Envelope protobuf-message нет |
 | RecordFragment | Ограниченное типизированное Protobuf-сообщение структуры или содержимого записи; общий event_id и fragment_index связывают полный набор |
 | Frame / part | TransportFrame переносит один RecordFragment целиком или часть его bytes; part_index действует внутри fragment_index. ACK нужен для всех частей всех фрагментов |
-| Batch | Закрываемый пакет доставки с известным составом. Это не обещание полноты всей блокчейн-истории |
+| Batch | Полный набор событий одного native decision, возможно нескольких блоков или только статусов. Decision без публичных событий не создаёт batch; технические chunks не меняют его границу |
 | Gateway | Отдельный получатель данных адаптера и отправитель в NATS; имеет собственное хранилище на каждую сеть |
 | DestinationBinding | Точное логическое назначение сообщений: сеть, аккаунт NATS, stream и subjects с идентификатором и поколением. Один URL это назначение не определяет |
 | Stream metadata identity | Два поля NATS stream: extractor.network_digest и extractor.destination_id. Проверяются точно; не заменяют account/route/generation checks и не доказывают сохранность истории |
@@ -98,7 +98,7 @@
 | Resume | Возврат к новому захвату через сохранённый переход поколения после завершённого обслуживания |
 | Fixture | Заранее определённые входы и ожидаемый результат проверочного сценария |
 | Oracle, независимый эталон | Основание для ожидаемого результата, независимое от проверяемой логики. Это тестовый термин, не внешний оракул продукта |
-| Evidence / proof | Проверяемые материалы / доказательство результата конкретного испытания. Описание ожидаемого результата ещё не является таким доказательством |
+| Evidence / proof | Проверяемые материалы конкретного испытания; CaseResult связывает AC, сеть и вариант с RunManifest. Applicability отделена от verdict; NOT_RUN не требует выдуманных actual outputs |
 | Gate | Условие завершения этапа: какой набор результатов должен быть подтверждён, прежде чем следующий этап считается обоснованным |
 | Preflight | Проверки совместимости и идентичности до начала соответствующей работы или изменения сохранённого состояния |
 
@@ -234,7 +234,7 @@
 
 ## 6. Приёмка, декомпозиция и фиксация
 
-- **63 родительских REQ** фиксируют обязательства. **187 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
+- **63 родительских REQ** фиксируют обязательства. **195 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
 - Задача в справочной декомпозиции имеет результат, ответственный модуль, точные зависимости и ссылки на REQ/AC/контракт. Начальный native proof, delivery-only proof и combined recovery proof разделены. Описание задачи не разрешает её исполнение по D64.
 - Все обязательные REQ покрываются AC и задачами; каждый AC имеет владельца и точный task mapping; граф зависимостей не содержит циклов. Optional/deferred явно отмечены.
 - Runtime NOT_RUN не заменяется документальным SPECIFIED. Source inspection не доказывает power-loss, совместимость сборки или фактическое прохождение теста.
@@ -598,9 +598,11 @@ Consensus bytes не содержат gas_used отдельной tx, effective/
 | SystemBalanceApplied/Removed/StatusChanged | Optional вне-транзакционный scope D17 |
 | BorLegacyReceiptApplied/Removed/StatusChanged | Optional typed auxiliary source receipt; не body transaction |
 
-BlockComplete и CoverageUpdated исключены D25. Source metadata не является результатом собственного пересчёта/сверки хеша или полного inventory. Для Classic сохраняются native AVM result identity и отдельная Ethereum projection; корректный native decoder обязателен, но production completeness verifier не добавляется.
+BlockComplete и CoverageUpdated исключены D25. Source metadata не является результатом собственного пересчёта/сверки хеша или полного inventory. Текущий native decoder сохраняет данные ETH/BSC/Polygon по закрытым профилям; production completeness verifier не добавляется. Classic/AVM и история отложены D38/D42 и не задают обязательств текущего wire contract.
 
-Внутренний закрытый delivery batch содержит references фактически подготовленных сообщений блока. После durable сохранения batch/messages — WAL_SAVED; после PubAck всех этих сообщений/частей — NATS_ACKED. Это локальный учёт передачи, не утверждение, что источником выданы все данные блокчейна. Отдельное публичное событие прогресса/coverage и UI не требуются.
+D79/F02: одно native decision с публичными событиями создаёт один delivery batch с полным упорядоченным набором semantic descriptors этого решения. Batch может охватывать несколько блоков при reorg либо содержать только status/finality события. Decision без публичных событий фиксирует decision checkpoint без batch allocation. Decision→batch_id и счётчик сохраняются атомарно; повтор marker восстанавливает прежнюю связь. Большие descriptor/payload списки пишутся фрагментами; лимиты WriteBatch/RPC не делят semantic decision на дополнительные batches. Closing marker закрывает весь manifest, не очередной chunk.
+
+После durable сохранения полного batch/messages — WAL_SAVED; после PubAck всех frames всех его событий — NATS_ACKED. Partial event/block ACK не завершает batch и не разрешает его cleanup. Это локальный учёт передачи полного набора событий решения, не утверждение, что источником выданы все данные блокчейна. Отдельное публичное событие прогресса/coverage и UI не требуются.
 
 Optional BorLegacyReceiptRecord описан в [POLYGON_LEGACY_CAPTURE.md](.project/docs/research/POLYGON_LEGACY_CAPTURE.md): source receipt/hash/index/encoding, без фиктивной transaction envelope. Его source-only ограничения сохраняются, auxiliary completeness verifier не вводится.
 
@@ -619,7 +621,7 @@ Optional BorLegacyReceiptRecord описан в [POLYGON_LEGACY_CAPTURE.md](.pro
 | REMOVED(A) | поздний StatusChanged/Applied(A) | Не реактивирует A |
 | REMOVED(A) | возвращение того же блока | Новый Applied(B), B≠A |
 
-Пересечение live/history может создать разные наблюдения и активации одного включения в разных producer/run. Общий registry и подавление повторов не требуются. При доставке Removed раньше Applied ссылка сохраняет смысл отмены; поздний Applied не оживляет удалённую активацию. Revision монотонна внутри объекта lifecycle данного producer/run, не между независимыми загрузками или сетями. Порядок history относительно live не определяет состояние цепочки.
+Независимые live producer/run могут наблюдать одно включение с разными activation identity; общий registry и подавление повторов не требуются. При доставке Removed раньше Applied ссылка сохраняет смысл отмены; поздний Applied не оживляет удалённую активацию. Revision монотонна внутри объекта lifecycle данного producer/run, не между независимыми runs или сетями. History/backfill не входят в текущий контракт.
 
 Applied несёт initial lifecycle snapshot с revision=0; неизвестное на этом этапе finality evidence имеет явный профильный статус, не выдуманный finalized. Каждый StatusChanged несёт полный replacement snapshot evidence своей активации, не delta patch, и durable положительную revision. Более старая revision не заменяет новую; одна и та же revision с разным содержимым — конфликт/ERROR, не last-write-wins. Removed терминален независимо от порядка доставки; более поздняя запись не реактивирует A, новый период каноничности имеет другую activation_id. Writer не создаёт новые Status для terminal A. Эти правила задают смысл wire events и тестового валидатора, не добавляют production consumer.
 
@@ -641,11 +643,11 @@ record_digest связывает упорядоченные исходные byt
 
 Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. D52: default `transport.max_frame_bytes=2097152` (2 MiB) задаётся YAML Gateway и валидируется до отправки; NATS server/stream настроены на этот предел, gRPC учитывает собственную обёртку. Размер RecordFragment ограничен отдельно: 65536 bytes, независимо от NATS limit. При меньшем доступном frame фрагмент передаётся через FragmentPart. Изменение лимита относится к новым планам; сохранённые pending bytes не перекодируются. При несовместимом уменьшении лимита — явная ошибка конфигурации до публикации, pending сохраняются до восстановления достаточного лимита. [Подробности](#live-yaml-и-команды). Pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
 
-Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения).
+Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части разных live events могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения).
 
 Execution chronology задают block parent links, native transaction position, operation_index и action/frame order. Delivery chronology задают chain_sequence и transport metadata. `part_index` задаёт только сборку bytes. Нельзя сортировкой chain_sequence восстанавливать blockchain chronology.
 
-NATS message ID стабильно различает `(network,event_id,fragment_index,form,part_index)`. После PubAck всех transport frames всех RecordFragment всех событий закрытого block batch Gateway sync фиксирует NATS_ACKED и подтверждает adapter batch_id/digest/plan identity. ACK seal, одного фрагмента или event не разрешает очистить весь блок. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable plan/WAL, повторный запуск, потеря состояния и block-batch IngestAck/Release определены в ROCKSDB_DELIVERY_PROTOCOL.
+NATS message ID стабильно различает `(network,event_id,fragment_index,form,part_index)`. После PubAck всех transport frames всех RecordFragment всех событий закрытого decision batch Gateway sync фиксирует NATS_ACKED и подтверждает adapter batch_id/digest/plan identity. ACK seal, одного фрагмента или event не разрешает очистить весь batch. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable plan/WAL, повторный запуск, потеря состояния и decision-batch IngestAck/Release определены в [DELIVERY_STATE_MACHINE](#durable-delivery-и-смена-назначения).
 
 ##### 6.1. Типизированный формат RecordFragment — D73
 
@@ -693,7 +695,7 @@ Producer использует disk spool и несколько проходов:
 
 Для каждой сети отдельные streams/subjects/limits: `evm.v3.<chain_key>.<event_family>.<event_kind>`. Текущие family=tx|block; optional balance.system|bor.legacy_receipt. Kind=applied|removed|status. Optional families разрешены только при declared profile feature; default первая версия outside-tx публикацию не включает, её включение требует соответствующих schema/fixtures. Markdown v3 не задаёт wire version.
 
-Полная запись и её части направляются в один subject своего logical event; identity сети из frame проверяется против route. D48: stream и subject prefix задаются в YAML Gateway. D54: logical destination (account/stream/subject mapping) фиксируется в durable publication plan и ACK; изменение назначения допускается только после завершения pending адаптера и Gateway. Смена URL того же назначения допустима после проверки идентичности. Подтверждения разных назначений не образуют общий NATS_ACKED. Перенос pending не проектируется; точная идентификация назначения и handshake/drain checks остаются E03. Post-ACK retention не входит в гарантию сборщика.
+Полная запись и её части направляются в один subject своего logical event; identity сети из frame проверяется против route. D48: stream и subject prefix задаются в YAML Gateway. D54: logical destination (account/stream/subject mapping) фиксируется в durable publication plan и ACK; изменение назначения допускается только после завершения pending адаптера и Gateway. Смена URL того же назначения допустима после проверки идентичности. Подтверждения разных назначений не образуют общий NATS_ACKED. Перенос pending не проектируется; точная идентификация назначения и handshake/drain checks заданы в CONTROL_WIRE_CONTRACT и DELIVERY_STATE_MACHINE, их runtime-проверки относятся к E03. Post-ACK retention не входит в гарантию сборщика.
 
 #### 8. Проверки для последующих этапов
 
@@ -702,11 +704,10 @@ Producer использует disk spool и несколько проходов:
 | Failed tx + успешный child в reverted parent | Gas/nonce сохранены по native правилам; child actions не committed |
 | Компенсирующие transfers | Оба actions есть, net diff может быть 0 |
 | BSC Parlia system | Фактический wire type/signature не потеряны; native Finalize capture проверен |
-| DEFERRED D38/D42: Classic native result ↔ Ethereum projection | Все source results учтены; CL-01…08 проверяют archive, декодирование, observer и неизменность native исполнения |
 | Bor StateSync / legacy synthetic | Body 0x7f и optional legacy source receipt не смешаны; fixtures POLY-L01…07 из исследования E00-15 |
 | Пустой блок / ошибка нормализации | Metadata пустого блока передаётся; известная ошибка даёт ERROR, а не NATS_ACKED |
 | Parts reorder/duplicates/corruption | Сборка по индексу, повторы идемпотентны, конфликт bytes/digest отклоняется |
-| Live reorg во время публикации; history overlap DEFERRED D38 | Дубли разных runs допустимы; lifecycle references не смешиваются, ACK учитывает все части |
+| Live reorg во время публикации | Дубли разных runs допустимы; lifecycle references не смешиваются, ACK учитывает все части полного decision batch |
 | Неизвестный тип/версия/fork | Явная ошибка нормализации, без фиктивного поддержанного payload |
 | Optional balances выключены | Передаётся заявленный transaction scope; полнота всех балансов не заявляется |
 
@@ -740,7 +741,7 @@ Blob sidecars не являются обязательной частью вкл
 
 Это библиотека вариантов, а не разрешение всех пяти типов во всех сетях. ETH/BSC исходники определяют ID 0–4; Base/Nitro/Bor используют только варианты, разрешённые их собственными правилами в данном блоке. Fork validator обязателен. Наличие типа в исходнике само по себе не доказывает активацию.
 
-Источники: [Geth types](https://github.com/ethereum/go-ethereum/blob/a579077007b98217c3e253a66e4b452ca0c32b96/core/types/transaction.go), [BSC types](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/transaction.go).
+Источники: [Geth types](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/transaction.go), [BSC types](https://github.com/bnb-chain/bsc/blob/cdb7548b5baacfdae92f9f63437d6456411665f3/core/types/transaction.go).
 
 #### BSC / Parlia
 
@@ -962,6 +963,8 @@ Bor recording resolver сохраняет exact request identity и exact respon
 
 #### Durable состояния и native decision bridge
 
+D79/F02: canonical/reorg/finality decision с публичными событиями соответствует одному delivery batch, независимо от числа затронутых блоков. Полный semantic manifest закрывается для решения целиком; ссылка decision→batch_id выделяется атомарно и повторяется при recovery того же marker. Решение без публичных событий продвигает decision checkpoint без batch allocation. Disk/RPC chunks не вводят дополнительные semantic decisions/batches; они только ограничивают размер физических записей. Порядок descriptors фиксируется native/lifecycle протоколом до public attempt.
+
 | State | Условие закрытия | Восстановление |
 |---|---|---|
 | INPUT_PREPARING | Capsule/pins ещё неполны | Проверить ownership; завершить подготовку либо убрать безопасные orphan fragments |
@@ -1085,9 +1088,11 @@ Gateway prefixes: `meta/{store_epoch,destination_binding}`, `session/<producer,r
 | Gateway RELEASING | очередной cleanup chunk / restart | Удалить chunk, sync cursor; последним atomic commit продвинуть retired_prefix и удалить RELEASING | ReleaseAck только после финального commit |
 | Producer cleanup завершён | ReleaseAck | Sync retired_prefix и удаление outbox | RETIRED; payload/plan отсутствуют |
 
-IngestAck проверяет batch/manifest/plan/destination; ACK части либо успешный gRPC write не заменяет его. Перед удалением любых recovery fragments должна существовать durable замена либо достаточные replay prerequisites. Старый attempt не смешивается с новым manifest. Любые bytes под существующим immutable event_id неизменны, даже до первой публикации.
+IngestAck проверяет batch/manifest/plan/destination; ACK части либо успешный gRPC write не заменяет его. Перед удалением любых recovery fragments должна существовать durable замена либо достаточные replay prerequisites. Старый attempt не смешивается с новым manifest. После READY неизменны event identity и зафиксированное логическое кодирование RecordFragment по D73; после SEALED также неизменны reservation, layout, headers и TransportFrame bytes. Новый неопубликованный transport plan разрешён только в явно заданном pre-SEALED recovery после потери Gateway; READY fragments/IDs при этом не меняются.
 
-До DELIVERY_STAGING уже durable semantic descriptors с activation/revision/source identity; retry attempt меняет только public event reservations. Decision→batch_id и batch counter сохраняются атомарно, повтор native marker не выделяет новый batch. В ACKED/outbox сохраняется весь IngestAck, включая issuer_store_epoch и layout_manifest_digest, до producer cleanup; он требуется RecoveryRelease после Gateway loss.
+До DELIVERY_STAGING уже durable semantic descriptors с activation/revision/source identity; retry attempt меняет только public event reservations. Один native decision с публичными событиями имеет ровно один batch с полным manifest, в том числе multi-block reorg/finality-only. Decision→batch_id и batch counter сохраняются атомарно, повтор native marker не выделяет новый batch. Decision без public events сохраняет checkpoint без batch. Технические chunks/WriteBatch не меняют эту семантическую границу.
+
+Полный IngestAck, включая issuer_store_epoch и layout_manifest_digest, и release_outbox сохраняются до проверенного ReleaseAck и атомарного продвижения producer retired_prefix. Payload cleanup их не удаляет; они нужны RecoveryRelease после Gateway loss. Удаление outbox/ACK и продвижение retired_prefix — один sync commit после проверки ReleaseAck.
 
 #### Prepare и повторные попытки
 
@@ -1298,7 +1303,7 @@ Recovery CommitSwitch/Resume использует authenticated `MAINTENANCE` se
 | CommitSwitch | switch_id, exact SwitchPrepared, producer durable-commit assertion | SwitchCommitted с той же identity |
 | Resume | old SealAck, resume_id, active binding digest, next admission generation | ResumeAck(resume_id,binding_digest,old/new admission generation,drain_id,issuer_store_epoch) |
 
-`IngestAck={batch_id,manifest_digest,plan_digest,layout_manifest_digest,binding_digest,issuer_store_epoch}`. Producer сохраняет **весь ACK** в ACKED/outbox до cleanup, чтобы RecoveryRelease не требовал утраченного payload. Seal/Switch/Resume ответы связывают весь intent; совпадения одного номера недостаточно. Handshake/control evidence имеет fixed versioned schema, не JSON opaque map. Конкретные generated RPC tags — E02; значения/validation/порядок commit заданы здесь.
+`IngestAck={batch_id,manifest_digest,plan_digest,layout_manifest_digest,binding_digest,issuer_store_epoch}`. Producer сохраняет **весь IngestAck и release_outbox до проверенного ReleaseAck и атомарного продвижения producer retired_prefix**. Payload cleanup их не удаляет; RecoveryRelease не требует утраченного payload. Seal/Switch/Resume ответы связывают весь intent; совпадения одного номера недостаточно. Handshake/control evidence имеет fixed versioned schema, не JSON opaque map. Конкретные generated RPC tags — E02; значения/validation/порядок commit заданы здесь.
 
 Chunk retries: одинаковые offset/bytes/digest возвращают тот же next_offset; конфликт записанного диапазона — IMMUTABLE_CONFLICT; пропуск offset — OFFSET_MISMATCH с ожидаемым cursor. Закрытие manifest/batch возможно только после проверки всех contiguous chunks. GET/ChunkAck не является разрешением удалить producer payload.
 
@@ -1333,7 +1338,7 @@ WIRE-01: binding digest не зависит от JSON formatting, меняетс
 
 > D52: операционная готовность/синхронизация наблюдается по логам; управление штатными средствами Docker/Kubernetes, без отдельного API и обязательной детализации probes/shutdown таймаутов. Native граница H+1 и сохранение pending остаются. Default размера frame — 2 MiB, правила ниже.
 
-> D51: штатные native configs можно заменить целиком и дополнить аргументами. Окружение выполняет отдельный init-шаг, первый старт создаёт необходимые native файлы, рестарт сохраняет state/ключи. Исходники `/config` read-only; изменяемые native файлы находятся в `/data/node`. Это подготовка окружения, не новая команда CLI сборщика. Точные filenames/init/mount mappings остаются в [deployment-задачах](#состав-и-размещение-нод).
+> D51: штатные native configs можно заменить целиком и дополнить аргументами. Окружение выполняет отдельный init-шаг, первый старт создаёт необходимые native файлы, рестарт сохраняет state/ключи. Исходники `/config` read-only; изменяемые native файлы находятся в `/data/node`. Это подготовка окружения, не новая команда CLI сборщика. Точные filenames/init/mount mappings заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение); их runtime-проверки ещё не выполнены.
 
 > D50: [таблица endpoints и экспонирования](#порты-и-экспонирование) закреплена по поручению пользователя. P2P overrides задаются native конфигурацией/окружением, не новыми произвольными ключами YAML сборщика. Gateway каждой сети использует внутренний service DNS и порт 50051, NATS — внутренний 4222. Значения настраиваемы; P2P NodePort не затрагивает приложение и не открывает его API наружу.
 
@@ -1341,7 +1346,7 @@ WIRE-01: binding digest не зависит от JSON formatting, меняетс
 
 > D48: каждая сеть имеет собственный YAML сборщика и отдельный YAML Gateway. Штатные native configs и дополнительные аргументы передаются окружением, не включаются в схему сборщика. Образы, порты/P2P, каталоги, ресурсы и размещение доступны через Compose overrides/Kubernetes values. Секреты отдельными файлами; изменения применяются перезапуском компонента. Проект предоставляет defaults для трёх сетей; конкретные значения ещё уточняются в [NODE_DEPLOYMENT_SPEC](#состав-и-размещение-нод).
 
-> D46: endpoints используют service DNS, configs отделены от секретов, JWT у Geth/Prysm пар различаются. Каждый компонент — StatefulSet replicas=1 со своими Service/PVC, в Compose — сервис с named volumes. Готовность публикации не блокирует синхронизацию/capture и запись в WAL. Версии и точные native/probe-параметры ещё не утверждены; [deployment-контракт](#состав-и-размещение-нод).
+> D46: endpoints используют service DNS, configs отделены от секретов, JWT у Geth/Prysm пар различаются. Каждый компонент — StatefulSet replicas=1 со своими Service/PVC, в Compose — сервис с named volumes. Готовность публикации не блокирует синхронизацию/capture и запись в WAL. Кандидаты версий и native init/config/flags заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение); build/runtime proof не выполнен. Отдельные probes/shutdown таймауты не требуются по D52.
 
 > D45: каждый самостоятельный компонент — отдельный Compose service и Kubernetes workload/Pod; адаптер остаётся встроенным в native клиент. Базовые связи adapter→Gateway идут по конфигурируемым сетевым endpoints (TCP/gRPC+mTLS), без обязательного общего хоста/UDS. Поддержка UDS в схеме не является требованием совместного размещения. Карта компонентов — [NODE_DEPLOYMENT_SPEC](#состав-и-размещение-нод).
 
@@ -1429,7 +1434,7 @@ Publication plan и ACK относятся к одному сохранённо�
 | bsc-mainnet | bsc | Go/BSC: tx execution и Parlia Finalize |
 | polygon-pos-mainnet | bor | Go/Bor: tx execution, StateSync/Finalize; supporting Heimdall |
 
-Сборки и toolchains закрепляются по [CLIENT_MATRIX](.project/docs/CLIENT_MATRIX.md) и [COMPONENT_STACK](#стек-и-границы-сборок). YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.
+Текущие source/toolchain candidates заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение) и [COMPONENT_STACK](#стек-и-границы-сборок); CLIENT_MATRIX сохраняет исторические исследования. YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.
 
 **Общий интерфейс, native параметры.** Аргументы запуска, datadir, consensus/rollup/Heimdall соединения и JWT задаются штатной конфигурацией native клиента и окружением. Они не дублируются в YAML адаптера. Общий параметр подключения YAML является частью нашей native интеграции; команды Gateway/config check остаются отдельными. Native capture не заменяется RPC.
 
@@ -1476,14 +1481,14 @@ CFG-S04/CFG-S05 завершены как документация с уточн
 
 #### Состав и ответственность
 
-| Контур | Что проект должен скомпоновать и настроить | Что ещё уточнить |
+| Контур | Что проект должен скомпоновать и настроить | Принятое решение и граница доказательства |
 |---|---|---|
-| Ethereum | Geth с native-адаптером + Prysm (D44), их соединение и credentials, собственные native datadirs, RocksDB WAL адаптера, Gateway и его журнал | Кандидат Prysm 7.3.0 принят D47; образы, совместимость и параметры запуска уточняются; отдельные контейнеры/Pods приняты D45 |
-| BSC | BSC-клиент с native-адаптером и штатным консенсусом, native datadir, собственные WAL/Gateway/журнал | Точная контейнерная конфигурация закреплённого клиента |
-| Polygon PoS | Bor с native-адаптером + Heimdall-v2, отдельные Geth/Prysm для Polygon L1 по D44, необходимые соединения, собственные native datadirs, WAL/Gateway/журнал | Кандидаты версий приняты D47; точная конфигурация и образы уточняются; отдельный контейнер/Pod каждого компонента принят D45 |
-| NATS | Один ранее принятый NATS JetStream внутри Compose/Kubernetes, persistent storage, подключение независимых Gateway, раздельные streams/subjects | Полная связанная конфигурация; HA/DC-топология не вводится |
+| Ethereum | Geth с native-адаптером + Prysm (D44), их соединение и credentials, собственные native datadirs, RocksDB WAL адаптера, Gateway и его журнал | Prysm 7.3.0 и отдельные контейнеры/Pods приняты; native конфигурация задана bootstrap-контрактом, build/image/runtime evidence ещё нет |
+| BSC | BSC-клиент с native-адаптером и штатным консенсусом, native datadir, собственные WAL/Gateway/журнал | Конфигурация/flags/init закреплены bootstrap-контрактом; build/image/runtime evidence ещё нет |
+| Polygon PoS | Bor с native-адаптером + Heimdall-v2, отдельные Geth/Prysm для Polygon L1 по D44, необходимые соединения, собственные native datadirs, WAL/Gateway/журнал | Кандидаты версий, отдельные workloads и native конфигурация приняты; build/image/runtime evidence ещё нет |
+| NATS | Один ранее принятый NATS JetStream внутри Compose/Kubernetes, persistent storage, подключение независимых Gateway, раздельные streams/subjects | Конфигурация identity/ACL/metadata/bootstrap задана; runtime evidence ещё нет, HA/DC-топология вне scope |
 
-Исходные native candidates сохраняются в [CLIENT_MATRIX](.project/docs/CLIENT_MATRIX.md), стек компонентов — [COMPONENT_STACK](#стек-и-границы-сборок). Кандидат версии не означает доказанную совместимость сборки. Добавление validator duties/staking не требуется для сбора данных и не предполагается автоматически.
+Текущие native candidates заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](#bootstrap-и-окружение), стек — [COMPONENT_STACK](#стек-и-границы-сборок); CLIENT_MATRIX хранит исторические исследования. Кандидат версии не означает доказанную совместимость сборки. Добавление validator duties/staking не требуется для сбора данных и не предполагается автоматически.
 
 #### Обязательное описание для обеих сред
 
@@ -1511,7 +1516,7 @@ D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обе
 
 Адаптер и embedded RocksDB не выделяются в дополнительные процессы/Pods. Каждый writable каталог принадлежит одному owner. D45 не разрешает параллельных writers, совместного datadir или автоматического multi-node failover. Размещение/перезапуск owner должно сохранять его состояние по ранее принятому recovery-контракту.
 
-Компоненты связываются конфигурируемыми сетевыми endpoints: service DNS в Kubernetes/Compose либо заданные адреса. Связи не предполагают localhost или общий хост. Для adapter→Gateway применяется ранее принятый TCP/gRPC с mTLS; native связи используют штатную аутентификацию, в том числе Engine API/JWT для каждой отдельной Geth/Prysm пары. NATS остаётся общим транспортом. Точные адреса, порты и передача secrets — DEP-03.2.
+Компоненты связываются конфигурируемыми сетевыми endpoints: service DNS в Kubernetes/Compose либо заданные адреса. Связи не предполагают localhost или общий хост. Для adapter→Gateway применяется ранее принятый TCP/gRPC с mTLS; native связи используют штатную аутентификацию, в том числе Engine API/JWT для каждой отдельной Geth/Prysm пары. NATS остаётся общим транспортом. Точные адреса, порты и передача secrets заданы NETWORK_PORTS и DEPLOYMENT_BOOTSTRAP_CONTRACT.
 
 Каждый компонент можно размещать и перезапускать отдельно. Это не устраняет зависимость Geth от Prysm или Bor от Heimdall/L1: их недоступность отражается в готовности соответствующей ноды. Остальные сетевые контуры не переконфигурируются и не ожидают её прогресса; pending WAL сохраняется независимо.
 
@@ -1523,7 +1528,7 @@ D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обе
 - Независимый запуск, остановка и изменение конфигурации контура каждой сети. Native dependencies внутри сети допускаются; общего координатора прогресса и зависимости от extractor другой сети нет. Общий NATS сохраняет согласованную роль транспорта.
 - Штатная остановка, сохранение томов и восстановление pending по существующему RocksDB-протоколу. Автоматическое удаление данных и загрузка исторических пропусков не добавляются.
 
-Docker Compose используется для локального/dev запуска, Kubernetes — для production-размещения. Один и тот же функциональный контракт применяется к обеим средам. Сборщик не вызывает их API для создания/управления процессами: окружение исполняет подготовленные проектом конфигурации. Выбор конкретного Kubernetes packaging и окончательных templates не объявляется принятым этим документом.
+Docker Compose используется для локального/dev запуска, Kubernetes — для production-размещения. Один и тот же функциональный контракт применяется к обеим средам. Сборщик не вызывает их API для создания/управления процессами: окружение исполняет подготовленные проектом конфигурации. Принятая компоновка workloads/Service/PVC и bootstrap заданы ниже и в DEPLOYMENT_BOOTSTRAP_CONTRACT; manifests/templates и runtime evidence не создавались в этой документальной работе.
 
 #### Настройки размещения и связей D46
 
@@ -1536,6 +1541,7 @@ Docker Compose используется для локального/dev запу
 | eth-prysm | eth-geth | Engine API своей Ethereum-ноды |
 | polygon-l1-prysm | polygon-l1-geth | Engine API отдельной L1-ноды Polygon |
 | polygon-heimdall | polygon-l1-geth и polygon-bor | Штатные L1/Bor подключения |
+| polygon-bor | polygon-l1-geth:8545 | Finality observer: hash-pinned finalized L1 checkpoint reads; собственная supporting L1 Polygon, не основной eth-geth |
 | polygon-bor | polygon-heimdall | Штатный интерфейс Bor/Heimdall |
 | Адаптер внутри eth-geth / bsc-node / polygon-bor | eth-gateway / bsc-gateway / polygon-gateway соответственно | gRPC с mTLS |
 | Каждый Gateway | nats | Публикация и получение PubAck |
@@ -1583,7 +1589,7 @@ Docker Compose используется для локального/dev запу
 
 Каждый процесс получает только нужные каталоги. Повторение пути в разных контейнерах не означает общий volume/PVC: разные native клиенты, сети и владельцы состояния изолированы. Polygon L1 Geth не получает WAL адаптера. Физические пути хоста и storage параметры настраиваются отдельно; принятые пути не навязывают размещение на одном узле.
 
-P2P-ключ/идентичность сохраняется в persistent native state либо связанном с ним постоянном расположении, соответствующем конфигурации клиента. Обычный перезапуск не генерирует новую идентичность. Точные имена native файлов и flags для кандидатов D47 ещё сверяются; проект не меняет upstream формат ключей.
+P2P-ключ/идентичность сохраняется в persistent native state либо связанном с ним постоянном расположении, соответствующем конфигурации клиента. Обычный перезапуск не генерирует новую идентичность. Точные native файлы/flags заданы в DEPLOYMENT_BOOTSTRAP_CONTRACT; их runtime-проверка ещё не выполнена, upstream формат ключей не меняется.
 
 #### Подготовка конфигов и native файлов D51
 
@@ -1770,6 +1776,7 @@ Bootnodes/seeds берутся из сетевого профиля выбран
 | eth-geth | 8551 | eth-prysm → Engine API с JWT основной пары |
 | polygon-l1-geth | 8551 | polygon-l1-prysm → Engine API с JWT Polygon L1 |
 | polygon-l1-geth | 8545 | polygon-heimdall → Ethereum JSON-RPC |
+| polygon-l1-geth | 8545 | polygon-bor → hash-pinned finalized checkpoint reads собственной supporting L1; внутренний JSON-RPC |
 | polygon-bor | 8545 | polygon-heimdall → Bor JSON-RPC |
 | polygon-heimdall | 1317 | polygon-bor → Heimdall REST |
 | polygon-heimdall | 26657 | Внутренняя диагностика CometBFT / будущая проверка синхронизации |
@@ -1778,7 +1785,9 @@ Bootnodes/seeds берутся из сетевого профиля выбран
 | eth-gateway, bsc-gateway, polygon-gateway | 50051 | Только свой адаптер → gRPC/mTLS |
 | nats | 4222 | Gateway → NATS с принятыми credentials/TLS настройками |
 
-WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и дополнительные Heimdall gRPC endpoints не публикуются автоматически. Если конкретные flags/probes потребуют дополнительный внутренний интерфейс, его назначение явно фиксируется на следующем этапе. Staking/validator duties не добавляются.
+Bor observer получает supporting L1 endpoint/role identity из finality.polygon.sources_file. Default — polygon-l1-geth:8545; при согласованном endpoint/TLS override проверяются те же bootstrap identity и роль POLYGON_L1_EXECUTION по CURRENT_SEMANTICS. Основной eth-geth не становится допустимой заменой только из-за той же chain_id. Связь остаётся внутренней в Compose/Kubernetes.
+
+WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и дополнительные Heimdall gRPC endpoints не публикуются автоматически. Дополнительные interfaces требуют явного изменения карты доступа; обязательные текущие связи определены таблицей. Staking/validator duties не добавляются.
 
 #### Проверенные источники и оставшаяся работа
 
@@ -1821,7 +1830,6 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 Источники: [grpc-go go.mod](https://github.com/grpc/grpc-go/blob/v1.84.0/go.mod), [nats.go go.mod](https://github.com/nats-io/nats.go/blob/v1.54.0/go.mod), [protobuf-go go.mod](https://github.com/protocolbuffers/protobuf-go/blob/v1.36.12/go.mod), [Go distributions](https://go.dev/dl/?mode=json). Go 1.27.2 — кандидат общего сервиса на дату проверки, не утверждение об установленном компиляторе проекта.
 
 
-Источники: [tonic workspace](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/Cargo.toml), [tonic-prost](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost/Cargo.toml), [tonic-prost-build](https://github.com/grpc/grpc-rust/blob/tonic-v0.14.6/tonic-prost-build/Cargo.toml), [prost](https://github.com/tokio-rs/prost/blob/v0.14.4/Cargo.toml).
 
 #### Версионирование и проверка
 
@@ -1845,7 +1853,7 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 ### Требования и приёмка
 
-Родительские REQ раскрыты в [187 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [195 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -1910,7 +1918,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | ID | Требование | Проверка и ожидаемый результат / этап |
 |---|---|---|
 | REQ-DLV-01 | Единственные durable owners, sync closing markers | REC/journal: reopen/power loss каждого state, незакрытые chunks не публикуются; E03 |
-| REQ-DLV-02 | Stable batch/attempt/counters без sequence дыр | ATTEMPT/ID: native rejected/no-events не выделяет batch; attempt не меняет semantic IDs, overflow fatal; E02/E03 |
+| REQ-DLV-02 | Один decision batch, stable attempt/counters без sequence дыр | ATTEMPT/ID: один public decision — один полный batch, включая multi-block/finality-only; no-events без batch, chunks не делят decision; attempt сохраняет semantic IDs, overflow fatal; E02/E03 |
 | REQ-DLV-03 | Prepare/reservation идемпотентны | PREPARE/RPC: потеря replies/chunks, same/conflicting digest, Gateway loss до SEALED; сохранённый seed повторяется; E03 |
 | REQ-DLV-04 | Bounded typed fragments и exact wrapper/layout/header/bytes | FRAGMENT/LAYOUT: запись и отдельное поле >2 GiB без монолитного protobuf; schema/presence/blob coverage/seal; COMPLETE/PART boundary, order/digest/size, SHA/MsgID vectors; после READY fragment bytes, после SEALED transport bytes неизменны; all-fragments ACK; E02/E03 |
 | REQ-DLV-05 | End-to-end ACK всех частей одного назначения | REC/NATS: partial PubAck, wrong stream, lost bitmap/IngestAck, reordered parts; ChunkAck/CLOSED не разрешают producer cleanup; E03 |
@@ -1934,7 +1942,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-OPS-04 | Config generation заменяет только allowlist | CONFIG: изменённый native config применён после restart, ключи/genesis/state сохранены, невозможный mix отвергнут; E06 |
 | REQ-OPS-05 | mTLS/SAN/EKU/network/role admission | TRUST: чужой CA/SAN/role/network/deployment, credential rotation и UDS ownership; reject до store mutation; E03/E06 |
 | REQ-OPS-06 | Минимальные NATS ACL, bootstrap identity и проверка account | NATS: runtime publish/INFO/UserInfo/reply allowed, admin denied; D77 atomic config CREATE/read-back, existing metadata mismatch blocked, compatible UPDATE сохраняет посторонние keys; без retag/PURGE/reset; E03/E06 |
-| REQ-OPS-07 | P2P mapping/advertise и внутренние API | CONFIG/START: назначенные ports во всех слоях, only P2P external, required native links reachable, no localhost inter-service assumption; E06 |
+| REQ-OPS-07 | P2P mapping/advertise и внутренние API | CONFIG/START: ports во всех слоях, only P2P external, required links reachable, включая Bor observer→собственная supporting L1; ошибочная основная Ethereum-нода отвергается по role identity; E06 |
 | REQ-OPS-08 | Independent startup и stop-confirm-start | START/REPLACE: NATS outage, Bor/Heimdall retry, delayed old writer, native sync отдельно от delivery; E06 |
 | REQ-OPS-09 | Обязательные control logs без secrets | LOG: все states/errors видны при отключённом debug, правильная identity, SIGKILL не выдаёт graceful STOPPED; E06/E07 |
 | REQ-OPS-10 | Артефакты/совместимость доказаны перед runtime acceptance | ARTIFACT: pinned source/patch/toolchain/image, mainnet genesis SHA/parse, wrong artifact reject, clean bootstrap; E01/E06 |
@@ -1946,8 +1954,8 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DEV-01 | Порядок E01→E07 без позднего открытия source seam | План/evidence: native proof E01, delivery E03, combined E05; ни одного DONE по ещё будущему proof |
 | REQ-DEV-02 | Independent expected и воспроизводимый harness | Fixture passport/seed/input hash + mutation sanity; clean environment без скрытой ноды автора; E01/E02/E07 |
 | REQ-DEV-03 | Separate builds и bounded module interfaces | Dependency review: core без внутренних типов трёх fork сразу, NATS SDK только Gateway, Rust/history не prerequisites; E01 |
-| REQ-DEV-04 | Evidence traceability и честные verdict | Каждый run с REQ/finding/task/fixture/input/expected/build/actual/fault; новый source/profile invalidates затронутый PASS; каждый gate |
-| REQ-DEV-05 | Функциональная приёмка трёх независимых сетей | E07: все mandatory REQ имеют PASS по применимости, optional/deferred явно помечены; runtime не заменяется source inspection/MD lint |
+| REQ-DEV-04 | Evidence traceability и честные verdict | CaseRegistry/CaseResult связывают AC/network/variant/task; applicability отдельно от verdict; PASS/FAIL с полным RunManifest, NOT_RUN без выдуманных actual; version changes invalidates PASS; каждый gate |
+| REQ-DEV-05 | Функциональная приёмка трёх независимых сетей | E07: каждый mandatory variant имеет собственный PASS, missing/FAIL блокирует gate; optional/deferred/not-applicable требуют rules; runtime не заменяется source inspection/MD lint |
 
 #### Definition of ready для документации
 
@@ -1964,7 +1972,7 @@ D64: это критерии приёмки описываемой систем�
 #### Правила чтения и результатов
 
 - `ALL` означает отдельные варианты ETH/BSC/POLY; `ETH`, `BSC`, `POLY` ограничивают применимость. Для общих protocol/config cases ALL означает экземпляр соответствующей сети, а не общий multi-network writer. `DOC` — проверка состава спецификации; это не runtime PASS.
-- Каждая строка имеет самостоятельный verdict для `(AC ID, network, variant)`. Перечисленные однотипные значения/границы — обязательные именованные variants с одинаковым Then, а не выбор одного удобного примера. Разные разрешённые исходы получают разные AC IDs. Неприменимый native fork/type получает документированное NOT_APPLICABLE; обязательный путь нельзя исключить так, а optional extension отдельно помечается NOT_ENABLED.
+- Каждая строка разворачивается в identities `(AC ID, network, variant_id)` versioned CaseRegistry. Перечисленные однотипные значения/границы — обязательные именованные variants с одинаковым Then, не выбор удобного примера. Разные разрешённые исходы получают разные AC IDs. Applicability=`APPLICABLE|NOT_APPLICABLE|NOT_ENABLED|DEFERRED` отделена от verdict=`NOT_RUN|PASS|FAIL`, который существует только для APPLICABLE. Исключения требуют reason/rule_ref; обязательный путь нельзя отключить как optional. Точные CaseResult/RunManifest и полнота gate — IMPLEMENTATION_GATES.
 - Stage — один этап, на котором результат данного case требуется целиком. E01 проверяет отдельные native seams; E03 — delivery от заданного durable входа; E05 — их сочетание. PASS раннего case не заменяет позднюю интеграцию. По D64 stages — описание системы, не поручение агенту.
 - Owner — ведущий модуль. `native` = `adapters/geth`, `adapters/bsc` или `adapters/bor` по сети; `capture` = `core/capture`; `normalize` = `core/normalization`; `journal` = `core/journal`; `delivery` = `core/delivery`; `proto` = `protocol/proto` и `protocol/validators`; `harness` = `test/harness`; `deploy` = `deploy/init`, `deploy/compose`, `deploy/kubernetes`; `config` и `gateway` — одноимённые модули. Межмодульные зависимости задаются карточками задач, owner не отменяет единственного владельца каждого durable store.
 - Для каждого case предусмотрен fixture passport: pinned inputs/profile, независимый expected source, точный fault boundary и storage/cache model. Expected описывает наблюдаемые records/IDs/bytes, durable состояния после restart и запрещённые эффекты. Evidence manifest и mutation sanity — по [IMPLEMENTATION_GATES](#план-доказательств-и-границы-модулей). Здесь проектируются паспорта и ожидаемые результаты; фактические input/output artifacts и отчёты запусков не создаются.
@@ -2009,6 +2017,7 @@ D64: это критерии приёмки описываемой систем�
 | AC-CAP-07-05 | REQ-CAP-07 | ALL: READY/mirror durable, native marker ещё не убран | Power loss перед marker cleanup, затем его повтор | Applied-decision frontier подавляет второе применение; нет нового batch/activation/revision для того же решения | journal | E05 |
 | AC-CAP-07-06 | REQ-CAP-07 | ALL: durable intent, native outcome fixture — rejection до завершённого decision | Crash до adapter reconciliation и restart | Native rejection восстановлен явно; нет Applied и ложного accepted marker по одному наличию intent | native | E01 |
 | AC-CAP-08-01 | REQ-CAP-08 | ALL: semantic manifest durable, DELIVERY_STAGING attempt не закрыт | Crash/retry attempt и повтор исходного native decision | Semantic refs/source/revision прежние, batch allocation один; только разрешённые pre-READY public attempt IDs могут измениться | delivery | E03 |
+| AC-CAP-08-02 | REQ-CAP-08 | ALL: один native reorg decision заменяет несколько блоков; manifest строится chunks | Crash внутри построения и повтор того же native marker | Восстановлен один прежний batch_id и полный упорядоченный набор Removed/Applied/status descriptors; частичный manifest не READY, события не разбиты на block batches | native | E05 |
 | AC-CAP-09-01 | REQ-CAP-09 | BSC: actualTx/nonce/finalise; POLY: SYSTEM_PRE/StateSync/SYSTEM_POST | Исполнение native system paths с наблюдением tx boundaries | BSC использует actualTx; StateSync after взят до block-alloc; исходные receipts/log order сохранены, system effects не приписаны соседней tx | native | E04 |
 | AC-CAP-10-01 | REQ-CAP-10 | ALL: работающая native нода и независимые соседние сети | Fatal normalization/corruption/local sync failure | Соответствующий native процесс завершается без false READY; pending сохранён насколько допускает durable граница; соседние сети продолжаются | native | E05 |
 
@@ -2090,6 +2099,8 @@ D64: это критерии приёмки описываемой систем�
 | AC-DLV-02-01 | REQ-DLV-02 | ALL: native rejected/no-public-events decision, затем публичное решение | Batch allocation по завершённым решениям | Для первого не выделен batch; второй использует следующий допустимый sequence без искусственного gap | delivery | E03 |
 | AC-DLV-02-02 | REQ-DLV-02 | ALL: счётчик на максимально допустимом u64 | Следующая allocation | Явный отказ до записи/публикации; нет wrap, reuse identity или ложного успеха | journal | E03 |
 | AC-DLV-02-03 | REQ-DLV-02 | ALL: semantic manifest и batch allocation durable, public attempt ещё не READY | Crash/retry public attempt | Semantic refs и batch прежние; attempt event IDs выделены атомарно без reuse, READY ещё не объявлен | delivery | E03 |
+| AC-DLV-02-04 | REQ-DLV-02 | ALL: native finality-only decision с публичными status событиями без нового блока | Закрытие semantic manifest и доставка | Выделен один batch для полного decision; отсутствие нового body блока не подавляет batch, ACK требуется для всех его событий | delivery | E03 |
+| AC-DLV-02-05 | REQ-DLV-02 | ALL: одно decision с manifest/payload больше одного WriteBatch/RPC; частично ACKed события | Bounded запись, закрытие и публикация chunks | Физических chunks много, batch_id один; closing marker закрывает полный manifest, partial ACK не завершает batch и не разрешает его cleanup | delivery | E03 |
 | AC-DLV-03-01 | REQ-DLV-03 | ALL: chunked Prepare manifest принят частично | Потерять chunk ACK и повторить тот же offset/bytes | Saved next_offset повторяется; нет duplicate append или silent content replacement | gateway | E03 |
 | AC-DLV-03-02 | REQ-DLV-03 | ALL: existing reservation/batch identity | Повтор с conflicting manifest/digest | Typed immutable conflict; старые данные сохранены, ID не перевыдан автоматически | gateway | E03 |
 | AC-DLV-03-03 | REQ-DLV-03 | ALL: producer READY, публикационный plan ещё не SEALED | Потерять Gateway store | Recovery формирует допустимую новую reservation/plan; producer READY остаётся последней полной копией | delivery | E03 |
@@ -2175,6 +2186,8 @@ D64: это критерии приёмки описываемой систем�
 | AC-OPS-06-05 | REQ-OPS-06 | ALL: существующий stream, включая пустой, с missing/malformed/wrong project metadata | Bootstrap при той же или новой config revision | CONFIG_BLOCKED; нет автоматического присвоения identity, retag, DELETE/PURGE/recreate; чужие data/config сохранены | deploy | E06 |
 | AC-OPS-06-06 | REQ-OPS-06 | ALL: проверенные project metadata плюс посторонние key/value; разрешённая compatible config revision | Bootstrap UPDATE и повторный запуск | Две identity-метки и посторонние metadata сохранены; read-back проверен; отсутствие generation/digest metadata допустимо; runtime не получает admin ACL | deploy | E06 |
 | AC-OPS-07-01 | REQ-OPS-07 | ALL: accepted port map для Compose/Kubernetes | Сверить native listen/advertise, mappings/Service/NodePort и internal links | Назначенные ports согласованы; наружу только P2P по контракту, межсервисные links не используют чужой localhost | deploy | E06 |
+| AC-OPS-07-02 | REQ-OPS-07 | POLY: default service topology или согласованный endpoint/TLS override собственной supporting L1 | Из Bor observer выполнить hash-pinned finalized checkpoint read | polygon-bor достигает polygon-l1-geth:8545 либо проверенного supporting endpoint; канал внутренний и не требует доступа к основному Ethereum extractor | deploy | E06 |
+| AC-OPS-07-03 | REQ-OPS-07 | POLY: endpoint observer ошибочно направлен на основной eth-geth либо неверную supporting identity | Проверка config/bootstrap role provenance до GC read | Явная ошибка identity/role; одинаковая Ethereum chain_id не маскирует чужой контур, по таким данным recovery-state не очищается | deploy | E06 |
 | AC-OPS-08-01 | REQ-OPS-08 | ALL: supporting/native services стартуют независимо; NATS/Gateway unavailable; POLY Bor/Heimdall delayed | Разный порядок старта, затем восстановление зависимостей | Native sync и delivery status различимы; retry без startup deadlock, чужая сеть не ожидается | deploy | E06 |
 | AC-OPS-08-02 | REQ-OPS-08 | ALL: старый writer ещё жив/удерживает store | Replacement Pod/process пытается стартовать до подтверждённой остановки | Stop-confirm-start/owner locks не допускают двух writers; restart другой сети не нужен | deploy | E06 |
 | AC-OPS-09-01 | REQ-OPS-09 | ALL: debug выключен, lifecycle/recovery/drain, известные test secrets | Штатный lifecycle и graceful stop | Обязательные control events/identities/error classes и STOPPED видны; secrets/полные credentials отсутствуют | deploy | E06 |
@@ -2191,7 +2204,10 @@ D64: это критерии приёмки описываемой систем�
 | AC-DEV-02-01 | REQ-DEV-02 | ALL: deterministic fixture passport и независимый expected | Reproduction на чистом окружении; mutation parity/SELFDESTRUCT/receipt/chunk/revision/ACK | Нужные inputs/commands известны, каждая предписанная mutation вызывает FAIL; expected не вычислен проверяемым normalizer | harness | E07 |
 | AC-DEV-03-01 | REQ-DEV-03 | ALL: native modules, shared core и Gateway dependency graph | Review import/toolchain/schema-generation boundaries | Native fork graphs изолированы; core не импортирует сразу три fork state types, NATS SDK только Gateway; Rust/history не prerequisites | harness | E01 |
 | AC-DEV-04-01 | REQ-DEV-04 | ALL: evidence manifest конкретного case/network/variant | Audit полей/хешей; сменить связанный source/profile/schema/plan/storage version | Input/expected/actual/build/fault/task/REQ связаны; прежний PASS не перенесён автоматически, missing evidence не PASS | harness | E07 |
+| AC-DEV-04-02 | REQ-DEV-04 | DOC: CaseRegistry/CaseResult/RunManifest vectors для всех applicability и verdict | Валидация схемы evidence; invalid identity/version/ref и выдуманные actual поля у NOT_RUN | Разрешены только согласованные сочетания; PASS/FAIL требуют полный run manifest, исключения требуют reason/rule_ref; NOT_RUN не требует фиктивного запуска | harness | E01 |
 | AC-DEV-05-01 | REQ-DEV-05 | ALL: полный реестр применимых AC и результаты acceptance | Итоговая сверка каждой сети отдельно | Каждый mandatory вариант имеет собственный verdict; optional/deferred объяснены; одна сеть и Markdown/source review не подменяют runtime PASS остальных | harness | E07 |
+| AC-DEV-05-02 | REQ-DEV-05 | DOC: одна AC с двумя mandatory variants; первый PASS, второй FAIL, затем отсутствует | Сверка CaseRegistry с outcomes и CaseResult | Gate блокируется в обоих вариантах, PASS одного case/file не закрывает другой; duplicate/conflicting identity также отвергнуты | harness | E07 |
+| AC-DEV-05-03 | REQ-DEV-05 | DOC: обязательные применимые cases PASS, optional отключён, fork-specific case доказанно неприменим, deferred принят решением | Gate с корректными applicability rules; отдельно попытка скрыть mandatory native path как NOT_ENABLED | Корректные исключения не блокируют gate; ложное исключение обязательного пути отвергнуто. Никакого runtime PASS только по Markdown | harness | E07 |
 
 #### Документальная полнота каталога
 
@@ -2241,9 +2257,9 @@ D64: документальные требования к доказательс
 | E06-07…09/12/13 | Полный пользовательский YAML/native config/init/Compose/Kubernetes комплект; 11 services/14 volumes, artifact proof, wrong profile/peer, H+1 и независимый replay | Ранний fixture runner не заменяет этот комплект; history CLI не добавляется |
 | E07-02/03/08/09 | End-to-end acceptance отдельно ETH/BSC/POLY; clean environment reproduction, runbook, isolation и опубликованные сообщения | Публичная open-source упаковка и performance/production-методика отложены |
 
-E01-01 делится до начала исполнения на `.build.ETH/BSC/POLY`, `.supporting`, `.harness`, `.artifacts`. Native source state fixtures, bodies/headers/consumed Heimdall responses, fork config, secrets для тестов и команды запуска перечисляются **до** соответствующего proof. Нельзя требовать скрытую уже синхронизированную ноду автора. Test-only harness использует pinned native execution/decision paths и детерминированные inputs; соответствие реальному import path проверяется отдельно. Mainnet-only продукт не запрещает локальный test-only execution harness и fault injection.
+Единственный реестр child task IDs — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Для E01-01 это E01-01.evidence, E01-01.builds и E01-01.harness; ETH/BSC/POLY — отдельные applicability slots этих задач, не суффиксы новых ID. Supporting-client builds/artifact provenance входят в E01-01.builds; supporting fixtures/bootstrap inputs — в E01-01.harness. Native source state fixtures, bodies/headers/consumed Heimdall responses, fork config, secrets для тестов и команды запуска перечисляются до соответствующего proof. Скрытая синхронизированная нода автора не является prerequisite. Test-only harness использует pinned native execution/decision paths и детерминированные inputs; соответствие реальному import path проверяется отдельно. Mainnet-only продукт не запрещает локальный test-only harness/fault injection.
 
-E01-02 делится на `.admission`, `.ownership`, `.pin`, `.decision` для каждой сети; E01-04 проверяет их ранние power-loss seams до определения общей production модели. Минимальный внутренний spool/marker proof не обязан уже быть schema E02. E04 расширяет семантическое покрытие, E05 сочетает доказанные seams в полный lifecycle matrix; окно native/WAL нельзя впервые исследовать лишь в E05.
+E01-02 имеет точные child IDs: E01-02.pins, E01-02.inputs, E01-02.owned_capture, E01-02.admission, E01-02.decision_bridge, E01-02.lifecycle_seams. Сетевые slots задаёт каталог. E01-04.early_faults проверяет ранние power-loss seams до определения общей production модели. Минимальный внутренний spool/marker proof не обязан уже быть schema E02. E04 расширяет семантическое покрытие, E05 сочетает доказанные seams в полный lifecycle matrix; окно native/WAL нельзя впервые исследовать лишь в E05. Сокращённые альтернативные child IDs не создаются; supporting artifacts не теряются при этом уточнении.
 
 E03 использует настоящий NATS с минимальными test CA/credentials/stream bootstrap и независимыми test directories. Этот ранний harness создаётся в E01/E03, полный replaceable user deployment — E06. REC-T01 разбит: E01 доказывает native admission/state seam, E03 — delivery часть, E05 — совмещённые native crash interleavings. Ни один частичный PASS не обозначается полным REC-T01. Остальные REC-T01–17 применяются только в текущем live scope; historical variants помечаются DEFERRED.
 
@@ -2273,16 +2289,31 @@ Mutation sanity gate: намеренно испорченные parity handling,
 
 #### Evidence manifest и stop conditions
 
-Один файловый manifest на fixture run, с schema_version и статусом PASS/FAIL/NOT_RUN/DEFERRED. Обязательные поля:
+D79/F04: applicability и execution verdict — разные поля. До запуска фиксируется versioned `CaseRegistry` с digest: полный список `(ac_id,network,variant_id)`, его task_id, fixture_id/version, profile/fork и applicability rule. ALL разворачивается в ETH/BSC/POLY; каждый перечисленный в AC вариант получает устойчивый именованный variant_id, без выбора удобного поднабора. DOC означает отдельную документальную область, не runtime сети. Registry version меняется при изменении набора variants/rules; старый PASS не переносится автоматически. Единственные task IDs берутся из TASK_DECOMPOSITION, network — отдельное поле.
 
-- requirement_ids и audit_finding_ids; task_id с network suffix; fixture_id/version;
-- network/profile/fork; native source commit, patch commit, dependency lock digest, compiler/generator versions, image digest/architecture;
-- input artifact paths + SHA-256; expected artifact paths + SHA-256 и независимый expected_source/method;
-- scenario/seed, fault boundary, storage/cache model, run command, environment versions;
-- actual output/log paths + SHA-256, normalized comparator version, verdict и объяснение различий;
-- started/finished time, evidence producer, parent integration run при необходимости.
+`CaseResult={ac_id,network,variant_id,task_id,fixture_id,fixture_version,applicability,verdict?,run_manifest_ref?,reason?,rule_ref?}`. Case identity уникальна в рамках выбранного CaseRegistry; все ссылки и fixture версии совпадают с его записью. Applicability enum закрыт:
 
-Артефакты не содержат secrets. Пустое поле image digest у source-only анализа явно означает NOT_RUN для runtime, не PASS. Новый native commit/profile/schema/plan/storage version инвалидирует связанные старые результаты до повторной проверки; несовместимость не маскируется переносом галочки.
+| applicability | verdict | Evidence / правило |
+|---|---|---|
+| APPLICABLE | NOT_RUN | Запуск не выполнен либо прежнее evidence инвалидировано; run_manifest_ref отсутствует, actual outputs/timestamps не выдумываются |
+| APPLICABLE | PASS или FAIL | Обязателен run_manifest_ref с path/run_id/SHA-256 полного manifest фактического запуска; outcome данного case совпадает с manifest |
+| NOT_APPLICABLE | отсутствует | reason и rule_ref обязательны: конкретное правило network/profile/fork доказывает неприменимость; обязательный применимый native путь так исключать нельзя |
+| NOT_ENABLED | отсутствует | Только явно optional extension, выключенный в проверяемом profile; reason и rule_ref на feature/config обязательны. Обязательные BSC/Bor system tx не являются optional |
+| DEFERRED | отсутствует | reason и rule_ref на принятое scope-решение обязательны; ошибка или нехватка evidence не основание отложить обязательный case |
+
+Для трёх исключающих applicability run_manifest_ref отсутствует. Неизвестные/несогласованные applicability, verdict или identities отвергаются. Отсутствующий результат не считается NOT_APPLICABLE/NOT_ENABLED или PASS; для запланированного применимого case фиксируется NOT_RUN. Исторические результаты сохраняются отдельно от текущего verdict и не маскируют пропущенный вариант.
+
+Один `RunManifest` schema_version=2 на фактически выполненный fixture run одной network/profile/fork. Для разных сетей оформляются отдельные runs/manifests; DOC fixture не выдаётся за runtime сети. Обязательны:
+
+- run_id, CaseRegistry version/digest и точный список case identities; fixture_id/version и task_id без выдуманного network suffix;
+- requirement_ids, audit_finding_ids (явно пустой список допустим, если finding не относится к run), network/profile/fork; native/patch commits, dependency lock digest, compiler/generator versions, применимые image digest/architecture;
+- input/expected artifacts с paths/SHA-256, независимый expected_source/method; scenario/seed, fault boundary, storage/cache model, run command и environment versions;
+- отдельный case outcome PASS/FAIL для каждой заявленной identity, actual output/log paths/SHA-256, comparator version и объяснение результата; глобальный PASS файла не заменяет outcomes вариантов;
+- started/finished time, evidence producer и parent integration run при наличии.
+
+CaseResult ссылается на закрытый manifest с SHA-256; manifest содержит identities/outcomes, но не hash ссылающегося CaseResult: циклического хеширования нет. Несколько cases могут ссылаться на один run только при наличии каждого в его точном списке и индивидуальных outcomes. Подмена fixture/profile/version либо отсутствие actual/expected evidence делает ссылку непригодной для PASS. Неприменимые к виду fixture build/image поля имеют явное объяснение в passport; source-only анализ никогда не создаёт runtime PASS. Артефакты не содержат secrets.
+
+Gate сопоставляет текущий CaseRegistry, назначенные этому stage identities и CaseResult один к одному: duplicate/conflicting identities, пропущенный mandatory variant, NOT_RUN, FAIL или невалидное evidence блокируют gate. Исключения принимаются только по подтверждённым rules/decisions; отключённый optional не блокирует mandatory gate. Счёт файлов manifest и PASS одного варианта/сети не заменяют полный реестр. Новый native commit/profile/schema/plan/storage version инвалидирует затронутые результаты: текущий применимый case становится NOT_RUN до нового запуска, прежний manifest остаётся историческим. В этой работе runtime cases не запускаются и остаются NOT_RUN.
 
 При missing mandatory native path, неустранимом snapshot alias, потере recovery pin, нарушении marker ordering, неограниченном collector memory path, конфликте identity/immutable bytes или false ACK gate останавливается. Сохраняются минимальный counterexample и evidence; исправляется механизм и повторяются затронутые проверки. Нельзя молча снижать полноту, отключать обязательный native type, пропускать poison record или называть runtime-профиль supported. Изменение принятого поведения/клиента выносится пользователю; инженерное исправление в рамках контракта выполняется самостоятельно.
 
@@ -2344,7 +2375,7 @@ Mutation sanity gate: намеренно испорченные parity handling,
 
 Каждая задача имеет постоянный ID. Статусы: TODO, IN_PROGRESS, BLOCKED, DONE, DONE_DOCS_ONLY, DEFERRED_BY_USER, OPTIONAL, REMOVED/OUT_OF_SCOPE. По умолчанию незавершённая задача без явной пометки — TODO; deferred/optional не входят в обязательный gate. DONE требует артефакта и evidence по IMPLEMENTATION_GATES. Перед началом записать ID в PROJECT_STATUS; после завершения сохранить результат, проверки, следующий шаг и commit. SPECIFIED документации не является DONE реализации.
 
-Крупную задачу перед исполнением разбивать на подзадачи с суффиксами .1, .2 и отдельными критериями; уже присвоенные ID не переиспользовать. Коммиты, публикации и деплой фиксировать только после фактического выполнения с hash/URL и результатом проверки. Сохранение файлов не означает наличие удалённой резервной копии.
+Декомпозиция текущих parent tasks закреплена единственным каталогом TASK_DECOMPOSITION. Новые child IDs при изменении ТЗ сначала добавляются туда с owner/output/dependencies/AC; параллельные сокращённые ID не создаются, существующие не переиспользуются. Коммиты, публикации и деплой фиксировать только после фактического выполнения с hash/URL и результатом проверки. Сохранение файлов не означает наличие удалённой резервной копии.
 
 #### Принятая последовательность
 
@@ -2360,7 +2391,7 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 
 Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects. Команда N–M отложена D38; текущий live YAML и restart приняты D39/D48.
 
-Принято D36: основной сборщик только live, history отдельным сервисом на узле ноды по N–M. Default три часа и история через start_block/reload/apply отменены. Единый интерфейс без Kubernetes-зависимости, независимые сети и RocksDB/ACK сохраняются. D37 закрывает CFG-R3: поиск пропусков и организация их восполнения вне scope; pending WAL доставляется автоматически.
+Историческая справка D36–D37: отдельный history сервис N–M обсуждался ранее, затем отложен D38 и не входит в текущие E01–E07. Default три часа/start_block/reload/apply отменены. Действуют live H+1, независимые сети, RocksDB/ACK; поиск пропусков вне scope, сохранённый pending доставляется автоматически.
 
 #### E01 — воспроизводимая сборка и доказательство захвата
 
@@ -2500,7 +2531,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e01-01-evidence"></a>E01-01.evidence | `test/evidence`; COMMON | Версионированный паспорт evidence: REQ/AC/build/input/expected/actual/fault/verdict связаны; NOT_RUN не принимается за PASS | SPEC → принятые требования | EVID |
+| <a id="task-e01-01-evidence"></a>E01-01.evidence | `test/evidence`; COMMON | CaseRegistry/CaseResult/RunManifest schemas: AC/network/variant identities, applicability отдельно от verdict, versioned evidence; NOT_RUN без выдуманных actual | SPEC → принятые требования | EVID |
 | <a id="task-e01-01-builds"></a>E01-01.builds | `build/native`; ETH/BSC/POLY | Изолированный build/artifact manifest каждого клиента и supporting зависимости; source/patch/compiler/lock определены, native internal types не склеены в общий graph | E01-01.evidence → формат manifest | STACK, BOOT |
 | <a id="task-e01-01-harness"></a>E01-01.harness | `test/harness`; ETH/BSC/POLY | Воспроизводимый минимальный runner с явными inputs/state/test credentials/supporting services и независимым expected; скрытая нода автора не нужна | E01-01.builds → закреплённые клиенты; E01-01.evidence → evidence schema | EVID, BOOT |
 | <a id="task-e01-02-pins"></a>E01-02.pins | `adapters/<client>/state_provider`; ETH/BSC/POLY | Hash-provider/pin seam: source root/input остаётся доступным до допустимого release; неподдержанный backend отвергается | E01-01.harness → runner и parent state | NATIVE, CONFIG |
@@ -2591,7 +2622,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | <a id="task-e06-13-topology"></a>E06-13.topology | `deploy/compose+kubernetes`; ETH/BSC/POLY | 11 services/14 volumes с проверяемыми backing owners; adapter/Gateway и Polygon L1 изолированы | E06-13.init → initialized homes; E06-07.yaml → role stores | TOPO, BOOT |
 | <a id="task-e06-13-secrets"></a>E06-13.secrets | `deploy/trust`; ETH/BSC/POLY | CA/SAN/EKU/role/network admission, private keys/JWT/credentials и rotation; bootstrap admin не попадает Gateway | E06-07.yaml → connection roles | BOOT, CONFIG |
 | <a id="task-e06-13-nats_bootstrap"></a>E06-13.nats_bootstrap | `deploy/nats`; COMMON | Создание/проверка accounts/streams/ACL и D77 identity metadata; CREATE/read-back, отказ adoption missing keys, compatible UPDATE сохраняет посторонние keys; runtime без admin/reset | E06-13.secrets → trust material; E03-03.destination → expected binding | BOOT, CONTROL |
-| <a id="task-e06-13-network"></a>E06-13.network | `deploy/network`; ETH/BSC/POLY | Port mapping/advertise/internal links: наружу только согласованный P2P, межсервисные localhost ошибки отвергнуты | E06-13.topology → services; E06-13.secrets → authenticated connections | PORTS, BOOT, TOPO |
+| <a id="task-e06-13-network"></a>E06-13.network | `deploy/network`; ETH/BSC/POLY | Port mapping/advertise/internal links, включая Bor observer→собственная supporting L1; наружу только P2P, localhost/чужая L1 identity отвергнуты | E06-13.topology → services; E06-13.secrets → authenticated connections | PORTS, BOOT, TOPO |
 | <a id="task-e06-08-config_replace"></a>E06-08.config_replace | `deploy/config_generation`; ETH/BSC/POLY | Config replacement меняет только allowlist, применим после restart; immutable state/keys/genesis не перетираются | E06-13.init → phase state; E06-07.yaml → validated desired config | BOOT, CONFIG |
 | <a id="task-e06-08-maintenance"></a>E06-08.maintenance | `test/user_maintenance`; ETH/BSC/POLY | Исполнимый пользовательский stop-confirm-start/drain/switch/Resume/upgrade сценарий, включая shared-volume и delayed-writer ошибки | E06-08.config_replace → config generations; E06-13.network → reachable services; E06-13.nats_bootstrap → target; E05-03.upgrade → version rules | BOOT, CONFIG, DELIVERY, CONTROL |
 | <a id="task-e06-09-live_start"></a>E06-09.live_start | `test/user_startup`; ETH/BSC/POLY | Clean startup/sync→H+1 и independent pending; NATS outage не блокирует safe capture, restart одной сети не требует остальных | E06-13.network → links; E06-13.nats_bootstrap → NATS; E06-08.config_replace → effective configs | CONFIG, NATIVE, BOOT |
@@ -2609,7 +2640,7 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 | <a id="task-e07-03-runbook"></a>E07-03.runbook | `docs/runbook`; ETH/BSC/POLY | Проверяемый запуск/остановка/диагностика/recovery drill по фактическим states; команды не требуют скрытого окружения | E07-02.e2e → accepted path; E06-12.logs → observable states; E06-08.maintenance → operating procedure | BOOT, CONFIG, DELIVERY |
 | <a id="task-e07-08-isolation"></a>E07-08.isolation | `test/network_isolation`; ETH/BSC/POLY | Матрица add/config/stop/restart одной сети без изменения соседних writers/stores; общий NATS не означает shared journal | E07-02.e2e → running acceptance topology | TOPO, DELIVERY, EVID |
 | <a id="task-e07-09-nats_acceptance"></a>E07-09.nats_acceptance | `test/nats_reader`; ETH/BSC/POLY | Финальный NATS corpus: fields/parts/lifecycle/empty/duplicates/PubAck согласованы с native expected; production consumer не создаётся | E07-02.e2e → native expected; E07-02.scope → boundary | MSG, CONTROL, EVID |
-| <a id="task-e07-09-requirement_verdict"></a>E07-09.requirement_verdict | `test/evidence`; COMMON | Полная REQ/AC/applicability матрица verdict; mandatory без evidence не PASS, optional/deferred не маскируют отсутствие обязательного результата | E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence | EVID |
+| <a id="task-e07-09-requirement_verdict"></a>E07-09.requirement_verdict | `test/evidence`; COMMON | Полная CaseRegistry/CaseResult матрица AC/network/variant; individual run outcomes, mandatory missing/FAIL/NOT_RUN блокируют gate, исключения требуют rules | E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence | EVID |
 
 `G.E07`: все обязательные AC закрыты по своей применимости и итоговая матрица непротиворечива. В настоящей работе G.E01–G.E07 **не исполняются**, все runtime результаты NOT_RUN.
 
@@ -2619,7 +2650,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 #### REQ/AC → ответственный task
 
-Все 63 REQ и 187 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 195 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -2641,6 +2672,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-CAP-07 | AC-CAP-07-01…AC-CAP-07-03, AC-CAP-07-06 | [E01-02.decision_bridge](#task-e01-02-decision_bridge) | E01 |
 | REQ-CAP-07 | AC-CAP-07-04…AC-CAP-07-05 | [E05-01.registry](#task-e05-01-registry) | E05 |
 | REQ-CAP-08 | AC-CAP-08-01 | [E03-01.producer_store](#task-e03-01-producer_store) | E03 |
+| REQ-CAP-08 | AC-CAP-08-02 | [E05-02.reorg](#task-e05-02-reorg) | E05 |
 | REQ-CAP-09 | AC-CAP-09-01 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-CAP-10 | AC-CAP-10-01 | [E05-03.full_crash_matrix](#task-e05-03-full_crash_matrix) | E05 |
 | REQ-DAT-01 | AC-DAT-01-01…AC-DAT-01-02 | [E02-02.schemas](#task-e02-02-schemas) | E02 |
@@ -2668,7 +2700,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-LIF-07 | AC-LIF-07-01…AC-LIF-07-06 | [E05-01.polygon_observer](#task-e05-01-polygon_observer) | E05 |
 | REQ-LIF-08 | AC-LIF-08-01…AC-LIF-08-05 | [E05-01.activation_gc](#task-e05-01-activation_gc) | E05 |
 | REQ-DLV-01 | AC-DLV-01-01…AC-DLV-01-02 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
-| REQ-DLV-02 | AC-DLV-02-01…AC-DLV-02-03 | [E03-01.producer_store](#task-e03-01-producer_store) | E03 |
+| REQ-DLV-02 | AC-DLV-02-01…AC-DLV-02-05 | [E03-01.producer_store](#task-e03-01-producer_store) | E03 |
 | REQ-DLV-03 | AC-DLV-03-01…AC-DLV-03-02 | [E03-02.rpc_streaming](#task-e03-02-rpc_streaming) | E03 |
 | REQ-DLV-03 | AC-DLV-03-03 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-03 | AC-DLV-03-04 | [E03-01.gateway_store](#task-e03-01-gateway_store) | E03 |
@@ -2703,7 +2735,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-OPS-05 | AC-OPS-05-02…AC-OPS-05-03 | [E06-13.secrets](#task-e06-13-secrets) | E06 |
 | REQ-OPS-06 | AC-OPS-06-01, AC-OPS-06-03 | [E03-03.destination](#task-e03-03-destination) | E03 |
 | REQ-OPS-06 | AC-OPS-06-02, AC-OPS-06-04…AC-OPS-06-06 | [E06-13.nats_bootstrap](#task-e06-13-nats_bootstrap) | E06 |
-| REQ-OPS-07 | AC-OPS-07-01 | [E06-13.network](#task-e06-13-network) | E06 |
+| REQ-OPS-07 | AC-OPS-07-01…AC-OPS-07-03 | [E06-13.network](#task-e06-13-network) | E06 |
 | REQ-OPS-08 | AC-OPS-08-01 | [E06-09.live_start](#task-e06-09-live_start) | E06 |
 | REQ-OPS-08 | AC-OPS-08-02 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |
 | REQ-OPS-09 | AC-OPS-09-01…AC-OPS-09-02 | [E06-12.logs](#task-e06-12-logs) | E06 |
@@ -2712,8 +2744,9 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DEV-01 | AC-DEV-01-01 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
 | REQ-DEV-02 | AC-DEV-02-01 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
 | REQ-DEV-03 | AC-DEV-03-01 | [E01-01.builds](#task-e01-01-builds) | E01 |
+| REQ-DEV-04 | AC-DEV-04-02 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
 | REQ-DEV-04 | AC-DEV-04-01 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
-| REQ-DEV-05 | AC-DEV-05-01 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
+| REQ-DEV-05 | AC-DEV-05-01…AC-DEV-05-03 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
 
 #### Приёмка артефактов без отдельного AC-owner
 

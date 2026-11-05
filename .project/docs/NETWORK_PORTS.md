@@ -44,6 +44,7 @@ Bootnodes/seeds берутся из сетевого профиля выбран
 | eth-geth | 8551 | eth-prysm → Engine API с JWT основной пары |
 | polygon-l1-geth | 8551 | polygon-l1-prysm → Engine API с JWT Polygon L1 |
 | polygon-l1-geth | 8545 | polygon-heimdall → Ethereum JSON-RPC |
+| polygon-l1-geth | 8545 | polygon-bor → hash-pinned finalized checkpoint reads собственной supporting L1; внутренний JSON-RPC |
 | polygon-bor | 8545 | polygon-heimdall → Bor JSON-RPC |
 | polygon-heimdall | 1317 | polygon-bor → Heimdall REST |
 | polygon-heimdall | 26657 | Внутренняя диагностика CometBFT / будущая проверка синхронизации |
@@ -52,7 +53,9 @@ Bootnodes/seeds берутся из сетевого профиля выбран
 | eth-gateway, bsc-gateway, polygon-gateway | 50051 | Только свой адаптер → gRPC/mTLS |
 | nats | 4222 | Gateway → NATS с принятыми credentials/TLS настройками |
 
-WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и дополнительные Heimdall gRPC endpoints не публикуются автоматически. Если конкретные flags/probes потребуют дополнительный внутренний интерфейс, его назначение явно фиксируется на следующем этапе. Staking/validator duties не добавляются.
+Bor observer получает supporting L1 endpoint/role identity из finality.polygon.sources_file. Default — polygon-l1-geth:8545; при согласованном endpoint/TLS override проверяются те же bootstrap identity и роль POLYGON_L1_EXECUTION по CURRENT_SEMANTICS. Основной eth-geth не становится допустимой заменой только из-за той же chain_id. Связь остаётся внутренней в Compose/Kubernetes.
+
+WebSocket, validator RPC, metrics/admin, NATS monitoring/cluster ports и дополнительные Heimdall gRPC endpoints не публикуются автоматически. Дополнительные interfaces требуют явного изменения карты доступа; обязательные текущие связи определены таблицей. Staking/validator duties не добавляются.
 
 ## Проверенные источники и оставшаяся работа
 

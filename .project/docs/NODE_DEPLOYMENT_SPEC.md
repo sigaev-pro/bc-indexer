@@ -6,14 +6,14 @@
 
 ## Состав и ответственность
 
-| Контур | Что проект должен скомпоновать и настроить | Что ещё уточнить |
+| Контур | Что проект должен скомпоновать и настроить | Принятое решение и граница доказательства |
 |---|---|---|
-| Ethereum | Geth с native-адаптером + Prysm (D44), их соединение и credentials, собственные native datadirs, RocksDB WAL адаптера, Gateway и его журнал | Кандидат Prysm 7.3.0 принят D47; образы, совместимость и параметры запуска уточняются; отдельные контейнеры/Pods приняты D45 |
-| BSC | BSC-клиент с native-адаптером и штатным консенсусом, native datadir, собственные WAL/Gateway/журнал | Точная контейнерная конфигурация закреплённого клиента |
-| Polygon PoS | Bor с native-адаптером + Heimdall-v2, отдельные Geth/Prysm для Polygon L1 по D44, необходимые соединения, собственные native datadirs, WAL/Gateway/журнал | Кандидаты версий приняты D47; точная конфигурация и образы уточняются; отдельный контейнер/Pod каждого компонента принят D45 |
-| NATS | Один ранее принятый NATS JetStream внутри Compose/Kubernetes, persistent storage, подключение независимых Gateway, раздельные streams/subjects | Полная связанная конфигурация; HA/DC-топология не вводится |
+| Ethereum | Geth с native-адаптером + Prysm (D44), их соединение и credentials, собственные native datadirs, RocksDB WAL адаптера, Gateway и его журнал | Prysm 7.3.0 и отдельные контейнеры/Pods приняты; native конфигурация задана bootstrap-контрактом, build/image/runtime evidence ещё нет |
+| BSC | BSC-клиент с native-адаптером и штатным консенсусом, native datadir, собственные WAL/Gateway/журнал | Конфигурация/flags/init закреплены bootstrap-контрактом; build/image/runtime evidence ещё нет |
+| Polygon PoS | Bor с native-адаптером + Heimdall-v2, отдельные Geth/Prysm для Polygon L1 по D44, необходимые соединения, собственные native datadirs, WAL/Gateway/журнал | Кандидаты версий, отдельные workloads и native конфигурация приняты; build/image/runtime evidence ещё нет |
+| NATS | Один ранее принятый NATS JetStream внутри Compose/Kubernetes, persistent storage, подключение независимых Gateway, раздельные streams/subjects | Конфигурация identity/ACL/metadata/bootstrap задана; runtime evidence ещё нет, HA/DC-топология вне scope |
 
-Исходные native candidates сохраняются в [CLIENT_MATRIX](CLIENT_MATRIX.md), стек компонентов — [COMPONENT_STACK](COMPONENT_STACK.md). Кандидат версии не означает доказанную совместимость сборки. Добавление validator duties/staking не требуется для сбора данных и не предполагается автоматически.
+Текущие native candidates заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md), стек — [COMPONENT_STACK](COMPONENT_STACK.md); CLIENT_MATRIX хранит исторические исследования. Кандидат версии не означает доказанную совместимость сборки. Добавление validator duties/staking не требуется для сбора данных и не предполагается автоматически.
 
 ## Обязательное описание для обеих сред
 
@@ -41,7 +41,7 @@ D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обе
 
 Адаптер и embedded RocksDB не выделяются в дополнительные процессы/Pods. Каждый writable каталог принадлежит одному owner. D45 не разрешает параллельных writers, совместного datadir или автоматического multi-node failover. Размещение/перезапуск owner должно сохранять его состояние по ранее принятому recovery-контракту.
 
-Компоненты связываются конфигурируемыми сетевыми endpoints: service DNS в Kubernetes/Compose либо заданные адреса. Связи не предполагают localhost или общий хост. Для adapter→Gateway применяется ранее принятый TCP/gRPC с mTLS; native связи используют штатную аутентификацию, в том числе Engine API/JWT для каждой отдельной Geth/Prysm пары. NATS остаётся общим транспортом. Точные адреса, порты и передача secrets — DEP-03.2.
+Компоненты связываются конфигурируемыми сетевыми endpoints: service DNS в Kubernetes/Compose либо заданные адреса. Связи не предполагают localhost или общий хост. Для adapter→Gateway применяется ранее принятый TCP/gRPC с mTLS; native связи используют штатную аутентификацию, в том числе Engine API/JWT для каждой отдельной Geth/Prysm пары. NATS остаётся общим транспортом. Точные адреса, порты и передача secrets заданы NETWORK_PORTS и DEPLOYMENT_BOOTSTRAP_CONTRACT.
 
 Каждый компонент можно размещать и перезапускать отдельно. Это не устраняет зависимость Geth от Prysm или Bor от Heimdall/L1: их недоступность отражается в готовности соответствующей ноды. Остальные сетевые контуры не переконфигурируются и не ожидают её прогресса; pending WAL сохраняется независимо.
 
@@ -53,7 +53,7 @@ D47/D58: приняты кандидаты Geth 1.17.9/Prysm 7.3.0 для обе
 - Независимый запуск, остановка и изменение конфигурации контура каждой сети. Native dependencies внутри сети допускаются; общего координатора прогресса и зависимости от extractor другой сети нет. Общий NATS сохраняет согласованную роль транспорта.
 - Штатная остановка, сохранение томов и восстановление pending по существующему RocksDB-протоколу. Автоматическое удаление данных и загрузка исторических пропусков не добавляются.
 
-Docker Compose используется для локального/dev запуска, Kubernetes — для production-размещения. Один и тот же функциональный контракт применяется к обеим средам. Сборщик не вызывает их API для создания/управления процессами: окружение исполняет подготовленные проектом конфигурации. Выбор конкретного Kubernetes packaging и окончательных templates не объявляется принятым этим документом.
+Docker Compose используется для локального/dev запуска, Kubernetes — для production-размещения. Один и тот же функциональный контракт применяется к обеим средам. Сборщик не вызывает их API для создания/управления процессами: окружение исполняет подготовленные проектом конфигурации. Принятая компоновка workloads/Service/PVC и bootstrap заданы ниже и в DEPLOYMENT_BOOTSTRAP_CONTRACT; manifests/templates и runtime evidence не создавались в этой документальной работе.
 
 ## Настройки размещения и связей D46
 
@@ -66,6 +66,7 @@ Docker Compose используется для локального/dev запу
 | eth-prysm | eth-geth | Engine API своей Ethereum-ноды |
 | polygon-l1-prysm | polygon-l1-geth | Engine API отдельной L1-ноды Polygon |
 | polygon-heimdall | polygon-l1-geth и polygon-bor | Штатные L1/Bor подключения |
+| polygon-bor | polygon-l1-geth:8545 | Finality observer: hash-pinned finalized L1 checkpoint reads; собственная supporting L1 Polygon, не основной eth-geth |
 | polygon-bor | polygon-heimdall | Штатный интерфейс Bor/Heimdall |
 | Адаптер внутри eth-geth / bsc-node / polygon-bor | eth-gateway / bsc-gateway / polygon-gateway соответственно | gRPC с mTLS |
 | Каждый Gateway | nats | Публикация и получение PubAck |
@@ -113,7 +114,7 @@ Docker Compose используется для локального/dev запу
 
 Каждый процесс получает только нужные каталоги. Повторение пути в разных контейнерах не означает общий volume/PVC: разные native клиенты, сети и владельцы состояния изолированы. Polygon L1 Geth не получает WAL адаптера. Физические пути хоста и storage параметры настраиваются отдельно; принятые пути не навязывают размещение на одном узле.
 
-P2P-ключ/идентичность сохраняется в persistent native state либо связанном с ним постоянном расположении, соответствующем конфигурации клиента. Обычный перезапуск не генерирует новую идентичность. Точные имена native файлов и flags для кандидатов D47 ещё сверяются; проект не меняет upstream формат ключей.
+P2P-ключ/идентичность сохраняется в persistent native state либо связанном с ним постоянном расположении, соответствующем конфигурации клиента. Обычный перезапуск не генерирует новую идентичность. Точные native файлы/flags заданы в DEPLOYMENT_BOOTSTRAP_CONTRACT; их runtime-проверка ещё не выполнена, upstream формат ключей не меняется.
 
 ## Подготовка конфигов и native файлов D51
 

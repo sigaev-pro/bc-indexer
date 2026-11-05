@@ -4,6 +4,12 @@
 
 ## Language
 
+**Delivery batch**:
+Полный набор публичных событий одного native decision. Может включать несколько блоков при reorg или только статусы; no-events decision не выделяет batch. Физическое разбиение на chunks не меняет границу полного ACK/cleanup.
+
+**Результат сценария / CaseResult**:
+Запись для точных AC/network/variant из versioned CaseRegistry. Applicability объясняет применимость; только APPLICABLE имеет verdict NOT_RUN/PASS/FAIL. PASS/FAIL ссылаются на фактический RunManifest с индивидуальным outcome, исключения — на правило/решение. Отсутствующий вариант не означает PASS.
+
 **Метки идентичности NATS stream**:
 Обязательные строковые metadata extractor.network_digest и extractor.destination_id, вычисленные из DestinationBinding. Они обозначают сеть и линию назначения, не binding generation и не сохранность данных. Missing/malformed/mismatch блокирует публикацию; account/stream/subjects проверяются отдельно. Bootstrap не присваивает identity существующему немаркированному stream автоматически.
 

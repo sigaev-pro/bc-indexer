@@ -33,9 +33,11 @@ Gateway prefixes: `meta/{store_epoch,destination_binding}`, `session/<producer,r
 | Gateway RELEASING | очередной cleanup chunk / restart | Удалить chunk, sync cursor; последним atomic commit продвинуть retired_prefix и удалить RELEASING | ReleaseAck только после финального commit |
 | Producer cleanup завершён | ReleaseAck | Sync retired_prefix и удаление outbox | RETIRED; payload/plan отсутствуют |
 
-IngestAck проверяет batch/manifest/plan/destination; ACK части либо успешный gRPC write не заменяет его. Перед удалением любых recovery fragments должна существовать durable замена либо достаточные replay prerequisites. Старый attempt не смешивается с новым manifest. Любые bytes под существующим immutable event_id неизменны, даже до первой публикации.
+IngestAck проверяет batch/manifest/plan/destination; ACK части либо успешный gRPC write не заменяет его. Перед удалением любых recovery fragments должна существовать durable замена либо достаточные replay prerequisites. Старый attempt не смешивается с новым manifest. После READY неизменны event identity и зафиксированное логическое кодирование RecordFragment по D73; после SEALED также неизменны reservation, layout, headers и TransportFrame bytes. Новый неопубликованный transport plan разрешён только в явно заданном pre-SEALED recovery после потери Gateway; READY fragments/IDs при этом не меняются.
 
-До DELIVERY_STAGING уже durable semantic descriptors с activation/revision/source identity; retry attempt меняет только public event reservations. Decision→batch_id и batch counter сохраняются атомарно, повтор native marker не выделяет новый batch. В ACKED/outbox сохраняется весь IngestAck, включая issuer_store_epoch и layout_manifest_digest, до producer cleanup; он требуется RecoveryRelease после Gateway loss.
+До DELIVERY_STAGING уже durable semantic descriptors с activation/revision/source identity; retry attempt меняет только public event reservations. Один native decision с публичными событиями имеет ровно один batch с полным manifest, в том числе multi-block reorg/finality-only. Decision→batch_id и batch counter сохраняются атомарно, повтор native marker не выделяет новый batch. Decision без public events сохраняет checkpoint без batch. Технические chunks/WriteBatch не меняют эту семантическую границу.
+
+Полный IngestAck, включая issuer_store_epoch и layout_manifest_digest, и release_outbox сохраняются до проверенного ReleaseAck и атомарного продвижения producer retired_prefix. Payload cleanup их не удаляет; они нужны RecoveryRelease после Gateway loss. Удаление outbox/ACK и продвижение retired_prefix — один sync commit после проверки ReleaseAck.
 
 ## Prepare и повторные попытки
 

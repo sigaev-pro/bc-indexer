@@ -114,9 +114,11 @@ Consensus bytes не содержат gas_used отдельной tx, effective/
 | SystemBalanceApplied/Removed/StatusChanged | Optional вне-транзакционный scope D17 |
 | BorLegacyReceiptApplied/Removed/StatusChanged | Optional typed auxiliary source receipt; не body transaction |
 
-BlockComplete и CoverageUpdated исключены D25. Source metadata не является результатом собственного пересчёта/сверки хеша или полного inventory. Для Classic сохраняются native AVM result identity и отдельная Ethereum projection; корректный native decoder обязателен, но production completeness verifier не добавляется.
+BlockComplete и CoverageUpdated исключены D25. Source metadata не является результатом собственного пересчёта/сверки хеша или полного inventory. Текущий native decoder сохраняет данные ETH/BSC/Polygon по закрытым профилям; production completeness verifier не добавляется. Classic/AVM и история отложены D38/D42 и не задают обязательств текущего wire contract.
 
-Внутренний закрытый delivery batch содержит references фактически подготовленных сообщений блока. После durable сохранения batch/messages — WAL_SAVED; после PubAck всех этих сообщений/частей — NATS_ACKED. Это локальный учёт передачи, не утверждение, что источником выданы все данные блокчейна. Отдельное публичное событие прогресса/coverage и UI не требуются.
+D79/F02: одно native decision с публичными событиями создаёт один delivery batch с полным упорядоченным набором semantic descriptors этого решения. Batch может охватывать несколько блоков при reorg либо содержать только status/finality события. Decision без публичных событий фиксирует decision checkpoint без batch allocation. Decision→batch_id и счётчик сохраняются атомарно; повтор marker восстанавливает прежнюю связь. Большие descriptor/payload списки пишутся фрагментами; лимиты WriteBatch/RPC не делят semantic decision на дополнительные batches. Closing marker закрывает весь manifest, не очередной chunk.
+
+После durable сохранения полного batch/messages — WAL_SAVED; после PubAck всех frames всех его событий — NATS_ACKED. Partial event/block ACK не завершает batch и не разрешает его cleanup. Это локальный учёт передачи полного набора событий решения, не утверждение, что источником выданы все данные блокчейна. Отдельное публичное событие прогресса/coverage и UI не требуются.
 
 Optional BorLegacyReceiptRecord описан в [POLYGON_LEGACY_CAPTURE.md](research/POLYGON_LEGACY_CAPTURE.md): source receipt/hash/index/encoding, без фиктивной transaction envelope. Его source-only ограничения сохраняются, auxiliary completeness verifier не вводится.
 
@@ -135,7 +137,7 @@ Optional BorLegacyReceiptRecord описан в [POLYGON_LEGACY_CAPTURE.md](rese
 | REMOVED(A) | поздний StatusChanged/Applied(A) | Не реактивирует A |
 | REMOVED(A) | возвращение того же блока | Новый Applied(B), B≠A |
 
-Пересечение live/history может создать разные наблюдения и активации одного включения в разных producer/run. Общий registry и подавление повторов не требуются. При доставке Removed раньше Applied ссылка сохраняет смысл отмены; поздний Applied не оживляет удалённую активацию. Revision монотонна внутри объекта lifecycle данного producer/run, не между независимыми загрузками или сетями. Порядок history относительно live не определяет состояние цепочки.
+Независимые live producer/run могут наблюдать одно включение с разными activation identity; общий registry и подавление повторов не требуются. При доставке Removed раньше Applied ссылка сохраняет смысл отмены; поздний Applied не оживляет удалённую активацию. Revision монотонна внутри объекта lifecycle данного producer/run, не между независимыми runs или сетями. History/backfill не входят в текущий контракт.
 
 Applied несёт initial lifecycle snapshot с revision=0; неизвестное на этом этапе finality evidence имеет явный профильный статус, не выдуманный finalized. Каждый StatusChanged несёт полный replacement snapshot evidence своей активации, не delta patch, и durable положительную revision. Более старая revision не заменяет новую; одна и та же revision с разным содержимым — конфликт/ERROR, не last-write-wins. Removed терминален независимо от порядка доставки; более поздняя запись не реактивирует A, новый период каноничности имеет другую activation_id. Writer не создаёт новые Status для terminal A. Эти правила задают смысл wire events и тестового валидатора, не добавляют production consumer.
 
@@ -157,11 +159,11 @@ record_digest связывает упорядоченные исходные byt
 
 Лимит учитывает полную сериализованную TransportFrame и NATS headers, а не только data. D52: default `transport.max_frame_bytes=2097152` (2 MiB) задаётся YAML Gateway и валидируется до отправки; NATS server/stream настроены на этот предел, gRPC учитывает собственную обёртку. Размер RecordFragment ограничен отдельно: 65536 bytes, независимо от NATS limit. При меньшем доступном frame фрагмент передаётся через FragmentPart. Изменение лимита относится к новым планам; сохранённые pending bytes не перекодируются. При несовместимом уменьшении лимита — явная ошибка конфигурации до публикации, pending сохраняются до восстановления достаточного лимита. [Подробности](LIVE_CONFIG_SPEC.md). Pending spool без TTL/прикладной квоты по D28. Post-ACK retention вне scope. При невозможности разместить запись — backpressure/явная ошибка и незавершённый блок; обрезать данные запрещено.
 
-Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части history/live могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md).
+Gateway назначает chain_sequence в пределах publication_epoch своего store; все части имеют одну пару epoch/sequence. Epoch сохраняется при restart с диском и меняется при создании нового store. Publication plan и точные frame bytes сохраняются producer до первой публикации; после потери Gateway store replay использует прежнюю пару и bytes. Это порядок регистрации в одном epoch, не block chronology, не NATS stream sequence и не глобальный порядок через потерю диска. Части разных live events могут чередоваться. Протокол Prepare/Publish/IngestAck/Release: [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md).
 
 Execution chronology задают block parent links, native transaction position, operation_index и action/frame order. Delivery chronology задают chain_sequence и transport metadata. `part_index` задаёт только сборку bytes. Нельзя сортировкой chain_sequence восстанавливать blockchain chronology.
 
-NATS message ID стабильно различает `(network,event_id,fragment_index,form,part_index)`. После PubAck всех transport frames всех RecordFragment всех событий закрытого block batch Gateway sync фиксирует NATS_ACKED и подтверждает adapter batch_id/digest/plan identity. ACK seal, одного фрагмента или event не разрешает очистить весь блок. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable plan/WAL, повторный запуск, потеря состояния и block-batch IngestAck/Release определены в ROCKSDB_DELIVERY_PROTOCOL.
+NATS message ID стабильно различает `(network,event_id,fragment_index,form,part_index)`. После PubAck всех transport frames всех RecordFragment всех событий закрытого decision batch Gateway sync фиксирует NATS_ACKED и подтверждает adapter batch_id/digest/plan identity. ACK seal, одного фрагмента или event не разрешает очистить весь batch. NATS deduplication window не обеспечивает вечный exactly-once: контракт допускает повторы с тем же ID/bytes. ACK не подтверждает работу downstream consumers. Durable plan/WAL, повторный запуск, потеря состояния и decision-batch IngestAck/Release определены в [DELIVERY_STATE_MACHINE](DELIVERY_STATE_MACHINE.md).
 
 ### 6.1. Типизированный формат RecordFragment — D73
 
@@ -209,7 +211,7 @@ Producer использует disk spool и несколько проходов:
 
 Для каждой сети отдельные streams/subjects/limits: `evm.v3.<chain_key>.<event_family>.<event_kind>`. Текущие family=tx|block; optional balance.system|bor.legacy_receipt. Kind=applied|removed|status. Optional families разрешены только при declared profile feature; default первая версия outside-tx публикацию не включает, её включение требует соответствующих schema/fixtures. Markdown v3 не задаёт wire version.
 
-Полная запись и её части направляются в один subject своего logical event; identity сети из frame проверяется против route. D48: stream и subject prefix задаются в YAML Gateway. D54: logical destination (account/stream/subject mapping) фиксируется в durable publication plan и ACK; изменение назначения допускается только после завершения pending адаптера и Gateway. Смена URL того же назначения допустима после проверки идентичности. Подтверждения разных назначений не образуют общий NATS_ACKED. Перенос pending не проектируется; точная идентификация назначения и handshake/drain checks остаются E03. Post-ACK retention не входит в гарантию сборщика.
+Полная запись и её части направляются в один subject своего logical event; identity сети из frame проверяется против route. D48: stream и subject prefix задаются в YAML Gateway. D54: logical destination (account/stream/subject mapping) фиксируется в durable publication plan и ACK; изменение назначения допускается только после завершения pending адаптера и Gateway. Смена URL того же назначения допустима после проверки идентичности. Подтверждения разных назначений не образуют общий NATS_ACKED. Перенос pending не проектируется; точная идентификация назначения и handshake/drain checks заданы в CONTROL_WIRE_CONTRACT и DELIVERY_STATE_MACHINE, их runtime-проверки относятся к E03. Post-ACK retention не входит в гарантию сборщика.
 
 ## 8. Проверки для последующих этапов
 
@@ -218,11 +220,10 @@ Producer использует disk spool и несколько проходов:
 | Failed tx + успешный child в reverted parent | Gas/nonce сохранены по native правилам; child actions не committed |
 | Компенсирующие transfers | Оба actions есть, net diff может быть 0 |
 | BSC Parlia system | Фактический wire type/signature не потеряны; native Finalize capture проверен |
-| DEFERRED D38/D42: Classic native result ↔ Ethereum projection | Все source results учтены; CL-01…08 проверяют archive, декодирование, observer и неизменность native исполнения |
 | Bor StateSync / legacy synthetic | Body 0x7f и optional legacy source receipt не смешаны; fixtures POLY-L01…07 из исследования E00-15 |
 | Пустой блок / ошибка нормализации | Metadata пустого блока передаётся; известная ошибка даёт ERROR, а не NATS_ACKED |
 | Parts reorder/duplicates/corruption | Сборка по индексу, повторы идемпотентны, конфликт bytes/digest отклоняется |
-| Live reorg во время публикации; history overlap DEFERRED D38 | Дубли разных runs допустимы; lifecycle references не смешиваются, ACK учитывает все части |
+| Live reorg во время публикации | Дубли разных runs допустимы; lifecycle references не смешиваются, ACK учитывает все части полного decision batch |
 | Неизвестный тип/версия/fork | Явная ошибка нормализации, без фиктивного поддержанного payload |
 | Optional balances выключены | Передаётся заявленный transaction scope; полнота всех балансов не заявляется |
 

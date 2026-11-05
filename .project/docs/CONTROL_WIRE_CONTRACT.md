@@ -128,7 +128,7 @@ Recovery CommitSwitch/Resume использует authenticated `MAINTENANCE` se
 | CommitSwitch | switch_id, exact SwitchPrepared, producer durable-commit assertion | SwitchCommitted с той же identity |
 | Resume | old SealAck, resume_id, active binding digest, next admission generation | ResumeAck(resume_id,binding_digest,old/new admission generation,drain_id,issuer_store_epoch) |
 
-`IngestAck={batch_id,manifest_digest,plan_digest,layout_manifest_digest,binding_digest,issuer_store_epoch}`. Producer сохраняет **весь ACK** в ACKED/outbox до cleanup, чтобы RecoveryRelease не требовал утраченного payload. Seal/Switch/Resume ответы связывают весь intent; совпадения одного номера недостаточно. Handshake/control evidence имеет fixed versioned schema, не JSON opaque map. Конкретные generated RPC tags — E02; значения/validation/порядок commit заданы здесь.
+`IngestAck={batch_id,manifest_digest,plan_digest,layout_manifest_digest,binding_digest,issuer_store_epoch}`. Producer сохраняет **весь IngestAck и release_outbox до проверенного ReleaseAck и атомарного продвижения producer retired_prefix**. Payload cleanup их не удаляет; RecoveryRelease не требует утраченного payload. Seal/Switch/Resume ответы связывают весь intent; совпадения одного номера недостаточно. Handshake/control evidence имеет fixed versioned schema, не JSON opaque map. Конкретные generated RPC tags — E02; значения/validation/порядок commit заданы здесь.
 
 Chunk retries: одинаковые offset/bytes/digest возвращают тот же next_offset; конфликт записанного диапазона — IMMUTABLE_CONFLICT; пропуск offset — OFFSET_MISMATCH с ожидаемым cursor. Закрытие manifest/batch возможно только после проверки всех contiguous chunks. GET/ChunkAck не является разрешением удалить producer payload.
 

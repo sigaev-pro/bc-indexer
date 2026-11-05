@@ -2,15 +2,15 @@
 
 DOC-FULL-AUDIT-01 / D71. Проверенная редакция: `61afb7a`. [Краткое ТЗ](../../TZ_DECISION_MAKER.md), [подробное ТЗ](../../TZ_EXECUTOR.md), нормативные тематические документы, решения и словарь проверены до границы D70: предусмотренные данные в стандартизированном формате, подтверждённо доставленные в NATS JetStream. D64: исключительно документация, без реализации.
 
-**Текущий статус: F11 (D73), F03 (D74), F12 (D75–D76), F13 (D77), F01 (D78) приняты и исправлены в документации (DOC_FIXED); остальные 9 предложений НА СОГЛАСОВАНИИ.** Доказательства исходных дефектов и номера строк ниже относятся к указанному audit commit. Архивные исследования и прежние решения не считаются конкурирующими действующими требованиями. DOC_FIXED не означает runtime PASS.
+**Текущий статус D79: все 14 находок F01–F14 согласованы и исправлены в документации (DOC_FIXED). Ожидающих согласования предложений нет.** Доказательства исходных дефектов и номера строк ниже относятся к указанному audit commit. Архивные исследования и прежние решения не считаются конкурирующими действующими требованиями. DOC_FIXED не означает runtime PASS.
 
-**Порядок по D72–D78:** пользователь выбрал разбор по одному; последовательно утверждены F11/F03/F12/F13/F01. Остальные 9 пунктов ожидают отдельного обсуждения. Следующий пункт — F02 (delivery batch соответствует native decision, не обязательно одному блоку).
+**Согласование завершено:** D73–D78 закрыли F11/F03/F12/F13/F01, D79 утвердил весь оставшийся пакет.
 
 ## Результат
 
 Подтверждены **14 групп замечаний**: 10 ранее известных перепроверены; 4 новых — F11–F14. Это реестр подтверждённых находок, не обещание отсутствия любых неизвестных ошибок. F08/F09 — опасные для чтения формулировки, но более точные разделы уже задают безопасное поведение; они не объявляются доказанными дефектами самого протокола.
 
-Остаются 9 групп согласования текста с принятым поведением: F02/F04–F10/F14. Все четыре дополнения технического контракта F11/F03/F12/F13 и исправление F01 приняты и внесены. Остальные замечания не исправляются автоматически; ни одно не требует расширять проект за NATS или начинать реализацию.
+Все 14 групп исправлены в рамках D64/D70; расширение результата за NATS и реализация не добавлены.
 
 | Приоритет | Что он означает в этом отчёте |
 |---|---|
@@ -34,11 +34,13 @@ DOC-FULL-AUDIT-01 / D71. Проверенная редакция: `61afb7a`. [К
 
 ### F02 · P2 · Batch назван пакетом блока, хотя выделяется на native decision
 
+**DOC_FIXED / D79: один public native decision — один полный batch, multi-block reorg/finality-only и no-events checkpoint определены в MESSAGE_CONTRACT/NATIVE_CAPTURE_PROTOCOL/DELIVERY_STATE_MACHINE. Удалены block-batch ограничения; добавлены AC-CAP-08-02 и AC-DLV-02-04…05.**
+
 **Доказательство:** `TZ_EXECUTOR.md:560`, `:605` против `:858`, `:864`, `:940`, `:1070`. Native decision может быть много-блочным reorg либо finality-only событием; автомат атомарно связывает decision с batch_id.
 
 **Контрпример:** перестройку двух старых блоков на два новых один исполнитель делит на четыре block batches, другой — на один decision batch. Границы ACK и recovery становятся разными.
 
-**Предлагаемая формулировка:** «Native decision с публичными событиями порождает один delivery batch, содержащий полный набор его semantic descriptors. Decision без публичных событий не выделяет batch. Batch может содержать события нескольких блоков либо только статусы. Большие списки и payload хранятся фрагментами; лимит WriteBatch не делит semantic decision на другие delivery batches». Заменить неточные block-batch формулировки, сохранив атомарность closing marker.
+**Принятая формулировка D79:** «Native decision с публичными событиями порождает один delivery batch, содержащий полный набор его semantic descriptors. Decision без публичных событий не выделяет batch. Batch может содержать события нескольких блоков либо только статусы. Большие списки и payload хранятся фрагментами; лимит WriteBatch не делит semantic decision на другие delivery batches». Заменить неточные block-batch формулировки, сохранив атомарность closing marker.
 
 **Приёмка:** crash внутри построения много-блочного reorg; повтор marker даёт прежний batch_id и состав событий. Finality-only создаёт один соответствующий batch, empty decision — только decision checkpoint. REQ-CAP-08/DLV-02; `E02-01.semantic_descriptors`, `E05-02.reorg`; дополнительные AC назначаются точному owner в соответствующем этапе.
 
@@ -63,57 +65,71 @@ DOC-FULL-AUDIT-01 / D71. Проверенная редакция: `61afb7a`. [К
 
 ### F04 · P2 · Evidence не связывает все требуемые результаты приёмки
 
+**DOC_FIXED / D79: CaseRegistry/CaseResult/RunManifest v2 связывают AC/network/variant/task/fixture и индивидуальные outcomes. Applicability отделена от verdict, исключения требуют rules, NOT_RUN не выдумывает actual outputs. AC-DEV-04-02 и AC-DEV-05-02…03; gates проверяют полный реестр.**
+
 **Доказательство:** `TZ_EXECUTOR.md:1810` требует отдельный результат `(AC ID, network, variant)` и NOT_APPLICABLE/NOT_ENABLED. Обязательный manifest `:2088–2095` не содержит AC/variant identity; его enum содержит только PASS/FAIL/NOT_RUN/DEFERRED. `:2315` обещает связь с AC.
 
-**Предлагаемое изменение:** раздельно определить applicability и execution verdict. `CaseResult{ac_id,network,variant_id,task_id,fixture_id,fixture_version,applicability,verdict?,run_manifest_ref?,reason?}`. Applicability=`APPLICABLE|NOT_APPLICABLE|NOT_ENABLED|DEFERRED`; verdict=`NOT_RUN|PASS|FAIL` только для APPLICABLE. PASS/FAIL требуют ссылку на полный run evidence; NOT_RUN не требует вымышленных actual output/timestamps. Исключения требуют обоснования и правила профиля/решения. Manifest содержит точный список case identities; gate проверяет полный реестр обязательных variants, а не количество файлов manifest.
+**Принятое изменение D79:** раздельно определить applicability и execution verdict. `CaseResult{ac_id,network,variant_id,task_id,fixture_id,fixture_version,applicability,verdict?,run_manifest_ref?,reason?}`. Applicability=`APPLICABLE|NOT_APPLICABLE|NOT_ENABLED|DEFERRED`; verdict=`NOT_RUN|PASS|FAIL` только для APPLICABLE. PASS/FAIL требуют ссылку на полный run evidence; NOT_RUN не требует вымышленных actual output/timestamps. Исключения требуют обоснования и правила профиля/решения. Manifest содержит точный список case identities; gate проверяет полный реестр обязательных variants, а не количество файлов manifest.
 
 **Приёмка:** два варианта одной AC с разными исходами; отсутствие одного результата не превращается в PASS; отключённый optional не блокирует обязательный gate и не маскирует обязательный native путь. REQ-DEV-04/05; `E01-01.evidence`, `E07-09.requirement_verdict`.
 
 ### F05 · P2 · Два предписанных набора child task IDs
 
+**DOC_FIXED / D79: TASK_DECOMPOSITION — единственный каталог 68 child IDs. Старые shorthand-предписания заменены exact E01 IDs; supporting outputs и сетевые slots сохранены. Нормативные ссылки проверены по каталогу.**
+
 **Доказательство:** `TZ_EXECUTOR.md:2056–2058` требует `.build.ETH/BSC/POLY/.supporting/.artifacts` и `.ownership/.pin/.decision`; итоговый каталог `:2315–2326` использует `.builds/.evidence/.harness/.pins/.inputs/.owned_capture/.decision_bridge/...` и отдельные сетевые slots.
 
-**Предлагаемое изменение:** единственным реестром child IDs назначить текущий TASK_DECOMPOSITION. В IMPLEMENTATION_GATES заменить старое предписание точным перечнем этих IDs; supporting artifacts оставить обязательным выходом `.builds/.harness`, а сетевые варианты — applicability slots. Не создавать второй параллельный набор задач. Сохранить parent IDs и 68 существующих child IDs, если отдельное согласованное исправление не требует новой задачи.
+**Принятое изменение D79:** единственным реестром child IDs назначить текущий TASK_DECOMPOSITION. В IMPLEMENTATION_GATES заменить старое предписание точным перечнем этих IDs; supporting artifacts оставить обязательным выходом `.builds/.harness`, а сетевые варианты — applicability slots. Не создавать второй параллельный набор задач. Сохранить parent IDs и 68 существующих child IDs, если отдельное согласованное исправление не требует новой задачи.
 
 **Приёмка:** каждое нормативное упоминание дочерней задачи разрешается в один каталог; нет альтернативных сокращённых предписаний. REQ-DEV-01/03.
 
 ### F06 · P2 · Карта доступа не содержит обязательную связь Bor→L1
 
+**DOC_FIXED / D79: добавлен polygon-bor→polygon-l1-geth:8545 в обе карты связей. Endpoint/TLS override требует той же supporting identity/role; основной eth-geth не замена. AC-OPS-07-02…03 назначены E06-13.network.**
+
 **Доказательство:** observer внутри Bor читает supporting L1 по `TZ_EXECUTOR.md:765–771`, `:1243`; таблицы `:1383–1390`, `:1613–1621` показывают только Heimdall как клиента L1 RPC.
 
-**Предлагаемое изменение:** добавить `polygon-bor → polygon-l1-geth:8545` для hash-pinned finalized checkpoint reads. При override использовать согласованный endpoint/TLS; доступ остаётся внутренним. В network/config fixtures проверить корректную связь и запрет случайного направления к основному Ethereum extractor.
+**Принятое изменение D79:** добавить `polygon-bor → polygon-l1-geth:8545` для hash-pinned finalized checkpoint reads. При override использовать согласованный endpoint/TLS; доступ остаётся внутренним. В network/config fixtures проверить корректную связь и запрет случайного направления к основному Ethereum extractor.
 
 **Следствие:** без строки исполнитель схемы доступа может закрыть обязательный канал и остановить продвижение GC. Это не утверждение о существующем отказе Compose. REQ-LIF-07/OPS-07; `E05-01.polygon_observer`, `E06-13.network`.
 
 ### F07 · P2 · Краткое ТЗ не раскрывает весь обязательный state diff
 
+**DOC_FIXED / D79: краткое ТЗ явно включает balance/nonce/code bytes/storage/existence до/после tx и отделяет сохранённый diff от попыток. Snapshot и глобальное outside-tx состояние не добавлены.**
+
 **Доказательство:** таблица `TZ_DECISION_MAKER.md:19–33` не объясняет nonce/code/storage/account existence, обязательные в `TZ_EXECUTOR.md:545`, `:698`. Исходные события упомянуты в кратком документе, поэтому полное отсутствие logs не заявляется.
 
-**Предлагаемая строка краткой таблицы:** «Изменения состояния аккаунтов — баланс, nonce, код, storage и существование до/после транзакции; изменения кода передаются с его bytes. Это итоговое сохранённое состояние, отдельно от отменённых попыток». Уточнить, что полное системное состояние вне tx и начальный snapshot этим не обещаются.
+**Принятая строка краткой таблицы D79:** «Изменения состояния аккаунтов — баланс, nonce, код, storage и существование до/после транзакции; изменения кода передаются с его bytes. Это итоговое сохранённое состояние, отдельно от отменённых попыток». Уточнить, что полное системное состояние вне tx и начальный snapshot этим не обещаются.
 
 **Приёмка:** обязательные категории подробного контракта представлены в кратком без добавления функций. REQ-DAT-07; поведение не меняется.
 
 ### F08 · P3 · Формулировка срока хранения ACK допускает неправильное прочтение
 
+**DOC_FIXED / D79: оба текста сохраняют полный IngestAck/release_outbox до проверенного ReleaseAck и атомарного producer retired_prefix; payload cleanup их не удаляет. Протокол RecoveryRelease и существующая приёмка сохранены.**
+
 **Доказательство:** `TZ_EXECUTOR.md:969`, `:1154` говорят «до cleanup», но таблица Release, RecoveryRelease и AC-DLV-06-04 требуют пережить удаление payload.
 
-**Предлагаемая замена:** «Полный IngestAck и release_outbox сохраняются до проверенного ReleaseAck и атомарного продвижения producer retired_prefix. Payload cleanup их не удаляет». Уточнить оба места; автомат не менять.
+**Принятая замена D79:** «Полный IngestAck и release_outbox сохраняются до проверенного ReleaseAck и атомарного продвижения producer retired_prefix. Payload cleanup их не удаляет». Уточнить оба места; автомат не менять.
 
 **Приёмка:** crash после удаления payload и потеря Gateway store позволяют RecoveryRelease по сохранённому ACK. REQ-DLV-06/07; `E03-05.recovery_matrix`.
 
 ### F09 · P3 · Правило immutable bytes не различает Envelope и frame
 
+**DOC_FIXED / D79: immutable READY относится к event identity/RecordFragment bytes; SEALED дополнительно фиксирует reservation/layout/headers/frames. Только существующий pre-SEALED recovery может менять неопубликованный transport plan.**
+
 **Доказательство:** `TZ_EXECUTOR.md:967` запрещает менять «любые bytes» под event_id, тогда как `:977`, `:1924` допускают новый неопубликованный plan после потери Gateway до SEALED.
 
-**Предлагаемая замена:** «После READY неизменны логический payload/его зафиксированное кодирование и event identity; после SEALED — также reservation, layout, headers и frames. Перепланирование допустимо только в явно указанном pre-SEALED recovery». При принятии F11 термин payload encoding должен относиться к новому record container, не возвращать ограничение одного Envelope.
+**Принятая замена D79:** «После READY неизменны логический payload/его зафиксированное кодирование и event identity; после SEALED — также reservation, layout, headers и frames. Перепланирование допустимо только в явно указанном pre-SEALED recovery». При принятии F11 термин payload encoding должен относиться к новому record container, не возвращать ограничение одного Envelope.
 
 **Приёмка:** old READY/new pre-SEALED plan допустим; изменение SEALED bytes запрещено. REQ-DLV-03/04.
 
 ### F10 · P3 · В текущем тексте остались старые scope и статусы
 
+**DOC_FIXED / D79: из активного контракта удалены Classic/history и ничем не используемый Rust/tonic source list; принятые config/init/flags отделены от NOT_RUN evidence. Исторические материалы сохранены с явным статусом.**
+
 **Доказательство:** Classic/AVM и live/history описаны как действующие на `TZ_EXECUTOR.md:558`, `:579`, `:601`, хотя они deferred. `:1195–1197`, `:1330–1332` говорят о неутверждённых настройках, уже заданных поздними таблицами. Отдельный список Rust/tonic источников не имеет текущей роли.
 
-**Предлагаемое изменение:** убрать эти предписания из текущего нормативного текста либо вынести в явно ненормативную историческую справку. Разделить «параметр принят» и «runtime-проверка не выполнена». Архивные документы не переписывать так, будто прежних решений не было.
+**Принятое изменение D79:** убрать эти предписания из текущего нормативного текста либо вынести в явно ненормативную историческую справку. Разделить «параметр принят» и «runtime-проверка не выполнена». Архивные документы не переписывать так, будто прежних решений не было.
 
 **Приёмка:** поиск current-only текста не возвращает обязательный Classic/history/Rust путь или уже закрытый вопрос как незакрытый. D38/D42/D64/D70 сохраняются.
 
@@ -170,49 +186,33 @@ DOC-FULL-AUDIT-01 / D71. Проверенная редакция: `61afb7a`. [К
 
 ### F14 · P3 · Ссылка доказательства Geth types ведёт на прежний source pin
 
+**DOC_FIXED / D79: ссылка Geth transaction types заменена на 9dffe6e976cbbb87a84c5fd395448f0950290def. Повторно прочитан pinned transaction.go: constants 0x00–0x04 подтверждены; fork activation/build не заявлены.**
+
 **Доказательство:** `TZ_EXECUTOR.md:656` ссылается на `a579077007b98217c3e253a66e4b452ca0c32b96`, а текущий capture/bootstrap baseline закреплён на `9dffe6e976cbbb87a84c5fd395448f0950290def`. CLIENT_MATRIX явно объявляет прежнюю таблицу исторической.
 
 Проверенный [выбранный source transaction.go](https://github.com/ethereum/go-ethereum/blob/9dffe6e976cbbb87a84c5fd395448f0950290def/core/types/transaction.go) также содержит типы 0x00–0x04. Ошибка текущего списка типов не установлена; проблема — происхождение его доказательства.
 
-**Предлагаемое изменение:** заменить ссылку в действующем реестре/root на выбранный source; исторические ссылки оставить в исторических исследованиях. Не выдавать это за новую проверку сборки или fork activation.
+**Принятое изменение D79:** заменить ссылку в действующем реестре/root на выбранный source; исторические ссылки оставить в исторических исследованиях. Не выдавать это за новую проверку сборки или fork activation.
 
 **Приёмка:** текущие native source claims указывают на выбранный baseline либо явно называют другой pin как исторический. REQ-CAP-01/OPS-10.
 
-## Сквозной проход и исключённые ложные находки
+## Итоговая сквозная проверка D79
 
-| Область | Результат документальной проверки |
+Все 14 замечаний F01–F14 согласованы и исправлены в документации. Исходные доказательства/номера строк выше относятся к audit commit 61afb7a; отметки DOC_FIXED описывают результат правок. Прежние предложения не являются ожидающими ответа вопросами.
+
+| Область | Итог |
 |---|---|
-| Scope/live H+1/downtime | Сохранены D64/D70, нет требования выгружать простой или строить consumer. Эти ограничения не переоткрываются |
-| ADMITTED/static inputs/dependency log | Durable static inputs до execution; динамические responses сохраняются до передачи native execution; offline replay незавершённых внешних запросов не обещается |
-| Owned capture/VM pause | Передача owned chunks и ожидание вне hooks описаны; предполагаемое runtime-доказательство явно остаётся NOT_RUN |
-| Native decision/child root/mirror | Порядок root sync/marker/mirror и повтор без новых revisions описаны; multi-block batch wording требует F02 |
-| Calls/fees/revert/SELFDESTRUCT | Различение попытки/committed и отсутствие двойного учёта заданы; общий порядок/scopes требует F03 |
-| Payload/raw receipt/large fields | F11/F12 блокируют однозначную финализацию формата; пустой список не скрывает известную ошибку capture |
-| Lifecycle/reorder/reinclusion | Terminal Removed, новые activations и полные Status snapshots заданы; production consumer из этого не следует |
-| ETH/BSC/Polygon finality и GC | Различение early/attested и finalized L1 checkpoint сохранено; payload cleanup не освобождает нужные pins |
-| Prepare/SEALED/ACK/loss/fencing | Основные recovery paths замкнуты в тексте; F08/F09 устраняют более слабые формулировки |
-| Drain/switch/Resume/upgrades | Проверены staged intents, maintenance lost replies, native pending до seal, retained metadata после drain; несовместимый store не мигрируется автоматически |
-| NATS limits и post-ACK | Размер frame включает headers; schema/record size требует F11. Post-ACK retention/потеря NATS не превращены в новую гарантию |
-| Config/init/volumes/TLS/ports | Negative relative-path AC и недостающая Bor→L1 связь — F01/F06; metadata check — F13. Независимые owners и запрет concurrent writers описаны |
-| REQ/AC/tasks/evidence | 63/156/68 формально покрыты; граф без циклов. Содержательная однозначность требует F04/F05 |
-| Нормативные копии/архивы | 15 зеркальных разделов совпадают; исторические материалы не добавляют current scope. Остатки внутри текущего текста — F10/F14 |
+| Scope/live/recovery | D64/D70 сохранены: только ТЗ; три mainnet, live H+1, без выгрузки простоя/production consumer |
+| Capture/decision | Owned snapshots, static/dynamic pins и child-root/marker protocol сохранены; один native decision имеет один batch |
+| Данные | Полные calls/actions/account diff; общий order/scopes; bounded typed fragments и exact native receipt registry |
+| Lifecycle/finality | Removed/reinclusion/status, BSC evidence и Polygon L1 checkpoint GC не подменяются transport ACK |
+| Delivery/cleanup | READY/SEALED границы точны; полный batch ACK, IngestAck до ReleaseAck, loss/retry/fencing и cutover сохранены |
+| Окружение | Relative YAML paths и absolute-only Polygon field согласованы; Bor→supporting L1 включён; NATS identity metadata точны |
+| Приёмка/задачи | 63 REQ / 195 AC / 68 child tasks / 7 gates; каждый AC назначен, applicability/variant evidence определены |
+| Документы | Два адресных ТЗ и 15 нормативных зеркал синхронизированы; старый scope явно исторический |
 
-Не объявлялись новыми дефектами: отсутствие implementation/image/runtime proofs; optional default OFF без штатного runtime-toggle; post-ACK архив; конечный диск; отсутствие numerical SLO; внешняя бизнес-польза после NATS. Эти границы уже приняты. Проверка не включает запуск нод, сборки, crash tests или актуализацию каждого внешнего релиза.
+Проверены REQ/AC/task mapping и stages, неизвестные IDs/dependencies и циклы, Markdown links/anchors/tables, совпадение зеркал и тела TZ_EXECUTOR с v3, git diff --check и неизменность исходного v2. Точные результаты последнего прогона — PROJECT_STATUS и FINAL_SPEC_REVIEW.
 
-## Что уже проверено автоматически
+Точечный source review: предел Protobuf, receipt codecs pinned Geth/BSC/Bor, NATS metadata и текущие Geth transaction type constants. Это не сборка, не запуск нод, не crash test и не обновление всех зависимостей на последние релизы.
 
-- Все 63 REQ имеют AC; 156 AC назначены ровно одной задаче соответствующего этапа; 68 child tasks не имеют неизвестных табличных зависимостей или циклов с учётом семи gates.
-- Таблицы AC/tasks корректны; явно написанных неизвестных child IDs нет. F05 находится в словесном предписании сокращённых суффиксов, а не в ссылках итогового графа.
-- 15 нормативных разделов v3 совпадают с тематическими файлами после нормализации заголовков и ссылок; тело адресного подробного ТЗ совпадает с v3.
-- При завершении проверяются все Markdown links/anchors, git diff --check, неизменность v2 и обоих адресных ТЗ относительно `61afb7a`.
-- Внешняя точечная сверка: официальный предел/streaming Protobuf; native receipt codecs трёх pinned clients; transaction type constants выбранного и прежнего Geth. Эти источники не подменяют runtime PASS.
-
-## Порядок согласования и исправления
-
-1. **Сначала F11:** выбрать допустимый формат больших логических записей. Без этого правки exact wire layout пришлось бы переделывать.
-2. **Затем F03/F12/F13:** утвердить предложенные порядок/scopes, receipt codec и stream metadata; при несогласии показать конкретную альтернативу до правок схем.
-3. **Пакет без смены принятого поведения:** согласовать F01/F02/F04–F10/F14 и применить согласованную редактуру одновременно в v3, двух адресных документах и тематических файлах.
-4. На каждое согласованное дополнение уточнить AC/variant/evidence/task mapping; новые IDs добавлять, старые не переназначать. Числа 63/156/68 не являются запретом на необходимые дополнительные сценарии.
-5. После правок повторить семантические контрпримеры этого реестра, структурную сверку и локальный commit. Только тогда соответствующий finding получает DOC_FIXED; runtime остаётся NOT_RUN.
-
-**Нормативные исправления пока не выполнены.** Этот документ — конкретное предложение для согласования. Пользовательский ответ фиксируется отдельным решением до зависимых изменений.
+DOC_FIXED означает устранение документального дефекта. Runtime остаётся NOT_RUN. Закрытие этого реестра не является доказательством отсутствия любого будущего контрпримера, наличия реализации или production-готовности. Открытых решений по согласованному пакету нет; повторный вопрос требуется только при новом существенном контрпримере/изменении требований.

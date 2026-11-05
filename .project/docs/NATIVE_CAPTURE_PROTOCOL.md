@@ -39,6 +39,8 @@ Bor recording resolver сохраняет exact request identity и exact respon
 
 ## Durable состояния и native decision bridge
 
+D79/F02: canonical/reorg/finality decision с публичными событиями соответствует одному delivery batch, независимо от числа затронутых блоков. Полный semantic manifest закрывается для решения целиком; ссылка decision→batch_id выделяется атомарно и повторяется при recovery того же marker. Решение без публичных событий продвигает decision checkpoint без batch allocation. Disk/RPC chunks не вводят дополнительные semantic decisions/batches; они только ограничивают размер физических записей. Порядок descriptors фиксируется native/lifecycle протоколом до public attempt.
+
 | State | Условие закрытия | Восстановление |
 |---|---|---|
 | INPUT_PREPARING | Capsule/pins ещё неполны | Проверить ownership; завершить подготовку либо убрать безопасные orphan fragments |

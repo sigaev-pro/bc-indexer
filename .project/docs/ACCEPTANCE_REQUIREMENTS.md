@@ -1,6 +1,6 @@
 # Полный реестр требований и приёмки
 
-Родительские REQ раскрыты в [187 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [195 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -65,7 +65,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | ID | Требование | Проверка и ожидаемый результат / этап |
 |---|---|---|
 | REQ-DLV-01 | Единственные durable owners, sync closing markers | REC/journal: reopen/power loss каждого state, незакрытые chunks не публикуются; E03 |
-| REQ-DLV-02 | Stable batch/attempt/counters без sequence дыр | ATTEMPT/ID: native rejected/no-events не выделяет batch; attempt не меняет semantic IDs, overflow fatal; E02/E03 |
+| REQ-DLV-02 | Один decision batch, stable attempt/counters без sequence дыр | ATTEMPT/ID: один public decision — один полный batch, включая multi-block/finality-only; no-events без batch, chunks не делят decision; attempt сохраняет semantic IDs, overflow fatal; E02/E03 |
 | REQ-DLV-03 | Prepare/reservation идемпотентны | PREPARE/RPC: потеря replies/chunks, same/conflicting digest, Gateway loss до SEALED; сохранённый seed повторяется; E03 |
 | REQ-DLV-04 | Bounded typed fragments и exact wrapper/layout/header/bytes | FRAGMENT/LAYOUT: запись и отдельное поле >2 GiB без монолитного protobuf; schema/presence/blob coverage/seal; COMPLETE/PART boundary, order/digest/size, SHA/MsgID vectors; после READY fragment bytes, после SEALED transport bytes неизменны; all-fragments ACK; E02/E03 |
 | REQ-DLV-05 | End-to-end ACK всех частей одного назначения | REC/NATS: partial PubAck, wrong stream, lost bitmap/IngestAck, reordered parts; ChunkAck/CLOSED не разрешают producer cleanup; E03 |
@@ -89,7 +89,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-OPS-04 | Config generation заменяет только allowlist | CONFIG: изменённый native config применён после restart, ключи/genesis/state сохранены, невозможный mix отвергнут; E06 |
 | REQ-OPS-05 | mTLS/SAN/EKU/network/role admission | TRUST: чужой CA/SAN/role/network/deployment, credential rotation и UDS ownership; reject до store mutation; E03/E06 |
 | REQ-OPS-06 | Минимальные NATS ACL, bootstrap identity и проверка account | NATS: runtime publish/INFO/UserInfo/reply allowed, admin denied; D77 atomic config CREATE/read-back, existing metadata mismatch blocked, compatible UPDATE сохраняет посторонние keys; без retag/PURGE/reset; E03/E06 |
-| REQ-OPS-07 | P2P mapping/advertise и внутренние API | CONFIG/START: назначенные ports во всех слоях, only P2P external, required native links reachable, no localhost inter-service assumption; E06 |
+| REQ-OPS-07 | P2P mapping/advertise и внутренние API | CONFIG/START: ports во всех слоях, only P2P external, required links reachable, включая Bor observer→собственная supporting L1; ошибочная основная Ethereum-нода отвергается по role identity; E06 |
 | REQ-OPS-08 | Independent startup и stop-confirm-start | START/REPLACE: NATS outage, Bor/Heimdall retry, delayed old writer, native sync отдельно от delivery; E06 |
 | REQ-OPS-09 | Обязательные control logs без secrets | LOG: все states/errors видны при отключённом debug, правильная identity, SIGKILL не выдаёт graceful STOPPED; E06/E07 |
 | REQ-OPS-10 | Артефакты/совместимость доказаны перед runtime acceptance | ARTIFACT: pinned source/patch/toolchain/image, mainnet genesis SHA/parse, wrong artifact reject, clean bootstrap; E01/E06 |
@@ -101,8 +101,8 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DEV-01 | Порядок E01→E07 без позднего открытия source seam | План/evidence: native proof E01, delivery E03, combined E05; ни одного DONE по ещё будущему proof |
 | REQ-DEV-02 | Independent expected и воспроизводимый harness | Fixture passport/seed/input hash + mutation sanity; clean environment без скрытой ноды автора; E01/E02/E07 |
 | REQ-DEV-03 | Separate builds и bounded module interfaces | Dependency review: core без внутренних типов трёх fork сразу, NATS SDK только Gateway, Rust/history не prerequisites; E01 |
-| REQ-DEV-04 | Evidence traceability и честные verdict | Каждый run с REQ/finding/task/fixture/input/expected/build/actual/fault; новый source/profile invalidates затронутый PASS; каждый gate |
-| REQ-DEV-05 | Функциональная приёмка трёх независимых сетей | E07: все mandatory REQ имеют PASS по применимости, optional/deferred явно помечены; runtime не заменяется source inspection/MD lint |
+| REQ-DEV-04 | Evidence traceability и честные verdict | CaseRegistry/CaseResult связывают AC/network/variant/task; applicability отдельно от verdict; PASS/FAIL с полным RunManifest, NOT_RUN без выдуманных actual; version changes invalidates PASS; каждый gate |
+| REQ-DEV-05 | Функциональная приёмка трёх независимых сетей | E07: каждый mandatory variant имеет собственный PASS, missing/FAIL блокирует gate; optional/deferred/not-applicable требуют rules; runtime не заменяется source inspection/MD lint |
 
 ## Definition of ready для документации
 

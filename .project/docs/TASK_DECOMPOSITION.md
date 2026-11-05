@@ -35,7 +35,7 @@
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e01-01-evidence"></a>E01-01.evidence | `test/evidence`; COMMON | Версионированный паспорт evidence: REQ/AC/build/input/expected/actual/fault/verdict связаны; NOT_RUN не принимается за PASS | SPEC → принятые требования | EVID |
+| <a id="task-e01-01-evidence"></a>E01-01.evidence | `test/evidence`; COMMON | CaseRegistry/CaseResult/RunManifest schemas: AC/network/variant identities, applicability отдельно от verdict, versioned evidence; NOT_RUN без выдуманных actual | SPEC → принятые требования | EVID |
 | <a id="task-e01-01-builds"></a>E01-01.builds | `build/native`; ETH/BSC/POLY | Изолированный build/artifact manifest каждого клиента и supporting зависимости; source/patch/compiler/lock определены, native internal types не склеены в общий graph | E01-01.evidence → формат manifest | STACK, BOOT |
 | <a id="task-e01-01-harness"></a>E01-01.harness | `test/harness`; ETH/BSC/POLY | Воспроизводимый минимальный runner с явными inputs/state/test credentials/supporting services и независимым expected; скрытая нода автора не нужна | E01-01.builds → закреплённые клиенты; E01-01.evidence → evidence schema | EVID, BOOT |
 | <a id="task-e01-02-pins"></a>E01-02.pins | `adapters/<client>/state_provider`; ETH/BSC/POLY | Hash-provider/pin seam: source root/input остаётся доступным до допустимого release; неподдержанный backend отвергается | E01-01.harness → runner и parent state | NATIVE, CONFIG |
@@ -126,7 +126,7 @@
 | <a id="task-e06-13-topology"></a>E06-13.topology | `deploy/compose+kubernetes`; ETH/BSC/POLY | 11 services/14 volumes с проверяемыми backing owners; adapter/Gateway и Polygon L1 изолированы | E06-13.init → initialized homes; E06-07.yaml → role stores | TOPO, BOOT |
 | <a id="task-e06-13-secrets"></a>E06-13.secrets | `deploy/trust`; ETH/BSC/POLY | CA/SAN/EKU/role/network admission, private keys/JWT/credentials и rotation; bootstrap admin не попадает Gateway | E06-07.yaml → connection roles | BOOT, CONFIG |
 | <a id="task-e06-13-nats_bootstrap"></a>E06-13.nats_bootstrap | `deploy/nats`; COMMON | Создание/проверка accounts/streams/ACL и D77 identity metadata; CREATE/read-back, отказ adoption missing keys, compatible UPDATE сохраняет посторонние keys; runtime без admin/reset | E06-13.secrets → trust material; E03-03.destination → expected binding | BOOT, CONTROL |
-| <a id="task-e06-13-network"></a>E06-13.network | `deploy/network`; ETH/BSC/POLY | Port mapping/advertise/internal links: наружу только согласованный P2P, межсервисные localhost ошибки отвергнуты | E06-13.topology → services; E06-13.secrets → authenticated connections | PORTS, BOOT, TOPO |
+| <a id="task-e06-13-network"></a>E06-13.network | `deploy/network`; ETH/BSC/POLY | Port mapping/advertise/internal links, включая Bor observer→собственная supporting L1; наружу только P2P, localhost/чужая L1 identity отвергнуты | E06-13.topology → services; E06-13.secrets → authenticated connections | PORTS, BOOT, TOPO |
 | <a id="task-e06-08-config_replace"></a>E06-08.config_replace | `deploy/config_generation`; ETH/BSC/POLY | Config replacement меняет только allowlist, применим после restart; immutable state/keys/genesis не перетираются | E06-13.init → phase state; E06-07.yaml → validated desired config | BOOT, CONFIG |
 | <a id="task-e06-08-maintenance"></a>E06-08.maintenance | `test/user_maintenance`; ETH/BSC/POLY | Исполнимый пользовательский stop-confirm-start/drain/switch/Resume/upgrade сценарий, включая shared-volume и delayed-writer ошибки | E06-08.config_replace → config generations; E06-13.network → reachable services; E06-13.nats_bootstrap → target; E05-03.upgrade → version rules | BOOT, CONFIG, DELIVERY, CONTROL |
 | <a id="task-e06-09-live_start"></a>E06-09.live_start | `test/user_startup`; ETH/BSC/POLY | Clean startup/sync→H+1 и independent pending; NATS outage не блокирует safe capture, restart одной сети не требует остальных | E06-13.network → links; E06-13.nats_bootstrap → NATS; E06-08.config_replace → effective configs | CONFIG, NATIVE, BOOT |
@@ -144,7 +144,7 @@
 | <a id="task-e07-03-runbook"></a>E07-03.runbook | `docs/runbook`; ETH/BSC/POLY | Проверяемый запуск/остановка/диагностика/recovery drill по фактическим states; команды не требуют скрытого окружения | E07-02.e2e → accepted path; E06-12.logs → observable states; E06-08.maintenance → operating procedure | BOOT, CONFIG, DELIVERY |
 | <a id="task-e07-08-isolation"></a>E07-08.isolation | `test/network_isolation`; ETH/BSC/POLY | Матрица add/config/stop/restart одной сети без изменения соседних writers/stores; общий NATS не означает shared journal | E07-02.e2e → running acceptance topology | TOPO, DELIVERY, EVID |
 | <a id="task-e07-09-nats_acceptance"></a>E07-09.nats_acceptance | `test/nats_reader`; ETH/BSC/POLY | Финальный NATS corpus: fields/parts/lifecycle/empty/duplicates/PubAck согласованы с native expected; production consumer не создаётся | E07-02.e2e → native expected; E07-02.scope → boundary | MSG, CONTROL, EVID |
-| <a id="task-e07-09-requirement_verdict"></a>E07-09.requirement_verdict | `test/evidence`; COMMON | Полная REQ/AC/applicability матрица verdict; mandatory без evidence не PASS, optional/deferred не маскируют отсутствие обязательного результата | E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence | EVID |
+| <a id="task-e07-09-requirement_verdict"></a>E07-09.requirement_verdict | `test/evidence`; COMMON | Полная CaseRegistry/CaseResult матрица AC/network/variant; individual run outcomes, mandatory missing/FAIL/NOT_RUN блокируют gate, исключения требуют rules | E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence | EVID |
 
 `G.E07`: все обязательные AC закрыты по своей применимости и итоговая матрица непротиворечива. В настоящей работе G.E01–G.E07 **не исполняются**, все runtime результаты NOT_RUN.
 
@@ -154,7 +154,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 187 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 195 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -176,6 +176,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-CAP-07 | AC-CAP-07-01…AC-CAP-07-03, AC-CAP-07-06 | [E01-02.decision_bridge](#task-e01-02-decision_bridge) | E01 |
 | REQ-CAP-07 | AC-CAP-07-04…AC-CAP-07-05 | [E05-01.registry](#task-e05-01-registry) | E05 |
 | REQ-CAP-08 | AC-CAP-08-01 | [E03-01.producer_store](#task-e03-01-producer_store) | E03 |
+| REQ-CAP-08 | AC-CAP-08-02 | [E05-02.reorg](#task-e05-02-reorg) | E05 |
 | REQ-CAP-09 | AC-CAP-09-01 | [E04-01.receipts](#task-e04-01-receipts) | E04 |
 | REQ-CAP-10 | AC-CAP-10-01 | [E05-03.full_crash_matrix](#task-e05-03-full_crash_matrix) | E05 |
 | REQ-DAT-01 | AC-DAT-01-01…AC-DAT-01-02 | [E02-02.schemas](#task-e02-02-schemas) | E02 |
@@ -203,7 +204,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-LIF-07 | AC-LIF-07-01…AC-LIF-07-06 | [E05-01.polygon_observer](#task-e05-01-polygon_observer) | E05 |
 | REQ-LIF-08 | AC-LIF-08-01…AC-LIF-08-05 | [E05-01.activation_gc](#task-e05-01-activation_gc) | E05 |
 | REQ-DLV-01 | AC-DLV-01-01…AC-DLV-01-02 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
-| REQ-DLV-02 | AC-DLV-02-01…AC-DLV-02-03 | [E03-01.producer_store](#task-e03-01-producer_store) | E03 |
+| REQ-DLV-02 | AC-DLV-02-01…AC-DLV-02-05 | [E03-01.producer_store](#task-e03-01-producer_store) | E03 |
 | REQ-DLV-03 | AC-DLV-03-01…AC-DLV-03-02 | [E03-02.rpc_streaming](#task-e03-02-rpc_streaming) | E03 |
 | REQ-DLV-03 | AC-DLV-03-03 | [E03-05.recovery_matrix](#task-e03-05-recovery_matrix) | E03 |
 | REQ-DLV-03 | AC-DLV-03-04 | [E03-01.gateway_store](#task-e03-01-gateway_store) | E03 |
@@ -238,7 +239,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-OPS-05 | AC-OPS-05-02…AC-OPS-05-03 | [E06-13.secrets](#task-e06-13-secrets) | E06 |
 | REQ-OPS-06 | AC-OPS-06-01, AC-OPS-06-03 | [E03-03.destination](#task-e03-03-destination) | E03 |
 | REQ-OPS-06 | AC-OPS-06-02, AC-OPS-06-04…AC-OPS-06-06 | [E06-13.nats_bootstrap](#task-e06-13-nats_bootstrap) | E06 |
-| REQ-OPS-07 | AC-OPS-07-01 | [E06-13.network](#task-e06-13-network) | E06 |
+| REQ-OPS-07 | AC-OPS-07-01…AC-OPS-07-03 | [E06-13.network](#task-e06-13-network) | E06 |
 | REQ-OPS-08 | AC-OPS-08-01 | [E06-09.live_start](#task-e06-09-live_start) | E06 |
 | REQ-OPS-08 | AC-OPS-08-02 | [E06-08.maintenance](#task-e06-08-maintenance) | E06 |
 | REQ-OPS-09 | AC-OPS-09-01…AC-OPS-09-02 | [E06-12.logs](#task-e06-12-logs) | E06 |
@@ -247,8 +248,9 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-DEV-01 | AC-DEV-01-01 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
 | REQ-DEV-02 | AC-DEV-02-01 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
 | REQ-DEV-03 | AC-DEV-03-01 | [E01-01.builds](#task-e01-01-builds) | E01 |
+| REQ-DEV-04 | AC-DEV-04-02 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
 | REQ-DEV-04 | AC-DEV-04-01 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
-| REQ-DEV-05 | AC-DEV-05-01 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
+| REQ-DEV-05 | AC-DEV-05-01…AC-DEV-05-03 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
 
 ## Приёмка артефактов без отдельного AC-owner
 
