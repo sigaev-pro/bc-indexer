@@ -1,5 +1,9 @@
 # Дерево решений и журнал интервью
 
+## Latest decision — D88 (2026-11-06)
+
+The owner reported that the OAuth authorization code did not arrive and offered SSH authentication to recover BOOT-05. Under the existing D84/D86 launch, use the owner's already configured SSH identity for Git transport in this repository. The coordinator verified GitHub authentication as `sigaev-pro` with `BatchMode=yes` and `StrictHostKeyChecking=yes`, then changed only this repository's origin to `git@github.com:sigaev-pro/bc-indexer.git`. No key material, global Git/SSH configuration, or gh authentication was changed. Keep gh for permitted issue, PR, and API operations. The pending OAuth workflow-scope refresh is no longer the chosen prerequisite for Git publication; any later API permission failure remains a separate blocker. This transport choice does not relax branch protection, exact-commit CI, independent review, or the stop before E01. Successful SSH authentication is not proof of a successful push or live CI; verify each remote step separately.
+
 ## Latest decision — D86 (2026-11-06)
 
 The user said to start after the coordinator proposed completing BOOT and stopping before E01. This launch authorizes BOOT-01 through BOOT-09 under the existing issue, review, and commit rules, including the initial baseline push to the verified empty repository and issue/PR updates. Finish all independent bootstrap work that the available access and resources allow. Record external blockers without claiming completion. Stop after BOOT; accepting BOOT-09 does not authorize starting E01 in this run. A later stage requires a new explicit launch. Preserve this stage limit in launch instructions and persistent controller state.
