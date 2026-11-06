@@ -93,7 +93,7 @@ The first launch creates and verifies bootstrap automation, then exits. It does 
 ```bash
 cd /Users/vadim/projects/bonpay/extractor
 mkdir -p .project/automation/runs
-nohup bash -c '
+nohup caffeinate -i -s bash -c '
   set -euo pipefail
   .project/cache/codex-0.167.0/node_modules/.bin/codex exec --sandbox workspace-write \
     -c approval_policy="\"never\"" \
@@ -106,7 +106,7 @@ nohup bash -c '
 ' < /dev/null > .project/automation/runs/launcher.log 2>&1 &
 ```
 
-Это конкретный bootstrap-запуск через существующий `codex exec`; controller создаётся в нём по BOOT-03. Если Codex закончит раньше, останется blocker, файла controller не будет либо verify-bootstrap не пройдёт — дальнейший запуск остановится, не создаст фиктивный успех. Повторять весь launcher поверх активного процесса нельзя: preflight/lease должны выявить конкурента. Если bootstrap остановился до создания controller, изучить `bootstrap-last.txt`/логи и устранить причину; затем повторить bootstrap, который обязан сверить текущие issues/commits и продолжить без дублей. Это ограничение первого запуска, не обещание уже установленного сервиса.
+This macOS launcher uses a process-scoped `caffeinate` guard. It does not change global power settings and does not protect against closing the laptop lid, shutdown, or loss of power. Use a dedicated runner for stronger uptime requirements. Linux runners need their own supervisor; do not copy the macOS guard there. The controller is created in BOOT-03. If bootstrap exits early, leaves a blocker, or fails verification, the launcher stops. Before repeating it, inspect saved state and logs and reconcile any existing process. Initial bootstrap recovery remains limited until the controller exists.
 
 После BOOT-03 доступны:
 

@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": {"type": "string", "enum": ["PASS", "BLOCKED"]},
+    "commit_sha": {"type": "string"},
+    "file_written": {"type": "boolean"},
+    "git_commit_succeeded": {"type": "boolean"},
+    "remote_read_succeeded": {"type": "boolean"},
+    "docker_read_succeeded": {"type": "boolean"},
+    "blocker": {"type": "string"}
+  },
+  "required": ["status", "commit_sha", "file_written", "git_commit_succeeded", "remote_read_succeeded", "docker_read_succeeded", "blocker"]
+}
