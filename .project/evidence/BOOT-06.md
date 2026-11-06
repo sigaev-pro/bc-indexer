@@ -1,7 +1,7 @@
 # BOOT-06 component inventory evidence
 
 Task: [BOOT-06](https://github.com/sigaev-pro/bc-indexer/issues/6).
-Date: 2026-11-06. Base: `6b8e1dd561d8be39f80b00ef5860d35b7db95d24`.
+Date: 2026-11-06. Original source baseline: `6b8e1dd561d8be39f80b00ef5860d35b7db95d24`. Integration base: accepted main `504b711dca4eb1c621f14ef54102102c3739248d`.
 Scope: initial registry and metadata-verified candidate; no active lock or specification changes.
 
 ## Artifacts
@@ -31,6 +31,14 @@ Independent review of commit `38ab319cdcc7724cea0aba8b06a267b7a6ebe617` found tw
 
 The validator checks baseline source hashes against the exact base commit, the immutable original v2 hash, and generated-output task IDs against the task catalog. Additional pre-commit checks verify changed-file scope, local Markdown links, JSON/Python parsing, English-authored text, and `git diff --check`.
 
+## Integration verification
+
+`python3 .project/automation/ci.py` passes with accepted BOOT-05 automation included: 31 unittest cases, 87 tracked Markdown files, 1016 local links, all 16 normative mirrors, 63 requirements, 217 acceptance cases, 68 product tasks, and 84 issue IDs. CI invokes the component validator with `--self-test`; all 54 unsafe mutations are rejected. Python/JSON and Git whitespace checks pass. Runtime remains NOT_RUN and release_ready remains false.
+
+The diff against `504b711dca4eb1c621f14ef54102102c3739248d` contains exactly the four component files, this evidence file, and PROJECT_STATUS.md. All four component files are byte-identical to reviewed commit `b8e26ae6be1d050267ba87b172a0eb5ab40f50c7`. Registry SHA-256 is `339f4f86ad1a4eeefa48df6e03aafa3c1b20c4f186a25017891c6479000ffdce`; candidate-lock SHA-256 is `8a523fa9fc6ecc21ef3c2f5cd9b36827a5820c83de0c849aea194b4e762b21f5`. No specification or active pin changes are part of the integration.
+
 ## Result and limits
 
-Proposed status: READY_FOR_REVIEW. Independent review of the revised commit and task acceptance are pending. The registry is ready as a build-planning input; the selected clients and libraries are not an accepted runtime combination. Current source candidates differ from the specification baseline, which remains unchanged. E01/E06 own build outputs, admission, signed closures, and profile manifests; E07 owns full applicable acceptance. No product process, testnet transaction, deployment, or active version promotion ran in this task.
+Independent review of revised commit `b8e26ae6be1d050267ba87b172a0eb5ab40f50c7` returned PASS in [issue #6 comment 6693195796](https://github.com/sigaev-pro/bc-indexer/issues/6#issuecomment-6693195796). This integration merges accepted BOOT-05 main history into that branch without rebasing or rewriting the reviewed component commits. The status-file conflict preserves both histories. Component registry, candidate lock, validator, and guide bytes remain unchanged; the original source baseline in the lock is preserved rather than relabeled as a new version acquisition.
+
+The new integration commit requires its own independent review, remote CI, and exact-commit acceptance. The registry is ready as a build-planning input; the selected clients and libraries are not an accepted runtime combination. Current source candidates differ from the specification baseline, which remains unchanged. E01/E06 own build outputs, admission, signed closures, and profile manifests; E07 owns full applicable acceptance. No product process, testnet transaction, deployment, or active version promotion ran in this task.
