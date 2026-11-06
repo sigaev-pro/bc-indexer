@@ -2,6 +2,8 @@
 
 **D86 — Current launch: BOOT only.** The owner authorized bootstrap and a stop before E01. Complete BOOT-01 through BOOT-09 where access permits, record blockers, and stop. A passed gate establishes readiness; it does not authorize another stage. Future controller runs must store an explicit stage limit and retain it on resume. Starting a later stage requires a new owner instruction.
 
+**Agent setup:** project roles and the explicit-prompt loader are in [.project/agency/README.md](.project/agency/README.md). BOOT-02 pins a project-local Codex 0.167.0 because the host CLI 0.145.0 cannot run the owner's configured model. Follow that file's exact install command before using the launcher below. Use [PROJECT_STATUS](.project/PROJECT_STATUS.md) for accepted tasks and remaining runtime checks.
+
 **D85 — English-only project output.** All new project text must use clear, simple American English: issues, PRs, reviews, code comments, documentation, commits, test descriptions, CLI messages, logs, and reports. Avoid British expressions, regional idioms, and unnecessary jargon. Follow [.project/AGENTS.md](.project/AGENTS.md). Use the English ISSUE_CATALOG when creating or updating issues; preserve task IDs, dependencies, acceptance criteria, and exact technical names. Every worker and reviewer must enforce this rule.
 
 Решение D84, 2026-11-06. Разработка разрешена: прежнее ограничение «только ТЗ, реализации никогда не будет» отменено прямым указанием пользователя. Продуктовая граница сохраняется: native-данные → стандартизированные записи → подтверждённая доставка в NATS. Репозиторий: [sigaev-pro/bc-indexer](https://github.com/sigaev-pro/bc-indexer). Сначала создаются все issues, затем работа проходит подготовку и E01–E07 по порядку.
@@ -93,7 +95,7 @@ cd /Users/vadim/projects/bonpay/extractor
 mkdir -p .project/automation/runs
 nohup bash -c '
   set -euo pipefail
-  codex exec --sandbox workspace-write \
+  .project/cache/codex-0.167.0/node_modules/.bin/codex exec --sandbox workspace-write \
     -c approval_policy="\"never\"" \
     -c sandbox_workspace_write.network_access=true \
     --json -o .project/automation/runs/bootstrap-last.txt \
