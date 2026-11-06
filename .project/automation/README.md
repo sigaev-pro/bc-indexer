@@ -79,3 +79,20 @@ The command only reads GitHub. It fails closed unless all of these checks pass:
 An offline `--snapshot PATH` mode supports isolated tests and analysis of trusted collected snapshots. It does not authenticate arbitrary input and does not authorize a merge. Snapshots retain separate `combined_status` and `commit_statuses` API responses. The collector rejects oversized check sets or full status pages instead of silently skipping pagination.
 
 The coordinator must merge with GitHub's expected-head condition, respect strict branch protection, then verify the resulting commit and tree. A PASS is evidence for the captured state, not a reservation against later changes. A changed head requires new review and CI; a changed base requires updating the candidate and repeating the gate. The future controller owns serialization and records the verified merge result.
+
+## Durable capture before merge
+
+Use `evidence.py` to retain the full passing collector snapshot before a manual or controller-managed merge. Every identity below is required. The output directory must be Git-ignored and inside the canonical repository; an isolated worktree may use the canonical repository's ignored run directory.
+
+```bash
+python3 .project/automation/evidence.py \
+  --repo sigaev-pro/bc-indexer --pr PR_NUMBER --task TASK_ID \
+  --review-comment-id COMMENT_ID --coordinator-login sigaev-pro \
+  --implementer-session ACTUAL_IMPLEMENTER_SESSION_ID \
+  --expected-head FULL_HEAD_SHA --expected-base FULL_BASE_SHA \
+  --output-dir /Users/vadim/projects/bonpay/extractor/.project/automation/runs/acceptance
+```
+
+The command only reads GitHub. It rejects a passing proof for a different requested head, base, PR, or task. Before reporting success, it atomically retains one private JSON bundle and syncs both file data and the containing directory. The bundle contains the complete snapshot, expected identity, evaluator verdict, capture time, and snapshot hash. Its content-addressed filename preserves earlier evidence. Output includes the bundle path and hash, but no environment or credentials.
+
+The snapshot hash is SHA-256 of `json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False) + "\n"`, encoded as UTF-8. Retain the full bundle with the actual merge receipt; a digest or CI log URL alone cannot reconstruct it. Capturing a PASS does not reserve GitHub state or authorize a merge. Repeat the live gate if the head or base changes, and always use the expected-head merge condition and verify the resulting merge/tree.
