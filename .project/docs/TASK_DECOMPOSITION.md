@@ -4,7 +4,7 @@ D83: E01-01.builds включает отдельный scripts/refresh-versions 
 
 D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет outputs существующих задач без новых child IDs: E01-01.evidence — schema v3/profile registry; E01-01.harness — runner/fixtures/deadlines; E07-02.e2e — TC01–TC12; E07-09.nats_acceptance — reader/mutations; E07-09.requirement_verdict — семь профилей и все suites. Build/bootstrap tasks доказывают каждый профиль; mainnet proof не принимается за testnet. 63 REQ / 217 AC / 68 child tasks / 7 gates.
 
-2026-11-05. Только проектирование и документация, D64. Этот файл описывает задачи **проектируемого процесса**, а не разрешает их выполнение. Код продукта, сборки, runtime-тесты и deployment не выполняются. Все runtime verdict — **NOT_RUN**. Существующие parent ID E01–E07 сохранены; дочерние ID уточняют результат, не переиспользуют снятые ID.
+2026-11-06 · D84: задачи разрешены к исполнению по issue-first регламенту и gates. Все runtime verdict пока NOT_RUN. Существующие parent/child IDs сохранены; 9 BOOT и 7 gate issues организуют выполнение 68 child tasks, не меняют их нормативный смысл.
 
 Нормативное поведение задаёт [единое ТЗ](../evm-transaction-extractor-tz-v3-codex.md). [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md) сохраняет parent-задачи и историю scope. Здесь определены владельцы, артефакты, зависимости и привязка к [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md); [ACCEPTANCE_REQUIREMENTS](ACCEPTANCE_REQUIREMENTS.md) остаётся реестром 63 REQ. Изменение поведения через задачу запрещено: обнаруженное противоречие возвращается в ТЗ и решения.
 
@@ -150,7 +150,7 @@ D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет outputs суще
 | <a id="task-e07-09-nats_acceptance"></a>E07-09.nats_acceptance | `test/nats_reader`; ETH/BSC/POLY | Финальный NATS corpus: fields/parts/lifecycle/empty/duplicates/PubAck согласованы с native expected; production consumer не создаётся | E07-02.e2e → native expected; E07-02.scope → boundary | MSG, CONTROL, EVID |
 | <a id="task-e07-09-requirement_verdict"></a>E07-09.requirement_verdict | `test/evidence`; COMMON | Полная CaseRegistry/CaseResult матрица полных identities D82; individual run outcomes, mandatory missing/FAIL/NOT_RUN блокируют gate, исключения требуют rules | E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence | EVID |
 
-`G.E07`: все обязательные AC закрыты по своей применимости и итоговая матрица непротиворечива. В настоящей работе G.E01–G.E07 **не исполняются**, все runtime результаты NOT_RUN.
+`G.E07`: все обязательные AC закрыты по своей применимости и итоговая матрица непротиворечива. По D84 gates исполняются последовательно; до реальных запусков результаты NOT_RUN.
 
 ## Отложенные и снятые parents
 

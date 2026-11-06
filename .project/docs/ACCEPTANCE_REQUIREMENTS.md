@@ -4,7 +4,7 @@ D83 уточняет REQ-DEV-02/04: standard run ≤1800 секунд без pre
 
 D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет REQ-SCP-01 и REQ-DEV-02/04/05: семь профилей, TC01–TC12, suites/deadlines и evidence schema v3. Каждый профиль проверяется отдельно; число родительских REQ остаётся 63.
 
-Родительские REQ раскрыты в [217 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [217 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). D84 разрешает исполнение этого backlog по issues/gates.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -114,4 +114,4 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 
 ## Definition of done для реализации
 
-D64: это критерии приёмки описываемой системы в составе ТЗ; реализация и исполнение E01–E07 никогда не входят в нашу работу. NOT_RUN не PASS; audit SPECIFIED не runtime DONE. Требования нельзя понижать ради успешного gate. Предписанный системой процесс проверки сохраняет counterexample input/actual/expected, устраняет причину и повторяет затронутые proofs; предусмотренный пакет приёмки содержит build/artifact locks, configs/runbook и воспроизводимые evidence. Здесь эти условия только проектируются и документируются.
+D84: это обязательные критерии фактической приёмки разработки E01–E07. NOT_RUN не PASS; audit SPECIFIED не runtime DONE. Требования нельзя понижать ради успешного gate. Предписанный системой процесс проверки сохраняет counterexample input/actual/expected, устраняет причину и повторяет затронутые proofs; предусмотренный пакет приёмки содержит build/artifact locks, configs/runbook и воспроизводимые evidence. D84 разрешает реализацию и проверку этих условий после подготовки BOOT.

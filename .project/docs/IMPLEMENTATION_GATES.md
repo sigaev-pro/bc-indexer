@@ -4,7 +4,7 @@ D83: standard run ≤1800 секунд без подготовки; topology/о�
 
 D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) — дополнение всех gates: семь профилей, suites/TC01–TC12, evidence schema v3. ProfileManifest/fixture kind/resource-deadline digest и phase durations входят в RunManifest; CaseRegistry version/digest покрывает новые оси. Семейство не единица зачёта: каждому профилю отдельный результат. E01 — реестр/fixtures; E03 — ранний NATS smoke; E05 — combined faults; E06 — все профильные окружения; E07 — полная матрица, mutations, soak и public smoke.
 
-D64: документальные требования к доказательствам для проектируемой системы. Порядок из [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md) **E01 → E02 → E03 → E04 → E05 → E06 → E07** сохраняется как содержание ТЗ; code/build/runtime tasks не выполняются в нашей работе и не ожидают разрешения. SPECIFIED в [реестре исправлений](DESIGN_REPAIR_STATUS.md) означает готовый проверяемый проект.
+D84: эти требования к доказательствам применяются при разработке E01 → E02 → E03 → E04 → E05 → E06 → E07 после BOOT. SPECIFIED означает готовый проект, а не выполненный runtime proof. Прежний запрет D64 отменён.
 
 ## Ранний harness и зависимости gates
 
@@ -74,11 +74,11 @@ D79/F04: applicability и execution verdict — разные поля. До за
 
 CaseResult ссылается на закрытый manifest с SHA-256; manifest содержит identities/outcomes, но не hash ссылающегося CaseResult: циклического хеширования нет. Несколько cases могут ссылаться на один run только при наличии каждого в его точном списке и индивидуальных outcomes. Подмена fixture/profile/version либо отсутствие actual/expected evidence делает ссылку непригодной для PASS. Неприменимые к виду fixture build/image поля имеют явное объяснение в passport; source-only анализ никогда не создаёт runtime PASS. Артефакты не содержат secrets.
 
-Gate сопоставляет текущий CaseRegistry, назначенные этому stage identities и CaseResult один к одному: duplicate/conflicting identities, пропущенный mandatory variant, NOT_RUN, FAIL или невалидное evidence блокируют gate. Исключения принимаются только по подтверждённым rules/decisions; отключённый optional не блокирует mandatory gate. Счёт файлов manifest и PASS одного варианта/сети не заменяют полный реестр. Новый native commit/profile/schema/plan/storage version инвалидирует затронутые результаты: текущий применимый case становится NOT_RUN до нового запуска, прежний manifest остаётся историческим. В этой работе runtime cases не запускаются и остаются NOT_RUN.
+Gate сопоставляет текущий CaseRegistry, назначенные этому stage identities и CaseResult один к одному: duplicate/conflicting identities, пропущенный mandatory variant, NOT_RUN, FAIL или невалидное evidence блокируют gate. Исключения принимаются только по подтверждённым rules/decisions; отключённый optional не блокирует mandatory gate. Счёт файлов manifest и PASS одного варианта/сети не заменяют полный реестр. Новый native commit/profile/schema/plan/storage version инвалидирует затронутые результаты: текущий применимый case становится NOT_RUN до нового запуска, прежний manifest остаётся историческим. По D84 runtime cases выполняются по issues/gates; до реальных запусков они NOT_RUN.
 
 При missing mandatory native path, неустранимом snapshot alias, потере recovery pin, нарушении marker ordering, неограниченном collector memory path, конфликте identity/immutable bytes или false ACK gate останавливается. Сохраняются минимальный counterexample и evidence; исправляется механизм и повторяются затронутые проверки. Нельзя молча снижать полноту, отключать обязательный native type, пропускать poison record или называть runtime-профиль supported. Изменение принятого поведения/клиента выносится пользователю; инженерное исправление в рамках контракта выполняется самостоятельно.
 
-Требование ТЗ к описываемому процессу разработки: переход между этапами только после evidence всех обязательных подзадач ETH/BSC/POLY и сохранения результатов. Optional/deferred задачи не используются ни как ложный PASS, ни как блокер gate. По D64 наша работа ограничена проектированием этих правил; исполнять этапы не предполагается.
+Требование ТЗ к описываемому процессу разработки: переход между этапами только после evidence всех обязательных подзадач ETH/BSC/POLY и сохранения результатов. Optional/deferred задачи не используются ни как ложный PASS, ни как блокер gate. D84 разрешает исполнение этапов по issues/gates.
 
 ## Traceability 41 находки
 
