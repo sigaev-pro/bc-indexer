@@ -1,5 +1,17 @@
 # Дерево решений и журнал интервью
 
+## Delegated implementation decision — D89 (2026-11-06)
+
+BOOT-03 implements the accepted controller contract with a Python standard-library scheduler, a durable store, a real execution adapter, and an isolated fake backend. A canonical repository lock is shared across worktrees and inherited by supervised subprocesses. Atomic writes sync each newly created directory and its parent before reporting durability. Task leases have explicit run identity and generations; old timestamps never authorize stealing another run's work.
+
+The public `run` command requires accepted BOOT-09 evidence and current preflight. `verify-bootstrap` checks BOOT-01 through BOOT-08, avoiding a circular gate. The scheduler uses the ordered stage bound from a reviewed owner authorization record. D86 remains the only accepted record and limits work to BOOT. CLI arguments and saved state cannot widen it. Product recipes and acceptance adapters remain unconfigured and must fail closed until their later authorized tasks supply them.
+
+The controller retains complete pre-merge collector snapshots before requesting a merge and retains the verified actual merge receipt afterward. Historical import is limited to the exact BOOT-01/02/04/05 commits and coordinator comments recorded in the importer. BOOT-05's original snapshot bytes were not retained; its narrow exception preserves the actual post-merge public proof and coordinator live-gate attestation without reconstructing the old digest. BOOT-06 and later manual tasks use retained full captures and authenticated merge facts, without additional historical exceptions.
+
+An interrupted session with no durable result is an explicit reconciliation blocker. Recovery never signals a process from an old PID record, discards dirty work, steals a lease, or repeats an uncertain remote mutation without checking its existing identity. Supervision uses monotonic deadlines and unreaped child ownership; denied or uncertain cleanup is recorded as a blocker. Budget exhaustion is resumable only through an explicit new bounded budget window, with earlier consumption retained. These are technical choices within D84/D86, not permission to start E01 or change product guarantees.
+
+Review corrections distinguish automatic service recovery from an explicit operator resume. Automatic recovery preserves durable stops and blockers. A stopped session can receive a new linked operation only with authenticated terminal evidence and confirmed process-group cleanup; previous artifacts and consumed attempts remain recorded. A failed model session has one explicitly authorized diagnostic retry, within the existing task and invocation limits. This process-level diagnostic cannot clear failed task verification or change D83 runtime failure semantics.
+
 ## Delegated technical decision — D90 (2026-11-06)
 
 BOOT-08 defines TEST-OPEN-02 under D84 within D82/D83's accepted guarantees. Accepted BOOT-06 supplies the candidate registry; accepted BOOT-07/D87 supplies finite reader completion. This decision requires independent exact-commit review before BOOT-08 is accepted. It is not a new owner approval, an accepted runtime client pin, or product runtime evidence.

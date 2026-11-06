@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task_id", "session_id", "commit_sha", "changed_files", "checks", "evidence", "blockers", "proposed_status"],
+  "properties": {
+    "task_id": {"type": "string"},
+    "session_id": {"type": "string"},
+    "commit_sha": {"type": "string"},
+    "changed_files": {"type": "array", "items": {"type": "string"}},
+    "checks": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "proposed_status": {"type": "string", "enum": ["REVIEW", "BLOCKED"]}
+  }
+}

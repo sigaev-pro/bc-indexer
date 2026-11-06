@@ -1,0 +1,67 @@
+# BOOT-03 persistent controller
+
+Task: [BOOT-03](https://github.com/sigaev-pro/bc-indexer/issues/5). Authorization: D86, BOOT only.
+Accepted implementation base: `504b711dca4eb1c621f14ef54102102c3739248d`.
+
+## Durable capture substep
+
+`automation/evidence.py` calls the accepted BOOT-05 collector and evaluator using explicit repository, task, PR, review comment, coordinator, implementer, expected head, and expected base identities. It retains the complete passing snapshot, verdict, identity, capture time, and canonical snapshot hash in one atomic JSON bundle before returning success. File data and the containing directory are synced. Content-addressed names preserve prior captures; a failed or stale proof cannot create a successful capture.
+
+The capture command only reads GitHub. It neither merges nor authorizes a merge. The coordinator must still use the expected-head merge condition, preserve branch protection, and verify and retain the actual merge result. CLI output goes to an explicitly selected Git-ignored directory in the canonical repository, including when the command runs from an isolated worktree.
+
+Focused tests use temporary directories and a fake collector. The original 11 capture tests passed with 42 total bootstrap tests. Independent review then identified that new nested directory entries also need parent-directory sync. The correction creates and syncs each directory level before descending, including the nearest existing ancestor on retry. Two additional tests cover exact sync ordering and recovery after parent sync fails. The corrected suite has 13 capture tests and 44 total bootstrap tests. No real model session, issue, or GitHub mutation is used.
+
+The capture substep was committed as `d138a76cd44bc3718423f7e52470fe0e9f27a6fe`, then corrected after independent review in `ed513201e357da23414fd103227ecbadb15b8a84`. The coordinator independently reviewed the correction and used it to retain complete BOOT-06 and BOOT-07 proofs before their merges. Their original captures remain in the canonical ignored acceptance directory.
+
+## Controller implementation
+
+The implementation supplies `verify-bootstrap`, `run`, `resume`, `status`, and `stop`; validates the 84-node DAG and live issue mapping; retains exact task/recipe snapshots; and schedules only through the immutable reviewed owner stage bound. D86 remains BOOT only. Public `run` requires accepted BOOT-09 plus current preflight; `verify-bootstrap` checks the preceding eight tasks. Unconfigured product verification and acceptance remain explicit blockers.
+
+Atomic run state, an inherited repository lock, and generation-bound task leases prevent multiple writers across worktrees. Before external changes, the controller retains operation identities and reconciles current worktrees, branches, PRs, reports, statuses, CI, and merge facts. It preserves dirty work and uncertain session outcomes. Full pre-merge captures precede merge requests; durable accepted receipts follow verified actual merges. Issue closure follows accepted evidence.
+
+The supervisor uses bounded pipes, monotonic deadlines, process groups, and unreaped direct-child ownership. A parent watchdog bounds stopped or hung supervisors. Darwin tests exposed that `waitid` may report `CLD_STOPPED` despite `WEXITED`, and an empty zombie-owned group may return `EPERM`. The implementation filters exit event types and distinguishes empty groups from denied cleanup using live membership. PID records never authorize signaling another process. Denied or uncertain cleanup remains visible.
+
+The owner's existing model remains unchanged. Codex resolves from the canonical repository's pinned 0.167.0 cache; isolated worktrees do not install their own copy. No new real model session was launched for BOOT-03. Existing BOOT-02/04 proofs establish the model and access environment, while the new process tests use temporary Python subprocesses.
+
+## Failure evidence
+
+- Fake-backend crash injection covers before and after worktree preparation, worker/reviewer execution, verification, push, PR creation, review comment, status, pre-merge capture, merge, and issue closure. Recovery retains one operation identity and does not duplicate changes.
+- The real publication adapter is tested with a fake GitHub transport that loses responses after push, PR, comment, and status mutations. Retried operations discover and reuse the existing remote objects.
+- Negative checks reject unverified worker output, manually closed dependencies, stale head/base/CI, forged receipts, missing recipes, changed lease generations, foreign stale leases, graph drift, and exhausted review attempts.
+- Budget tests retain invocation reservations and elapsed window deadlines across normal resume. Only an explicit renewal adds a bounded window. A test-only future authorization proves that scheduling follows ordered stages; D86 still cannot dispatch E01.
+- Disposable process tests cover inherited locks, stop with work preservation, process timeout, bounded output, environment fields, stale/reused PID records, backward wall-clock movement, and an unresponsive stopped supervisor with a child group.
+- Receipt tests authenticate retained captures against actual public record shapes, verify merge parents/tree/main ancestry, reject altered evidence, and preserve accepted proof independently of expiring CI logs. Historical exceptions are limited to BOOT-01/02/04/05.
+
+An early provisional live read-only `verify-bootstrap` run reconciled all 84 issues and authenticated BOOT-01/02/04/05/06/07. It correctly returned BLOCKED with BOOT-03 and BOOT-08 missing, `e01_authorized: false`, and product runtime NOT_RUN. This ran working source, not an accepted controller commit. The first bounded local attempt timed out during read-only collection; the normal sandbox lacked network access. The completed read-only check used approved escalation and retained local receipts. No GitHub mutation occurred. Executing source hashes and explicit clean/modified state accompany later revalidation records so checkout HEAD is not confused with uncommitted source bytes.
+
+Implementation commit `af7c4b55edb922589f5bafb2665cecdd38c7867e` passed exact-head CI with 81 tests. The accepted BOOT-06/07 main was integrated with both status/decision histories preserved. Final implementation `6bb1f908e8ecc6cdc46adb74db7f2ea5d8331693` passes clean exact-head CI with 82 tests and component validation. The final regression proves that a process exit of zero cannot produce successful session evidence when owned-group cleanup is denied or uncertain. Document/mapping/mirror checks and the immutable v2 hash pass.
+
+Read-only live verification also ran against exact clean implementation `6bb1f908e8ecc6cdc46adb74db7f2ea5d8331693`. It reconciled all 84 issues and verified receipts for BOOT-01/02/04/05/06/07. The expected result was BLOCKED with only BOOT-03 and BOOT-08 missing, E01 unauthorized, and product verification unconfigured. Durable records under the canonical `state/accepted/revalidations/` directory bind each retained receipt to the clean executing commit and the exact hashes of `controller.py`, `controller_backend.py`, `session_runner.py`, `acceptance_receipts.py`, `evidence.py`, and `acceptance.py`. This confirms the verifier rejects incomplete bootstrap; it is not a claim that bootstrap or BOOT-03 is accepted.
+
+Independent review, fresh exact-head GitHub CI, and coordinator acceptance remain pending. Native product runtime remains NOT_RUN; E01 is not authorized.
+
+## First independent review repair
+
+Independent review of candidate `85918b5bfd9a4b955a415c3493af49cd062760a8` against accepted main `41d9ed0627fe4822bb3ffc2e1c043a84f18af406` requested two recovery corrections. The prior 82-test suite passed but did not cover these crash windows.
+
+The P1 watchdog regression uses the actual supervisor paused immediately before `Popen`. Its possible worker ignores TERM and exits by itself after six seconds, so the failing regression cannot leave an unbounded helper. Against the reviewed implementation, watchdog SIGCONT admitted the new worker after the child census. The corrected watchdog never resumes that supervisor: it cleans the observed child groups while the supervisor remains stopped, then terminates its still-owned group. The regression verifies that no worker spawn occurs and that the repository lock is immediately available afterward.
+
+The P2 regression interrupts `advance` directly before and after terminal state save and before and after lease release. This models a hard crash without a Python finally block hiding a missing write. The old implementation failed recovery before DONE save and after lease release because its durable lease was already released. The corrected order saves DONE first. Reconciliation verifies the receipt, then finishes idempotent cleanup only for the same run and lease generation. All four crash boundaries recover without duplicate issue closure.
+
+Both defects were reproduced before their fixes. The focused controller/process suite passes 32 tests; full local CI passes 84 tests plus component validation and document checks. The spawn regression synchronizes with the supervisor's actual pre-Popen marker rather than relying on interpreter startup timing. The repair preserves BOOT-09 preflight, D86 authorization, historical-import limits, and existing exact-commit acceptance. No model session, GitHub mutation, service installation, or new live acceptance claim is part of this repair.
+
+## Second independent review repair
+
+Independent re-review of `035c88f9c8fb787d04716add6a08aa36b05c2a62` found that service startup used explicit resume and could clear an operator stop. The regression invokes `controller.main` with arguments parsed from both actual service templates. Against the reviewed version, STOPPED and BUDGET_STOP runs dispatched work. Both templates now use `resume --automatic`. Tests cover STOPPED with and without a marker, RUNNING with a stop marker, BUDGET_STOP, and BLOCKED; all preserve budgets and task state with no preflight, task effect, or session. Automatic recovery can still reconcile a genuinely RUNNING crash without duplicate publication, but cannot grant budget renewal or a session retry.
+
+Real disposable subprocess evidence also reproduced the pending-result loop. A stopped or failed operation retained its ID and replayed the same terminal `result.json`. The corrected explicit resume authenticates request/result/log hashes and confirmed process-group cleanup, then durably reserves a new linked operation. The original artifacts remain unchanged. A new worker attempt and model invocation are charged before launch. Crashes on either side of that reservation recover with one link and one charge. Missing results, legacy results without cleanup proof, uncertain cleanup, watchdog termination, or changed logs block replacement without starting a process.
+
+A failed model process or failed model turn requires the explicit `--retry-session` flag and has one diagnostic retry per task, within the existing attempt and invocation limits. A successful process exit does not hide a failed model turn. Failed task verification cannot be cleared with this flag; it remains blocked for reviewed diagnosis, preserving D83 runtime failure semantics. The supervisor confirms that the owned process group is empty before reaping its leader; sending a termination signal alone is not proof of cleanup.
+
+The second repair passes all 95 local bootstrap tests and 54 component negative cases, with document and immutable-original checks passing. Ten new recovery tests cover service CLI behavior and retained real process results; an additional process test rejects unconfirmed cleanup. BOOT-08's recipe now allows only its concrete corpus directory in addition to the existing task paths and requires its validator and catalog. Accepted-main integration, exact committed-source checks, and independent re-review remain next. This repair ran no model session, service installation, GitHub mutation, or product runtime test; E01 remains unauthorized.
+
+## Final integrated repair verification (2026-11-07)
+
+Repair commit `565dbb5cb3dad243c6955a92741d7cb13ab95be1` was merged with accepted BOOT-08 main `29a626d4cc3a7238521113f386a7273fb58c45d1`. The integrated clean code commit is `9354bea60e2f253363fbb883133cdef691883f52`. Both status histories and D89/D90 are retained. The accepted BOOT-08 corpus, validator, specification, mirrors, and evidence have no delta from main. Exact-head CI passes 144 tests, 54 component negative cases, 16 normative mirrors, 91 documents/1044 local links, and the immutable v2 check.
+
+A fresh read-only `verify-bootstrap` invocation on that exact clean code commit reconciled all 84 issues and authenticated BOOT-01/02/04/05/06/07/08. It returned the expected BLOCKED verdict with only BOOT-03 missing. It reported `e01_authorized: false`, `product_verification_configured: false`, and `runtime: NOT_RUN`. BOOT-08 was imported from its retained full capture with authenticated public and merge evidence, without a new historical exception. Durable revalidations identify the exact clean executing commit and all six module hashes. The final documentation commit changes only this evidence and PROJECT_STATUS; those implementation hashes remain identical. Independent re-review and coordinator acceptance are still required.

@@ -1,0 +1,273 @@
+"""Supervise one bounded process group while retaining the controller lock."""
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import selectors
+import subprocess
+import time
+
+import acceptance
+import evidence
+
+LOG_LIMIT = 8 * 1024 * 1024
+
+
+def file_hash(path):
+    with Path(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def exited_unreaped(process):
+    """Inspect our own child without releasing its PID for possible reuse."""
+    if process.returncode is not None:
+        raise ChildProcessError("child was already reaped")
+    event = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    # Darwin can return CLD_STOPPED even when WSTOPPED was not requested.
+    return event is not None and event.si_pid == process.pid and event.si_code in {os.CLD_EXITED, os.CLD_KILLED, os.CLD_DUMPED}
+
+
+def live_group_members(group):
+    rows = subprocess.run(["ps", "-axo", "pgid=,stat="], text=True, capture_output=True, timeout=2)
+    acceptance.require(rows.returncode == 0, "cannot inspect owned process group")
+    return any(len(values := line.split()) == 2 and values[0] == str(group) and not values[1].startswith("Z")
+               for line in rows.stdout.splitlines())
+
+
+def terminate_group(process, grace=3):
+    """Signal only a direct child whose unreaped leader still reserves the group ID."""
+    try:
+        exited_unreaped(process)
+    except ChildProcessError:
+        return "ownership-lost"
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return "already-exited"
+    except PermissionError:
+        if exited_unreaped(process) and not live_group_members(process.pid):
+            return "already-exited"
+        return "cleanup-denied"
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return "graceful"
+        except PermissionError:
+            if exited_unreaped(process) and not live_group_members(process.pid):
+                return "graceful"
+            return "cleanup-denied"
+        if exited_unreaped(process) and not live_group_members(process.pid):
+            return "graceful"
+        time.sleep(0.05)
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return "graceful"
+    except PermissionError:
+        return "cleanup-denied"
+    return "forced"
+
+
+def confirm_group_exit(process, timeout=2):
+    """Prove the group is empty while its direct-child leader is still reserved."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if exited_unreaped(process) and not live_group_members(process.pid):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
+
+
+def watchdog_cleanup(process, grace=2):
+    """Bound cleanup even if a supervisor is stopped or cannot execute its handler."""
+    try:
+        exited_unreaped(process)
+    except ChildProcessError:
+        return {"supervisor": "ownership-lost", "child_groups": []}
+    children = []
+    denied = []
+    # Keep this direct child unreaped. Freeze it before inspecting its children so
+    # it cannot reap their leaders and allow their numeric process IDs to be reused.
+    os.kill(process.pid, signal.SIGSTOP)
+    frozen = False
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        row = subprocess.run(["ps", "-p", str(process.pid), "-o", "stat="],
+                             text=True, capture_output=True, timeout=1)
+        if row.stdout.strip().startswith("T"):
+            frozen = True
+            break
+        if exited_unreaped(process):
+            break
+        time.sleep(0.02)
+    if frozen:
+        rows = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid="], text=True,
+                              capture_output=True, timeout=2)
+        acceptance.require(rows.returncode == 0, "cannot inspect supervised child ownership")
+        for line in rows.stdout.splitlines():
+            values = line.split()
+            if len(values) == 3 and all(value.isdigit() for value in values):
+                pid, parent, group = map(int, values)
+                if parent == process.pid and group == pid:
+                    children.append(pid)
+        for group in children:
+            try:
+                os.killpg(group, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                if live_group_members(group):
+                    denied.append(group)
+        if children:
+            time.sleep(grace)
+        for group in children:
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                if live_group_members(group) and group not in denied:
+                    denied.append(group)
+    # Never resume this supervisor after the child census. It may be stopped
+    # immediately before Popen, and resuming it could admit an unseen worker.
+    # Its unreaped leader still reserves this group ID through final cleanup.
+    supervisor = "forced-while-stopped" if frozen else "forced-with-uncertain-child-ownership"
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        supervisor = "already-exited"
+    except PermissionError:
+        supervisor = "cleanup-denied"
+    return {"supervisor": supervisor, "child_groups": children,
+            "cleanup_denied_groups": denied,
+            "cleanup_uncertain": not frozen or bool(denied) or supervisor == "cleanup-denied",
+            "ownership": "unreaped direct supervisor; no resume between child census and final group termination"}
+
+
+def supervise(request_path, lock_fd):
+    request_path = Path(request_path)
+    request = acceptance.parse_json(request_path.read_text())
+    directory = request_path.parent
+    result_path = directory / "result.json"
+    request_hash = evidence.digest(request)
+    os.fstat(lock_fd)
+    if result_path.exists():
+        saved = acceptance.parse_json(result_path.read_text())
+        acceptance.require(saved["request_sha256"] == request_hash, "saved result belongs to another request")
+        return saved
+    claim_fd = os.open(directory / "session.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(claim_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    process = None
+    interrupted = False
+    old_handlers = {}
+
+    def interrupt(*_args):
+        nonlocal interrupted
+        interrupted = True
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        old_handlers[signum] = signal.signal(signum, interrupt)
+    stdout_path, stderr_path = directory / "stdout.jsonl", directory / "stderr.log"
+    started = time.time()
+    deadline = time.monotonic() + min(request.get("timeout_seconds", 3600), max(0, request["deadline"] - started))
+    reason, termination = "completed", "not-needed"
+    try:
+        evidence.atomic_json(directory / "started.json", {"request_sha256": request_hash,
+                             "operation_id": request["operation_id"], "supervisor_pid": os.getpid(),
+                             "started_at": started})
+        for output in (stdout_path, stderr_path):
+            acceptance.require(not output.exists(), "session output already exists without a completed result")
+        with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
+            os.chmod(stdout_path, 0o600)
+            os.chmod(stderr_path, 0o600)
+            with (directory / "stdin.txt").open("rb") as stdin:
+                process = subprocess.Popen(request["command"], cwd=request["cwd"], stdin=stdin,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+                                           pass_fds=(lock_fd,), env=dict(os.environ, **request.get("env", {})))
+            selector = selectors.DefaultSelector()
+            selector.register(process.stdout, selectors.EVENT_READ, stdout)
+            selector.register(process.stderr, selectors.EVENT_READ, stderr)
+            written = 0
+            last_heartbeat = 0.0
+            while True:
+                now = time.time()
+                if now - last_heartbeat >= 1:
+                    evidence.atomic_json(directory / "heartbeat.json", {
+                        "operation_id": request["operation_id"], "supervisor_pid": os.getpid(),
+                        "process_group": process.pid, "started_at": started, "heartbeat_at": now})
+                    last_heartbeat = now
+                if interrupted or Path(request["stop_file"]).exists():
+                    reason = "stopped"
+                elif time.monotonic() >= deadline:
+                    reason = "timeout"
+                elif written >= request["log_limit"]:
+                    reason = "output-limit"
+                elif exited_unreaped(process) and not selector.get_map():
+                    break
+                else:
+                    for key, _ in selector.select(timeout=0.1):
+                        chunk = os.read(key.fd, min(65536, max(1, request["log_limit"] - written)))
+                        if not chunk:
+                            selector.unregister(key.fileobj)
+                            key.fileobj.close()
+                        else:
+                            key.data.write(chunk)
+                            written += len(chunk)
+                    continue
+                termination = terminate_group(process)
+                break
+            selector.close()
+            for pipe in (process.stdout, process.stderr):
+                if not pipe.closed:
+                    pipe.close()
+            # A process can exit while descendants keep its process group alive.
+            if termination == "not-needed":
+                termination = terminate_group(process, grace=0.1)
+            cleanup_complete = termination in {"already-exited", "graceful", "forced"} and confirm_group_exit(process)
+            if not cleanup_complete:
+                reason = "cleanup-uncertain"
+                evidence.atomic_json(directory / "cleanup.json", {"operation_id": request["operation_id"],
+                                     "termination": termination, "reason": reason})
+            process.wait(timeout=10)
+            stdout.flush()
+            stderr.flush()
+            os.fsync(stdout.fileno())
+            os.fsync(stderr.fileno())
+        result = {"schema_version": 1, "operation_id": request["operation_id"],
+                  "request_sha256": request_hash, "started_at": started, "finished_at": time.time(),
+                  "exit_code": process.returncode, "reason": reason, "termination": termination,
+                  "cleanup_complete": cleanup_complete,
+                  "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
+        evidence.atomic_json(result_path, result)
+        return result
+    finally:
+        if process is not None and process.returncode is None:
+            terminate_group(process)
+            process.wait(timeout=10)
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
+        os.close(claim_fd)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--request", required=True, type=Path)
+    parser.add_argument("--lock-fd", required=True, type=int)
+    args = parser.parse_args()
+    try:
+        result = supervise(args.request, args.lock_fd)
+        return 0 if result["reason"] == "completed" else 1
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        # Full commands and arbitrary environment are deliberately absent from errors.
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
