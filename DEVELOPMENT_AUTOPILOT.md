@@ -1,5 +1,7 @@
 # Разработка extractor с agency-agents
 
+**D86 — Current launch: BOOT only.** The owner authorized bootstrap and a stop before E01. Complete BOOT-01 through BOOT-09 where access permits, record blockers, and stop. A passed gate establishes readiness; it does not authorize another stage. Future controller runs must store an explicit stage limit and retain it on resume. Starting a later stage requires a new owner instruction.
+
 **D85 — English-only project output.** All new project text must use clear, simple American English: issues, PRs, reviews, code comments, documentation, commits, test descriptions, CLI messages, logs, and reports. Avoid British expressions, regional idioms, and unnecessary jargon. Follow [.project/AGENTS.md](.project/AGENTS.md). Use the English ISSUE_CATALOG when creating or updating issues; preserve task IDs, dependencies, acceptance criteria, and exact technical names. Every worker and reviewer must enforce this rule.
 
 Решение D84, 2026-11-06. Разработка разрешена: прежнее ограничение «только ТЗ, реализации никогда не будет» отменено прямым указанием пользователя. Продуктовая граница сохраняется: native-данные → стандартизированные записи → подтверждённая доставка в NATS. Репозиторий: [sigaev-pro/bc-indexer](https://github.com/sigaev-pro/bc-indexer). Сначала создаются все issues, затем работа проходит подготовку и E01–E07 по порядку.
@@ -84,7 +86,7 @@ Controller не хранит весь секретный environment в manifest
 
 Однократные prerequisites: доступ Codex, `gh` с issues/contents/PR/check permissions в выбранном repo, Git, Python 3, Docker и доступные ресурсы runner. Для public-smoke позже нужны подготовленные ноды и ограниченные testnet keys/funds. Рабочие secrets вводятся средствами окружения, не текстом issue. Для непрерывной работы предпочтителен выделенный runner, который не засыпает; ноутбук со sleep не даёт unattended uptime. BOOT-04 проверяет фактическую возможность сборки/сети/Git внутри выбранной sandbox; найденный запрет не обходится.
 
-Из текущего локального проекта первый запуск выглядит так. Он сначала создаёт и проверяет BOOT-автоматизацию, затем начинает E01–E07. До успешного `verify-bootstrap` продуктовый цикл не стартует:
+The first launch creates and verifies bootstrap automation, then exits. It does not start E01. Use the current PROJECT_STATUS before repeating a launch, and preserve D86's stage limit:
 
 ```bash
 cd /Users/vadim/projects/bonpay/extractor
@@ -99,7 +101,6 @@ nohup bash -c '
     > .project/automation/runs/bootstrap.jsonl \
     2> .project/automation/runs/bootstrap.stderr.log
   python3 .project/automation/controller.py verify-bootstrap --repo sigaev-pro/bc-indexer
-  exec python3 .project/automation/controller.py run --repo sigaev-pro/bc-indexer
 ' < /dev/null > .project/automation/runs/launcher.log 2>&1 &
 ```
 

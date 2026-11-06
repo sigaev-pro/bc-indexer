@@ -1,0 +1,30 @@
+# Local credentials and signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+credentials.json
+secrets/
+.aws/
+
+# Local agent state, worktrees, and generated evidence
+.project/automation/state/
+.project/automation/runs/
+.project/worktrees/
+.worktrees/
+.codex/logs/
+.codex/sessions/
+
+# Native stores, build output, and caches
+.project/runtime/
+.project/cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+node_modules/
+.DS_Store

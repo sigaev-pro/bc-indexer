@@ -1,5 +1,9 @@
 # Дерево решений и журнал интервью
 
+## Latest decision — D86 (2026-11-06)
+
+The user said to start after the coordinator proposed completing BOOT and stopping before E01. This launch authorizes BOOT-01 through BOOT-09 under the existing issue, review, and commit rules, including the initial baseline push to the verified empty repository and issue/PR updates. Finish all independent bootstrap work that the available access and resources allow. Record external blockers without claiming completion. Stop after BOOT; accepting BOOT-09 does not authorize starting E01 in this run. A later stage requires a new explicit launch. Preserve this stage limit in launch instructions and persistent controller state.
+
 ## Latest decision — D85 (2026-11-06)
 
 The user requires all 84 existing issues to be rewritten in clear, simple American English. All project-authored text must use English: issue titles/bodies/comments, PRs/reviews, code comments/docstrings, documentation, commits, test descriptions, CLI/help/error/log messages, and automation output. Avoid British expressions, regional idioms, jargon added for style, and vague promotional language. Preserve exact technical names, IDs, APIs, and source data. This task translates the issues, their local source catalog, the project rules, and the bootstrap prompt; it does not silently change product requirements or bulk-translate historical specifications. New project text must follow the rule immediately. Conversation with the user may continue in the language they use; project artifacts remain English.
