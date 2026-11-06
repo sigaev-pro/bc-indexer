@@ -2,7 +2,7 @@
 
 ## D83 — время, версии, контракты и повторы
 
-D87 in [TESTING_CONTRACT](TESTING_CONTRACT.md) specifies TEST-OPEN-01 subject to independent BOOT-07 acceptance. TEST-OPEN-02 remains open; runtime outcomes remain NOT_RUN until executed.
+D87 in [TESTING_CONTRACT](TESTING_CONTRACT.md) records the accepted TEST-OPEN-01 design. D90 adds the complete versioned corpus and quota rules, subject to independent BOOT-08 acceptance. Runtime outcomes remain NOT_RUN until executed.
 
 D87 variants retain existing IDs: AC-DEV-02-01 covers independent source/oracle evidence; AC-DEV-02-05 covers every reader counterexample in D87; AC-DEV-02-08 covers finite closure/comparison deadlines; AC-DEV-04-07 covers isolated retry evidence; AC-DEV-04-08 covers the design/runtime gate. Expand ALL into each applicable profile. The case registry must list these variants explicitly; this paragraph does not execute them or create new task IDs.
 

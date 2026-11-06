@@ -4,6 +4,18 @@
 
 ## Language
 
+**Corpus obligation**:
+A named assertion for an existing acceptance case, profile, suite, evidence mode, and source dimension. Assignment and definition validity do not mean the product ran or passed.
+
+**Source projection**:
+A versioned inventory derived from exact candidate native source commits. It describes declarations and proof obligations; it is separate from a verified runtime ProfileManifest and never invents genesis or fixture hashes.
+
+**Resolved fixture**:
+An immutable test input with its actual chain/config/validator/supporting identities, native interval predicates, compiler outputs, independent oracle, and reproduction method. A private fixture keeps its test-only identity even when it checks a public profile's semantics.
+
+**Public smoke oracle**:
+The independent complete inventory of required logical identities in a finite public observation window, together with declared source/header/receipt/delivery assertions. It does not prove internal trace fields that lack an independent semantic oracle.
+
 **Reader observation window**:
 The finite set of admitted source observations and their resolved native decisions covered by one test run, including recovery work accepted before its final boundary.
 _Avoid_: Quiet period, permanently stable chain.
