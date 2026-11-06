@@ -17,6 +17,20 @@ ASSIGNMENT_DIGEST = "c358c152bbf4b315be39c75f4b3926532b7407de81b670c8be65c3306fb
 RECIPE_DIGEST = "60c98b11cfbbe770358811bcb4782875c28ba1363aa31438ae61eb58e04a3980"
 SUITES = {"quick", "functional", "fault", "soak", "public-smoke"}
 MODES = {"document", "harness", "synthetic", "native-seam", "local-e2e", "public"}
+TASK_PATTERN = r"E\d\d-\d\d\.[a-z][a-z0-9_]*"
+ORACLE_PROVENANCE = {
+    "specification": {"accepted_contract", "versioned_schema_policy"},
+    "native-and-contract": {"native_block_transaction_bytes", "native_consensus_receipt_bytes",
+                            "native_state_commitment_proof", "independent_action_model",
+                            "authoritative_native_decisions"},
+    "wire": {"hand_checked_golden_vectors", "independent_codec",
+             "deterministic_streaming_generator", "mutation_recipe"},
+    "delivery": {"independent_source_ledger", "durable_owner_logs", "nats_stream_and_producer_ack",
+                 "reader_boundary_manifest", "fault_injection_records"},
+    "public-inventory": {"independent_source_ledger", "native_body_receipt_header_bytes",
+                         "reader_boundary_manifest"},
+}
+RESOLUTION_ARTIFACTS = {"intervals", "historical", "compiler", "public", "expected", "case_registry"}
 PROFILE_IDS = {
     "ethereum-mainnet": ("ETH", 1), "ethereum-sepolia": ("ETH", 11155111),
     "ethereum-hoodi": ("ETH", 560048), "bsc-mainnet": ("BSC", 56),
@@ -51,6 +65,14 @@ def table_rows(text, prefix):
             for line in text.splitlines() if line.startswith("| " + prefix)]
 
 
+def product_tasks(root=ROOT):
+    text = (root / ".project/docs/TASK_DECOMPOSITION.md").read_text()
+    text = re.sub(r"<a[^>]*></a>", "", text.split("## Отложенные и снятые parents", 1)[0])
+    tasks = [row[0] for row in table_rows(text, "E0") if re.fullmatch(TASK_PATTERN, row[0])]
+    require(len(tasks) == len(set(tasks)) == 68, "invalid product task registry")
+    return set(tasks)
+
+
 def contract_metadata(root=ROOT):
     text = (root / ".project/docs/ACCEPTANCE_CASES.md").read_text()
     rows = table_rows(text, "AC-")
@@ -61,7 +83,9 @@ def contract_metadata(root=ROOT):
     section = decomposition.split("## REQ/AC", 1)[1].split("## ", 1)[0]
     assigned = {}
     for row in table_rows(section, "REQ-"):
-        task = re.search(r"E\d\d-\d\d\.[a-z_]+", row[2]).group()
+        match = re.search(TASK_PATTERN, row[2])
+        require(match is not None, "missing AC task owner")
+        task = match.group()
         for group in row[1].split(","):
             limits = group.strip().split("…")
             if len(limits) == 1:
@@ -85,8 +109,89 @@ def distinct(values, label):
     require(bool(values) and len(values) == len(set(values)), f"empty or duplicate {label}")
 
 
+def text_value(value, label):
+    require(isinstance(value, str) and bool(value.strip()), f"{label} must be nonempty text")
+
+
+def object_fields(value, fields, label):
+    require(isinstance(value, dict) and set(value) == set(fields), f"invalid {label} fields")
+
+
+def text_list(value, label):
+    require(isinstance(value, list) and bool(value), f"{label} must be a nonempty list")
+    for item in value:
+        text_value(item, label)
+    distinct(value, label)
+
+
+def known_owner(value, tasks, label):
+    text_value(value, label)
+    require(value in tasks, f"unknown {label}: {value}")
+
+
+def owner_list(value, tasks, label):
+    text_list(value, label)
+    for owner in value:
+        known_owner(owner, tasks, label)
+
+
+def validate_proof_contracts(catalog, tasks):
+    """Validate structure and declared provenance, not the truth of English claims."""
+    oracles = catalog.get("oracles")
+    object_fields(oracles, ORACLE_PROVENANCE, "oracle registry")
+    for name, contract in oracles.items():
+        label = f"oracle {name}"
+        object_fields(contract, {"owner", "inputs", "proof", "forbidden"}, label)
+        known_owner(contract["owner"], tasks, label + " owner")
+        text_value(contract["proof"], label + " proof")
+        text_list(contract["forbidden"], label + " forbidden")
+        require(isinstance(contract["inputs"], list) and bool(contract["inputs"]), label + " inputs are empty")
+        categories = []
+        for source in contract["inputs"]:
+            object_fields(source, {"provenance", "description"}, label + " input")
+            text_value(source["provenance"], label + " provenance")
+            text_value(source["description"], label + " input description")
+            require(source["provenance"] in ORACLE_PROVENANCE[name], label + " has invalid provenance")
+            categories.append(source["provenance"])
+        distinct(categories, label + " provenance categories")
+        require(set(categories) == ORACLE_PROVENANCE[name], label + " is missing required provenance")
+
+    resolution = catalog.get("resolution")
+    object_fields(resolution, RESOLUTION_ARTIFACTS | {"owner", "rule", "profile_owners", "artifact_owners"},
+                  "resolution")
+    known_owner(resolution["owner"], tasks, "resolution owner")
+    for field in RESOLUTION_ARTIFACTS | {"rule"}:
+        text_value(resolution[field], "resolution " + field)
+    object_fields(resolution["profile_owners"], PROFILE_IDS, "resolution profile owners")
+    for profile, owners in resolution["profile_owners"].items():
+        owner_list(owners, tasks, "profile owners for " + profile)
+        require(all(owner.startswith("E06-") for owner in owners), "profile resolution must have E06 owners")
+    object_fields(resolution["artifact_owners"], RESOLUTION_ARTIFACTS, "resolution artifact owners")
+    for artifact, owners in resolution["artifact_owners"].items():
+        owner_list(owners, tasks, "artifact owners for " + artifact)
+
+    gates = catalog.get("gates")
+    object_fields(gates, {f"E{number:02d}" for number in range(1, 8)}, "gate registry")
+    assigned = []
+    for stage, entries in gates.items():
+        require(isinstance(entries, list) and bool(entries), f"gate {stage} has no owners")
+        for entry in entries:
+            object_fields(entry, {"owner", "responsibility"}, "gate assignment")
+            known_owner(entry["owner"], tasks, "gate owner")
+            require(entry["owner"].startswith(stage + "-"), "gate owner belongs to another stage")
+            text_value(entry["responsibility"], "gate responsibility")
+            assigned.append(entry["owner"])
+    distinct(assigned, "gate task assignments")
+    require(set(assigned) == tasks, "gate task assignments are incomplete")
+
+
 def validate_definition(catalog, sources, root=ROOT):
     metadata, row_digest = contract_metadata(root)
+    tasks = product_tasks(root)
+    validate_proof_contracts(catalog, tasks)
+    for ac, values in metadata.items():
+        require(values["owner"] in tasks and values["owner"].startswith(values["gate"] + "-"),
+                f"invalid task/gate assignment for {ac}")
     require(catalog["schema_version"] == sources["schema_version"] == 1, "unknown definition schema")
     require(catalog["decision"] == sources["decision"] == "D90", "wrong definition decision")
     require(catalog["runtime"] == "NOT_RUN", "definition cannot claim runtime results")
@@ -144,7 +249,6 @@ def validate_definition(catalog, sources, root=ROOT):
                 "invalid scenario mode or suite")
         require(scenario["oracle"] in catalog["oracles"], "unknown scenario oracle")
         require(bool(scenario["stimulus"]) and bool(scenario["expected"]), "scenario lacks a predicate")
-    require(set(catalog["gates"]) == {f"E{number:02d}" for number in range(1, 8)}, "missing gate owner")
     require(all(value == "PENDING_E01_E06" for value in sources["runtime_outputs"].values()),
             "source projection cannot contain fabricated runtime artifacts")
     require(catalog["quotas"] == {
@@ -220,15 +324,32 @@ def scenario_dimensions(scenario, profile, mode, variant, catalog, sources):
     return ["current"]
 
 
+def case_registry_projection(ac, task, profile, suite, mode, recipe, variant, dimension):
+    """Map known schema-v3 fields without constructing a resolved registry entry."""
+    require((profile == "COMMON") == (mode == "document"), "COMMON is only a definition document scope")
+    document = mode == "document"
+    return {
+        "ac_id": ac, "task_id": task, "suite": suite,
+        "variant_id": "/".join([recipe, variant, mode, dimension]),
+        "profile": "DOC" if document else profile,
+        "profile_manifest_digest": "NOT_APPLICABLE" if document else None,
+        "fork_variant": "NOT_APPLICABLE" if document else None,
+        "fixture_kind": "document" if document else mode if mode in {"native-seam", "local-e2e", "public"} else None,
+    }
+
+
 def expand(catalog, sources, metadata):
     cells = []
 
     def cell(ac, profile, suite, mode, recipe, variant, dimension="current", oracle=None, condition=None):
         key = "/".join([ac, recipe, variant, profile, suite, mode, dimension])
+        projection = case_registry_projection(ac, metadata[ac]["owner"], profile, suite, mode,
+                                              recipe, variant, dimension)
         cells.append({"cell_id": key, "ac": ac, **metadata[ac], "profile": profile,
                       "suite": suite, "mode": mode, "recipe": recipe, "variant": variant,
                       "dimension": dimension, "oracle": oracle or "native-and-contract",
-                      "condition": condition, "runtime": "NOT_RUN", "resolution": "PENDING_E01_E06"})
+                      "condition": condition, "runtime": "NOT_RUN", "resolution": "PENDING_E01_E06",
+                      "case_registry_projection": projection})
 
     for case in catalog["cases"]:
         for variant in case["variants"]:
@@ -373,8 +494,9 @@ def validate_pairwise(rows, factors, excluded_pairs):
     require(not (required - excluded - covered), "pairwise value pairs are missing")
 
 
-def validate_campaign(plan, catalog, cells):
+def validate_campaign(plan, catalog, cells, root=ROOT):
     """Check a static allocation, not E01's fixture readiness or runtime evidence."""
+    validate_proof_contracts(catalog, product_tasks(root))
     require(plan["schema_version"] == 1 and plan["catalog_sha256"] == digest(catalog), "stale campaign definition")
     require(plan["purpose"] in {"acceptance", "diagnostic"}, "unknown campaign purpose")
     require(plan["runtime"] == "NOT_RUN", "a plan cannot claim runtime PASS")

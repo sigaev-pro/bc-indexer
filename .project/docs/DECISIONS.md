@@ -18,6 +18,8 @@ The candidate deltas explicitly include Sepolia Amsterdam/Gloas, canceled Hoodi 
 
 A generic example per family, normalizer-generated expected results, blanket N/A for old forks, silent quota reductions, and substituting synthetic/seam evidence for native E2E were rejected because they hide missing obligations. D90 defines the finite proof obligations without claiming exhaustive unbounded states. Product runtime remains NOT_RUN.
 
+BOOT-08 review repair 1 requires typed nonempty oracle contracts with closed provenance categories, complete resolution fields, and explicit owners checked against the actual task registry and stage assignments. These checks validate structure; independent review still assesses oracle meaning and real provenance. The full catalog digest remains the plan-invalidation boundary. Definition-only COMMON/document projects to D82's existing DOC profile with NOT_APPLICABLE digest/fork and document fixture kind. Runtime identities remain unresolved until real artifacts exist; no new evidence-schema version or fixture-kind enum is introduced.
+
 ## Delegated technical decision — D87 (2026-11-06)
 
 BOOT-07 defines finite NATS reader completion under D84's delegated authority. This is a technical decision within the accepted scope, not a new owner approval or a runtime result. Independent review of the exact candidate is required before BOOT-07 acceptance closes TEST-OPEN-01.

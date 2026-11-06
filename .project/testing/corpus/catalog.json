@@ -23,8 +23,14 @@
     "specification": {
       "owner": "E01-01.evidence",
       "inputs": [
-        "accepted REQ/AC and task/gate mapping",
-        "versioned schemas and policy"
+        {
+          "provenance": "accepted_contract",
+          "description": "accepted REQ/AC and task/gate mapping"
+        },
+        {
+          "provenance": "versioned_schema_policy",
+          "description": "versioned schemas and policy"
+        }
       ],
       "proof": "Validate the specific artifact or expected refusal. A document check proves no native runtime outcome.",
       "forbidden": [
@@ -34,11 +40,26 @@
     "native-and-contract": {
       "owner": "E01-01.harness",
       "inputs": [
-        "original native block and transaction bytes",
-        "native consensus receipt codec bytes",
-        "pre/post native state commitments and account/storage proofs",
-        "separately authored contract action ledger or independent reference execution",
-        "authoritative native lifecycle decisions"
+        {
+          "provenance": "native_block_transaction_bytes",
+          "description": "original native block and transaction bytes"
+        },
+        {
+          "provenance": "native_consensus_receipt_bytes",
+          "description": "native consensus receipt codec bytes"
+        },
+        {
+          "provenance": "native_state_commitment_proof",
+          "description": "pre/post native state commitments and account/storage proofs"
+        },
+        {
+          "provenance": "independent_action_model",
+          "description": "separately authored contract action ledger or independent reference execution"
+        },
+        {
+          "provenance": "authoritative_native_decisions",
+          "description": "authoritative native lifecycle decisions"
+        }
       ],
       "proof": "Freeze expected identities and values before execution from original native inputs and a reviewed independent ledger/reference implementation. Cross-check state roots, receipts, code, nonce, balances, storage, calls, rollback scopes, and fees. The extractor and its normalizer cannot write expected output.",
       "forbidden": [
@@ -50,10 +71,22 @@
     "wire": {
       "owner": "E01-01.evidence",
       "inputs": [
-        "hand-checked golden vectors",
-        "independent schema/codec implementation",
-        "deterministic streaming generator",
-        "exact mutation recipe"
+        {
+          "provenance": "hand_checked_golden_vectors",
+          "description": "hand-checked golden vectors"
+        },
+        {
+          "provenance": "independent_codec",
+          "description": "independent schema/codec implementation"
+        },
+        {
+          "provenance": "deterministic_streaming_generator",
+          "description": "deterministic streaming generator"
+        },
+        {
+          "provenance": "mutation_recipe",
+          "description": "exact mutation recipe"
+        }
       ],
       "proof": "Compare bytes/digests and exact identity sets, prove the specific rejection for malformed inputs, and include positive controls. Keep synthetic evidence separate from native E2E.",
       "forbidden": [
@@ -64,11 +97,26 @@
     "delivery": {
       "owner": "E07-09.nats_acceptance",
       "inputs": [
-        "independent admitted-decision ledger",
-        "both durable owner logs and delivery manifests",
-        "raw NATS stream sequences and producer PubAck evidence",
-        "D87 reader boundary manifest",
-        "fault-injection schedule and process records"
+        {
+          "provenance": "independent_source_ledger",
+          "description": "independent admitted-decision ledger"
+        },
+        {
+          "provenance": "durable_owner_logs",
+          "description": "both durable owner logs and delivery manifests"
+        },
+        {
+          "provenance": "nats_stream_and_producer_ack",
+          "description": "raw NATS stream sequences and producer PubAck evidence"
+        },
+        {
+          "provenance": "reader_boundary_manifest",
+          "description": "D87 reader boundary manifest"
+        },
+        {
+          "provenance": "fault_injection_records",
+          "description": "fault-injection schedule and process records"
+        }
       ],
       "proof": "Join exact source, logical, and physical identity sets with immutable bytes, verify terminal closure and the declared fault outcome, and prove forbidden output absent inside the closed boundary.",
       "forbidden": [
@@ -80,9 +128,18 @@
     "public-inventory": {
       "owner": "E07-09.nats_acceptance",
       "inputs": [
-        "independent native admitted-block and lifecycle ledger",
-        "complete native body transaction inventory and original receipt/header bytes",
-        "D87 closed source and stream boundaries"
+        {
+          "provenance": "independent_source_ledger",
+          "description": "independent native admitted-block and lifecycle ledger"
+        },
+        {
+          "provenance": "native_body_receipt_header_bytes",
+          "description": "complete native body transaction inventory and original receipt/header bytes"
+        },
+        {
+          "provenance": "reader_boundary_manifest",
+          "description": "D87 closed source and stream boundaries"
+        }
       ],
       "proof": "Build the complete expected logical identity set from native block/transaction/lifecycle decisions, including reorg revisions and empty blocks, without using normalized output. Assert the declared public fields: network/profile, source identities/order, original header/transaction/consensus receipt bytes, lifecycle references, framing and delivery. Record unasserted internal trace/state fields explicitly; smoke does not prove full trace semantics.",
       "forbidden": [
@@ -6448,41 +6505,370 @@
   },
   "gates": {
     "E01": [
-      "E01-01.evidence: schemas, catalog expansion, independent expected-ledger and fixture passports",
-      "E01-01.builds: exact lock and compiler toolchain provenance",
-      "E01-01.harness: resolved local fixtures, source applicability, fork/compiler compatibility, oracle independence, runner and deadline feasibility"
+      {
+        "owner": "E01-01.evidence",
+        "responsibility": "Define the versioned test evidence schemas"
+      },
+      {
+        "owner": "E01-01.builds",
+        "responsibility": "Create isolated native and supporting client builds"
+      },
+      {
+        "owner": "E01-01.harness",
+        "responsibility": "Build the reproducible native test runner"
+      },
+      {
+        "owner": "E01-02.pins",
+        "responsibility": "Verify native state retention and release"
+      },
+      {
+        "owner": "E01-02.inputs",
+        "responsibility": "Persist native inputs and consumed dependency responses"
+      },
+      {
+        "owner": "E01-02.owned_capture",
+        "responsibility": "Capture immutable data with bounded memory"
+      },
+      {
+        "owner": "E01-02.admission",
+        "responsibility": "Persist capture admission before publishing results"
+      },
+      {
+        "owner": "E01-02.decision_bridge",
+        "responsibility": "Recover native decisions and delivery obligations"
+      },
+      {
+        "owner": "E01-02.lifecycle_seams",
+        "responsibility": "Map all required native lifecycle callers"
+      },
+      {
+        "owner": "E01-03.smoke_corpus",
+        "responsibility": "Create the minimal independent native test corpus"
+      },
+      {
+        "owner": "E01-04.early_faults",
+        "responsibility": "Test early capture and decision boundaries under power loss"
+      },
+      {
+        "owner": "E01-05.type_paths",
+        "responsibility": "Verify every required native transaction path"
+      }
     ],
     "E02": [
-      "Assigned schema/normalizer AC tasks: golden vectors, negative mutations, typed fragments, source type representation"
+      {
+        "owner": "E02-01.semantic_descriptors",
+        "responsibility": "Define stable event and batch identities"
+      },
+      {
+        "owner": "E02-05.actions_model",
+        "responsibility": "Define monetary actions, execution order, and rollback scopes"
+      },
+      {
+        "owner": "E02-08.block_metadata",
+        "responsibility": "Define block metadata and lifecycle messages"
+      },
+      {
+        "owner": "E02-10.closed_profiles",
+        "responsibility": "Define the closed payload and extension registry"
+      },
+      {
+        "owner": "E02-02.schemas",
+        "responsibility": "Generate reproducible schemas, bindings, and validators"
+      },
+      {
+        "owner": "E02-02.codec",
+        "responsibility": "Implement bounded fragment encoding and exact transport bytes"
+      },
+      {
+        "owner": "E02-03.lifecycle_validator",
+        "responsibility": "Validate event order, revisions, and block reinclusion"
+      },
+      {
+        "owner": "E02-04.compatibility",
+        "responsibility": "Define read, replay, and write compatibility checks"
+      }
     ],
     "E03": [
-      "Assigned capture/lifecycle tasks and E03-11.block_lifecycle: native seams, durable boundaries, early real-NATS reader proof"
+      {
+        "owner": "E03-01.producer_store",
+        "responsibility": "Implement the durable producer state machine"
+      },
+      {
+        "owner": "E03-01.gateway_store",
+        "responsibility": "Implement the durable Gateway state machine"
+      },
+      {
+        "owner": "E03-02.rpc_streaming",
+        "responsibility": "Stream bounded RPC chunks and validate sealed imports"
+      },
+      {
+        "owner": "E03-02.fencing",
+        "responsibility": "Reject stale sessions, RPCs, and callbacks"
+      },
+      {
+        "owner": "E03-03.destination",
+        "responsibility": "Validate the bound NATS destination before publishing"
+      },
+      {
+        "owner": "E03-03.publisher",
+        "responsibility": "Persist full-batch NATS acknowledgments"
+      },
+      {
+        "owner": "E03-01.cleanup",
+        "responsibility": "Release acknowledged data in a recoverable order"
+      },
+      {
+        "owner": "E03-03.maintenance",
+        "responsibility": "Implement destination changes and maintenance recovery"
+      },
+      {
+        "owner": "E03-04.pressure_errors",
+        "responsibility": "Handle backpressure and delivery failures"
+      },
+      {
+        "owner": "E03-05.recovery_matrix",
+        "responsibility": "Verify delivery recovery under failures"
+      },
+      {
+        "owner": "E03-11.block_lifecycle",
+        "responsibility": "Verify block and lifecycle delivery through NATS"
+      }
     ],
     "E04": [
-      "Assigned network tasks: all required native entrypoints and source-derived fork/type semantics per family"
+      {
+        "owner": "E04-01.calls",
+        "responsibility": "Capture complete calls, execution order, and rollback results"
+      },
+      {
+        "owner": "E04-01.receipts",
+        "responsibility": "Preserve exact native receipt bytes and projections"
+      },
+      {
+        "owner": "E04-01.authorization",
+        "responsibility": "Preserve every source authorization tuple"
+      },
+      {
+        "owner": "E04-01.block_record",
+        "responsibility": "Project exact native block metadata"
+      },
+      {
+        "owner": "E04-03.state_diff",
+        "responsibility": "Capture exact transaction-boundary state changes"
+      },
+      {
+        "owner": "E04-01.selfdestruct",
+        "responsibility": "Separate SELFDESTRUCT actions, transfers, and deletion"
+      },
+      {
+        "owner": "E04-03.balance_actions",
+        "responsibility": "Capture all monetary actions with stable causes and IDs"
+      },
+      {
+        "owner": "E04-04.import_pressure",
+        "responsibility": "Verify capture under large inputs and slow workers"
+      },
+      {
+        "owner": "E04-02.optional_scope",
+        "responsibility": "Declare and test optional capture scopes"
+      }
     ],
     "E05": [
-      "Assigned Gateway/delivery tasks: real transport faults, durability and immutable retry coverage"
+      {
+        "owner": "E05-01.registry",
+        "responsibility": "Persist activation, revision, and native decision state"
+      },
+      {
+        "owner": "E05-01.eth_finality",
+        "responsibility": "Capture authoritative Ethereum finality observations"
+      },
+      {
+        "owner": "E05-01.bsc_finality",
+        "responsibility": "Separate early and header-attested BSC finality"
+      },
+      {
+        "owner": "E05-01.polygon_observer",
+        "responsibility": "Observe Polygon status and finalized L1 checkpoints"
+      },
+      {
+        "owner": "E05-01.activation_gc",
+        "responsibility": "Release recovery state only after a valid GC decision"
+      },
+      {
+        "owner": "E05-02.reorg",
+        "responsibility": "Verify reorgs, reapplication, and reordered lifecycle events"
+      },
+      {
+        "owner": "E05-03.drain",
+        "responsibility": "Drain native obligations without admitting new work"
+      },
+      {
+        "owner": "E05-03.upgrade",
+        "responsibility": "Verify drain, replay, and upgrade compatibility"
+      },
+      {
+        "owner": "E05-04.concurrent_fencing",
+        "responsibility": "Prevent duplicate actions and revived state during races"
+      },
+      {
+        "owner": "E05-03.full_crash_matrix",
+        "responsibility": "Verify the complete native-to-NATS recovery path"
+      }
     ],
     "E06": [
-      "Assigned profile/bootstrap tasks: all seven exact ProfileManifests, genesis/config provenance, prepared public nodes and local equivalence"
+      {
+        "owner": "E06-07.yaml",
+        "responsibility": "Validate strict role and native configuration"
+      },
+      {
+        "owner": "E06-13.artifact_lock",
+        "responsibility": "Pin and validate deployment artifacts"
+      },
+      {
+        "owner": "E06-13.init",
+        "responsibility": "Initialize native clients safely and repeatably"
+      },
+      {
+        "owner": "E06-13.topology",
+        "responsibility": "Verify service topology and storage ownership"
+      },
+      {
+        "owner": "E06-13.secrets",
+        "responsibility": "Configure trust, credentials, and secret rotation"
+      },
+      {
+        "owner": "E06-13.nats_bootstrap",
+        "responsibility": "Create and verify NATS accounts, streams, and permissions"
+      },
+      {
+        "owner": "E06-13.network",
+        "responsibility": "Verify ports, advertised addresses, and internal connections"
+      },
+      {
+        "owner": "E06-08.config_replace",
+        "responsibility": "Replace configuration without overwriting persistent state"
+      },
+      {
+        "owner": "E06-08.maintenance",
+        "responsibility": "Verify the complete maintenance procedure"
+      },
+      {
+        "owner": "E06-09.live_start",
+        "responsibility": "Start live capture and recover pending delivery independently"
+      },
+      {
+        "owner": "E06-12.logs",
+        "responsibility": "Report control states and failures without exposing secrets"
+      },
+      {
+        "owner": "E06-13.clean_bootstrap",
+        "responsibility": "Reproduce the full deployment from a clean environment"
+      }
     ],
     "E07": [
-      "E07-02.e2e: current native E2E, controlled contracts, combined faults, public smoke, pairwise, seed and soak",
-      "E07-09.nats_acceptance: D87 counterexamples and exact comparison",
-      "E07-09.requirement_verdict: full assigned matrix, retries, invalidation and required NOT_RUN blockers"
+      {
+        "owner": "E07-02.e2e",
+        "responsibility": "Verify end-to-end correctness and failure recovery"
+      },
+      {
+        "owner": "E07-02.scope",
+        "responsibility": "Verify the product boundary from native capture to NATS"
+      },
+      {
+        "owner": "E07-03.runbook",
+        "responsibility": "Verify operating and recovery instructions"
+      },
+      {
+        "owner": "E07-08.isolation",
+        "responsibility": "Verify independent network configuration and operation"
+      },
+      {
+        "owner": "E07-09.nats_acceptance",
+        "responsibility": "Validate the final records received from NATS"
+      },
+      {
+        "owner": "E07-09.requirement_verdict",
+        "responsibility": "Check complete acceptance coverage for every required variant"
+      }
     ]
   },
   "runtime": "NOT_RUN",
   "resolution": {
     "owner": "E01-01.harness",
-    "profile_owner": "E06 profile tasks",
     "rule": "Every expanded obligation is assigned before READY. Resolve exact fork predicates, native admission, fixture identity, oracle, compiler target, and expected outcome from pinned sources. Keep inactive/unsupported obligations visible with a reviewed source proof or NOT_RUN; unresolved mandatory obligations block acceptance.",
     "intervals": "Group equal activation values only within the same unit. Genesis has no valid minus-one block. Never sort block heights, timestamps, total difficulty, and epochs as one number. E01/E06 map each source activation group and each reachable native feature interval to exact native predicates and an immutable interval ID.",
     "historical": "Historical and future source branches require native-seam obligations. Only a current profile with proved native import equivalence and real supporting components may close current local-e2e. An unavailable historical full-consensus runner is not replaced by a claim of full E2E.",
     "compiler": "Pin compiler version/commit/binary digest, language, full settings, EVM target, source and linked-library digests, init/runtime bytecode digests, and reproduction command. Prove the generated opcodes and initcode rules are valid for the resolved interval. Use an older pinned compiler or reviewed hand bytecode when necessary; do not attribute an unsupported compiler opcode to the extractor.",
     "public": "Public mainnet is passive. Testnet signing requires exact chain identity, owned-contract deployment/code proof, funded accounts, nonce strategy, spending limit, and readiness. No public consensus or governance control is assumed.",
-    "expected": "Preparation may construct expected fixtures and independent ledgers, never actual SUT results. Execute every scenario action inside the measured run. Freeze expected predicates before READY; public identities may be bound during the window from the independent native ledger, not from output being checked."
+    "expected": "Preparation may construct expected fixtures and independent ledgers, never actual SUT results. Execute every scenario action inside the measured run. Freeze expected predicates before READY; public identities may be bound during the window from the independent native ledger, not from output being checked.",
+    "profile_owners": {
+      "ethereum-mainnet": [
+        "E06-13.artifact_lock",
+        "E06-13.init",
+        "E06-13.topology",
+        "E06-13.clean_bootstrap"
+      ],
+      "ethereum-sepolia": [
+        "E06-13.artifact_lock",
+        "E06-13.init",
+        "E06-13.topology",
+        "E06-13.clean_bootstrap"
+      ],
+      "ethereum-hoodi": [
+        "E06-13.artifact_lock",
+        "E06-13.init",
+        "E06-13.topology",
+        "E06-13.clean_bootstrap"
+      ],
+      "bsc-mainnet": [
+        "E06-13.artifact_lock",
+        "E06-13.init",
+        "E06-13.topology",
+        "E06-13.clean_bootstrap"
+      ],
+      "bsc-testnet": [
+        "E06-13.artifact_lock",
+        "E06-13.init",
+        "E06-13.topology",
+        "E06-13.clean_bootstrap"
+      ],
+      "polygon-pos-mainnet": [
+        "E06-13.artifact_lock",
+        "E06-13.init",
+        "E06-13.topology",
+        "E06-13.clean_bootstrap"
+      ],
+      "polygon-pos-amoy": [
+        "E06-13.artifact_lock",
+        "E06-13.init",
+        "E06-13.topology",
+        "E06-13.clean_bootstrap"
+      ]
+    },
+    "artifact_owners": {
+      "intervals": [
+        "E01-05.type_paths",
+        "E06-13.artifact_lock"
+      ],
+      "historical": [
+        "E01-01.harness",
+        "E01-05.type_paths"
+      ],
+      "compiler": [
+        "E01-01.builds"
+      ],
+      "public": [
+        "E06-13.clean_bootstrap",
+        "E07-02.e2e"
+      ],
+      "expected": [
+        "E01-01.evidence",
+        "E01-03.smoke_corpus"
+      ],
+      "case_registry": [
+        "E01-01.evidence"
+      ]
+    },
+    "case_registry": "Definition cells are not schema-v3 CaseRegistry entries. COMMON/document maps to the existing DOC profile with profile_manifest_digest and fork_variant NOT_APPLICABLE and fixture_kind document. Preserve ac_id, task_id and suite; derive variant_id from recipe, variant, mode and dimension. Runtime profile digests, fork variants and unresolved fixture kinds remain null in the projection until E01/E06 bind real artifacts. The definition mode names harness and synthetic are evidence classifications, not new fixture_kind enum values."
   },
   "size_boundaries": {
     "address_bytes": "20",

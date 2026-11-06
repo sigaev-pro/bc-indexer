@@ -53,6 +53,112 @@ class CorpusTests(unittest.TestCase):
         self.assertEqual({cell["resolution"] for cell in self.cells}, {"PENDING_E01_E06"})
         self.assertEqual(set(VERIFY.PROFILE_IDS), set(self.catalog["profiles"]))
 
+    def test_empty_or_missing_oracle_contract_rejected(self):
+        self.definition_rejected(lambda value: value["oracles"].update({"native-and-contract": {}}))
+        self.definition_rejected(lambda value: value["oracles"].pop("native-and-contract"))
+
+    def test_oracle_fields_are_required_and_typed(self):
+        for field in ["owner", "inputs", "proof", "forbidden"]:
+            with self.subTest(missing=field):
+                self.definition_rejected(lambda value: value["oracles"]["native-and-contract"].pop(field))
+        for field, replacement in [("owner", 1), ("inputs", "native bytes"), ("inputs", []),
+                                   ("proof", []), ("proof", " \t "), ("forbidden", {}),
+                                   ("forbidden", []), ("forbidden", [""])]:
+            with self.subTest(field=field, replacement=replacement):
+                self.definition_rejected(
+                    lambda value: value["oracles"]["native-and-contract"].update({field: replacement}))
+
+    def test_oracle_owner_must_exist_in_task_registry(self):
+        self.definition_rejected(
+            lambda value: value["oracles"]["native-and-contract"].update(owner="E99-99.fake"))
+
+    def test_oracle_provenance_is_typed_and_closed(self):
+        for replacement in [{}, {"provenance": "normalizer_output", "description": "Expected records"},
+                            {"provenance": "native_block_transaction_bytes", "description": ""},
+                            {"provenance": [], "description": "Original native bytes"},
+                            {"provenance": "accepted_contract", "description": "Wrong oracle category"}]:
+            with self.subTest(replacement=replacement):
+                self.definition_rejected(
+                    lambda value: value["oracles"]["native-and-contract"]["inputs"].__setitem__(0, replacement))
+        self.definition_rejected(lambda value: value["oracles"]["native-and-contract"]["inputs"].pop())
+        self.definition_rejected(lambda value: value["oracles"]["native-and-contract"]["inputs"].append(
+            copy.deepcopy(value["oracles"]["native-and-contract"]["inputs"][0])))
+
+    def test_missing_resolution_contract_rejected(self):
+        self.definition_rejected(lambda value: value.pop("resolution"))
+        self.definition_rejected(lambda value: value.update(resolution={}))
+
+    def test_resolution_fields_are_required_and_typed(self):
+        for field in VERIFY.RESOLUTION_ARTIFACTS | {"owner", "rule", "profile_owners", "artifact_owners"}:
+            with self.subTest(missing=field):
+                self.definition_rejected(lambda value: value["resolution"].pop(field))
+        for field in VERIFY.RESOLUTION_ARTIFACTS | {"rule"}:
+            for replacement in [" ", [], None]:
+                with self.subTest(field=field, replacement=replacement):
+                    self.definition_rejected(lambda value: value["resolution"].update({field: replacement}))
+
+    def test_resolution_owner_mappings_use_real_tasks(self):
+        self.definition_rejected(lambda value: value["resolution"].update(owner="E99-99.fake"))
+        self.definition_rejected(lambda value: value["resolution"]["profile_owners"].pop("ethereum-hoodi"))
+        for replacement in [[], ["E99-99.fake"], ["E01-01.harness"], "E06-13.init"]:
+            with self.subTest(profile_owners=replacement):
+                self.definition_rejected(lambda value: value["resolution"]["profile_owners"].update(
+                    {"ethereum-hoodi": replacement}))
+        self.definition_rejected(lambda value: value["resolution"]["artifact_owners"].update(compiler=[]))
+        self.definition_rejected(lambda value: value["resolution"]["artifact_owners"].update(
+            compiler=["E99-99.fake"]))
+
+    def test_gate_assignments_are_required_typed_and_complete(self):
+        self.definition_rejected(lambda value: value.pop("gates"))
+        for replacement in [[], {}, ["E01-01.harness"], [{"owner": "E01-01.harness"}]]:
+            with self.subTest(replacement=replacement):
+                self.definition_rejected(lambda value: value["gates"].update(E01=replacement))
+        self.definition_rejected(lambda value: value["gates"]["E01"][0].update(responsibility=" "))
+        self.definition_rejected(lambda value: value["gates"]["E01"].pop())
+
+    def test_gate_owner_must_exist_and_match_stage(self):
+        self.definition_rejected(lambda value: value["gates"]["E01"][0].update(owner="E99-99.fake"))
+        self.definition_rejected(lambda value: value["gates"]["E01"][0].update(owner="E07-02.e2e"))
+        self.definition_rejected(lambda value: value["gates"]["E01"].append(
+            copy.deepcopy(value["gates"]["E01"][0])))
+
+    def test_task_registry_preserves_digits_in_task_names(self):
+        self.assertEqual(len(VERIFY.product_tasks()), 68)
+        self.assertIn("E07-02.e2e", VERIFY.product_tasks())
+        self.assertNotIn("E07-02.e", VERIFY.product_tasks())
+        self.assertEqual(self.metadata["AC-DEV-02-01"]["owner"], "E07-02.e2e")
+
+    def test_document_projection_preserves_existing_schema_v3_doc_identity(self):
+        documents = [cell for cell in self.cells if cell["mode"] == "document"]
+        self.assertEqual(len(documents), 51)
+        for cell in documents:
+            projection = cell["case_registry_projection"]
+            self.assertEqual(cell["profile"], "COMMON")
+            self.assertEqual(projection["profile"], "DOC")
+            self.assertEqual(projection["profile_manifest_digest"], "NOT_APPLICABLE")
+            self.assertEqual(projection["fork_variant"], "NOT_APPLICABLE")
+            self.assertEqual(projection["fixture_kind"], "document")
+            self.assertEqual(projection["task_id"], cell["owner"])
+            self.assertEqual(projection["ac_id"], cell["ac"])
+
+    def test_runtime_projection_has_no_fabricated_digest_or_new_fixture_enum(self):
+        for cell in self.cells:
+            if cell["mode"] == "document":
+                continue
+            projection = cell["case_registry_projection"]
+            self.assertEqual(projection["profile"], cell["profile"])
+            self.assertIsNone(projection["profile_manifest_digest"])
+            self.assertIsNone(projection["fork_variant"])
+            if cell["mode"] in {"synthetic", "harness"}:
+                self.assertIsNone(projection["fixture_kind"])
+            else:
+                self.assertEqual(projection["fixture_kind"], cell["mode"])
+
+    def test_common_cannot_become_runtime_profile(self):
+        with self.assertRaises(ValueError):
+            VERIFY.case_registry_projection("AC-DEV-02-01", "E07-02.e2e", "COMMON", "functional",
+                                            "local-e2e", "baseline", "example", "current")
+
     def test_missing_ac_rejected(self):
         self.definition_rejected(lambda value: value["cases"].pop())
 
@@ -172,6 +278,35 @@ class CorpusTests(unittest.TestCase):
         self.assertEqual(result["allocation"], "COMPLETE")
         self.assertFalse(result["ready"])
         self.assertEqual(result["runtime"], "NOT_RUN")
+
+    def test_fresh_campaign_digest_cannot_bypass_invalid_oracle_or_resolution(self):
+        run = self.allocation_run()
+        for mutate in [
+            lambda value: value["oracles"].update({"native-and-contract": {}}),
+            lambda value: value["oracles"]["native-and-contract"].update(owner="E99-99.fake"),
+            lambda value: value.pop("resolution"),
+            lambda value: value["gates"].update(E01=[]),
+        ]:
+            catalog = copy.deepcopy(self.catalog)
+            mutate(catalog)
+            plan = {"schema_version": 1, "catalog_sha256": VERIFY.digest(catalog), "purpose": "acceptance",
+                    "profiles": run["profiles"], "suites": ["quick"], "runs": [run], "runtime": "NOT_RUN"}
+            with self.assertRaises(ValueError):
+                VERIFY.validate_campaign(plan, catalog, self.cells)
+
+    def test_valid_prose_edit_needs_review_and_invalidates_old_campaign_digest(self):
+        catalog = copy.deepcopy(self.catalog)
+        catalog["oracles"]["native-and-contract"]["proof"] += " Preserve the reviewed provenance."
+        VERIFY.validate_definition(catalog, self.sources)
+        run = self.allocation_run()
+        plan = {"schema_version": 1, "catalog_sha256": VERIFY.digest(self.catalog), "purpose": "acceptance",
+                "profiles": run["profiles"], "suites": ["quick"], "runs": [run], "runtime": "NOT_RUN"}
+        with self.assertRaisesRegex(ValueError, "stale campaign definition"):
+            VERIFY.validate_campaign(plan, catalog, self.cells)
+        plan["catalog_sha256"] = VERIFY.digest(catalog)
+        result = VERIFY.validate_campaign(plan, catalog, self.cells)
+        self.assertEqual(result["allocation"], "COMPLETE")
+        self.assertFalse(result["ready"])
 
     def test_missing_cell_blocks_acceptance_but_stays_visible_in_diagnostic(self):
         run = self.allocation_run()
