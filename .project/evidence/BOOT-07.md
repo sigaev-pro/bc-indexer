@@ -1,6 +1,12 @@
 # BOOT-07 — Finite reader completion
 
-Status: READY_FOR_REVIEW. Date: 2026-11-06. Task: BOOT-07 (issue #7). Base: 1ab566cf402a84661729502685be284afb38ba73. Branch: boot/07-reader-completion. Decision: D87, delegated under D84. Independent acceptance is pending. Product runtime remains NOT_RUN.
+Status: READY_FOR_REVIEW. Date: 2026-11-06. Task: BOOT-07 (issue #7). Original base: 1ab566cf402a84661729502685be284afb38ba73. Integration base: 7764b9b4df1e660ff5d6b5b652d93cd3445d1337. Branch: boot/07-reader-completion. Decision: D87, delegated under D84. Candidate 730c71c3c79fc5364293907cf54b81895a63e52c passed [independent review](https://github.com/sigaev-pro/bc-indexer/issues/7#issuecomment-6693196519); exact-head integration acceptance is pending. Product runtime remains NOT_RUN.
+
+## Accepted-main integration
+
+Accepted main includes BOOT-05 through PR #87 and BOOT-06 through PR #88. Issue #4 is closed; issue #6 is closed with [acceptance evidence](https://github.com/sigaev-pro/bc-indexer/issues/6#issuecomment-6694117880). A normal merge preserves both histories. The only conflicts were the status and decision journals: both task histories and the complete D87/D88 texts are retained. The reviewed D87 contract bytes remain unchanged; all component files match the accepted main revision. BOOT-08 has not started.
+
+The integrated tree passes portable bootstrap CI: 31 unit tests, all 54 component negative cases rejected, 16 normative mirrors, 88 documents/1019 local links, 63 REQ/217 AC/68 product tasks/84 issues, and the immutable original v2 hash. The worker must repeat that command on the clean merge commit with BOOTSTRAP_HEAD_SHA set to its full SHA and BOOTSTRAP_BASE_SHA set to the accepted integration base. This binds the result to the exact candidate rather than the modified precommit tree. Remote CI, independent exact-head review, publication, and acceptance belong to the coordinator.
 
 ## Result and boundary
 
@@ -36,7 +42,7 @@ These are document-level checks of the proposed rules, not executed product test
 
 ## Verification
 
-The following checks completed with exit code 0 in the isolated worktree:
+The following checks completed with exit code 0 on the original isolated candidate before accepted-main integration; the integration uses the portable CI checks listed above:
 
 - git diff --check.
 - Canonical/executor comparison from the agreed-contract marker, with relative link targets normalized: full body matches.
