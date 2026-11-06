@@ -67,7 +67,7 @@ def validate_handoff(role, handoff, data):
         raise ValueError("A writer needs explicit allowed paths")
     for value in paths:
         path = PurePosixPath(value)
-        if not value or value == "." or path.is_absolute() or ".." in path.parts or "\\" in value:
+        if not value or path == PurePosixPath(".") or path.is_absolute() or ".." in path.parts or "\\" in value:
             raise ValueError(f"Unsafe writable path: {value}")
         if any(part in (".git", ".aws", "secrets") or part.startswith(".env") for part in path.parts):
             raise ValueError(f"Sensitive writable path: {value}")

@@ -43,7 +43,7 @@ class RoleBoundaryTests(unittest.TestCase):
             roles.render("reviewer", item)
 
     def test_unsafe_and_secret_paths_are_rejected(self):
-        for path in ["../outside", "/tmp/outside", ".", ".git/config", ".env", "secrets/key", "a/../../b", "a\\b"]:
+        for path in ["../outside", "/tmp/outside", ".", "./", "././", ".git/config", ".env", "secrets/key", "a/../../b", "a\\b"]:
             item = dict(self.handoff, read_only=False, allowed_paths=[path])
             with self.subTest(path=path), self.assertRaises(ValueError):
                 roles.render("devops", item)
