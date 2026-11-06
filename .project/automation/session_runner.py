@@ -209,6 +209,10 @@ def supervise(request_path, lock_fd):
             # A process can exit while descendants keep its process group alive.
             if termination == "not-needed":
                 termination = terminate_group(process, grace=0.1)
+            if termination in {"cleanup-denied", "ownership-lost"}:
+                reason = "cleanup-uncertain"
+                evidence.atomic_json(directory / "cleanup.json", {"operation_id": request["operation_id"],
+                                     "termination": termination, "reason": reason})
             process.wait(timeout=10)
             stdout.flush()
             stderr.flush()

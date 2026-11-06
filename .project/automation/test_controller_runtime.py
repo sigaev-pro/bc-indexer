@@ -138,6 +138,13 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(session_runner.terminate_group(process), "ownership-lost")
         kill.assert_not_called()
 
+    def test_uncertain_cleanup_cannot_return_successful_session(self):
+        directory = self.request([sys.executable, "-c", "pass"])
+        with self.store.lock(), patch.object(session_runner, "terminate_group", return_value="cleanup-denied"):
+            result = session_runner.supervise(directory / "request.json", self.store.lock_fd)
+        self.assertEqual(result["reason"], "cleanup-uncertain")
+        self.assertTrue((directory / "cleanup.json").is_file())
+
     def test_backward_wall_clock_cannot_extend_session_timeout(self):
         directory = self.request([sys.executable, "-c", "import time; time.sleep(30)"], seconds=30)
         path = directory / "request.json"
