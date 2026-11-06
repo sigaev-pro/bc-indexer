@@ -1,6 +1,8 @@
 # Декомпозиция требований ТЗ по результатам
 
-D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет outputs существующих задач без новых child IDs: E01-01.evidence — schema v3/profile registry; E01-01.harness — runner/fixtures/deadlines; E07-02.e2e — TC01–TC12; E07-09.nats_acceptance — reader/mutations; E07-09.requirement_verdict — семь профилей и все suites. Build/bootstrap tasks доказывают каждый профиль; mainnet proof не принимается за testnet. 63 REQ / 211 AC / 68 child tasks / 7 gates.
+D83: E01-01.builds включает отдельный scripts/refresh-versions и ComponentRegistry/candidate lock/UpdateReport; E01-01.harness — configurable RunPlan и фазовые времена. E07-02.e2e проверяет ≤1800 секунд standard run, собственные test contracts и обязательные variants при configurable volumes. E07-09.requirement_verdict проверяет updater, retries/freshness и open gates. TEST-OPEN-01/02 остаются незакрытыми условиями полной приёмки по TESTING_CONTRACT.
+
+D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет outputs существующих задач без новых child IDs: E01-01.evidence — schema v3/profile registry; E01-01.harness — runner/fixtures/deadlines; E07-02.e2e — TC01–TC12; E07-09.nats_acceptance — reader/mutations; E07-09.requirement_verdict — семь профилей и все suites. Build/bootstrap tasks доказывают каждый профиль; mainnet proof не принимается за testnet. 63 REQ / 217 AC / 68 child tasks / 7 gates.
 
 2026-11-05. Только проектирование и документация, D64. Этот файл описывает задачи **проектируемого процесса**, а не разрешает их выполнение. Код продукта, сборки, runtime-тесты и deployment не выполняются. Все runtime verdict — **NOT_RUN**. Существующие parent ID E01–E07 сохранены; дочерние ID уточняют результат, не переиспользуют снятые ID.
 
@@ -156,7 +158,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 211 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 217 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -249,10 +251,10 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-OPS-10 | AC-OPS-10-01, AC-OPS-10-03 | [E01-01.builds](#task-e01-01-builds) | E01 |
 | REQ-OPS-10 | AC-OPS-10-02 | [E06-13.clean_bootstrap](#task-e06-13-clean_bootstrap) | E06 |
 | REQ-DEV-01 | AC-DEV-01-01 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
-| REQ-DEV-02 | AC-DEV-02-01…AC-DEV-02-07 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
+| REQ-DEV-02 | AC-DEV-02-01…AC-DEV-02-10 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
 | REQ-DEV-03 | AC-DEV-03-01 | [E01-01.builds](#task-e01-01-builds) | E01 |
 | REQ-DEV-04 | AC-DEV-04-02…AC-DEV-04-03 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
-| REQ-DEV-04 | AC-DEV-04-01, AC-DEV-04-04…AC-DEV-04-05 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
+| REQ-DEV-04 | AC-DEV-04-01, AC-DEV-04-04…AC-DEV-04-08 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
 | REQ-DEV-05 | AC-DEV-05-01…AC-DEV-05-06 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
 
 ## Приёмка артефактов без отдельного AC-owner

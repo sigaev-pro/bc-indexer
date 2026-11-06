@@ -1,5 +1,7 @@
 # Исполняемый план, модули и доказательства
 
+D83: standard run ≤1800 секунд без подготовки; topology/объёмы настраиваются без снятия mandatory variants. Updater использует stable candidate lock без latest и full gate. Один retry не стирает FAIL; retry PASS — UNSTABLE diagnostic, acceptance остаётся FAIL. Public smoke новый для принимаемого candidate. TEST-OPEN-01 (окончание потока) и TEST-OPEN-02 (эталонный corpus/quotas) явно открыты и блокируют полную приёмку; не превращать их в DEFERRED/N/A. Точные поля попыток и workflow — [TESTING_CONTRACT](TESTING_CONTRACT.md).
+
 D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) — дополнение всех gates: семь профилей, suites/TC01–TC12, evidence schema v3. ProfileManifest/fixture kind/resource-deadline digest и phase durations входят в RunManifest; CaseRegistry version/digest покрывает новые оси. Семейство не единица зачёта: каждому профилю отдельный результат. E01 — реестр/fixtures; E03 — ранний NATS smoke; E05 — combined faults; E06 — все профильные окружения; E07 — полная матрица, mutations, soak и public smoke.
 
 D64: документальные требования к доказательствам для проектируемой системы. Порядок из [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md) **E01 → E02 → E03 → E04 → E05 → E06 → E07** сохраняется как содержание ТЗ; code/build/runtime tasks не выполняются в нашей работе и не ожидают разрешения. SPECIFIED в [реестре исправлений](DESIGN_REPAIR_STATUS.md) означает готовый проверяемый проект.

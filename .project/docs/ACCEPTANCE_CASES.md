@@ -1,5 +1,18 @@
 # Атомарные сценарии приёмки
 
+## D83 — время, версии, контракты и повторы
+
+Открытые TEST-OPEN-01/02 из [TESTING_CONTRACT](TESTING_CONTRACT.md) не считаются закрытыми этими строками; соответствующие runtime outcomes — NOT_RUN.
+
+| AC ID | REQ | Given | When | Then | Owner | Stage |
+|---|---|---|---|---|---|---|
+| AC-DEV-02-08 | REQ-DEV-02 | ALL: standard plan одного/нескольких profiles; подготовка отдельно | Измерить parent run, replay/recovery delays; отдельно timeout и extended mode | Standard ≤1800 секунд от scenario start до результата; timeout FAIL, подготовка отдельно, extended не standard PASS, tested actions не спрятаны в setup | harness | E07 |
+| AC-DEV-02-09 | REQ-DEV-02 | ALL: собственные контракты/fixtures с pinned compiler/bytecode/input/expected; public deployment только testnet | Transfer/allowance/zero/boundary/nested/revert/create cases; проверить code/chain и точные суммы | Independent expected; deployment setup не закрывает CREATE case; mainnet пассивен; logs-only не полный trace oracle; fault/reorg не заменены контрактом | harness | E07 |
+| AC-DEV-02-10 | REQ-DEV-02 | ALL: configurable RunPlan и mandatory variants | Изменить объёмы/seeds/parallelism; отдельно сократить corpus | В приёмке каждый mandatory variant сохранён; diagnostic PARTIAL не gate PASS; quotas закреплены до run; незаполненный corpus/quotas не закрывает gate | harness | E07 |
+| AC-DEV-04-06 | REQ-DEV-04 | DOC: registry всех компонентов, официальный stable release и current lock | Updater check/update: compatible candidate, incompatible profile, unavailable source, corrupted artifact, concurrent lock write | Точные pins без latest; check не мутирует lock; только проверенный candidate принят атомарно; блокеры/ошибки явны, старый lock сохранён; runtime не рестартован | harness | E07 |
+| AC-DEV-04-07 | REQ-DEV-04 | DOC: первый FAIL, один clean retry PASS либо FAIL, затем correction | Aggregate попыток; попытка третьего retry без correction; новый successful corrected run | Первый FAIL сохранён; retry PASS отмечен UNSTABLE, acceptance FAIL; бесконечные ретраи запрещены; только исправление и новый proof закрывают case | harness | E07 |
+| AC-DEV-04-08 | REQ-DEV-04 | DOC: release candidate, старый public smoke, TEST-OPEN-01/02 открыты | Проверить freshness и полноту gate; попытка принять short quiet period как completeness | Historical smoke не заменяет новый на точном candidate; open criteria/corpus блокируют full acceptance; timeout не условие успеха | harness | E07 |
+
 ## D82 — расширенный тестовый контур
 
 Нормативные variants/suites/manifests — [TESTING_CONTRACT](TESTING_CONTRACT.md). TC01–TC12 расширяют corpus существующих и новых AC; PASS одного примера не заменяет обязательные именованные варианты.

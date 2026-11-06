@@ -1,6 +1,6 @@
 # Техническое задание: native EVM transaction extractor
 
-Редакция D16–D82 · 2026-11-06. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
+Редакция D16–D83 · 2026-11-06. Краткое ядро и полные нормативные приложения составляют один документ. Приложения сохраняют точные поля, переходы, конфигурацию и проверяемые сценарии; они не являются необязательными пояснениями.
 
 Цель нашей работы по D64 — только идеальное ТЗ. Реализации не будет никогда. Указанные ниже программные компоненты, этапы, тесты и артефакты описывают проектируемую систему, а не задачи на исполнение агентом. Runtime verdict всех сценариев — NOT_RUN.
 
@@ -77,7 +77,7 @@
 
 ## 6. Приёмка, декомпозиция и фиксация
 
-- **63 родительских REQ** фиксируют обязательства. **211 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
+- **63 родительских REQ** фиксируют обязательства. **217 AC-сценариев** задают отдельные исходы Given → When/fault → Then и применимость сети. Независимые исходы имеют разные AC IDs; эквивалентные варианты требуют отдельных verdict.
 - Задача в справочной декомпозиции имеет результат, ответственный модуль, точные зависимости и ссылки на REQ/AC/контракт. Начальный native proof, delivery-only proof и combined recovery proof разделены. Описание задачи не разрешает её исполнение по D64.
 - Все обязательные REQ покрываются AC и задачами; каждый AC имеет владельца и точный task mapping; граф зависимостей не содержит циклов. Optional/deferred явно отмечены.
 - Runtime NOT_RUN не заменяется документальным SPECIFIED. Source inspection не доказывает power-loss, совместимость сборки или фактическое прохождение теста.
@@ -1460,6 +1460,8 @@ P2P-ключ/идентичность сохраняется в persistent nativ
 
 ### Bootstrap и окружение
 
+D83: перечисленные ниже pins — исходная исследованная база, не утверждение о latest stable. Отдельный scripts/refresh-versions по [TESTING_CONTRACT](#полный-тестовый-контур) проверяет и обновляет весь ComponentRegistry до точных stable pins через candidate lock и обязательный gate. Floating latest запрещён; incompatible update явно блокируется, существующий lock сохраняется. Здесь версии фактически не обновлялись, скрипт не реализован.
+
 D82: приведённые ниже mainnet artifacts/команды — baseline трёх mainnet контуров. Для каждого testnet обязательны отдельные проверенные ProfileManifest/genesis/fork/bootstrap/supporting configs по [TESTING_CONTRACT](#полный-тестовый-контур); mainnet defaults не наследуются. Polygon Amoy использует собственную L1 Sepolia пару. ENV_READY и credentials привязаны к конкретному profile/network digest; отсутствующий testnet bootstrap блокирует запуск.
 
 Polygon bootstrap также создаёт persistent supporting deployment IDs и read-only `/etc/extractor/polygon-sources.json` по CURRENT_SEMANTICS. Файл связывает роли/адреса/chain identities с deployment provenance; Geth RPC не выдаёт эти IDs и не доказывает роль supporting service. Identity-файлы находятся в существующих native volumes, новый volume не нужен.
@@ -1712,9 +1714,11 @@ Pinned gRPC-Go 1.84.0 требует Go 1.25.0; nats.go 1.54.0 — Go 1.26.0. pr
 
 ### Требования и приёмка
 
+D83 уточняет REQ-DEV-02/04: standard run ≤1800 секунд без preparation, настраиваемые объёмы, test contracts, updater stable locks без latest, один диагностический retry и обязательная freshness. TEST-OPEN-01/02 — открытые критерии, а не принятые исключения.
+
 D82: [TESTING_CONTRACT](#полный-тестовый-контур) расширяет REQ-SCP-01 и REQ-DEV-02/04/05: семь профилей, TC01–TC12, suites/deadlines и evidence schema v3. Каждый профиль проверяется отдельно; число родительских REQ остаётся 63.
 
-Родительские REQ раскрыты в [211 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
+Родительские REQ раскрыты в [217 атомарных сценариях](#атомарные-сценарии-приёмки); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](#декомпозиция-требований-по-результатам). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -1827,6 +1831,19 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 D64: это критерии приёмки описываемой системы в составе ТЗ; реализация и исполнение E01–E07 никогда не входят в нашу работу. NOT_RUN не PASS; audit SPECIFIED не runtime DONE. Требования нельзя понижать ради успешного gate. Предписанный системой процесс проверки сохраняет counterexample input/actual/expected, устраняет причину и повторяет затронутые proofs; предусмотренный пакет приёмки содержит build/artifact locks, configs/runbook и воспроизводимые evidence. Здесь эти условия только проектируются и документируются.
 
 ### Атомарные сценарии приёмки
+
+#### D83 — время, версии, контракты и повторы
+
+Открытые TEST-OPEN-01/02 из [TESTING_CONTRACT](#полный-тестовый-контур) не считаются закрытыми этими строками; соответствующие runtime outcomes — NOT_RUN.
+
+| AC ID | REQ | Given | When | Then | Owner | Stage |
+|---|---|---|---|---|---|---|
+| AC-DEV-02-08 | REQ-DEV-02 | ALL: standard plan одного/нескольких profiles; подготовка отдельно | Измерить parent run, replay/recovery delays; отдельно timeout и extended mode | Standard ≤1800 секунд от scenario start до результата; timeout FAIL, подготовка отдельно, extended не standard PASS, tested actions не спрятаны в setup | harness | E07 |
+| AC-DEV-02-09 | REQ-DEV-02 | ALL: собственные контракты/fixtures с pinned compiler/bytecode/input/expected; public deployment только testnet | Transfer/allowance/zero/boundary/nested/revert/create cases; проверить code/chain и точные суммы | Independent expected; deployment setup не закрывает CREATE case; mainnet пассивен; logs-only не полный trace oracle; fault/reorg не заменены контрактом | harness | E07 |
+| AC-DEV-02-10 | REQ-DEV-02 | ALL: configurable RunPlan и mandatory variants | Изменить объёмы/seeds/parallelism; отдельно сократить corpus | В приёмке каждый mandatory variant сохранён; diagnostic PARTIAL не gate PASS; quotas закреплены до run; незаполненный corpus/quotas не закрывает gate | harness | E07 |
+| AC-DEV-04-06 | REQ-DEV-04 | DOC: registry всех компонентов, официальный stable release и current lock | Updater check/update: compatible candidate, incompatible profile, unavailable source, corrupted artifact, concurrent lock write | Точные pins без latest; check не мутирует lock; только проверенный candidate принят атомарно; блокеры/ошибки явны, старый lock сохранён; runtime не рестартован | harness | E07 |
+| AC-DEV-04-07 | REQ-DEV-04 | DOC: первый FAIL, один clean retry PASS либо FAIL, затем correction | Aggregate попыток; попытка третьего retry без correction; новый successful corrected run | Первый FAIL сохранён; retry PASS отмечен UNSTABLE, acceptance FAIL; бесконечные ретраи запрещены; только исправление и новый proof закрывают case | harness | E07 |
+| AC-DEV-04-08 | REQ-DEV-04 | DOC: release candidate, старый public smoke, TEST-OPEN-01/02 открыты | Проверить freshness и полноту gate; попытка принять short quiet period как completeness | Historical smoke не заменяет новый на точном candidate; open criteria/corpus блокируют full acceptance; timeout не условие успеха | harness | E07 |
 
 #### D82 — расширенный тестовый контур
 
@@ -2127,7 +2144,7 @@ Fixtures выполняются для текущих Go journals и Gateway/NAT
 
 ### Полный тестовый контур
 
-D82, 2026-11-06. Нормативная часть ТЗ. Только проектирование по D64: стенд не реализован, runtime verdict всех профилей — NOT_RUN. Доставка продукта заканчивается в NATS JetStream по D70; reader, генератор сценариев и oracle — только средства приёмки.
+D82–D83, 2026-11-06. Нормативная часть ТЗ. Только проектирование по D64: стенд не реализован, runtime verdict всех профилей — NOT_RUN. Доставка продукта заканчивается в NATS JetStream по D70; reader, генератор сценариев и oracle — только средства приёмки. TEST-OPEN-01 и TEST-OPEN-02 ниже явно не закрыты.
 
 #### Реестр профилей
 
@@ -2139,7 +2156,7 @@ D82, 2026-11-06. Нормативная часть ТЗ. Только проек
 
 Основания реестра: [Ethereum networks](https://ethereum.org/developers/docs/networks/) указывает Sepolia и Hoodi; [BSC network endpoints](https://docs.bnbchain.org/bnb-smart-chain/developers/json_rpc/json-rpc-endpoint/) — BSC mainnet/testnet; [Polygon Amoy](https://polygon.technology/blog/introducing-the-amoy-testnet-for-polygon-pos) — Amoy и L1 Sepolia. Источники просмотрены 2026-11-06; они подтверждают назначение сетей, не runtime совместимость закреплённых клиентов. Устаревшие/закрытые и временные devnet не получают статус публичного supported profile автоматически. Перед выпуском реестр сверяется с официальными источниками; появление/закрытие сети требует явной ревизии профилей и приёмки, не молчаливого исключения из gate.
 
-Для каждого профиля E01/E06 формируют versioned ProfileManifest: profile/family; chain ID и genesis hash; полные native chain/fork config с digest; execution/consensus/supporting commits и image digests; toolchain/patch/dependency lock; bootstrap artifact sources и hashes; поддерживаемые fork ranges и native transaction/system types; параметры finality/GC и Polygon RootChain/Heimdall/L1 identity; state backend/pruning; ENV_READY identity. Значения берутся из проверенных native конфигов и официальных artifacts, не копируются из mainnet по сходству названий. Незаполненный или несовместимый manifest блокирует runtime admission и приёмку; имя testnet само по себе не достаточный proof. Смена кандидатов клиента требует отдельного зафиксированного решения.
+Для каждого профиля E01/E06 формируют versioned ProfileManifest: profile/family; chain ID и genesis hash; полные native chain/fork config с digest; execution/consensus/supporting commits и image digests; toolchain/patch/dependency lock; bootstrap artifact sources и hashes; поддерживаемые fork ranges и native transaction/system types; параметры finality/GC и Polygon RootChain/Heimdall/L1 identity; state backend/pruning; ENV_READY identity. Значения берутся из проверенных native конфигов и официальных artifacts, не копируются из mainnet по сходству названий. Незаполненный или несовместимый manifest блокирует runtime admission и приёмку; имя testnet само по себе не достаточный proof. D83 задаёт управляемый version-updater workflow ниже: compatible pins обновляются через candidate/gate; изменение scope/семантики требует отдельного решения.
 
 Таблицы типов и семантики задают семейство; конкретный активный набор определяется profile/fork manifest. Неизвестный обязательный native тип или путь блокирует gate, не отбрасывается. Все семь профилей имеют отдельные network identity, bindings, subjects/streams, credentials и writable stores. Имя профиля не заменяет проверку genesis/chain config. Смена mainnet на testnet не является переносом накопленного state: создаётся независимый контур.
 
@@ -2161,7 +2178,9 @@ D82, 2026-11-06. Нормативная часть ТЗ. Только проек
 
 Fixture manifest различает `native-seam`, `local-e2e`, `public`; содержит source profile/fork, фактические genesis/chain config, native state format, pins/retained inputs, blocks/transactions, supporting inputs, воспроизводимый способ подготовки и независимый expected. Локально изменённый genesis помечается как test-only identity: соответствие публичному профилю — отдельное доказательство, не равенство network digest. Запрещены скрытый готовый datadir автора и необъяснимый бинарный snapshot. Полный архив mainnet не prerequisite локального теста. Ни один тип fixture не заменяет недостающий другой.
 
-Resource/deadline manifest закрепляет CPU/architecture/RAM/disk/parallelism, подготовку отдельно от startup/test/teardown, конечные startup/event/total deadlines для каждого режима и минимальный soak budget. Timeout начатого теста — FAIL. В quick запрещены публичная синхронизация и скачивание входных artifacts; предварительное отсутствие artifacts обнаруживается до начала measured run. Цель quick — минуты, не часы; числа 5/10 минут из обсуждения не являются измеренным SLA. Численный бюджет на описанном runner должен быть закреплён до первого принимаемого прогона; без него скорость/готовность тестового контура не принимаются. Это время тестов, не production TPS/SLO D40.
+Resource/deadline manifest закрепляет CPU/architecture/RAM/disk/parallelism, конечные startup/event/total deadlines и soak budget. По D83 сам стандартный прогон выбранного набора профилей занимает не более 1800 секунд wall-clock: от начала сценарного исполнения после PREPARED/READY до формирования результата reader/comparator. При параллельном запуске это предел parent run, не отдельные 30 минут на каждый профиль. Создание/загрузка images и fixtures, bootstrap/sync, развёртывание тестовых контрактов и подготовка funding относятся к подготовке; teardown — отдельная фаза. Все фазы имеют отдельные timestamps, конечные deadlines и diagnostics; подготовка не должна тайно исполнять проверяемые действия или выдавать их за результаты run. Restart/recovery/fault delays, если это действия сценария, входят в measured run. Подготовка не входит в 30 минут, но не может завершиться ложным PASS. Первая попытка и единственный диагностический retry — отдельные runs, каждый с собственным бюджетом.
+
+Режим standard допускает только total deadline ≤1800 секунд. Длительные/нагрузочные soak-прогоны явно выбираются отдельно как extended с настраиваемыми duration/volumes/deadlines; они не объявляются 30-минутным standard PASS. Полная матрица может включать несколько самостоятельных прогонов и не обязана целиком укладываться в 30 минут; её нельзя сокращать для получения зелёного gate. На неподходящих ресурсах preparation сообщает невозможность выполнить заявленный plan вместо молчаливого снижения покрытия. В quick запрещены публичная синхронизация и скачивание входных artifacts; missing inputs обнаруживаются на preparation. Это требования к времени тестов, не production TPS/SLO D40; фактическая достижимость ещё не измерена.
 
 #### Обязательные семейства сценариев
 
@@ -2186,7 +2205,7 @@ Resource/deadline manifest закрепляет CPU/architecture/RAM/disk/parall
 
 Reader имеет собственные test-only credentials/consumer и читает реальные сообщения NATS. Он проверяет wire/schema/IDs/digests, собирает transport parts и RecordFragments в записи и batches, учитывает exact duplicates и принятые lifecycle revisions. Отсутствующие и неожиданные записи сверяются с полным expected набором, а не только с количеством сообщений. Из больших blobs не строится неограниченный RAM объект: сборка/сравнение допускают bounded disk spool.
 
-Лог содержит profile/run/case, block/tx/event IDs, этап и понятную причину PASS/FAIL; полные frames/records, manifests, expected/actual diff и диагностика сохраняются отдельными artifacts с hashes, без secrets. Reader не объявляет producer PubAck наблюдаемым из consumer ACK: durable producer evidence коррелируется отдельно. Graceful completion определяется закрытием ожидаемых batches и стабилизацией сценария в заданных границах, не произвольной паузой после первого сообщения. Crash/reorg variants используют собственный заранее заданный expected lifecycle.
+Лог содержит profile/run/case, block/tx/event IDs, этап и понятную причину PASS/FAIL; полные frames/records, manifests, expected/actual diff и диагностика сохраняются отдельными artifacts с hashes, без secrets. Reader не объявляет producer PubAck наблюдаемым из consumer ACK: durable producer evidence коррелируется отдельно. Точный алгоритм окончания наблюдения, границы полного expected набора и обработки reorg у public-smoke отложен пользователем как TEST-OPEN-01. Прежняя формула «закрытие batches и стабилизация» не считается закрытым решением. Произвольная пауза после первого сообщения не доказывает полноту; deadline задаёт только верхнюю границу ожидания, не условие успеха. Crash/reorg variants используют собственный заранее заданный expected lifecycle.
 
 Expected semantic outcomes получены из native receipts/state commitments плюс независимый manually checkable/reference execution scenario. Тот же normalizer не генерирует эталон для себя. Источник расхождения (producer/transport/reconstruction/oracle) отражается в отчёте; подозрение на oracle не превращает FAIL в PASS.
 
@@ -2200,11 +2219,41 @@ Applicability/verdict остаются раздельными по IMPLEMENTATIO
 
 Изменение реестра профилей/AC/variants/fork/client/config/schema/fixture/oracle/deadline обновляет digest и инвалидирует затронутые results. Добавленный профиль получает все общие cases; добавленный case — все применимые профили. Gate отвергает duplicate/missing/unknown identity, неподтверждённое исключение, устаревшее evidence и любой обязательный NOT_RUN/FAIL. Summary показывает знаменатель applicable, PASS/FAIL/NOT_RUN и исключения отдельно по каждому профилю, fork, suite и case. Нельзя заменить полноту процентом без перечисления остатка.
 
-#### Привязка к задачам
+#### D83 — настраиваемый стенд, обновления и повторы
+
+**Конфигурация стенда.** RunPlan выбирает profiles, suite, standard/extended, fixture versions, seed, parallelism, resource limits, число блоков/транзакций/операций, размеры payload/records, длительность outage/soak и фазовые deadlines. Preparation выбирает воспроизводимое локальное состояние либо подготовленные публичные ноды; native-seam, local-e2e и public остаются разными видами evidence. Необязательные реальные supporting services заменяются фиксированными ответами только в явно помеченном seam test. Full E2E не подменяется mock. Настройки не расширяют продуктовый YAML, это отдельный test-only RunPlan.
+
+Acceptance RunPlan разворачивает все назначенные mandatory variants минимум по одному разу; каждый размерный boundary B−1/B/B+1, перечисленный fork и обязательный fault combination сохраняются. Настройка интенсивности добавляет повторения и объём, но не снимает обязательные cases. Уменьшенный набор разрешён как diagnostic: отчёт явно PARTIAL, незапущенные applicable cells NOT_RUN, полного gate PASS нет. Minimum soak quota и число seeds фиксируются в versioned acceptance plan до запуска; понижение плана после FAIL не делает прежний результат успешным. Частные значения corpus/quotas относятся к TEST-OPEN-02; их отсутствие не закрывает приёмку.
+
+**Отдельный version updater.** В поставляемом проекте предусматривается самостоятельный скрипт `scripts/refresh-versions` с режимами `check` и `update`. Это спецификация будущего артефакта, файл скрипта сейчас не создаётся. Оба режима используют versioned ComponentRegistry с полным перечнем native и supporting clients, NATS, RocksDB/gRPC/Protobuf libraries, toolchains/generators, base images и прямых/транзитивных dependency locks в поставке. Для каждой записи определены официальный источник релизов, канал stable, способ точного pin, dependency/profile constraints и способ проверки. Компонент без источника/правила обновления — явный блокер, а не тихий skip.
+
+`check` читает реестр и официальные источники без изменения активных locks; формирует UpdateReport с current/latest stable/selected candidate, источниками, timestamp, compatibility/security notices и blocked reasons. `update` получает актуальные stable releases, разрешает совместимый набор зависимостей и создаёт отдельный candidate lock с точными versions/commits/image digests/artifact hashes. Floating latest, незакреплённые branches и диапазоны вместо разрешённого lock запрещены; prerelease/nightly автоматически не выбираются. Скрипт не подставляет чужой image/непроверенный artifact при недоступности источника. Недоступный источник означает incomplete check и nonzero exit, не «всё актуально».
+
+Candidate проходит проверку provenance/hashes, воспроизводимости сборок, per-profile native/supporting compatibility, applicable corpus и миграционной границы; результаты предыдущего lock не переносятся. Полная проверка может состоять из нескольких runs; правило 1800 секунд относится к каждому standard run, не всему workflow обновления. Продвижение candidate в активный lock допускается только после успешного обязательного gate, включая public smoke перед приёмкой версии. При открытых TEST-OPEN-01/02 полного gate нет. UpdateReport различает найденное обновление, подготовленный candidate и действительно принятый lock; появление новой версии не означает успешное обновление.
+
+Запись активного lock атомарна, с проверкой исходной revision и сохранением прежнего lock/report; конкурентное обновление или сбой не оставляют смешанный набор версий. Скрипт не рестартует production, не меняет пользовательские stores и не выполняет автоматическую миграцию WAL. Для несовместимых persistent formats действует drain старой сборкой по D59; возврат старого lock не обещает downgrade уже изменённого state. Если последняя стабильная версия несовместима с обязательным профилем, прежний активный lock сохраняется, отчёт явно показывает отставание/блокер; нельзя назвать его актуальным. D83 разрешает этот управляемый version-update workflow вместо отдельного интервью о каждом compatible pin; изменение scope/семантики/неподдержанная миграция остаются отдельным решением. В рамках D64 workflow только описывается.
+
+**Собственные тестовые контракты.** На каждом поддерживаемом публичном testnet и в local-e2e предусматривается контролируемый corpus собственных контрактов: token transfer/transferFrom/allowance, zero/boundary values, logs/storage, nested call/delegatecall/staticcall, handled/unhandled revert, out-of-gas, CREATE/CREATE2 success/failure и fork-dependent действия. Не универсализировать поведение произвольного ERC-контракта; expected задаётся конкретным исходником и сценарием. Scenario actions выполняются после начала measured run; deployment/funding до run не служат evidence для CREATE/fee cases, которые обязаны выполнить отдельную проверяемую операцию внутри run.
+
+Corpus manifest закрепляет исходники, compiler/settings, bytecode hashes, адрес/chain identity, deployment provenance, calldata, начальное состояние/балансы/allowance, sender/nonce и ожидаемые эффекты. Funding и deployment воспроизводимы; receipts/code проверяются до READY. Signer только testnet, mainnet keys/funding исключены. Контракты тестируют execution cases, но не управляют публичным consensus: reorg, power loss, client failures и fork transitions остаются управляемыми локальными сценариями. Mainnet smoke пассивен; публичный testnet PASS не закрывает профиль mainnet.
+
+Известные токены, например USDT, используются дополнительными закреплёнными transaction fixtures с проверенными network/address/block/tx identity. Сумма перевода сверяется точно с заданным input, logs и применимыми состояниями; для обычного успешного сценария не нужен перебор всех положительных сумм, но zero/boundary/revert — отдельные варианты. Transfer log не является полным oracle trace/state/rollback. Подробный независимый expected corpus разрешено доработать позднее как TEST-OPEN-02; тот же normalizer не генерирует эталон для себя.
+
+**Простая политика повторов.** Первая неудачная попытка сохраняется с FAIL и artifacts. Разрешён ровно один диагностический повтор того же plan/versions/seed на чистом окружении; это новый run_id с first_run_id, attempt_index=2 и retry_reason. Первый run имеет attempt_index=1. Успех повтора отмечается диагностикой UNSTABLE в attempt-group summary, но исходная case acceptance остаётся FAIL; новый verdict enum для CaseResult не вводится. Второй FAIL также оставляет FAIL. Ретраи «до зелёного» запрещены. Отмена/недоступность на preparation дают NOT_RUN с причиной, но не право потерять предшествовавший FAIL.
+
+После устранения причины нужен новый полный успешный run затронутых cases с correction_ref на изменение либо зафиксированное устранение внешней причины; прежние попытки остаются историей. Без исправления один успешный запуск не закрывает нестабильность. Перед приёмкой release candidate выполняется новый public-smoke каждого публичного профиля на точном lock/config/profile revision; historical smoke другого кандидата не переносится. Обязательная недоступная сеть блокирует соответствующий gate, не подменяется локальным PASS. Правила invalidation остальных результатов из D82 сохраняются.
+
+**Явно отложенные уточнения.** TEST-OPEN-01: точный критерий завершения NATS reader для конечного локального и непрерывного публичного потока, включая reorg и отсутствие лишних/потерянных записей. Пользователь отложил решение; предложение о конечном диапазоне/закрытии batches не принято как окончательный алгоритм. TEST-OPEN-02: конкретный versioned corpus, независимые expected и минимальные soak/seed quotas. Уточнение допускается позднее; до него сохраняются требования к полноте и независимости. Обе записи — открытая работа над ТЗ, не DEFERRED/NOT_APPLICABLE для обязательных runtime cases. Затронутые cases остаются NOT_RUN; E07/full acceptance не объявляется закрытым. Следующее обсуждение — TEST-OPEN-01, когда пользователь вернётся к этому вопросу.
+
+#### Задачи D83
+
+D83: E01-01.builds также описывает отдельный version updater/candidate lock и UpdateReport; E01-01.harness — настраиваемую preparation/topology и отдельные фазовые бюджеты; E07-02.e2e — собственные test contracts/объёмы и стандартный 1800-second run; E07-09.requirement_verdict — историю retry, свежесть public smoke и запрет полного PASS при открытых TEST-OPEN-01/02. Уточнения этих outputs не разрешают реализацию в нашей работе.
 
 E01-01.evidence — schema v3/profile registry; E01-01.builds — per-profile native/supporting compatibility; E01-01.harness — reproducible fixtures/runner/deadlines и early seams. E03-11.block_lifecycle — настоящий NATS и ранний reader smoke. E07-02.e2e — TC01–TC12 corpus и combined fault/fork/soak outcomes; E06 профильные задачи — готовое окружение и bootstrap каждого профиля. E07-09.nats_acceptance — независимый reader и mutations; E07-09.requirement_verdict — полная матрица, публичные результаты и итоговый gate. Эти outputs дополняют существующие child tasks; отдельный несогласованный backlog не создаётся.
 
 ### План доказательств и границы модулей
+
+D83: standard run ≤1800 секунд без подготовки; topology/объёмы настраиваются без снятия mandatory variants. Updater использует stable candidate lock без latest и full gate. Один retry не стирает FAIL; retry PASS — UNSTABLE diagnostic, acceptance остаётся FAIL. Public smoke новый для принимаемого candidate. TEST-OPEN-01 (окончание потока) и TEST-OPEN-02 (эталонный corpus/quotas) явно открыты и блокируют полную приёмку; не превращать их в DEFERRED/N/A. Точные поля попыток и workflow — [TESTING_CONTRACT](#полный-тестовый-контур).
 
 D82: [TESTING_CONTRACT](#полный-тестовый-контур) — дополнение всех gates: семь профилей, suites/TC01–TC12, evidence schema v3. ProfileManifest/fixture kind/resource-deadline digest и phase durations входят в RunManifest; CaseRegistry version/digest покрывает новые оси. Семейство не единица зачёта: каждому профилю отдельный результат. E01 — реестр/fixtures; E03 — ранний NATS smoke; E05 — combined faults; E06 — все профильные окружения; E07 — полная матрица, mutations, soak и public smoke.
 
@@ -2461,7 +2510,9 @@ Gate: отдельно приняты Ethereum, BSC и Polygon; обязател
 
 ### Декомпозиция требований по результатам
 
-D82: [TESTING_CONTRACT](#полный-тестовый-контур) расширяет outputs существующих задач без новых child IDs: E01-01.evidence — schema v3/profile registry; E01-01.harness — runner/fixtures/deadlines; E07-02.e2e — TC01–TC12; E07-09.nats_acceptance — reader/mutations; E07-09.requirement_verdict — семь профилей и все suites. Build/bootstrap tasks доказывают каждый профиль; mainnet proof не принимается за testnet. 63 REQ / 211 AC / 68 child tasks / 7 gates.
+D83: E01-01.builds включает отдельный scripts/refresh-versions и ComponentRegistry/candidate lock/UpdateReport; E01-01.harness — configurable RunPlan и фазовые времена. E07-02.e2e проверяет ≤1800 секунд standard run, собственные test contracts и обязательные variants при configurable volumes. E07-09.requirement_verdict проверяет updater, retries/freshness и open gates. TEST-OPEN-01/02 остаются незакрытыми условиями полной приёмки по TESTING_CONTRACT.
+
+D82: [TESTING_CONTRACT](#полный-тестовый-контур) расширяет outputs существующих задач без новых child IDs: E01-01.evidence — schema v3/profile registry; E01-01.harness — runner/fixtures/deadlines; E07-02.e2e — TC01–TC12; E07-09.nats_acceptance — reader/mutations; E07-09.requirement_verdict — семь профилей и все suites. Build/bootstrap tasks доказывают каждый профиль; mainnet proof не принимается за testnet. 63 REQ / 217 AC / 68 child tasks / 7 gates.
 
 2026-11-05. Только проектирование и документация, D64. Этот файл описывает задачи **проектируемого процесса**, а не разрешает их выполнение. Код продукта, сборки, runtime-тесты и deployment не выполняются. Все runtime verdict — **NOT_RUN**. Существующие parent ID E01–E07 сохранены; дочерние ID уточняют результат, не переиспользуют снятые ID.
 
@@ -2617,7 +2668,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 #### REQ/AC → ответственный task
 
-Все 63 REQ и 211 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 217 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](#атомарные-сценарии-приёмки); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -2710,10 +2761,10 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-OPS-10 | AC-OPS-10-01, AC-OPS-10-03 | [E01-01.builds](#task-e01-01-builds) | E01 |
 | REQ-OPS-10 | AC-OPS-10-02 | [E06-13.clean_bootstrap](#task-e06-13-clean_bootstrap) | E06 |
 | REQ-DEV-01 | AC-DEV-01-01 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
-| REQ-DEV-02 | AC-DEV-02-01…AC-DEV-02-07 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
+| REQ-DEV-02 | AC-DEV-02-01…AC-DEV-02-10 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
 | REQ-DEV-03 | AC-DEV-03-01 | [E01-01.builds](#task-e01-01-builds) | E01 |
 | REQ-DEV-04 | AC-DEV-04-02…AC-DEV-04-03 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
-| REQ-DEV-04 | AC-DEV-04-01, AC-DEV-04-04…AC-DEV-04-05 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
+| REQ-DEV-04 | AC-DEV-04-01, AC-DEV-04-04…AC-DEV-04-08 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
 | REQ-DEV-05 | AC-DEV-05-01…AC-DEV-05-06 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
 
 #### Приёмка артефактов без отдельного AC-owner

@@ -1,5 +1,7 @@
 # Стек компонентов текущей поставки
 
+D83: перечисленные ниже pins — исходная исследованная база, не утверждение о latest stable. Отдельный scripts/refresh-versions по [TESTING_CONTRACT](TESTING_CONTRACT.md) проверяет и обновляет весь ComponentRegistry до точных stable pins через candidate lock и обязательный gate. Floating latest запрещён; incompatible update явно блокируется, существующий lock сохраняется. Здесь версии фактически не обновлялись, скрипт не реализован.
+
 D82: правила семейства применяются отдельно к каждому mainnet/testnet профилю из [TESTING_CONTRACT](TESTING_CONTRACT.md). Active fork/types, native/supporting compatibility и identity закрепляются ProfileManifest; mainnet source evidence не доказывает testnet runtime. Указанные версии остаются кандидатами.
 
 D58–D63: Heimdall 0.13.2; hash state profiles; Bor без BlockSTM/ускоренных import/preconfirmation paths. Точные source refs — [bootstrap contract](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Immutable image/dependency locks и совместные runtime proofs — будущие E01/E06.

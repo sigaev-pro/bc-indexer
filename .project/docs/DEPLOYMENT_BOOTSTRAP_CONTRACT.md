@@ -1,5 +1,7 @@
 # Bootstrap, конфигурация и владение окружением
 
+D83: перечисленные ниже pins — исходная исследованная база, не утверждение о latest stable. Отдельный scripts/refresh-versions по [TESTING_CONTRACT](TESTING_CONTRACT.md) проверяет и обновляет весь ComponentRegistry до точных stable pins через candidate lock и обязательный gate. Floating latest запрещён; incompatible update явно блокируется, существующий lock сохраняется. Здесь версии фактически не обновлялись, скрипт не реализован.
+
 D82: приведённые ниже mainnet artifacts/команды — baseline трёх mainnet контуров. Для каждого testnet обязательны отдельные проверенные ProfileManifest/genesis/fork/bootstrap/supporting configs по [TESTING_CONTRACT](TESTING_CONTRACT.md); mainnet defaults не наследуются. Polygon Amoy использует собственную L1 Sepolia пару. ENV_READY и credentials привязаны к конкретному profile/network digest; отсутствующий testnet bootstrap блокирует запуск.
 
 Polygon bootstrap также создаёт persistent supporting deployment IDs и read-only `/etc/extractor/polygon-sources.json` по CURRENT_SEMANTICS. Файл связывает роли/адреса/chain identities с deployment provenance; Geth RPC не выдаёт эти IDs и не доказывает роль supporting service. Identity-файлы находятся в существующих native volumes, новый volume не нужен.

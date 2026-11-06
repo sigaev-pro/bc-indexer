@@ -1,8 +1,10 @@
 # Последовательность разработки и задачи
 
+D83: E01-01.builds предусматривает отдельный updater versions, E01 harness — configurable preparation/RunPlan, E07 — standard run ≤30 минут без подготовки, test contracts, retry/freshness. Полная приёмка не закрыта до TEST-OPEN-01/02 по [TESTING_CONTRACT](TESTING_CONTRACT.md); их уточнение — дальнейшая работа над ТЗ, не разрешение на реализацию.
+
 D82: обязательны все семь mainnet/testnet профилей и suites из [TESTING_CONTRACT](TESTING_CONTRACT.md). Quick не требует публичной синхронизации; полная приёмка включает independent NATS reader, TC01–TC12, fault/soak/public-smoke. Runtime NOT_RUN.
 
-Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 211 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
+Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 217 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
 
 D64: этот документ описывает порядок разработки проектируемой системы как часть ТЗ. Реализация никогда не входит в нашу работу; E01–E07 не являются исполняемым backlog агента. [Gates](IMPLEMENTATION_GATES.md) и [63 требования](ACCEPTANCE_REQUIREMENTS.md) задают проверяемое содержание ТЗ. 41/41 находки аудита SPECIFIED; runtime NOT_RUN.
 
