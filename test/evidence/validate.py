@@ -7,6 +7,7 @@ Successful validation is artifact conformance, not acceptance or runtime proof.
 """
 
 import datetime
+from fractions import Fraction
 import hashlib
 import json
 import math
@@ -29,8 +30,13 @@ SCHEMAS = {
     "RunManifest": "run-manifest.schema.json",
     "CompositeManifest": "composite-manifest.schema.json",
     "PrerequisitePlan": "prerequisite-plan.schema.json",
+    "ReaderBoundaryManifest": "reader-boundary-manifest.schema.json",
 }
 SCHEMA_FILES = set(SCHEMAS.values()) | {"evidence-definitions.schema.json"}
+READER_CONDITIONS = (
+    "source_closure", "delivery_closure", "terminal_fence", "stream_coverage",
+    "reconstruction", "semantic_comparison",
+)
 TIME_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})\Z"
@@ -80,7 +86,13 @@ def timestamp(value):
     require(isinstance(value, str) and TIME_PATTERN.fullmatch(value) is not None,
             "timestamp must use the documented RFC 3339 profile")
     try:
-        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+        whole = parsed.replace(microsecond=0) - epoch
+        fraction = re.search(r"\.([0-9]+)", value)
+        # Preserve sub-microsecond ordering instead of truncating it in datetime.
+        remainder = Fraction(int(fraction[1]), 10 ** len(fraction[1])) if fraction else Fraction(0)
+        return Fraction(whole.days * 86400 + whole.seconds) + remainder
     except ValueError as error:
         raise InvalidEvidence("timestamp has an invalid date, time, or offset") from error
 
@@ -320,13 +332,17 @@ class EvidenceValidator:
         return manifest
 
     def check_artifacts(self, document):
-        artifacts = self.object_map("artifacts")
         for name in ("input_artifacts", "expected_artifacts", "actual_artifacts", "logs"):
             for reference in document[name]:
-                content = artifacts.get(reference["path"])
-                require(type(content) is str, "referenced artifact text is unavailable")
-                actual = hashlib.sha256(content.encode("utf-8")).hexdigest()
-                require(actual == reference["sha256"], "artifact digest differs from its exact UTF-8 bytes")
+                self.check_artifact_reference(reference)
+
+    def check_artifact_reference(self, reference):
+        if reference is None:
+            return
+        content = self.object_map("artifacts").get(reference["path"])
+        require(type(content) is str, "referenced artifact text is unavailable")
+        actual = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        require(actual == reference["sha256"], "artifact digest differs from its exact UTF-8 bytes")
 
     def check_phases(self, document, verdict):
         started, finished = timestamp(document["started_at"]), timestamp(document["finished_at"])
@@ -335,11 +351,11 @@ class EvidenceValidator:
         for name, phase in document["phases"].items():
             begin, end = timestamp(phase["started_at"]), timestamp(phase["finished_at"])
             require(started <= begin <= end <= finished, "phase falls outside the run or has reversed timestamps")
-            elapsed = (end - begin).total_seconds()
+            elapsed = end - begin
             if "duration_seconds" in phase:
-                require(math.isclose(elapsed, phase["duration_seconds"], rel_tol=0, abs_tol=0.000001),
+                require(elapsed == Fraction(str(phase["duration_seconds"])),
                         "phase duration differs from its timestamps")
-            require(elapsed <= phase["deadline_seconds"] or verdict == "FAIL",
+            require(elapsed <= Fraction(str(phase["deadline_seconds"])) or verdict == "FAIL",
                     "a run that exceeded a phase deadline cannot report PASS")
             phases[name] = (begin, end)
         require(phases["preparation"][1] <= phases["execution"][0]
@@ -411,7 +427,7 @@ class EvidenceValidator:
             require(all(phases["execution"][0] <= start <= end <= phases["execution"][1]
                         for start, end in intervals), "parent execution does not contain every child execution")
         if document.get("run_mode", "standard") == "standard":
-            elapsed = (max(end for _, end in intervals) - min(start for start, _ in intervals)).total_seconds()
+            elapsed = max(end for _, end in intervals) - min(start for start, _ in intervals)
             require(elapsed <= 1800 or document["verdict"] == "FAIL",
                     "standard parent cannot hide more than 1800 seconds of child execution")
 
@@ -428,6 +444,110 @@ class EvidenceValidator:
             if stage in obligations:
                 require(obligations[stage] in row["evidence"], "stage omits its required early evidence")
 
+    def validate_reader_boundary(self, document):
+        """Check D87 record consistency without claiming native or stream proof."""
+        self.schemas.validate(document, SCHEMAS["ReaderBoundaryManifest"])
+        case_keys = set()
+        for case_identity in document["case_identities"]:
+            case = self.registry_case(case_identity)
+            require(case["applicability"] == "APPLICABLE", "reader boundary includes an excluded case")
+            require(all(case[field] == document[field] for field in RUN_AXES),
+                    "reader boundary mixes profile, fork, fixture, or suite axes")
+            key = identity(case_identity)
+            require(key not in case_keys, "reader boundary repeats a case identity")
+            case_keys.add(key)
+
+        statuses = {name: document["conditions"][name]["status"] for name in READER_CONDITIONS}
+        reader_complete = all(statuses[name] == "SATISFIED" for name in READER_CONDITIONS[:5])
+        require(document["reader_complete"] is reader_complete, "reader completion flag differs from closure conditions")
+        comparison = {"SATISFIED": True, "FAILED": False, "NOT_RUN": None, "INCOMPLETE": None}
+        require(document["comparison_passed"] is comparison[statuses["semantic_comparison"]],
+                "comparison flag differs from the semantic comparison condition")
+
+        references = [document["run_plan_ref"], document["oracle_ref"], document["expectation"]["predicate_ref"]]
+        sources = document["source_boundaries"]
+        deliveries = document["delivery_boundaries"]
+        streams = document["streams"]
+        source_fields = ("baseline_ref", "admission_set_ref", "terminal_frontier_ref", "transitions_ref")
+        delivery_fields = ("highwater_ref", "seal_ref", "puback_ref", "attempt_census_ref", "attempt_classifications_ref")
+        stream_fields = ("config_ref", "seal_ref", "coverage_ref")
+        source_ids, delivery_ids, stream_ids = set(), set(), set()
+        for source in sources:
+            require(source["source_id"] not in source_ids, "reader boundary repeats a source ID")
+            source_ids.add(source["source_id"])
+            references.extend(source[field] for field in source_fields)
+        for delivery in deliveries:
+            key = tuple(delivery[field] for field in ("destination_id", "binding_digest", "episode_id", "generation"))
+            require(key not in delivery_ids, "reader boundary repeats a delivery episode")
+            delivery_ids.add(key)
+            references.extend(delivery["manifest_refs"])
+            references.extend(delivery[field] for field in delivery_fields)
+        for stream in streams:
+            key = tuple(stream[field] for field in ("stream_id", "destination_id", "generation"))
+            require(key not in stream_ids, "reader boundary repeats a stream identity")
+            stream_ids.add(key)
+            require(stream["upper_sequence"] is None or stream["lower_sequence"] <= stream["upper_sequence"],
+                    "stream upper sequence precedes its lower sequence")
+            references.extend(stream[field] for field in stream_fields)
+            references.extend(stream["raw_message_refs"])
+            references.extend(stream["terminal_fence"].values())
+        references.extend(document["logical_comparison"].values())
+        for condition in document["conditions"].values():
+            references.extend(condition["evidence_refs"])
+        for reference in references:
+            self.check_artifact_reference(reference)
+
+        if statuses["source_closure"] == "SATISFIED":
+            require(sources and all(all(source[field] is not None for field in source_fields) for source in sources),
+                    "source closure lacks baseline, obligations, frontier, or transition evidence")
+        if statuses["delivery_closure"] == "SATISFIED":
+            require(deliveries and all(delivery["manifest_refs"] and all(delivery[field] is not None for field in delivery_fields)
+                                       for delivery in deliveries), "delivery closure lacks required delivery or publication evidence")
+        if statuses["terminal_fence"] == "SATISFIED":
+            require(streams and all(all(reference is not None for reference in stream["terminal_fence"].values())
+                                   for stream in streams), "terminal fence lacks its required evidence references")
+        if statuses["stream_coverage"] == "SATISFIED":
+            require(streams and all(stream["upper_sequence"] is not None
+                                   and all(stream[field] is not None for field in stream_fields)
+                                   and (stream["upper_sequence"] == stream["lower_sequence"] or stream["raw_message_refs"])
+                                   for stream in streams), "stream coverage lacks bounds, configuration, seal, coverage, or raw bytes")
+        if statuses["semantic_comparison"] == "SATISFIED":
+            require(all(reference is not None for reference in document["logical_comparison"].values()),
+                    "semantic comparison lacks expected, actual, or diff evidence")
+
+        if not document["run_started"]:
+            # The schema rejects fabricated actual fields in this preparation state.
+            return
+        manifests = self.object_map("manifests")
+        require(document["run_manifest_path"] in manifests, "reader boundary run manifest is unavailable")
+        manifest = manifests[document["run_manifest_path"]]
+        outcomes = self.validate_manifest(manifest)
+        require(manifest["run_id"] == document["run_id"], "reader boundary run ID differs")
+        require(all(manifest[field] == document[field] for field in RUN_AXES), "reader boundary run axes differ")
+        require(set(outcomes) == case_keys, "reader boundary does not cover the exact run case set")
+        matches = [item for item in manifest["actual_artifacts"] if item["path"] == document["artifact_path"]]
+        require(len(matches) == 1 and matches[0]["sha256"] == digest(document),
+                "run must reference the canonical boundary artifact exactly once")
+        require(self.object_map("artifacts").get(document["artifact_path"]) == canonical(document).decode("ascii"),
+                "reader boundary artifact bytes are not the exact canonical JSON")
+
+        execution = manifest["phases"]["execution"]
+        run_start, run_end = timestamp(execution["started_at"]), timestamp(execution["finished_at"])
+        positive_pass = document["expectation"]["mode"] == "positive_delivery" and aggregate(outcomes.values()) == "PASS"
+        if positive_pass:
+            require(all(status == "SATISFIED" for status in statuses.values()),
+                    "positive delivery PASS requires all six reader conditions")
+        for phase in document["phase_times"].values():
+            start = timestamp(phase["started_at"]) if phase["started_at"] is not None else None
+            finish = timestamp(phase["finished_at"]) if phase["finished_at"] is not None else None
+            require(finish is None or start is not None, "reader phase finish requires a start")
+            require(start is None or run_start <= start <= run_end, "reader phase start is outside execution")
+            require(finish is None or start <= finish <= run_end, "reader phase finish is reversed or outside execution")
+            if positive_pass:
+                require(start is not None and finish is not None, "positive reader completion requires every phase timestamp")
+                require(finish - start <= Fraction(str(phase["deadline_seconds"])),
+                        "positive reader completion exceeded a phase deadline")
+
     def validate(self, kind, document):
         handlers = {
             "CaseRegistry": self.validate_registry,
@@ -435,6 +555,7 @@ class EvidenceValidator:
             "RunManifest": self.validate_manifest,
             "CompositeManifest": self.validate_composite,
             "PrerequisitePlan": self.validate_prerequisites,
+            "ReaderBoundaryManifest": self.validate_reader_boundary,
         }
         require(kind in handlers, "unknown evidence document kind")
         handlers[kind](document)
@@ -463,7 +584,7 @@ def validate_bundle(bundle):
 def main():
     if sys.argv[1:] == ["--help"]:
         print("Read one evidence-artifacts-v1 JSON bundle from stdin. Exit 0: valid; exit 2: invalid.")
-        print("Kinds: CaseRegistry, CaseResult, RunManifest, CompositeManifest, PrerequisitePlan, ExpandProfiles.")
+        print("Kinds: CaseRegistry, CaseResult, RunManifest, CompositeManifest, PrerequisitePlan, ReaderBoundaryManifest, ExpandProfiles.")
         print("ExpandProfiles prints a sorted JSON array. See test/evidence/README.md for the context contract.")
         return 0
     try:

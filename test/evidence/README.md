@@ -17,8 +17,10 @@ and AC-DEV-01-01, AC-DEV-04-02, and AC-DEV-04-03 in
 `case-registry.schema.json`, `case-result.schema.json`, and
 `run-manifest.schema.json` are standard JSON Schema 2020-12 documents. Shared
 definitions live in `evidence-definitions.schema.json`. The composite and stage
-plan schemas cover the cross-document validation interface. Keep these local
-files together when using a separate JSON Schema tool.
+plan schemas cover the cross-document validation interface.
+`reader-boundary-manifest.schema.json` defines the separate D87 version 1
+observation artifact. Keep these local files together when using a separate JSON
+Schema tool.
 
 The CLI uses Python's standard library. It needs Python 3.10 or later and installs
 no packages. Its small schema evaluator implements only the keywords used by
@@ -54,7 +56,8 @@ is rejected.
 
 The empty objects above are placeholders for the document and its context, not a
 valid result. `kind` accepts `CaseRegistry`, `CaseResult`, `RunManifest`,
-`CompositeManifest`, or `PrerequisitePlan`. The optional `synthetic` label never
+`CompositeManifest`, `PrerequisitePlan`, or `ReaderBoundaryManifest`.
+The optional `synthetic` label never
 changes validity. Unit fixtures and the trusted pack are explicitly synthetic;
 their PASS/FAIL strings test representation, not native behavior.
 
@@ -206,10 +209,91 @@ replace the coordinator's complete accepted task and gate graph.
 
 ProfileManifest contents, actual native/supporting builds, fixture resolution,
 resource/RunPlan artifacts, and actual D87 reader boundary evidence still need
-their assigned implementation and real runs. The D87 ReaderBoundaryManifest
-schema is an additional output of this task and is pending the coordinator's
-explicit interface handoff for an independent trusted adapter. This five-kind
-implementation is a completed substep, not completion of the whole issue.
-The harness must preserve immutable source, delivery, stream, and terminal-fence
-evidence through its output hashes. The accepted corpus, source locks, and product
-specification are unchanged.
+their assigned implementation and real runs. The D87 schema records those
+observations but does not produce them. The harness must preserve immutable
+source, delivery, stream, and terminal-fence evidence through its output hashes.
+The accepted corpus, source locks, and product specification are unchanged.
+
+## D87 reader boundary record
+
+`ReaderBoundaryManifest` uses schema version 1 and the coordinator's AUT-02
+`reader-evidence-contract.md` interface, derived from D87. It never adds new
+CaseResult verdicts. The CLI checks this artifact's structure, references,
+identity bindings, and internal consistency. It does not replay or certify
+native decisions, NATS ingress, Raft frontiers, message reconstruction, or oracle
+semantics.
+
+Every field below is required; nullable fields represent unavailable evidence.
+All nested objects reject unknown fields.
+
+| Field group | Contents |
+|---|---|
+| Identity | `schema_version=1`, `boundary_id`, `artifact_path`, six run axes, and complete `case_identities` |
+| Execution | `run_started`, nullable `run_id` and `run_manifest_path`, nullable `run_plan_ref` and `oracle_ref` |
+| Expectation | `expectation.mode` is `positive_delivery` or `declared_negative`; `predicate_ref` is null for positive delivery and required for a declared negative |
+| Sources | `source_boundaries` with distinct source IDs and baseline, admission-set, terminal-frontier, and episode/binding/generation transition references |
+| Delivery | `delivery_boundaries` with distinct destination/binding/episode/generation tuples, manifest chunks, highwater, seal, producer PubAck, attempt census, and attempt classification references |
+| Streams | `streams` with distinct stream/destination/generation tuples, config, sequence bounds, seal, raw coverage/chunks, and terminal-fence references |
+| Comparison | `logical_comparison.expected_ref`, `actual_ref`, and `diff_ref` |
+| Phases | Exactly `startup`, `observation`, `shutdown_drain`, `stream_closure`, `reconstruction`, and `comparison` in `phase_times` |
+| Conditions | Exactly the six independent conditions listed below, plus `reader_complete` and nullable `comparison_passed` |
+
+The JSON schema defines the exact field spellings inside each group. Every
+artifact reference is `{path, sha256}` and resolves through `context.artifacts`.
+Large evidence sets are hash-bound chunk artifacts. This text-bundle validator
+checks their exact UTF-8 bytes, without pretending their presence proves the
+underlying runtime facts. Generations and stream sequences are nonnegative
+integers. A known upper sequence cannot precede the lower sequence.
+
+Each condition has `status`, `evidence_refs`, `reason`, and `missing_obligations`.
+Statuses are `NOT_RUN`, `SATISFIED`, `FAILED`, and `INCOMPLETE`. SATISFIED requires
+evidence and no missing obligations. FAILED requires evidence. INCOMPLETE names
+at least one missing obligation. NOT_RUN has no condition evidence. Every status
+requires a nonempty explanation.
+
+| Condition | Required structure for SATISFIED |
+|---|---|
+| `source_closure` | At least one source; every baseline, admission-set, terminal-frontier, and transition reference is present |
+| `delivery_closure` | At least one boundary; manifest references and all five highwater/seal/PubAck/census/classification references are present |
+| `terminal_fence` | At least one stream; implementation, conformance, process exit/restart, ingress restriction, and recovered-frontier references are present |
+| `stream_coverage` | At least one stream; lower/upper bounds and configuration/seal/coverage references; nonempty intervals also have raw-message references |
+| `reconstruction` | Condition evidence; actual part/record/batch correctness remains a reader obligation |
+| `semantic_comparison` | Expected, actual, and diff references; an empty diff still has a hash |
+
+`reader_complete` is true exactly when the first five conditions are SATISFIED.
+`comparison_passed` is true for SATISFIED semantic comparison, false for FAILED,
+and null for NOT_RUN or INCOMPLETE. A complete reader can therefore retain a
+semantic mismatch and a FAIL result. An empty stream interval remains
+structurally possible, while independent runtime evidence must prove the absence
+of publication obligations.
+
+When execution starts, `context.manifests[run_manifest_path]` must be a valid
+RunManifest with the same run ID, six axes, and exact case identity set. Its
+`actual_artifacts` must include `artifact_path` exactly once with the SHA-256 of
+this boundary's canonical JSON bytes. The same bytes must exist in
+`context.artifacts`. The boundary names the run path/ID without hashing the run;
+the run hashes the boundary. This avoids a circular digest. Checking only a
+RunManifest checks its output hashes; call the ReaderBoundaryManifest validator
+as well to check this typed output's content.
+
+When `run_started=false`, the profile and case identities must already be
+resolved and applicable. All conditions are NOT_RUN, flags are false/null, run
+ID/path and phase timestamps are null, source/delivery/stream arrays are empty,
+and logical comparison references are null. Prepared plan/oracle references may
+be present or null. No invented RunManifest or actual output is required. A
+failure before identity resolution remains an ordinary CaseResult NOT_RUN
+diagnostic, without a fabricated reader boundary record.
+
+Each phase has nullable `started_at`/`finished_at` and a finite positive
+`deadline_seconds`. A finish requires a start, cannot precede it, and all actual
+times lie in the linked run's execution interval. Phases may overlap. Timestamp
+comparison preserves fractional seconds exactly, including nanoseconds and UTC
+offsets.
+
+For a started positive-delivery run whose case outcomes all report PASS, all six
+conditions must be SATISFIED and every phase must finish within its deadline.
+Recorded FAIL can retain failed, incomplete, or unstarted checks. A declared
+negative can represent PASS with unsatisfied positive closure conditions only
+with its hash-bound predeclared predicate. Structural validity never proves that
+predicate or its forbidden-output checks. The later runtime comparator must do
+that work, including all D87 counterexamples.
