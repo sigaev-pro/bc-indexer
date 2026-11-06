@@ -212,7 +212,10 @@ def candidate_call(command, request):
                                 timeout=5, preexec_fn=limits)
         stdout.seek(0)
         stderr.seek(0)
-        return result.returncode, stdout.read(65536), stderr.read(65536)
+        output, errors = stdout.read(65536), stderr.read(65536)
+        check(len(output) < 65536 and len(errors) < 65536,
+              "candidate output limit reached on stdout or stderr")
+        return result.returncode, output, errors
 
 
 def execute(candidate):

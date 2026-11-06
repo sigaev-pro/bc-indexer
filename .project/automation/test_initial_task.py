@@ -195,6 +195,45 @@ class ArtifactDriverTests(unittest.TestCase):
                     verifier.execute(root)
                 self.assertLess(time.monotonic() - started, 8)
 
+    def test_caught_output_overflow_cannot_report_valid_or_invalid(self):
+        for stream in (1, 2):
+            for exit_code in (0, 2):
+                with self.subTest(stream=stream, exit_code=exit_code):
+                    script = ("import errno,json,os,signal,sys\njson.load(sys.stdin)\n"
+                              "signal.signal(signal.SIGXFSZ, signal.SIG_IGN)\n"
+                              "try:\n"
+                              f" while True: os.write({stream}, b'x' * 8192)\n"
+                              "except OSError as error:\n"
+                              " if error.errno != errno.EFBIG: raise\n"
+                              f"os._exit({exit_code})\n")
+                    with self.assertRaisesRegex(ValueError, "output limit"):
+                        verifier.candidate_call([sys.executable, "-I", "-c", script], {"synthetic": True})
+
+    def test_output_boundary_is_rejected_and_empty_validation_stdout_is_allowed(self):
+        for stream in (1, 2):
+            for exit_code in (0, 2):
+                for size in (0, 65535, 65536):
+                    with self.subTest(stream=stream, exit_code=exit_code, size=size):
+                        script = ("import json,os,sys\njson.load(sys.stdin)\n"
+                                  f"os.write({stream}, b'x' * {size})\nos._exit({exit_code})\n")
+                        if size == 65536:
+                            with self.assertRaisesRegex(ValueError, "output limit"):
+                                verifier.candidate_call([sys.executable, "-I", "-c", script], {})
+                        else:
+                            actual, stdout, stderr = verifier.candidate_call([sys.executable, "-I", "-c", script], {})
+                            self.assertEqual(actual, exit_code)
+                            self.assertEqual(len(stdout if stream == 1 else stderr), size)
+
+    def test_empty_expansion_stdout_is_rejected_after_valid_ordinary_calls(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            protocol_stub(root)
+            path = root / "test/evidence/validate.py"
+            lines = path.read_text().splitlines()
+            path.write_text("\n".join(" pass" if line.startswith(" print(json.dumps(") else line for line in lines) + "\n")
+            with self.assertRaises(ValueError):
+                verifier.execute(root)
+
     def test_missing_output_and_profile_alias_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
