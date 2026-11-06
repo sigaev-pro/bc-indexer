@@ -42,6 +42,9 @@ def protocol_stub(root, behavior="oracle"):
         (directory / (name + ".schema.json")).write_text(json.dumps({"type": "object", "required": required,
             "properties": {"schema_version": {"const": 3}}, "description": "BOOTSTRAP PROTOCOL STUB ONLY"}))
     (directory / "profile-registry.json").write_text(json.dumps({"schema_version": 3, "profiles": verifier.PROFILES}))
+    (directory / "reader-boundary-manifest.schema.json").write_text(json.dumps({"type": "object",
+        "required": sorted(verifier.reader_vectors.REQUIRED), "properties": {"schema_version": {"const": 1}},
+        "description": "BOOTSTRAP PROTOCOL STUB ONLY; NOT A D87 IMPLEMENTATION"}))
     (directory / "README.md").write_text("BOOTSTRAP PROTOCOL STUB ONLY. No product schemas or runtime proof.\n")
     table = {verifier.digest(vector["request"]): 0 if vector["valid"] else 2 for vector in verifier.vectors()}
     script = "import json,sys,hashlib,time\nrequest=json.load(sys.stdin)\n"

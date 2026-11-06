@@ -3,12 +3,17 @@
 import argparse
 import copy
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import resource
 import subprocess
 import sys
 import tempfile
+
+_reader_spec = importlib.util.spec_from_file_location("extractor_reader_vectors", Path(__file__).with_name("reader_evidence_vectors.py"))
+reader_vectors = importlib.util.module_from_spec(_reader_spec)
+_reader_spec.loader.exec_module(reader_vectors)
 
 TASK = "E01-01.evidence"
 CONTRACT = "evidence-artifacts-v1"
@@ -17,9 +22,10 @@ PROFILES = {"ethereum-mainnet": "ETH", "ethereum-sepolia": "ETH", "ethereum-hood
 IDENTITY = ("ac_id", "network", "profile", "profile_manifest_digest", "fork_variant", "fixture_kind", "suite", "variant_id")
 OUTPUTS = tuple("test/evidence/" + name for name in (
     "case-registry.schema.json", "case-result.schema.json", "run-manifest.schema.json",
-    "profile-registry.json", "validate.py", "README.md"))
+    "profile-registry.json", "validate.py", "README.md", "reader-boundary-manifest.schema.json"))
 PACK_FILES = (".project/automation/evidence_task_verifier.py", ".project/automation/evidence-task-contract.md",
-              ".project/automation/task_proofs.py", ".project/automation/task-recipes.json")
+              ".project/automation/task_proofs.py", ".project/automation/task-recipes.json",
+              ".project/automation/reader_evidence_vectors.py", ".project/automation/reader-evidence-contract.md")
 
 
 def canonical(value):
@@ -181,6 +187,7 @@ def vectors():
     forward = copy.deepcopy(partial)
     forward["stages"][0]["dependencies"] = ["E05"]
     add("acyclic-forward-prerequisite", "PrerequisitePlan", forward, False, {})
+    rows.extend(reader_vectors.vectors(next(row for row in rows if row["id"] == "manifest")))
     return rows
 
 
@@ -201,6 +208,10 @@ def validate_outputs(candidate):
         check(schema.get("type") == "object" and fields <= set(schema.get("required", []))
               and schema.get("properties", {}).get("schema_version", {}).get("const") == 3,
               "schema does not declare the required v3 fields: " + filename)
+    reader_schema = json.loads((root / OUTPUTS[-1]).read_text())
+    check(reader_schema.get("type") == "object" and reader_vectors.REQUIRED <= set(reader_schema.get("required", []))
+          and reader_schema.get("properties", {}).get("schema_version", {}).get("const") == 1,
+          "reader boundary schema does not declare the required D87 fields")
     return hashes
 
 
