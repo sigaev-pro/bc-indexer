@@ -1,6 +1,6 @@
 # Полный реестр требований и приёмки
 
-D83 уточняет REQ-DEV-02/04: standard run ≤1800 секунд без preparation, настраиваемые объёмы, test contracts, updater stable locks без latest, один диагностический retry и обязательная freshness. TEST-OPEN-01/02 — открытые критерии, а не принятые исключения.
+D83 extends REQ-DEV-02/04 with the 1800-second standard-run limit excluding preparation, configurable volumes, test contracts, exact stable version locks, one diagnostic retry, and fresh public smoke. D87 specifies TEST-OPEN-01 subject to independent BOOT-07 acceptance. TEST-OPEN-02 remains open; neither item grants an acceptance exception.
 
 D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет REQ-SCP-01 и REQ-DEV-02/04/05: семь профилей, TC01–TC12, suites/deadlines и evidence schema v3. Каждый профиль проверяется отдельно; число родительских REQ остаётся 63.
 

@@ -1,5 +1,17 @@
 # Дерево решений и журнал интервью
 
+## Delegated technical decision — D87 (2026-11-06)
+
+BOOT-07 defines finite NATS reader completion under D84's delegated authority. This is a technical decision within the accepted scope, not a new owner approval or a runtime result. Independent review of the exact candidate is required before BOOT-07 acceptance closes TEST-OPEN-01.
+
+The test runner freezes a finite plan, preserves independent source evidence and durable delivery evidence, stops LIVE, and completes the existing drain protocol. The actual terminal native decision frontier includes admitted recovery work and stop races; every public decision maps to one whole batch. Existing DRAINED/SealAck/highwater evidence closes publication obligations. The harness then stops publication workers, seals only its isolated JetStream test streams, and reads/verifies every stream sequence through each terminal upper bound. This test-only server seal is distinct from product SealGeneration and adds no production API, message, command, or guarantee.
+
+Exact source-derived expected sets expose an omitted whole batch; full stream coverage exposes unexpected messages and retention gaps; full fragment/batch reconstruction exposes partial data. Exact duplicate retries are allowed only after byte equality checks. A public reorg inside the realized window is included; a later reorg is outside that run and cannot make the finite test prove permanent canonicality. Cutover keeps separate destination evidence and does not copy acknowledged history. Reader completion, producer delivery proof, and semantic comparison remain separate conditions.
+
+Deadlines never establish success. All run phases through comparison remain inside D83's standard 1800-second budget. Declared negative cases may prove specific rejection behavior without claiming successful delivery or reader completion. A diagnostic retry uses a separate clean run and cannot erase the original FAIL. The exact contract, ReaderBoundaryManifest fields, and required counterexamples are in [TESTING_CONTRACT](TESTING_CONTRACT.md); the canonical specification and executor mirror carry the same text.
+
+Alternative quiet-period, block-height-only, received-count-only, and producer-manifest-only completion rules were rejected because they can miss late reorg events, fragments, extra data, or an omitted batch. Freezing the entire public chain is unnecessary: the test closes only the collector's admitted window. TEST-OPEN-02 remains assigned to BOOT-08. Product runtime and performance remain NOT_RUN; BOOT-07 document checks cannot accept E01 or E07.
+
 ## Latest decision — D86 (2026-11-06)
 
 The user said to start after the coordinator proposed completing BOOT and stopping before E01. This launch authorizes BOOT-01 through BOOT-09 under the existing issue, review, and commit rules, including the initial baseline push to the verified empty repository and issue/PR updates. Finish all independent bootstrap work that the available access and resources allow. Record external blockers without claiming completion. Stop after BOOT; accepting BOOT-09 does not authorize starting E01 in this run. A later stage requires a new explicit launch. Preserve this stage limit in launch instructions and persistent controller state.
