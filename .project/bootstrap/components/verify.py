@@ -12,10 +12,18 @@ import sys
 from urllib.parse import urlparse
 
 
-PROFILES = {
-    "ethereum-mainnet", "ethereum-sepolia", "ethereum-hoodi", "bsc-mainnet",
-    "bsc-testnet", "polygon-pos-mainnet", "polygon-pos-amoy",
+PROFILE_IDENTITIES = {
+    "ethereum-mainnet": (1, "geth", "prysm"),
+    "ethereum-sepolia": (11155111, "geth", "prysm"),
+    "ethereum-hoodi": (560048, "geth", "prysm"),
+    "bsc-mainnet": (56, "bsc", None),
+    "bsc-testnet": (97, "bsc", None),
+    "polygon-pos-mainnet": (137, "bor", "heimdall"),
+    "polygon-pos-amoy": (80002, "bor", "heimdall"),
 }
+PROFILES = set(PROFILE_IDENTITIES)
+COMMON_COMPONENTS = {"nats-server", "nats-go", "grpc-go", "protobuf-go", "rocksdb", "grocksdb"}
+GO_CLIENT_INPUTS = {"geth", "bsc", "bor", "prysm", "heimdall", "nats-server"}
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 FLOATING = {"latest", "stable", "main", "master", "develop", "nightly", "edge"}
@@ -70,6 +78,7 @@ def validate(registry, lock, registry_hash, root):
 
     entries = registry["components"]
     ids = [entry["id"] for entry in entries]
+    component_profiles = {entry["id"]: set(entry["profiles"]) for entry in entries}
     require(len(ids) == len(set(ids)), "duplicate component IDs")
     require(set(ids) == set(lock["components"]), "registry and lock component sets differ")
     platforms = set(lock["candidate_policy"]["build_platforms"])
@@ -88,6 +97,11 @@ def validate(registry, lock, registry_hash, root):
         require(item["compatibility"] == "NOT_RUN", ident + ": unproved compatibility claim")
         require(bool(item["evidence_type"]), ident + ": missing evidence type")
         kind = entry["pin_kind"]
+        if ident in GO_CLIENT_INPUTS:
+            paths = [dep["path"] for dep in item.get("dependency_inputs", [])]
+            require(kind == "git_source", ident + ": a native/support Go client needs a source pin")
+            require(len(paths) == 2 and set(paths) == {"go.mod", "go.sum"},
+                    ident + ": exactly one go.mod and one go.sum input are required")
         if kind == "git_source":
             exact(item["version"], ident)
             require(bool(COMMIT.fullmatch(item["commit"])), ident + ": invalid source commit")
@@ -158,8 +172,25 @@ def validate(registry, lock, registry_hash, root):
     for profile in rows:
         ident = profile["id"]
         require(profile["build"] == "NOT_RUN" and profile["runtime"] == "NOT_RUN", ident + ": unproved profile result")
+        expected_identity = PROFILE_IDENTITIES.get(ident)
+        if expected_identity is None:
+            errors.append(ident + ": unknown profile identity")
+            continue
+        chain_id, native, consensus = expected_identity
+        require(type(profile["chain_id"]) is int and profile["chain_id"] == chain_id,
+                ident + ": chain ID does not match the accepted profile")
+        require(profile["native_component"] == native and profile["consensus_component"] == consensus,
+                ident + ": native/support clients do not match the accepted profile")
         require(profile["native_component"] in ids and profile["consensus_component"] in [None] + ids,
                 ident + ": unknown native/support component")
+        common = profile["common_components"]
+        require(set(common) == COMMON_COMPONENTS and len(common) == len(COMMON_COMPONENTS),
+                ident + ": common components are incomplete, duplicated, or unknown")
+        referenced = [profile["native_component"], profile["consensus_component"], *common]
+        for component in referenced:
+            if component is not None:
+                require(component in lock["components"] and ident in component_profiles.get(component, set()),
+                        ident + ": component does not apply to this profile: " + component)
         require(bool(profile["constraints"]) and set(profile["constraints"]) <= set(constraints),
                 ident + ": missing constraints")
         if ident.startswith("polygon-"):
@@ -167,6 +198,13 @@ def validate(registry, lock, registry_hash, root):
             expected = "ethereum-mainnet" if ident == "polygon-pos-mainnet" else "ethereum-sepolia"
             require(l1["profile"] == expected and l1["dedicated_instance"] is True
                     and l1["share_with_other_profiles"] is False, ident + ": invalid L1 ownership")
+            _, execution, consensus = PROFILE_IDENTITIES[expected]
+            require(l1["execution_component"] == execution and l1["consensus_component"] == consensus,
+                    ident + ": invalid L1 execution/consensus clients")
+            for component in (l1["execution_component"], l1["consensus_component"]):
+                scope = component_profiles.get(component, set())
+                require(component in lock["components"] and {ident, expected} <= scope,
+                        ident + ": supporting component does not apply to both the Polygon and L1 profiles: " + component)
 
     expected = {item["id"] for item in registry["generated_outputs"]}
     require(expected == PENDING_OUTPUTS, "required generated outputs are missing")
@@ -237,7 +275,30 @@ def negative_checks(registry, lock, digest, root):
         "unofficial_artifact": lambda r, l: l["components"]["go"]["artifacts"][0].update(url="https://example.com/go.tar.gz"),
         "false_release_ready": lambda r, l: l.update(release_ready=True),
         "duplicate_package_index": lambda r, l: l["package_indexes"].__setitem__(-1, l["package_indexes"][0]),
+        "wrong_chain_id": lambda r, l: l["profiles"][0].update(chain_id=97),
+        "wrong_native_client": lambda r, l: l["profiles"][0].update(native_component="bsc"),
+        "wrong_consensus_client": lambda r, l: l["profiles"][0].update(consensus_component="heimdall"),
+        "unexpected_bsc_consensus_client": lambda r, l: l["profiles"][3].update(consensus_component="prysm"),
+        "wrong_polygon_l1_execution": lambda r, l: l["profiles"][-1]["supporting_l1"].update(execution_component="bsc"),
+        "wrong_polygon_l1_consensus": lambda r, l: l["profiles"][-1]["supporting_l1"].update(consensus_component="heimdall"),
+        "unknown_common_component": lambda r, l: l["profiles"][0]["common_components"].append("unknown"),
+        "missing_common_component": lambda r, l: l["profiles"][0]["common_components"].pop(),
+        "duplicate_common_component": lambda r, l: l["profiles"][0]["common_components"].append("grpc-go"),
+        "inapplicable_common_component": lambda r, l: next(e for e in r["components"] if e["id"] == "nats-server")["profiles"].remove("ethereum-mainnet"),
+        "inapplicable_native_component": lambda r, l: next(e for e in r["components"] if e["id"] == "geth")["profiles"].remove("ethereum-mainnet"),
+        "inapplicable_polygon_support": lambda r, l: next(e for e in r["components"] if e["id"] == "prysm")["profiles"].remove("polygon-pos-amoy"),
+        "inapplicable_l1_network": lambda r, l: next(e for e in r["components"] if e["id"] == "prysm")["profiles"].remove("ethereum-sepolia"),
     }
+    for ident in sorted(GO_CLIENT_INPUTS):
+        mutations[ident + "_empty_dependency_inputs"] = (
+            lambda r, l, ident=ident: l["components"][ident].update(dependency_inputs=[]))
+        for path in ("go.mod", "go.sum"):
+            mutations[ident + "_missing_" + path] = (
+                lambda r, l, ident=ident, path=path: l["components"][ident].update(
+                    dependency_inputs=[dep for dep in l["components"][ident]["dependency_inputs"] if dep["path"] != path]))
+        mutations[ident + "_duplicate_dependency_input"] = (
+            lambda r, l, ident=ident: l["components"][ident]["dependency_inputs"].append(
+                copy.deepcopy(l["components"][ident]["dependency_inputs"][0])))
     missed = []
     for name, mutate in mutations.items():
         changed_registry, changed_lock = copy.deepcopy(registry), copy.deepcopy(lock)

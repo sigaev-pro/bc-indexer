@@ -10,7 +10,7 @@ Run the offline check from the repository root:
 python3 .project/bootstrap/components/verify.py --self-test
 ```
 
-A structural PASS means the inventory is internally consistent. The result always reports runtime NOT_RUN and release_ready false. The command does not access the network, download packages, run a node, or modify files. Its negative checks reject missing profiles/components, floating pins, bad hashes, mutable image references, crossed native dependency inputs, wrong Polygon L1 ownership, unlocked sidecars, stale registry hashes, and false acceptance claims.
+A structural PASS means the inventory is internally consistent. The result always reports runtime NOT_RUN and release_ready false. The command does not access the network, download packages, run a node, or modify files. It enforces the accepted chain ID and native/support clients for each profile, referenced-component applicability, and the complete common-component set. Each native/support Go client must retain exactly one source-bound `go.mod` and `go.sum`. Its negative checks also reject floating pins, bad hashes, mutable image references, crossed native dependency inputs, wrong Polygon L1 ownership, unlocked sidecars, stale registry hashes, and false acceptance claims.
 
 ## Candidate choices
 

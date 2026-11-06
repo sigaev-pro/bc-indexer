@@ -23,12 +23,14 @@ Download the two small BSC v1.8.2 bootstrap ZIPs into memory, hash them, and ins
 
 ## Checks
 
-`python3 .project/bootstrap/components/verify.py --self-test` exits 0: structure PASS; 41 components, seven profiles, 11 constraints, eight pending outputs; all 17 unsafe mutations rejected. Runtime is NOT_RUN and release_ready is false.
+`python3 .project/bootstrap/components/verify.py --self-test` exits 0: structure PASS; 41 components, seven profiles, 11 constraints, eight pending outputs; all 54 unsafe mutations rejected. Runtime is NOT_RUN and release_ready is false.
 
 The mutations cover floating versions, mutable commits, missing/duplicate components, missing profiles, false runtime PASS, stale registry hashes, malformed artifact hashes, mutable image pulls, mismatched NATS versions, enabled untracked sidecars, crossed native dependency inputs, wrong Polygon L1 ownership, missing generated outputs, unofficial artifact hosts, false release readiness, and duplicate package indexes.
+
+Independent review of commit `38ab319cdcc7724cea0aba8b06a267b7a6ebe617` found two validator gaps. The revised validator now rejects mismatched profile chain IDs, native/consensus clients, Polygon L1 clients, incomplete/duplicate common-component lists, and inapplicable component/profile references. It also requires exactly one source-bound `go.mod` and `go.sum` for Geth, BSC, Bor, Prysm, Heimdall, and NATS server. The 37 added regression cases include profile/client/applicability mutations and empty, missing, or duplicate dependency inputs for every one of those six clients. Registry and candidate-lock bytes are unchanged by these fixes.
 
 The validator checks baseline source hashes against the exact base commit, the immutable original v2 hash, and generated-output task IDs against the task catalog. Additional pre-commit checks verify changed-file scope, local Markdown links, JSON/Python parsing, English-authored text, and `git diff --check`.
 
 ## Result and limits
 
-Proposed status: READY_FOR_REVIEW. Independent review and task acceptance are pending. The registry is ready as a build-planning input; the selected clients and libraries are not an accepted runtime combination. Current source candidates differ from the specification baseline, which remains unchanged. E01/E06 own build outputs, admission, signed closures, and profile manifests; E07 owns full applicable acceptance. No product process, testnet transaction, deployment, or active version promotion ran in this task.
+Proposed status: READY_FOR_REVIEW. Independent review of the revised commit and task acceptance are pending. The registry is ready as a build-planning input; the selected clients and libraries are not an accepted runtime combination. Current source candidates differ from the specification baseline, which remains unchanged. E01/E06 own build outputs, admission, signed closures, and profile manifests; E07 owns full applicable acceptance. No product process, testnet transaction, deployment, or active version promotion ran in this task.
