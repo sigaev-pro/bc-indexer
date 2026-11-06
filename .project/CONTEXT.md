@@ -4,6 +4,19 @@
 
 ## Language
 
+**Reader observation window**:
+The finite set of admitted source observations and their resolved native decisions covered by one test run, including recovery work accepted before its final boundary.
+_Avoid_: Quiet period, permanently stable chain.
+
+**Reader completion**:
+Proof that the test's source and delivery boundaries are closed and every message, record, and batch in its closed stream intervals has been read and reconstructed. It is separate from proof that the records have the expected meaning.
+
+**Reader expected set**:
+The complete logical results required by the independently preserved native inputs and decisions in the observation window, evaluated using rules fixed before the run. Received records or producer manifests cannot define this set for themselves.
+
+**Test stream closure**:
+The final boundary of an isolated test destination after publication has ended, used to account for all retained messages. It is distinct from the product's admission-generation seal and does not imply permanent blockchain finality.
+
 **Delivery batch**:
 Полный набор публичных событий одного native decision. Может включать несколько блоков при reorg или только статусы; no-events decision не выделяет batch. Физическое разбиение на chunks не меняет границу полного ACK/cleanup.
 

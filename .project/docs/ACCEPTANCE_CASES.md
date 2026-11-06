@@ -2,7 +2,9 @@
 
 ## D83 — время, версии, контракты и повторы
 
-Открытые TEST-OPEN-01/02 из [TESTING_CONTRACT](TESTING_CONTRACT.md) не считаются закрытыми этими строками; соответствующие runtime outcomes — NOT_RUN.
+D87 in [TESTING_CONTRACT](TESTING_CONTRACT.md) specifies TEST-OPEN-01 subject to independent BOOT-07 acceptance. TEST-OPEN-02 remains open; runtime outcomes remain NOT_RUN until executed.
+
+D87 variants retain existing IDs: AC-DEV-02-01 covers independent source/oracle evidence; AC-DEV-02-05 covers every reader counterexample in D87; AC-DEV-02-08 covers finite closure/comparison deadlines; AC-DEV-04-07 covers isolated retry evidence; AC-DEV-04-08 covers the design/runtime gate. Expand ALL into each applicable profile. The case registry must list these variants explicitly; this paragraph does not execute them or create new task IDs.
 
 | AC ID | REQ | Given | When | Then | Owner | Stage |
 |---|---|---|---|---|---|---|
@@ -11,7 +13,7 @@
 | AC-DEV-02-10 | REQ-DEV-02 | ALL: configurable RunPlan и mandatory variants | Изменить объёмы/seeds/parallelism; отдельно сократить corpus | В приёмке каждый mandatory variant сохранён; diagnostic PARTIAL не gate PASS; quotas закреплены до run; незаполненный corpus/quotas не закрывает gate | harness | E07 |
 | AC-DEV-04-06 | REQ-DEV-04 | DOC: registry всех компонентов, официальный stable release и current lock | Updater check/update: compatible candidate, incompatible profile, unavailable source, corrupted artifact, concurrent lock write | Точные pins без latest; check не мутирует lock; только проверенный candidate принят атомарно; блокеры/ошибки явны, старый lock сохранён; runtime не рестартован | harness | E07 |
 | AC-DEV-04-07 | REQ-DEV-04 | DOC: первый FAIL, один clean retry PASS либо FAIL, затем correction | Aggregate попыток; попытка третьего retry без correction; новый successful corrected run | Первый FAIL сохранён; retry PASS отмечен UNSTABLE, acceptance FAIL; бесконечные ретраи запрещены; только исправление и новый proof закрывают case | harness | E07 |
-| AC-DEV-04-08 | REQ-DEV-04 | DOC: release candidate, старый public smoke, TEST-OPEN-01/02 открыты | Проверить freshness и полноту gate; попытка принять short quiet period как completeness | Historical smoke не заменяет новый на точном candidate; open criteria/corpus блокируют full acceptance; timeout не условие успеха | harness | E07 |
+| AC-DEV-04-08 | REQ-DEV-04 | DOC: release candidate, old public smoke, missing BOOT-07/08 acceptance or runtime evidence | Check freshness, D87 boundary evidence, and gate completeness; attempt to use a quiet interval as proof | Fresh smoke matches the exact candidate; missing design or runtime evidence blocks acceptance; a timeout or quiet interval cannot prove completeness | harness | E07 |
 
 ## D82 — расширенный тестовый контур
 

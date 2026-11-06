@@ -1,6 +1,6 @@
 # Декомпозиция требований ТЗ по результатам
 
-D83: E01-01.builds включает отдельный scripts/refresh-versions и ComponentRegistry/candidate lock/UpdateReport; E01-01.harness — configurable RunPlan и фазовые времена. E07-02.e2e проверяет ≤1800 секунд standard run, собственные test contracts и обязательные variants при configurable volumes. E07-09.requirement_verdict проверяет updater, retries/freshness и open gates. TEST-OPEN-01/02 остаются незакрытыми условиями полной приёмки по TESTING_CONTRACT.
+D83 assigns scripts/refresh-versions and its registry/locks/report to E01-01.builds; RunPlan and phase timing to E01-01.harness; and the 1800-second standard run, test contracts, and mandatory variants to E07-02.e2e. D87 adds reader-boundary evidence to the existing harness/reader tasks. E07-09.requirement_verdict checks updater results, retry history, freshness, accepted BOOT-07/08 decisions, and all required runtime evidence. TEST-OPEN-02 remains open.
 
 D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет outputs существующих задач без новых child IDs: E01-01.evidence — schema v3/profile registry; E01-01.harness — runner/fixtures/deadlines; E07-02.e2e — TC01–TC12; E07-09.nats_acceptance — reader/mutations; E07-09.requirement_verdict — семь профилей и все suites. Build/bootstrap tasks доказывают каждый профиль; mainnet proof не принимается за testnet. 63 REQ / 217 AC / 68 child tasks / 7 gates.
 

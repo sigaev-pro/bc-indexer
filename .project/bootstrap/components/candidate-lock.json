@@ -1,0 +1,1576 @@
+{
+  "schema_version": 1,
+  "candidate_id": "BOOT-06-2026-11-06",
+  "registry_sha256": "339f4f86ad1a4eeefa48df6e03aafa3c1b20c4f186a25017891c6479000ffdce",
+  "checked_on": "2026-11-06",
+  "status": "METADATA_VERIFIED_CANDIDATE",
+  "release_ready": false,
+  "active_lock_changed": false,
+  "base_commit": "6b8e1dd561d8be39f80b00ef5860d35b7db95d24",
+  "baseline": {
+    "status": "DOCUMENTED_CANDIDATES_NOT_RUNTIME_ACCEPTANCE",
+    "files": [
+      {
+        "path": "TZ_EXECUTOR.md",
+        "sha256": "08eda7045e8a340ec1d3ec0b8c987ee1f252bcf33f5d7ee395cf39249df3ae0f"
+      },
+      {
+        "path": "TZ_DECISION_MAKER.md",
+        "sha256": "73ff13089f3afb1e1ee112bb10520f306410812de4698437f1532c4412fbe650"
+      },
+      {
+        "path": ".project/evm-transaction-extractor-tz-v3-codex.md",
+        "sha256": "fca8dd172bb1604508c54c15bb52ad28de5ae5bcb05bf472e83ba40a1f318a85"
+      },
+      {
+        "path": ".project/evm-transaction-extractor-tz-v2.md",
+        "sha256": "ea825f0f0c3b747133de216c5bb1b15bc4f1d0601380ff1b6c3c1a4b620bc634"
+      },
+      {
+        "path": ".project/agency/sources.lock.json",
+        "sha256": "b5c894b2badb1b6270dfaa1cce887127397748b4e4a5fcb681a8c72bd18cb044"
+      },
+      {
+        "path": ".project/agency/toolchain.lock.json",
+        "sha256": "84b4037073de5974953335b58c7d894c583e510fe1e05c01fecc4468754ab251"
+      }
+    ],
+    "versions": {
+      "geth": "v1.17.9",
+      "prysm": "v7.3.0",
+      "bsc": "v1.7.8",
+      "bor": "v2.10.3",
+      "heimdall": "v0.13.2",
+      "nats-server": "v2.15.1",
+      "nats-chart": "nats-2.15.1",
+      "nats-go": "v1.54.0",
+      "grpc-go": "v1.84.0",
+      "protoc": "v36.2",
+      "protobuf-go": "v1.36.12",
+      "grocksdb": "v1.10.2",
+      "rocksdb": "v10.4.2",
+      "go": "go1.27.2"
+    }
+  },
+  "components": {
+    "geth": {
+      "version": "v1.17.10",
+      "source_repository": "ethereum/go-ethereum",
+      "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+      "release_url": "https://github.com/ethereum/go-ethereum/releases/tag/v1.17.10",
+      "published_at": "2026-10-23T12:07:39Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/ethereum/go-ethereum/1df30b18d9ed35ee9d28ffd4648442c2204554ad/go.mod",
+          "sha256": "df92841ea528f644350b890d9d67fd78e1f68ff2424e90f3e495cfcf8e30f21d",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/ethereum/go-ethereum/1df30b18d9ed35ee9d28ffd4648442c2204554ad/go.sum",
+          "sha256": "ddafb18490c93ae43659876330add971403706b3403bf0d0ac7760a6daabdf65",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "prysm": {
+      "version": "v7.3.1",
+      "source_repository": "OffchainLabs/prysm",
+      "commit": "96d418cd964b083e37519a9df274030a1beac7db",
+      "release_url": "https://github.com/OffchainLabs/prysm/releases/tag/v7.3.1",
+      "published_at": "2026-10-22T21:28:14Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/OffchainLabs/prysm/96d418cd964b083e37519a9df274030a1beac7db/go.mod",
+          "sha256": "e99954aed527c87a9fd1d7a10a705207fc063a8cc1a6db85684c097f43c16a02",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/OffchainLabs/prysm/96d418cd964b083e37519a9df274030a1beac7db/go.sum",
+          "sha256": "4b5472e63a1600b2979bbef9a6849aecd0150a2d6c5c27db9f9ef59444a37d48",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": [
+        {
+          "name": "beacon-chain-v7.3.1-linux-amd64",
+          "url": "https://github.com/OffchainLabs/prysm/releases/download/v7.3.1/beacon-chain-v7.3.1-linux-amd64",
+          "sha256": "4e740bd2eabc98863607c649062f2e8720d4e12ccab28fc59ec6e84cbc90da3e",
+          "size_bytes": 65427536,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "beacon-chain-v7.3.1-linux-arm64",
+          "url": "https://github.com/OffchainLabs/prysm/releases/download/v7.3.1/beacon-chain-v7.3.1-linux-arm64",
+          "sha256": "b8afffb44dee8b5d04719ec0c9733782895110618db6c45c9ee351df30b678ed",
+          "size_bytes": 60533328,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        }
+      ]
+    },
+    "bsc": {
+      "version": "v1.8.2",
+      "source_repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "release_url": "https://github.com/bnb-chain/bsc/releases/tag/v1.8.2",
+      "published_at": "2026-11-03T02:12:36Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/bnb-chain/bsc/54afaff4da31ac9e49ba646a4f65104edac5a2f3/go.mod",
+          "sha256": "b8da2413ade54666b0e67c07a0ddd70b04adbe8e55dd0aa82000c5949a0d44c9",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/bnb-chain/bsc/54afaff4da31ac9e49ba646a4f65104edac5a2f3/go.sum",
+          "sha256": "74b7c0ad1b31d06b1e6d521ffd328aed63af748a155ff1f5303480f162f2e9a8",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "bor": {
+      "version": "v2.11.0",
+      "source_repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "release_url": "https://github.com/0xPolygon/bor/releases/tag/v2.11.0",
+      "published_at": "2026-11-05T14:45:39Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/0xPolygon/bor/3a018e38467594508ca31ebeaf804837fb92834a/go.mod",
+          "sha256": "abd25422c7ee5515c114907ec2cf1c74efded34ddad4cfe263841fef4e9464aa",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/0xPolygon/bor/3a018e38467594508ca31ebeaf804837fb92834a/go.sum",
+          "sha256": "8764edc80ba00ea7b95160cd836c521d1e95aa2bb05178ed4fe5541c3d610cbe",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "heimdall": {
+      "version": "v0.13.2",
+      "source_repository": "0xPolygon/heimdall-v2",
+      "commit": "03090c94e7eaef344cd16efd6c968431c4041847",
+      "release_url": "https://github.com/0xPolygon/heimdall-v2/releases/tag/v0.13.2",
+      "published_at": "2026-11-03T11:31:46Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/0xPolygon/heimdall-v2/03090c94e7eaef344cd16efd6c968431c4041847/go.mod",
+          "sha256": "8f612e9d9eb21bc85eb22adf46455f3f22a638901884c49e12637c22e2edcd86",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/0xPolygon/heimdall-v2/03090c94e7eaef344cd16efd6c968431c4041847/go.sum",
+          "sha256": "acbafd18f33253560af6e32beba4746f0056cd293beeb6eaf2f45fdeedd3f67c",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "nats-server": {
+      "version": "v2.15.2",
+      "source_repository": "nats-io/nats-server",
+      "commit": "5a815f11a911efa2c88fd1dbfb18ed89a449bfc1",
+      "release_url": "https://github.com/nats-io/nats-server/releases/tag/v2.15.2",
+      "published_at": "2026-10-26T16:54:42Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/nats-io/nats-server/5a815f11a911efa2c88fd1dbfb18ed89a449bfc1/go.mod",
+          "sha256": "2a9ae7bfaf49b4a381cdeb7ff35d8079322aef0bf7d101c52ad55457e312a9a4",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/nats-io/nats-server/5a815f11a911efa2c88fd1dbfb18ed89a449bfc1/go.sum",
+          "sha256": "ba3a1fea38553d8f0aa566ef8d719e33180de3b94649412ae53e61a7308576c4",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "nats-go": {
+      "version": "v1.55.0",
+      "source_repository": "nats-io/nats.go",
+      "commit": "6068694d76fcf1f12bdf1e7383876aa5a3928421",
+      "release_url": "https://github.com/nats-io/nats.go/releases/tag/v1.55.0",
+      "published_at": "2026-10-23T15:44:54Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/nats-io/nats.go/6068694d76fcf1f12bdf1e7383876aa5a3928421/go.mod",
+          "sha256": "49fe0ab7668e927129af2df6efa995bf6a99bcfbd41c6e12aae75c6496e8968e",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/nats-io/nats.go/6068694d76fcf1f12bdf1e7383876aa5a3928421/go.sum",
+          "sha256": "bf7336f4c70fcca9aae76e2518181c41658df3f69260a31f40861fa2042410ce",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "grpc-go": {
+      "version": "v1.85.0",
+      "source_repository": "grpc/grpc-go",
+      "commit": "c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7",
+      "release_url": "https://github.com/grpc/grpc-go/releases/tag/v1.85.0",
+      "published_at": "2026-10-27T09:28:04Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/grpc/grpc-go/c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7/go.mod",
+          "sha256": "cefeec472544b4affa46dcf08a02af961f421f57d4514373713a2d7fd54dcaed",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/grpc/grpc-go/c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7/go.sum",
+          "sha256": "c4c5d0e18e172798abfb9a7478ad3a491f5780977b72cd2bc885b7f1334759ee",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "protoc": {
+      "version": "v36.2",
+      "source_repository": "protocolbuffers/protobuf",
+      "commit": "2c74169b34066ceb8ddb6b882fcb3fb32d737a55",
+      "release_url": "https://github.com/protocolbuffers/protobuf/releases/tag/v36.2",
+      "published_at": "2026-09-17T17:33:01Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": [
+        {
+          "name": "protoc-36.2-linux-aarch_64.zip",
+          "url": "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-aarch_64.zip",
+          "sha256": "8b8f18bd2b30346efbc698dd5a73dd7c805f3ef8380f6dfc95c768f3f1852f6a",
+          "size_bytes": 3631325,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "protoc-36.2-linux-x86_64.zip",
+          "url": "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-x86_64.zip",
+          "sha256": "121f6c7afe1d4d0e3ea6aab9432038599250134cbf4474cb1167d2c7decd4278",
+          "size_bytes": 3681545,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        }
+      ]
+    },
+    "protobuf-go": {
+      "version": "v1.36.12",
+      "source_repository": "protocolbuffers/protobuf-go",
+      "commit": "cdd4c5f7406e82462949c7a65defa9f3029c162d",
+      "release_url": "https://github.com/protocolbuffers/protobuf-go/releases/tag/v1.36.12",
+      "published_at": "2026-08-10T15:29:56Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/protocolbuffers/protobuf-go/cdd4c5f7406e82462949c7a65defa9f3029c162d/go.mod",
+          "sha256": "a75c105a852fbd8da8d8cfac09c2eab9a206cfd27ed37c973737e23f632ca96e",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/protocolbuffers/protobuf-go/cdd4c5f7406e82462949c7a65defa9f3029c162d/go.sum",
+          "sha256": "6b86b51f20019287a19ee69c029ca2ad1fd4ca402fb5c29fde5c23de062070d6",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "grocksdb": {
+      "version": "v1.11.0",
+      "source_repository": "linxGnu/grocksdb",
+      "commit": "f3563a8ab45e99f4d00606a351d1aeacf8bc748f",
+      "release_url": "https://github.com/linxGnu/grocksdb/releases/tag/v1.11.0",
+      "published_at": "2026-09-07T03:12:52Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/linxGnu/grocksdb/f3563a8ab45e99f4d00606a351d1aeacf8bc748f/go.mod",
+          "sha256": "c05aed936b3dd119be483138d0717b7296aac371463cd32846dcb2b95c8d6974",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/linxGnu/grocksdb/f3563a8ab45e99f4d00606a351d1aeacf8bc748f/go.sum",
+          "sha256": "1f9e79f21c303c684970204c300fe29a8f0a709fac8eb1d12f2029f18fad6af6",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": []
+    },
+    "nats-chart": {
+      "version": "nats-2.15.2",
+      "source_repository": "nats-io/k8s",
+      "commit": "0f9c5c75851d113fc9e1fd00edd3034de62ab14c",
+      "release_url": "https://github.com/nats-io/k8s/releases/tag/nats-2.15.2",
+      "published_at": "2026-10-29T22:57:57Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": [
+        {
+          "name": "nats-2.15.2.tgz",
+          "url": "https://github.com/nats-io/k8s/releases/download/nats-2.15.2/nats-2.15.2.tgz",
+          "sha256": "a7e829a5cfa06591b02534ee76e2acaaab8fd0bfd2e8a4785629e8df5a6b8427",
+          "size_bytes": 21998,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "chart_metadata": {
+        "version": "2.15.2",
+        "app_version": "2.15.2",
+        "url": "https://raw.githubusercontent.com/nats-io/k8s/0f9c5c75851d113fc9e1fd00edd3034de62ab14c/helm/charts/nats/Chart.yaml",
+        "sha256": "f1ffe1d77e6143ed9d7c7baaa93739326d3b7d5c25c308daa82772052ae85ff1"
+      }
+    },
+    "compose": {
+      "version": "v5.7.0",
+      "source_repository": "docker/compose",
+      "commit": "5bceecf985347fcf6dd23029ce440b502a0d4301",
+      "release_url": "https://github.com/docker/compose/releases/tag/v5.7.0",
+      "published_at": "2026-11-02T15:01:54Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": []
+    },
+    "docker-engine": {
+      "version": "docker-v29.9.3",
+      "source_repository": "moby/moby",
+      "commit": "70efc0e31da3a115fc87574d1b786fa2b867c346",
+      "release_url": "https://github.com/moby/moby/releases/tag/docker-v29.9.3",
+      "published_at": "2026-11-03T22:37:18Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": []
+    },
+    "kubernetes": {
+      "version": "v1.37.2",
+      "source_repository": "kubernetes/kubernetes",
+      "commit": "c50e5395f1ae2d4a2c05f28fdcc38c0916cc1a32",
+      "release_url": "https://github.com/kubernetes/kubernetes/releases/tag/v1.37.2",
+      "published_at": "2026-10-28T04:37:53Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": []
+    },
+    "helm": {
+      "version": "v4.3.1",
+      "source_repository": "helm/helm",
+      "commit": "c0d08d0d6d9424d4a14febb5e8a3e51b0dd00dff",
+      "release_url": "https://github.com/helm/helm/releases/tag/v4.3.1",
+      "published_at": "2026-10-15T01:08:37Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": []
+    },
+    "rocksdb": {
+      "version": "v11.13.2",
+      "source_repository": "meta/rocksdb",
+      "commit": "17b624b5c0d41bd42db5cf88aa867f3b26eaf1fa",
+      "release_url": "https://github.com/meta/rocksdb/releases/tag/v11.13.2",
+      "published_at": "2026-11-04T00:35:04Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": []
+    },
+    "solc": {
+      "version": "v0.8.38",
+      "source_repository": "argotorg/solidity",
+      "commit": "1835d247de183f23e7b0e2bc4a50732af525b77c",
+      "release_url": "https://github.com/argotorg/solidity/releases/tag/v0.8.38",
+      "published_at": "2026-10-22T07:21:17Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": [
+        {
+          "name": "solc-static-linux",
+          "url": "https://github.com/argotorg/solidity/releases/download/v0.8.38/solc-static-linux",
+          "sha256": "65c3180a336eabb6bdc4bbd49cc405aeb233976964ae6c11fba2a6c8be8f3243",
+          "size_bytes": 15527664,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "solc-static-linux-arm",
+          "url": "https://github.com/argotorg/solidity/releases/download/v0.8.38/solc-static-linux-arm",
+          "sha256": "7a986c8f85945fec780d2cbb352cdd85959b7222dd33830a7563c2af4bc1fca0",
+          "size_bytes": 14112456,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        }
+      ]
+    },
+    "protoc-gen-go": {
+      "version": "v1.36.12",
+      "source_repository": "protocolbuffers/protobuf-go",
+      "commit": "cdd4c5f7406e82462949c7a65defa9f3029c162d",
+      "release_url": "https://github.com/protocolbuffers/protobuf-go/releases/tag/v1.36.12",
+      "published_at": "2026-08-10T15:29:56Z",
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "go.mod",
+          "url": "https://raw.githubusercontent.com/protocolbuffers/protobuf-go/cdd4c5f7406e82462949c7a65defa9f3029c162d/go.mod",
+          "sha256": "a75c105a852fbd8da8d8cfac09c2eab9a206cfd27ed37c973737e23f632ca96e",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        },
+        {
+          "path": "go.sum",
+          "url": "https://raw.githubusercontent.com/protocolbuffers/protobuf-go/cdd4c5f7406e82462949c7a65defa9f3029c162d/go.sum",
+          "sha256": "6b86b51f20019287a19ee69c029ca2ad1fd4ca402fb5c29fde5c23de062070d6",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Upstream dependency input; a resolved build closure is still pending."
+        }
+      ],
+      "artifacts": [
+        {
+          "name": "protoc-gen-go.v1.36.12.linux.amd64.tar.gz",
+          "url": "https://github.com/protocolbuffers/protobuf-go/releases/download/v1.36.12/protoc-gen-go.v1.36.12.linux.amd64.tar.gz",
+          "sha256": "14abe70d1557026d3dce6676b7a44d3ada91d79902c71cb075fbb8d315943320",
+          "size_bytes": 2070180,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "protoc-gen-go.v1.36.12.linux.arm64.tar.gz",
+          "url": "https://github.com/protocolbuffers/protobuf-go/releases/download/v1.36.12/protoc-gen-go.v1.36.12.linux.arm64.tar.gz",
+          "sha256": "bf385e22e18661b044f7b96ec28384f3f76aa6da10e956b450ffb949306768de",
+          "size_bytes": 1877626,
+          "evidence_type": "OFFICIAL_ASSET_DIGEST_METADATA",
+          "payload_verified": false
+        }
+      ]
+    },
+    "protoc-gen-go-grpc": {
+      "version": "cmd/protoc-gen-go-grpc/v1.6.2",
+      "source_repository": "grpc/grpc-go",
+      "commit": "1c63fa5f5492fb6cb4cabf9847999ce469505f49",
+      "release_url": "https://github.com/grpc/grpc-go/tree/cmd/protoc-gen-go-grpc/v1.6.2/cmd/protoc-gen-go-grpc",
+      "published_at": null,
+      "evidence_type": "OFFICIAL_MODULE_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [
+        {
+          "path": "cmd/protoc-gen-go-grpc/go.mod",
+          "url": "https://raw.githubusercontent.com/grpc/grpc-go/1c63fa5f5492fb6cb4cabf9847999ce469505f49/cmd/protoc-gen-go-grpc/go.mod",
+          "sha256": "13b3495a0a9343b656ea5b3468824a6bfab4c2c46e10413b8126a3b9810f1ab7",
+          "evidence_type": "SOURCE_BYTES_HASHED",
+          "meaning": "Separate generator module; it does not share the SDK version."
+        }
+      ],
+      "artifacts": []
+    },
+    "bor-cometbft": {
+      "version": "v0.3.8-polygon",
+      "source_repository": "0xPolygon/cometbft",
+      "commit": "76c6ace040ae01d53ecc6e1ceced4de247fa9ef6",
+      "release_url": "https://github.com/0xPolygon/cometbft/releases/tag/v0.3.8-polygon",
+      "published_at": null,
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": [],
+      "observed_stable": "v0.3.11-polygon",
+      "owner_component": "bor"
+    },
+    "bor-cosmos-sdk": {
+      "version": "v0.2.13-polygon",
+      "source_repository": "0xPolygon/cosmos-sdk",
+      "commit": "ddfd9931f20871ab30f754a67372562e8fdff193",
+      "release_url": "https://github.com/0xPolygon/cosmos-sdk/releases/tag/v0.2.13-polygon",
+      "published_at": null,
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": [],
+      "observed_stable": "v0.2.17-polygon",
+      "owner_component": "bor"
+    },
+    "heimdall-cometbft": {
+      "version": "v0.3.11-polygon",
+      "source_repository": "0xPolygon/cometbft",
+      "commit": "4189879f019941eb710e701d6993eed27f7e8457",
+      "release_url": "https://github.com/0xPolygon/cometbft/releases/tag/v0.3.11-polygon",
+      "published_at": null,
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": [],
+      "observed_stable": "v0.3.11-polygon",
+      "owner_component": "heimdall"
+    },
+    "heimdall-cosmos-sdk": {
+      "version": "v0.2.17-polygon",
+      "source_repository": "0xPolygon/cosmos-sdk",
+      "commit": "1243dea26123fc0582b057e1834a3aeb4dac9bb7",
+      "release_url": "https://github.com/0xPolygon/cosmos-sdk/releases/tag/v0.2.17-polygon",
+      "published_at": null,
+      "evidence_type": "OFFICIAL_RELEASE_AND_TAG_RESOLVED",
+      "compatibility": "NOT_RUN",
+      "dependency_inputs": [],
+      "artifacts": [],
+      "observed_stable": "v0.2.17-polygon",
+      "owner_component": "heimdall"
+    },
+    "go": {
+      "version": "go1.27.3",
+      "evidence_type": "OFFICIAL_DOWNLOAD_CHECKSUM_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "go1.27.3.src.tar.gz",
+          "url": "https://go.dev/dl/go1.27.3.src.tar.gz",
+          "sha256": "6e7749035cf360f06b2575d162ea79df9fda8ef671889e5c375f8e50777f26bb",
+          "size_bytes": 35134035,
+          "evidence_type": "OFFICIAL_DOWNLOAD_CHECKSUM_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "go1.27.3.linux-amd64.tar.gz",
+          "url": "https://go.dev/dl/go1.27.3.linux-amd64.tar.gz",
+          "sha256": "65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40",
+          "size_bytes": 70588678,
+          "evidence_type": "OFFICIAL_DOWNLOAD_CHECKSUM_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "go1.27.3.linux-arm64.tar.gz",
+          "url": "https://go.dev/dl/go1.27.3.linux-arm64.tar.gz",
+          "sha256": "a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49",
+          "size_bytes": 67076044,
+          "evidence_type": "OFFICIAL_DOWNLOAD_CHECKSUM_METADATA",
+          "payload_verified": false
+        }
+      ]
+    },
+    "nats-runtime-image": {
+      "version": "2.15.2-alpine",
+      "image": "docker.io/library/nats",
+      "digest": "sha256:afae2fdbe2e326c65e1246cb83b9d05d319188734f3bd577ac8072daae78a10f",
+      "pull_reference": "docker.io/library/nats@sha256:afae2fdbe2e326c65e1246cb83b9d05d319188734f3bd577ac8072daae78a10f",
+      "evidence_type": "OCI_INDEX_BYTES_HASHED",
+      "compatibility": "NOT_RUN",
+      "discovery_url": "https://registry-1.docker.io/v2/library/nats/manifests/2.15.2-alpine",
+      "platform_manifests": {
+        "linux/amd64": "sha256:89c5c61b5969261e05106a98e465ccb85c7f4bf4e94c1e70786c189759d79e7e",
+        "linux/arm64": "sha256:20196671f18d72f951ae7c6877cdbad3a6fee55a4b0844b76eb152fa49fbee61"
+      },
+      "platform_manifest_payloads_verified": false
+    },
+    "debian-runtime-image": {
+      "version": "13.7-slim",
+      "image": "docker.io/library/debian",
+      "digest": "sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2",
+      "pull_reference": "docker.io/library/debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2",
+      "evidence_type": "OCI_INDEX_BYTES_HASHED",
+      "compatibility": "NOT_RUN",
+      "discovery_url": "https://registry-1.docker.io/v2/library/debian/manifests/13.7-slim",
+      "platform_manifests": {
+        "linux/amd64": "sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392",
+        "linux/arm64": "sha256:24a01011d10eba3a023bc8585b9650b8b29021240d4217c05b905e09ef4a5232"
+      },
+      "platform_manifest_payloads_verified": false
+    },
+    "golang-build-image": {
+      "version": "1.27.3-trixie",
+      "image": "docker.io/library/golang",
+      "digest": "sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80",
+      "pull_reference": "docker.io/library/golang@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80",
+      "evidence_type": "OCI_INDEX_BYTES_HASHED",
+      "compatibility": "NOT_RUN",
+      "discovery_url": "https://registry-1.docker.io/v2/library/golang/manifests/1.27.3-trixie",
+      "platform_manifests": {
+        "linux/amd64": "sha256:a5406f41680f17b4aa0b49de641e00f116215f5c8829d548d29cb44c4f85aa4f",
+        "linux/arm64": "sha256:4f03804fe5085b5e565347663bc51a54177634097cc71e9f816af6c2672f7662"
+      },
+      "platform_manifest_payloads_verified": false
+    },
+    "debian-libbz2-dev": {
+      "package": "libbz2-dev",
+      "version_by_platform": {
+        "linux/amd64": "1.0.8-6",
+        "linux/arm64": "1.0.8-6"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "libbz2-dev_1.0.8-6_amd64.deb",
+          "version": "1.0.8-6",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/b/bzip2/libbz2-dev_1.0.8-6_amd64.deb",
+          "sha256": "b395471bf69087a18a6baa04d68a9d50497b20f8a2602d9729c7069f820bbe6b",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "libbz2-dev_1.0.8-6_arm64.deb",
+          "version": "1.0.8-6",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/b/bzip2/libbz2-dev_1.0.8-6_arm64.deb",
+          "sha256": "580ca6907c86073e275241fc25448bd7867938d0c326cc3975a9ea84f8a7ba0f",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-cmake": {
+      "package": "cmake",
+      "version_by_platform": {
+        "linux/amd64": "3.31.6-2",
+        "linux/arm64": "3.31.6-2"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "cmake_3.31.6-2_amd64.deb",
+          "version": "3.31.6-2",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/c/cmake/cmake_3.31.6-2_amd64.deb",
+          "sha256": "dee2fc94973325240604ffbca677a3f16b462fb6520946bd81be1ecbac770a02",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "cmake_3.31.6-2_arm64.deb",
+          "version": "3.31.6-2",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/c/cmake/cmake_3.31.6-2_arm64.deb",
+          "sha256": "983aa00debd072f7bfae69f93b1b9e4628da0a914c3745b9022e4cd60215493b",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-gxx-14": {
+      "package": "g++-14",
+      "version_by_platform": {
+        "linux/amd64": "14.2.0-19",
+        "linux/arm64": "14.2.0-19"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "g++-14_14.2.0-19_amd64.deb",
+          "version": "14.2.0-19",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/g++-14_14.2.0-19_amd64.deb",
+          "sha256": "4706ab29eab3d81e93582b45b229fdedc71f1eec3071996a448cf2c8beb83f3a",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "g++-14_14.2.0-19_arm64.deb",
+          "version": "14.2.0-19",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/g++-14_14.2.0-19_arm64.deb",
+          "sha256": "f4813643994aa96c527e687c9c7d01855aa5fdd86e63cc8bd05c63ecc9373796",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-gcc-14": {
+      "package": "gcc-14",
+      "version_by_platform": {
+        "linux/amd64": "14.2.0-19",
+        "linux/arm64": "14.2.0-19"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "gcc-14_14.2.0-19_amd64.deb",
+          "version": "14.2.0-19",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14_14.2.0-19_amd64.deb",
+          "sha256": "21500408b5019d8d29f70ce58488e2eea469a1adb4b5fd7db45e819b5efcac4e",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "gcc-14_14.2.0-19_arm64.deb",
+          "version": "14.2.0-19",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14_14.2.0-19_arm64.deb",
+          "sha256": "f4ba77903d7efc3c64c69a8a98c7efa8ea1ae4331521bb74abd76bcc43f1b576",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-gxx": {
+      "package": "g++",
+      "version_by_platform": {
+        "linux/amd64": "4:14.2.0-1",
+        "linux/arm64": "4:14.2.0-1"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "g++_14.2.0-1_amd64.deb",
+          "version": "4:14.2.0-1",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-defaults/g++_14.2.0-1_amd64.deb",
+          "sha256": "f86661c021ab2acb39ceb87315e7c2d4d420fdadc19945d5d589f3953410445c",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "g++_14.2.0-1_arm64.deb",
+          "version": "4:14.2.0-1",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-defaults/g++_14.2.0-1_arm64.deb",
+          "sha256": "e4b8f8fae7c838c40b9db29251b152c9af03a4d4463388d69efdda66c4e97e79",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-gcc": {
+      "package": "gcc",
+      "version_by_platform": {
+        "linux/amd64": "4:14.2.0-1",
+        "linux/arm64": "4:14.2.0-1"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "gcc_14.2.0-1_amd64.deb",
+          "version": "4:14.2.0-1",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-defaults/gcc_14.2.0-1_amd64.deb",
+          "sha256": "eee65c41a441c57c05f754ced1b9d093956966a1c7da9938c3ec00d3dc2f905d",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "gcc_14.2.0-1_arm64.deb",
+          "version": "4:14.2.0-1",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-defaults/gcc_14.2.0-1_arm64.deb",
+          "sha256": "f543b52e29a6780a78c73cf08e551e8e524d623c1092c477cfd8beb5285a86f5",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-libgflags-dev": {
+      "package": "libgflags-dev",
+      "version_by_platform": {
+        "linux/amd64": "2.2.2-2",
+        "linux/arm64": "2.2.2-2+b1"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "libgflags-dev_2.2.2-2_amd64.deb",
+          "version": "2.2.2-2",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gflags/libgflags-dev_2.2.2-2_amd64.deb",
+          "sha256": "055ca9ee17b57159926eea04ee32da8d3332c4e24e3bf028276d89106a75418a",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "libgflags-dev_2.2.2-2+b1_arm64.deb",
+          "version": "2.2.2-2+b1",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/g/gflags/libgflags-dev_2.2.2-2+b1_arm64.deb",
+          "sha256": "bebb9afcad48573cdb1bc608475f4e3840f14a7c2a5fe56524ef4c220d3302a0",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-libzstd-dev": {
+      "package": "libzstd-dev",
+      "version_by_platform": {
+        "linux/amd64": "1.5.7+dfsg-1",
+        "linux/arm64": "1.5.7+dfsg-1"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "libzstd-dev_1.5.7+dfsg-1_amd64.deb",
+          "version": "1.5.7+dfsg-1",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/libz/libzstd/libzstd-dev_1.5.7+dfsg-1_amd64.deb",
+          "sha256": "de5f8aabcf4cb5cd1b441495ea4c24838e88ecbb30ae22c032a1b3b68a9d6f1e",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "libzstd-dev_1.5.7+dfsg-1_arm64.deb",
+          "version": "1.5.7+dfsg-1",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/libz/libzstd/libzstd-dev_1.5.7+dfsg-1_arm64.deb",
+          "sha256": "05cf42de5c9fdf17f49f663b47bfe736f10fbc7080fcc3a86ac43d5d670de149",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-liblz4-dev": {
+      "package": "liblz4-dev",
+      "version_by_platform": {
+        "linux/amd64": "1.10.0-4",
+        "linux/arm64": "1.10.0-4"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "liblz4-dev_1.10.0-4_amd64.deb",
+          "version": "1.10.0-4",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/l/lz4/liblz4-dev_1.10.0-4_amd64.deb",
+          "sha256": "b56779767ce81a4648f9b78a5ebce8264f14af2ac28dccd6896eb0402c685b2a",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "liblz4-dev_1.10.0-4_arm64.deb",
+          "version": "1.10.0-4",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/l/lz4/liblz4-dev_1.10.0-4_arm64.deb",
+          "sha256": "9506a573fa9d6297d39c99f657e47e40ab60ad7b6d4fdff92aae624e3caa9e47",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-make": {
+      "package": "make",
+      "version_by_platform": {
+        "linux/amd64": "4.4.1-2",
+        "linux/arm64": "4.4.1-2"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "make_4.4.1-2_amd64.deb",
+          "version": "4.4.1-2",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/m/make-dfsg/make_4.4.1-2_amd64.deb",
+          "sha256": "70a9709e665383b06068ccd423d62ea191b65355f318a25565dbf324b254cec6",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "make_4.4.1-2_arm64.deb",
+          "version": "4.4.1-2",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/m/make-dfsg/make_4.4.1-2_arm64.deb",
+          "sha256": "043219839669c431def9bb410c4a827f115ee5bf377469d55c4ed905f81f73be",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-libssl-dev": {
+      "package": "libssl-dev",
+      "version_by_platform": {
+        "linux/amd64": "3.5.7-1~deb13u3",
+        "linux/arm64": "3.5.7-1~deb13u3"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "libssl-dev_3.5.7-1~deb13u3_amd64.deb",
+          "version": "3.5.7-1~deb13u3",
+          "platform": "linux/amd64",
+          "url": "https://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl-dev_3.5.7-1~deb13u3_amd64.deb",
+          "sha256": "c5f5f0383cac45209fefe85b3c3308e5ef6743663597d89bedcb96aaa06b8342",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "libssl-dev_3.5.7-1~deb13u3_arm64.deb",
+          "version": "3.5.7-1~deb13u3",
+          "platform": "linux/arm64",
+          "url": "https://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl-dev_3.5.7-1~deb13u3_arm64.deb",
+          "sha256": "ee3ce1214925d3905a8ad54ea1250b016438322f73a9719474fcd0ece6243a8e",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-libsnappy-dev": {
+      "package": "libsnappy-dev",
+      "version_by_platform": {
+        "linux/amd64": "1.2.2-1",
+        "linux/arm64": "1.2.2-1"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "libsnappy-dev_1.2.2-1_amd64.deb",
+          "version": "1.2.2-1",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/s/snappy/libsnappy-dev_1.2.2-1_amd64.deb",
+          "sha256": "ecfcbb8499eb6c1d8e27e85b5ac53a33706effb71ec9b1817a1e53f864a275ed",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "libsnappy-dev_1.2.2-1_arm64.deb",
+          "version": "1.2.2-1",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/s/snappy/libsnappy-dev_1.2.2-1_arm64.deb",
+          "sha256": "b879899bfc72db028ea92678771b2e64453fe4aa480e0346b9a9f5534e255961",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    },
+    "debian-zlib1g-dev": {
+      "package": "zlib1g-dev",
+      "version_by_platform": {
+        "linux/amd64": "1:1.3.dfsg+really1.3.1-1+b1",
+        "linux/arm64": "1:1.3.dfsg+really1.3.1-1+b1"
+      },
+      "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+      "compatibility": "NOT_RUN",
+      "artifacts": [
+        {
+          "name": "zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_amd64.deb",
+          "version": "1:1.3.dfsg+really1.3.1-1+b1",
+          "platform": "linux/amd64",
+          "url": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_amd64.deb",
+          "sha256": "76ed5c858e1aef38b7be93acce5910e457e77bd6271471b9d05fb42e78826224",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        },
+        {
+          "name": "zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_arm64.deb",
+          "version": "1:1.3.dfsg+really1.3.1-1+b1",
+          "platform": "linux/arm64",
+          "url": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_arm64.deb",
+          "sha256": "745ebcf1fa115e230af76216355d7290a24f1790fe3780249b519c0e4d30534f",
+          "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
+          "payload_verified": false
+        }
+      ],
+      "signed_index_verification": "PENDING_E01"
+    }
+  },
+  "profiles": [
+    {
+      "id": "ethereum-mainnet",
+      "chain_id": 1,
+      "native_component": "geth",
+      "consensus_component": "prysm",
+      "common_components": [
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "constraints": [
+        "BOOT06-C02",
+        "BOOT06-C06",
+        "BOOT06-C07",
+        "BOOT06-C08",
+        "BOOT06-C09",
+        "BOOT06-C11"
+      ],
+      "build": "NOT_RUN",
+      "runtime": "NOT_RUN",
+      "genesis_and_fork_config": "PENDING_E01_E06"
+    },
+    {
+      "id": "ethereum-sepolia",
+      "chain_id": 11155111,
+      "native_component": "geth",
+      "consensus_component": "prysm",
+      "common_components": [
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "constraints": [
+        "BOOT06-C02",
+        "BOOT06-C06",
+        "BOOT06-C07",
+        "BOOT06-C08",
+        "BOOT06-C09",
+        "BOOT06-C11"
+      ],
+      "build": "NOT_RUN",
+      "runtime": "NOT_RUN",
+      "genesis_and_fork_config": "PENDING_E01_E06"
+    },
+    {
+      "id": "ethereum-hoodi",
+      "chain_id": 560048,
+      "native_component": "geth",
+      "consensus_component": "prysm",
+      "common_components": [
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "constraints": [
+        "BOOT06-C01",
+        "BOOT06-C06",
+        "BOOT06-C07",
+        "BOOT06-C08",
+        "BOOT06-C09",
+        "BOOT06-C11"
+      ],
+      "build": "NOT_RUN",
+      "runtime": "NOT_RUN",
+      "genesis_and_fork_config": "PENDING_E01_E06"
+    },
+    {
+      "id": "bsc-mainnet",
+      "chain_id": 56,
+      "native_component": "bsc",
+      "consensus_component": null,
+      "common_components": [
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "constraints": [
+        "BOOT06-C03",
+        "BOOT06-C06",
+        "BOOT06-C07",
+        "BOOT06-C08",
+        "BOOT06-C09",
+        "BOOT06-C11",
+        "BOOT06-C10"
+      ],
+      "build": "NOT_RUN",
+      "runtime": "NOT_RUN",
+      "genesis_and_fork_config": "PENDING_E01_E06"
+    },
+    {
+      "id": "bsc-testnet",
+      "chain_id": 97,
+      "native_component": "bsc",
+      "consensus_component": null,
+      "common_components": [
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "constraints": [
+        "BOOT06-C03",
+        "BOOT06-C06",
+        "BOOT06-C07",
+        "BOOT06-C08",
+        "BOOT06-C09",
+        "BOOT06-C11",
+        "BOOT06-C10"
+      ],
+      "build": "NOT_RUN",
+      "runtime": "NOT_RUN",
+      "genesis_and_fork_config": "PENDING_E01_E06"
+    },
+    {
+      "id": "polygon-pos-mainnet",
+      "chain_id": 137,
+      "native_component": "bor",
+      "consensus_component": "heimdall",
+      "common_components": [
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "constraints": [
+        "BOOT06-C04",
+        "BOOT06-C06",
+        "BOOT06-C07",
+        "BOOT06-C08",
+        "BOOT06-C09",
+        "BOOT06-C11",
+        "BOOT06-C05"
+      ],
+      "build": "NOT_RUN",
+      "runtime": "NOT_RUN",
+      "genesis_and_fork_config": "PENDING_E01_E06",
+      "supporting_l1": {
+        "profile": "ethereum-mainnet",
+        "execution_component": "geth",
+        "consensus_component": "prysm",
+        "dedicated_instance": true,
+        "share_with_other_profiles": false
+      }
+    },
+    {
+      "id": "polygon-pos-amoy",
+      "chain_id": 80002,
+      "native_component": "bor",
+      "consensus_component": "heimdall",
+      "common_components": [
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "constraints": [
+        "BOOT06-C04",
+        "BOOT06-C06",
+        "BOOT06-C07",
+        "BOOT06-C08",
+        "BOOT06-C09",
+        "BOOT06-C11",
+        "BOOT06-C05"
+      ],
+      "build": "NOT_RUN",
+      "runtime": "NOT_RUN",
+      "genesis_and_fork_config": "PENDING_E01_E06",
+      "supporting_l1": {
+        "profile": "ethereum-sepolia",
+        "execution_component": "geth",
+        "consensus_component": "prysm",
+        "dedicated_instance": true,
+        "share_with_other_profiles": false
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "id": "BOOT06-C01",
+      "profiles": [
+        "ethereum-hoodi"
+      ],
+      "severity": "REQUIRED_BEFORE_PROFILE_ADMISSION",
+      "finding": "Geth v1.17.10 and Prysm v7.3.1 cancel the previously scheduled Hoodi Amsterdam/Gloas activation. The old pair cannot establish current Hoodi compatibility.",
+      "required_evidence": "Regenerate the pinned Hoodi fork/config fixture and verify the execution/consensus pair, identity, hooks, and restart behavior.",
+      "sources": [
+        "https://github.com/ethereum/go-ethereum/releases/tag/v1.17.10",
+        "https://github.com/OffchainLabs/prysm/releases/tag/v7.3.1"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C02",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia"
+      ],
+      "severity": "REQUIRED_BEFORE_PROFILE_ADMISSION",
+      "finding": "The current source pair is selected for both profiles; Hoodi-specific release notes do not establish mainnet or Sepolia runtime compatibility.",
+      "required_evidence": "Separate identity, genesis/fork config, execution/consensus, and capture proofs for each profile.",
+      "sources": [
+        "https://github.com/ethereum/go-ethereum/releases/tag/v1.17.10",
+        "https://github.com/OffchainLabs/prysm/releases/tag/v7.3.1"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C03",
+      "profiles": [
+        "bsc-mainnet",
+        "bsc-testnet"
+      ],
+      "severity": "REQUIRED_BEFORE_PROFILE_ADMISSION",
+      "finding": "Jenner is scheduled for mainnet at 1796697000 (2026-12-08 02:30 UTC) and testnet at 1793241000 (2026-10-29 02:30 UTC). The current testnet therefore needs the new paths now. Upgrading from v1.7.x also changes configuration and RPC behavior.",
+      "required_evidence": "Source and fixture coverage for CAS20 stateful precompiles, payment-lane behavior, timestamp precision, native capture/fees/rollback, and both sides of applicable fork boundaries. Verify current mainnet and testnet separately.",
+      "sources": [
+        "https://github.com/bnb-chain/bsc/releases/tag/v1.8.2",
+        "https://github.com/bnb-chain/bsc/blob/54afaff4da31ac9e49ba646a4f65104edac5a2f3/params/config.go"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C04",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "severity": "REQUIRED_BEFORE_PROFILE_ADMISSION",
+      "finding": "Uburu is already active at mainnet block 96787900 and Amoy block 51978200. Bor v2.10.3 no longer follows those chains. Bor v2.11.0 changes StateReceiver/state-sync execution and records; failed Heimdall fetches now fail the block.",
+      "required_evidence": "Recheck Bor capture seams, system/state-sync ordering, failure/recovery and receipts at Uburu. Preserve sequential execution: BlockSTM, pipelined import, parallel stateless import, and preconfirmations remain disabled in the first profile.",
+      "sources": [
+        "https://github.com/0xPolygon/bor/releases/tag/v2.11.0",
+        "https://github.com/0xPolygon/bor/blob/3a018e38467594508ca31ebeaf804837fb92834a/params/config.go"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C05",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "severity": "REQUIRED_BEFORE_PROFILE_ADMISSION",
+      "finding": "Karwar is active at Heimdall mainnet height 57006000 and Amoy height 50020000. Heimdall v0.13.2 is selected. Bor and Heimdall use different Cosmos/CometBFT replacement versions.",
+      "required_evidence": "Build each upstream dependency graph separately; verify Bor/Heimdall compatibility and checkpoint/finality evidence. Use a dedicated Ethereum mainnet L1 pair for Polygon mainnet and a dedicated Sepolia L1 pair for Amoy.",
+      "sources": [
+        "https://github.com/0xPolygon/heimdall-v2/releases/tag/v0.13.2",
+        "https://github.com/0xPolygon/heimdall-v2/blob/03090c94e7eaef344cd16efd6c968431c4041847/go.mod",
+        "https://github.com/0xPolygon/bor/blob/3a018e38467594508ca31ebeaf804837fb92834a/go.mod"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C06",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "severity": "REQUIRED_BEFORE_BUILD_ADMISSION",
+      "finding": "grpc-go v1.85.0 and nats.go v1.55.0 require Go 1.26.0. Geth/BSC source go directives remain 1.25.0; Bor/Heimdall require 1.26.10. Go 1.27.3 is the build candidate, not a proved native compiler upgrade.",
+      "required_evidence": "Compile and test each native module and common service separately. Resolve generated-binding and dependency changes in their own modules; keep the NATS SDK in Gateway.",
+      "sources": [
+        "https://github.com/grpc/grpc-go/blob/c9ab42cdb0a2b3e7b9d5510ebbc999638ee41eb7/go.mod",
+        "https://github.com/nats-io/nats.go/blob/6068694d76fcf1f12bdf1e7383876aa5a3928421/go.mod",
+        "https://go.dev/dl/?mode=json"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C07",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "severity": "REQUIRED_BEFORE_STORAGE_ADMISSION",
+      "finding": "grocksdb v1.11.0 was adapted for RocksDB 11.0.4; its compatibility with the selected RocksDB 11.13.2 is unproved.",
+      "required_evidence": "Compile/link the C API and exercise sync WriteBatch, WAL recovery, bounded spool, restart, and corruption behavior before accepting this pair. A failure blocks promotion; it does not silently select older versions.",
+      "sources": [
+        "https://github.com/linxGnu/grocksdb/releases/tag/v1.11.0",
+        "https://github.com/meta/rocksdb/releases/tag/v11.13.2"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C08",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "severity": "REQUIRED_BEFORE_DEPLOYMENT_ADMISSION",
+      "finding": "NATS server and chart are separately pinned to 2.15.2. Helm 4.3.1 and Kubernetes 1.37.2 are metadata-verified candidates; their chart compatibility has not been tested. Optional chart sidecars are disabled.",
+      "required_evidence": "Render/lint the chart, inspect actual image refs and permissions, verify JetStream limits/metadata/account checks, and run Compose/Kubernetes admission tests on the selected platform.",
+      "sources": [
+        "https://github.com/nats-io/k8s/releases/tag/nats-2.15.2",
+        "https://github.com/helm/helm/releases/tag/v4.3.1",
+        "https://github.com/kubernetes/kubernetes/releases/tag/v1.37.2"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C09",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "severity": "REQUIRED_BEFORE_ARTIFACT_ADMISSION",
+      "finding": "OCI indexes and selected platform descriptors are pinned; platform layers were not executed. Direct Debian package metadata does not constitute a signed, resolved OS closure.",
+      "required_evidence": "Verify signed Debian indexes and every downloaded package, resolve architecture-specific closures, record runtime libraries and generated image digests, and execute platform smoke tests. Linux/arm64 availability is not a support claim.",
+      "sources": [
+        "https://www.debian.org/releases/",
+        "https://deb.debian.org/debian/dists/trixie/Release",
+        "https://security.debian.org/debian-security/dists/trixie-security/Release"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C10",
+      "profiles": [
+        "bsc-mainnet",
+        "bsc-testnet"
+      ],
+      "severity": "REQUIRED_BEFORE_BOOTSTRAP_ADMISSION",
+      "finding": "The release prose ZIP checksums disagree with the release API and actual bytes. API checksums match downloaded archives. Both genesis JSON files omit jennerTime.",
+      "required_evidence": "Use the verified archive hashes; validate chain/genesis identity and effective native fork configuration after init. The archive's existence or chainId alone does not establish fork correctness.",
+      "sources": [
+        "https://github.com/bnb-chain/bsc/releases/tag/v1.8.2",
+        "https://api.github.com/repos/bnb-chain/bsc/releases/tags/v1.8.2"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "BOOT06-C11",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "severity": "REQUIRED_BEFORE_TEST_FIXTURE_ADMISSION",
+      "finding": "Solidity v0.8.38 is selected for project-owned test contracts. Its default EVM target may differ from a profile's active fork.",
+      "required_evidence": "Pin compiler bytes, explicit per-profile EVM target, source/ABI/bytecode hashes, inputs, and independent expected results. Verify the architecture of each compiler binary before running it.",
+      "sources": [
+        "https://github.com/argotorg/solidity/releases/tag/v0.8.38"
+      ],
+      "status": "OPEN"
+    }
+  ],
+  "candidate_policy": {
+    "build_platforms": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "platform_support": "NOT_RUN",
+    "common_and_native_go": "go1.27.3",
+    "native_go_note": "The newer compiler must pass each native build and capture gate. Upstream go directives and module graphs are preserved as inputs.",
+    "c_cpp_toolchain": "Debian 13 stable GCC/G++ 14 packages; no separate LLVM toolchain is introduced.",
+    "base_images": [
+      "golang-build-image",
+      "debian-runtime-image"
+    ],
+    "nats_chart_overrides": {
+      "reloader": {
+        "enabled": false
+      },
+      "natsBox": {
+        "enabled": false
+      },
+      "promExporter": {
+        "enabled": false
+      }
+    },
+    "optional_sidecars": "Disabled in this candidate. Enabling any sidecar requires its own official update rule, immutable image pin, and checks before admission.",
+    "solidity": "Compile each fixture with an explicit EVM target supported by its profile/fork. The compiler default is not a profile rule."
+  },
+  "package_indexes": [
+    {
+      "url": "https://deb.debian.org/debian/dists/trixie/main/binary-amd64/Packages.gz",
+      "sha256": "42c23aaca08e8225ed0449360724b92531952cbe4ce3bbf189298a7108f40a85",
+      "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
+      "signature_verification": "PENDING_E01"
+    },
+    {
+      "url": "https://deb.debian.org/debian/dists/trixie/main/binary-arm64/Packages.gz",
+      "sha256": "eb08ac2299585e234f64ed3c1dbe5b71e149cd68a84b711ceea85dcfc2627135",
+      "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
+      "signature_verification": "PENDING_E01"
+    },
+    {
+      "url": "https://security.debian.org/debian-security/dists/trixie-security/main/binary-amd64/Packages.xz",
+      "sha256": "5f9fc5aa45642005a7d58bf8782e6fe1a483b9082f4e1918dfb186fa490d2a20",
+      "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
+      "signature_verification": "PENDING_E01"
+    },
+    {
+      "url": "https://security.debian.org/debian-security/dists/trixie-security/main/binary-arm64/Packages.xz",
+      "sha256": "d8c68d608f887ed0e3c00dfd19ab78877477a0fbe247ae0c4f005d07104ca2da",
+      "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
+      "signature_verification": "PENDING_E01"
+    },
+    {
+      "url": "https://deb.debian.org/debian/dists/trixie-updates/main/binary-amd64/Packages.xz",
+      "sha256": "eea860c5dea11680e64299adb2736c2367c4235763a66f2b70ca61ce1b51978a",
+      "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
+      "signature_verification": "PENDING_E01"
+    },
+    {
+      "url": "https://deb.debian.org/debian/dists/trixie-updates/main/binary-arm64/Packages.xz",
+      "sha256": "eea860c5dea11680e64299adb2736c2367c4235763a66f2b70ca61ce1b51978a",
+      "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
+      "signature_verification": "PENDING_E01"
+    }
+  ],
+  "acquired_bootstrap_artifacts": [
+    {
+      "id": "bsc-mainnet-bootstrap",
+      "component": "bsc",
+      "profile": "bsc-mainnet",
+      "version": "v1.8.2",
+      "url": "https://github.com/bnb-chain/bsc/releases/download/v1.8.2/mainnet.zip",
+      "sha256": "522cb9902437df2368008b28bebb6b5c35ec026bf2ec41af40117ff507f53fa7",
+      "size_bytes": 45720,
+      "evidence_type": "PAYLOAD_BYTES_HASHED_AND_ZIP_INSPECTED",
+      "chain_id": 56,
+      "genesis_path": "mainnet/genesis.json",
+      "genesis_sha256": "85e9131b5ee9d133e68ad1a9f93d4e928ecc862a399b5166676f1c8cff040f59",
+      "native_init": "NOT_RUN",
+      "effective_fork_config": "NOT_RUN"
+    },
+    {
+      "id": "bsc-testnet-bootstrap",
+      "component": "bsc",
+      "profile": "bsc-testnet",
+      "version": "v1.8.2",
+      "url": "https://github.com/bnb-chain/bsc/releases/download/v1.8.2/testnet.zip",
+      "sha256": "0d9de8b7f1bafc36711eed80e97bf33f906fadc2ceb5457361645941d7ad19f7",
+      "size_bytes": 42010,
+      "evidence_type": "PAYLOAD_BYTES_HASHED_AND_ZIP_INSPECTED",
+      "chain_id": 97,
+      "genesis_path": "testnet/genesis.json",
+      "genesis_sha256": "821c2c569857a3fa5e8d087a74b66b1996127a6a1236ef0b7a14f25bee2fad0f",
+      "native_init": "NOT_RUN",
+      "effective_fork_config": "NOT_RUN"
+    }
+  ],
+  "pending_outputs": [
+    {
+      "id": "patched-native-images",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    },
+    {
+      "id": "supporting-runtime-images",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    },
+    {
+      "id": "common-project-artifacts",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    },
+    {
+      "id": "resolved-go-module-closures",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    },
+    {
+      "id": "resolved-os-package-closures",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    },
+    {
+      "id": "profile-bootstrap-manifests",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    },
+    {
+      "id": "fixture-contract-bytecode",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    },
+    {
+      "id": "updater-check-and-promotion",
+      "status": "PENDING_IMPLEMENTATION",
+      "runtime": "NOT_RUN"
+    }
+  ]
+}

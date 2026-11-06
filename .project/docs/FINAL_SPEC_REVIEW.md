@@ -1,8 +1,8 @@
 # Финальная сверка согласованного ТЗ
 
-**D84:** разработка разрешена; прежние docs-only ограничения исторические. TEST-OPEN-01/02 входят в BOOT-07/08 и должны быть закрыты до BOOT-09. Runbook и полный issue backlog подготовлены; controller/продукт ещё не реализованы, runtime NOT_RUN.
+**D87:** BOOT-07 specifies finite reader boundaries, complete source/delivery/stream evidence, reorg handling, retention checks, and deadlines. Independent review is required before TEST-OPEN-01 closes. TEST-OPEN-02 remains assigned to BOOT-08. Neither document review nor reader closure proves product runtime correctness; runtime remains NOT_RUN.
 
-**D83 (2026-11-06):** приняты 30 минут самого standard run, configurable стенд/объёмы, scripts/refresh-versions без latest, собственные test contracts и один clean retry без маскировки FAIL. После критической проверки явно открыты TEST-OPEN-01 (критерий завершения потока) и TEST-OPEN-02 (конкретный независимый corpus/quotas). Не заявлять полную готовность ТЗ/приёмки до их закрытия. Сверка ссылок/зеркал не доказывает закрытие этих вопросов; runtime NOT_RUN.
+**D83–D86:** The standard run has a 30-minute limit excluding preparation; configuration and volumes remain adjustable without losing coverage. Exact stable locks, controlled test contracts, one diagnostic retry, and fresh public smoke remain mandatory. D84 authorizes issue-based implementation; D86 limits the current launch to BOOT. BOOT-09 requires accepted BOOT-07/08 decisions and all other bootstrap evidence. Matching document mirrors alone does not close a gate.
 
 **D82 (2026-11-06), историческая база:** после сверки ниже объём был расширен до семи mainnet/testnet профилей и 211 AC, добавлены TESTING_CONTRACT и evidence schema v3. D83 увеличил текущий каталог до 217 AC. Вывод D81 относится к прежней базе. Runtime всех профилей NOT_RUN; источники подтверждают реестр публичных сетей, не совместимость сборок. Документальные проверки — в PROJECT_STATUS.
 
