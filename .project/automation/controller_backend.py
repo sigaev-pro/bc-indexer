@@ -15,6 +15,8 @@ from acceptance_receipts import HISTORICAL, Ledger
 from controller import Blocked, in_scope, read_json, require
 import evidence
 import session_runner
+import evidence_task_verifier as artifact_verifier
+import task_proofs
 
 WATCHDOG_GRACE_SECONDS = 5
 
@@ -29,7 +31,7 @@ class RealBackend:
                            "source_state": "modified" if self.git(self.source, "status", "--porcelain=v1") else "clean",
                            "commit_contains_executing_files": not bool(self.git(self.source, "status", "--porcelain=v1")),
                            "source_sha256": {name: hashlib.sha256((self.source / ".project/automation" / name).read_bytes()).hexdigest()
-                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "acceptance_receipts.py", "evidence.py", "acceptance.py")}}
+                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "acceptance_receipts.py", "evidence.py", "acceptance.py", "evidence_task_verifier.py", "task_proofs.py")}}
         self.roles = None
         self.cached_receipts = None
 
@@ -106,7 +108,9 @@ class RealBackend:
             else:
                 result[task] = self.ledger.save(self.ledger.historical(task))
         if self.ledger.directory.exists():
-            for path in sorted(self.ledger.directory.glob("BOOT-*.json")):
+            for path in sorted(self.ledger.directory.glob("*.json")):
+                require(path.stem.startswith("BOOT-") or path.stem == artifact_verifier.TASK,
+                        "BLOCKED_UNCONFIGURED_VERIFICATION", "receipt has no configured task acceptance adapter")
                 result[path.stem] = self.ledger.load(path.stem)
         if self.captures.exists():
             for path in sorted(self.captures.glob("*.json")):
@@ -117,6 +121,8 @@ class RealBackend:
                 require(task in run["catalog"], "BLOCKED_EVIDENCE", "capture names an unknown task")
                 if task in result:
                     continue
+                require(task.startswith("BOOT-") or (task == artifact_verifier.TASK and bundle["snapshot"].get("task_verification")),
+                        "BLOCKED_EVIDENCE", "a generic product capture is insufficient; retain its authenticated task proof")
                 try:
                     receipt = self.ledger.from_capture(bundle, {"capture_origin": "retained coordinator capture",
                                                                "importer": self.provenance,
@@ -140,13 +146,30 @@ class RealBackend:
     def verify_bootstrap(self, tasks):
         self.reconcile_catalog(tasks)
         receipts = self.receipts({"catalog": tasks})
+        recipes = self.snapshot_recipes(read_json(self.source / ".project/automation/task-recipes.json"))
+        self.artifact_recipe({"recipes": recipes}, {"task_id": artifact_verifier.TASK})
         required = {f"BOOT-{number:02}" for number in range(1, 9)}
         missing = sorted(required - set(receipts))
         return {"verdict": "BLOCKED" if missing else "PASS", "missing_accepted_tasks": missing,
                 "accepted_tasks": sorted(receipts), "issue_count": len(tasks),
                 "authorization": {"reference": "D86", "stage_limit": "BOOT"},
                 "e01_authorized": False, "product_verification_configured": False, "runtime": "NOT_RUN",
+                "initial_artifact_task": {"task_id": artifact_verifier.TASK, "contract": artifact_verifier.CONTRACT,
+                    "configured": True, "trusted_pack": artifact_verifier.pack(self.source), "authorization_required": True},
+                "unconfigured_e01_tasks": sorted(task for task, spec in tasks.items()
+                    if spec["stage"] == "E01" and task != artifact_verifier.TASK),
                 "executing_source": self.provenance}
+
+    def snapshot_recipes(self, recipes):
+        return task_proofs.snapshot(recipes, self.source)
+
+    def artifact_recipe(self, run, task):
+        require(task["task_id"] == artifact_verifier.TASK, "BLOCKED_UNCONFIGURED_VERIFICATION",
+                "this product task has no configured verifier or acceptance adapter")
+        try:
+            task_proofs.check_recipe(run["recipes"][task["task_id"]], self.source)
+        except (ValueError, KeyError, TypeError) as error:
+            raise Blocked("BLOCKED_VERIFIER_CHANGED", str(error)) from error
 
     def start_gate(self, tasks):
         report = self.verify_bootstrap(tasks)
@@ -199,7 +222,8 @@ class RealBackend:
             "BLOCKED_REPOSITORY", "repository transport identity changed")
         stage = run["catalog"][task["task_id"]]["stage"]
         require(in_scope(run, stage), "BLOCKED_AUTHORIZATION", "task exceeds the recorded owner stage limit")
-        require(stage == "BOOT", "BLOCKED_UNCONFIGURED_VERIFICATION", "product acceptance adapters and recipes are not configured")
+        if stage != "BOOT":
+            self.artifact_recipe(run, task)
         directory = self.directory(run, operation)
         evidence.durable_directory(directory)
         saved = directory / "operation-result.json"
@@ -272,8 +296,11 @@ class RealBackend:
         """Authenticate terminal process evidence before an operator retry."""
         identifiers = [operation["id"]]
         if operation["action"] == "verify":
+            count = len(run["recipes"][task["task_id"]]["commands"])
+            if task["task_id"] == artifact_verifier.TASK:
+                count += 1
             identifiers = [operation["id"] + "-check-" + str(number)
-                           for number, _ in enumerate(run["recipes"][task["task_id"]]["commands"])]
+                           for number in range(count)]
         records = []
         outcome = None
         for identifier in identifiers:
@@ -395,6 +422,11 @@ class RealBackend:
             handoff["task"] += "\nReview exact head " + task["worker"]["commit_sha"] + ". Check every acceptance criterion independently."
         elif task.get("review"):
             handoff["task"] += "\nPrior review findings: " + json.dumps(task["review"]["findings"])
+        if task["task_id"] == artifact_verifier.TASK:
+            handoff["task"] += ("\nFollow the exact accepted artifact interface in .project/automation/evidence-task-contract.md. "
+                                "Required outputs: " + json.dumps(recipe["required_files"]) +
+                                ". The trusted verifier and recipe are outside your allowed paths. "
+                                "Synthetic bootstrap vectors are test inputs, never product runtime evidence.")
         prompt, revision = self.role_prompt("reviewer" if review else recipe["role"], handoff)
         directory = self.directory(run, operation)
         handoff_path = directory / "handoff.json"
@@ -479,24 +511,50 @@ class RealBackend:
             self.git(workspace, "cat-file", "-e", head + ":" + name)
             files[name] = hashlib.sha256((workspace / name).read_bytes()).hexdigest()
         checks = []
-        for number, command in enumerate(recipe["commands"]):
+        commands = list(recipe["commands"])
+        artifact = task["task_id"] == artifact_verifier.TASK
+        if artifact:
+            self.artifact_recipe(run, task)
+            commands.append([sys.executable, "-I", str(self.source / ".project/automation/evidence_task_verifier.py"),
+                             "--candidate", str(workspace)])
+        for number, command in enumerate(commands):
             require(isinstance(command, list) and command and all(isinstance(arg, str) for arg in command),
                     "BLOCKED_VERIFICATION", "verification command must be an argument array")
-            _, execution = self.supervised(run, operation["id"] + "-check-" + str(number), command, workspace,
+            execution_directory, execution = self.supervised(run, operation["id"] + "-check-" + str(number), command, workspace,
                                            timeout=600, environment={"BOOTSTRAP_HEAD_SHA": head,
                                                                    "BOOTSTRAP_BASE_SHA": task["workspace"]["base_sha"]})
-            checks.append({"command": command, "execution": execution})
+            check = {"command": command, "execution": execution}
+            if artifact:
+                check.update(request=read_json(execution_directory / "request.json"),
+                             stdout=(execution_directory / "stdout.jsonl").read_text(),
+                             stderr=(execution_directory / "stderr.log").read_text())
+            checks.append(check)
         if recipe.get("bootstrap_gate"):
             report = self.verify_bootstrap(run["catalog"])
             require(report["verdict"] == "PASS", "BLOCKED_BOOTSTRAP", "bootstrap dependencies remain unaccepted")
         require(self.candidate(run, task) == head, "BLOCKED_HEAD_CHANGED", "verification changed the candidate")
-        return {"passed": True, "head_sha": head, "files": files, "checks": checks,
-                "recipe_sha256": evidence.digest(recipe), "runtime": "NOT_RUN"}
+        result = {"passed": True, "head_sha": head, "files": files, "checks": checks,
+                  "recipe_sha256": evidence.digest(recipe), "runtime": "NOT_RUN"}
+        if artifact:
+            result.update(task_id=artifact_verifier.TASK, base_sha=task["workspace"]["base_sha"], recipe=recipe,
+                          verifier_source_commit=self.provenance["checkout_head_sha"], authorization=run["authorization"],
+                          verification_operation_id=operation["id"])
+            try:
+                task_proofs.check_verification(result, head, task["workspace"]["base_sha"])
+            except (ValueError, KeyError, TypeError) as error:
+                raise Blocked("BLOCKED_ARTIFACT_PROOF", str(error)) from error
+        return result
 
     def do_publish(self, run, task, operation, directory):
         head = self.candidate(run, task)
         require(task["verification"]["passed"] is True and task["review"]["verdict"] == "PASS",
                 "BLOCKED_EVIDENCE", "publication requires independent verification and review")
+        binding = None
+        if task["task_id"] == artifact_verifier.TASK:
+            self.artifact_recipe(run, task)
+            require(task["verification"]["head_sha"] == head and task["verification"]["base_sha"] == task["workspace"]["base_sha"],
+                    "BLOCKED_ARTIFACT_PROOF", "artifact proof identifies a different candidate or base")
+            binding = task_proofs.publication(task["verification"])
         branch = task["workspace"]["branch"]
         remote = self.git(self.root, "ls-remote", "origin", "refs/heads/" + branch)
         if not remote or remote.split()[0] != head:
@@ -510,7 +568,7 @@ class RealBackend:
         else:
             self.candidate(run, task)
             pull = self.mutate("POST", "pulls", {"head": branch, "base": "main", "title": task["task_id"] + ": " + run["catalog"][task["task_id"]]["snapshot"].splitlines()[0].split(" — ")[-1],
-                "body": f"<!-- extractor-task:{task['task_id']} -->\n<!-- extractor-operation:{operation['id']} -->\n\nImplements the assigned bootstrap acceptance criteria. The controller closes the task only after verified acceptance."})
+                "body": f"<!-- extractor-task:{task['task_id']} -->\n<!-- extractor-operation:{operation['id']} -->\n\nImplements the assigned task acceptance criteria. The controller closes the task only after verified acceptance."})
         require(pull["state"] == "open" and pull["head"]["sha"] == head
                 and f"<!-- extractor-task:{task['task_id']} -->" in pull["body"],
                 "BLOCKED_REMOTE", "existing pull request does not match the task candidate")
@@ -519,6 +577,8 @@ class RealBackend:
                   "implementer_session": task["worker"]["session_id"], "reviewer_session": task["review"]["session_id"],
                   "read_only": True, "verdict": "PASS", "findings": [], "checks": task["review"]["checks"],
                   "unverified": task["review"]["unverified"], "operation_id": operation["id"]}
+        if binding is not None:
+            report["controller_verification"] = binding
         body = acceptance.REVIEW_MARKER + "\n```json\n" + json.dumps(report, indent=2) + "\n```"
         comments = [c for c in self.pages(f"issues/{pull['number']}/comments") if c["body"] == body]
         require(len(comments) <= 1, "BLOCKED_REMOTE", "independent report is duplicated")
@@ -538,6 +598,9 @@ class RealBackend:
                 "base_sha": task["workspace"]["base_sha"]}
 
     def do_merge(self, run, task, operation, directory):
+        if task["task_id"] == artifact_verifier.TASK:
+            self.artifact_recipe(run, task)
+            task_proofs.check_verification(task["verification"], task["worker"]["commit_sha"], task["workspace"]["base_sha"])
         expected = {"repository": self.repository, "task_id": task["task_id"], "pull_request_number": task["pull"]["number"],
                     "review_comment_id": task["pull"]["comment_id"], "coordinator_login": "sigaev-pro",
                     "implementer_session": task["worker"]["session_id"], "head_sha": task["worker"]["commit_sha"],
@@ -558,16 +621,19 @@ class RealBackend:
                 time.sleep(2)
             self.candidate(run, task)
             try:
-                captured = evidence.capture(expected, directory / "evidence")
+                options = {"task_verification": task["verification"]} if task["task_id"] == artifact_verifier.TASK else {}
+                captured = evidence.capture(expected, directory / "evidence", **options)
             except (ValueError, KeyError, TypeError) as error:
                 raise Blocked("BLOCKED_ACCEPTANCE", str(error)) from error
             bundle = read_json(captured["path"])
+            if task["task_id"] == artifact_verifier.TASK:
+                self.ledger.verify_task_proof({"capture": bundle, "task_verification": task["verification"]})
             evidence.atomic_json(intent_path, {"capture": bundle, "provenance": self.provenance})
             self.check_stop(run)
             self.mutate("PUT", f"pulls/{expected['pull_request_number']}/merge", {"sha": expected["head_sha"], "merge_method": "merge"})
         require(intent_path.exists(), "BLOCKED_EVIDENCE", "merged PR has no retained pre-merge intent; do not invent acceptance")
         intent = read_json(intent_path)
-        receipt = self.ledger.from_capture(intent["capture"], intent["provenance"])
+        receipt = self.ledger.from_capture(intent["capture"], intent["provenance"], task.get("verification"))
         receipt["task_verification"] = task["verification"]
         receipt["worker_session"] = task["worker"]["session_id"]
         receipt["reviewer_session"] = task["review"]["session_id"]

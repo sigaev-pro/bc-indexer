@@ -1,5 +1,15 @@
 # Дерево решений и журнал интервью
 
+## Delegated implementation decision — D91 (2026-11-07)
+
+BOOT-09 adds one exact-task artifact acceptance path for E01-01.evidence. It does not authorize E01 or create its product schemas. A trusted bootstrap verifier outside worker-owned paths will execute future candidate validation against fixed D82/EVID vectors for AC-DEV-01-01, AC-DEV-04-02, and AC-DEV-04-03. Synthetic vectors and fake candidates are bootstrap test inputs, never product runtime evidence. The other E01 tasks remain unconfigured.
+
+D82 names the DOC profile, NOT_APPLICABLE digest/fork, and document fixture kind but does not specify a literal network value for a resolved document identity. D91 chooses `network=DOC` for this test-evidence serialization. COMMON remains a definition scope. This choice adds no runtime network, profile, production NetworkIdentity, or fixture enum. The stdin validation-bundle interface and field spellings in the trusted handoff are technical artifact choices; they are not claims that these spellings were already fixed by the product protocol.
+
+The controller retains the exact task, head/base, recipe and trusted-verifier hashes, candidate output hashes, execution result, and check logs. Its digest is published in a separately labeled controller_verification field in the authenticated coordinator report after verification. This field is separate from reviewer claims because the reviewer runs earlier. Initial-task receipt import and replay require that public binding; recomputing local hashes cannot replace it. Generic GitHub CI and worker-declared success are insufficient.
+
+The coordinator and independent QA reviewer own later trusted recipes and adapters. Task owners may propose commands and evidence contracts but cannot approve their own verifier. Accepted additions require a new immutable run snapshot and an explicit handoff preserving consumed budgets and prior attempts; resume does not silently adopt new recipes, source bytes, or authorization. D86 remains the sole launch record. Readiness identifies the initial artifact task only and does not claim that all E01 verification exists.
+
 ## Delegated implementation decision — D89 (2026-11-06)
 
 BOOT-03 implements the accepted controller contract with a Python standard-library scheduler, a durable store, a real execution adapter, and an isolated fake backend. A canonical repository lock is shared across worktrees and inherited by supervised subprocesses. Atomic writes sync each newly created directory and its parent before reporting durability. Task leases have explicit run identity and generations; old timestamps never authorize stealing another run's work.
