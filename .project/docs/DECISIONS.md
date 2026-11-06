@@ -1,5 +1,23 @@
 # Дерево решений и журнал интервью
 
+## Delegated technical decision — D90 (2026-11-06)
+
+BOOT-08 defines TEST-OPEN-02 under D84 within D82/D83's accepted guarantees. Accepted BOOT-06 supplies the candidate registry; accepted BOOT-07/D87 supplies finite reader completion. This decision requires independent exact-commit review before BOOT-08 is accepted. It is not a new owner approval, an accepted runtime client pin, or product runtime evidence.
+
+The [concrete corpus](../testing/corpus/README.md) assigns all 217 ACs and 677 named baseline variants, plus explicit contract, source-fork/type/entrypoint, size, topology, compound-fault, pairwise, seed, soak, and public variants. The source projection binds exact candidate source commits and blobs. Deterministic expansion preserves existing AC/task/gate ownership and separate per-profile/suite/mode/dimension obligations. A static validator catches omissions and invalid allocations but never grants READY or runtime PASS.
+
+Source groups resolve into exact native predicates and runtime intervals at E01/E06; block/time/total-difficulty/epoch clocks are distinct. Historical or future native seams do not prove current full E2E. Custom local genesis/config/validator/supporting identities remain test-only; production identity checks are not disabled. Missing legitimate native admission remains an explicit unresolved requirement.
+
+Independent oracles use native source inventories, original consensus bytes, native state commitments/proofs, and separately authored contract ledgers/reference execution. Public smoke independently inventories every required logical identity in the closed D87 window and checks its declared source/header/receipt/delivery fields; it does not claim unverified internal trace semantics. Deeper public-contract assertions require actual independent prestate/environment evidence. The full local/native trace matrix remains mandatory.
+
+Controlled contracts pin their source, compiler/build settings, EVM target, and actual init/runtime bytecode outputs per interval. Preparation may build expected fixtures but cannot count as SUT execution. Mainnet remains passive; testnet signers require exact identity, verified owned deployment, funding, nonce control and spending limits. Synthetic large-record/wire tests cannot close native E2E.
+
+Initial floors per profile/current interval are eight seed indices with 256 actions each; standard soak of 600 seconds and 1,000 actions; explicitly extended soak of 3,600 seconds and 10,000 actions. A backlog case reaches 32 durable unacknowledged batches and max(64 MiB, twice configured collector queue capacity) in exact pending publication bytes. These are engineering starting floors, not measured throughput. Increased volumes/parallelism are configurable; reductions remain diagnostic PARTIAL with visible NOT_RUN cells. Every standard parent run still finishes all required phases within 1800 seconds, excluding preparation. Multiple standard runs may form a campaign; D83 retries and result invalidation remain unchanged.
+
+The candidate deltas explicitly include Sepolia Amsterdam/Gloas, canceled Hoodi activation, BSC Jenner/CAS20/payment-lane rules and separate schedules, and Bor Uburu StateSync body/hash/receipt/event paths. Source declarations never substitute for feature activation or public signer authority. E01/E06 own actual ProfileManifest/genesis/compiled-fixture hashes and source applicability proofs; those outputs remain pending. E07 owns actual complete corpus execution. No E01 work, node runtime, public transaction, active source-pin change, or new product API/wire guarantee is authorized by this BOOT-08 change.
+
+A generic example per family, normalizer-generated expected results, blanket N/A for old forks, silent quota reductions, and substituting synthetic/seam evidence for native E2E were rejected because they hide missing obligations. D90 defines the finite proof obligations without claiming exhaustive unbounded states. Product runtime remains NOT_RUN.
+
 ## Delegated technical decision — D87 (2026-11-06)
 
 BOOT-07 defines finite NATS reader completion under D84's delegated authority. This is a technical decision within the accepted scope, not a new owner approval or a runtime result. Independent review of the exact candidate is required before BOOT-07 acceptance closes TEST-OPEN-01.
