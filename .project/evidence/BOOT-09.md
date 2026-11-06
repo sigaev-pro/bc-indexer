@@ -1,8 +1,27 @@
 # BOOT-09 readiness evidence
 
-## Scope and accepted baseline
+## Accepted result and stopping point
 
-Work starts from accepted main `24ae66d72512427e0e1fd7dc281640035c37db51`, after BOOT-03 PR #90 and issue #5 acceptance comment `6695975227`. The controller's final review was `6695941742`, and its exact-head CI run was `42295448825`. BOOT-01 through BOOT-08 have coordinator acceptance records. BOOT-09 itself still requires independent review, exact-head checks, retained capture, verified merge, and coordinator acceptance.
+All nine BOOT tasks are accepted. [PR #92](https://github.com/sigaev-pro/bc-indexer/pull/92) merged candidate `8387694e78a6a0ddc733b8c7f3b521dac2d967a2` as `17d421a0c6aec96c2af82dbc9080eda36849a692`. Both merge parents and the candidate-identical tree were verified. The [acceptance record](https://github.com/sigaev-pro/bc-indexer/issues/9#issuecomment-6697157355) closes issue #9. All 84 task issues were reconciled afterward: issues #1 through #9 are closed, and the other 75 remain open.
+
+Independent reviewers `/root/boot01_review` and `/root/boot04_preflight` passed the exact candidate. [Their published report](https://github.com/sigaev-pro/bc-indexer/pull/92#issuecomment-6697118671) and [CI run 42302651951](https://github.com/sigaev-pro/bc-indexer/actions/runs/42302651951) cover 161 portable tests, 54 component negative checks, all normative mirrors and stable IDs, and the unchanged original v2. The trusted corpus retains 54 vectors and four profile-expansion calls. The full premerge capture is retained in the canonical `runs/acceptance/` directory with snapshot SHA-256 `c7d0df6dffc967796b57d498ce4e7602b14b501de5057c30d815c7505bc875ec` and bundle SHA-256 `b0373fbb35ba674ea7b2b57edd704a55027e9a1bdaf19cf9ff4cf1470402fa58`.
+
+On accepted main, the coordinator ran:
+
+```sh
+python3 .project/automation/controller.py run --repo sigaev-pro/bc-indexer --authorization-ref D86 --stage-limit BOOT
+python3 .project/automation/controller.py status --run-id run_466b9ee5481a45f99b682d94f00c0309
+```
+
+The run completed in 161.93 seconds with exit code 0. Its persisted state is COMPLETE: nine DONE tasks, 75 PLANNED tasks, zero model invocations in this run, and no blocker. All product tasks remain PLANNED. The authorization is D86/BOOT, and product runtime remains NOT_RUN. The completion-state file is `.project/automation/state/runs/run_466b9ee5481a45f99b682d94f00c0309.json`; its SHA-256 at completion is `abf2199f82c14dc773ec0358be6ab8b3ebd64155edcd68bbdf20745fd9fa6a6d`. Back up the canonical `state/` and `runs/` directories together as described in the automation guide. This duration measures controller verification, not a native network test.
+
+D86 is complete. Stop before E01. The next action requires a new owner launch and its reviewed authorization record for the configured E01-01.evidence artifact task. The later eleven E01 tasks and G.E01 still need independently reviewed verification contracts. They cannot be enabled by a permissive adapter, a changed resume argument, or a new run that resets consumed budgets. No general cross-run budget-transfer command is implemented. No product schemas, native product runtime, installed service, or production deployment are claimed.
+
+## Candidate history and accepted baseline
+
+The sections below record candidate preparation and review. The accepted result above supersedes their earlier pending-review wording.
+
+Work started from accepted main `24ae66d72512427e0e1fd7dc281640035c37db51`, after BOOT-03 PR #90 and issue #5 acceptance comment `6695975227`. The controller's final review was `6695941742`, and its exact-head CI run was `42295448825`. BOOT-01 through BOOT-08 had coordinator acceptance records. BOOT-09's subsequent review, capture, verified merge, and acceptance are recorded above.
 
 D91 adds a concrete starting path for the future E01-01.evidence artifact task. It does not widen D86, create product schemas, execute native runtime, or configure the other eleven E01 tasks and G.E01. Initial-task readiness is distinct from permission to launch and from complete E01 readiness. The accepted corpus, source locks, specification, stable IDs, and original v2 remain unchanged.
 
