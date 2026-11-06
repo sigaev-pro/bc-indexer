@@ -1,0 +1,6557 @@
+{
+  "schema_version": 1,
+  "decision": "D90",
+  "candidate_lock_sha256": "8a523fa9fc6ecc21ef3c2f5cd9b36827a5820c83de0c849aea194b4e762b21f5",
+  "classification": "SOURCE_CANDIDATE_NOT_RUNTIME_ACCEPTANCE",
+  "sources": {
+    "geth-config": {
+      "repository": "ethereum/go-ethereum",
+      "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+      "path": "params/config.go",
+      "blob_sha1": "f5889446078a824e14bea32e9f25a726dc21fe2b"
+    },
+    "geth-mainnet": {
+      "repository": "ethereum/go-ethereum",
+      "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+      "path": "params/chainspecs/mainnet.json",
+      "blob_sha1": "faa3a33a30e76705a9095c5f0e3f6f1637b7cfa1"
+    },
+    "geth-sepolia": {
+      "repository": "ethereum/go-ethereum",
+      "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+      "path": "params/chainspecs/sepolia.json",
+      "blob_sha1": "94a6baf6694a906b4fc539f30e68c4eb3f10fed6"
+    },
+    "geth-hoodi": {
+      "repository": "ethereum/go-ethereum",
+      "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+      "path": "params/chainspecs/hoodi.json",
+      "blob_sha1": "9c2f22adbba78347c66571d2cb96faed6f61f798"
+    },
+    "geth-txtypes": {
+      "repository": "ethereum/go-ethereum",
+      "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+      "path": "core/types/transaction.go",
+      "blob_sha1": "8ef2d5ab90c3e1eccd03a379118719a5fdfbea14"
+    },
+    "geth-vm-contracts": {
+      "repository": "ethereum/go-ethereum",
+      "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+      "path": "core/vm/contracts.go",
+      "blob_sha1": "fbd83595b3125a46584dd0b7b1a6aa05fcae9791"
+    },
+    "prysm-mainnet": {
+      "repository": "OffchainLabs/prysm",
+      "commit": "96d418cd964b083e37519a9df274030a1beac7db",
+      "path": "config/params/mainnet_config.go",
+      "blob_sha1": "fb1e011b293df1971ae1c7ed9c3a692e67401f42"
+    },
+    "prysm-sepolia": {
+      "repository": "OffchainLabs/prysm",
+      "commit": "96d418cd964b083e37519a9df274030a1beac7db",
+      "path": "config/params/testnet_sepolia_config.go",
+      "blob_sha1": "3be1da569c46db82c6d1589e8f4d6e35388b97f9"
+    },
+    "prysm-hoodi": {
+      "repository": "OffchainLabs/prysm",
+      "commit": "96d418cd964b083e37519a9df274030a1beac7db",
+      "path": "config/params/testnet_hoodi_config.go",
+      "blob_sha1": "1b7cd50bfcea9263ec22a15b7131eb81f2137c5c"
+    },
+    "bsc-config": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "params/config.go",
+      "blob_sha1": "a33de5ffd6376aed328076e3de7a87999b13941c"
+    },
+    "bsc-txtypes": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/types/transaction.go",
+      "blob_sha1": "088f5caa29889360396681bf4411daa7077d5114"
+    },
+    "bsc-vm-contracts": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/contracts.go",
+      "blob_sha1": "8348a0cb355e4224abbb7873e2b2ade505fe38e5"
+    },
+    "bsc-cas20": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20.go",
+      "blob_sha1": "1fe6497622aec0e5c85c990e066ce942a6854840"
+    },
+    "bsc-cas20_factory": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_factory.go",
+      "blob_sha1": "0aece4c142744c1505ae900333aa6fd1e01f225d"
+    },
+    "bsc-cas20_asset": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_asset.go",
+      "blob_sha1": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+    },
+    "bsc-cas20_stablecoin": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_stablecoin.go",
+      "blob_sha1": "60ea9648240ac30989c6a6bb86fa87b37bc93e36"
+    },
+    "bsc-cas20_policy": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_policy.go",
+      "blob_sha1": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+    },
+    "bsc-cas20_activation": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_activation.go",
+      "blob_sha1": "69f3b1b799fd2a2a790d8c7347063ebe36163a90"
+    },
+    "bsc-cas20_token": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_token.go",
+      "blob_sha1": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+    },
+    "bsc-cas20_admin": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_admin.go",
+      "blob_sha1": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+    },
+    "bsc-cas20_metadata": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_metadata.go",
+      "blob_sha1": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+    },
+    "bsc-cas20_permit": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_permit.go",
+      "blob_sha1": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+    },
+    "bsc-cas20_memo": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/vm/cas20_memo.go",
+      "blob_sha1": "5321c7e597dd09de41aff5daa819e2b90cb77e64"
+    },
+    "bsc-payment-lane": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/payment_lane.go",
+      "blob_sha1": "e3c03dde36d5978f79ad51335b85b44a033899b4"
+    },
+    "bsc-lane-classify": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/paymentlane/classify.go",
+      "blob_sha1": "5b36293769aec88857d2d89eb4186e2ae0944e2e"
+    },
+    "bsc-lane-budget": {
+      "repository": "bnb-chain/bsc",
+      "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "path": "core/paymentlane/budget.go",
+      "blob_sha1": "d334e7b192244bbf0c0a41f8fd5c9332df3fe77b"
+    },
+    "bor-config": {
+      "repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "path": "params/config.go",
+      "blob_sha1": "2c6076d98c902ff9a68a97a539a8eaf1b3605cdf"
+    },
+    "bor-txtypes": {
+      "repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "path": "core/types/transaction.go",
+      "blob_sha1": "3c198205b5dcfd7455b7af63a865e5d80a6dbe5e"
+    },
+    "bor-vm-contracts": {
+      "repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "path": "core/vm/contracts.go",
+      "blob_sha1": "abe998c1f9effa8037c961c5a07d9b317bf92ba5"
+    },
+    "bor-validation": {
+      "repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "path": "core/txpool/validation.go",
+      "blob_sha1": "d10467475c989b0f26ad41c135cc68a9ae764bec"
+    },
+    "bor-processor": {
+      "repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "path": "core/state_processor.go",
+      "blob_sha1": "0ac0af66e6f614a8580729480786e30c76442b46"
+    },
+    "bor-bor": {
+      "repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "path": "consensus/bor/bor.go",
+      "blob_sha1": "bea74a84f4ca6ee9884cd587f0609a4dc0e39df0"
+    },
+    "bor-statefull": {
+      "repository": "0xPolygon/bor",
+      "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+      "path": "consensus/bor/statefull/processor.go",
+      "blob_sha1": "d2d34a7b3412e5f848e21d664bb44fe7a371fb46"
+    }
+  },
+  "profiles": {
+    "ethereum-mainnet": {
+      "family": "ETH",
+      "source": "geth-mainnet",
+      "chain_id": 1,
+      "source_line": 1,
+      "forks": [
+        {
+          "field": "homesteadBlock",
+          "unit": "block",
+          "value": "1150000"
+        },
+        {
+          "field": "daoForkBlock",
+          "unit": "block",
+          "value": "1920000"
+        },
+        {
+          "field": "eip150Block",
+          "unit": "block",
+          "value": "2463000"
+        },
+        {
+          "field": "eip155Block",
+          "unit": "block",
+          "value": "2675000"
+        },
+        {
+          "field": "eip158Block",
+          "unit": "block",
+          "value": "2675000"
+        },
+        {
+          "field": "byzantiumBlock",
+          "unit": "block",
+          "value": "4370000"
+        },
+        {
+          "field": "constantinopleBlock",
+          "unit": "block",
+          "value": "7280000"
+        },
+        {
+          "field": "petersburgBlock",
+          "unit": "block",
+          "value": "7280000"
+        },
+        {
+          "field": "istanbulBlock",
+          "unit": "block",
+          "value": "9069000"
+        },
+        {
+          "field": "muirGlacierBlock",
+          "unit": "block",
+          "value": "9200000"
+        },
+        {
+          "field": "berlinBlock",
+          "unit": "block",
+          "value": "12244000"
+        },
+        {
+          "field": "londonBlock",
+          "unit": "block",
+          "value": "12965000"
+        },
+        {
+          "field": "arrowGlacierBlock",
+          "unit": "block",
+          "value": "13773000"
+        },
+        {
+          "field": "grayGlacierBlock",
+          "unit": "block",
+          "value": "15050000"
+        },
+        {
+          "field": "shanghaiTime",
+          "unit": "timestamp",
+          "value": "1681338455"
+        },
+        {
+          "field": "cancunTime",
+          "unit": "timestamp",
+          "value": "1710338135"
+        },
+        {
+          "field": "pragueTime",
+          "unit": "timestamp",
+          "value": "1746612311"
+        },
+        {
+          "field": "osakaTime",
+          "unit": "timestamp",
+          "value": "1764798551"
+        },
+        {
+          "field": "bpo1Time",
+          "unit": "timestamp",
+          "value": "1765290071"
+        },
+        {
+          "field": "bpo2Time",
+          "unit": "timestamp",
+          "value": "1767747671"
+        },
+        {
+          "field": "terminalTotalDifficulty",
+          "unit": "total_difficulty",
+          "value": "58750000000000000000000"
+        },
+        {
+          "field": "mergeNetsplitBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo3Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo4Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo5Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "amsterdamTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bogotaTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "ubtTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        }
+      ],
+      "source_ref": {
+        "repository": "ethereum/go-ethereum",
+        "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+        "path": "params/chainspecs/mainnet.json",
+        "blob_sha1": "faa3a33a30e76705a9095c5f0e3f6f1637b7cfa1"
+      }
+    },
+    "ethereum-sepolia": {
+      "family": "ETH",
+      "source": "geth-sepolia",
+      "chain_id": 11155111,
+      "source_line": 1,
+      "forks": [
+        {
+          "field": "homesteadBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "eip150Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "eip155Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "eip158Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "byzantiumBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "constantinopleBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "petersburgBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "istanbulBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "muirGlacierBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "berlinBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "londonBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "mergeNetsplitBlock",
+          "unit": "block",
+          "value": "1735371"
+        },
+        {
+          "field": "shanghaiTime",
+          "unit": "timestamp",
+          "value": "1677557088"
+        },
+        {
+          "field": "cancunTime",
+          "unit": "timestamp",
+          "value": "1706655072"
+        },
+        {
+          "field": "pragueTime",
+          "unit": "timestamp",
+          "value": "1741159776"
+        },
+        {
+          "field": "osakaTime",
+          "unit": "timestamp",
+          "value": "1760427360"
+        },
+        {
+          "field": "bpo1Time",
+          "unit": "timestamp",
+          "value": "1761017184"
+        },
+        {
+          "field": "bpo2Time",
+          "unit": "timestamp",
+          "value": "1761607008"
+        },
+        {
+          "field": "amsterdamTime",
+          "unit": "timestamp",
+          "value": "1791294816"
+        },
+        {
+          "field": "terminalTotalDifficulty",
+          "unit": "total_difficulty",
+          "value": "17000000000000000"
+        },
+        {
+          "field": "daoForkBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "arrowGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "grayGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo3Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo4Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo5Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bogotaTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "ubtTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        }
+      ],
+      "source_ref": {
+        "repository": "ethereum/go-ethereum",
+        "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+        "path": "params/chainspecs/sepolia.json",
+        "blob_sha1": "94a6baf6694a906b4fc539f30e68c4eb3f10fed6"
+      }
+    },
+    "ethereum-hoodi": {
+      "family": "ETH",
+      "source": "geth-hoodi",
+      "chain_id": 560048,
+      "source_line": 1,
+      "forks": [
+        {
+          "field": "homesteadBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "eip150Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "eip155Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "eip158Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "byzantiumBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "constantinopleBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "petersburgBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "istanbulBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "muirGlacierBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "berlinBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "londonBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "mergeNetsplitBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "shanghaiTime",
+          "unit": "timestamp",
+          "value": "0"
+        },
+        {
+          "field": "cancunTime",
+          "unit": "timestamp",
+          "value": "0"
+        },
+        {
+          "field": "pragueTime",
+          "unit": "timestamp",
+          "value": "1742999832"
+        },
+        {
+          "field": "osakaTime",
+          "unit": "timestamp",
+          "value": "1761677592"
+        },
+        {
+          "field": "bpo1Time",
+          "unit": "timestamp",
+          "value": "1762365720"
+        },
+        {
+          "field": "bpo2Time",
+          "unit": "timestamp",
+          "value": "1762955544"
+        },
+        {
+          "field": "terminalTotalDifficulty",
+          "unit": "total_difficulty",
+          "value": "0"
+        },
+        {
+          "field": "daoForkBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "arrowGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "grayGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo3Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo4Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bpo5Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "amsterdamTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "bogotaTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "ubtTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        }
+      ],
+      "source_ref": {
+        "repository": "ethereum/go-ethereum",
+        "commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+        "path": "params/chainspecs/hoodi.json",
+        "blob_sha1": "9c2f22adbba78347c66571d2cb96faed6f61f798"
+      }
+    },
+    "bsc-mainnet": {
+      "family": "BSC",
+      "source": "bsc-config",
+      "source_line": 214,
+      "chain_id": 56,
+      "forks": [
+        {
+          "field": "HomesteadBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP150Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP155Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP158Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ByzantiumBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ConstantinopleBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "PetersburgBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "IstanbulBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "MuirGlacierBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "RamanujanBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "NielsBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "MirrorSyncBlock",
+          "unit": "block",
+          "value": "5184000"
+        },
+        {
+          "field": "BrunoBlock",
+          "unit": "block",
+          "value": "13082000"
+        },
+        {
+          "field": "EulerBlock",
+          "unit": "block",
+          "value": "18907621"
+        },
+        {
+          "field": "NanoBlock",
+          "unit": "block",
+          "value": "21962149"
+        },
+        {
+          "field": "MoranBlock",
+          "unit": "block",
+          "value": "22107423"
+        },
+        {
+          "field": "GibbsBlock",
+          "unit": "block",
+          "value": "23846001"
+        },
+        {
+          "field": "PlanckBlock",
+          "unit": "block",
+          "value": "27281024"
+        },
+        {
+          "field": "LubanBlock",
+          "unit": "block",
+          "value": "29020050"
+        },
+        {
+          "field": "PlatoBlock",
+          "unit": "block",
+          "value": "30720096"
+        },
+        {
+          "field": "BerlinBlock",
+          "unit": "block",
+          "value": "31302048"
+        },
+        {
+          "field": "LondonBlock",
+          "unit": "block",
+          "value": "31302048"
+        },
+        {
+          "field": "HertzBlock",
+          "unit": "block",
+          "value": "31302048"
+        },
+        {
+          "field": "HertzfixBlock",
+          "unit": "block",
+          "value": "34140700"
+        },
+        {
+          "field": "ShanghaiTime",
+          "unit": "timestamp",
+          "value": "1705996800"
+        },
+        {
+          "field": "KeplerTime",
+          "unit": "timestamp",
+          "value": "1705996800"
+        },
+        {
+          "field": "FeynmanTime",
+          "unit": "timestamp",
+          "value": "1713419340"
+        },
+        {
+          "field": "FeynmanFixTime",
+          "unit": "timestamp",
+          "value": "1713419340"
+        },
+        {
+          "field": "CancunTime",
+          "unit": "timestamp",
+          "value": "1718863500"
+        },
+        {
+          "field": "HaberTime",
+          "unit": "timestamp",
+          "value": "1718863500"
+        },
+        {
+          "field": "HaberFixTime",
+          "unit": "timestamp",
+          "value": "1727316120"
+        },
+        {
+          "field": "BohrTime",
+          "unit": "timestamp",
+          "value": "1727317200"
+        },
+        {
+          "field": "PascalTime",
+          "unit": "timestamp",
+          "value": "1742436600"
+        },
+        {
+          "field": "PragueTime",
+          "unit": "timestamp",
+          "value": "1742436600"
+        },
+        {
+          "field": "LorentzTime",
+          "unit": "timestamp",
+          "value": "1745903100"
+        },
+        {
+          "field": "MaxwellTime",
+          "unit": "timestamp",
+          "value": "1751250600"
+        },
+        {
+          "field": "FermiTime",
+          "unit": "timestamp",
+          "value": "1768357800"
+        },
+        {
+          "field": "OsakaTime",
+          "unit": "timestamp",
+          "value": "1777343400"
+        },
+        {
+          "field": "MendelTime",
+          "unit": "timestamp",
+          "value": "1777343400"
+        },
+        {
+          "field": "PasteurTime",
+          "unit": "timestamp",
+          "value": "1787625000"
+        },
+        {
+          "field": "JennerTime",
+          "unit": "timestamp",
+          "value": "1796697000"
+        },
+        {
+          "field": "BPO1Time",
+          "unit": "timestamp",
+          "value": null
+        },
+        {
+          "field": "BPO2Time",
+          "unit": "timestamp",
+          "value": null
+        },
+        {
+          "field": "AmsterdamTime",
+          "unit": "timestamp",
+          "value": null
+        },
+        {
+          "field": "DAOForkBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "YoloV3Block",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "CatalystBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "ArrowGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "GrayGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "MergeNetsplitBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "BPO3Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "BPO4Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "BPO5Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "UBTTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "TerminalTotalDifficulty",
+          "unit": "total_difficulty",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        }
+      ],
+      "source_ref": {
+        "repository": "bnb-chain/bsc",
+        "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+        "path": "params/config.go",
+        "blob_sha1": "a33de5ffd6376aed328076e3de7a87999b13941c"
+      }
+    },
+    "bsc-testnet": {
+      "family": "BSC",
+      "source": "bsc-config",
+      "source_line": 269,
+      "chain_id": 97,
+      "forks": [
+        {
+          "field": "HomesteadBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP150Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP155Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP158Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ByzantiumBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ConstantinopleBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "PetersburgBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "IstanbulBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "MuirGlacierBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "RamanujanBlock",
+          "unit": "block",
+          "value": "1010000"
+        },
+        {
+          "field": "NielsBlock",
+          "unit": "block",
+          "value": "1014369"
+        },
+        {
+          "field": "MirrorSyncBlock",
+          "unit": "block",
+          "value": "5582500"
+        },
+        {
+          "field": "BrunoBlock",
+          "unit": "block",
+          "value": "13837000"
+        },
+        {
+          "field": "EulerBlock",
+          "unit": "block",
+          "value": "19203503"
+        },
+        {
+          "field": "GibbsBlock",
+          "unit": "block",
+          "value": "22800220"
+        },
+        {
+          "field": "NanoBlock",
+          "unit": "block",
+          "value": "23482428"
+        },
+        {
+          "field": "MoranBlock",
+          "unit": "block",
+          "value": "23603940"
+        },
+        {
+          "field": "PlanckBlock",
+          "unit": "block",
+          "value": "28196022"
+        },
+        {
+          "field": "LubanBlock",
+          "unit": "block",
+          "value": "29295050"
+        },
+        {
+          "field": "PlatoBlock",
+          "unit": "block",
+          "value": "29861024"
+        },
+        {
+          "field": "BerlinBlock",
+          "unit": "block",
+          "value": "31103030"
+        },
+        {
+          "field": "LondonBlock",
+          "unit": "block",
+          "value": "31103030"
+        },
+        {
+          "field": "HertzBlock",
+          "unit": "block",
+          "value": "31103030"
+        },
+        {
+          "field": "HertzfixBlock",
+          "unit": "block",
+          "value": "35682300"
+        },
+        {
+          "field": "ShanghaiTime",
+          "unit": "timestamp",
+          "value": "1702972800"
+        },
+        {
+          "field": "KeplerTime",
+          "unit": "timestamp",
+          "value": "1702972800"
+        },
+        {
+          "field": "FeynmanTime",
+          "unit": "timestamp",
+          "value": "1710136800"
+        },
+        {
+          "field": "FeynmanFixTime",
+          "unit": "timestamp",
+          "value": "1711342800"
+        },
+        {
+          "field": "CancunTime",
+          "unit": "timestamp",
+          "value": "1713330442"
+        },
+        {
+          "field": "HaberTime",
+          "unit": "timestamp",
+          "value": "1716962820"
+        },
+        {
+          "field": "HaberFixTime",
+          "unit": "timestamp",
+          "value": "1719986788"
+        },
+        {
+          "field": "BohrTime",
+          "unit": "timestamp",
+          "value": "1724116996"
+        },
+        {
+          "field": "PascalTime",
+          "unit": "timestamp",
+          "value": "1740452880"
+        },
+        {
+          "field": "PragueTime",
+          "unit": "timestamp",
+          "value": "1740452880"
+        },
+        {
+          "field": "LorentzTime",
+          "unit": "timestamp",
+          "value": "1744097580"
+        },
+        {
+          "field": "MaxwellTime",
+          "unit": "timestamp",
+          "value": "1748243100"
+        },
+        {
+          "field": "FermiTime",
+          "unit": "timestamp",
+          "value": "1762741500"
+        },
+        {
+          "field": "OsakaTime",
+          "unit": "timestamp",
+          "value": "1774319400"
+        },
+        {
+          "field": "MendelTime",
+          "unit": "timestamp",
+          "value": "1774319400"
+        },
+        {
+          "field": "PasteurTime",
+          "unit": "timestamp",
+          "value": "1784601000"
+        },
+        {
+          "field": "JennerTime",
+          "unit": "timestamp",
+          "value": "1793241000"
+        },
+        {
+          "field": "BPO1Time",
+          "unit": "timestamp",
+          "value": null
+        },
+        {
+          "field": "BPO2Time",
+          "unit": "timestamp",
+          "value": null
+        },
+        {
+          "field": "AmsterdamTime",
+          "unit": "timestamp",
+          "value": null
+        },
+        {
+          "field": "DAOForkBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "YoloV3Block",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "CatalystBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "ArrowGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "GrayGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "MergeNetsplitBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "BPO3Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "BPO4Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "BPO5Time",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "UBTTime",
+          "unit": "timestamp",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "TerminalTotalDifficulty",
+          "unit": "total_difficulty",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        }
+      ],
+      "source_ref": {
+        "repository": "bnb-chain/bsc",
+        "commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+        "path": "params/config.go",
+        "blob_sha1": "a33de5ffd6376aed328076e3de7a87999b13941c"
+      }
+    },
+    "polygon-pos-mainnet": {
+      "family": "POLY",
+      "source": "bor-config",
+      "source_line": 417,
+      "chain_id": 137,
+      "forks": [
+        {
+          "field": "HomesteadBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "DAOForkBlock",
+          "unit": "block",
+          "value": null
+        },
+        {
+          "field": "EIP150Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP155Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP158Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ByzantiumBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ConstantinopleBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "PetersburgBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "IstanbulBlock",
+          "unit": "block",
+          "value": "3395000"
+        },
+        {
+          "field": "MuirGlacierBlock",
+          "unit": "block",
+          "value": "3395000"
+        },
+        {
+          "field": "BerlinBlock",
+          "unit": "block",
+          "value": "14750000"
+        },
+        {
+          "field": "LondonBlock",
+          "unit": "block",
+          "value": "23850000"
+        },
+        {
+          "field": "ShanghaiBlock",
+          "unit": "block",
+          "value": "50523000"
+        },
+        {
+          "field": "CancunBlock",
+          "unit": "block",
+          "value": "54876000"
+        },
+        {
+          "field": "PragueBlock",
+          "unit": "block",
+          "value": "73440256"
+        },
+        {
+          "field": "JaipurBlock",
+          "unit": "block",
+          "value": "23850000"
+        },
+        {
+          "field": "DelhiBlock",
+          "unit": "block",
+          "value": "38189056"
+        },
+        {
+          "field": "IndoreBlock",
+          "unit": "block",
+          "value": "44934656"
+        },
+        {
+          "field": "AhmedabadBlock",
+          "unit": "block",
+          "value": "62278656"
+        },
+        {
+          "field": "BhilaiBlock",
+          "unit": "block",
+          "value": "73440256"
+        },
+        {
+          "field": "RioBlock",
+          "unit": "block",
+          "value": "77414656"
+        },
+        {
+          "field": "MadhugiriBlock",
+          "unit": "block",
+          "value": "80084800"
+        },
+        {
+          "field": "MadhugiriProBlock",
+          "unit": "block",
+          "value": "80084800"
+        },
+        {
+          "field": "DandeliBlock",
+          "unit": "block",
+          "value": "81424000"
+        },
+        {
+          "field": "LisovoBlock",
+          "unit": "block",
+          "value": "83756500"
+        },
+        {
+          "field": "LisovoProBlock",
+          "unit": "block",
+          "value": "83756500"
+        },
+        {
+          "field": "GiuglianoBlock",
+          "unit": "block",
+          "value": "85268500"
+        },
+        {
+          "field": "ChicagoBlock",
+          "unit": "block",
+          "value": "87218600"
+        },
+        {
+          "field": "ValenciaBlock",
+          "unit": "block",
+          "value": "89531000"
+        },
+        {
+          "field": "AustinBlock",
+          "unit": "block",
+          "value": "91949700"
+        },
+        {
+          "field": "HampiBlock",
+          "unit": "block",
+          "value": null
+        },
+        {
+          "field": "UburuBlock",
+          "unit": "block",
+          "value": "96787900"
+        },
+        {
+          "field": "ArrowGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "GrayGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "MergeNetsplitBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "VerkleBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "OsakaBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "TerminalTotalDifficulty",
+          "unit": "total_difficulty",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        }
+      ],
+      "source_ref": {
+        "repository": "0xPolygon/bor",
+        "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+        "path": "params/config.go",
+        "blob_sha1": "2c6076d98c902ff9a68a97a539a8eaf1b3605cdf"
+      }
+    },
+    "polygon-pos-amoy": {
+      "family": "POLY",
+      "source": "bor-config",
+      "source_line": 318,
+      "chain_id": 80002,
+      "forks": [
+        {
+          "field": "HomesteadBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "DAOForkBlock",
+          "unit": "block",
+          "value": null
+        },
+        {
+          "field": "EIP150Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP155Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "EIP158Block",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ByzantiumBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "ConstantinopleBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "PetersburgBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "IstanbulBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "MuirGlacierBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "BerlinBlock",
+          "unit": "block",
+          "value": "0"
+        },
+        {
+          "field": "LondonBlock",
+          "unit": "block",
+          "value": "73100"
+        },
+        {
+          "field": "ShanghaiBlock",
+          "unit": "block",
+          "value": "73100"
+        },
+        {
+          "field": "CancunBlock",
+          "unit": "block",
+          "value": "5423600"
+        },
+        {
+          "field": "PragueBlock",
+          "unit": "block",
+          "value": "22765056"
+        },
+        {
+          "field": "JaipurBlock",
+          "unit": "block",
+          "value": "73100"
+        },
+        {
+          "field": "DelhiBlock",
+          "unit": "block",
+          "value": "73100"
+        },
+        {
+          "field": "IndoreBlock",
+          "unit": "block",
+          "value": "73100"
+        },
+        {
+          "field": "AhmedabadBlock",
+          "unit": "block",
+          "value": "11865856"
+        },
+        {
+          "field": "BhilaiBlock",
+          "unit": "block",
+          "value": "22765056"
+        },
+        {
+          "field": "RioBlock",
+          "unit": "block",
+          "value": "26272256"
+        },
+        {
+          "field": "MadhugiriBlock",
+          "unit": "block",
+          "value": "28899616"
+        },
+        {
+          "field": "MadhugiriProBlock",
+          "unit": "block",
+          "value": "29287400"
+        },
+        {
+          "field": "DandeliBlock",
+          "unit": "block",
+          "value": "31890000"
+        },
+        {
+          "field": "LisovoBlock",
+          "unit": "block",
+          "value": "33634700"
+        },
+        {
+          "field": "LisovoProBlock",
+          "unit": "block",
+          "value": "34062000"
+        },
+        {
+          "field": "GiuglianoBlock",
+          "unit": "block",
+          "value": "35573500"
+        },
+        {
+          "field": "ChicagoBlock",
+          "unit": "block",
+          "value": "38358000"
+        },
+        {
+          "field": "ValenciaBlock",
+          "unit": "block",
+          "value": "40776000"
+        },
+        {
+          "field": "AustinBlock",
+          "unit": "block",
+          "value": "44120000"
+        },
+        {
+          "field": "HampiBlock",
+          "unit": "block",
+          "value": null
+        },
+        {
+          "field": "UburuBlock",
+          "unit": "block",
+          "value": "51978200"
+        },
+        {
+          "field": "ArrowGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "GrayGlacierBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "MergeNetsplitBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "VerkleBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "OsakaBlock",
+          "unit": "block",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        },
+        {
+          "field": "TerminalTotalDifficulty",
+          "unit": "total_difficulty",
+          "value": null,
+          "origin": "omitted native pointer field; verify source zero value"
+        }
+      ],
+      "source_ref": {
+        "repository": "0xPolygon/bor",
+        "commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+        "path": "params/config.go",
+        "blob_sha1": "2c6076d98c902ff9a68a97a539a8eaf1b3605cdf"
+      }
+    }
+  },
+  "consensus_forks": {
+    "ethereum-mainnet": {
+      "source": "prysm-mainnet",
+      "epochs": {
+        "Altair": "74240",
+        "Bellatrix": "144896",
+        "Capella": "194048",
+        "Deneb": "269568",
+        "Electra": "364032",
+        "Fulu": "411392",
+        "Gloas": null,
+        "Heze": null
+      }
+    },
+    "ethereum-sepolia": {
+      "source": "prysm-sepolia",
+      "inherits": "prysm-mainnet",
+      "epochs": {
+        "Altair": "50",
+        "Bellatrix": "100",
+        "Capella": "56832",
+        "Deneb": "132608",
+        "Electra": "222464",
+        "Fulu": "272640",
+        "Gloas": "353024",
+        "Heze": null
+      }
+    },
+    "ethereum-hoodi": {
+      "source": "prysm-hoodi",
+      "inherits": "prysm-mainnet",
+      "epochs": {
+        "Altair": "0",
+        "Bellatrix": "0",
+        "Capella": "0",
+        "Deneb": "0",
+        "Electra": "2048",
+        "Fulu": "50688",
+        "Gloas": null,
+        "Heze": null
+      }
+    }
+  },
+  "transaction_types": {
+    "ETH": {
+      "source": "geth-txtypes",
+      "types": {
+        "0x00": "LegacyTxType",
+        "0x01": "AccessListTxType",
+        "0x02": "DynamicFeeTxType",
+        "0x03": "BlobTxType",
+        "0x04": "SetCodeTxType"
+      }
+    },
+    "BSC": {
+      "source": "bsc-txtypes",
+      "types": {
+        "0x00": "LegacyTxType",
+        "0x01": "AccessListTxType",
+        "0x02": "DynamicFeeTxType",
+        "0x03": "BlobTxType",
+        "0x04": "SetCodeTxType"
+      }
+    },
+    "POLY": {
+      "source": "bor-txtypes",
+      "types": {
+        "0x00": "LegacyTxType",
+        "0x01": "AccessListTxType",
+        "0x02": "DynamicFeeTxType",
+        "0x03": "BlobTxType",
+        "0x04": "SetCodeTxType",
+        "0x7f": "StateSyncTxType"
+      }
+    }
+  },
+  "precompile_maps": {
+    "ETH": [
+      {
+        "name": "PrecompiledContractsHomestead",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsByzantium",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddByzantium",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulByzantium",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingByzantium",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsIstanbul",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsBerlin",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsCancun",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0xa"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsPrague",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsOsaka",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsP256Verify",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      }
+    ],
+    "BSC": [
+      {
+        "name": "PrecompiledContractsHomestead",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsByzantium",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddByzantium",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulByzantium",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingByzantium",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsIstanbulForBSC",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidate",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsNano",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidateDeprecated",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidateDeprecated",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsMoran",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidateMoran",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsPlanck",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlanck",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsLuban",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlanck",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidate",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsPlato",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlato",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidate",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsBerlin",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsHertz",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlato",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidateHertz",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsFeynman",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlato",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidateHertz",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x68"
+            ],
+            "implementation": "verifyDoubleSignEvidence",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x69"
+            ],
+            "implementation": "secp256k1SignatureRecover",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsCancunForBSC",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlato",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidateHertz",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x68"
+            ],
+            "implementation": "verifyDoubleSignEvidence",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x69"
+            ],
+            "implementation": "secp256k1SignatureRecover",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsHaber",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlato",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidateHertz",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x68"
+            ],
+            "implementation": "verifyDoubleSignEvidence",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x69"
+            ],
+            "implementation": "secp256k1SignatureRecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsPragueForBSC",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlato",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidateHertz",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x68"
+            ],
+            "implementation": "verifyDoubleSignEvidence",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x69"
+            ],
+            "implementation": "secp256k1SignatureRecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsOsakaForBSC",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidate",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidatePlato",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidateHertz",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x68"
+            ],
+            "implementation": "verifyDoubleSignEvidence",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x69"
+            ],
+            "implementation": "secp256k1SignatureRecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{eip7951: true}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsPasteur",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidateDeprecated",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidateDeprecated",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidatePasteur",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x68"
+            ],
+            "implementation": "verifyDoubleSignEvidence",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x69"
+            ],
+            "implementation": "secp256k1SignatureRecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{eip7951: true}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsJenner",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x64"
+            ],
+            "implementation": "tmHeaderValidateDeprecated",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x65"
+            ],
+            "implementation": "iavlMerkleProofValidateDeprecated",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x66"
+            ],
+            "implementation": "blsSignatureVerify",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x67"
+            ],
+            "implementation": "cometBFTLightBlockValidatePasteur",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x68"
+            ],
+            "implementation": "verifyDoubleSignEvidenceJenner",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x69"
+            ],
+            "implementation": "secp256k1SignatureRecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x70"
+            ],
+            "implementation": "milliTimestamp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{eip7951: true}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsP256Verify",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      }
+    ],
+    "POLY": [
+      {
+        "name": "PrecompiledContractsHomestead",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsByzantium",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddByzantium",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulByzantium",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingByzantium",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsIstanbul",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: false, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsBerlin",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsCancun",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x2"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x3"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x4"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x5"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x6"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x7"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x8"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x9"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x01",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsPrague",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: false, eip7883: false}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x01",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsOsaka",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{eip7951: true}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsP256Verify",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x1",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsMadhugiri",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsMadhugiriPro",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x01",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsLisovo",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0a"
+            ],
+            "implementation": "kzgPointEvaluation",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x01",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{eip7951: true}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsLisovoPro",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x01",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{eip7951: true}"
+          }
+        ]
+      },
+      {
+        "name": "PrecompiledContractsChicago",
+        "entries": [
+          {
+            "address_bytes": [
+              "0x01"
+            ],
+            "implementation": "ecrecover",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x02"
+            ],
+            "implementation": "sha256hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x03"
+            ],
+            "implementation": "ripemd160hash",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x04"
+            ],
+            "implementation": "dataCopy",
+            "settings": "{}"
+          },
+          {
+            "address_bytes": [
+              "0x05"
+            ],
+            "implementation": "bigModExp",
+            "settings": "{eip2565: true, eip7823: true, eip7883: true}"
+          },
+          {
+            "address_bytes": [
+              "0x06"
+            ],
+            "implementation": "bn256AddIstanbul",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x07"
+            ],
+            "implementation": "bn256ScalarMulIstanbul",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x08"
+            ],
+            "implementation": "bn256PairingIstanbul",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x09"
+            ],
+            "implementation": "blake2F",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x0b"
+            ],
+            "implementation": "bls12381G1Add",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x0c"
+            ],
+            "implementation": "bls12381G1MultiExp",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x0d"
+            ],
+            "implementation": "bls12381G2Add",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x0e"
+            ],
+            "implementation": "bls12381G2MultiExp",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x0f"
+            ],
+            "implementation": "bls12381Pairing",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x10"
+            ],
+            "implementation": "bls12381MapG1",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x11"
+            ],
+            "implementation": "bls12381MapG2",
+            "settings": "{pip88: true}"
+          },
+          {
+            "address_bytes": [
+              "0x01",
+              "0x00"
+            ],
+            "implementation": "p256Verify",
+            "settings": "{eip7951: true}"
+          }
+        ]
+      }
+    ]
+  },
+  "cas20": {
+    "source": "bsc-cas20",
+    "routing": {
+      "factory": "0xCA5F000000000000000000000000000000000000",
+      "activation": "0x7020000000000000000000000000000000000001",
+      "policy": "0x7020000000000000000000000000000000000002",
+      "asset": "0xca52 prefix; bytes 2..9 zero; byte 10 = 0",
+      "stablecoin": "0xca52 prefix; bytes 2..9 zero; byte 10 = 1"
+    },
+    "routes": {
+      "factory": [
+        {
+          "selector_name": "selCreateCAS20",
+          "signature": "createCAS20(uint8,bytes32,bytes,bytes[])",
+          "source_path": "core/vm/cas20_factory.go",
+          "source_blob": "0aece4c142744c1505ae900333aa6fd1e01f225d"
+        },
+        {
+          "selector_name": "selGetCAS20Address",
+          "signature": "getCAS20Address(uint8,address,bytes32)",
+          "source_path": "core/vm/cas20_factory.go",
+          "source_blob": "0aece4c142744c1505ae900333aa6fd1e01f225d"
+        },
+        {
+          "selector_name": "selIsCAS20",
+          "signature": "isCAS20(address)",
+          "source_path": "core/vm/cas20_factory.go",
+          "source_blob": "0aece4c142744c1505ae900333aa6fd1e01f225d"
+        },
+        {
+          "selector_name": "selVariantOf",
+          "signature": "variantOf(address)",
+          "source_path": "core/vm/cas20_factory.go",
+          "source_blob": "0aece4c142744c1505ae900333aa6fd1e01f225d"
+        },
+        {
+          "selector_name": "selIsCAS20Initialized",
+          "signature": "isCAS20Initialized(address)",
+          "source_path": "core/vm/cas20_factory.go",
+          "source_blob": "0aece4c142744c1505ae900333aa6fd1e01f225d"
+        }
+      ],
+      "policy": [
+        {
+          "selector_name": "selCreatePolicy",
+          "signature": "createPolicy(address,uint8)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selCreatePolicyWithAccounts",
+          "signature": "createPolicyWithAccounts(address,uint8,address[])",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selCreateComposite",
+          "signature": "createCompositePolicy(address,uint8,uint64[])",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selUpdateComposite",
+          "signature": "updateComposite(uint64,uint64[])",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selCompositeChildIds",
+          "signature": "compositePolicyChildIds(uint64)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selMinCompositeChildren",
+          "signature": "MIN_COMPOSITE_CHILD_POLICIES()",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selMaxCompositeChildren",
+          "signature": "MAX_COMPOSITE_CHILD_POLICIES()",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selUpdateAllowlist",
+          "signature": "updateAllowlist(uint64,bool,address[])",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selUpdateBlocklist",
+          "signature": "updateBlocklist(uint64,bool,address[])",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selStageUpdateAdmin",
+          "signature": "stageUpdateAdmin(uint64,address)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selFinalizeUpdateAdmin",
+          "signature": "finalizeUpdateAdmin(uint64)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selRenounceAdmin",
+          "signature": "renounceAdmin(uint64)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selIsAuthorized",
+          "signature": "isAuthorized(uint64,address)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selPolicyExists",
+          "signature": "policyExists(uint64)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selPolicyAdmin",
+          "signature": "policyAdmin(uint64)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        },
+        {
+          "selector_name": "selPendingPolicyAdmin",
+          "signature": "pendingPolicyAdmin(uint64)",
+          "source_path": "core/vm/cas20_policy.go",
+          "source_blob": "5b8c3b7826106d657524fc1e1f1dd7aeed5542f7"
+        }
+      ],
+      "activation": [
+        {
+          "selector_name": "selIsActivated",
+          "signature": "isActivated(bytes32)",
+          "source_path": "core/vm/cas20_activation.go",
+          "source_blob": "69f3b1b799fd2a2a790d8c7347063ebe36163a90"
+        },
+        {
+          "selector_name": "selCheckActivated",
+          "signature": "checkActivated(bytes32)",
+          "source_path": "core/vm/cas20_activation.go",
+          "source_blob": "69f3b1b799fd2a2a790d8c7347063ebe36163a90"
+        },
+        {
+          "selector_name": "selActivationAdm",
+          "signature": "admin()",
+          "source_path": "core/vm/cas20_activation.go",
+          "source_blob": "69f3b1b799fd2a2a790d8c7347063ebe36163a90"
+        },
+        {
+          "selector_name": "selActivate",
+          "signature": "activate(bytes32)",
+          "source_path": "core/vm/cas20_activation.go",
+          "source_blob": "69f3b1b799fd2a2a790d8c7347063ebe36163a90"
+        },
+        {
+          "selector_name": "selDeactivate",
+          "signature": "deactivate(bytes32)",
+          "source_path": "core/vm/cas20_activation.go",
+          "source_blob": "69f3b1b799fd2a2a790d8c7347063ebe36163a90"
+        },
+        {
+          "selector_name": "selUpdateParam",
+          "signature": "updateParam(string,bytes)",
+          "source_path": "core/vm/cas20_activation.go",
+          "source_blob": "69f3b1b799fd2a2a790d8c7347063ebe36163a90"
+        }
+      ],
+      "asset": [
+        {
+          "selector_name": "selHasRole",
+          "signature": "hasRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selGetRoleAdmin",
+          "signature": "getRoleAdmin(bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selGrantRole",
+          "signature": "grantRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selRevokeRole",
+          "signature": "revokeRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selRenounceRole",
+          "signature": "renounceRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSetRoleAdmin",
+          "signature": "setRoleAdmin(bytes32,bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selRenounceLastAdmin",
+          "signature": "renounceLastAdmin()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selDefaultAdminRole",
+          "signature": "DEFAULT_ADMIN_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMintRole",
+          "signature": "MINT_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selBurnRole",
+          "signature": "BURN_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeRole",
+          "signature": "SEIZE_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selPauseRole",
+          "signature": "PAUSE_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUnpauseRole",
+          "signature": "UNPAUSE_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMetadataRole",
+          "signature": "METADATA_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selTransferSenderScope",
+          "signature": "TRANSFER_SENDER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selTransferReceiverScope",
+          "signature": "TRANSFER_RECEIVER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selTransferExecutorScope",
+          "signature": "TRANSFER_EXECUTOR_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMintReceiverScope",
+          "signature": "MINT_RECEIVER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeExemptScope",
+          "signature": "SEIZE_EXEMPT_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeReceiverScope",
+          "signature": "SEIZE_RECEIVER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selPolicyId",
+          "signature": "policyId(bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selIsPaused",
+          "signature": "isPaused(uint8)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selPause",
+          "signature": "pause(uint8[])",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUnpause",
+          "signature": "unpause(uint8[])",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMint",
+          "signature": "mint(address,uint256)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selBurn",
+          "signature": "burn(uint256)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeWithMemo",
+          "signature": "seizeWithMemo(address,address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUpdateSupplyCap",
+          "signature": "updateSupplyCap(uint256)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUpdatePolicy",
+          "signature": "updatePolicy(bytes32,uint64)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMultiplier",
+          "signature": "multiplier()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selWadPrecision",
+          "signature": "WAD_PRECISION()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selScaledBalanceOf",
+          "signature": "scaledBalanceOf(address)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selToScaledBalance",
+          "signature": "toScaledBalance(uint256)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selToRawBalance",
+          "signature": "toRawBalance(uint256)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selUpdateMultiplier",
+          "signature": "updateMultiplier(uint256)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selOperatorRole",
+          "signature": "OPERATOR_ROLE()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selBatchMint",
+          "signature": "batchMint(address[],uint256[])",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selAnnounce",
+          "signature": "announce(bytes[],string,string,string)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selIsAnnouncementIdUsed",
+          "signature": "isAnnouncementIdUsed(string)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selExtraMetadata",
+          "signature": "extraMetadata(string)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selUpdateExtraMetadata",
+          "signature": "updateExtraMetadata(string,string)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selUIMultiplier",
+          "signature": "uiMultiplier()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selToUIAmount",
+          "signature": "toUIAmount(uint256)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selFromUIAmount",
+          "signature": "fromUIAmount(uint256)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selBalanceOfUI",
+          "signature": "balanceOfUI(address)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selTotalSupplyUI",
+          "signature": "totalSupplyUI()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selNewUIMultiplier",
+          "signature": "newUIMultiplier()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selEffectiveAt",
+          "signature": "effectiveAt()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selUpdateUIMultiplier",
+          "signature": "updateUIMultiplier(uint256,uint256)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selCancelUIMultiplier",
+          "signature": "cancelUIMultiplierUpdate()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selMaxUIMultiplier",
+          "signature": "MAX_UI_MULTIPLIER()",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selSupportsInterface",
+          "signature": "supportsInterface(bytes4)",
+          "source_path": "core/vm/cas20_asset.go",
+          "source_blob": "1f3d8bddf0fa393c7347043573e5b07691eb481a"
+        },
+        {
+          "selector_name": "selTransferWithMemoFormat",
+          "signature": "transferWithMemoFormat(address,uint256,bytes32,bytes32)",
+          "source_path": "core/vm/cas20_memo.go",
+          "source_blob": "5321c7e597dd09de41aff5daa819e2b90cb77e64"
+        },
+        {
+          "selector_name": "selTransferFromWithMemoFormat",
+          "signature": "transferFromWithMemoFormat(address,address,uint256,bytes32,bytes32)",
+          "source_path": "core/vm/cas20_memo.go",
+          "source_blob": "5321c7e597dd09de41aff5daa819e2b90cb77e64"
+        },
+        {
+          "selector_name": "selContractURI",
+          "signature": "contractURI()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selUpdateName",
+          "signature": "updateName(string)",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selUpdateSymbol",
+          "signature": "updateSymbol(string)",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selUpdateContractURI",
+          "signature": "updateContractURI(string)",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selPausedFeatures",
+          "signature": "pausedFeatures()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selSupplyCap",
+          "signature": "supplyCap()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selEIP712Domain",
+          "signature": "eip712Domain()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selDomainSeparator",
+          "signature": "DOMAIN_SEPARATOR()",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selNonces",
+          "signature": "nonces(address)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selPermit",
+          "signature": "permit(address,address,uint256,uint256,uint8,bytes32,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selTransferWithMemo",
+          "signature": "transferWithMemo(address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selTransferFromWithMemo",
+          "signature": "transferFromWithMemo(address,address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selMintWithMemo",
+          "signature": "mintWithMemo(address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selBurnWithMemo",
+          "signature": "burnWithMemo(uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selName",
+          "signature": "name()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selSymbol",
+          "signature": "symbol()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selDecimals",
+          "signature": "decimals()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selTotalSupply",
+          "signature": "totalSupply()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selBalanceOf",
+          "signature": "balanceOf(address)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selAllowance",
+          "signature": "allowance(address,address)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selApprove",
+          "signature": "approve(address,uint256)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selTransfer",
+          "signature": "transfer(address,uint256)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selTransferFrom",
+          "signature": "transferFrom(address,address,uint256)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        }
+      ],
+      "stablecoin": [
+        {
+          "selector_name": "selHasRole",
+          "signature": "hasRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selGetRoleAdmin",
+          "signature": "getRoleAdmin(bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selGrantRole",
+          "signature": "grantRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selRevokeRole",
+          "signature": "revokeRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selRenounceRole",
+          "signature": "renounceRole(bytes32,address)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSetRoleAdmin",
+          "signature": "setRoleAdmin(bytes32,bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selRenounceLastAdmin",
+          "signature": "renounceLastAdmin()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selDefaultAdminRole",
+          "signature": "DEFAULT_ADMIN_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMintRole",
+          "signature": "MINT_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selBurnRole",
+          "signature": "BURN_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeRole",
+          "signature": "SEIZE_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selPauseRole",
+          "signature": "PAUSE_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUnpauseRole",
+          "signature": "UNPAUSE_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMetadataRole",
+          "signature": "METADATA_ROLE()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selTransferSenderScope",
+          "signature": "TRANSFER_SENDER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selTransferReceiverScope",
+          "signature": "TRANSFER_RECEIVER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selTransferExecutorScope",
+          "signature": "TRANSFER_EXECUTOR_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMintReceiverScope",
+          "signature": "MINT_RECEIVER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeExemptScope",
+          "signature": "SEIZE_EXEMPT_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeReceiverScope",
+          "signature": "SEIZE_RECEIVER_POLICY()",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selPolicyId",
+          "signature": "policyId(bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selIsPaused",
+          "signature": "isPaused(uint8)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selPause",
+          "signature": "pause(uint8[])",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUnpause",
+          "signature": "unpause(uint8[])",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selMint",
+          "signature": "mint(address,uint256)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selBurn",
+          "signature": "burn(uint256)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selSeizeWithMemo",
+          "signature": "seizeWithMemo(address,address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUpdateSupplyCap",
+          "signature": "updateSupplyCap(uint256)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selUpdatePolicy",
+          "signature": "updatePolicy(bytes32,uint64)",
+          "source_path": "core/vm/cas20_admin.go",
+          "source_blob": "425fb16d81df9ad6f603cb84ab4e3bc09c184fe2"
+        },
+        {
+          "selector_name": "selTransferWithMemoFormat",
+          "signature": "transferWithMemoFormat(address,uint256,bytes32,bytes32)",
+          "source_path": "core/vm/cas20_memo.go",
+          "source_blob": "5321c7e597dd09de41aff5daa819e2b90cb77e64"
+        },
+        {
+          "selector_name": "selTransferFromWithMemoFormat",
+          "signature": "transferFromWithMemoFormat(address,address,uint256,bytes32,bytes32)",
+          "source_path": "core/vm/cas20_memo.go",
+          "source_blob": "5321c7e597dd09de41aff5daa819e2b90cb77e64"
+        },
+        {
+          "selector_name": "selContractURI",
+          "signature": "contractURI()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selUpdateName",
+          "signature": "updateName(string)",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selUpdateSymbol",
+          "signature": "updateSymbol(string)",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selUpdateContractURI",
+          "signature": "updateContractURI(string)",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selPausedFeatures",
+          "signature": "pausedFeatures()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selSupplyCap",
+          "signature": "supplyCap()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selEIP712Domain",
+          "signature": "eip712Domain()",
+          "source_path": "core/vm/cas20_metadata.go",
+          "source_blob": "69921f0ec7a5636b3e374f01ffba8a69ef3363cf"
+        },
+        {
+          "selector_name": "selDomainSeparator",
+          "signature": "DOMAIN_SEPARATOR()",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selNonces",
+          "signature": "nonces(address)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selPermit",
+          "signature": "permit(address,address,uint256,uint256,uint8,bytes32,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selTransferWithMemo",
+          "signature": "transferWithMemo(address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selTransferFromWithMemo",
+          "signature": "transferFromWithMemo(address,address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selMintWithMemo",
+          "signature": "mintWithMemo(address,uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selBurnWithMemo",
+          "signature": "burnWithMemo(uint256,bytes32)",
+          "source_path": "core/vm/cas20_permit.go",
+          "source_blob": "6a0a33ddad2bd52544bba9c468f6b273737a362e"
+        },
+        {
+          "selector_name": "selCurrency",
+          "signature": "currency()",
+          "source_path": "core/vm/cas20_stablecoin.go",
+          "source_blob": "60ea9648240ac30989c6a6bb86fa87b37bc93e36"
+        },
+        {
+          "selector_name": "selName",
+          "signature": "name()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selSymbol",
+          "signature": "symbol()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selDecimals",
+          "signature": "decimals()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selTotalSupply",
+          "signature": "totalSupply()",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selBalanceOf",
+          "signature": "balanceOf(address)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selAllowance",
+          "signature": "allowance(address,address)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selApprove",
+          "signature": "approve(address,uint256)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selTransfer",
+          "signature": "transfer(address,uint256)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        },
+        {
+          "selector_name": "selTransferFrom",
+          "signature": "transferFrom(address,address,uint256)",
+          "source_path": "core/vm/cas20_token.go",
+          "source_blob": "44f5be44bf65d57d3ca8aa57d93be0a1dba2b1a9"
+        }
+      ]
+    }
+  },
+  "deltas": [
+    {
+      "id": "hoodi_amsterdam_canceled",
+      "profiles": [
+        "ethereum-hoodi"
+      ],
+      "sources": [
+        "geth-hoodi",
+        "prysm-hoodi"
+      ],
+      "variants": [
+        "canceled_activation_absent",
+        "stale_gloas_config_rejected",
+        "el_cl_pair_mismatch_rejected"
+      ],
+      "rule": "Do not copy Sepolia Amsterdam/Gloas activation to Hoodi. A version byte declaration is not activation."
+    },
+    {
+      "id": "sepolia_amsterdam_gloas",
+      "profiles": [
+        "ethereum-sepolia"
+      ],
+      "sources": [
+        "geth-sepolia",
+        "prysm-sepolia"
+      ],
+      "variants": [
+        "paired_activation",
+        "wrong_epoch_rejected",
+        "restart_at_transition",
+        "precompile_state_touch",
+        "precompile_cache_hit_miss"
+      ],
+      "rule": "Resolve the Amsterdam/Gloas pair from this profile; source scheduling is not runtime admission."
+    },
+    {
+      "id": "bsc_jenner",
+      "profiles": [
+        "bsc-mainnet",
+        "bsc-testnet"
+      ],
+      "sources": [
+        "bsc-config",
+        "bsc-cas20",
+        "bsc-payment-lane",
+        "bsc-lane-classify",
+        "bsc-lane-budget"
+      ],
+      "variants": [
+        "before_at_after",
+        "mainnet_testnet_different_schedule",
+        "feature_disabled",
+        "governance_activation",
+        "parent_poststate_listing",
+        "system_general_lane",
+        "budget_boundary",
+        "failed_transaction_gas",
+        "millisecond_timestamp",
+        "double_sign_price",
+        "p256_rule"
+      ],
+      "rule": "Separate fork routing, feature activation, privileged state, and payment-lane admission. Public test signers have no assumed governance authority."
+    },
+    {
+      "id": "bor_uburu_state_sync",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "sources": [
+        "bor-config",
+        "bor-txtypes",
+        "bor-processor",
+        "bor-bor",
+        "bor-statefull"
+      ],
+      "variants": [
+        "before_at_after",
+        "zero_events",
+        "multiple_events",
+        "failed_fetch",
+        "missing_last_body_tx",
+        "metadata_hash_mismatch",
+        "receipt_count_mismatch",
+        "event_order",
+        "event_scope_reset",
+        "gas_boundary",
+        "event_revert",
+        "restart_replay",
+        "typed_hash_payload"
+      ],
+      "rule": "Use the actual final body StateSync transaction and native receipts/hooks. Rejected blocks create no Applied. Keep BlockSTM, pipelined/stateless import, and preconfirmations disabled."
+    }
+  ],
+  "runtime_outputs": {
+    "profile_manifests": "PENDING_E01_E06",
+    "genesis_hashes": "PENDING_E01_E06",
+    "compiled_fixture_hashes": "PENDING_E01_E06"
+  },
+  "precompile_selection": {
+    "ETH": {
+      "source": "geth-vm-contracts",
+      "function": "activePrecompiledContracts",
+      "source_rules": "func activePrecompiledContracts(rules params.Rules) *PrecompiledContracts {\n\tswitch {\n\tcase rules.IsUBT:\n\t\treturn &PrecompiledContractsVerkle\n\tcase rules.IsBogota:\n\t\treturn &PrecompiledContractsOsaka\n\tcase rules.IsOsaka:\n\t\treturn &PrecompiledContractsOsaka\n\tcase rules.IsPrague:\n\t\treturn &PrecompiledContractsPrague\n\tcase rules.IsCancun:\n\t\treturn &PrecompiledContractsCancun\n\tcase rules.IsBerlin:\n\t\treturn &PrecompiledContractsBerlin\n\tcase rules.IsIstanbul:\n\t\treturn &PrecompiledContractsIstanbul\n\tcase rules.IsByzantium:\n\t\treturn &PrecompiledContractsByzantium\n\tdefault:\n\t\treturn &PrecompiledContractsHomestead\n\t}\n}",
+      "aliases": [
+        {
+          "name": "PrecompiledContractsBLS",
+          "target": "PrecompiledContractsPrague"
+        },
+        {
+          "name": "PrecompiledContractsVerkle",
+          "target": "PrecompiledContractsBerlin"
+        }
+      ],
+      "rule": "Resolve the ordered native selector, including BSC stripped non-Parlia maps and helper-only maps. A source map is not proof that a public profile activates it."
+    },
+    "BSC": {
+      "source": "bsc-vm-contracts",
+      "function": "activePrecompiledContracts",
+      "source_rules": "func activePrecompiledContracts(rules params.Rules) PrecompiledContracts {\n\tswitch {\n\t// UBT (binary-tree devnet experiment) deliberately stays above Jenner:\n\t// it already shadows every BSC fork's precompile set (see IsPasteur\n\t// below), and Jenner keeps that pre-existing precedence instead of\n\t// silently swapping an active UBT set for a Pasteur-derived one.\n\tcase rules.IsUBT:\n\t\treturn PrecompiledContractsVerkle\n\tcase rules.IsJenner:\n\t\treturn PrecompiledContractsJenner\n\tcase rules.IsPasteur:\n\t\treturn PrecompiledContractsPasteur\n\tcase rules.IsOsaka:\n\t\tif rules.IsInBSC {\n\t\t\treturn PrecompiledContractsOsakaForBSC\n\t\t}\n\t\treturn PrecompiledContractsOsaka\n\tcase rules.IsPrague:\n\t\tif rules.IsInBSC {\n\t\t\treturn PrecompiledContractsPragueForBSC\n\t\t}\n\t\treturn PrecompiledContractsPrague\n\tcase rules.IsHaber:\n\t\treturn PrecompiledContractsHaber\n\tcase rules.IsCancun:\n\t\tif rules.IsInBSC {\n\t\t\treturn PrecompiledContractsCancunForBSC\n\t\t}\n\t\treturn PrecompiledContractsCancun\n\tcase rules.IsFeynman:\n\t\treturn PrecompiledContractsFeynman\n\tcase rules.IsHertz:\n\t\treturn PrecompiledContractsHertz\n\tcase rules.IsBerlin:\n\t\treturn PrecompiledContractsBerlin\n\tcase rules.IsPlato:\n\t\treturn PrecompiledContractsPlato\n\tcase rules.IsLuban:\n\t\treturn PrecompiledContractsLuban\n\tcase rules.IsPlanck:\n\t\treturn PrecompiledContractsPlanck\n\tcase rules.IsMoran:\n\t\treturn PrecompiledContractsMoran\n\tcase rules.IsNano:\n\t\treturn PrecompiledContractsNano\n\tcase rules.IsIstanbul:\n\t\tif rules.IsInBSC {\n\t\t\treturn PrecompiledContractsIstanbulForBSC\n\t\t}\n\t\treturn PrecompiledContractsIstanbul\n\tcase rules.IsByzantium:\n\t\treturn PrecompiledContractsByzantium\n\tdefault:\n\t\treturn PrecompiledContractsHomestead\n\t}\n}",
+      "aliases": [
+        {
+          "name": "PrecompiledContractsBLS",
+          "target": "PrecompiledContractsPragueForBSC"
+        },
+        {
+          "name": "PrecompiledContractsVerkle",
+          "target": "PrecompiledContractsBerlin"
+        }
+      ],
+      "rule": "Resolve the ordered native selector, including BSC stripped non-Parlia maps and helper-only maps. A source map is not proof that a public profile activates it."
+    },
+    "POLY": {
+      "source": "bor-vm-contracts",
+      "function": "activePrecompiledContracts",
+      "source_rules": "func activePrecompiledContracts(rules params.Rules) PrecompiledContracts {\n\tswitch {\n\tcase rules.IsChicago:\n\t\treturn PrecompiledContractsChicago\n\tcase rules.IsLisovoPro:\n\t\treturn PrecompiledContractsLisovoPro\n\tcase rules.IsLisovo:\n\t\treturn PrecompiledContractsLisovo\n\tcase rules.IsMadhugiriPro:\n\t\treturn PrecompiledContractsMadhugiriPro\n\tcase rules.IsMadhugiri:\n\t\treturn PrecompiledContractsMadhugiri\n\tcase rules.IsVerkle:\n\t\treturn PrecompiledContractsVerkle\n\tcase rules.IsOsaka:\n\t\treturn PrecompiledContractsOsaka\n\tcase rules.IsPrague:\n\t\treturn PrecompiledContractsPrague\n\tcase rules.IsCancun:\n\t\treturn PrecompiledContractsCancun\n\tcase rules.IsBerlin:\n\t\treturn PrecompiledContractsBerlin\n\tcase rules.IsIstanbul:\n\t\treturn PrecompiledContractsIstanbul\n\tcase rules.IsByzantium:\n\t\treturn PrecompiledContractsByzantium\n\tdefault:\n\t\treturn PrecompiledContractsHomestead\n\t}\n}",
+      "aliases": [
+        {
+          "name": "PrecompiledContractsBLS",
+          "target": "PrecompiledContractsPrague"
+        },
+        {
+          "name": "PrecompiledContractsVerkle",
+          "target": "PrecompiledContractsBerlin"
+        }
+      ],
+      "rule": "Resolve the ordered native selector, including BSC stripped non-Parlia maps and helper-only maps. A source map is not proof that a public profile activates it."
+    }
+  }
+}

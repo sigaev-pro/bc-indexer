@@ -1,6 +1,6 @@
 # Финальная сверка согласованного ТЗ
 
-**D87:** BOOT-07 specifies finite reader boundaries, complete source/delivery/stream evidence, reorg handling, retention checks, and deadlines. Independent review is required before TEST-OPEN-01 closes. TEST-OPEN-02 remains assigned to BOOT-08. Neither document review nor reader closure proves product runtime correctness; runtime remains NOT_RUN.
+**D87/D90:** Accepted BOOT-07 closes the finite-reader design. BOOT-08 defines the named independent corpus, source/fork/type/entrypoint expansion, compiler and fixture resolution, seed/soak/backlog floors, and static coverage checks; independent acceptance is still required. Actual profile/fixture/oracle artifacts and runtime results remain E01/E06/E07 work. Definition validity and reader closure do not prove product correctness; runtime remains NOT_RUN.
 
 **D83–D86:** The standard run has a 30-minute limit excluding preparation; configuration and volumes remain adjustable without losing coverage. Exact stable locks, controlled test contracts, one diagnostic retry, and fresh public smoke remain mandatory. D84 authorizes issue-based implementation; D86 limits the current launch to BOOT. BOOT-09 requires accepted BOOT-07/08 decisions and all other bootstrap evidence. Matching document mirrors alone does not close a gate.
 

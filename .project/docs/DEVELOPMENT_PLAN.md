@@ -1,6 +1,6 @@
 # Последовательность разработки и задачи
 
-D83 assigns version updates to E01-01.builds, configurable preparation/RunPlan to the E01 harness, and the 30-minute standard run, test contracts, retries, and freshness to E07. D87 in [TESTING_CONTRACT](TESTING_CONTRACT.md) specifies TEST-OPEN-01 subject to independent BOOT-07 acceptance; TEST-OPEN-02 remains BOOT-08 work. D84 authorizes implementation through issues and gates. D86 currently limits execution to BOOT and requires a stop before E01.
+D83 assigns version updates to E01-01.builds, configurable preparation/RunPlan to the E01 harness, and the 30-minute standard run, test contracts, retries, and freshness to E07. D87 in [TESTING_CONTRACT](TESTING_CONTRACT.md) records the accepted TEST-OPEN-01 design and D90's concrete TEST-OPEN-02 corpus, subject to independent BOOT-08 acceptance. D84 authorizes implementation through issues and gates. D86 currently limits execution to BOOT and requires a stop before E01.
 
 D82: обязательны все семь mainnet/testnet профилей и suites из [TESTING_CONTRACT](TESTING_CONTRACT.md). Quick не требует публичной синхронизации; полная приёмка включает independent NATS reader, TC01–TC12, fault/soak/public-smoke. Runtime NOT_RUN.
 
