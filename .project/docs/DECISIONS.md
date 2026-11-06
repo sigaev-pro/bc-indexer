@@ -1,5 +1,9 @@
 # Дерево решений и журнал интервью
 
+## Latest decision — D85 (2026-11-06)
+
+The user requires all 84 existing issues to be rewritten in clear, simple American English. All project-authored text must use English: issue titles/bodies/comments, PRs/reviews, code comments/docstrings, documentation, commits, test descriptions, CLI/help/error/log messages, and automation output. Avoid British expressions, regional idioms, jargon added for style, and vague promotional language. Preserve exact technical names, IDs, APIs, and source data. This task translates the issues, their local source catalog, the project rules, and the bootstrap prompt; it does not silently change product requirements or bulk-translate historical specifications. New project text must follow the rule immediately. Conversation with the user may continue in the language they use; project artifacts remain English.
+
 ## Последнее решение — D84 (2026-11-06)
 
 Пользователь явно изменил направление: «мы переходим к разработке». Прежний запрет D64 на реализацию отменён этим решением; его исторические записи сохраняются как superseded. Разрешены код, сборки и runtime-тесты для принятого ТЗ в порядке E01–E07. До первого продуктового изменения весь известный объём должен быть разбит на issues, зависимости и gate issues; работа идёт поэтапно. Пользователь поручил отдельный регламент ролей agency-agents и автономного запуска без постоянного участия, выбрал GitHub sigaev-pro/bc-indexer для issues/PR. Текущий результат — runbook, полный каталог и опубликованные issues, а не молчаливый запуск многодневной разработки. Технические решения внутри принятого контракта делегируются; scope/необратимые внешние действия и внешние блокеры не обходятся. D70 и продуктовые требования сохраняются. TEST-OPEN-01/02 выделяются отдельными подготовительными issues с независимой проверкой; код следующих этапов не используется для сокрытия незавершённых критериев.

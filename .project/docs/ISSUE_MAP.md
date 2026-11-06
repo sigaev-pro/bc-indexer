@@ -1,6 +1,6 @@
-# GitHub issues: D84
+# GitHub issue map
 
-Репозиторий: [sigaev-pro/bc-indexer](https://github.com/sigaev-pro/bc-indexer/issues). 84 задачи опубликованы 2026-11-06; все OPEN/PLANNED на момент публикации. Код продукта ещё не реализован. Источник: [ISSUE_CATALOG](ISSUE_CATALOG.md); [регламент запуска](../../DEVELOPMENT_AUTOPILOT.md). Прямые URL — фактический результат API, не прогноз номеров.
+D85 language revision, 2026-11-06. Repository: [sigaev-pro/bc-indexer](https://github.com/sigaev-pro/bc-indexer/issues). The 84 tasks were published on 2026-11-06 and were all OPEN/PLANNED at publication. Product implementation has not started. Sources: [ISSUE_CATALOG](ISSUE_CATALOG.md) and [DEVELOPMENT_AUTOPILOT](../../DEVELOPMENT_AUTOPILOT.md). These are actual API-returned issue URLs, not predicted numbers.
 
 - [BOOT-01 — #1](https://github.com/sigaev-pro/bc-indexer/issues/1)
 - [BOOT-02 — #2](https://github.com/sigaev-pro/bc-indexer/issues/2)
@@ -86,4 +86,3 @@
 - [G.E05 — #82](https://github.com/sigaev-pro/bc-indexer/issues/82)
 - [G.E06 — #83](https://github.com/sigaev-pro/bc-indexer/issues/83)
 - [G.E07 — #84](https://github.com/sigaev-pro/bc-indexer/issues/84)
-

@@ -1,1321 +1,1325 @@
-# Полный начальный каталог issues
+# Initial issue catalog
 
-D84 · 2026-11-06 · GitHub sigaev-pro/bc-indexer. 84 issues: 9 BOOT, 68 child tasks E01–E07, 7 gates. Все product runtime результаты на момент создания NOT_RUN. Source tasks: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md); запуск/роли: [DEVELOPMENT_AUTOPILOT](../../DEVELOPMENT_AUTOPILOT.md). Стабильный ID/marker — ключ reconciliation, номер GitHub назначается отдельно.
+D85 language revision, 2026-11-06. Repository: [sigaev-pro/bc-indexer](https://github.com/sigaev-pro/bc-indexer). The backlog contains 84 issues: 9 bootstrap tasks, 68 implementation tasks, and 7 stage gates. Runtime results remain NOT_RUN until verified runs provide evidence.
 
-Профили ETH/BSC/POLY раскрываются в семь профилей D82; COMMON runtime механизмы не получают автоматический общий PASS. Задачи без собственного AC-owner всё равно имеют artifact acceptance в исходном каталоге. Семейства AC и конкретные variants сохраняются, не пересоздаются под новые IDs. BOOT issues — организация исполнения и закрытие открытых критериев, не новые требования к данным продукта.
+Source requirements: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) and [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Roles and execution: [DEVELOPMENT_AUTOPILOT](../../DEVELOPMENT_AUTOPILOT.md). Published numbers: [ISSUE_MAP](ISSUE_MAP.md).
 
-## BOOT-01 — Связать репозиторий и опубликовать исходную базу
+Use each stable task ID and its marker to reconcile GitHub issues. Do not create duplicates or change requirements when translating text. Expand ETH, BSC, and POLY into all applicable mainnet and testnet profiles. A COMMON implementation does not grant every profile a shared PASS. Tasks without a dedicated AC owner still require artifact acceptance in the source task catalog.
+
+All project-authored text must use plain American English under [.project/AGENTS.md](../AGENTS.md). Technical IDs, field names, APIs, and source data retain their exact spelling.
+
+## BOOT-01 — Connect the repository and publish the baseline
 
 <!-- extractor-task:BOOT-01 -->
 
-Этап: BOOT. Роль: DevOps. Применимость/модуль: COMMON.
+Stage: BOOT. Role: DevOps. Module and applicability: COMMON.
 
-Зависимости: нет.
+Dependencies: none.
 
-Результат: Проверить origin/branch/history, закрепить spec commit, опубликовать базу в пустой main без force; подготовить .gitignore для secrets/runs/state/worktrees.
+Output: Verify the remote, branch, and history. Pin the specification commit and publish the baseline to an empty main branch without a force push. Add ignore rules for secrets, run output, state, and worktrees.
 
-Приёмка: Remote identity подтверждена; tracked files проверены на secrets; сохранена история; исходный v2 не менялся; повторный запуск ничего не перезаписывает.
+Acceptance: Verify the remote identity, check tracked files for secrets, preserve Git history and the original v2 specification, and confirm that rerunning the setup does not overwrite existing work.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-02 — Адаптировать и закрепить роли agency-agents
+## BOOT-02 — Adapt and pin the agency-agents roles
 
 <!-- extractor-task:BOOT-02 -->
 
-Этап: BOOT. Роль: Coordinator / Technical Writer. Применимость/модуль: COMMON.
+Stage: BOOT. Role: Coordinator / Technical Writer. Module and applicability: COMMON.
 
-Зависимости: BOOT-01.
+Dependencies: BOOT-01.
 
-Результат: Project-local роли и source/hash lock ревизии b859c515d813efcfc4755d3471dd9e7686c7706d; явные правила scope, handoff, allowed paths, review.
+Output: Create project-local roles based on agency-agents commit b859c515d813efcfc4755d3471dd9e7686c7706d. Record source hashes and define scope, handoffs, allowed paths, and review duties.
 
-Приёмка: Один writer/worktree; reviewer независим; UI-only/retry defaults удалены; roles discovery или explicit prompt fallback проверены; нет глобальной установки всех агентов.
+Acceptance: Allow one writer per worktree and require an independent reviewer. Remove UI-only instructions and conflicting retry defaults. Verify role discovery or the explicit-prompt fallback. Do not install the full roster globally.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-04 — Проверить unattended доступы и runner
+## BOOT-04 — Verify unattended access and runner readiness
 
 <!-- extractor-task:BOOT-04 -->
 
-Этап: BOOT. Роль: DevOps. Применимость/модуль: COMMON.
+Stage: BOOT. Role: DevOps. Module and applicability: COMMON.
 
-Зависимости: BOOT-01.
+Dependencies: BOOT-01.
 
-Результат: Preflight Codex/GitHub/Git/Docker/network/ресурсов/secrets; report с capabilities и ограничениями; testnet signer готовится отдельно.
+Output: Check Codex, GitHub, Git, Docker, network access, resources, and secret handling. Report available capabilities and restrictions. Prepare the testnet signer separately.
 
-Приёмка: Разрешённые sandbox операции реально доступны; managed блокер явно останавливает действие; credentials не в Git/logs; нет опасного bypass.
+Acceptance: Verify the required sandbox operations. Stop affected work when a managed restriction blocks it. Keep credentials out of Git and logs, and do not bypass security controls.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-05 — Подготовить CI и правила независимой приёмки
+## BOOT-05 — Set up CI and independent acceptance checks
 
 <!-- extractor-task:BOOT-05 -->
 
-Этап: BOOT. Роль: DevOps / Reviewer. Применимость/модуль: COMMON.
+Stage: BOOT. Role: DevOps / Reviewer. Module and applicability: COMMON.
 
-Зависимости: BOOT-01, BOOT-04.
+Dependencies: BOOT-01, BOOT-04.
 
-Результат: Required checks для doc/code/test evidence и exact commit; PR flow без выдачи одного actor за двух независимых GitHub людей.
+Output: Define required checks for documentation, code, and test evidence on the exact commit. Set up a PR workflow that does not present one GitHub actor as two independent human reviewers.
 
-Приёмка: Изменённый после review commit не merged; failed/missing checks блокируют; workflow доступен выбранному repo; admin bypass не используется.
+Acceptance: Block merging after an unreviewed commit or a failed or missing check. Verify that the workflow is available in this repository. Do not bypass branch rules with admin access.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-03 — Создать и проверить durable controller
+## BOOT-03 — Build and verify the persistent task controller
 
 <!-- extractor-task:BOOT-03 -->
 
-Этап: BOOT. Роль: DevOps / Protocol Engineer. Применимость/модуль: COMMON.
+Stage: BOOT. Role: DevOps / Protocol Engineer. Module and applicability: COMMON.
 
-Зависимости: BOOT-02, BOOT-04, BOOT-05.
+Dependencies: BOOT-02, BOOT-04, BOOT-05.
 
-Результат: .project/automation/controller.py: verify-bootstrap/run/resume/status/stop, DAG scheduler, leases, durable state, workers/reviewers, bounded attempts/budget.
+Output: Implement .project/automation/controller.py with verify-bootstrap, run, resume, status, and stop commands; dependency scheduling; leases; persistent state; worker and reviewer sessions; and bounded attempts and budgets.
 
-Приёмка: Изолированные failure tests: exit0 без evidence не DONE; crash/restart не дублирует mutations; stale lease/CI/review отвергнуты; stop/recovery не теряет work; fake GitHub backend не создаёт лишние реальные issues.
+Acceptance: Use isolated failure tests to prove that exit code 0 without evidence is not DONE, crashes do not duplicate changes, stale leases and review or CI results are rejected, and stop or recovery preserves work. Use a fake GitHub backend so these tests do not create extra real issues.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-06 — Проверить стабильные кандидаты и inventory версий
+## BOOT-06 — Check stable versions and build the component inventory
 
 <!-- extractor-task:BOOT-06 -->
 
-Этап: BOOT. Роль: Architect / DevOps. Применимость/модуль: COMMON.
+Stage: BOOT. Role: Architect / DevOps. Module and applicability: COMMON.
 
-Зависимости: BOOT-01.
+Dependencies: BOOT-01.
 
-Результат: ComponentRegistry источников stable и исходный candidate lock всех native/supporting/toolchain/library/image компонентов; compatibility risks по семи профилям.
+Output: Create a ComponentRegistry of stable release sources and an initial candidate lock for all native clients, supporting clients, toolchains, libraries, and images. Record compatibility risks for all seven profiles.
 
-Приёмка: Точные pins/digests, нет latest; актуальность проверена по официальным источникам; неподтверждённая совместимость не PASS. Полный updater/build proof остаётся E01/E07.
+Acceptance: Use exact versions and digests, with no floating latest references. Check current releases against official sources. Unverified compatibility is not PASS. Full updater and build validation remains in E01 and E07.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-07 — Закрыть TEST-OPEN-01: конец проверяемого NATS потока
+## BOOT-07 — Resolve TEST-OPEN-01: define when NATS validation ends
 
 <!-- extractor-task:BOOT-07 -->
 
-Этап: BOOT. Роль: Architect / QA. Применимость/модуль: COMMON.
+Stage: BOOT. Role: Architect / QA. Module and applicability: COMMON.
 
-Зависимости: BOOT-01, BOOT-02.
+Dependencies: BOOT-01, BOOT-02.
 
-Результат: Конкретный алгоритм границы/завершения local и public reader, включая reorg, незавершённые parts, лишние/пропущенные записи и timeout.
+Output: Define exact boundaries and completion rules for the local and public-stream readers, including reorgs, incomplete parts, extra or missing records, and timeouts.
 
-Приёмка: Независимый review контрпримеров; решение внутри гарантий записано и зеркала согласованы. Если нужна смена scope — BLOCKED_DECISION, а не фиктивное закрытие.
+Acceptance: Review counterexamples independently. Record the decision within the accepted guarantees and update all specification copies. If the decision requires a scope change, report BLOCKED_DECISION instead of closing the issue.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-08 — Закрыть TEST-OPEN-02: corpus и независимые expected
+## BOOT-08 — Resolve TEST-OPEN-02: define the test corpus and expected results
 
 <!-- extractor-task:BOOT-08 -->
 
-Этап: BOOT. Роль: Native Engineer / QA. Применимость/модуль: COMMON.
+Stage: BOOT. Role: Native Engineer / QA. Module and applicability: COMMON.
 
-Зависимости: BOOT-06, BOOT-07.
+Dependencies: BOOT-06, BOOT-07.
 
-Результат: Именованные cases/variants всех семи profiles/forks, contract scenarios, источники independent expected, минимальные seeds/soak quotas, configurable RunPlans.
+Output: Define named cases and variants for all seven profiles and their supported forks, contract scenarios, independent sources of expected results, minimum seed and soak quotas, and configurable RunPlans.
 
-Приёмка: Каждый mandatory variant назначен; нет ethalon из проверяемого normalizer; public/local различены; standard plan <=1800 секунд без preparation; документация не объявлена runtime PASS.
+Acceptance: Assign every required variant. Do not derive expected results from the normalizer under test. Distinguish public and local runs. Limit a standard run to 1800 seconds, excluding preparation. Documentation alone is not runtime PASS.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## BOOT-09 — Принять подготовку и открыть E01
+## BOOT-09 — Accept bootstrap results and open E01
 
 <!-- extractor-task:BOOT-09 -->
 
-Этап: BOOT. Роль: Reviewer. Применимость/модуль: COMMON.
+Stage: BOOT. Role: Reviewer. Module and applicability: COMMON.
 
-Зависимости: BOOT-01, BOOT-02, BOOT-03, BOOT-04, BOOT-05, BOOT-06, BOOT-07, BOOT-08.
+Dependencies: BOOT-01, BOOT-02, BOOT-03, BOOT-04, BOOT-05, BOOT-06, BOOT-07, BOOT-08.
 
-Результат: Полный reconciled backlog 84 issues с mapping/acyclic DAG и принятыми BOOT outcomes; verify-bootstrap.
+Output: Reconcile all 84 issues, their mappings, and their acyclic dependency graph. Verify accepted bootstrap results with verify-bootstrap.
 
-Приёмка: Все BOOT dependencies приняты с commits/evidence; отсутствуют фиктивные DONE; controller готов, вопросы закрыты или E01 остаётся заблокирован.
+Acceptance: Require accepted commits and evidence for every bootstrap dependency. Reject false DONE results. Open E01 only when the controller is ready and the open criteria are resolved.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## E01-01.evidence — CaseRegistry/CaseResult/RunManifest schemas: полные profile/fork/fixture/suite identities D82, applicability о
+## E01-01.evidence — Define the versioned test evidence schemas
 
 <!-- extractor-task:E01-01.evidence -->
 
-Этап: E01. Роль: QA / Engineer. Применимость/модуль: `test/evidence`; COMMON.
+Stage: E01. Role: QA / Engineer. Module and applicability: `test/evidence`; COMMON.
 
-Зависимости: BOOT-09.
+Dependencies: BOOT-09.
 
-Результат: CaseRegistry/CaseResult/RunManifest schemas: полные profile/fork/fixture/suite identities D82, applicability отдельно от verdict, versioned evidence; NOT_RUN без выдуманных actual
+Output: Define CaseRegistry, CaseResult, and RunManifest with the full D82 profile, fork, fixture, and suite identities. Keep applicability separate from verdicts. Version the evidence and represent NOT_RUN without fabricated actual results.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DEV-01, REQ-DEV-04. AC: AC-DEV-01-01, AC-DEV-04-02, AC-DEV-04-03.
 
-Контракт: EVID. Inputs: SPEC → принятые требования.
+Contracts: EVID. Inputs: SPEC provides the accepted requirements.
 
-## E01-01.builds — Изолированный build/artifact manifest каждого клиента и supporting зависимости
+## E01-01.builds — Create isolated native and supporting client builds
 
 <!-- extractor-task:E01-01.builds -->
 
-Этап: E01. Роль: DevOps. Применимость/модуль: `build/native`; ETH/BSC/POLY.
+Stage: E01. Role: DevOps. Module and applicability: `build/native`; ETH/BSC/POLY.
 
-Зависимости: E01-01.evidence, BOOT-09.
+Dependencies: E01-01.evidence, BOOT-09.
 
-Результат: Изолированный build/artifact manifest каждого клиента и supporting зависимости; source/patch/compiler/lock определены, native internal types не склеены в общий graph
+Output: Create a separate build and artifact manifest for each client and supporting dependency. Pin sources, patches, compilers, and dependency locks. Do not combine internal types from different native clients in one dependency graph.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DEV-03, REQ-OPS-10. AC: AC-OPS-10-01, AC-OPS-10-03, AC-DEV-03-01.
 
-Контракт: STACK, BOOT. Inputs: E01-01.evidence → формат manifest.
+Contracts: STACK, BOOT. Inputs: E01-01.evidence provides the manifest format.
 
-## E01-01.harness — Воспроизводимый минимальный runner с явными inputs/state/test credentials/supporting services и независимым ex
+## E01-01.harness — Build the reproducible native test runner
 
 <!-- extractor-task:E01-01.harness -->
 
-Этап: E01. Роль: QA / Engineer. Применимость/модуль: `test/harness`; ETH/BSC/POLY.
+Stage: E01. Role: QA / Engineer. Module and applicability: `test/harness`; ETH/BSC/POLY.
 
-Зависимости: E01-01.builds, E01-01.evidence, BOOT-09.
+Dependencies: E01-01.builds, E01-01.evidence, BOOT-09.
 
-Результат: Воспроизводимый минимальный runner с явными inputs/state/test credentials/supporting services и независимым expected; скрытая нода автора не нужна
+Output: Create a minimal reproducible runner with explicit inputs, state, test credentials, supporting services, and independent expected results. Do not depend on an undocumented node prepared by the author.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: EVID, BOOT. Inputs: E01-01.builds → закреплённые клиенты; E01-01.evidence → evidence schema.
+Contracts: EVID, BOOT. Inputs: E01-01.builds provides pinned clients; E01-01.evidence provides the evidence schema.
 
-## E01-02.pins — Hash-provider/pin seam: source root/input остаётся доступным до допустимого release
+## E01-02.pins — Verify native state retention and release
 
 <!-- extractor-task:E01-02.pins -->
 
-Этап: E01. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/state_provider`; ETH/BSC/POLY.
+Stage: E01. Role: Native Engineer. Module and applicability: `adapters/<client>/state_provider`; ETH/BSC/POLY.
 
-Зависимости: E01-01.harness, BOOT-09.
+Dependencies: E01-01.harness, BOOT-09.
 
-Результат: Hash-provider/pin seam: source root/input остаётся доступным до допустимого release; неподдержанный backend отвергается
+Output: Implement the hash-provider and pin interface. Keep the source root and required inputs available until release is allowed. Reject unsupported state backends.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-03, REQ-OPS-01, REQ-OPS-03. AC: AC-CAP-03-01, AC-CAP-03-02, AC-OPS-01-02, AC-OPS-01-03, AC-OPS-03-02.
 
-Контракт: NATIVE, CONFIG. Inputs: E01-01.harness → runner и parent state.
+Contracts: NATIVE, CONFIG. Inputs: E01-01.harness provides the runner and parent state.
 
-## E01-02.inputs — Static capsule и append-only consumed dependency log
+## E01-02.inputs — Persist native inputs and consumed dependency responses
 
 <!-- extractor-task:E01-02.inputs -->
 
-Этап: E01. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/source_inputs`; ETH/BSC/POLY.
+Stage: E01. Role: Native Engineer. Module and applicability: `adapters/<client>/source_inputs`; ETH/BSC/POLY.
 
-Зависимости: E01-02.pins, BOOT-09.
+Dependencies: E01-02.pins, BOOT-09.
 
-Результат: Static capsule и append-only consumed dependency log; возвращённый native execution ответ сначала durable, повтор не подменяет его свежим
+Output: Implement the static input capsule and append-only log of consumed dependencies. Persist each returned native execution response before allowing it to be consumed. Replay must use the saved response rather than a fresh replacement.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-04. AC: AC-CAP-04-01, AC-CAP-04-02, AC-CAP-04-03.
 
-Контракт: NATIVE. Inputs: E01-02.pins → закреплённый state/input owner.
+Contracts: NATIVE. Inputs: E01-02.pins defines state and input ownership.
 
-## E01-02.owned_capture — Owned capture seam: immutable chunks/snapshots, ограниченный дополнительный RAM, safe-point wait вне callbacks
+## E01-02.owned_capture — Capture immutable data with bounded memory
 
 <!-- extractor-task:E01-02.owned_capture -->
 
-Этап: E01. Роль: Protocol Engineer. Применимость/модуль: `core/capture`; ETH/BSC/POLY.
+Stage: E01. Role: Protocol Engineer. Module and applicability: `core/capture`; ETH/BSC/POLY.
 
-Зависимости: E01-01.harness, BOOT-09.
+Dependencies: E01-01.harness, BOOT-09.
 
-Результат: Owned capture seam: immutable chunks/snapshots, ограниченный дополнительный RAM, safe-point wait вне callbacks; mutable native alias не уходит worker
+Output: Create immutable chunks and snapshots with clear ownership and bounded additional RAM. Wait at safe points outside callbacks. Do not pass mutable aliases of native state to the worker.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-05, REQ-CAP-06. AC: AC-CAP-05-01, AC-CAP-06-02.
 
-Контракт: NATIVE. Inputs: E01-01.harness → execution fixtures.
+Contracts: NATIVE. Inputs: E01-01.harness provides execution fixtures.
 
-## E01-02.admission — Guard/pin/ADMITTED seam: обязательство обнаружимо после sync admission, до него публичного результата нет
+## E01-02.admission — Persist capture admission before publishing results
 
 <!-- extractor-task:E01-02.admission -->
 
-Этап: E01. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/admission`; ETH/BSC/POLY.
+Stage: E01. Role: Native Engineer. Module and applicability: `adapters/<client>/admission`; ETH/BSC/POLY.
 
-Зависимости: E01-02.inputs, E01-02.owned_capture, E01-02.pins, BOOT-09.
+Dependencies: E01-02.inputs, E01-02.owned_capture, E01-02.pins, BOOT-09.
 
-Результат: Guard/pin/ADMITTED seam: обязательство обнаружимо после sync admission, до него публичного результата нет
+Output: Implement the guard, pin, and ADMITTED transition. Make the obligation recoverable after synchronized admission. Do not expose a public result before admission.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-02. AC: AC-CAP-02-01, AC-CAP-02-02.
 
-Контракт: NATIVE. Inputs: E01-02.pins → pin contract; E01-02.inputs → capsule/log; E01-02.owned_capture → ownership boundary.
+Contracts: NATIVE. Inputs: E01-02.pins provides the pin contract; E01-02.inputs provides the capsule and dependency log; E01-02.owned_capture provides the ownership boundary.
 
-## E01-02.decision_bridge — Child-root/native marker/mirror seam: authoritative decision и одно delivery obligation восстанавливаются
+## E01-02.decision_bridge — Recover native decisions and delivery obligations
 
 <!-- extractor-task:E01-02.decision_bridge -->
 
-Этап: E01. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/decision`; ETH/BSC/POLY.
+Stage: E01. Role: Native Engineer. Module and applicability: `adapters/<client>/decision`; ETH/BSC/POLY.
 
-Зависимости: E01-02.admission, BOOT-09.
+Dependencies: E01-02.admission, BOOT-09.
 
-Результат: Child-root/native marker/mirror seam: authoritative decision и одно delivery obligation восстанавливаются; rejected/no-event decision не создаёт public batch
+Output: Implement the child-root, native-marker, and mirror interface. Recover the authoritative decision and its single delivery obligation. Rejected decisions and decisions without public events must not create a public batch.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-07. AC: AC-CAP-07-01, AC-CAP-07-02, AC-CAP-07-03, AC-CAP-07-06.
 
-Контракт: NATIVE, DELIVERY. Inputs: E01-02.admission → admitted observation.
+Contracts: NATIVE, DELIVERY. Inputs: E01-02.admission provides the admitted observation.
 
-## E01-02.lifecycle_seams — Карта реальных execution/system/canonical/finality callers, включая event без нового блока и known branch
+## E01-02.lifecycle_seams — Map all required native lifecycle callers
 
 <!-- extractor-task:E01-02.lifecycle_seams -->
 
-Этап: E01. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/lifecycle`; ETH/BSC/POLY.
+Stage: E01. Role: Native Engineer. Module and applicability: `adapters/<client>/lifecycle`; ETH/BSC/POLY.
 
-Зависимости: E01-02.decision_bridge, BOOT-09.
+Dependencies: E01-02.decision_bridge, BOOT-09.
 
-Результат: Карта реальных execution/system/canonical/finality callers, включая event без нового блока и known branch; ни один обязательный caller не обходит guard
+Output: Map actual execution, system, canonical-chain, and finality callers, including events without a new block and known-branch paths. Every required caller must pass through the guard.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-01, REQ-LIF-05, REQ-LIF-06. AC: AC-CAP-01-01, AC-LIF-05-02, AC-LIF-05-03, AC-LIF-06-04, AC-LIF-06-05.
 
-Контракт: NATIVE, SEM. Inputs: E01-02.decision_bridge → decision marker interface.
+Contracts: NATIVE, SEM. Inputs: E01-02.decision_bridge provides the decision-marker interface.
 
-## E01-03.smoke_corpus — Минимальный независимый corpus transfer/nested revert/fees/system/empty
+## E01-03.smoke_corpus — Create the minimal independent native test corpus
 
 <!-- extractor-task:E01-03.smoke_corpus -->
 
-Этап: E01. Роль: QA / Engineer. Применимость/модуль: `test/native_corpus`; ETH/BSC/POLY.
+Stage: E01. Role: QA / Engineer. Module and applicability: `test/native_corpus`; ETH/BSC/POLY.
 
-Зависимости: E01-01.harness, E01-02.decision_bridge, BOOT-09.
+Dependencies: E01-01.harness, E01-02.decision_bridge, BOOT-09.
 
-Результат: Минимальный независимый corpus transfer/nested revert/fees/system/empty; полный production semantic coverage этим не объявляется
+Output: Create transfer, nested-revert, fee, system-action, and empty-block cases with independent expected results. Do not treat this small corpus as full production semantic coverage.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: NATIVE, SEM, TYPES. Inputs: E01-02.decision_bridge → native execution output; E01-01.harness → independent expected.
+Contracts: NATIVE, SEM, TYPES. Inputs: E01-02.decision_bridge provides native execution output; E01-01.harness provides independent expected results.
 
-## E01-04.early_faults — Evidence ранних admission/pin/EXEC_READY/decision/H seams при power loss
+## E01-04.early_faults — Test early capture and decision boundaries under power loss
 
 <!-- extractor-task:E01-04.early_faults -->
 
-Этап: E01. Роль: QA / Engineer. Применимость/модуль: `test/native_faults`; ETH/BSC/POLY.
+Stage: E01. Role: QA / Engineer. Module and applicability: `test/native_faults`; ETH/BSC/POLY.
 
-Зависимости: E01-02.lifecycle_seams, E01-03.smoke_corpus, BOOT-09.
+Dependencies: E01-02.lifecycle_seams, E01-03.smoke_corpus, BOOT-09.
 
-Результат: Evidence ранних admission/pin/EXEC_READY/decision/H seams при power loss; full native+Gateway matrix явно остаётся E05
+Output: Collect evidence for admission, pins, EXEC_READY, native decisions, and the H boundary under power loss. Keep the full native-plus-Gateway failure matrix in E05.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-SCP-03. AC: AC-SCP-03-01.
 
-Контракт: NATIVE, EVID. Inputs: E01-02.lifecycle_seams → caller coverage; E01-03.smoke_corpus → inputs/expected.
+Contracts: NATIVE, EVID. Inputs: E01-02.lifecycle_seams provides caller coverage; E01-03.smoke_corpus provides inputs and expected results.
 
-## E01-05.type_paths — Матрица действующих native transaction paths
+## E01-05.type_paths — Verify every required native transaction path
 
 <!-- extractor-task:E01-05.type_paths -->
 
-Этап: E01. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/type_mapping`; ETH/BSC/POLY.
+Stage: E01. Role: Native Engineer. Module and applicability: `adapters/<client>/type_mapping`; ETH/BSC/POLY.
 
-Зависимости: E01-03.smoke_corpus, BOOT-09.
+Dependencies: E01-03.smoke_corpus, BOOT-09.
 
-Результат: Матрица действующих native transaction paths; unknown type не пропускается, BSC system и Bor StateSync обязательны
+Output: Build the matrix of active native transaction paths. Reject unknown types rather than skipping them. Include required BSC system transactions and Bor StateSync paths.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: TYPES, SEM. Inputs: E01-03.smoke_corpus → native corpus.
+Contracts: TYPES, SEM. Inputs: E01-03.smoke_corpus provides the native corpus.
 
-## E02-01.semantic_descriptors — Manifest semantic identity: activation/revision/source стабильны до delivery attempts
+## E02-01.semantic_descriptors — Define stable event and batch identities
 
 <!-- extractor-task:E02-01.semantic_descriptors -->
 
-Этап: E02. Роль: Protocol Engineer. Применимость/модуль: `protocol/semantic`; ETH/BSC/POLY.
+Stage: E02. Role: Protocol Engineer. Module and applicability: `protocol/semantic`; ETH/BSC/POLY.
 
-Зависимости: E01-02.decision_bridge, G.E01.
+Dependencies: E01-02.decision_bridge, G.E01.
 
-Результат: Manifest semantic identity: activation/revision/source стабильны до delivery attempts; decision→batch выделяется один раз
+Output: Define semantic identities in the manifest. Keep activation, revision, and source stable across delivery attempts. Allocate the decision-to-batch mapping exactly once.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: MSG, CONTROL, NATIVE. Inputs: E01-02.decision_bridge → decision interface.
+Contracts: MSG, CONTROL, NATIVE. Inputs: E01-02.decision_bridge provides the decision interface.
 
-## E02-05.actions_model — Типизированная модель native monetary actions, общий execution_order, cause equality и RollbackScope refs/tree
+## E02-05.actions_model — Define monetary actions, execution order, and rollback scopes
 
 <!-- extractor-task:E02-05.actions_model -->
 
-Этап: E02. Роль: Protocol Engineer. Применимость/модуль: `protocol/balance`; ETH/BSC/POLY.
+Stage: E02. Role: Protocol Engineer. Module and applicability: `protocol/balance`; ETH/BSC/POLY.
 
-Зависимости: E01-03.smoke_corpus, G.E01.
+Dependencies: E01-03.smoke_corpus, G.E01.
 
-Результат: Типизированная модель native monetary actions, общий execution_order, cause equality и RollbackScope refs/tree/validator; receipt summary не суммируется как второе движение
+Output: Define typed native monetary actions, shared execution_order, equality of causes, and RollbackScope references, trees, and validation. Do not count the receipt summary as a second monetary movement.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-05. AC: AC-DAT-05-03.
 
-Контракт: MSG, SEM. Inputs: E01-03.smoke_corpus → reference effects.
+Contracts: MSG, SEM. Inputs: E01-03.smoke_corpus provides reference effects.
 
-## E02-08.block_metadata — Block metadata/lifecycle schema, включая empty
+## E02-08.block_metadata — Define block metadata and lifecycle messages
 
 <!-- extractor-task:E02-08.block_metadata -->
 
-Этап: E02. Роль: Protocol Engineer. Применимость/модуль: `protocol/block`; ETH/BSC/POLY.
+Stage: E02. Role: Protocol Engineer. Module and applicability: `protocol/block`; ETH/BSC/POLY.
 
-Зависимости: E01-05.type_paths, G.E01.
+Dependencies: E01-05.type_paths, G.E01.
 
-Результат: Block metadata/lifecycle schema, включая empty; native source counts не превращены в completeness assertion
+Output: Define block metadata and lifecycle schemas, including empty blocks. Do not treat native source counts as proof of complete capture.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: MSG, SEM. Inputs: E01-05.type_paths → профильные native поля.
+Contracts: MSG, SEM. Inputs: E01-05.type_paths provides profile-specific native fields.
 
-## E02-10.closed_profiles — Закрытый реестр payload/extensions/presence, D75 receipt kinds/native_type/origins/network details с exact wid
+## E02-10.closed_profiles — Define the closed payload and extension registry
 
 <!-- extractor-task:E02-10.closed_profiles -->
 
-Этап: E02. Роль: Protocol Engineer. Применимость/модуль: `protocol/profiles`; ETH/BSC/POLY.
+Stage: E02. Role: Protocol Engineer. Module and applicability: `protocol/profiles`; ETH/BSC/POLY.
 
-Зависимости: E01-05.type_paths, G.E01.
+Dependencies: E01-05.type_paths, G.E01.
 
-Результат: Закрытый реестр payload/extensions/presence, D75 receipt kinds/native_type/origins/network details с exact widths/applicability; D80 sources_binding_digest:Hash32 обязателен в SourceObservationRef/L1Checkpoint; unsupported version не получает ANY fallback
+Output: Define payload variants, extensions, field presence, exact widths, and applicability. Include D75 receipt kinds, native_type, origins, and network details. Require the D80 sources_binding_digest:Hash32 in SourceObservationRef and L1Checkpoint. Do not use an ANY fallback for unsupported versions.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-02, REQ-DAT-09, REQ-LIF-07. AC: AC-DAT-02-03, AC-DAT-09-03, AC-LIF-07-07.
 
-Контракт: TYPES, SEM, MSG. Inputs: E01-05.type_paths → source variants.
+Contracts: TYPES, SEM, MSG. Inputs: E01-05.type_paths provides source variants.
 
-## E02-02.schemas — Воспроизводимые schema/bindings и structural validators: required presence, oneof, lengths, unknown values опр
+## E02-02.schemas — Generate reproducible schemas, bindings, and validators
 
 <!-- extractor-task:E02-02.schemas -->
 
-Этап: E02. Роль: Protocol Engineer. Применимость/модуль: `protocol/proto`; COMMON.
+Stage: E02. Role: Protocol Engineer. Module and applicability: `protocol/proto`; COMMON.
 
-Зависимости: E02-01.semantic_descriptors, E02-05.actions_model, E02-08.block_metadata, E02-10.closed_profiles, G.E01.
+Dependencies: E02-01.semantic_descriptors, E02-05.actions_model, E02-08.block_metadata, E02-10.closed_profiles, G.E01.
 
-Результат: Воспроизводимые schema/bindings и structural validators: required presence, oneof, lengths, unknown values определены
+Output: Generate reproducible schemas and bindings. Define structural validation for required field presence, oneof fields, lengths, and unknown values.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-01. AC: AC-DAT-01-01, AC-DAT-01-02.
 
-Контракт: MSG, CONTROL. Inputs: E02-01.semantic_descriptors → identities; E02-05.actions_model → action schema; E02-08.block_metadata → block schema; E02-10.closed_profiles → variants.
+Contracts: MSG, CONTROL. Inputs: E02-01.semantic_descriptors provides identities; E02-05.actions_model provides action schemas; E02-08.block_metadata provides block schemas; E02-10.closed_profiles provides variants.
 
-## E02-02.codec — Bounded typed RecordFragment/tree/blob codec, streaming manifests и exact transport layout/headers/digests
+## E02-02.codec — Implement bounded fragment encoding and exact transport bytes
 
 <!-- extractor-task:E02-02.codec -->
 
-Этап: E02. Роль: Protocol Engineer. Применимость/модуль: `protocol/codec`; COMMON.
+Stage: E02. Role: Protocol Engineer. Module and applicability: `protocol/codec`; COMMON.
 
-Зависимости: E02-02.schemas, G.E01.
+Dependencies: E02-02.schemas, G.E01.
 
-Результат: Bounded typed RecordFragment/tree/blob codec, streaming manifests и exact transport layout/headers/digests; полная Envelope не сериализуется одним message, крупное поле также дробится
+Output: Implement the typed RecordFragment, tree, and blob codec with bounded memory, streaming manifests, and exact transport layout, headers, and digests. Do not serialize a complete Envelope as one message. Split large individual fields as well.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-04. AC: AC-DLV-04-01, AC-DLV-04-02, AC-DLV-04-04, AC-DLV-04-05, AC-DLV-04-06, AC-DLV-04-07, AC-DLV-04-08, AC-DLV-04-09, AC-DLV-04-12.
 
-Контракт: CONTROL, DELIVERY. Inputs: E02-02.schemas → typed messages/validators.
+Contracts: CONTROL, DELIVERY. Inputs: E02-02.schemas provides typed messages and validators.
 
-## E02-03.lifecycle_validator — Тестовый lifecycle automaton: reordered Applied/Removed/Status, revision conflicts и reinclusion имеют однозна
+## E02-03.lifecycle_validator — Validate event order, revisions, and block reinclusion
 
 <!-- extractor-task:E02-03.lifecycle_validator -->
 
-Этап: E02. Роль: QA / Engineer. Применимость/модуль: `test/lifecycle_validator`; ETH/BSC/POLY.
+Stage: E02. Role: QA / Engineer. Module and applicability: `test/lifecycle_validator`; ETH/BSC/POLY.
 
-Зависимости: E02-01.semantic_descriptors, E02-02.schemas, G.E01.
+Dependencies: E02-01.semantic_descriptors, E02-02.schemas, G.E01.
 
-Результат: Тестовый lifecycle automaton: reordered Applied/Removed/Status, revision conflicts и reinclusion имеют однозначный результат; production consumer не создаётся
+Output: Build the test lifecycle state machine. Define unambiguous results for reordered Applied, Removed, and Status events, revision conflicts, and reinclusion. Do not create a production consumer.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-LIF-03. AC: AC-LIF-03-01, AC-LIF-03-02, AC-LIF-03-03.
 
-Контракт: MSG, SEM. Inputs: E02-02.schemas → lifecycle messages; E02-01.semantic_descriptors → identity invariants.
+Contracts: MSG, SEM. Inputs: E02-02.schemas provides lifecycle messages; E02-01.semantic_descriptors provides identity invariants.
 
-## E02-04.compatibility — Read/replay/new-write capability matrix: immutable pending поддержан либо transition отвергнут
+## E02-04.compatibility — Define read, replay, and write compatibility checks
 
 <!-- extractor-task:E02-04.compatibility -->
 
-Этап: E02. Роль: Protocol Engineer. Применимость/модуль: `protocol/compatibility`; COMMON.
+Stage: E02. Role: Protocol Engineer. Module and applicability: `protocol/compatibility`; COMMON.
 
-Зависимости: E02-02.codec, G.E01.
+Dependencies: E02-02.codec, G.E01.
 
-Результат: Read/replay/new-write capability matrix: immutable pending поддержан либо transition отвергнут; drain не разрешает несовместимый remaining metadata format
+Output: Define the read, replay, and new-write capability matrix. Support immutable pending data or reject the transition. A completed drain does not make an incompatible format of retained metadata acceptable.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: CONTROL, DELIVERY, CONFIG. Inputs: E02-02.codec → encoding versions.
+Contracts: CONTROL, DELIVERY, CONFIG. Inputs: E02-02.codec provides encoding versions.
 
-## E03-01.producer_store — Producer state machine INTENT/STAGING/READY/SEALED/ACKED_CLEANUP/outbox
+## E03-01.producer_store — Implement the durable producer state machine
 
 <!-- extractor-task:E03-01.producer_store -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `core/journal/producer`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `core/journal/producer`; COMMON.
 
-Зависимости: E02-01.semantic_descriptors, E02-02.codec, G.E02.
+Dependencies: E02-01.semantic_descriptors, E02-02.codec, G.E02.
 
-Результат: Producer state machine INTENT/STAGING/READY/SEALED/ACKED_CLEANUP/outbox; closing commits атомарны, attempt не меняет semantic identity
+Output: Implement INTENT, STAGING, READY, SEALED, ACKED_CLEANUP, and outbox states. Make closing commits atomic. A delivery attempt must not change semantic identity.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-08, REQ-DLV-02. AC: AC-CAP-08-01, AC-DLV-02-01, AC-DLV-02-02, AC-DLV-02-03, AC-DLV-02-04, AC-DLV-02-05.
 
-Контракт: DELIVERY, CONTROL. Inputs: E02-02.codec → immutable bytes; E02-01.semantic_descriptors → descriptors.
+Contracts: DELIVERY, CONTROL. Inputs: E02-02.codec provides immutable bytes; E02-01.semantic_descriptors provides descriptors.
 
-## E03-01.gateway_store — PREPARING/reservation/RECEIVING/CLOSED/ACKED/RELEASING store
+## E03-01.gateway_store — Implement the durable Gateway state machine
 
 <!-- extractor-task:E03-01.gateway_store -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `gateway/journal`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `gateway/journal`; COMMON.
 
-Зависимости: E03-01.producer_store, G.E02.
+Dependencies: E03-01.producer_store, G.E02.
 
-Результат: PREPARING/reservation/RECEIVING/CLOSED/ACKED/RELEASING store; reservation retry не выделяет новую sequence
+Output: Implement PREPARING, reservation, RECEIVING, CLOSED, ACKED, and RELEASING states. Retrying a reservation must not allocate a new sequence.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-03. AC: AC-DLV-03-04.
 
-Контракт: DELIVERY, CONTROL. Inputs: E03-01.producer_store → batch/plan interface.
+Contracts: DELIVERY, CONTROL. Inputs: E03-01.producer_store provides the batch and plan interface.
 
-## E03-02.rpc_streaming — Bounded chunk RPC и IMPORT_SEALED
+## E03-02.rpc_streaming — Stream bounded RPC chunks and validate sealed imports
 
 <!-- extractor-task:E03-02.rpc_streaming -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `gateway/ingest`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `gateway/ingest`; COMMON.
 
-Зависимости: E03-01.gateway_store, E03-01.producer_store, G.E02.
+Dependencies: E03-01.gateway_store, E03-01.producer_store, G.E02.
 
-Результат: Bounded chunk RPC и IMPORT_SEALED; offset/conflict/manifest validation предшествуют CLOSED
+Output: Implement bounded chunk RPC and IMPORT_SEALED. Validate offsets, conflicts, and manifests before entering CLOSED.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-03. AC: AC-DLV-03-01, AC-DLV-03-02.
 
-Контракт: CONTROL, DELIVERY. Inputs: E03-01.gateway_store → Gateway transitions; E03-01.producer_store → producer transitions.
+Contracts: CONTROL, DELIVERY. Inputs: E03-01.gateway_store provides Gateway transitions; E03-01.producer_store provides producer transitions.
 
-## E03-02.fencing — Session/admission/publisher fencing: stale RPC/callback не создаёт state после barrier или Release
+## E03-02.fencing — Reject stale sessions, RPCs, and callbacks
 
 <!-- extractor-task:E03-02.fencing -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `gateway/session`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `gateway/session`; COMMON.
 
-Зависимости: E03-02.rpc_streaming, G.E02.
+Dependencies: E03-02.rpc_streaming, G.E02.
 
-Результат: Session/admission/publisher fencing: stale RPC/callback не создаёт state после barrier или Release
+Output: Implement session, admission, and publisher fencing. Stale RPCs and callbacks must not create state after a barrier or Release.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-08, REQ-OPS-05. AC: AC-DLV-08-01, AC-DLV-08-02, AC-OPS-05-01.
 
-Контракт: CONTROL, DELIVERY. Inputs: E03-02.rpc_streaming → mutating RPC boundary.
+Contracts: CONTROL, DELIVERY. Inputs: E03-02.rpc_streaming provides the mutating RPC boundary.
 
-## E03-03.destination — Pre-plan binding и online account/stream/route plus exact D77 metadata validation
+## E03-03.destination — Validate the bound NATS destination before publishing
 
 <!-- extractor-task:E03-03.destination -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `gateway/destination`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `gateway/destination`; COMMON.
 
-Зависимости: E02-02.codec, E03-02.fencing, G.E02.
+Dependencies: E02-02.codec, E03-02.fencing, G.E02.
 
-Результат: Pre-plan binding и online account/stream/route plus exact D77 metadata validation; missing/mismatch не перенаправляет pending
+Output: Bind the destination before creating the publication plan. Validate the live account, stream, routing, and exact D77 metadata. Missing or mismatched settings must not redirect pending data.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-09, REQ-OPS-06. AC: AC-DLV-09-01, AC-DLV-09-02, AC-DLV-09-03, AC-DLV-09-04, AC-DLV-09-05, AC-OPS-06-01, AC-OPS-06-03.
 
-Контракт: CONTROL, CONFIG, BOOT. Inputs: E03-02.fencing → authenticated owner; E02-02.codec → binding digest.
+Contracts: CONTROL, CONFIG, BOOT. Inputs: E03-02.fencing provides the authenticated owner; E02-02.codec provides the binding digest.
 
-## E03-03.publisher — NATS PubAck → durable NATS_ACKED → IngestAck одного manifest/plan/destination
+## E03-03.publisher — Persist full-batch NATS acknowledgments
 
 <!-- extractor-task:E03-03.publisher -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `gateway/publisher`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `gateway/publisher`; COMMON.
 
-Зависимости: E03-02.rpc_streaming, E03-03.destination, G.E02.
+Dependencies: E03-02.rpc_streaming, E03-03.destination, G.E02.
 
-Результат: NATS PubAck → durable NATS_ACKED → IngestAck одного manifest/plan/destination; partial ACK не завершает batch
+Output: Implement the sequence from NATS PubAck to durable NATS_ACKED and then IngestAck for one manifest, plan, and destination. A partial acknowledgment must not complete a batch.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-04, REQ-DLV-05. AC: AC-DLV-04-03, AC-DLV-04-10, AC-DLV-05-01, AC-DLV-05-02, AC-DLV-05-03.
 
-Контракт: DELIVERY, CONTROL, BOOT. Inputs: E03-03.destination → verified target; E03-02.rpc_streaming → CLOSED frames.
+Contracts: DELIVERY, CONTROL, BOOT. Inputs: E03-03.destination provides the verified destination; E03-02.rpc_streaming provides CLOSED frames.
 
-## E03-01.cleanup — Ordered Release/RecoveryRelease/retired baseline обеих сторон, bounded RELEASING cleanup
+## E03-01.cleanup — Release acknowledged data in a recoverable order
 
 <!-- extractor-task:E03-01.cleanup -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `core/delivery/release`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `core/delivery/release`; COMMON.
 
-Зависимости: E03-02.fencing, E03-03.publisher, G.E02.
+Dependencies: E03-02.fencing, E03-03.publisher, G.E02.
 
-Результат: Ordered Release/RecoveryRelease/retired baseline обеих сторон, bounded RELEASING cleanup; ACKed payload не нужен после Gateway loss
+Output: Implement ordered Release and RecoveryRelease, retired baselines on both sides, and bounded RELEASING cleanup. Recovery after Gateway loss must not require payloads that were already acknowledged.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-06. AC: AC-DLV-06-01, AC-DLV-06-02, AC-DLV-06-03, AC-DLV-06-04.
 
-Контракт: DELIVERY, CONTROL. Inputs: E03-03.publisher → IngestAck; E03-02.fencing → barrier.
+Contracts: DELIVERY, CONTROL. Inputs: E03-03.publisher provides IngestAck; E03-02.fencing provides the barrier.
 
-## E03-03.maintenance — Seal/Switch/Resume, D77 target metadata checks и idempotent committed receipt при NATS outage
+## E03-03.maintenance — Implement destination changes and maintenance recovery
 
 <!-- extractor-task:E03-03.maintenance -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `core/delivery/maintenance`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `core/delivery/maintenance`; COMMON.
 
-Зависимости: E03-01.cleanup, E03-02.fencing, E03-03.destination, G.E02.
+Dependencies: E03-01.cleanup, E03-02.fencing, E03-03.destination, G.E02.
 
-Результат: Seal/Switch/Resume, D77 target metadata checks и idempotent committed receipt при NATS outage; MAINTENANCE recovery от заданного quiesced producer, без proof native quiescence
+Output: Implement Seal, Switch, and Resume, D77 destination metadata checks, and an idempotent committed receipt during a NATS outage. Test MAINTENANCE recovery from a producer already given as quiesced. Proving native quiescence is outside this task.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-09, REQ-DLV-11. AC: AC-DLV-09-06, AC-DLV-09-07, AC-DLV-09-08, AC-DLV-11-02, AC-DLV-11-04, AC-DLV-11-05, AC-DLV-11-06, AC-DLV-11-07.
 
-Контракт: DELIVERY, CONTROL. Inputs: E03-01.cleanup → empty delivery frontier; E03-03.destination → binding; E03-02.fencing → session barrier.
+Contracts: DELIVERY, CONTROL. Inputs: E03-01.cleanup provides an empty delivery frontier; E03-03.destination provides the binding; E03-02.fencing provides the session barrier.
 
-## E03-04.pressure_errors — Transient/config/poison/ENOSPC behavior и bounded queues
+## E03-04.pressure_errors — Handle backpressure and delivery failures
 
 <!-- extractor-task:E03-04.pressure_errors -->
 
-Этап: E03. Роль: Protocol Engineer. Применимость/модуль: `core/delivery/errors`; COMMON.
+Stage: E03. Role: Protocol Engineer. Module and applicability: `core/delivery/errors`; COMMON.
 
-Зависимости: E03-01.cleanup, E03-03.publisher, G.E02.
+Dependencies: E03-01.cleanup, E03-03.publisher, G.E02.
 
-Результат: Transient/config/poison/ENOSPC behavior и bounded queues; pending без TTL/квоты, local fatal и remote outage различаются
+Output: Define transient, configuration, poison-record, and ENOSPC behavior with bounded queues. Pending data has no TTL or quota. Distinguish fatal local failures from remote outages.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-13. AC: AC-DLV-13-01, AC-DLV-13-02, AC-DLV-13-04, AC-DLV-13-05.
 
-Контракт: DELIVERY, CONFIG. Inputs: E03-03.publisher → retry points; E03-01.cleanup → cleanup points.
+Contracts: DELIVERY, CONFIG. Inputs: E03-03.publisher provides retry points; E03-01.cleanup provides cleanup points.
 
-## E03-05.recovery_matrix — Delivery-only fault evidence от заданного durable INTENT/READY
+## E03-05.recovery_matrix — Verify delivery recovery under failures
 
 <!-- extractor-task:E03-05.recovery_matrix -->
 
-Этап: E03. Роль: QA / Engineer. Применимость/модуль: `test/delivery_faults`; COMMON.
+Stage: E03. Role: QA / Engineer. Module and applicability: `test/delivery_faults`; COMMON.
 
-Зависимости: E02-04.compatibility, E03-03.maintenance, E03-04.pressure_errors, G.E02.
+Dependencies: E02-04.compatibility, E03-03.maintenance, E03-04.pressure_errors, G.E02.
 
-Результат: Delivery-only fault evidence от заданного durable INTENT/READY; Gateway loss/late RPC/partial cleanup проверены, full REC-T01 не присваивается
+Output: Collect delivery-only failure evidence from a given durable INTENT or READY state. Test Gateway loss, late RPCs, and partial cleanup. Do not claim full REC-T01 coverage.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-01, REQ-DLV-03, REQ-DLV-04, REQ-DLV-07, REQ-DLV-14. AC: AC-DLV-01-01, AC-DLV-01-02, AC-DLV-03-03, AC-DLV-04-11, AC-DLV-07-01, AC-DLV-07-02, AC-DLV-07-04, AC-DLV-14-01.
 
-Контракт: DELIVERY, CONTROL, EVID. Inputs: E03-03.maintenance → transition machine; E03-04.pressure_errors → error states; E02-04.compatibility → capability matrix.
+Contracts: DELIVERY, CONTROL, EVID. Inputs: E03-03.maintenance provides the transition state machine; E03-04.pressure_errors provides error states; E02-04.compatibility provides the capability matrix.
 
-## E03-11.block_lifecycle — NATS smoke corpus block/tx/lifecycle/empty с parts/PubAck
+## E03-11.block_lifecycle — Verify block and lifecycle delivery through NATS
 
 <!-- extractor-task:E03-11.block_lifecycle -->
 
-Этап: E03. Роль: QA / Engineer. Применимость/модуль: `test/nats_smoke`; ETH/BSC/POLY.
+Stage: E03. Role: QA / Engineer. Module and applicability: `test/nats_smoke`; ETH/BSC/POLY.
 
-Зависимости: E01-03.smoke_corpus, E02-03.lifecycle_validator, E03-03.publisher, G.E02.
+Dependencies: E01-03.smoke_corpus, E02-03.lifecycle_validator, E03-03.publisher, G.E02.
 
-Результат: NATS smoke corpus block/tx/lifecycle/empty с parts/PubAck; не verifier полного блокчейна
+Output: Run a NATS smoke corpus for blocks, transactions, lifecycle events, and empty blocks, including parts and PubAck. This is not a verifier for the entire blockchain.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: MSG, DELIVERY, EVID. Inputs: E03-03.publisher → publish path; E01-03.smoke_corpus → native inputs; E02-03.lifecycle_validator → expected lifecycle.
+Contracts: MSG, DELIVERY, EVID. Inputs: E03-03.publisher provides the publication path; E01-03.smoke_corpus provides native inputs; E02-03.lifecycle_validator provides expected lifecycle results.
 
-## E04-01.calls — Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed
+## E04-01.calls — Capture complete calls, execution order, and rollback results
 
 <!-- extractor-task:E04-01.calls -->
 
-Этап: E04. Роль: Protocol Engineer. Применимость/модуль: `core/normalization/calls`; ETH/BSC/POLY.
+Stage: E04. Role: Protocol Engineer. Module and applicability: `core/normalization/calls`; ETH/BSC/POLY.
 
-Зависимости: E01-05.type_paths, E02-02.schemas, E02-05.actions_model, G.E03.
+Dependencies: E01-05.type_paths, E02-02.schemas, E02-05.actions_model, G.E03.
 
-Результат: Полное дерево calls, общий порядок с actions, native scope mapping и outcome/committed; D81 отличает attempted/локально успешный created_address от конечного existence; успешный child не переживает ancestor rollback
+Output: Capture the complete call tree, shared order with actions, native scope mapping, and outcome and committed fields. Apply D81: distinguish an attempted address and a locally successful created_address from final account existence. A successful child call does not survive an ancestor rollback.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-04, REQ-DAT-05. AC: AC-DAT-04-01, AC-DAT-04-02, AC-DAT-04-03, AC-DAT-05-01, AC-DAT-05-02, AC-DAT-05-04, AC-DAT-05-05.
 
-Контракт: MSG, SEM. Inputs: E02-02.schemas → call variants; E02-05.actions_model → order/scopes; E01-05.type_paths → native paths.
+Contracts: MSG, SEM. Inputs: E02-02.schemas provides call variants; E02-05.actions_model provides order and scopes; E01-05.type_paths provides native paths.
 
-## E04-01.receipts — Native receipt consensus/storage registry, D76 bounded byte-equivalent writer, log/create/network-details proj
+## E04-01.receipts — Preserve exact native receipt bytes and projections
 
 <!-- extractor-task:E04-01.receipts -->
 
-Этап: E04. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/receipts`; ETH/BSC/POLY.
+Stage: E04. Role: Native Engineer. Module and applicability: `adapters/<client>/receipts`; ETH/BSC/POLY.
 
-Зависимости: E01-05.type_paths, E02-02.codec, E02-10.closed_profiles, G.E03.
+Dependencies: E01-05.type_paths, E02-02.codec, E02-10.closed_profiles, G.E03.
 
-Результат: Native receipt consensus/storage registry, D76 bounded byte-equivalent writer, log/create/network-details projection; source и derived значения не подменяют друг друга
+Output: Implement the native consensus and storage receipt registry, the D76 bounded writer with byte-identical output, and log, contract-creation, and network-detail projections. Do not substitute derived values for source values or the reverse.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-09, REQ-DAT-02, REQ-DAT-09. AC: AC-CAP-09-01, AC-DAT-02-01, AC-DAT-02-02, AC-DAT-02-04, AC-DAT-02-05, AC-DAT-09-01, AC-DAT-09-02, AC-DAT-09-04.
 
-Контракт: MSG, SEM, TYPES. Inputs: E01-05.type_paths → receipt origins; E02-10.closed_profiles → receipt registry; E02-02.codec → D73 fragments/spool.
+Contracts: MSG, SEM, TYPES. Inputs: E01-05.type_paths provides receipt origins; E02-10.closed_profiles provides the receipt registry; E02-02.codec provides D73 fragments and disk spooling.
 
-## E04-01.authorization — Исходные authorization tuples, включая invalid/duplicate, сохранены
+## E04-01.authorization — Preserve every source authorization tuple
 
 <!-- extractor-task:E04-01.authorization -->
 
-Этап: E04. Роль: Protocol Engineer. Применимость/модуль: `core/normalization/authorization`; ETH/BSC/POLY по native applicability.
+Stage: E04. Role: Protocol Engineer. Module and applicability: `core/normalization/authorization`; ETH/BSC/POLY according to native applicability.
 
-Зависимости: E02-10.closed_profiles, E04-01.receipts, G.E03.
+Dependencies: E02-10.closed_profiles, E04-01.receipts, G.E03.
 
-Результат: Исходные authorization tuples, включая invalid/duplicate, сохранены; validation внешней tx не фильтрует tuples
+Output: Preserve source authorization tuples, including invalid and duplicate tuples. Validation of the outer transaction must not filter them.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-03. AC: AC-DAT-03-01.
 
-Контракт: TYPES, SEM. Inputs: E04-01.receipts → native outcome; E02-10.closed_profiles → source widths.
+Contracts: TYPES, SEM. Inputs: E04-01.receipts provides native outcomes; E02-10.closed_profiles provides source field widths.
 
-## E04-01.block_record — Native BlockApplied projection: header/RLP/count/optional presence и source timestamp precision точны для empt
+## E04-01.block_record — Project exact native block metadata
 
 <!-- extractor-task:E04-01.block_record -->
 
-Этап: E04. Роль: Protocol Engineer. Применимость/модуль: `core/normalization/block`; ETH/BSC/POLY.
+Stage: E04. Role: Protocol Engineer. Module and applicability: `core/normalization/block`; ETH/BSC/POLY.
 
-Зависимости: E01-05.type_paths, E02-08.block_metadata, G.E03.
+Dependencies: E01-05.type_paths, E02-08.block_metadata, G.E03.
 
-Результат: Native BlockApplied projection: header/RLP/count/optional presence и source timestamp precision точны для empty и nonempty blocks
+Output: Implement BlockApplied from native data with exact headers, RLP, counts, optional field presence, and source timestamp precision for both empty and nonempty blocks.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-10. AC: AC-DAT-10-01.
 
-Контракт: MSG, SEM. Inputs: E02-08.block_metadata → typed block schema; E01-05.type_paths → source header variants.
+Contracts: MSG, SEM. Inputs: E02-08.block_metadata provides the typed block schema; E01-05.type_paths provides source header variants.
 
-## E04-03.state_diff — Transaction-boundary existence/balance/nonce/code/storage before/after
+## E04-03.state_diff — Capture exact transaction-boundary state changes
 
 <!-- extractor-task:E04-03.state_diff -->
 
-Этап: E04. Роль: Protocol Engineer. Применимость/модуль: `core/normalization/state`; ETH/BSC/POLY.
+Stage: E04. Role: Protocol Engineer. Module and applicability: `core/normalization/state`; ETH/BSC/POLY.
 
-Зависимости: E01-02.owned_capture, E04-01.calls, G.E03.
+Dependencies: E01-02.owned_capture, E04-01.calls, G.E03.
 
-Результат: Transaction-boundary existence/balance/nonce/code/storage before/after; rollback/empty account/reset корректны
+Output: Capture account existence, balance, nonce, code, and storage before and after the transaction. Handle rollbacks, empty accounts, and resets correctly.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-05, REQ-DAT-07. AC: AC-CAP-05-02, AC-DAT-07-01, AC-DAT-07-02.
 
-Контракт: MSG, SEM. Inputs: E04-01.calls → scopes; E01-02.owned_capture → immutable snapshots.
+Contracts: MSG, SEM. Inputs: E04-01.calls provides scopes; E01-02.owned_capture provides immutable snapshots.
 
-## E04-01.selfdestruct — SELFDESTRUCT action, monetary movement и deletion раздельны при zero/self-beneficiary/revert/fork cases
+## E04-01.selfdestruct — Separate SELFDESTRUCT actions, transfers, and deletion
 
 <!-- extractor-task:E04-01.selfdestruct -->
 
-Этап: E04. Роль: Protocol Engineer. Применимость/модуль: `core/normalization/selfdestruct`; ETH/BSC/POLY.
+Stage: E04. Role: Protocol Engineer. Module and applicability: `core/normalization/selfdestruct`; ETH/BSC/POLY.
 
-Зависимости: E04-01.calls, E04-03.state_diff, G.E03.
+Dependencies: E04-01.calls, E04-03.state_diff, G.E03.
 
-Результат: SELFDESTRUCT action, monetary movement и deletion раздельны при zero/self-beneficiary/revert/fork cases
+Output: Keep the SELFDESTRUCT action, monetary movement, and account deletion separate. Cover zero value, self-beneficiary, revert, and fork-specific cases.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-06. AC: AC-DAT-06-01, AC-DAT-06-02, AC-DAT-06-03, AC-DAT-06-04.
 
-Контракт: SEM, MSG. Inputs: E04-03.state_diff → boundary diff; E04-01.calls → call scopes.
+Contracts: SEM, MSG. Inputs: E04-03.state_diff provides boundary state changes; E04-01.calls provides call scopes.
 
-## E04-03.balance_actions — Причинные денежные движения, fees/refunds/credits
+## E04-03.balance_actions — Capture all monetary actions with stable causes and IDs
 
 <!-- extractor-task:E04-03.balance_actions -->
 
-Этап: E04. Роль: Protocol Engineer. Применимость/модуль: `core/normalization/balance`; ETH/BSC/POLY.
+Stage: E04. Role: Protocol Engineer. Module and applicability: `core/normalization/balance`; ETH/BSC/POLY.
 
-Зависимости: E02-05.actions_model, E04-01.receipts, E04-03.state_diff, G.E03.
+Dependencies: E02-05.actions_model, E04-01.receipts, E04-03.state_diff, G.E03.
 
-Результат: Причинные денежные движения, fees/refunds/credits; native scope и стабильные order/IDs при capture recovery; net-zero actions не исчезают, summary не удваивает effects
+Output: Capture monetary movements with their causes, including fee purchases, refunds, and recipient credits. Preserve native scopes and stable order and IDs during capture recovery. Keep actions whose net effect is zero, and do not count summary amounts twice.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DAT-05, REQ-DAT-08. AC: AC-DAT-05-06, AC-DAT-05-07, AC-DAT-08-01, AC-DAT-08-02, AC-DAT-08-03.
 
-Контракт: SEM, MSG. Inputs: E04-03.state_diff → account delta; E04-01.receipts → fee summary; E02-05.actions_model → action schema.
+Contracts: SEM, MSG. Inputs: E04-03.state_diff provides account deltas; E04-01.receipts provides fee summaries; E02-05.actions_model provides the action schema.
 
-## E04-04.import_pressure — Полный import path и large-field/slow-worker behavior
+## E04-04.import_pressure — Verify capture under large inputs and slow workers
 
 <!-- extractor-task:E04-04.import_pressure -->
 
-Этап: E04. Роль: QA / Engineer. Применимость/модуль: `test/native_import`; ETH/BSC/POLY.
+Stage: E04. Role: QA / Engineer. Module and applicability: `test/native_import`; ETH/BSC/POLY.
 
-Зависимости: E01-02.owned_capture, E04-01.block_record, E04-01.selfdestruct, E04-03.balance_actions, G.E03.
+Dependencies: E01-02.owned_capture, E04-01.block_record, E04-01.selfdestruct, E04-03.balance_actions, G.E03.
 
-Результат: Полный import path и large-field/slow-worker behavior; native results не меняются, collector memory bounded, системные scopes не смешаны
+Output: Test the full import path with large fields and slow workers. Native execution results must stay unchanged, collector memory must stay bounded, and system scopes must remain distinct.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-06, REQ-SCP-04. AC: AC-SCP-04-01, AC-SCP-04-02, AC-CAP-06-01.
 
-Контракт: NATIVE, SEM, EVID. Inputs: E04-03.balance_actions → full effects; E04-01.selfdestruct → action semantics; E04-01.block_record → full block projection; E01-02.owned_capture → safe-point seam.
+Contracts: NATIVE, SEM, EVID. Inputs: E04-03.balance_actions provides complete effects; E04-01.selfdestruct provides action semantics; E04-01.block_record provides full block projections; E01-02.owned_capture provides the safe-point interface.
 
-## E04-02.optional_scope — Scope declaration: default OFF без потери native tx effects
+## E04-02.optional_scope — Declare and test optional capture scopes
 
 <!-- extractor-task:E04-02.optional_scope -->
 
-Этап: E04. Роль: Protocol Engineer. Применимость/модуль: `protocol/optional_scope`; ETH/BSC/POLY.
+Stage: E04. Role: Protocol Engineer. Module and applicability: `protocol/optional_scope`; ETH/BSC/POLY.
 
-Зависимости: E04-03.balance_actions, G.E03.
+Dependencies: E04-03.balance_actions, G.E03.
 
-Результат: Scope declaration: default OFF без потери native tx effects; enabled outside-tx/legacy record только с объявленными typed fixtures
+Output: Verify the default OFF setting without losing required native transaction effects. Enable outside-transaction or legacy records only with explicitly declared typed fixtures.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-SCP-05. AC: AC-SCP-05-01, AC-SCP-05-02.
 
-Контракт: MSG, TYPES, SEM. Inputs: E04-03.balance_actions → обязательный tx scope.
+Contracts: MSG, TYPES, SEM. Inputs: E04-03.balance_actions defines the required transaction scope.
 
-## E05-01.registry — Durable activation/revision registry и native decision mirror
+## E05-01.registry — Persist activation, revision, and native decision state
 
 <!-- extractor-task:E05-01.registry -->
 
-Этап: E05. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/lifecycle_registry`; ETH/BSC/POLY.
+Stage: E05. Role: Native Engineer. Module and applicability: `adapters/<client>/lifecycle_registry`; ETH/BSC/POLY.
 
-Зависимости: E01-02.lifecycle_seams, E02-03.lifecycle_validator, G.E04.
+Dependencies: E01-02.lifecycle_seams, E02-03.lifecycle_validator, G.E04.
 
-Результат: Durable activation/revision registry и native decision mirror; speculative corpus не становится Applied, READY Applied остаётся отменяемым
+Output: Implement the durable activation and revision registry and the native decision mirror. Speculative capture data must not become Applied. A READY Applied event must remain reversible.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-07, REQ-LIF-01. AC: AC-CAP-07-04, AC-CAP-07-05, AC-LIF-01-01, AC-LIF-01-02.
 
-Контракт: NATIVE, MSG. Inputs: E02-03.lifecycle_validator → semantic oracle; E01-02.lifecycle_seams → native callers.
+Contracts: NATIVE, MSG. Inputs: E02-03.lifecycle_validator provides the semantic test oracle; E01-02.lifecycle_seams provides native callers.
 
-## E05-01.eth_finality — Typed native safe/finalized observations, setter/restart/no-new-block semantics
+## E05-01.eth_finality — Capture authoritative Ethereum finality observations
 
 <!-- extractor-task:E05-01.eth_finality -->
 
-Этап: E05. Роль: Native Engineer. Применимость/модуль: `adapters/geth/finality`; ETH.
+Stage: E05. Role: Native Engineer. Module and applicability: `adapters/geth/finality`; ETH.
 
-Зависимости: E01-02.lifecycle_seams, E05-01.registry, G.E04.
+Dependencies: E01-02.lifecycle_seams, E05-01.registry, G.E04.
 
-Результат: Typed native safe/finalized observations, setter/restart/no-new-block semantics; GC anchor только authoritative finalized ancestry
+Output: Capture typed native safe and finalized observations. Cover setters, restarts, and changes without a new block. Use only authoritative finalized ancestry as the GC anchor.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-LIF-05. AC: AC-LIF-05-01, AC-LIF-05-04.
 
-Контракт: SEM, NATIVE. Inputs: E05-01.registry → activation refs; E01-02.lifecycle_seams → native setter paths.
+Contracts: SEM, NATIVE. Inputs: E05-01.registry provides activation references; E01-02.lifecycle_seams provides native setter paths.
 
-## E05-01.bsc_finality — Early VotePool/header-attested evidence раздельны
+## E05-01.bsc_finality — Separate early and header-attested BSC finality
 
 <!-- extractor-task:E05-01.bsc_finality -->
 
-Этап: E05. Роль: Native Engineer. Применимость/модуль: `adapters/bsc/finality`; BSC.
+Stage: E05. Role: Native Engineer. Module and applicability: `adapters/bsc/finality`; BSC.
 
-Зависимости: E01-02.lifecycle_seams, E05-01.registry, G.E04.
+Dependencies: E01-02.lifecycle_seams, E05-01.registry, G.E04.
 
-Результат: Early VotePool/header-attested evidence раздельны; GC допускает только установленный контрактом header Source
+Output: Keep early VotePool evidence separate from finality attested in block headers. Allow GC only from the header Source defined by the contract.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-LIF-06. AC: AC-LIF-06-01, AC-LIF-06-02, AC-LIF-06-03.
 
-Контракт: SEM, NATIVE. Inputs: E05-01.registry → activation refs; E01-02.lifecycle_seams → native finality paths.
+Contracts: SEM, NATIVE. Inputs: E05-01.registry provides activation references; E01-02.lifecycle_seams provides native finality paths.
 
-## E05-01.polygon_observer — Native Polygon statuses и L1-finalized checkpoint evidence с D80 sources_binding_digest, закреплённым за obser
+## E05-01.polygon_observer — Observe Polygon status and finalized L1 checkpoints
 
 <!-- extractor-task:E05-01.polygon_observer -->
 
-Этап: E05. Роль: Native Engineer. Применимость/модуль: `adapters/bor/finality_observer`; POLY.
+Stage: E05. Role: Native Engineer. Module and applicability: `adapters/bor/finality_observer`; POLY.
 
-Зависимости: E01-01.harness, E05-01.registry, G.E04.
+Dependencies: E01-01.harness, E05-01.registry, G.E04.
 
-Результат: Native Polygon statuses и L1-finalized checkpoint evidence с D80 sources_binding_digest, закреплённым за observation и неизменным при replay/config replacement; публикация tx/status не ждёт GC source, source outage не выдумывает anchor
+Output: Capture native Polygon statuses and checkpoint evidence confirmed by finalized L1 state. Bind the D80 sources_binding_digest to each observation and preserve it during replay and configuration replacement. Transaction and status publication must not wait for the GC source. A source outage must not invent an anchor.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-LIF-07. AC: AC-LIF-07-01, AC-LIF-07-02, AC-LIF-07-03, AC-LIF-07-04, AC-LIF-07-05, AC-LIF-07-06, AC-LIF-07-08, AC-LIF-07-09.
 
-Контракт: SEM, NATIVE, BOOT. Inputs: E05-01.registry → activation refs; E01-01.harness → own Polygon L1 fixture endpoints.
+Contracts: SEM, NATIVE, BOOT. Inputs: E05-01.registry provides activation references; E01-01.harness provides dedicated Polygon L1 fixture endpoints.
 
-## E05-01.activation_gc — GC decision по durable terminal/anchor, ancestry и отсутствию pending
+## E05-01.activation_gc — Release recovery state only after a valid GC decision
 
 <!-- extractor-task:E05-01.activation_gc -->
 
-Этап: E05. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/recovery_gc`; ETH/BSC/POLY.
+Stage: E05. Role: Native Engineer. Module and applicability: `adapters/<client>/recovery_gc`; ETH/BSC/POLY.
 
-Зависимости: E03-01.cleanup, E05-01.bsc_finality, E05-01.eth_finality, E05-01.polygon_observer, G.E04.
+Dependencies: E03-01.cleanup, E05-01.bsc_finality, E05-01.eth_finality, E05-01.polygon_observer, G.E04.
 
-Результат: GC decision по durable terminal/anchor, ancestry и отсутствию pending; no-anchor сохраняет pins, доказанная regression ниже принятого anchor fatal
+Output: Base GC decisions on durable terminal evidence, an accepted anchor, ancestry, and the absence of pending work. Keep pins when no anchor is available. A proven regression below an accepted anchor is fatal.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-LIF-08. AC: AC-LIF-08-01, AC-LIF-08-02, AC-LIF-08-03, AC-LIF-08-04, AC-LIF-08-05.
 
-Контракт: SEM, NATIVE. Inputs: E05-01.eth_finality → ETH evidence; E05-01.bsc_finality → BSC evidence; E05-01.polygon_observer → POLY evidence; E03-01.cleanup → delivery status.
+Contracts: SEM, NATIVE. Inputs: E05-01.eth_finality, E05-01.bsc_finality, and E05-01.polygon_observer provide network-specific evidence; E03-01.cleanup provides delivery status.
 
-## E05-02.reorg — Reorg/reapply/known-branch/reordered events evidence
+## E05-02.reorg — Verify reorgs, reapplication, and reordered lifecycle events
 
 <!-- extractor-task:E05-02.reorg -->
 
-Этап: E05. Роль: QA / Engineer. Применимость/модуль: `test/native_lifecycle`; ETH/BSC/POLY.
+Stage: E05. Role: QA / Engineer. Module and applicability: `test/native_lifecycle`; ETH/BSC/POLY.
 
-Зависимости: E05-01.activation_gc, E05-01.registry, G.E04.
+Dependencies: E05-01.activation_gc, E05-01.registry, G.E04.
 
-Результат: Reorg/reapply/known-branch/reordered events evidence; Removed создаётся для READY Applied независимо от PubAck
+Output: Collect evidence for reorgs, reapplication, known branches, and reordered events. Create Removed for a READY Applied event regardless of whether PubAck has arrived.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-08, REQ-LIF-02. AC: AC-CAP-08-02, AC-LIF-02-01.
 
-Контракт: NATIVE, MSG, SEM. Inputs: E05-01.registry → registry; E05-01.activation_gc → retained ancestry.
+Contracts: NATIVE, MSG, SEM. Inputs: E05-01.registry provides the registry; E05-01.activation_gc provides retained ancestry.
 
-## E05-03.drain — Native RECOVERY_ONLY DRAIN закрывает все obligations до seal/highwater
+## E05-03.drain — Drain native obligations without admitting new work
 
 <!-- extractor-task:E05-03.drain -->
 
-Этап: E05. Роль: Native Engineer. Применимость/модуль: `adapters/<client>/maintenance`; ETH/BSC/POLY.
+Stage: E05. Role: Native Engineer. Module and applicability: `adapters/<client>/maintenance`; ETH/BSC/POLY.
 
-Зависимости: E03-03.maintenance, E05-02.reorg, G.E04.
+Dependencies: E03-03.maintenance, E05-02.reorg, G.E04.
 
-Результат: Native RECOVERY_ONLY DRAIN закрывает все obligations до seal/highwater; retained future-GC pins допустимы, новых admissions/poll нет
+Output: Implement native RECOVERY_ONLY DRAIN. Complete all obligations before the seal and high-water mark. Pins retained for later GC are allowed. Do not admit new work or start new polling.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-10, REQ-DLV-11, REQ-DLV-12. AC: AC-DLV-10-01, AC-DLV-10-02, AC-DLV-10-03, AC-DLV-10-04, AC-DLV-11-03, AC-DLV-12-01.
 
-Контракт: NATIVE, DELIVERY, CONTROL, CONFIG. Inputs: E05-02.reorg → pending native transitions; E03-03.maintenance → delivery drain/switch.
+Contracts: NATIVE, DELIVERY, CONTROL, CONFIG. Inputs: E05-02.reorg provides pending native transitions; E03-03.maintenance provides delivery drain and destination switching.
 
-## E05-03.upgrade — Old-build drain/compatible replay/rollback matrix с retained lifecycle metadata
+## E05-03.upgrade — Verify drain, replay, and upgrade compatibility
 
 <!-- extractor-task:E05-03.upgrade -->
 
-Этап: E05. Роль: QA / Engineer. Применимость/модуль: `test/compatibility_recovery`; ETH/BSC/POLY.
+Stage: E05. Role: QA / Engineer. Module and applicability: `test/compatibility_recovery`; ETH/BSC/POLY.
 
-Зависимости: E02-04.compatibility, E05-03.drain, G.E04.
+Dependencies: E02-04.compatibility, E05-03.drain, G.E04.
 
-Результат: Old-build drain/compatible replay/rollback matrix с retained lifecycle metadata; incompatible persistent format всегда отвергнут prewrite
+Output: Test old-build drain, compatible replay, and rollback behavior with retained lifecycle metadata. Reject incompatible persistent formats before any write.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-14. AC: AC-DLV-14-02.
 
-Контракт: DELIVERY, CONFIG, NATIVE. Inputs: E05-03.drain → completed drain; E02-04.compatibility → read/write rules.
+Contracts: DELIVERY, CONFIG, NATIVE. Inputs: E05-03.drain provides a completed drain; E02-04.compatibility provides read and write rules.
 
-## E05-04.concurrent_fencing — Гонки native decisions/old worker/session/late PubAck не создают второе действие или resurrected state
+## E05-04.concurrent_fencing — Prevent duplicate actions and revived state during races
 
 <!-- extractor-task:E05-04.concurrent_fencing -->
 
-Этап: E05. Роль: QA / Engineer. Применимость/модуль: `test/native_concurrency`; ETH/BSC/POLY.
+Stage: E05. Role: QA / Engineer. Module and applicability: `test/native_concurrency`; ETH/BSC/POLY.
 
-Зависимости: E03-02.fencing, E05-02.reorg, E05-03.drain, G.E04.
+Dependencies: E03-02.fencing, E05-02.reorg, E05-03.drain, G.E04.
 
-Результат: Гонки native decisions/old worker/session/late PubAck не создают второе действие или resurrected state
+Output: Test races involving native decisions, old workers, sessions, and late PubAck responses. These races must not create a second action or revive released state.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-11. AC: AC-DLV-11-08.
 
-Контракт: NATIVE, DELIVERY, CONTROL. Inputs: E05-03.drain → mode barrier; E05-02.reorg → lifecycle races; E03-02.fencing → transport fencing.
+Contracts: NATIVE, DELIVERY, CONTROL. Inputs: E05-03.drain provides the mode barrier; E05-02.reorg provides lifecycle races; E03-02.fencing provides transport fencing.
 
-## E05-03.full_crash_matrix — Полный native→WAL→Gateway→NATS crash/reorg/finality/restart proof, включая cleanup/GC
+## E05-03.full_crash_matrix — Verify the complete native-to-NATS recovery path
 
 <!-- extractor-task:E05-03.full_crash_matrix -->
 
-Этап: E05. Роль: QA / Engineer. Применимость/модуль: `test/composed_faults`; ETH/BSC/POLY.
+Stage: E05. Role: QA / Engineer. Module and applicability: `test/composed_faults`; ETH/BSC/POLY.
 
-Зависимости: E03-05.recovery_matrix, E05-03.upgrade, E05-04.concurrent_fencing, G.E04.
+Dependencies: E03-05.recovery_matrix, E05-03.upgrade, E05-04.concurrent_fencing, G.E04.
 
-Результат: Полный native→WAL→Gateway→NATS crash/reorg/finality/restart proof, включая cleanup/GC; только здесь combined REC-T01
+Output: Prove recovery across native capture, WAL, Gateway, and NATS for crashes, reorgs, finality changes, and restarts, including cleanup and GC. Only this combined test provides full REC-T01 evidence.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-CAP-10, REQ-DLV-07, REQ-DLV-13, REQ-LIF-04, REQ-SCP-03. AC: AC-SCP-03-02, AC-CAP-10-01, AC-LIF-04-01, AC-LIF-04-02, AC-DLV-07-03, AC-DLV-13-03.
 
-Контракт: NATIVE, DELIVERY, SEM, EVID. Inputs: E05-04.concurrent_fencing → race evidence; E05-03.upgrade → version recovery; E03-05.recovery_matrix → delivery-only evidence.
+Contracts: NATIVE, DELIVERY, SEM, EVID. Inputs: E05-04.concurrent_fencing provides race evidence; E05-03.upgrade provides version recovery; E03-05.recovery_matrix provides delivery-only evidence.
 
-## E06-07.yaml — Strict role config/effective native preflight и side-effect-free check
+## E06-07.yaml — Validate strict role and native configuration
 
 <!-- extractor-task:E06-07.yaml -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `config`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `config`; ETH/BSC/POLY.
 
-Зависимости: E02-02.codec, E05-03.drain, G.E05.
+Dependencies: E02-02.codec, E05-03.drain, G.E05.
 
-Результат: Strict role config/effective native preflight и side-effect-free check; storage paths от YAML, Polygon sources_file absolute-only; только declared keys/profiles/modes, binding_file — desired descriptor
+Output: Validate strict role configuration and effective native settings before startup. Keep config check free of side effects. Resolve storage paths relative to the YAML file; require an absolute Polygon sources_file path. Accept only declared keys, profiles, and modes. Treat binding_file as the desired destination descriptor.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-01, REQ-SCP-01. AC: AC-SCP-01-01, AC-SCP-01-02, AC-OPS-01-01, AC-OPS-01-04, AC-OPS-01-05.
 
-Контракт: CONFIG, CONTROL. Inputs: E02-02.codec → descriptor parser; E05-03.drain → mode contract.
+Contracts: CONFIG, CONTROL. Inputs: E02-02.codec provides the descriptor parser; E05-03.drain provides the mode contract.
 
-## E06-13.artifact_lock — User artifact manifest: source/patch/toolchain/image/genesis identity
+## E06-13.artifact_lock — Pin and validate deployment artifacts
 
 <!-- extractor-task:E06-13.artifact_lock -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `deploy/artifacts`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `deploy/artifacts`; ETH/BSC/POLY.
 
-Зависимости: E01-01.builds, E06-07.yaml, G.E05.
+Dependencies: E01-01.builds, E06-07.yaml, G.E05.
 
-Результат: User artifact manifest: source/patch/toolchain/image/genesis identity; неправильный artifact отвергается до init
+Output: Create the user-facing artifact manifest with source, patch, toolchain, image, and genesis identities. Reject incorrect artifacts before initialization.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: BOOT, STACK. Inputs: E01-01.builds → build manifest; E06-07.yaml → profile identity.
+Contracts: BOOT, STACK. Inputs: E01-01.builds provides build manifests; E06-07.yaml provides profile identity.
 
-## E06-13.init — Idempotent phase-driven native init
+## E06-13.init — Initialize native clients safely and repeatably
 
 <!-- extractor-task:E06-13.init -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `deploy/init`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `deploy/init`; ETH/BSC/POLY.
 
-Зависимости: E06-07.yaml, E06-13.artifact_lock, G.E05.
+Dependencies: E06-07.yaml, E06-13.artifact_lock, G.E05.
 
-Результат: Idempotent phase-driven native init; повтор/partial init сохраняет keys/state и проверяет genesis/ENV_READY
+Output: Implement idempotent native initialization with explicit phases. Repeated or partial initialization must preserve keys and state and verify genesis and ENV_READY.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-03. AC: AC-OPS-03-01, AC-OPS-03-03.
 
-Контракт: BOOT. Inputs: E06-13.artifact_lock → verified artifacts; E06-07.yaml → paths/profile.
+Contracts: BOOT. Inputs: E06-13.artifact_lock provides verified artifacts; E06-07.yaml provides paths and profiles.
 
-## E06-13.topology — 11 services/14 volumes с проверяемыми backing owners
+## E06-13.topology — Verify service topology and storage ownership
 
 <!-- extractor-task:E06-13.topology -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `deploy/compose+kubernetes`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `deploy/compose+kubernetes`; ETH/BSC/POLY.
 
-Зависимости: E06-07.yaml, E06-13.init, G.E05.
+Dependencies: E06-07.yaml, E06-13.init, G.E05.
 
-Результат: 11 services/14 volumes с проверяемыми backing owners; adapter/Gateway и Polygon L1 изолированы
+Output: Verify the 11-service, 14-volume mainnet baseline and each backing-store owner. Isolate adapters, Gateways, and the dedicated Polygon L1 components. Apply the accepted profile expansion rules when adding testnets.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-02. AC: AC-OPS-02-01, AC-OPS-02-02.
 
-Контракт: TOPO, BOOT. Inputs: E06-13.init → initialized homes; E06-07.yaml → role stores.
+Contracts: TOPO, BOOT. Inputs: E06-13.init provides initialized native homes; E06-07.yaml defines role-specific stores.
 
-## E06-13.secrets — CA/SAN/EKU/role/network admission, private keys/JWT/credentials и rotation
+## E06-13.secrets — Configure trust, credentials, and secret rotation
 
 <!-- extractor-task:E06-13.secrets -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `deploy/trust`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `deploy/trust`; ETH/BSC/POLY.
 
-Зависимости: E06-07.yaml, G.E05.
+Dependencies: E06-07.yaml, G.E05.
 
-Результат: CA/SAN/EKU/role/network admission, private keys/JWT/credentials и rotation; bootstrap admin не попадает Gateway
+Output: Implement CA, SAN, EKU, role, and network admission checks; private keys, JWT secrets, credentials, and rotation. Keep bootstrap admin credentials out of the Gateway.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-05. AC: AC-OPS-05-02, AC-OPS-05-03.
 
-Контракт: BOOT, CONFIG. Inputs: E06-07.yaml → connection roles.
+Contracts: BOOT, CONFIG. Inputs: E06-07.yaml defines connection roles.
 
-## E06-13.nats_bootstrap — Создание/проверка accounts/streams/ACL и D77 identity metadata
+## E06-13.nats_bootstrap — Create and verify NATS accounts, streams, and permissions
 
 <!-- extractor-task:E06-13.nats_bootstrap -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `deploy/nats`; COMMON.
+Stage: E06. Role: DevOps. Module and applicability: `deploy/nats`; COMMON.
 
-Зависимости: E03-03.destination, E06-13.secrets, G.E05.
+Dependencies: E03-03.destination, E06-13.secrets, G.E05.
 
-Результат: Создание/проверка accounts/streams/ACL и D77 identity metadata; CREATE/read-back, отказ adoption missing keys, compatible UPDATE сохраняет посторонние keys; runtime без admin/reset
+Output: Create or verify accounts, streams, ACLs, and D77 identity metadata. Read back created settings, reject adoption when required identity keys are missing, and preserve unrelated keys during compatible updates. Runtime components must not receive admin or reset permissions.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-06. AC: AC-OPS-06-02, AC-OPS-06-04, AC-OPS-06-05, AC-OPS-06-06.
 
-Контракт: BOOT, CONTROL. Inputs: E06-13.secrets → trust material; E03-03.destination → expected binding.
+Contracts: BOOT, CONTROL. Inputs: E06-13.secrets provides trust material; E03-03.destination provides the expected binding.
 
-## E06-13.network — Port mapping/advertise/internal links, включая Bor observer→собственная supporting L1
+## E06-13.network — Verify ports, advertised addresses, and internal connections
 
 <!-- extractor-task:E06-13.network -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `deploy/network`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `deploy/network`; ETH/BSC/POLY.
 
-Зависимости: E06-13.secrets, E06-13.topology, G.E05.
+Dependencies: E06-13.secrets, E06-13.topology, G.E05.
 
-Результат: Port mapping/advertise/internal links, включая Bor observer→собственная supporting L1; наружу только P2P, localhost/чужая L1 identity отвергнуты
+Output: Verify port mappings, advertised addresses, and internal links, including the Bor observer connection to its dedicated supporting L1. Expose only P2P by default. Reject localhost as a cross-container destination and reject the wrong L1 identity.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-07. AC: AC-OPS-07-01, AC-OPS-07-02, AC-OPS-07-03.
 
-Контракт: PORTS, BOOT, TOPO. Inputs: E06-13.topology → services; E06-13.secrets → authenticated connections.
+Contracts: PORTS, BOOT, TOPO. Inputs: E06-13.topology defines services; E06-13.secrets provides authenticated connections.
 
-## E06-08.config_replace — Config replacement меняет только allowlist, применим после restart
+## E06-08.config_replace — Replace configuration without overwriting persistent state
 
 <!-- extractor-task:E06-08.config_replace -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `deploy/config_generation`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `deploy/config_generation`; ETH/BSC/POLY.
 
-Зависимости: E06-07.yaml, E06-13.init, G.E05.
+Dependencies: E06-07.yaml, E06-13.init, G.E05.
 
-Результат: Config replacement меняет только allowlist, применим после restart; immutable state/keys/genesis не перетираются
+Output: Allow configuration replacement to change only allowlisted files and apply after restart. Do not overwrite immutable state, keys, or genesis data.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-04. AC: AC-OPS-04-01, AC-OPS-04-02.
 
-Контракт: BOOT, CONFIG. Inputs: E06-13.init → phase state; E06-07.yaml → validated desired config.
+Contracts: BOOT, CONFIG. Inputs: E06-13.init provides initialization state; E06-07.yaml provides validated desired configuration.
 
-## E06-08.maintenance — Исполнимый пользовательский stop-confirm-start/drain/switch/Resume/upgrade сценарий, включая shared-volume и d
+## E06-08.maintenance — Verify the complete maintenance procedure
 
 <!-- extractor-task:E06-08.maintenance -->
 
-Этап: E06. Роль: QA / Engineer. Применимость/модуль: `test/user_maintenance`; ETH/BSC/POLY.
+Stage: E06. Role: QA / Engineer. Module and applicability: `test/user_maintenance`; ETH/BSC/POLY.
 
-Зависимости: E05-03.upgrade, E06-08.config_replace, E06-13.nats_bootstrap, E06-13.network, G.E05.
+Dependencies: E05-03.upgrade, E06-08.config_replace, E06-13.nats_bootstrap, E06-13.network, G.E05.
 
-Результат: Исполнимый пользовательский stop-confirm-start/drain/switch/Resume/upgrade сценарий, включая shared-volume и delayed-writer ошибки
+Output: Provide an executable user procedure for stop-confirm-start, drain, destination switching, Resume, and upgrades. Cover shared-volume and delayed-writer failures.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DLV-11, REQ-DLV-14, REQ-OPS-08. AC: AC-DLV-11-01, AC-DLV-14-03, AC-OPS-08-02.
 
-Контракт: BOOT, CONFIG, DELIVERY, CONTROL. Inputs: E06-08.config_replace → config generations; E06-13.network → reachable services; E06-13.nats_bootstrap → target; E05-03.upgrade → version rules.
+Contracts: BOOT, CONFIG, DELIVERY, CONTROL. Inputs: E06-08.config_replace provides configuration generations; E06-13.network provides reachable services; E06-13.nats_bootstrap provides the destination; E05-03.upgrade provides version rules.
 
-## E06-09.live_start — Clean startup/sync→H+1 и independent pending
+## E06-09.live_start — Start live capture and recover pending delivery independently
 
 <!-- extractor-task:E06-09.live_start -->
 
-Этап: E06. Роль: QA / Engineer. Применимость/модуль: `test/user_startup`; ETH/BSC/POLY.
+Stage: E06. Role: QA / Engineer. Module and applicability: `test/user_startup`; ETH/BSC/POLY.
 
-Зависимости: E06-08.config_replace, E06-13.nats_bootstrap, E06-13.network, G.E05.
+Dependencies: E06-08.config_replace, E06-13.nats_bootstrap, E06-13.network, G.E05.
 
-Результат: Clean startup/sync→H+1 и independent pending; NATS outage не блокирует safe capture, restart одной сети не требует остальных
+Output: Verify clean startup and synchronization followed by capture at H+1. Recover existing pending work independently. A NATS outage must not prevent safe capture, and restarting one network must not require restarting the others.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-08. AC: AC-OPS-08-01.
 
-Контракт: CONFIG, NATIVE, BOOT. Inputs: E06-13.network → links; E06-13.nats_bootstrap → NATS; E06-08.config_replace → effective configs.
+Contracts: CONFIG, NATIVE, BOOT. Inputs: E06-13.network provides connections; E06-13.nats_bootstrap provides NATS; E06-08.config_replace provides effective configuration.
 
-## E06-12.logs — Обязательные structured control states/errors при debug OFF
+## E06-12.logs — Report control states and failures without exposing secrets
 
 <!-- extractor-task:E06-12.logs -->
 
-Этап: E06. Роль: DevOps. Применимость/модуль: `config/control_logs`; ETH/BSC/POLY.
+Stage: E06. Role: DevOps. Module and applicability: `config/control_logs`; ETH/BSC/POLY.
 
-Зависимости: E06-08.maintenance, E06-09.live_start, G.E05.
+Dependencies: E06-08.maintenance, E06-09.live_start, G.E05.
 
-Результат: Обязательные structured control states/errors при debug OFF; secrets отсутствуют, SIGKILL не сообщает graceful STOPPED
+Output: Emit required structured control states and errors with debug logging OFF. Keep secrets out of logs. A SIGKILL termination must not be reported as a graceful STOPPED state.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-09. AC: AC-OPS-09-01, AC-OPS-09-02.
 
-Контракт: BOOT, CONFIG, DELIVERY. Inputs: E06-09.live_start → startup states; E06-08.maintenance → maintenance/error states.
+Contracts: BOOT, CONFIG, DELIVERY. Inputs: E06-09.live_start provides startup states; E06-08.maintenance provides maintenance and error states.
 
-## E06-13.clean_bootstrap — Полный user-stack reproduction evidence из чистого окружения
+## E06-13.clean_bootstrap — Reproduce the full deployment from a clean environment
 
 <!-- extractor-task:E06-13.clean_bootstrap -->
 
-Этап: E06. Роль: QA / Engineer. Применимость/модуль: `test/deployment`; ETH/BSC/POLY.
+Stage: E06. Role: QA / Engineer. Module and applicability: `test/deployment`; ETH/BSC/POLY.
 
-Зависимости: E06-12.logs, E06-13.artifact_lock, E06-13.topology, G.E05.
+Dependencies: E06-12.logs, E06-13.artifact_lock, E06-13.topology, G.E05.
 
-Результат: Полный user-stack reproduction evidence из чистого окружения; ранний harness не подменяет комплект
+Output: Collect evidence that the complete user deployment can be reproduced from a clean environment. The early test harness does not replace this deployment.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-OPS-10. AC: AC-OPS-10-02.
 
-Контракт: BOOT, TOPO, EVID. Inputs: E06-12.logs → diagnosable states; E06-13.artifact_lock → artifacts; E06-13.topology → owner map.
+Contracts: BOOT, TOPO, EVID. Inputs: E06-12.logs provides diagnostic states; E06-13.artifact_lock provides artifacts; E06-13.topology provides the ownership map.
 
-## E07-02.e2e — End-to-end native correctness/fault verdict каждой сети с независимым expected
+## E07-02.e2e — Verify end-to-end correctness and failure recovery
 
 <!-- extractor-task:E07-02.e2e -->
 
-Этап: E07. Роль: QA / Engineer. Применимость/модуль: `test/acceptance`; ETH/BSC/POLY.
+Stage: E07. Role: QA / Engineer. Module and applicability: `test/acceptance`; ETH/BSC/POLY.
 
-Зависимости: E05-03.full_crash_matrix, E06-13.clean_bootstrap, G.E06.
+Dependencies: E05-03.full_crash_matrix, E06-13.clean_bootstrap, G.E06.
 
-Результат: End-to-end native correctness/fault verdict каждой сети с независимым expected; source-only анализ не считается runtime PASS
+Output: Produce end-to-end native correctness and failure verdicts for every network profile using independent expected results. Source inspection alone is not runtime PASS.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DEV-02. AC: AC-DEV-02-01, AC-DEV-02-02, AC-DEV-02-03, AC-DEV-02-04, AC-DEV-02-05, AC-DEV-02-06, AC-DEV-02-07, AC-DEV-02-08, AC-DEV-02-09, AC-DEV-02-10.
 
-Контракт: EVID, MSG, SEM. Inputs: E05-03.full_crash_matrix → combined inputs/evidence; E06-13.clean_bootstrap → user environment.
+Contracts: EVID, MSG, SEM. Inputs: E05-03.full_crash_matrix provides combined inputs and evidence; E06-13.clean_bootstrap provides the user environment.
 
-## E07-02.scope — Trace boundary native→NATS, отсутствие лишних downstream/HA/history/performance обязательств
+## E07-02.scope — Verify the product boundary from native capture to NATS
 
 <!-- extractor-task:E07-02.scope -->
 
-Этап: E07. Роль: QA / Engineer. Применимость/модуль: `test/scope_audit`; ETH/BSC/POLY.
+Stage: E07. Role: QA / Engineer. Module and applicability: `test/scope_audit`; ETH/BSC/POLY.
 
-Зависимости: E07-02.e2e, G.E06.
+Dependencies: E07-02.e2e, G.E06.
 
-Результат: Trace boundary native→NATS, отсутствие лишних downstream/HA/history/performance обязательств; optional scope явно отделён
+Output: Trace the product boundary from native capture to NATS. Confirm that no additional downstream, high-availability, history, or performance obligations have been introduced. Keep optional scope explicit.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-SCP-02, REQ-SCP-06. AC: AC-SCP-02-01, AC-SCP-06-01.
 
-Контракт: EVID, MSG, CONFIG. Inputs: E07-02.e2e → observed product path.
+Contracts: EVID, MSG, CONFIG. Inputs: E07-02.e2e provides the observed product path.
 
-## E07-03.runbook — Проверяемый запуск/остановка/диагностика/recovery drill по фактическим states
+## E07-03.runbook — Verify operating and recovery instructions
 
 <!-- extractor-task:E07-03.runbook -->
 
-Этап: E07. Роль: Protocol Engineer. Применимость/модуль: `docs/runbook`; ETH/BSC/POLY.
+Stage: E07. Role: Protocol Engineer. Module and applicability: `docs/runbook`; ETH/BSC/POLY.
 
-Зависимости: E06-08.maintenance, E06-12.logs, E07-02.e2e, G.E06.
+Dependencies: E06-08.maintenance, E06-12.logs, E07-02.e2e, G.E06.
 
-Результат: Проверяемый запуск/остановка/диагностика/recovery drill по фактическим states; команды не требуют скрытого окружения
+Output: Verify startup, shutdown, diagnostics, and recovery drills against actual system states. Commands must not depend on an undocumented environment.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: BOOT, CONFIG, DELIVERY. Inputs: E07-02.e2e → accepted path; E06-12.logs → observable states; E06-08.maintenance → operating procedure.
+Contracts: BOOT, CONFIG, DELIVERY. Inputs: E07-02.e2e provides the accepted path; E06-12.logs provides observable states; E06-08.maintenance provides operating procedures.
 
-## E07-08.isolation — Матрица add/config/stop/restart одной сети без изменения соседних writers/stores
+## E07-08.isolation — Verify independent network configuration and operation
 
 <!-- extractor-task:E07-08.isolation -->
 
-Этап: E07. Роль: QA / Engineer. Применимость/модуль: `test/network_isolation`; ETH/BSC/POLY.
+Stage: E07. Role: QA / Engineer. Module and applicability: `test/network_isolation`; ETH/BSC/POLY.
 
-Зависимости: E07-02.e2e, G.E06.
+Dependencies: E07-02.e2e, G.E06.
 
-Результат: Матрица add/config/stop/restart одной сети без изменения соседних writers/stores; общий NATS не означает shared journal
+Output: Test adding, configuring, stopping, and restarting one network without changing another network's writers or stores. Sharing NATS must not imply sharing a journal.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: TOPO, DELIVERY, EVID. Inputs: E07-02.e2e → running acceptance topology.
+Contracts: TOPO, DELIVERY, EVID. Inputs: E07-02.e2e provides the running acceptance topology.
 
-## E07-09.nats_acceptance — Финальный NATS corpus: fields/parts/lifecycle/empty/duplicates/PubAck согласованы с native expected
+## E07-09.nats_acceptance — Validate the final records received from NATS
 
 <!-- extractor-task:E07-09.nats_acceptance -->
 
-Этап: E07. Роль: QA / Engineer. Применимость/модуль: `test/nats_reader`; ETH/BSC/POLY.
+Stage: E07. Role: QA / Engineer. Module and applicability: `test/nats_reader`; ETH/BSC/POLY.
 
-Зависимости: E07-02.e2e, E07-02.scope, G.E06.
+Dependencies: E07-02.e2e, E07-02.scope, G.E06.
 
-Результат: Финальный NATS corpus: fields/parts/lifecycle/empty/duplicates/PubAck согласованы с native expected; production consumer не создаётся
+Output: Validate final NATS fields, parts, lifecycle events, empty blocks, allowed duplicates, and PubAck evidence against native expected results. Do not create a production consumer.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-Контракт: MSG, CONTROL, EVID. Inputs: E07-02.e2e → native expected; E07-02.scope → boundary.
+Contracts: MSG, CONTROL, EVID. Inputs: E07-02.e2e provides native expected results; E07-02.scope defines the product boundary.
 
-## E07-09.requirement_verdict — Полная CaseRegistry/CaseResult матрица полных identities D82
+## E07-09.requirement_verdict — Check complete acceptance coverage for every required variant
 
 <!-- extractor-task:E07-09.requirement_verdict -->
 
-Этап: E07. Роль: QA / Engineer. Применимость/модуль: `test/evidence`; COMMON.
+Stage: E07. Role: QA / Engineer. Module and applicability: `test/evidence`; COMMON.
 
-Зависимости: E07-03.runbook, E07-08.isolation, E07-09.nats_acceptance, G.E06.
+Dependencies: E07-03.runbook, E07-08.isolation, E07-09.nats_acceptance, G.E06.
 
-Результат: Полная CaseRegistry/CaseResult матрица полных identities D82; individual run outcomes, mandatory missing/FAIL/NOT_RUN блокируют gate, исключения требуют rules
+Output: Reconcile CaseRegistry and CaseResult using full D82 identities and individual run outcomes. A missing required result, FAIL, or NOT_RUN must block the gate. Every exception requires an accepted rule.
 
-Приёмка: Выход и invariant проверены по source task, назначенным AC и artifact acceptance TASK_DECOMPOSITION; independent review exact commit и обязательные проверки PASS. Профили mainnet/testnet не подменяют друг друга.
+Acceptance: Verify the output and invariant against the source task, its assigned ACs, and the artifact acceptance criteria in TASK_DECOMPOSITION. Require independent review of the exact commit and PASS for every required check. Mainnet and testnet profiles do not replace one another.
 
 REQ: REQ-DEV-04, REQ-DEV-05. AC: AC-DEV-04-01, AC-DEV-04-04, AC-DEV-04-05, AC-DEV-04-06, AC-DEV-04-07, AC-DEV-04-08, AC-DEV-05-01, AC-DEV-05-02, AC-DEV-05-03, AC-DEV-05-04, AC-DEV-05-05, AC-DEV-05-06.
 
-Контракт: EVID. Inputs: E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence.
+Contracts: EVID. Inputs: E07-09.nats_acceptance provides output evidence; E07-08.isolation provides isolation evidence; E07-03.runbook provides operating evidence.
 
-## G.E01 — Принять результаты этапа E01
+## G.E01 — Accept E01: native source and early evidence
 
 <!-- extractor-task:G.E01 -->
 
-Этап: E01. Роль: Reviewer / QA. Применимость/модуль: ALL: семь profiles.
+Stage: E01. Role: Reviewer / QA. Module and applicability: ALL: all seven profiles.
 
-Зависимости: E01-01.evidence, E01-01.builds, E01-01.harness, E01-02.pins, E01-02.inputs, E01-02.owned_capture, E01-02.admission, E01-02.decision_bridge, E01-02.lifecycle_seams, E01-03.smoke_corpus, E01-04.early_faults, E01-05.type_paths.
+Dependencies: E01-01.evidence, E01-01.builds, E01-01.harness, E01-02.pins, E01-02.inputs, E01-02.owned_capture, E01-02.admission, E01-02.decision_bridge, E01-02.lifecycle_seams, E01-03.smoke_corpus, E01-04.early_faults, E01-05.type_paths.
 
-Результат: все перечисленные обязательные выходы отдельно ETH/BSC/POLY. Это ранний seam proof; transport, вся семантика и combined fault matrix ещё не приняты.
+Output: Accept all required outputs separately for ETH, BSC, and POLY profiles. This gate covers early native integration boundaries; it does not accept transport, full semantics, or the combined failure matrix.
 
-Приёмка: Все child tasks приняты, profile/variant matrix текущего stage полна; evidence относится к фактическим pins/commits. Промежуточный proof не переименован в окончательный. Следующий этап заблокирован до PASS.
+Acceptance: Every child task must be accepted, and the current stage's profile and variant matrix must be complete. Evidence must match the actual pinned versions and commits. Do not relabel partial evidence as full proof. Keep the next stage blocked until this gate passes.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## G.E02 — Принять результаты этапа E02
+## G.E02 — Accept E02: schemas, identities, and encoding
 
 <!-- extractor-task:G.E02 -->
 
-Этап: E02. Роль: Reviewer / QA. Применимость/модуль: ALL: семь profiles.
+Stage: E02. Role: Reviewer / QA. Module and applicability: ALL: all seven profiles.
 
-Зависимости: E02-01.semantic_descriptors, E02-05.actions_model, E02-08.block_metadata, E02-10.closed_profiles, E02-02.schemas, E02-02.codec, E02-03.lifecycle_validator, E02-04.compatibility.
+Dependencies: E02-01.semantic_descriptors, E02-05.actions_model, E02-08.block_metadata, E02-10.closed_profiles, E02-02.schemas, E02-02.codec, E02-03.lifecycle_validator, E02-04.compatibility.
 
-Результат: все обязательные схемы и локальные contract cases определены и проверяемы. Native correctness расширяется в E04; реальная delivery integration — E03.
+Output: Accept all required schemas and local contract cases as defined and verifiable. E04 extends native semantic correctness; E03 verifies delivery through real components.
 
-Приёмка: Все child tasks приняты, profile/variant matrix текущего stage полна; evidence относится к фактическим pins/commits. Промежуточный proof не переименован в окончательный. Следующий этап заблокирован до PASS.
+Acceptance: Every child task must be accepted, and the current stage's profile and variant matrix must be complete. Evidence must match the actual pinned versions and commits. Do not relabel partial evidence as full proof. Keep the next stage blocked until this gate passes.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## G.E03 — Принять результаты этапа E03
+## G.E03 — Accept E03: durable delivery through NATS
 
 <!-- extractor-task:G.E03 -->
 
-Этап: E03. Роль: Reviewer / QA. Применимость/модуль: ALL: семь profiles.
+Stage: E03. Role: Reviewer / QA. Module and applicability: ALL: all seven profiles.
 
-Зависимости: E03-01.producer_store, E03-01.gateway_store, E03-02.rpc_streaming, E03-02.fencing, E03-03.destination, E03-03.publisher, E03-01.cleanup, E03-03.maintenance, E03-04.pressure_errors, E03-05.recovery_matrix, E03-11.block_lifecycle.
+Dependencies: E03-01.producer_store, E03-01.gateway_store, E03-02.rpc_streaming, E03-02.fencing, E03-03.destination, E03-03.publisher, E03-01.cleanup, E03-03.maintenance, E03-04.pressure_errors, E03-05.recovery_matrix, E03-11.block_lifecycle.
 
-Результат: producer/Gateway/NATS delivery guarantees от заданного durable входа. Native admission seam принят отдельно в E01; комбинированный reorg/finality/capture crash proof остаётся E05.
+Output: Accept producer, Gateway, and NATS delivery guarantees from a given durable input. Native admission was checked separately in E01. Combined reorg, finality, and capture-crash evidence remains in E05.
 
-Приёмка: Все child tasks приняты, profile/variant matrix текущего stage полна; evidence относится к фактическим pins/commits. Промежуточный proof не переименован в окончательный. Следующий этап заблокирован до PASS.
+Acceptance: Every child task must be accepted, and the current stage's profile and variant matrix must be complete. Evidence must match the actual pinned versions and commits. Do not relabel partial evidence as full proof. Keep the next stage blocked until this gate passes.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## G.E04 — Принять результаты этапа E04
+## G.E04 — Accept E04: required native semantics
 
 <!-- extractor-task:G.E04 -->
 
-Этап: E04. Роль: Reviewer / QA. Применимость/модуль: ALL: семь profiles.
+Stage: E04. Role: Reviewer / QA. Module and applicability: ALL: all seven profiles.
 
-Зависимости: E04-01.calls, E04-01.receipts, E04-01.authorization, E04-01.block_record, E04-03.state_diff, E04-01.selfdestruct, E04-03.balance_actions, E04-04.import_pressure, E04-02.optional_scope.
+Dependencies: E04-01.calls, E04-01.receipts, E04-01.authorization, E04-01.block_record, E04-03.state_diff, E04-01.selfdestruct, E04-03.balance_actions, E04-04.import_pressure, E04-02.optional_scope.
 
-Результат: обязательные current-network semantic cases. Default OFF case обязателен; включённая optional-ветка условна. Historical coverage и performance не выводятся из этого gate.
+Output: Accept all required semantic cases for the current network profiles. The default OFF case is required; enabled optional cases are conditional. This gate does not establish historical coverage or performance guarantees.
 
-Приёмка: Все child tasks приняты, profile/variant matrix текущего stage полна; evidence относится к фактическим pins/commits. Промежуточный proof не переименован в окончательный. Следующий этап заблокирован до PASS.
+Acceptance: Every child task must be accepted, and the current stage's profile and variant matrix must be complete. Evidence must match the actual pinned versions and commits. Do not relabel partial evidence as full proof. Keep the next stage blocked until this gate passes.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## G.E05 — Принять результаты этапа E05
+## G.E05 — Accept E05: lifecycle and recovery integration
 
 <!-- extractor-task:G.E05 -->
 
-Этап: E05. Роль: Reviewer / QA. Применимость/модуль: ALL: семь profiles.
+Stage: E05. Role: Reviewer / QA. Module and applicability: ALL: all seven profiles.
 
-Зависимости: E05-01.registry, E05-01.eth_finality, E05-01.bsc_finality, E05-01.polygon_observer, E05-01.activation_gc, E05-02.reorg, E05-03.drain, E05-03.upgrade, E05-04.concurrent_fencing, E05-03.full_crash_matrix.
+Dependencies: E05-01.registry, E05-01.eth_finality, E05-01.bsc_finality, E05-01.polygon_observer, E05-01.activation_gc, E05-02.reorg, E05-03.drain, E05-03.upgrade, E05-04.concurrent_fencing, E05-03.full_crash_matrix.
 
-Результат: полные combined guarantees каждой сети. Ранняя карта callers E01 и delivery-only E03 остаются самостоятельными evidence, не переименовываются в полный proof.
+Output: Accept the combined guarantees for each network profile. Keep the early caller evidence from E01 and the delivery-only evidence from E03 separate; do not relabel either as full integration evidence.
 
-Приёмка: Все child tasks приняты, profile/variant matrix текущего stage полна; evidence относится к фактическим pins/commits. Промежуточный proof не переименован в окончательный. Следующий этап заблокирован до PASS.
+Acceptance: Every child task must be accepted, and the current stage's profile and variant matrix must be complete. Evidence must match the actual pinned versions and commits. Do not relabel partial evidence as full proof. Keep the next stage blocked until this gate passes.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## G.E06 — Принять результаты этапа E06
+## G.E06 — Accept E06: deployment and operating procedures
 
 <!-- extractor-task:G.E06 -->
 
-Этап: E06. Роль: Reviewer / QA. Применимость/модуль: ALL: семь profiles.
+Stage: E06. Role: Reviewer / QA. Module and applicability: ALL: all seven profiles.
 
-Зависимости: E06-07.yaml, E06-13.artifact_lock, E06-13.init, E06-13.topology, E06-13.secrets, E06-13.nats_bootstrap, E06-13.network, E06-08.config_replace, E06-08.maintenance, E06-09.live_start, E06-12.logs, E06-13.clean_bootstrap.
+Dependencies: E06-07.yaml, E06-13.artifact_lock, E06-13.init, E06-13.topology, E06-13.secrets, E06-13.nats_bootstrap, E06-13.network, E06-08.config_replace, E06-08.maintenance, E06-09.live_start, E06-12.logs, E06-13.clean_bootstrap.
 
-Результат: полный комплект по обязательным BOOT/CONFIG/MOUNT/TRUST/NATS/START/REPLACE/LOG/ARTIFACT cases. Это не публичная упаковка и не production/performance методика.
+Output: Accept the complete deployment against required BOOT, CONFIG, MOUNT, TRUST, NATS, START, REPLACE, LOG, and ARTIFACT cases. This gate does not cover public release packaging or a production performance methodology.
 
-Приёмка: Все child tasks приняты, profile/variant matrix текущего stage полна; evidence относится к фактическим pins/commits. Промежуточный proof не переименован в окончательный. Следующий этап заблокирован до PASS.
+Acceptance: Every child task must be accepted, and the current stage's profile and variant matrix must be complete. Evidence must match the actual pinned versions and commits. Do not relabel partial evidence as full proof. Keep the next stage blocked until this gate passes.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## G.E07 — Принять результаты этапа E07
+## G.E07 — Accept E07: complete product acceptance
 
 <!-- extractor-task:G.E07 -->
 
-Этап: E07. Роль: Reviewer / QA. Применимость/модуль: ALL: семь profiles.
+Stage: E07. Role: Reviewer / QA. Module and applicability: ALL: all seven profiles.
 
-Зависимости: E07-02.e2e, E07-02.scope, E07-03.runbook, E07-08.isolation, E07-09.nats_acceptance, E07-09.requirement_verdict.
+Dependencies: E07-02.e2e, E07-02.scope, E07-03.runbook, E07-08.isolation, E07-09.nats_acceptance, E07-09.requirement_verdict.
 
-Результат: все обязательные AC закрыты по своей применимости и итоговая матрица непротиворечива. По D84 gates исполняются последовательно; до реальных запусков результаты NOT_RUN.
+Output: Accept every required AC according to its applicability and verify that the complete result matrix is consistent. Execute gates in order under D84. Runtime results remain NOT_RUN until actual runs provide evidence.
 
-Приёмка: Все child tasks приняты, profile/variant matrix текущего stage полна; evidence относится к фактическим pins/commits. Промежуточный proof не переименован в окончательный. Следующий этап заблокирован до PASS.
+Acceptance: Every child task must be accepted, and the current stage's profile and variant matrix must be complete. Evidence must match the actual pinned versions and commits. Do not relabel partial evidence as full proof. Keep the next stage blocked until this gate passes.
 
-REQ: artifact/gate criteria. AC: artifact/gate criteria, не пропуск проверки.
+REQ: bootstrap, artifact, or gate criteria. AC: artifact or gate criteria; no dedicated AC owner does not mean no verification.
 
-## Публикация и состояние
+## Publication status
 
-Все 84 issues опубликованы: [прямой mapping ID → GitHub URL](ISSUE_MAP.md), номера #1–#84. Все открыты; DONE определяется регламентом, не наличием строки здесь. Повторный publish сверяет marker на всех страницах GitHub и не создаёт дубликаты.
+All 84 issues are published as #1 through #84. [ISSUE_MAP](ISSUE_MAP.md) lists their actual URLs. All were open when the catalog was created. DONE is determined by the workflow and evidence, not by this document. Before publishing again, scan every page of open and closed issues for stable markers.
