@@ -269,6 +269,48 @@ class ControllerTests(unittest.TestCase):
                 self.controller.action(run, task, "prepare")
         self.assertFalse(self.backend.effects)
 
+    def test_terminal_save_and_lease_release_crashes_recover_without_reclosing(self):
+        for boundary in ("before-save", "after-save", "before-release", "after-release"):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary:
+                store = Store(Path(temporary) / "state")
+                backend = FakeBackend()
+                controller = Controller(store, backend, lambda: self.now)
+                with store.lock():
+                    run = controller.create(self.tasks, self.recipes)
+                    task = run["tasks"]["BOOT-03"]
+                    task["state"] = "READY"
+                    for _ in range(4):
+                        controller.advance(run, task)
+                    self.assertEqual(task["state"], "MERGING")
+                    save, release = store.save, store.release
+
+                    def crash_save(current):
+                        if task["state"] == "DONE" and boundary == "before-save":
+                            raise Crash(boundary)
+                        save(current)
+                        if task["state"] == "DONE" and boundary == "after-save":
+                            raise Crash(boundary)
+
+                    def crash_release(current):
+                        if boundary == "before-release":
+                            raise Crash(boundary)
+                        release(current)
+                        if boundary == "after-release":
+                            raise Crash(boundary)
+
+                    with patch.object(store, "save", side_effect=crash_save), patch.object(store, "release", side_effect=crash_release):
+                        with self.assertRaises(Crash):
+                            controller.advance(run, task)
+                    # Load the durable state directly: a hard crash does not run a
+                    # controller finally block that could hide the missing write.
+                    saved = store.load(run["run_id"])
+                    recovered = controller.run(saved, resume=True)
+                    lease = evidence.acceptance.parse_json((store.directory / "leases/BOOT-03.json").read_text())
+                self.assertEqual(recovered["status"], "COMPLETE")
+                self.assertEqual(recovered["tasks"]["BOOT-03"]["state"], "DONE")
+                self.assertTrue(lease["released"])
+                self.assertEqual(len([key for key in backend.effects if key.endswith(":close")]), 2)
+
     def test_remote_dependency_drift_blocks_before_mutation(self):
         self.backend.fail = "catalog"
         with self.store.lock():

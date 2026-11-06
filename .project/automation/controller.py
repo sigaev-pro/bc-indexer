@@ -156,8 +156,12 @@ class Store:
                 and actual["released"] is False, "BLOCKED_LEASE", "task lease is stale or belongs to another writer")
 
     def release(self, task):
-        lease = dict(task["lease"], released=True)
-        evidence.atomic_json(self.directory / "leases" / (task["task_id"] + ".json"), lease)
+        path = self.directory / "leases" / (task["task_id"] + ".json")
+        actual = read_json(path)
+        require(all(actual[key] == task["lease"][key] for key in ("task_id", "run_id", "generation")),
+                "BLOCKED_LEASE", "terminal cleanup cannot release a different task lease")
+        if not actual["released"]:
+            evidence.atomic_json(path, dict(actual, released=True))
 
 
 class Controller:
@@ -205,6 +209,11 @@ class Controller:
             if task["state"] == "DONE":
                 self.backend.verify_receipt(task["task_id"], task["receipt"], run)
         self.store.save(run)
+        # DONE is durable before lease cleanup. A crash between them is repaired
+        # here without replaying issue closure or borrowing another generation.
+        for task in run["tasks"].values():
+            if task["state"] == "DONE" and task.get("lease"):
+                self.store.release(task)
 
     def intent(self, run, task, action):
         self.store.check_lease(run, task)
@@ -281,7 +290,9 @@ class Controller:
                 self.store.save(run)
             self.action(run, task, "close")
             task["state"] = "DONE"
+            self.store.save(run)
             self.store.release(task)
+            return
         else:
             raise Blocked("BLOCKED_STATE", "unsupported task transition")
         self.store.save(run)

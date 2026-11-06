@@ -124,10 +124,20 @@ def watchdog_cleanup(process, grace=2):
             except PermissionError:
                 if live_group_members(group) and group not in denied:
                     denied.append(group)
-    os.kill(process.pid, signal.SIGCONT)
-    return {"supervisor": terminate_group(process, grace), "child_groups": children,
+    # Never resume this supervisor after the child census. It may be stopped
+    # immediately before Popen, and resuming it could admit an unseen worker.
+    # Its unreaped leader still reserves this group ID through final cleanup.
+    supervisor = "forced-while-stopped" if frozen else "forced-with-uncertain-child-ownership"
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        supervisor = "already-exited"
+    except PermissionError:
+        supervisor = "cleanup-denied"
+    return {"supervisor": supervisor, "child_groups": children,
             "cleanup_denied_groups": denied,
-            "ownership": "unreaped direct supervisor; child groups inspected while it was stopped"}
+            "cleanup_uncertain": not frozen or bool(denied) or supervisor == "cleanup-denied",
+            "ownership": "unreaped direct supervisor; no resume between child census and final group termination"}
 
 
 def supervise(request_path, lock_fd):

@@ -181,6 +181,70 @@ class RuntimeTests(unittest.TestCase):
         with Store(self.store.directory).lock():
             pass
 
+    def test_watchdog_cannot_resume_a_supervisor_into_a_new_worker_spawn(self):
+        backend = RealBackend.__new__(RealBackend)
+        backend.root, backend.source, backend.store = self.root, self.root, self.store
+        source = self.root / ".project/automation/session_runner.py"
+        source.parent.mkdir(parents=True)
+        source.write_text(
+            "import os, signal, sys, time\n"
+            "from pathlib import Path\n"
+            f"sys.path.insert(0, {str(Path(session_runner.__file__).parent)!r})\n"
+            "import session_runner\n"
+            "original = session_runner.subprocess.Popen\n"
+            "paused = False\n"
+            "def before_spawn(*args, **kwargs):\n"
+            "    global paused\n"
+            "    first = not paused\n"
+            "    if not paused:\n"
+            "        paused = True\n"
+            f"        open({str(self.root / 'before-spawn')!r}, 'w').write('paused')\n"
+            "        os.kill(os.getpid(), signal.SIGSTOP)\n"
+            "    process = original(*args, **kwargs)\n"
+            "    if first:\n"
+            f"        Path({str(self.root / 'spawn-returned')!r}).write_text('spawned')\n"
+            "        deadline = time.monotonic() + 1\n"
+            f"        while not Path({str(self.root / 'worker-started')!r}).exists() and time.monotonic() < deadline:\n"
+            "            time.sleep(0.005)\n"
+            "    return process\n"
+            "session_runner.subprocess.Popen = before_spawn\n"
+            "raise SystemExit(session_runner.main())\n")
+        marker = self.root / "worker-started"
+        worker = ("import signal,time; from pathlib import Path; "
+                  "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                  f"Path({str(marker)!r}).write_text('started'); time.sleep(6)")
+        run = {"run_id": "prespawn_run", "deadline": time.time() + 15}
+        started = time.monotonic()
+        original_launch = subprocess.Popen
+
+        def launch_and_wait_for_pause(*args, **kwargs):
+            process = original_launch(*args, **kwargs)
+            if isinstance(args[0], list) and len(args[0]) > 1 and args[0][1] == str(source):
+                deadline = time.monotonic() + 5
+                while not (self.root / "before-spawn").exists():
+                    self.assertLess(time.monotonic(), deadline, "supervisor never reached the spawn boundary")
+                    time.sleep(0.01)
+            return process
+
+        try:
+            with self.store.lock(), patch.object(controller_backend, "WATCHDOG_GRACE_SECONDS", 0.1), \
+                    patch.object(subprocess, "Popen", side_effect=launch_and_wait_for_pause):
+                with self.assertRaises(Blocked):
+                    backend.supervised(run, "pre-spawn", [sys.executable, "-c", worker], self.root, timeout=0.3)
+            self.assertTrue((self.root / "before-spawn").exists())
+            self.assertFalse((self.root / "spawn-returned").exists(), "watchdog admitted a spawn after its child census")
+            self.assertFalse(marker.exists(), "watchdog resumed the supervisor into a new worker")
+            with Store(self.store.directory).lock():
+                pass
+            self.assertLess(time.monotonic() - started, 8)
+        finally:
+            # The regression worker is self-bounded even when run against the old
+            # implementation, so a failing red test cannot leave a live helper.
+            if marker.exists():
+                remaining = 8 - (time.monotonic() - started)
+                if remaining > 0:
+                    time.sleep(remaining)
+
 
 if __name__ == "__main__":
     unittest.main()
