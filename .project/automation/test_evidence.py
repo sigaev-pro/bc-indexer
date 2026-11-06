@@ -107,6 +107,43 @@ class CaptureTests(unittest.TestCase):
                 evidence.capture(self.expected, self.path, self.collect)
         self.assertEqual(list(self.path.iterdir()), [])
 
+    def test_new_directory_entries_are_synced_before_descending(self):
+        first, second = self.path / "runs", self.path / "runs" / "acceptance"
+        calls = []
+        real_sync = evidence.sync_directory
+
+        def observe(path):
+            path = Path(path)
+            if path == first and first not in calls:
+                self.assertFalse(second.exists())
+            calls.append(path)
+            real_sync(path)
+
+        with patch.object(evidence, "sync_directory", side_effect=observe):
+            evidence.durable_directory(second)
+        self.assertEqual(calls, [self.path, self.path.parent, first, self.path,
+                                 second, first])
+
+    def test_directory_sync_failure_preserves_work_and_retry_syncs_its_entry(self):
+        first, second = self.path / "runs", self.path / "runs" / "acceptance"
+        real_sync = evidence.sync_directory
+
+        def fail_parent_after_creation(path):
+            if Path(path) == self.path and first.exists():
+                raise OSError("injected parent sync failure")
+            real_sync(path)
+
+        with patch.object(evidence, "sync_directory", side_effect=fail_parent_after_creation):
+            with self.assertRaises(OSError):
+                evidence.atomic_json(second / "proof.json", {"proof": True})
+        self.assertTrue(first.is_dir())
+        self.assertFalse(second.exists())
+        with patch.object(evidence, "sync_directory", wraps=real_sync) as sync:
+            evidence.atomic_json(second / "proof.json", {"proof": True})
+        self.assertEqual([Path(call.args[0]) for call in sync.call_args_list[:4]],
+                         [first, self.path, second, first])
+        self.assertEqual(json.loads((second / "proof.json").read_text()), {"proof": True})
+
     def test_capture_verdict_and_identity_are_bound_to_the_snapshot(self):
         result = evidence.capture(self.expected, self.path, self.collect)
         original = json.loads(Path(result["path"]).read_text())

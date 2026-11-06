@@ -33,10 +33,32 @@ def sync_directory(path):
         os.close(descriptor)
 
 
+def durable_directory(path):
+    """Sync each new directory entry before creating the next level below it."""
+    path = Path(path)
+    missing = []
+    ancestor = path
+    while not ancestor.exists():
+        missing.append(ancestor)
+        ancestor = ancestor.parent
+    acceptance.require(ancestor.is_dir(), "evidence parent is not a directory")
+    # The existing leaf can be left by an earlier failed mkdir/sync attempt.
+    # Sync its entry too before retrying; existence alone does not prove durability.
+    sync_directory(ancestor)
+    sync_directory(ancestor.parent)
+    for directory in reversed(missing):
+        try:
+            directory.mkdir(mode=0o700)
+        except FileExistsError:
+            acceptance.require(directory.is_dir(), "evidence parent is not a directory")
+        sync_directory(directory)
+        sync_directory(directory.parent)
+
+
 def atomic_json(path, value, exclusive=False):
     """Replace a complete JSON record, then sync its directory before returning."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    durable_directory(path.parent)
     temporary = None
     try:
         descriptor, temporary = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
