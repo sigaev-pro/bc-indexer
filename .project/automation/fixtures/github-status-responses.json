@@ -1,0 +1,37 @@
+{
+  "source": {
+    "repository": "sigaev-pro/bc-indexer",
+    "head_sha": "799a25f444257f64268c469a63b9cc340653eee6",
+    "note": "Minimal public API fields captured from the combined-status and status-list endpoints. Unused response fields are omitted. The combined response has no creator."
+  },
+  "combined_status": {
+    "state": "success",
+    "sha": "799a25f444257f64268c469a63b9cc340653eee6",
+    "total_count": 1,
+    "statuses": [
+      {
+        "id": 58284457193,
+        "url": "https://api.github.com/repos/sigaev-pro/bc-indexer/statuses/799a25f444257f64268c469a63b9cc340653eee6",
+        "state": "success",
+        "description": "Review SHA256: 36004caf08c31c72e22d47bbe8cdd2011a7cec0030931ffd2f20eb50cf770ab0",
+        "target_url": "https://github.com/sigaev-pro/bc-indexer/pull/87#issuecomment-6693562933",
+        "context": "bootstrap/independent-review",
+        "created_at": "2026-11-06T19:30:08Z",
+        "updated_at": "2026-11-06T19:30:08Z"
+      }
+    ]
+  },
+  "commit_statuses": [
+    {
+      "id": 58284457193,
+      "url": "https://api.github.com/repos/sigaev-pro/bc-indexer/statuses/799a25f444257f64268c469a63b9cc340653eee6",
+      "state": "success",
+      "description": "Review SHA256: 36004caf08c31c72e22d47bbe8cdd2011a7cec0030931ffd2f20eb50cf770ab0",
+      "target_url": "https://github.com/sigaev-pro/bc-indexer/pull/87#issuecomment-6693562933",
+      "context": "bootstrap/independent-review",
+      "created_at": "2026-11-06T19:30:08Z",
+      "updated_at": "2026-11-06T19:30:08Z",
+      "creator": {"login": "sigaev-pro"}
+    }
+  ]
+}

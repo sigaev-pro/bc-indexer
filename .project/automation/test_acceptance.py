@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -11,7 +12,7 @@ import acceptance
 HEAD, BASE, MERGE, TREE = (character * 40 for character in "abcd")
 REPOSITORY = "sigaev-pro/bc-indexer"
 PR_NUMBER = 87
-COMMENT_ID = 6693432825
+COMMENT_ID = 6693562933
 COMMENT_URL = f"https://github.com/{REPOSITORY}/pull/{PR_NUMBER}#issuecomment-{COMMENT_ID}"
 
 
@@ -61,13 +62,16 @@ def proof():
         "review_comment": {"id": COMMENT_ID, "user": {"login": "sigaev-pro"}, "html_url": COMMENT_URL,
                            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{PR_NUMBER}",
                            "body": acceptance.REVIEW_MARKER + "\n```json\n" + json.dumps(report) + "\n```"},
-        "combined_status": {"sha": HEAD, "statuses": [{
-            "context": acceptance.REVIEW_CONTEXT, "state": "success",
-            "creator": {"login": "sigaev-pro"}, "target_url": COMMENT_URL,
-        }]},
     }
+    captured = json.loads((Path(__file__).parent / "fixtures/github-status-responses.json").read_text())
+    snapshot["combined_status"] = captured["combined_status"]
+    snapshot["commit_statuses"] = captured["commit_statuses"]
+    snapshot["combined_status"]["sha"] = HEAD
     body = snapshot["review_comment"]["body"]
-    snapshot["combined_status"]["statuses"][0]["description"] = "Review SHA256: " + hashlib.sha256(body.encode()).hexdigest()
+    for status in snapshot["combined_status"]["statuses"] + snapshot["commit_statuses"]:
+        status["url"] = f"https://api.github.com/repos/{REPOSITORY}/statuses/{HEAD}"
+        status["target_url"] = COMMENT_URL
+        status["description"] = "Review SHA256: " + hashlib.sha256(body.encode()).hexdigest()
     return snapshot
 
 
@@ -95,6 +99,7 @@ class AcceptanceProofTests(unittest.TestCase):
             url = f"https://github.com/{REPOSITORY}/{route}/{PR_NUMBER}#issuecomment-{COMMENT_ID}"
             snapshot["review_comment"]["html_url"] = url
             snapshot["combined_status"]["statuses"][0]["target_url"] = url
+            snapshot["commit_statuses"][0]["target_url"] = url
             with self.subTest(route=route):
                 result = acceptance.evaluate(snapshot)
                 self.assertEqual(result["verdict"], "PASS", result)
@@ -196,7 +201,7 @@ class AcceptanceProofTests(unittest.TestCase):
             elif condition == "other_report":
                 status["target_url"] = COMMENT_URL + "0"
             elif condition == "other_actor":
-                status["creator"]["login"] = "worker"
+                snapshot["commit_statuses"][0]["creator"]["login"] = "worker"
             else:
                 snapshot["combined_status"]["sha"] = BASE
             with self.subTest(condition=condition):
@@ -268,6 +273,7 @@ class AcceptanceProofTests(unittest.TestCase):
             mapping = {
                 f"commits/{HEAD}/check-runs?filter=latest&per_page=100": "check_runs",
                 "actions/runs/10": "ci_run", f"commits/{HEAD}/status?per_page=100": "combined_status",
+                f"commits/{HEAD}/statuses?per_page=100": "commit_statuses",
                 f"issues/comments/{COMMENT_ID}": "review_comment", f"compare/{BASE}...{HEAD}": "comparison",
                 f"git/commits/{HEAD}": "head_commit", f"git/commits/{MERGE}": "merge_commit",
                 "branches/main/protection": "protection", "git/ref/heads/main": "base_ref",
@@ -277,6 +283,107 @@ class AcceptanceProofTests(unittest.TestCase):
         with patch.object(acceptance, "github", side_effect=fake_github):
             with self.assertRaisesRegex(ValueError, "changed during proof collection"):
                 acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
+
+    def test_collect_then_evaluate_accepts_the_captured_github_status_shapes(self):
+        snapshot = proof()
+        self.assertNotIn("creator", snapshot["combined_status"]["statuses"][0])
+        self.assertEqual(snapshot["commit_statuses"][0]["creator"]["login"], "sigaev-pro")
+        with patch.object(acceptance, "github", side_effect=api_fixture(snapshot)):
+            collected = acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
+        result = acceptance.evaluate(collected)
+        self.assertEqual(result["verdict"], "PASS", result)
+        self.assertEqual(result["review_status_id"], snapshot["commit_statuses"][0]["id"])
+
+    def test_collected_publisher_proof_must_match_the_exact_current_status(self):
+        changes = [
+            ("id", 58284457194), ("url", f"https://api.github.com/repos/{REPOSITORY}/statuses/{BASE}"),
+            ("url", f"https://api.github.com/repos/sigaev-pro/another-repo/statuses/{HEAD}"),
+            ("state", "pending"), ("context", "unrelated"), ("target_url", COMMENT_URL + "0"),
+            ("description", "Review SHA256: " + "0" * 64),
+            ("created_at", "2026-11-06T19:31:08Z"), ("updated_at", "2026-11-06T19:31:08Z"),
+            ("creator", {"login": "untrusted-publisher"}), ("creator", {}),
+        ]
+        for field, value in changes:
+            snapshot = proof()
+            snapshot["commit_statuses"][0][field] = value
+            with self.subTest(field=field, value=value):
+                with patch.object(acceptance, "github", side_effect=api_fixture(snapshot)):
+                    try:
+                        collected = acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
+                    except ValueError as error:
+                        self.assertTrue(str(error))
+                    else:
+                        self.assert_blocked(collected)
+
+    def test_newer_list_status_cannot_borrow_older_combined_success(self):
+        snapshot = proof()
+        newer = dict(snapshot["commit_statuses"][0], id=58284457194, state="pending")
+        snapshot["commit_statuses"].append(newer)
+        with patch.object(acceptance, "github", side_effect=api_fixture(snapshot)):
+            with self.assertRaisesRegex(ValueError, "identities differ"):
+                acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
+
+    def test_status_change_during_collection_invalidates_the_original_proof(self):
+        for change_both_endpoints in [False, True]:
+            snapshot = proof()
+
+            def mutate(path, count, response):
+                if count != 2:
+                    return
+                if path == f"commits/{HEAD}/statuses?per_page=100":
+                    response[0]["id"] += 1
+                if change_both_endpoints and path == f"commits/{HEAD}/status?per_page=100":
+                    response["statuses"][0]["id"] += 1
+
+            with self.subTest(change_both_endpoints=change_both_endpoints):
+                with patch.object(acceptance, "github", side_effect=api_fixture(snapshot, mutate)):
+                    with self.assertRaises(ValueError):
+                        acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
+
+    def test_missing_or_full_status_pages_cannot_hide_publisher_evidence(self):
+        for count in [0, 100, 101]:
+            snapshot = proof()
+            row = snapshot["commit_statuses"][0]
+            snapshot["commit_statuses"] = [dict(row, id=row["id"] + number) for number in range(count)]
+            with self.subTest(count=count):
+                with patch.object(acceptance, "github", side_effect=api_fixture(snapshot)):
+                    with self.assertRaises(ValueError):
+                        acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
+        snapshot = proof()
+        snapshot["combined_status"]["total_count"] = 100
+        with patch.object(acceptance, "github", side_effect=api_fixture(snapshot)):
+            with self.assertRaisesRegex(ValueError, "pagination limit"):
+                acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
+
+    def test_combined_creator_cannot_replace_the_status_list_publisher(self):
+        snapshot = proof()
+        snapshot["combined_status"]["statuses"][0]["creator"] = {"login": "sigaev-pro"}
+        snapshot["commit_statuses"][0]["creator"] = {"login": "untrusted-publisher"}
+        self.assert_blocked(snapshot)
+
+
+def api_fixture(snapshot, mutate=None):
+    calls = {}
+    mapping = {
+        f"pulls/{PR_NUMBER}": "pull_request",
+        f"commits/{HEAD}/check-runs?filter=latest&per_page=100": "check_runs",
+        "actions/runs/10": "ci_run", f"commits/{HEAD}/status?per_page=100": "combined_status",
+        f"commits/{HEAD}/statuses?per_page=100": "commit_statuses",
+        f"issues/comments/{COMMENT_ID}": "review_comment", f"compare/{BASE}...{HEAD}": "comparison",
+        f"git/commits/{HEAD}": "head_commit", f"git/commits/{MERGE}": "merge_commit",
+        "branches/main/protection": "protection", "git/ref/heads/main": "base_ref",
+    }
+
+    def read(repository, path):
+        if repository != REPOSITORY:
+            raise AssertionError("collector requested another repository")
+        calls[path] = calls.get(path, 0) + 1
+        result = copy.deepcopy(snapshot[mapping[path]])
+        if mutate:
+            mutate(path, calls[path], result)
+        return result
+
+    return read
 
 
 if __name__ == "__main__":

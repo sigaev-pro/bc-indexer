@@ -14,6 +14,7 @@ WORKFLOW_PATH = ".github/workflows/bootstrap.yml"
 REVIEW_MARKER = "<!-- extractor-review:v1 -->"
 SHA_PATTERN = r"[0-9a-f]{40}"
 TASK_PATTERN = r"(?:BOOT-\d{2}|E0[1-7]-\d+\.[a-z0-9_]+|G\.E0[1-7])"
+STATUS_FIELDS = ("id", "url", "context", "state", "target_url", "description", "created_at", "updated_at")
 
 
 def require(condition, message):
@@ -50,6 +51,30 @@ def check_protection(protection):
     require(not reviews.get("require_code_owner_reviews", False) and not reviews.get("require_last_push_approval", False),
             "additional human review controls need a supported approval workflow")
     require(protection["required_conversation_resolution"]["enabled"] is True, "unresolved review threads do not block merging")
+
+
+def review_status(combined, listed, repository, head):
+    """Join the current combined status to its publisher-bearing status-list row."""
+    require(combined["sha"] == head, "status response belongs to another commit")
+    require(isinstance(listed, list) and len(listed) < 100,
+            "status-list response reached the pagination limit")
+    require(combined["total_count"] < 100 and len(combined["statuses"]) < 100,
+            "combined-status response reached the pagination limit")
+    current = [row for row in combined["statuses"] if row["context"] == REVIEW_CONTEXT]
+    require(len(current) == 1, "independent review status is missing or ambiguous")
+    matching = [row for row in listed if row["context"] == REVIEW_CONTEXT]
+    require(matching, "independent review publisher proof is missing")
+    require(all(type(row["id"]) is int and row["id"] > 0 for row in matching), "invalid review status ID")
+    require(len({row["id"] for row in matching}) == len(matching), "duplicate review status IDs")
+    latest = max(matching, key=lambda row: row["id"])
+    require(latest["url"] == f"https://api.github.com/repos/{repository}/statuses/{head}",
+            "review publisher proof belongs to another repository or commit")
+    require(all(current[0][field] == latest[field] for field in STATUS_FIELDS),
+            "combined and latest status-list identities differ")
+    creator = latest.get("creator")
+    require(isinstance(creator, dict) and isinstance(creator.get("login"), str) and creator["login"].strip(),
+            "status-list publisher identity is missing")
+    return latest
 
 
 def evaluate(snapshot):
@@ -121,18 +146,15 @@ def evaluate(snapshot):
         require(review["verdict"] == "PASS" and review["findings"] == [], "independent review has not passed")
         require(isinstance(review["checks"], list) and review["checks"] and all(isinstance(item, str) and item.strip() for item in review["checks"]), "review lists no verified checks")
         require(isinstance(review["unverified"], list), "review must state unverified work")
-        statuses = snapshot["combined_status"]
-        require(statuses["sha"] == head, "status response belongs to another commit")
-        review_statuses = [row for row in statuses["statuses"] if row["context"] == REVIEW_CONTEXT]
-        require(len(review_statuses) == 1, "independent review status is missing or ambiguous")
-        status = review_statuses[0]
+        status = review_status(snapshot["combined_status"], snapshot["commit_statuses"], repository, head)
         require(status["state"] == "success", "independent review status has not passed")
         require(status["creator"]["login"] == coordinator, "unexpected independent review status publisher")
         require(status["target_url"] == comment["html_url"], "review status points to different evidence")
         digest = hashlib.sha256(comment["body"].encode()).hexdigest()
         require(status["description"] == f"Review SHA256: {digest}", "review evidence changed after its status was published")
         return {"verdict": "PASS", "task_id": task, "head_sha": head, "base_sha": base,
-                "ci_run_id": run["id"], "review_url": comment["html_url"], "errors": []}
+                "ci_run_id": run["id"], "review_url": comment["html_url"],
+                "review_status_id": status["id"], "errors": []}
     except (ValueError, KeyError, TypeError, AttributeError) as error:
         return {"verdict": "BLOCKED", "head_sha": head, "errors": [str(error)]}
 
@@ -167,6 +189,7 @@ def collect(repository, number, task, comment_id, coordinator, implementer):
         "pull_request_number": number, "review_comment_id": comment_id,
         "pull_request": pull, "check_runs": checks, "ci_run": run,
         "combined_status": github(repository, f"commits/{head}/status?per_page=100"),
+        "commit_statuses": github(repository, f"commits/{head}/statuses?per_page=100"),
         "review_comment": github(repository, f"issues/comments/{comment_id}"),
         "comparison": github(repository, f"compare/{base}...{head}"),
         "head_commit": github(repository, f"git/commits/{head}"),
@@ -174,6 +197,13 @@ def collect(repository, number, task, comment_id, coordinator, implementer):
         "protection": github(repository, "branches/main/protection"),
         "base_ref": github(repository, "git/ref/heads/main"),
     }
+    initial_status = review_status(snapshot["combined_status"], snapshot["commit_statuses"], repository, head)
+    fresh_combined = github(repository, f"commits/{head}/status?per_page=100")
+    fresh_list = github(repository, f"commits/{head}/statuses?per_page=100")
+    fresh_status = review_status(fresh_combined, fresh_list, repository, head)
+    require(all(initial_status[field] == fresh_status[field] for field in STATUS_FIELDS)
+            and initial_status["creator"]["login"] == fresh_status["creator"]["login"],
+            "review status changed during proof collection")
     # A later head must never borrow the proof collected for the earlier head.
     fresh_pull = github(repository, f"pulls/{number}")
     require(fresh_pull["head"]["sha"] == head and fresh_pull["base"]["sha"] == base,

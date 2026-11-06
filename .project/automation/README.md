@@ -52,6 +52,8 @@ Publish the commit status on that exact head only after the independent report p
 
 The collector binds the requested PR number and comment ID to GitHub's response. Both `/pull/NUMBER#issuecomment-ID` and `/issues/NUMBER#issuecomment-ID` URL forms must identify that exact PR and comment in the selected repository. The comment's API `issue_url` must also identify the intended PR. A report on another PR or task issue cannot provide this PR's review evidence.
 
+GitHub's combined-status endpoint does not include the status creator. The collector preserves that response and reads the status-list endpoint for publisher identity. The latest matching row must have the same ID, commit/repository URL, context, state, target URL, description digest, and timestamps as the current combined status. A publisher from another status cannot be substituted. Before returning, the collector reads both endpoints again and rejects a changed identity or a newer status. A full 100-row status page blocks collection because this bounded reader cannot prove that pagination is complete.
+
 The collector trusts the configured coordinator to identify the real sessions and publish the returned report. A worker-generated JSON object, a different session name chosen by the author, or an arbitrary success status is not independent evidence. The controller must retain its own session handoff and result records; text alone cannot authenticate a model session.
 
 ## Exact-commit gate
@@ -74,6 +76,6 @@ The command only reads GitHub. It fails closed unless all of these checks pass:
 - The trusted coordinator's separate-agent report covers this head and base. Its successful required status refers to that exact, unchanged report.
 - The actual branch-protection response enforces the required controls.
 
-An offline `--snapshot PATH` mode supports isolated tests and analysis of trusted collected snapshots. It does not authenticate arbitrary input and does not authorize a merge. The collector rejects oversized check sets instead of silently skipping pagination.
+An offline `--snapshot PATH` mode supports isolated tests and analysis of trusted collected snapshots. It does not authenticate arbitrary input and does not authorize a merge. Snapshots retain separate `combined_status` and `commit_statuses` API responses. The collector rejects oversized check sets or full status pages instead of silently skipping pagination.
 
 The coordinator must merge with GitHub's expected-head condition, respect strict branch protection, then verify the resulting commit and tree. A PASS is evidence for the captured state, not a reservation against later changes. A changed head requires new review and CI; a changed base requires updating the candidate and repeating the gate. The future controller owns serialization and records the verified merge result.

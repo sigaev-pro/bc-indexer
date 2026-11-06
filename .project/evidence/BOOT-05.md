@@ -8,13 +8,23 @@ The candidate adds a pinned GitHub Actions workflow, portable offline checks, an
 
 Operational instructions and the review-comment schema are in [automation/README.md](../automation/README.md). Runtime results for native product execution remain NOT_RUN.
 
+## Final allowed collector repair
+
+Candidate `799a25f444257f64268c469a63b9cc340653eee6` passed independent review and real Actions run `42280000422`. Review comment `6693562933` and status `58284457193` were published. The next live collector call stopped with `BLOCKED` and error `'creator'`: the combined-status response omits that field, while the status-list response includes it. A collect-to-evaluate regression using captured minimal API fields reproduced the same failure before the correction.
+
+The correction preserves both raw response shapes and obtains publisher identity only from the latest status-list row matching the current combined status. It compares ID, commit/repository URL, context, state, target URL, description, and timestamps. Missing publisher proof, wrong publishers, mismatched IDs or URLs, newer statuses, changes between reads, and full status pages are rejected. Tests exercise collection through the API adapter, not only the evaluator's in-memory input. The full local bootstrap suite passes all 31 tests, document checks, Python/JSON checks, and the unchanged original v2 hash.
+
+The complete read-only live smoke with the corrected local collector returned PASS for the already reviewed remote head `799a25f444257f64268c469a63b9cc340653eee6`, base `1ab566cf402a84661729502685be284afb38ba73`, CI run `42280000422`, PR #87 review comment `6693562933`, and review status `58284457193`. The snapshot also confirmed current branch protection, exact CI provenance, review body digest, and synthetic merge parents/tree. This is API-path validation against an existing accepted review/CI pair; it does not accept the modified collector code or authorize merging its new commit.
+
+This is the second repair cycle and third implementation attempt allowed by the bootstrap budget. The new commit still requires independent review, fresh real CI, a new exact-head report/status, and a successful live gate. A further failure must be recorded as a blocker rather than starting another uncontrolled repair cycle. No new remote mutation, push, or merge was performed during this repair.
+
 ## Live verification and collector correction
 
 SSH publication succeeded for `9896982a7ef995bd76120cb0dc310c407d47719a`, and [PR #87](https://github.com/sigaev-pro/bc-indexer/pull/87) was created. [Actions run 42279051046](https://github.com/sigaev-pro/bc-indexer/actions/runs/42279051046) passed on that exact head. The coordinator applied and read back the reviewed branch policy, including `bootstrap/ci` from GitHub Actions app 15368, required independent review, strict checks, and administrator enforcement. The PR was blocked while its review status was missing. Independent review then passed, and comment 6693432825 plus its digest-bound status were published.
 
 The live collector failed on a valid GitHub PR comment URL: `https://github.com/sigaev-pro/bc-indexer/pull/87#issuecomment-6693432825`. Its URL check accepted only `/issues/...`. A focused regression reproduced this rejection before the fix. The correction accepts the valid PR route and binds the URL, API `issue_url`, response ID, and requested comment ID to the selected repository and intended PR. Tests reject other repositories, PR numbers, and comment identities. This fixes collector parsing; it does not relax review or branch controls.
 
-The corrected local suite passes all 25 tests and the document checks. The correction creates a new head. The successful Actions run and review above remain evidence for `9896982a7ef995bd76120cb0dc310c407d47719a` only. Fresh exact-head local checks, independent review, remote CI, review status, and live collection are required before merging the corrected candidate. No merge or BOOT-05 completion is claimed.
+The first URL correction passed all 25 tests and the document checks. Its successful Actions run and review remain evidence for `799a25f444257f64268c469a63b9cc340653eee6` only; the final collector repair above supersedes that candidate. No merge or BOOT-05 completion is claimed.
 
 ## Local verification
 
