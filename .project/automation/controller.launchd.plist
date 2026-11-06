@@ -8,7 +8,7 @@
     <string>/usr/bin/caffeinate</string><string>-i</string><string>-s</string>
     <string>ABSOLUTE_PYTHON_PATH</string>
     <string>ABSOLUTE_REPOSITORY_PATH/.project/automation/controller.py</string>
-    <string>resume</string><string>--run-id</string><string>RECORDED_RUN_ID</string>
+    <string>resume</string><string>--automatic</string><string>--run-id</string><string>RECORDED_RUN_ID</string>
   </array>
   <key>WorkingDirectory</key><string>ABSOLUTE_REPOSITORY_PATH</string>
   <key>RunAtLoad</key><false/>

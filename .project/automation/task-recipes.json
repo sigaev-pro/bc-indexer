@@ -19,9 +19,9 @@
   },
   "BOOT-08": {
     "role": "qa",
-    "allowed_paths": [".project/docs/", ".project/evm-transaction-extractor-tz-v3-codex.md", ".project/evidence/BOOT-08.md", ".project/PROJECT_STATUS.md", "TZ_EXECUTOR.md", "TZ_DECISION_MAKER.md"],
-    "required_files": [".project/evidence/BOOT-08.md", ".project/docs/ACCEPTANCE_CASES.md"],
-    "commands": [["python3", ".project/automation/ci.py"]]
+    "allowed_paths": [".project/docs/", ".project/testing/corpus/", ".project/evm-transaction-extractor-tz-v3-codex.md", ".project/evidence/BOOT-08.md", ".project/PROJECT_STATUS.md", "TZ_EXECUTOR.md", "TZ_DECISION_MAKER.md"],
+    "required_files": [".project/evidence/BOOT-08.md", ".project/docs/ACCEPTANCE_CASES.md", ".project/testing/corpus/verify.py", ".project/testing/corpus/catalog.json"],
+    "commands": [["python3", ".project/automation/ci.py"], ["python3", ".project/testing/corpus/verify.py"]]
   },
   "BOOT-09": {
     "role": "technical-writer",

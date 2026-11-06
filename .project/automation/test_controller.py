@@ -42,6 +42,9 @@ class FakeBackend:
         return {"passed": self.gate_passed,
                 "bootstrap_gate_receipt": {"task_id": "BOOT-09", "proof": "verified-merge"}}
 
+    def session_recovery(self, run, task, operation):
+        return None
+
     def reconcile_catalog(self, tasks):
         if self.fail == "catalog":
             raise Blocked("BLOCKED_CATALOG", "remote dependency changed")

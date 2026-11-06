@@ -74,6 +74,17 @@ def terminate_group(process, grace=3):
     return "forced"
 
 
+def confirm_group_exit(process, timeout=2):
+    """Prove the group is empty while its direct-child leader is still reserved."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if exited_unreaped(process) and not live_group_members(process.pid):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
+
+
 def watchdog_cleanup(process, grace=2):
     """Bound cleanup even if a supervisor is stopped or cannot execute its handler."""
     try:
@@ -219,7 +230,8 @@ def supervise(request_path, lock_fd):
             # A process can exit while descendants keep its process group alive.
             if termination == "not-needed":
                 termination = terminate_group(process, grace=0.1)
-            if termination in {"cleanup-denied", "ownership-lost"}:
+            cleanup_complete = termination in {"already-exited", "graceful", "forced"} and confirm_group_exit(process)
+            if not cleanup_complete:
                 reason = "cleanup-uncertain"
                 evidence.atomic_json(directory / "cleanup.json", {"operation_id": request["operation_id"],
                                      "termination": termination, "reason": reason})
@@ -231,6 +243,7 @@ def supervise(request_path, lock_fd):
         result = {"schema_version": 1, "operation_id": request["operation_id"],
                   "request_sha256": request_hash, "started_at": started, "finished_at": time.time(),
                   "exit_code": process.returncode, "reason": reason, "termination": termination,
+                  "cleanup_complete": cleanup_complete,
                   "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
         evidence.atomic_json(result_path, result)
         return result

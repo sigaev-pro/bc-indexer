@@ -268,6 +268,50 @@ class RealBackend:
             spec.loader.exec_module(self.roles)
         return self.roles.render(role, handoff)
 
+    def session_recovery(self, run, task, operation):
+        """Authenticate terminal process evidence before an operator retry."""
+        identifiers = [operation["id"]]
+        if operation["action"] == "verify":
+            identifiers = [operation["id"] + "-check-" + str(number)
+                           for number, _ in enumerate(run["recipes"][task["task_id"]]["commands"])]
+        records = []
+        outcome = None
+        for identifier in identifiers:
+            directory = self.directory(run, {"id": identifier})
+            if not directory.exists():
+                continue
+            require(not (directory / "watchdog.json").exists(), "BLOCKED_SESSION_INTERRUPTED",
+                    "watchdog termination has no proven complete session cleanup; retain evidence for reviewed recovery")
+            request_path, result_path = directory / "request.json", directory / "result.json"
+            if not result_path.exists():
+                require(not (directory / "started.json").exists(), "BLOCKED_SESSION_INTERRUPTED",
+                        "started session has no retained result or complete cleanup proof")
+                continue
+            request, result = read_json(request_path), read_json(result_path)
+            require(request["operation_id"] == result["operation_id"] == identifier
+                    and result["request_sha256"] == evidence.digest(request),
+                    "BLOCKED_EVIDENCE", "retained retry evidence belongs to another request")
+            require(request["stop_file"] == str(self.store.directory / "stop" / (run["run_id"] + ".json")),
+                    "BLOCKED_EVIDENCE", "retained retry evidence belongs to another run")
+            for name, expected in (("stdin.txt", request["stdin_sha256"]),
+                                   ("stdout.jsonl", result["stdout_sha256"]), ("stderr.log", result["stderr_sha256"])):
+                require(session_runner.file_hash(directory / name) == expected, "BLOCKED_EVIDENCE",
+                        "retained session instructions or logs changed")
+            require(result.get("cleanup_complete") is True and result["termination"] in {"already-exited", "graceful", "forced"},
+                    "BLOCKED_SESSION_CLEANUP", "retained session lacks proven complete process-group cleanup")
+            if result["reason"] == "stopped":
+                outcome = outcome or "stopped"
+            elif result["reason"] != "completed" or result["exit_code"] != 0:
+                outcome = "failed"
+            records.append({"session_id": identifier, "directory": str(directory),
+                            "request_sha256": evidence.digest(request), "result_sha256": evidence.digest(result),
+                            "reason": result["reason"], "exit_code": result["exit_code"], "cleanup_complete": True})
+        if records and operation.get("failure", {}).get("code") == "FAILED_SESSION":
+            outcome = "failed"
+        if outcome is None:
+            return None
+        return {"operation_id": operation["id"], "outcome": outcome, "sessions": records}
+
     def supervised(self, run, operation_id, command, cwd, stdin="", timeout=3600, environment=None):
         directory = self.root / ".project/automation/runs" / run["run_id"] / operation_id
         evidence.durable_directory(directory)
@@ -325,6 +369,8 @@ class RealBackend:
         if watchdog.exists():
             stopped = read_json(watchdog)["reason"] == "operator stop"
             raise Blocked("STOPPED" if stopped else "FAILED_SESSION", "parent watchdog stopped an unresponsive supervisor; inspect retained cleanup evidence")
+        require(result.get("cleanup_complete") is True, "BLOCKED_SESSION_CLEANUP",
+                "session lacks proven complete process-group cleanup; preserve work for reviewed recovery")
         if result["reason"] == "stopped":
             raise Blocked("STOPPED", "supervised process stopped; work and logs are retained")
         require(result["reason"] == "completed" and result["exit_code"] == 0,

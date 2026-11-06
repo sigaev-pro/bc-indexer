@@ -243,7 +243,12 @@ class Controller:
         operation = self.intent(run, task, action)
         self.store.check_lease(run, task)
         # The adapter must reconcile this stable operation ID before any mutation.
-        result = self.backend.perform(action, run, task, operation)
+        try:
+            result = self.backend.perform(action, run, task, operation)
+        except Blocked as error:
+            operation["failure"] = {"code": error.code, "reason": str(error)}
+            self.store.save(run)
+            raise
         self.store.check_lease(run, task)
         require(result.get("operation_id") == operation["id"], "BLOCKED_EVIDENCE", "result belongs to another operation")
         task.pop("pending")
@@ -297,23 +302,77 @@ class Controller:
             raise Blocked("BLOCKED_STATE", "unsupported task transition")
         self.store.save(run)
 
-    def run(self, run, resume=False, renew_budget=False):
+    def recover_sessions(self, run, retry_session):
+        """An operator may authorize a new operation, never rewrite old results."""
+        for task in run["tasks"].values():
+            operation = task.get("pending")
+            if not operation or operation["action"] not in {"worker", "review", "verify"}:
+                continue
+            proof = self.backend.session_recovery(run, task, operation)
+            if proof is None:
+                continue
+            failed = proof["outcome"] == "failed"
+            if failed:
+                require(operation["action"] != "verify", "BLOCKED_VERIFICATION_FAILURE",
+                        "failed verification requires reviewed diagnosis; a session retry cannot clear a task or runtime FAIL")
+                require(retry_session, "BLOCKED_SESSION_RETRY_REQUIRED",
+                        "a failed model session requires an explicit diagnostic --retry-session")
+                require(task.get("diagnostic_retries", 0) < 1, "BLOCKED_SESSION_RETRIES",
+                        "the single diagnostic model-session retry is exhausted")
+            self.budget(run)
+            self.store.check_lease(run, task)
+            action = operation["action"]
+            if action == "worker":
+                require(task["attempts"] < run["limits"]["implementation_attempts"],
+                        "BLOCKED_ATTEMPTS", "the three implementation attempts are exhausted")
+                task["attempts"] += 1
+            if action in {"worker", "review"}:
+                run["invocations"] += 1
+            replacement = {"id": uuid.uuid4().hex, "action": action,
+                           "lease_generation": operation["lease_generation"], "retry_of": operation["id"],
+                           "authorization": "operator-diagnostic-retry" if failed else "operator-resume"}
+            task.setdefault("session_history", []).append({"operation": operation, "evidence": proof,
+                                                          "replacement_id": replacement["id"]})
+            if failed:
+                task["diagnostic_retries"] = task.get("diagnostic_retries", 0) + 1
+            task["pending"] = replacement
+            self.store.save(run)
+
+    def run(self, run, resume=False, renew_budget=False, automatic=False, retry_session=False):
+        require(not automatic or (resume and not renew_budget and not retry_session),
+                "BLOCKED_RECOVERY_MODE", "automatic recovery cannot authorize budget renewal or session retries")
+        require(resume or not (renew_budget or retry_session), "BLOCKED_RECOVERY_MODE",
+                "budget renewal and diagnostic retries require explicit resume")
+        if automatic:
+            # A service start is not an operator's decision to continue. Check
+            # durable stop state before preflight, reconciliation, or dispatch.
+            if self.store.stopped(run["run_id"]):
+                run["status"] = "STOPPED"
+                self.store.save(run)
+                return run
+            if run["status"] != "RUNNING":
+                return run
         if resume:
             gate = self.backend.start_gate(run["catalog"])
             require(gate.get("passed") is True, "BLOCKED_BOOTSTRAP", "resume requires current preflight and accepted BOOT-09")
             self.backend.verify_receipt("BOOT-09", gate["bootstrap_gate_receipt"], run)
-            self.store.clear_stop(run["run_id"])
             if renew_budget:
                 require(run["status"] == "BUDGET_STOP", "BLOCKED_BUDGET", "only an explicit budget stop can receive a new budget window")
                 run["budget_history"].append({"deadline": run["deadline"], "invocations": run["invocations"]})
                 run["deadline"] = self.clock() + run["limits"]["seconds"]
                 run["budget_baseline"] = run["invocations"]
-            for task in run["tasks"].values():
-                if task["state"] in {"BLOCKED", "FAILED"} and task.get("resume_state") and task.get("blocker", {}).get("code") != "BLOCKED_ATTEMPTS":
-                    task["state"] = task.pop("resume_state")
-                    task.pop("blocker", None)
+            if not automatic:
+                self.store.clear_stop(run["run_id"])
+                for task in run["tasks"].values():
+                    if task["state"] in {"BLOCKED", "FAILED"} and task.get("resume_state") and task.get("blocker", {}).get("code") != "BLOCKED_ATTEMPTS":
+                        task["state"] = task.pop("resume_state")
+                        task.pop("blocker", None)
         try:
+            self.budget(run)
             self.reconcile(run)
+            if resume and not automatic:
+                self.recover_sessions(run, retry_session)
+            run.pop("blocker", None)
             run["status"] = "RUNNING"
             while True:
                 self.budget(run)
@@ -369,8 +428,14 @@ def main():
     parser.add_argument("--authorization-ref", choices=sorted(AUTHORIZATIONS), default="D86")
     parser.add_argument("--session-timeout", type=int, default=3600)
     parser.add_argument("--renew-budget", action="store_true", help="Explicitly grant a stopped run one new bounded budget window.")
+    parser.add_argument("--automatic", action="store_true", help="Recover a running process after a crash; preserve durable stops and blockers.")
+    parser.add_argument("--retry-session", action="store_true", help="Explicitly allow one diagnostic retry of a failed model session with proven cleanup.")
     args = parser.parse_args()
     try:
+        require(not (args.automatic or args.retry_session or args.renew_budget) or args.command == "resume",
+                "BLOCKED_RECOVERY_MODE", "recovery options require resume")
+        require(not args.automatic or not (args.retry_session or args.renew_budget),
+                "BLOCKED_RECOVERY_MODE", "automatic recovery cannot authorize budget renewal or session retries")
         require(AUTHORIZATIONS[args.authorization_ref]["stage_limit"] == args.stage_limit,
                 "BLOCKED_AUTHORIZATION", "CLI stage limit differs from the recorded owner launch")
         from controller_backend import RealBackend
@@ -403,7 +468,8 @@ def main():
                 require(run["authorization"] == AUTHORIZATIONS[args.authorization_ref], "BLOCKED_AUTHORIZATION", "resume cannot change the run authorization")
             for signum in (signal.SIGTERM, signal.SIGINT):
                 signal.signal(signum, lambda *_: store.stop(run["run_id"]))
-            report = controller.run(run, resume=args.command == "resume", renew_budget=args.renew_budget)
+            report = controller.run(run, resume=args.command == "resume", renew_budget=args.renew_budget,
+                                    automatic=args.automatic, retry_session=args.retry_session)
             print(json.dumps(summary(report), indent=2))
             return 0 if report["status"] == "COMPLETE" else 1
     except (Blocked, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:

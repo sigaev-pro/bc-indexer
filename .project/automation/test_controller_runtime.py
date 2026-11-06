@@ -145,6 +145,13 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result["reason"], "cleanup-uncertain")
         self.assertTrue((directory / "cleanup.json").is_file())
 
+    def test_sending_a_signal_is_not_proof_of_complete_group_cleanup(self):
+        directory = self.request([sys.executable, "-c", "pass"])
+        with self.store.lock(), patch.object(session_runner, "confirm_group_exit", return_value=False):
+            result = session_runner.supervise(directory / "request.json", self.store.lock_fd)
+        self.assertFalse(result["cleanup_complete"])
+        self.assertEqual(result["reason"], "cleanup-uncertain")
+
     def test_backward_wall_clock_cannot_extend_session_timeout(self):
         directory = self.request([sys.executable, "-c", "import time; time.sleep(30)"], seconds=30)
         path = directory / "request.json"
