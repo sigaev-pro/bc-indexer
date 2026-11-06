@@ -112,9 +112,11 @@ This macOS launcher uses a process-scoped `caffeinate` guard. It does not change
 
 ```bash
 python3 .project/automation/controller.py status
-python3 .project/automation/controller.py stop
+python3 .project/automation/controller.py stop --run-id RUN_ID
 python3 .project/automation/controller.py resume --run-id RUN_ID
 ```
+
+The controller implementation and exact recovery procedures are documented in [.project/automation/README.md](.project/automation/README.md). Public `run` requires accepted BOOT-09 plus current preflight; `verify-bootstrap` checks its BOOT-01 through BOOT-08 prerequisites. D86 still authorizes only BOOT. A later stage needs a new reviewed owner authorization record and declared task verification/acceptance configuration. Readiness alone cannot start E01. `resume` preserves the original authorization, task snapshots, operation identities, attempts, and consumed budget. A budget stop needs an explicit `--renew-budget` to receive one new bounded window; earlier usage remains recorded.
 
 RUN_ID берётся из status/manifests, не угадывается. Длительный resume запускается под тем же supervisor/nohup. `stop` — явное намерение оператора, оно не считается FAIL продукта. Для рестарта машины BOOT-03 документирует установку service wrapper на выбранном runner; `nohup` переживает закрытие терминала, но не reboot. Автостарт после reboot включается только в заранее выбранном выделенном окружении, не глобально на личном компьютере.
 

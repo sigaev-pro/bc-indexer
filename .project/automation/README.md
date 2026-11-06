@@ -96,3 +96,50 @@ python3 .project/automation/evidence.py \
 The command only reads GitHub. It rejects a passing proof for a different requested head, base, PR, or task. Before reporting success, it atomically retains one private JSON bundle and syncs both file data and the containing directory. When output directories are new, it creates each level separately and syncs that directory and its parent entry before descending. A retry also syncs the nearest existing ancestor and its parent, covering an earlier interrupted directory-creation attempt. The bundle contains the complete snapshot, expected identity, evaluator verdict, capture time, and snapshot hash. Its content-addressed filename preserves earlier evidence. Output includes the bundle path and hash, but no environment or credentials.
 
 The snapshot hash is SHA-256 of `json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False) + "\n"`, encoded as UTF-8. Retain the full bundle with the actual merge receipt; a digest or CI log URL alone cannot reconstruct it. Capturing a PASS does not reserve GitHub state or authorize a merge. Repeat the live gate if the head or base changes, and always use the expected-head merge condition and verify the resulting merge/tree.
+
+## Persistent controller
+
+`controller.py` owns dependency scheduling and state transitions. `controller_backend.py` owns reconciled Git/GitHub operations and explicit role execution. `acceptance_receipts.py` verifies accepted dependencies. `session_runner.py` supervises one bounded process group. Tests exercise the same controller interface with a fake backend and run real disposable subprocesses to check ownership, stop, output bounds, and timeouts. They do not launch models or mutate GitHub.
+
+The canonical repository directory comes from Git's common directory. Every worktree therefore uses the same `.project/automation/state/` lock, run records, task leases, and accepted receipt ledger. Run/session artifacts live under `.project/automation/runs/`. These paths are ignored by Git. Back up both directories together. A per-operation `evidence/accepted-receipt.json` is a portable manifest containing the full collector snapshot, actual merge facts, verification records, source provenance, and a receipt digest. Preserve it with the named command/session logs; a remote CI log URL alone is insufficient.
+
+```bash
+python3 .project/automation/controller.py verify-bootstrap --repo sigaev-pro/bc-indexer
+python3 .project/automation/controller.py run --repo sigaev-pro/bc-indexer --authorization-ref D86 --stage-limit BOOT
+python3 .project/automation/controller.py status
+python3 .project/automation/controller.py stop --run-id RUN_ID
+python3 .project/automation/controller.py resume --run-id RUN_ID
+```
+
+`verify-bootstrap` reconciles all 84 task markers, issue mappings, and dependencies, then requires accepted receipts for BOOT-01 through BOOT-08. It reports missing work and returns nonzero until those results exist. It does not require BOOT-09, start workers, or grant E01 authorization. `run` additionally requires accepted BOOT-09 and current CLI, GitHub, branch-policy, and runner preflight. After bootstrap is accepted, the present D86/BOOT run ends without product dispatch. There is no alternative ungated bootstrap execution mode.
+
+The reviewed authorization registry in `controller.py` is independent of CLI requests and mutable run state. The scheduler handles ordered stages through the authorized bound; D86 is currently the sole entry. A later owner launch must add its reviewed authorization and task verification/acceptance configuration. Missing recipes produce `BLOCKED_UNCONFIGURED_VERIFICATION`. The present GitHub acceptance adapter supports bootstrap only; it cannot accept a product task merely because `bootstrap/ci` passes. Product runtime remains NOT_RUN.
+
+The importer has exactly four historical exceptions: BOOT-01 initial publication, BOOT-02 PR #85, BOOT-04 PR #86, and BOOT-05 PR #87. Each pins the candidate, accepted merge, coordinator comment identity, and exact comment body digest. It checks the public commit/tree and current main ancestry. BOOT-05 imports post-merge proof and the coordinator's live-gate attestation; it does not claim the original snapshot bytes exist. All later manual acceptances use the complete `evidence.py` capture. Place those captures in the canonical `runs/acceptance/` directory or select another directory with `--capture-dir`. The importer authenticates public review, status, CI, and actual merge facts before retaining a receipt. Once accepted, the full retained receipt does not depend on expiring CI logs.
+
+The controller reserves an operation ID and saves its intent before execution. PRs, comments, statuses, merges, and issue closure reconcile the existing remote result before a retry. An uncertain API response remains pending. A new head or base invalidates the candidate's acceptance. Dirty files, conflicting branches, ambiguous PRs, incomplete evidence, failed checks, unavailable access, and unsupported policy are explicit blockers. The controller never force-pushes, resets, cleans, discards stores, relaxes branch protection, or treats a closed issue as evidence.
+
+Worker and reviewer requests retain the exact task snapshot, dependency receipts, base/specification commits, role digest, session ID, path limits, schema, and process results. Codex resolves from the canonical repository's pinned 0.167.0 cache, including in isolated worktrees. The owner's configured model is preserved. Writers use the existing workspace-write sandbox, reviewers a separate read-only session, and both retain managed restrictions. The controller validates actual commits, changed paths, required tracked artifacts, independently executed verification commands, and exact-head review before publication. BOOT-09 uses a technical writer for its committed gate record and a separate reviewer for acceptance.
+
+## Stop, recovery, and budgets
+
+`status` reads atomic run records and prints the exact run ID, state, task blockers, attempt counts, invocation count, and deadline. `stop` writes a durable operator request; it does not mark product behavior as failed. The supervisor and parent watchdog stop owned groups with bounded graceful/forced cleanup and retain the outcome. Output is streamed through bounded pipes into private logs. The parent and supervisor use monotonic session deadlines so backward wall-clock changes cannot extend a session indefinitely.
+
+The repository lock is inherited by supervisors and workers. A controller crash cannot allow a second writer while its supervised child still owns that lock. Cleanup keeps direct-child leaders unreaped until their owned groups have been handled. Recovery never signals a numeric PID from an old heartbeat. A stopped or hung supervisor triggers a bounded parent watchdog; its child ownership is inspected while the supervisor is stopped and cannot reap those child leaders. Denied or unverifiable cleanup is a blocker, not successful cleanup.
+
+Resume uses the explicit run ID and reconciles current GitHub/Git evidence before pending operations. It preserves the saved authorization, task/recipe snapshots, attempts, and budget counters. An interrupted model session without a durable result remains `BLOCKED_SESSION_INTERRUPTED`: inspect its retained request, logs, process evidence, and worktree before preparing a reviewed recovery. Do not delete a lock file or edit state to steal ownership. A changed base/head or unresolved dirty work also requires a reviewed candidate recovery and fresh review/CI. There is no destructive automatic reset.
+
+Default limits are one sequential model session at a time, at most three model sessions including a coordinator, three implementation attempts per issue, 60 minutes per model session, 24 hours per budget window, and 200 model invocations per window. `--session-timeout` can narrow the session limit. A normal resume retains consumed budgets. After `BUDGET_STOP`, `resume --run-id RUN_ID --renew-budget` explicitly grants one new bounded window and retains the previous window in history. Exhausted implementation attempts are not reset. D83 remains separate: one diagnostic clean retry cannot erase a runtime FAIL or make a gate pass.
+
+## Runner service wrapper
+
+Use a dedicated runner for unattended restart after reboot. This implementation does not install or enable a machine-wide service. On the current macOS host, the process-scoped launcher below prevents idle sleep while preserving the owner's global power settings:
+
+```bash
+nohup caffeinate -i -s python3 .project/automation/controller.py resume --run-id RUN_ID \
+  > .project/automation/runs/controller-launcher.log 2>&1 < /dev/null &
+```
+
+For a previously selected dedicated macOS runner, copy [controller.launchd.plist](controller.launchd.plist) to that runner account's LaunchAgents directory after replacing every placeholder with absolute paths and the recorded run ID. Validate it with `plutil -lint`, load it with `launchctl bootstrap gui/USER_ID PATH`, and start it with `launchctl kickstart gui/USER_ID/com.extractor.controller`. `RunAtLoad` and automatic restart are disabled in the template. Enable reboot startup only for the explicitly selected dedicated environment. Lid close and loss of power remain outside `caffeinate` guarantees.
+
+On a dedicated Linux runner, use [controller.service](controller.service) as a user service after replacing placeholders. Run `systemd-analyze verify PATH`, then `systemctl --user daemon-reload` and `systemctl --user start extractor-controller.service`. Enable reboot/login startup only under the same explicit runner authorization. Automatic failure restart is disabled so an access or budget blocker cannot create an unbounded restart loop. Before any service restart, read `status`, inspect the retained blocker, and use the same run ID. Stop through the controller command first; service termination still triggers the controller's durable stop handler.

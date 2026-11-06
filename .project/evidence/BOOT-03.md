@@ -11,4 +11,27 @@ The capture command only reads GitHub. It neither merges nor authorizes a merge.
 
 Focused tests use temporary directories and a fake collector. The original 11 capture tests passed with 42 total bootstrap tests. Independent review then identified that new nested directory entries also need parent-directory sync. The correction creates and syncs each directory level before descending, including the nearest existing ancestor on retry. Two additional tests cover exact sync ordering and recovery after parent sync fails. The corrected suite has 13 capture tests and 44 total bootstrap tests. No real model session, issue, or GitHub mutation is used.
 
-The complete scheduler, state recovery, leases, subprocess handling, and historical receipt importer remain in progress. This substep does not establish controller readiness. Product runtime remains NOT_RUN, and E01 is not authorized.
+The capture substep was committed as `d138a76cd44bc3718423f7e52470fe0e9f27a6fe`, then corrected after independent review in `ed513201e357da23414fd103227ecbadb15b8a84`. The coordinator independently reviewed the correction and used it to retain complete BOOT-06 and BOOT-07 proofs before their merges. Their original captures remain in the canonical ignored acceptance directory.
+
+## Controller implementation
+
+The implementation supplies `verify-bootstrap`, `run`, `resume`, `status`, and `stop`; validates the 84-node DAG and live issue mapping; retains exact task/recipe snapshots; and schedules only through the immutable reviewed owner stage bound. D86 remains BOOT only. Public `run` requires accepted BOOT-09 plus current preflight; `verify-bootstrap` checks the preceding eight tasks. Unconfigured product verification and acceptance remain explicit blockers.
+
+Atomic run state, an inherited repository lock, and generation-bound task leases prevent multiple writers across worktrees. Before external changes, the controller retains operation identities and reconciles current worktrees, branches, PRs, reports, statuses, CI, and merge facts. It preserves dirty work and uncertain session outcomes. Full pre-merge captures precede merge requests; durable accepted receipts follow verified actual merges. Issue closure follows accepted evidence.
+
+The supervisor uses bounded pipes, monotonic deadlines, process groups, and unreaped direct-child ownership. A parent watchdog bounds stopped or hung supervisors. Darwin tests exposed that `waitid` may report `CLD_STOPPED` despite `WEXITED`, and an empty zombie-owned group may return `EPERM`. The implementation filters exit event types and distinguishes empty groups from denied cleanup using live membership. PID records never authorize signaling another process. Denied or uncertain cleanup remains visible.
+
+The owner's existing model remains unchanged. Codex resolves from the canonical repository's pinned 0.167.0 cache; isolated worktrees do not install their own copy. No new real model session was launched for BOOT-03. Existing BOOT-02/04 proofs establish the model and access environment, while the new process tests use temporary Python subprocesses.
+
+## Failure evidence
+
+- Fake-backend crash injection covers before and after worktree preparation, worker/reviewer execution, verification, push, PR creation, review comment, status, pre-merge capture, merge, and issue closure. Recovery retains one operation identity and does not duplicate changes.
+- The real publication adapter is tested with a fake GitHub transport that loses responses after push, PR, comment, and status mutations. Retried operations discover and reuse the existing remote objects.
+- Negative checks reject unverified worker output, manually closed dependencies, stale head/base/CI, forged receipts, missing recipes, changed lease generations, foreign stale leases, graph drift, and exhausted review attempts.
+- Budget tests retain invocation reservations and elapsed window deadlines across normal resume. Only an explicit renewal adds a bounded window. A test-only future authorization proves that scheduling follows ordered stages; D86 still cannot dispatch E01.
+- Disposable process tests cover inherited locks, stop with work preservation, process timeout, bounded output, environment fields, stale/reused PID records, backward wall-clock movement, and an unresponsive stopped supervisor with a child group.
+- Receipt tests authenticate retained captures against actual public record shapes, verify merge parents/tree/main ancestry, reject altered evidence, and preserve accepted proof independently of expiring CI logs. Historical exceptions are limited to BOOT-01/02/04/05.
+
+An early provisional live read-only `verify-bootstrap` run reconciled all 84 issues and authenticated BOOT-01/02/04/05/06/07. It correctly returned BLOCKED with BOOT-03 and BOOT-08 missing, `e01_authorized: false`, and product runtime NOT_RUN. This ran working source, not an accepted controller commit. The first bounded local attempt timed out during read-only collection; the normal sandbox lacked network access. The completed read-only check used approved escalation and retained local receipts. No GitHub mutation occurred. Executing source hashes and explicit clean/modified state accompany later revalidation records so checkout HEAD is not confused with uncommitted source bytes.
+
+Local CI now passes 81 tests, including the controller, real fake-transport adapter, process ownership, receipt, and existing acceptance suites. Document/mapping/mirror checks and the immutable v2 hash also pass. Final committed-source checks, independent review, fresh exact-head GitHub CI, and controller acceptance remain pending. Native product runtime remains NOT_RUN; E01 is not authorized.

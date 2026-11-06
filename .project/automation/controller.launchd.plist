@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.extractor.controller</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string><string>-i</string><string>-s</string>
+    <string>ABSOLUTE_PYTHON_PATH</string>
+    <string>ABSOLUTE_REPOSITORY_PATH/.project/automation/controller.py</string>
+    <string>resume</string><string>--run-id</string><string>RECORDED_RUN_ID</string>
+  </array>
+  <key>WorkingDirectory</key><string>ABSOLUTE_REPOSITORY_PATH</string>
+  <key>RunAtLoad</key><false/>
+  <key>KeepAlive</key><false/>
+  <key>StandardOutPath</key><string>ABSOLUTE_REPOSITORY_PATH/.project/automation/runs/service.stdout.log</string>
+  <key>StandardErrorPath</key><string>ABSOLUTE_REPOSITORY_PATH/.project/automation/runs/service.stderr.log</string>
+</dict>
+</plist>

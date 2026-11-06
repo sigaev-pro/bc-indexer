@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task_id", "session_id", "head_sha", "base_sha", "verdict", "findings", "checks", "unverified"],
+  "properties": {
+    "task_id": {"type": "string"},
+    "session_id": {"type": "string"},
+    "head_sha": {"type": "string"},
+    "base_sha": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["PASS", "REQUEST_CHANGES"]},
+    "findings": {"type": "array", "items": {"type": "string"}},
+    "checks": {"type": "array", "items": {"type": "string"}},
+    "unverified": {"type": "array", "items": {"type": "string"}}
+  }
+}

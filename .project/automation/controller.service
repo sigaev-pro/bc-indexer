@@ -1,0 +1,14 @@
+[Unit]
+Description=Extractor durable task controller
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=ABSOLUTE_REPOSITORY_PATH
+ExecStart=ABSOLUTE_PYTHON_PATH ABSOLUTE_REPOSITORY_PATH/.project/automation/controller.py resume --run-id RECORDED_RUN_ID
+Restart=no
+TimeoutStopSec=30
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

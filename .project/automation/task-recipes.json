@@ -1,0 +1,33 @@
+{
+  "BOOT-03": {
+    "role": "devops",
+    "allowed_paths": [".project/automation/", ".project/evidence/BOOT-03.md", ".project/PROJECT_STATUS.md", ".project/docs/DECISIONS.md", "DEVELOPMENT_AUTOPILOT.md"],
+    "required_files": [".project/automation/controller.py", ".project/automation/test_controller.py", ".project/evidence/BOOT-03.md"],
+    "commands": [["python3", ".project/automation/ci.py"]]
+  },
+  "BOOT-06": {
+    "role": "devops",
+    "allowed_paths": [".project/bootstrap/components/", ".project/evidence/BOOT-06.md", ".project/PROJECT_STATUS.md"],
+    "required_files": [".project/bootstrap/components/verify.py", ".project/evidence/BOOT-06.md"],
+    "commands": [["python3", ".project/automation/ci.py"], ["python3", ".project/bootstrap/components/verify.py", "--self-test"]]
+  },
+  "BOOT-07": {
+    "role": "architect",
+    "allowed_paths": [".project/docs/", ".project/evm-transaction-extractor-tz-v3-codex.md", ".project/evidence/BOOT-07.md", ".project/PROJECT_STATUS.md", "TZ_EXECUTOR.md", "TZ_DECISION_MAKER.md"],
+    "required_files": [".project/evidence/BOOT-07.md", ".project/docs/DECISIONS.md"],
+    "commands": [["python3", ".project/automation/ci.py"]]
+  },
+  "BOOT-08": {
+    "role": "qa",
+    "allowed_paths": [".project/docs/", ".project/evm-transaction-extractor-tz-v3-codex.md", ".project/evidence/BOOT-08.md", ".project/PROJECT_STATUS.md", "TZ_EXECUTOR.md", "TZ_DECISION_MAKER.md"],
+    "required_files": [".project/evidence/BOOT-08.md", ".project/docs/ACCEPTANCE_CASES.md"],
+    "commands": [["python3", ".project/automation/ci.py"]]
+  },
+  "BOOT-09": {
+    "role": "technical-writer",
+    "allowed_paths": [".project/evidence/BOOT-09.md", ".project/PROJECT_STATUS.md"],
+    "required_files": [".project/evidence/BOOT-09.md"],
+    "commands": [["python3", ".project/automation/ci.py"]],
+    "bootstrap_gate": true
+  }
+}
