@@ -187,7 +187,22 @@ def supervise(request_path, lock_fd):
         with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
             os.chmod(stdout_path, 0o600)
             os.chmod(stderr_path, 0o600)
+            stopped = interrupted or Path(request["stop_file"]).exists()
+            if stopped or time.time() >= request["deadline"] or time.monotonic() >= deadline:
+                for stream in (stdout, stderr):
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                result = {"schema_version": 1, "operation_id": request["operation_id"],
+                          "request_sha256": request_hash, "started_at": started, "finished_at": time.time(),
+                          "exit_code": None, "reason": "stopped" if stopped else "timeout",
+                          "termination": "not-started", "cleanup_complete": True,
+                          "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
+                evidence.atomic_json(result_path, result)
+                return result
             with (directory / "stdin.txt").open("rb") as stdin:
+                acceptance.require(time.time() < request["deadline"] and time.monotonic() < deadline
+                                   and not interrupted and not Path(request["stop_file"]).exists(),
+                                   "session deadline or stop forbids worker dispatch")
                 process = subprocess.Popen(request["command"], cwd=request["cwd"], stdin=stdin,
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
                                            pass_fds=(lock_fd,), env=dict(os.environ, **request.get("env", {})))
