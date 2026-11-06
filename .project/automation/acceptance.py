@@ -152,7 +152,20 @@ def evaluate(snapshot):
         require(status["target_url"] == comment["html_url"], "review status points to different evidence")
         digest = hashlib.sha256(comment["body"].encode()).hexdigest()
         require(status["description"] == f"Review SHA256: {digest}", "review evidence changed after its status was published")
-        return {"verdict": "PASS", "task_id": task, "head_sha": head, "base_sha": base,
+        extra = {}
+        if not task.startswith("BOOT-"):
+            import evidence_task_verifier as artifact_verifier
+            import task_proofs
+            require(task == artifact_verifier.TASK, "this product task has no acceptance adapter")
+            proof = task_proofs.check_verification(snapshot["task_verification"], head, base)
+            require(review.get("controller_verification") == task_proofs.publication(proof),
+                    "task proof differs from the coordinator's verification attestation")
+            ancestry = snapshot["verifier_source_ancestry"]
+            require(ancestry["status"] in {"identical", "ahead"}
+                    and ancestry["merge_base_commit"]["sha"] == proof["verifier_source_commit"],
+                    "trusted verifier source was not accepted before the candidate base")
+            extra = {"scope": "artifact-conformance", "runtime": "NOT_RUN", "task_proof_sha256": task_proofs.publication(proof)["proof_sha256"]}
+        return {"verdict": "PASS", "task_id": task, "head_sha": head, "base_sha": base, **extra,
                 "ci_run_id": run["id"], "review_url": comment["html_url"],
                 "review_status_id": status["id"], "errors": []}
     except (ValueError, KeyError, TypeError, AttributeError) as error:
@@ -166,11 +179,15 @@ def github(repository, path):
     return parse_json(result.stdout)
 
 
-def collect(repository, number, task, comment_id, coordinator, implementer):
+def collect(repository, number, task, comment_id, coordinator, implementer, task_verification=None):
     """Collect fresh remote facts without writing a status, review, or merge."""
     require(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository), "invalid repository")
     require(re.fullmatch(TASK_PATTERN, task), "invalid task ID")
     require(number > 0 and comment_id > 0, "pull request and comment IDs must be positive")
+    if not task.startswith("BOOT-"):
+        import evidence_task_verifier as artifact_verifier
+        require(task == artifact_verifier.TASK and task_verification is not None,
+                "product acceptance requires the configured exact-task verification proof")
     pull = github(repository, f"pulls/{number}")
     head, base = pull["head"]["sha"], pull["base"]["sha"]
     checks = github(repository, f"commits/{head}/check-runs?filter=latest&per_page=100")
@@ -197,6 +214,11 @@ def collect(repository, number, task, comment_id, coordinator, implementer):
         "protection": github(repository, "branches/main/protection"),
         "base_ref": github(repository, "git/ref/heads/main"),
     }
+    if not task.startswith("BOOT-"):
+        import task_proofs
+        task_proofs.check_verification(task_verification, head, base)
+        snapshot["task_verification"] = task_verification
+        snapshot["verifier_source_ancestry"] = github(repository, f"compare/{task_verification['verifier_source_commit']}...{base}")
     initial_status = review_status(snapshot["combined_status"], snapshot["commit_statuses"], repository, head)
     fresh_combined = github(repository, f"commits/{head}/status?per_page=100")
     fresh_list = github(repository, f"commits/{head}/statuses?per_page=100")
@@ -221,6 +243,7 @@ def main():
     parser.add_argument("--review-comment-id", type=int)
     parser.add_argument("--coordinator-login", default="sigaev-pro")
     parser.add_argument("--implementer-session")
+    parser.add_argument("--task-proof", type=Path, help="Retained controller verification proof required for the configured artifact task.")
     args = parser.parse_args()
     try:
         if args.snapshot:
@@ -229,7 +252,8 @@ def main():
             require(all([args.pr, args.task, args.review_comment_id, args.implementer_session]),
                     "live checks require --pr, --task, --review-comment-id, and --implementer-session")
             snapshot = collect(args.repo, args.pr, args.task, args.review_comment_id,
-                               args.coordinator_login, args.implementer_session)
+                               args.coordinator_login, args.implementer_session,
+                               parse_json(args.task_proof.read_text()) if args.task_proof else None)
         report = evaluate(snapshot)
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         report = {"verdict": "BLOCKED", "errors": [str(error)]}

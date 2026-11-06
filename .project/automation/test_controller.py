@@ -45,6 +45,9 @@ class FakeBackend:
     def session_recovery(self, run, task, operation):
         return None
 
+    def snapshot_recipes(self, recipes):
+        return copy.deepcopy(recipes)
+
     def reconcile_catalog(self, tasks):
         if self.fail == "catalog":
             raise Blocked("BLOCKED_CATALOG", "remote dependency changed")

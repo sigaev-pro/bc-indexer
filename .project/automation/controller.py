@@ -180,6 +180,7 @@ class Controller:
         require(gate.get("passed") is True and gate.get("bootstrap_gate_receipt"),
                 "BLOCKED_BOOTSTRAP", "run requires accepted BOOT-09 and current preflight")
         self.backend.verify_receipt("BOOT-09", gate["bootstrap_gate_receipt"], {"catalog": tasks})
+        recipes = self.backend.snapshot_recipes(recipes)
         run_id = "run_" + uuid.uuid4().hex
         run = {"schema_version": 1, "run_id": run_id, "repository": repository,
                "authorization": dict(authorization), "preflight": gate, "catalog": tasks, "catalog_sha256": evidence.digest(tasks),

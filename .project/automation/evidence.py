@@ -98,7 +98,7 @@ def validate_capture(bundle):
     return result
 
 
-def capture(expected, output_directory, collector=None):
+def capture(expected, output_directory, collector=None, task_verification=None):
     """Collect and durably retain a PASS before returning its path to the caller."""
     acceptance.require(set(expected) == {"repository", "task_id", "pull_request_number",
                        "review_comment_id", "coordinator_login", "implementer_session",
@@ -118,9 +118,14 @@ def capture(expected, output_directory, collector=None):
     acceptance.require(isinstance(expected["implementer_session"], str)
                        and expected["implementer_session"].strip(), "missing implementer session")
     read = collector or acceptance.collect
+    if not expected["task_id"].startswith("BOOT-"):
+        acceptance.require(task_verification is not None, "product capture requires retained exact-task verification")
+    options = {"task_verification": task_verification} if task_verification is not None else {}
     snapshot = read(expected["repository"], expected["pull_request_number"], expected["task_id"],
                     expected["review_comment_id"], expected["coordinator_login"],
-                    expected["implementer_session"])
+                    expected["implementer_session"], **options)
+    if not expected["task_id"].startswith("BOOT-"):
+        acceptance.require(snapshot.get("task_verification") == task_verification, "collector returned a different task proof")
     bundle = {"schema_version": 1, "kind": "premerge-capture", "expected": dict(expected),
               "captured_at": datetime.now(timezone.utc).isoformat(), "snapshot": snapshot,
               "snapshot_sha256": digest(snapshot), "verdict": acceptance.evaluate(snapshot)}
@@ -181,6 +186,7 @@ def main():
     parser.add_argument("--expected-head", required=True)
     parser.add_argument("--expected-base", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--task-proof", type=Path, help="Retained controller verification proof required for the configured artifact task.")
     args = parser.parse_args()
     try:
         directory = ignored_directory(args.output_dir)
@@ -188,7 +194,8 @@ def main():
                     "review_comment_id": args.review_comment_id, "coordinator_login": args.coordinator_login,
                     "implementer_session": args.implementer_session,
                     "head_sha": args.expected_head, "base_sha": args.expected_base}
-        print(json.dumps(capture(expected, directory), indent=2))
+        proof = acceptance.parse_json(args.task_proof.read_text()) if args.task_proof else None
+        print(json.dumps(capture(expected, directory, task_verification=proof), indent=2))
         return 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(json.dumps({"verdict": "BLOCKED", "error": str(error), "merge_authorized": False}))
