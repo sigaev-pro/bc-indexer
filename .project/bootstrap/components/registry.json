@@ -1,0 +1,1145 @@
+{
+  "schema_version": 1,
+  "registry_id": "extractor-bootstrap-components-v1",
+  "task_id": "BOOT-06",
+  "checked_on": "2026-11-06",
+  "scope": "Product build, test, and deployment inputs; bootstrap agent tools retain their separate locks.",
+  "profile_ids": [
+    "ethereum-mainnet",
+    "ethereum-sepolia",
+    "ethereum-hoodi",
+    "bsc-mainnet",
+    "bsc-testnet",
+    "polygon-pos-mainnet",
+    "polygon-pos-amoy"
+  ],
+  "policy": {
+    "stable_sources_only": true,
+    "allow_floating_pins": false,
+    "native_dependency_graphs": "SEPARATE_UPSTREAM_INPUTS",
+    "candidate_only": true,
+    "stage_limit": "BOOT",
+    "promotion": "Candidate inputs may be used for gated isolated preparation. Runtime admission and release promotion require the applicable E01/E06/E07 evidence; this inventory does not grant them.",
+    "upstream_bundle_rule": "Update native clients as stable source bundles. Preserve their own go.mod/go.sum and replacements until separately reviewed integration. A transitive prerelease or pseudo-version already in a bundle is not an independently selected prerelease."
+  },
+  "components": [
+    {
+      "id": "geth",
+      "category": "native_client",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "ethereum/go-ethereum",
+        "url": "https://api.github.com/repos/ethereum/go-ethereum/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "prysm",
+      "category": "support_client",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "OffchainLabs/prysm",
+        "url": "https://api.github.com/repos/OffchainLabs/prysm/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "bsc",
+      "category": "native_client",
+      "profiles": [
+        "bsc-mainnet",
+        "bsc-testnet"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "bnb-chain/bsc",
+        "url": "https://api.github.com/repos/bnb-chain/bsc/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "bor",
+      "category": "native_client",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "0xPolygon/bor",
+        "url": "https://api.github.com/repos/0xPolygon/bor/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "heimdall",
+      "category": "support_client",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "0xPolygon/heimdall-v2",
+        "url": "https://api.github.com/repos/0xPolygon/heimdall-v2/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "nats-server",
+      "category": "support_client",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "nats-io/nats-server",
+        "url": "https://api.github.com/repos/nats-io/nats-server/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "nats-go",
+      "category": "library",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "nats-io/nats.go",
+        "url": "https://api.github.com/repos/nats-io/nats.go/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "grpc-go",
+      "category": "library",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "grpc/grpc-go",
+        "url": "https://api.github.com/repos/grpc/grpc-go/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "protoc",
+      "category": "generator",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "protocolbuffers/protobuf",
+        "url": "https://api.github.com/repos/protocolbuffers/protobuf/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "protobuf-go",
+      "category": "library",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "protocolbuffers/protobuf-go",
+        "url": "https://api.github.com/repos/protocolbuffers/protobuf-go/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "grocksdb",
+      "category": "library",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "linxGnu/grocksdb",
+        "url": "https://api.github.com/repos/linxGnu/grocksdb/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "nats-chart",
+      "category": "deployment_tool",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "nats-io/k8s",
+        "url": "https://api.github.com/repos/nats-io/k8s/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED",
+        "tag_filter": "^nats-[0-9]+\\.[0-9]+\\.[0-9]+$"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "compose",
+      "category": "deployment_tool",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "docker/compose",
+        "url": "https://api.github.com/repos/docker/compose/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "docker-engine",
+      "category": "deployment_tool",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "moby/moby",
+        "url": "https://api.github.com/repos/moby/moby/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "kubernetes",
+      "category": "deployment_tool",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "kubernetes/kubernetes",
+        "url": "https://api.github.com/repos/kubernetes/kubernetes/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "helm",
+      "category": "deployment_tool",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "helm/helm",
+        "url": "https://api.github.com/repos/helm/helm/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "rocksdb",
+      "category": "library",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "meta/rocksdb",
+        "url": "https://api.github.com/repos/meta/rocksdb/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "solc",
+      "category": "test_toolchain",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "argotorg/solidity",
+        "url": "https://api.github.com/repos/argotorg/solidity/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "protoc-gen-go",
+      "category": "generator",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "protocolbuffers/protobuf-go",
+        "url": "https://api.github.com/repos/protocolbuffers/protobuf-go/releases?per_page=100",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_RELEASE_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "protoc-gen-go-grpc",
+      "category": "generator",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "git_module_tags",
+        "repository": "grpc/grpc-go",
+        "url": "https://api.github.com/repos/grpc/grpc-go/git/matching-refs/tags/cmd/protoc-gen-go-grpc/",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_MODULE_TAG_OBSERVED"
+      },
+      "update_rule": "Enumerate the official source, exclude drafts and prereleases, select the compatible stable candidate, resolve annotated tags to commits, and record notices before build gates.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "bor-cometbft",
+      "category": "upstream_fork_library",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "0xPolygon/cometbft",
+        "url": "https://api.github.com/repos/0xPolygon/cometbft/releases?per_page=100",
+        "channel": "upstream-bundle",
+        "selection": "OWNING_NATIVE_GO_MOD_REPLACEMENT"
+      },
+      "update_rule": "Follow the owning native stable release's exact replacement; never update this fork independently.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "bor-cosmos-sdk",
+      "category": "upstream_fork_library",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "0xPolygon/cosmos-sdk",
+        "url": "https://api.github.com/repos/0xPolygon/cosmos-sdk/releases?per_page=100",
+        "channel": "upstream-bundle",
+        "selection": "OWNING_NATIVE_GO_MOD_REPLACEMENT"
+      },
+      "update_rule": "Follow the owning native stable release's exact replacement; never update this fork independently.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "heimdall-cometbft",
+      "category": "upstream_fork_library",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "0xPolygon/cometbft",
+        "url": "https://api.github.com/repos/0xPolygon/cometbft/releases?per_page=100",
+        "channel": "upstream-bundle",
+        "selection": "OWNING_NATIVE_GO_MOD_REPLACEMENT"
+      },
+      "update_rule": "Follow the owning native stable release's exact replacement; never update this fork independently.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "heimdall-cosmos-sdk",
+      "category": "upstream_fork_library",
+      "profiles": [
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "git_source",
+      "source": {
+        "kind": "github_releases",
+        "repository": "0xPolygon/cosmos-sdk",
+        "url": "https://api.github.com/repos/0xPolygon/cosmos-sdk/releases?per_page=100",
+        "channel": "upstream-bundle",
+        "selection": "OWNING_NATIVE_GO_MOD_REPLACEMENT"
+      },
+      "update_rule": "Follow the owning native stable release's exact replacement; never update this fork independently.",
+      "verification": "Re-fetch the tag object and immutable source inputs, then verify builds and profile behavior before promotion."
+    },
+    {
+      "id": "go",
+      "category": "toolchain",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "artifact_set",
+      "source": {
+        "kind": "official_downloads",
+        "url": "https://go.dev/dl/?mode=json",
+        "channel": "stable",
+        "selection": "HIGHEST_STABLE_GO_RELEASE"
+      },
+      "update_rule": "Select a stable Go release and record its source and platform archive checksums. Prove every native and common module separately.",
+      "verification": "Hash downloaded bytes against official metadata; run native and common build gates."
+    },
+    {
+      "id": "nats-runtime-image",
+      "category": "image",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "oci_image",
+      "source": {
+        "kind": "official_oci",
+        "repository": "docker.io/library/nats",
+        "url": "https://registry-1.docker.io/v2/library/nats/tags/list",
+        "channel": "stable",
+        "selection": "VERSION_MATCHED_OFFICIAL_IMAGE"
+      },
+      "update_rule": "Resolve an exact version compatible with the selected component or Debian stable series. Pin the OCI index and every selected platform manifest.",
+      "verification": "Hash the manifest bytes, compare registry digests, then verify image provenance and platform execution before admission."
+    },
+    {
+      "id": "debian-runtime-image",
+      "category": "image",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "oci_image",
+      "source": {
+        "kind": "official_oci",
+        "repository": "docker.io/library/debian",
+        "url": "https://registry-1.docker.io/v2/library/debian/tags/list",
+        "channel": "stable",
+        "selection": "VERSION_MATCHED_OFFICIAL_IMAGE"
+      },
+      "update_rule": "Resolve an exact version compatible with the selected component or Debian stable series. Pin the OCI index and every selected platform manifest.",
+      "verification": "Hash the manifest bytes, compare registry digests, then verify image provenance and platform execution before admission."
+    },
+    {
+      "id": "golang-build-image",
+      "category": "image",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "oci_image",
+      "source": {
+        "kind": "official_oci",
+        "repository": "docker.io/library/golang",
+        "url": "https://registry-1.docker.io/v2/library/golang/tags/list",
+        "channel": "stable",
+        "selection": "VERSION_MATCHED_OFFICIAL_IMAGE"
+      },
+      "update_rule": "Resolve an exact version compatible with the selected component or Debian stable series. Pin the OCI index and every selected platform manifest.",
+      "verification": "Hash the manifest bytes, compare registry digests, then verify image provenance and platform execution before admission."
+    },
+    {
+      "id": "debian-libbz2-dev",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "libbz2-dev",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-cmake",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "cmake",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-gxx-14",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "g++-14",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-gcc-14",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "gcc-14",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-gxx",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "g++",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-gcc",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "gcc",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-libgflags-dev",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "libgflags-dev",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-libzstd-dev",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "libzstd-dev",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-liblz4-dev",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "liblz4-dev",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-make",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "make",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-libssl-dev",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "libssl-dev",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-libsnappy-dev",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "libsnappy-dev",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    },
+    {
+      "id": "debian-zlib1g-dev",
+      "category": "build_package",
+      "profiles": [
+        "ethereum-mainnet",
+        "ethereum-sepolia",
+        "ethereum-hoodi",
+        "bsc-mainnet",
+        "bsc-testnet",
+        "polygon-pos-mainnet",
+        "polygon-pos-amoy"
+      ],
+      "pin_kind": "distribution_package",
+      "source": {
+        "kind": "debian_stable_package",
+        "package": "zlib1g-dev",
+        "url": "https://deb.debian.org/debian/dists/trixie/Release",
+        "channel": "debian-13-stable",
+        "selection": "EXACT_PACKAGE_REVISION_PER_PLATFORM",
+        "additional_channels": [
+          "https://security.debian.org/debian-security/dists/trixie-security/Release",
+          "https://deb.debian.org/debian/dists/trixie-updates/Release"
+        ]
+      },
+      "update_rule": "Check the Debian 13 stable and security indexes, verify their signed Release metadata, and resolve a complete reproducible OS closure. Do not substitute a different distribution or a package range.",
+      "verification": "Verify archive SHA-256 and signed index provenance, dependency closure, native compile/link behavior, and resulting runtime libraries."
+    }
+  ],
+  "generated_outputs": [
+    {
+      "id": "patched-native-images",
+      "owner_tasks": [
+        "E01-01.builds",
+        "E06-13.artifact_lock"
+      ],
+      "source_components": [
+        "geth",
+        "bsc",
+        "bor"
+      ],
+      "description": "Record project patch commits, build inputs, image index/platform digests, and each native profile's evidence."
+    },
+    {
+      "id": "supporting-runtime-images",
+      "owner_tasks": [
+        "E01-01.builds",
+        "E06-13.artifact_lock"
+      ],
+      "source_components": [
+        "prysm",
+        "heimdall"
+      ],
+      "description": "Build or package exact upstream supporting binaries and record image digests, provenance, and dedicated L1 instance bindings."
+    },
+    {
+      "id": "common-project-artifacts",
+      "owner_tasks": [
+        "E06-13.artifact_lock"
+      ],
+      "source_components": [
+        "go",
+        "grpc-go",
+        "nats-go",
+        "protobuf-go",
+        "rocksdb",
+        "grocksdb"
+      ],
+      "description": "Record Gateway, test reader, driver, and helper source/dependency/image locks after their owning implementation tasks produce them."
+    },
+    {
+      "id": "resolved-go-module-closures",
+      "owner_tasks": [
+        "E01-01.builds",
+        "E06-13.artifact_lock"
+      ],
+      "source_components": [
+        "geth",
+        "bsc",
+        "bor",
+        "prysm",
+        "heimdall",
+        "nats-server",
+        "grpc-go",
+        "nats-go",
+        "protobuf-go",
+        "grocksdb"
+      ],
+      "description": "Resolve each build's actual module graph and checksums, including project integration. Upstream go.sum inputs may contain unused versions and are not this closure."
+    },
+    {
+      "id": "resolved-os-package-closures",
+      "owner_tasks": [
+        "E01-01.builds",
+        "E06-13.artifact_lock"
+      ],
+      "source_components": [
+        "golang-build-image",
+        "debian-runtime-image"
+      ],
+      "description": "Verify signed indexes, resolve complete per-platform build/runtime package closures, and pin compression/system libraries actually linked."
+    },
+    {
+      "id": "profile-bootstrap-manifests",
+      "owner_tasks": [
+        "E01-02.pins",
+        "E01-02.inputs",
+        "E06-13.init",
+        "E06-13.artifact_lock"
+      ],
+      "source_components": [
+        "geth",
+        "bsc",
+        "bor",
+        "prysm",
+        "heimdall"
+      ],
+      "description": "Materialize all seven identity/genesis/fork/bootstrap manifests, source hashes, and native parse proofs. Heimdall genesis payloads and testnet-specific sources still need acquisition."
+    },
+    {
+      "id": "fixture-contract-bytecode",
+      "owner_tasks": [
+        "E01-01.harness",
+        "E07-02.e2e"
+      ],
+      "source_components": [
+        "solc"
+      ],
+      "description": "Pin contract source, compiler, EVM target, bytecode/ABI, deployment inputs, and independent expectations per applicable profile/fork."
+    },
+    {
+      "id": "updater-check-and-promotion",
+      "owner_tasks": [
+        "E01-01.builds",
+        "E07-09.requirement_verdict"
+      ],
+      "source_components": [
+        "geth",
+        "prysm",
+        "bsc",
+        "bor",
+        "heimdall",
+        "nats-server",
+        "nats-go",
+        "grpc-go",
+        "protoc",
+        "protobuf-go",
+        "grocksdb",
+        "nats-chart",
+        "compose",
+        "docker-engine",
+        "kubernetes",
+        "helm",
+        "rocksdb",
+        "solc",
+        "protoc-gen-go",
+        "protoc-gen-go-grpc",
+        "bor-cometbft",
+        "bor-cosmos-sdk",
+        "heimdall-cometbft",
+        "heimdall-cosmos-sdk",
+        "go",
+        "nats-runtime-image",
+        "debian-runtime-image",
+        "golang-build-image",
+        "debian-libbz2-dev",
+        "debian-cmake",
+        "debian-gxx-14",
+        "debian-gcc-14",
+        "debian-gxx",
+        "debian-gcc",
+        "debian-libgflags-dev",
+        "debian-libzstd-dev",
+        "debian-liblz4-dev",
+        "debian-make",
+        "debian-libssl-dev",
+        "debian-libsnappy-dev",
+        "debian-zlib1g-dev"
+      ],
+      "description": "Implement scripts/refresh-versions check/update, source failures, compatible resolution, UpdateReport, full affected gates, and atomic promotion. This inventory and offline validator are not that updater."
+    }
+  ],
+  "external_lock_paths": [
+    ".project/agency/sources.lock.json",
+    ".project/agency/toolchain.lock.json"
+  ],
+  "package_channels": [
+    "debian-13-stable",
+    "trixie-security",
+    "trixie-updates"
+  ]
+}
