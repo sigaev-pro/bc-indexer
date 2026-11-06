@@ -1,6 +1,6 @@
 # Контракт сообщений текущей поставки
 
-ETH/BSC/POLY Mainnet, live-only. Точные finality/header/fee semantics — [CURRENT_SEMANTICS](CURRENT_SEMANTICS.md); ID/control/serialization — [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). Runtime проверок ещё нет.
+ETH/BSC/POLY mainnet/testnet по закрытому реестру D82, live-only. Точные finality/header/fee semantics — [CURRENT_SEMANTICS](CURRENT_SEMANTICS.md); ID/control/serialization — [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). Runtime проверок ещё нет.
 
 Тематическое представление [единого ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); изменения нормативного содержания синхронизируются с root в том же commit.
 

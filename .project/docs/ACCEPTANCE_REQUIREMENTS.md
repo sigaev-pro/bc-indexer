@@ -1,6 +1,8 @@
 # Полный реестр требований и приёмки
 
-Родительские REQ раскрыты в [199 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
+D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет REQ-SCP-01 и REQ-DEV-02/04/05: семь профилей, TC01–TC12, suites/deadlines и evidence schema v3. Каждый профиль проверяется отдельно; число родительских REQ остаётся 63.
+
+Родительские REQ раскрыты в [211 атомарных сценариях](ACCEPTANCE_CASES.md); результаты, владельцы, зависимости и точное соответствие AC задачам — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Это содержание ТЗ по D64, не исполняемый backlog агента.
 
 DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательное поведение текущего ETH/BSC/POLY live продукта, а не только 41 находку аудита. Нормативные детали — MESSAGE_CONTRACT, CURRENT_SEMANTICS, NATIVE_CAPTURE_PROTOCOL, DELIVERY_STATE_MACHINE, CONTROL_WIRE_CONTRACT, LIVE_CONFIG_SPEC и DEPLOYMENT_BOOTSTRAP_CONTRACT; полный нормативный текст включён в root v3.
 
@@ -10,7 +12,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 
 | ID | Требование | Проверка и ожидаемый результат / этап |
 |---|---|---|
-| REQ-SCP-01 | Первый контур ровно ETH/BSC/POLY Mainnet | CONFIG-01: три accepted profiles; Base/Arbitrum/testnet/неизвестный profile отвергнут, не запускается другой клиент; E01/E06 |
+| REQ-SCP-01 | Первый контур — семь mainnet/testnet профилей ETH/BSC/POLY по D82 | CONFIG-01: семь accepted profiles с проверенной identity/compatibility; Base/Arbitrum/незарегистрированный profile отвергнут, не запускается другой клиент; E01/E06 |
 | REQ-SCP-02 | Native источник, NATS — конечная граница | E07 path audit: hooks/StateDB/receipts native, JSON-RPC/debug_trace не основной tx feed; нет аналитического writer/consumer продукта |
 | REQ-SCP-03 | Только новый live H+1, pending независимо | BRANCH/START: initial sync и downtime range не экспортируются; сохранённые obligations завершены, новый boundary записан без окна; E01/E05/E06 |
 | REQ-SCP-04 | Успешные/failed/native system tx обязательны | E04 corpus: ordinary/failed/BSC system/Bor StateSync и пустой блок; unknown type вызывает error без skip |
@@ -102,7 +104,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 | REQ-DEV-02 | Independent expected и воспроизводимый harness | Fixture passport/seed/input hash + mutation sanity; clean environment без скрытой ноды автора; E01/E02/E07 |
 | REQ-DEV-03 | Separate builds и bounded module interfaces | Dependency review: core без внутренних типов трёх fork сразу, NATS SDK только Gateway, Rust/history не prerequisites; E01 |
 | REQ-DEV-04 | Evidence traceability и честные verdict | CaseRegistry/CaseResult связывают AC/network/variant/task; applicability отдельно от verdict; PASS/FAIL с полным RunManifest, NOT_RUN без выдуманных actual; version changes invalidates PASS; каждый gate |
-| REQ-DEV-05 | Функциональная приёмка трёх независимых сетей | E07: каждый mandatory variant имеет собственный PASS, missing/FAIL блокирует gate; optional/deferred/not-applicable требуют rules; runtime не заменяется source inspection/MD lint |
+| REQ-DEV-05 | Функциональная приёмка всех семи mainnet/testnet профилей | E07: каждый mandatory variant имеет собственный PASS, missing/FAIL блокирует gate; optional/deferred/not-applicable требуют rules; runtime не заменяется source inspection/MD lint |
 
 ## Definition of ready для документации
 

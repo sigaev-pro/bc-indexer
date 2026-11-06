@@ -1,6 +1,8 @@
 # Последовательность разработки и задачи
 
-Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 199 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
+D82: обязательны все семь mainnet/testnet профилей и suites из [TESTING_CONTRACT](TESTING_CONTRACT.md). Quick не требует публичной синхронизации; полная приёмка включает independent NATS reader, TC01–TC12, fault/soak/public-smoke. Runtime NOT_RUN.
+
+Точная декомпозиция parent-задач: [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md) — 68 child tasks, 7 gates, owners/outputs/dependencies и полный mapping 63 REQ / 211 AC. Сценарии — [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md). Это спецификация процесса по D64, не исполняемый backlog агента.
 
 D64: этот документ описывает порядок разработки проектируемой системы как часть ТЗ. Реализация никогда не входит в нашу работу; E01–E07 не являются исполняемым backlog агента. [Gates](IMPLEMENTATION_GATES.md) и [63 требования](ACCEPTANCE_REQUIREMENTS.md) задают проверяемое содержание ТЗ. 41/41 находки аудита SPECIFIED; runtime NOT_RUN.
 
@@ -16,15 +18,15 @@ D64: этот документ описывает порядок разрабо�
 
 ## Принятая последовательность
 
-E00 Решения → E01 Native-захват трёх сетей → E02 Общая типизированная схема → E03 Независимая доставка каждой сети через собственные WAL/Gateway в NATS → E04 Полные детали транзакций → E05 Reorg и восстановление каждой сети → E06 Live-конфигурация и доставка → E07 Функциональная приёмка трёх сетей → E08 Другие сети. История отложена, не блокирует цепочку.
+E00 Решения → E01 Native-захват семи профилей → E02 Общая типизированная схема → E03 Независимая доставка каждой сети через собственные WAL/Gateway в NATS → E04 Полные детали транзакций → E05 Reorg и восстановление каждой сети → E06 Live-конфигурация и доставка → E07 Функциональная приёмка семи профилей → E08 Другие сети. История отложена, не блокирует цепочку.
 
 Принято D16: конечный результат — унифицированные сообщения в NATS.IO. Последующая обработка исключена из этапов, стека и приёмки. Проверяющий считыватель — только тестовый инструмент.
 
 Действующая граница D36–D42: live без полного snapshot адресов, без истории и поиска пропусков; хронологические связи и детали сохраняются в сообщениях. Open-source намерение сохраняется, лицензия/публикация отложены D41. YAML live/Gateway и применение перезапуском описаны в LIVE_CONFIG_SPEC по D39/D48; найденные технические пробелы не возвращают закрытый выбор hot reload.
 
-Принято D42: первый контур — Ethereum Mainnet, BSC Mainnet и Polygon PoS. Все три проверяются в E01 до общей схемы E02; Base/Arbitrum отложены.
+D82 расширяет D42: первый контур — семь mainnet/testnet профилей ETH/BSC/POLY по TESTING_CONTRACT. Все профили проверяются отдельно в E01 до общей схемы E02; Base/Arbitrum отложены.
 
-Задачи текущего этапа выполняются отдельно для ETH/BSC/POLY; родитель закрывается после трёх сетей. Подзадачи .BASE/.ARB отложены D42. Исторические задачи отложены D38. Каждая сеть имеет собственные WAL, журнал Gateway и процессы; evidence хранится раздельно.
+Задачи текущего этапа выполняются отдельно для ETH/BSC/POLY; родитель закрывается после всех применимых профилей. Подзадачи .BASE/.ARB отложены D42. Исторические задачи отложены D38. Каждая сеть имеет собственные WAL, журнал Gateway и процессы; evidence хранится раздельно.
 
 Приняты D14/D15/D19: отдельный native node/adapter/WAL/Gateway каждой сети, общий NATS с изолированными streams/subjects. Команда N–M отложена D38; текущий live YAML и restart приняты D39/D48.
 
@@ -78,14 +80,14 @@ E00 Решения → E01 Native-захват трёх сетей → E02 Об�
 
 ## E01 — воспроизводимая сборка и доказательство захвата
 
-Зависимости: E00; для всех трёх сетей определены варианты сети, кандидаты клиентов и границы прототипов. Стек: родной клиент и его язык для каждой сети. Минимальный тестовый execution harness, затем реальный client import path. Один общий Ethereum-прототип не закрывает E01.
+Зависимости: E00; для семи профилей определены семейства и кандидаты клиентов; testnet совместимость требует отдельного proof и границы прототипов. Стек: родной клиент и его язык для каждой сети. Минимальный тестовый execution harness, затем реальный client import path. Один общий Ethereum-прототип не закрывает E01.
 
 - [ ] E01-01 Закрепить source/patch/toolchain/dependency/artifact pins, отдельные builds и минимальный fixture/bootstrap harness. Готово: clean build и команды, inputs/state/supporting services/test credentials известны до proof; нет скрытой авторской ноды. Подзадачи/manifest — IMPLEMENTATION_GATES.
 - [ ] E01-02 Доказать карту native callers, admission/owned snapshots/state pins/decision markers всех трёх сетей по NATIVE_CAPTURE_PROTOCOL. Готово: обязательные типы/поля имеют источник; minimal bridge работает в реальном import path, bypass запрещён; outside-tx публикация optional.
 - [ ] E01-03 Захватить transfer, nested call/revert, fee effects, родные системные транзакции и пустой блок. Готово: полные tx records/before/after сверены с независимым результатом. Вне-транзакционные начисления проверяются только при реализации расширения.
 - [ ] E01-04 Проверить стабильные offsets и повтор fixture, power loss на ранних admission/pin/EXEC_READY/decision seams, native-only replay и H guard. Готово: независимый expected/evidence; ранняя часть REC-T01 доказана до E02, полный matrix остаётся E05.
 
-- [ ] E01-05 Проверить извлечение поддержанных native типов на fixtures всех трёх сетей, включая failed/system для текущих live fork-профилей; исторические переходы отложены D38. Неизвестный тип даёт явную ошибку. Независимый production verifier состава каждого блока не требуется (D25).
+- [ ] E01-05 Проверить извлечение поддержанных native типов на fixtures всех семи профилей, включая failed/system для текущих live fork-профилей; историческая выгрузка отложена D38; fixture-переходы поддерживаемых fork обязательны по D82. Неизвестный тип даёт явную ошибку. Независимый production verifier состава каждого блока не требуется (D25).
 
 Отложенный контекст D38/D42: Classic/исторические Polygon fixtures из E00-15 не обязательны для текущего live-этапа. Исследования и fixture IDs сохранены. В live остаются все действующие native tx/system types, включая Polygon StateSync, с корректной атрибуцией эффектов.
 
@@ -102,7 +104,7 @@ Gate: по каждой ETH/BSC/POLY доказаны обязательные o
 - [ ] E02-05 Отразить закреплённую модель транзакционных balance actions/effects в схеме и валидаторах. Готово: причинные связи, rollback, gas purchase/return/recipient credits и отдельный fee summary представлены без потери и двойного учёта; outside-tx расширение optional.
 - [ ] E02-08 Добавить block metadata: hash, parent, height, native counts при наличии, lifecycle, включая пустые блоки. Локальный delivery batch связывает подготовленные сообщения с прогрессом доставки; без BlockComplete.
 
-- [ ] E02-10 Проверить полноту строгого общего контракта типов по MESSAGE_CONTRACT/CURRENT_SEMANTICS/реестру native типов. Готово: versioned envelope, payload oneof, обязательные/неприменимые поля, registered extensions и unknown-version behavior соответствуют ТЗ; malformed fixtures трёх сетей отвергнуты. Произвольный JSON не заменяет обязательные поля.
+- [ ] E02-10 Проверить полноту строгого общего контракта типов по MESSAGE_CONTRACT/CURRENT_SEMANTICS/реестру native типов. Готово: versioned envelope, payload oneof, обязательные/неприменимые поля, registered extensions и unknown-version behavior соответствуют ТЗ; malformed fixtures всех семи профилей отвергнуты. Произвольный JSON не заменяет обязательные поля.
 
 Gate: модель позволяет восстановить корректные нативные балансы на выбранных сценариях и объяснить каждую отмену независимо от транспорта.
 
@@ -116,7 +118,7 @@ Gate: модель позволяет восстановить корректн�
 - [ ] E03-04 Реализовать накопление без TTL/прикладной квоты до NATS ACK, bounded RAM, retry и явные ошибки disk-full/config. Не удалять pending данные; post-ACK retention и HA не проектировать.
 - [ ] E03-05 Пройти delivery часть REC-T01–17 и ATTEMPT/PREPARE/FRONTIER/FENCE/DRAIN/DEST/MEM/UPGRADE/POISON/ENOSPC от заданного durable intent/READY. Native admission proof уже в E01; совмещённый multi-block/native fault matrix — E05. History variants DEFERRED D38. Полный REC-T01 пока не отмечать PASS.
 
-Gate: delivery-only guarantees и integration smoke с native fixtures трёх сетей доказаны отдельно. Тест сверяет expected fields/parts/ACK/bytes/destination; полный native crash matrix ещё TODO E05. Production completeness verifier не вводится.
+Gate: delivery-only guarantees и integration smoke с native fixtures всех семи профилей доказаны отдельно. Тест сверяет expected fields/parts/ACK/bytes/destination; полный native crash matrix ещё TODO E05. Production completeness verifier не вводится.
 
 - [ ] E03-11 Доставлять block metadata и lifecycle в NATS, включая пустые блоки. Проверять PubAck всех частей; независимая проверка полноты содержимого вне scope.
 
@@ -158,9 +160,9 @@ Gate: crash/reorg/finality fixtures сохраняют correct references дан
 - [ ] E06-10 DEFERRED_BY_USER D38: history CLI N–M и отдельный Job/process.
 - [ ] E06-11 DEFERRED_BY_USER D38: параллельный live/history и resource overlap.
 - [ ] E06-12 Подключить user config/logs к уже реализованным native/delivery журналам: ADMITTED/EXEC_READY/decision и READY/SEALED/NATS_ACKED/RETIRED. Не создавать второй параллельный журнал ради старых упрощённых названий RECEIVED/WAL_SAVED. Нет dedup/completeness verifier.
-- [ ] E06-13 После согласования DEP-01–04 реализовать полный Compose/Kubernetes комплект трёх сетей по D43: native сборки с адаптерами, consensus/supporting clients, конфиги/секреты/соединения, независимые тома/WAL/Gateway и один NATS. Готово: конфигурации описывают все необходимые компоненты, функциональные startup/readiness/restart проверки подтверждают их связи. Performance и production-методика не входят.
+- [ ] E06-13 После согласования DEP-01–04 реализовать полный Compose/Kubernetes комплект семи профилей по D43/D82: native сборки с адаптерами, consensus/supporting clients, конфиги/секреты/соединения, независимые тома/WAL/Gateway и один NATS. Готово: конфигурации описывают все необходимые компоненты, функциональные startup/readiness/restart проверки подтверждают их связи. Performance и production-методика не входят.
 
-Gate: полный live stack трёх сетей воспроизводится по сохранённым commands/config/artifact manifests, проходит BOOT/CONFIG/MOUNT/TRUST/NATS/START/REPLACE/LOG/ARTIFACT fixtures. Исторические задачи не участвуют. Ранний harness не заменяет пользовательский комплект.
+Gate: полный live stack семи профилей воспроизводится по сохранённым commands/config/artifact manifests, проходит BOOT/CONFIG/MOUNT/TRUST/NATS/START/REPLACE/LOG/ARTIFACT fixtures. Исторические задачи не участвуют. Ранний harness не заменяет пользовательский комплект.
 
 ## E07 — приёмка и первая поставка
 
@@ -173,9 +175,9 @@ Gate: полный live stack трёх сетей воспроизводится
 - [ ] E07-07 DEFERRED_BY_USER (D41): подготовка open-source поставки отложена. Технические схемы, YAML и описание работы сборщика остаются частью ТЗ; публичный release bundle сейчас не готовится.
 - [ ] E07-08 Функционально проверить изоляцию: у каждой сети отдельные WAL адаптера и журнал Gateway; добавление, изменение конфига, остановка и рестарт одного экземпляра не требуют изменения/рестарта остальных. Нет общих writers и ожидания прогресса другой сети. Production-методика отдельно, вне scope.
 
-- [ ] E07-09 Принять результат в NATS на fixtures трёх сетей: типизированные поля, части, lifecycle, допустимые повторы, metadata пустых блоков и PubAck. Без production verifier полноты и performance требований.
+- [ ] E07-09 Принять результат в NATS на fixtures всех семи профилей: типизированные поля, части, lifecycle, допустимые повторы, metadata пустых блоков и PubAck. Без production verifier полноты и performance требований.
 
-Gate: отдельно приняты Ethereum, BSC и Polygon; обязательны согласованные функциональные критерии всех трёх сетей. Base/Arbitrum этот gate не блокируют.
+Gate: отдельно приняты Ethereum, BSC и Polygon; обязательны согласованные функциональные критерии всех семи профилей. Base/Arbitrum этот gate не блокируют.
 
 ## E08 — перенос на следующие клиенты
 

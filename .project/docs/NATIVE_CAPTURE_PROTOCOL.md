@@ -1,5 +1,7 @@
 # Native capture, state retention и lifecycle recovery
 
+D82: правила семейства применяются отдельно к каждому mainnet/testnet профилю из [TESTING_CONTRACT](TESTING_CONTRACT.md). Active fork/types, native/supporting compatibility и identity закрепляются ProfileManifest; mainnet source evidence не доказывает testnet runtime. Указанные версии остаются кандидатами.
+
 Exact current data/finality/GC semantics — [CURRENT_SEMANTICS](CURRENT_SEMANTICS.md), D62/D63. Semantic identity и связь decision→batch — [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). GC не использует generic native finalized getter без provenance.
 
 2026-11-05 · DOC-REPAIR-03 · D57/D58. Нормативное уточнение [архитектуры](COLLECTION_ARCHITECTURE.md), [модели изменений](BALANCE_MODEL.md) и раннего описания capture в [RocksDB protocol](ROCKSDB_DELIVERY_PROTOCOL.md). Это проект native patches; наличие подходящих upstream API не доказывает работу будущей сборки. E01/E04/E05 остаются обязательными gates.

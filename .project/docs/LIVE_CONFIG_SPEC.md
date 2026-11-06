@@ -1,5 +1,7 @@
 # CFG-S04 — конфигурация live/Gateway
 
+D82: закрытый реестр включает семь mainnet/testnet профилей; profile manifest и per-profile admission обязательны по [TESTING_CONTRACT](TESTING_CONTRACT.md). Публичная testnet не является алиасом mainnet. Неизвестные профили отвергаются; схема YAML остаётся v1, набор enum расширен.
+
 > Нормативные effective native configs, mounts/UID, trust bootstrap, peer role/network admission и startup — [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Для поставляемого окружения credentials/TLS обязательны по этому профилю, даже если общий YAML допускает иные явно выбранные transport modes.
 
 > D52: операционная готовность/синхронизация наблюдается по логам; управление штатными средствами Docker/Kubernetes, без отдельного API и обязательной детализации probes/shutdown таймаутов. Native граница H+1 и сохранение pending остаются. Default размера frame — 2 MiB, правила ниже.
@@ -10,7 +12,7 @@
 
 > D49: defaults deployment — Gateway `50051/TCP`, WAL `/data/wal`, журнал Gateway `/data/journal`, configs `/config` и secrets `/run/secrets` только для чтения. Процессы имеют собственные volumes; пути/порты переопределяемы. RPC/Engine API/Gateway/NATS не публикуются наружу по умолчанию. Это значения шаблонов окружения, не отмена обязательных полей схемы YAML. [Полный контракт defaults](NODE_DEPLOYMENT_SPEC.md).
 
-> D48: каждая сеть имеет собственный YAML сборщика и отдельный YAML Gateway. Штатные native configs и дополнительные аргументы передаются окружением, не включаются в схему сборщика. Образы, порты/P2P, каталоги, ресурсы и размещение доступны через Compose overrides/Kubernetes values. Секреты отдельными файлами; изменения применяются перезапуском компонента. Проект предоставляет defaults для трёх сетей; значения закреплены в [NODE_DEPLOYMENT_SPEC](NODE_DEPLOYMENT_SPEC.md), native flags/init — в [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Создание файлов окружения и runtime-проверка остаются результатами описанных задач E01/E06.
+> D48: каждая сеть имеет собственный YAML сборщика и отдельный YAML Gateway. Штатные native configs и дополнительные аргументы передаются окружением, не включаются в схему сборщика. Образы, порты/P2P, каталоги, ресурсы и размещение доступны через Compose overrides/Kubernetes values. Секреты отдельными файлами; изменения применяются перезапуском компонента. По D82 проект предоставляет defaults для семи профилей трёх семейств; значения закреплены в [NODE_DEPLOYMENT_SPEC](NODE_DEPLOYMENT_SPEC.md), native flags/init — в [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Создание файлов окружения и runtime-проверка остаются результатами описанных задач E01/E06.
 
 > D46: endpoints используют service DNS, configs отделены от секретов, JWT у Geth/Prysm пар различаются. Каждый компонент — StatefulSet replicas=1 со своими Service/PVC, в Compose — сервис с named volumes. Готовность публикации не блокирует синхронизацию/capture и запись в WAL. Кандидаты версий и native init/config/flags заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md); build/runtime proof не выполнен. Отдельные probes/shutdown таймауты не требуются по D52.
 
@@ -44,7 +46,7 @@ D78: общее разрешение относительных путей пр�
 | Поле | Тип | Обязательность / значение |
 |---|---|---|
 | `schema_version` | integer | Обязательно, ровно `1` |
-| `network.profile` | enum | Обязательно, один из трёх профилей ниже |
+| `network.profile` | enum | Обязательно, один из семи профилей ниже |
 | `destination.binding_file` | path | Обязательно обеим ролям: один immutable DestinationBinding данного контура, без NATS credentials; digest/network/generation сверяются с сохранённым state |
 | `native.kind` | enum | Обязательно live, соответствует профилю |
 | `delivery.gateway_endpoint` | URI | Обязательно live: `unix:///absolute/path` либо `https://host:port` |
@@ -63,14 +65,14 @@ D78: общее разрешение относительных путей пр�
 | `finality.polygon.l1_endpoint` | URI | Обязательно только polygon live: собственный supporting Geth, http/https JSON-RPC; не основной Ethereum extractor |
 | `finality.polygon.sources_file` | path | Обязательно только polygon live: read-only `/etc/extractor/polygon-sources.json`, bootstrap identities/roles/endpoints по CURRENT_SEMANTICS; абсолютный path |
 | `finality.polygon.l1_tls` | tagged object | Обязательно только polygon live: disabled при http, server/mutual при https; стандартные поля TLS ниже |
-| `finality.polygon.expected_root_chain_address` | string | Обязательно только polygon live: 40 lowercase hex без 0x, address из проверенного mainnet bootstrap/chain params |
+| `finality.polygon.expected_root_chain_address` | string | Обязательно только polygon live: 40 lowercase hex без 0x, address из проверенного bootstrap/chain params выбранного профиля |
 | `finality.polygon.expected_child_block_interval` | positive u64 | Обязательно только polygon live: значение из проверенного bootstrap/checkpoint params, без float/narrowing |
 
 Объекты TLS: `mode: disabled` запрещает дополнительные поля; `server` требует `ca_file`; `mutual` требует `ca_file`, `cert_file`, `key_file`. Проверка имени сервера обязательна при TLS. Для NATS disabled соответствует `nats://`, остальные режимы — `tls://`. Server-only TLS для адаптер↔Gateway не разрешён. UDS защищается правами файловой системы. Противоречивые режимы — ошибка до запуска.
 
 Структура всего документа проверяется целиком. Обязательные поля, локальные файлы и credentials проверяются только для запускаемой роли. Live не требует чтения NATS credentials; отсутствующая секция другой роли допустима. Секций ClickHouse, history, coverage и startup-уведомлений нет.
 
-D63: finality.polygon разрешён только polygon live. Heimdall endpoint берётся из effective native Bor config; expected L1 network — Ethereum Mainnet profile собственного Polygon L1 комплекта. Expected RootChain address/interval генерируются окружением из проверенных bootstrap chain parameters и сверяются с online responses, не принимаются автоматически из произвольного ответа. Значения и supporting node identity сохраняются в evidence. Нет fallback на основной Ethereum extractor. Wrong configured identity — CONFIG error; временная недоступность correct supporting source задерживает только GC. Observer в LIVE выполняет один цикл не чаще раза в 10 секунд, deadline отдельного network read 10 секунд; это технические defaults, не SLO. DRAIN не начинает новые optional polls и разрешает только сохранённый GC decision.
+D63: finality.polygon разрешён только polygon live. Heimdall endpoint берётся из effective native Bor config; expected L1 network — Ethereum Mainnet для polygon-pos-mainnet и Sepolia для polygon-pos-amoy из собственного L1 комплекта соответствующего профиля. Expected RootChain address/interval генерируются окружением из проверенных bootstrap chain parameters и сверяются с online responses, не принимаются автоматически из произвольного ответа. Значения и supporting node identity сохраняются в evidence. Нет fallback на основной Ethereum extractor. Wrong configured identity — CONFIG error; временная недоступность correct supporting source задерживает только GC. Observer в LIVE выполняет один цикл не чаще раза в 10 секунд, deadline отдельного network read 10 секунд; это технические defaults, не SLO. DRAIN не начинает новые optional polls и разрешает только сохранённый GC decision.
 
 ## Размер сообщения D52
 
@@ -99,6 +101,10 @@ Publication plan и ACK относятся к одному сохранённо�
 | ethereum-mainnet | geth | Go/Geth: native hooks/state journal, canonical notifications |
 | bsc-mainnet | bsc | Go/BSC: tx execution и Parlia Finalize |
 | polygon-pos-mainnet | bor | Go/Bor: tx execution, StateSync/Finalize; supporting Heimdall |
+| ethereum-sepolia | geth | Geth + consensus client; отдельные Sepolia genesis/fork configs |
+| ethereum-hoodi | geth | Geth + consensus client; отдельные Hoodi genesis/fork configs |
+| bsc-testnet | bsc | BSC/Parlia; отдельные testnet genesis/fork configs |
+| polygon-pos-amoy | bor | Bor + Heimdall; Amoy bootstrap и собственный L1 Sepolia |
 
 Текущие source/toolchain candidates заданы в [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md) и [COMPONENT_STACK](COMPONENT_STACK.md); CLIENT_MATRIX сохраняет исторические исследования. YAML не выбирает произвольный executable/version и не добавляет новый тип блокчейна без адаптера. Исторические Classic/replay профили сейчас не предлагаются. Эта таблица использует ранее собранную документацию, не утверждает совместимость по результатам runtime-тестов.
 

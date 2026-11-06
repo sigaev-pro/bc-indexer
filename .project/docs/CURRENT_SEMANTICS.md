@@ -1,5 +1,7 @@
 # Точные данные текущих профилей
 
+D82: правила семейства применяются отдельно к каждому mainnet/testnet профилю из [TESTING_CONTRACT](TESTING_CONTRACT.md). Active fork/types, native/supporting compatibility и identity закрепляются ProfileManifest; mainnet source evidence не доказывает testnet runtime. Указанные версии остаются кандидатами.
+
 DOC-FINAL-01 · D62/D63 · 2026-11-05. ETH/BSC/POLY, live-only. Уточняет [MESSAGE_CONTRACT](MESSAGE_CONTRACT.md); field numbers общего Envelope и generated bindings — E02, но значения и поведение определены здесь. Идентификаторы/кодирования — [CONTROL_WIRE_CONTRACT](CONTROL_WIRE_CONTRACT.md). Поля ниже обязательны, кроме явно optional/oneof availability; нулевое значение не заменяет отсутствие.
 
 ## Block, calls и account changes

@@ -1,5 +1,7 @@
 # Порты и экспонирование — D50
 
+D82: таблица ниже — baseline mainnet. Для дополнительных профилей service DNS, volumes, secrets, host P2P ports и NodePort выделяются отдельно. План портов обязателен до multi-profile запуска; одинаковые внутренние порты допустимы в разных namespaces без конфликта host binding. См. [TESTING_CONTRACT](TESTING_CONTRACT.md).
+
 > Точные native mappings, listener scopes и bootstrap — [DEPLOYMENT_BOOTSTRAP_CONTRACT](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). D58 обновил Heimdall до v0.13.2, порты сохранены. CometBFT RPC 26657 baseline слушает loopback внутри Heimdall. По D52 отдельная probe/shutdown спецификация не вводится, обязательные состояния отражаются в logs.
 
 2026-10-21. DEP-03.2b.2b.2. Пользователь поручил выбрать удобный вариант самостоятельно. Только ТЗ; конфигурации не запускались. Все значения переопределяются по D48. Неизменны границы D49: наружу только P2P, внутренние API отдельно, собственная идентичность каждого клиента.

@@ -1,12 +1,14 @@
 # Декомпозиция требований ТЗ по результатам
 
+D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) расширяет outputs существующих задач без новых child IDs: E01-01.evidence — schema v3/profile registry; E01-01.harness — runner/fixtures/deadlines; E07-02.e2e — TC01–TC12; E07-09.nats_acceptance — reader/mutations; E07-09.requirement_verdict — семь профилей и все suites. Build/bootstrap tasks доказывают каждый профиль; mainnet proof не принимается за testnet. 63 REQ / 211 AC / 68 child tasks / 7 gates.
+
 2026-11-05. Только проектирование и документация, D64. Этот файл описывает задачи **проектируемого процесса**, а не разрешает их выполнение. Код продукта, сборки, runtime-тесты и deployment не выполняются. Все runtime verdict — **NOT_RUN**. Существующие parent ID E01–E07 сохранены; дочерние ID уточняют результат, не переиспользуют снятые ID.
 
 Нормативное поведение задаёт [единое ТЗ](../evm-transaction-extractor-tz-v3-codex.md). [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md) сохраняет parent-задачи и историю scope. Здесь определены владельцы, артефакты, зависимости и привязка к [ACCEPTANCE_CASES](ACCEPTANCE_CASES.md); [ACCEPTANCE_REQUIREMENTS](ACCEPTANCE_REQUIREMENTS.md) остаётся реестром 63 REQ. Изменение поведения через задачу запрещено: обнаруженное противоречие возвращается в ТЗ и решения.
 
 ## Правила чтения карточек и графа
 
-- `ETH/BSC/POLY` — одно описание задачи с тремя независимыми applicability/result slots. PASS одной сети не закрывает остальные. `COMMON` означает общий механизм, а не общий writable store; сетевые варианты AC сохраняются.
+- `ETH/BSC/POLY` — одно описание задачи с независимыми applicability/result slots каждого из семи mainnet/testnet профилей D82. PASS одной сети не закрывает остальные. `COMMON` означает общий механизм, а не общий writable store; сетевые варианты AC сохраняются.
 - Владелец — единственный ответственный модуль, не назначение конкретному человеку или агенту. Review/independent oracle не переносит ответственность с owner.
 - Столбец «Зависимости → получаемый выход» содержит обязательные child ID и конкретный вход. Любая задача E02–E07 также требует gate предыдущего этапа; эта общая зависимость не повторяется в каждой строке. E01 получает зафиксированное ТЗ как внешний вход `SPEC`, а не результат будущего этапа.
 - Gate `G.E0n` — метка графа, не новая продуктовая задача. Он зависит от всех обязательных детей этапа E0n. Следующий этап зависит от gate, а не от будущего полного proof. Внутри этапа разрешены только указанные зависимости; зависимости на последующий этап запрещены.
@@ -35,7 +37,7 @@
 
 | Child ID | Owner; применимость | Один выход и обязательный invariant | Зависимости → получаемый выход | Контракт |
 |---|---|---|---|---|
-| <a id="task-e01-01-evidence"></a>E01-01.evidence | `test/evidence`; COMMON | CaseRegistry/CaseResult/RunManifest schemas: AC/network/variant identities, applicability отдельно от verdict, versioned evidence; NOT_RUN без выдуманных actual | SPEC → принятые требования | EVID |
+| <a id="task-e01-01-evidence"></a>E01-01.evidence | `test/evidence`; COMMON | CaseRegistry/CaseResult/RunManifest schemas: полные profile/fork/fixture/suite identities D82, applicability отдельно от verdict, versioned evidence; NOT_RUN без выдуманных actual | SPEC → принятые требования | EVID |
 | <a id="task-e01-01-builds"></a>E01-01.builds | `build/native`; ETH/BSC/POLY | Изолированный build/artifact manifest каждого клиента и supporting зависимости; source/patch/compiler/lock определены, native internal types не склеены в общий graph | E01-01.evidence → формат manifest | STACK, BOOT |
 | <a id="task-e01-01-harness"></a>E01-01.harness | `test/harness`; ETH/BSC/POLY | Воспроизводимый минимальный runner с явными inputs/state/test credentials/supporting services и независимым expected; скрытая нода автора не нужна | E01-01.builds → закреплённые клиенты; E01-01.evidence → evidence schema | EVID, BOOT |
 | <a id="task-e01-02-pins"></a>E01-02.pins | `adapters/<client>/state_provider`; ETH/BSC/POLY | Hash-provider/pin seam: source root/input остаётся доступным до допустимого release; неподдержанный backend отвергается | E01-01.harness → runner и parent state | NATIVE, CONFIG |
@@ -144,7 +146,7 @@
 | <a id="task-e07-03-runbook"></a>E07-03.runbook | `docs/runbook`; ETH/BSC/POLY | Проверяемый запуск/остановка/диагностика/recovery drill по фактическим states; команды не требуют скрытого окружения | E07-02.e2e → accepted path; E06-12.logs → observable states; E06-08.maintenance → operating procedure | BOOT, CONFIG, DELIVERY |
 | <a id="task-e07-08-isolation"></a>E07-08.isolation | `test/network_isolation`; ETH/BSC/POLY | Матрица add/config/stop/restart одной сети без изменения соседних writers/stores; общий NATS не означает shared journal | E07-02.e2e → running acceptance topology | TOPO, DELIVERY, EVID |
 | <a id="task-e07-09-nats_acceptance"></a>E07-09.nats_acceptance | `test/nats_reader`; ETH/BSC/POLY | Финальный NATS corpus: fields/parts/lifecycle/empty/duplicates/PubAck согласованы с native expected; production consumer не создаётся | E07-02.e2e → native expected; E07-02.scope → boundary | MSG, CONTROL, EVID |
-| <a id="task-e07-09-requirement_verdict"></a>E07-09.requirement_verdict | `test/evidence`; COMMON | Полная CaseRegistry/CaseResult матрица AC/network/variant; individual run outcomes, mandatory missing/FAIL/NOT_RUN блокируют gate, исключения требуют rules | E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence | EVID |
+| <a id="task-e07-09-requirement_verdict"></a>E07-09.requirement_verdict | `test/evidence`; COMMON | Полная CaseRegistry/CaseResult матрица полных identities D82; individual run outcomes, mandatory missing/FAIL/NOT_RUN блокируют gate, исключения требуют rules | E07-09.nats_acceptance → output evidence; E07-08.isolation → isolation evidence; E07-03.runbook → operating evidence | EVID |
 
 `G.E07`: все обязательные AC закрыты по своей применимости и итоговая матрица непротиворечива. В настоящей работе G.E01–G.E07 **не исполняются**, все runtime результаты NOT_RUN.
 
@@ -154,7 +156,7 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 
 ## REQ/AC → ответственный task
 
-Все 63 REQ и 199 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
+Все 63 REQ и 211 AC имеют точное назначение. Диапазон `…` включает все целые suffix между границами; запятая перечисляет отдельные интервалы. Условность AC-SCP-05-02 задана в каталоге. Stage совпадает со stage AC, поэтому ранняя проверка не зависит от E05/E06. Сценарии читаются в [каталоге AC](ACCEPTANCE_CASES.md); ссылки в столбце task ведут к конкретной строке результата.
 
 | REQ | AC ID / непрерывные диапазоны | Единственный ответственный task | Stage |
 |---|---|---|---|
@@ -247,11 +249,11 @@ E06-01/02/03/05/10/11 — DEFERRED D38; E06-04 — REMOVED D25; E06-06 — REMOV
 | REQ-OPS-10 | AC-OPS-10-01, AC-OPS-10-03 | [E01-01.builds](#task-e01-01-builds) | E01 |
 | REQ-OPS-10 | AC-OPS-10-02 | [E06-13.clean_bootstrap](#task-e06-13-clean_bootstrap) | E06 |
 | REQ-DEV-01 | AC-DEV-01-01 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
-| REQ-DEV-02 | AC-DEV-02-01 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
+| REQ-DEV-02 | AC-DEV-02-01…AC-DEV-02-07 | [E07-02.e2e](#task-e07-02-e2e) | E07 |
 | REQ-DEV-03 | AC-DEV-03-01 | [E01-01.builds](#task-e01-01-builds) | E01 |
-| REQ-DEV-04 | AC-DEV-04-02 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
-| REQ-DEV-04 | AC-DEV-04-01 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
-| REQ-DEV-05 | AC-DEV-05-01…AC-DEV-05-03 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
+| REQ-DEV-04 | AC-DEV-04-02…AC-DEV-04-03 | [E01-01.evidence](#task-e01-01-evidence) | E01 |
+| REQ-DEV-04 | AC-DEV-04-01, AC-DEV-04-04…AC-DEV-04-05 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
+| REQ-DEV-05 | AC-DEV-05-01…AC-DEV-05-06 | [E07-09.requirement_verdict](#task-e07-09-requirement_verdict) | E07 |
 
 ## Приёмка артефактов без отдельного AC-owner
 

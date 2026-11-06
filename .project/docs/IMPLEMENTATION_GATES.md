@@ -1,5 +1,7 @@
 # Исполняемый план, модули и доказательства
 
+D82: [TESTING_CONTRACT](TESTING_CONTRACT.md) — дополнение всех gates: семь профилей, suites/TC01–TC12, evidence schema v3. ProfileManifest/fixture kind/resource-deadline digest и phase durations входят в RunManifest; CaseRegistry version/digest покрывает новые оси. Семейство не единица зачёта: каждому профилю отдельный результат. E01 — реестр/fixtures; E03 — ранний NATS smoke; E05 — combined faults; E06 — все профильные окружения; E07 — полная матрица, mutations, soak и public smoke.
+
 D64: документальные требования к доказательствам для проектируемой системы. Порядок из [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md) **E01 → E02 → E03 → E04 → E05 → E06 → E07** сохраняется как содержание ТЗ; code/build/runtime tasks не выполняются в нашей работе и не ожидают разрешения. SPECIFIED в [реестре исправлений](DESIGN_REPAIR_STATUS.md) означает готовый проверяемый проект.
 
 ## Ранний harness и зависимости gates
@@ -14,7 +16,7 @@ D64: документальные требования к доказательс
 | E06-07…09/12/13 | Полный пользовательский YAML/native config/init/Compose/Kubernetes комплект; 11 services/14 volumes, artifact proof, wrong profile/peer, H+1 и независимый replay | Ранний fixture runner не заменяет этот комплект; history CLI не добавляется |
 | E07-02/03/08/09 | End-to-end acceptance отдельно ETH/BSC/POLY; clean environment reproduction, runbook, isolation и опубликованные сообщения | Публичная open-source упаковка и performance/production-методика отложены |
 
-Единственный реестр child task IDs — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Для E01-01 это E01-01.evidence, E01-01.builds и E01-01.harness; ETH/BSC/POLY — отдельные applicability slots этих задач, не суффиксы новых ID. Supporting-client builds/artifact provenance входят в E01-01.builds; supporting fixtures/bootstrap inputs — в E01-01.harness. Native source state fixtures, bodies/headers/consumed Heimdall responses, fork config, secrets для тестов и команды запуска перечисляются до соответствующего proof. Скрытая синхронизированная нода автора не является prerequisite. Test-only harness использует pinned native execution/decision paths и детерминированные inputs; соответствие реальному import path проверяется отдельно. Mainnet-only продукт не запрещает локальный test-only harness/fault injection.
+Единственный реестр child task IDs — [TASK_DECOMPOSITION](TASK_DECOMPOSITION.md). Для E01-01 это E01-01.evidence, E01-01.builds и E01-01.harness; ETH/BSC/POLY — отдельные applicability slots этих задач, не суффиксы новых ID. Supporting-client builds/artifact provenance входят в E01-01.builds; supporting fixtures/bootstrap inputs — в E01-01.harness. Native source state fixtures, bodies/headers/consumed Heimdall responses, fork config, secrets для тестов и команды запуска перечисляются до соответствующего proof. Скрытая синхронизированная нода автора не является prerequisite. Test-only harness использует pinned native execution/decision paths и детерминированные inputs; соответствие реальному import path проверяется отдельно. D82 включает семь mainnet/testnet профилей; локальный test-only harness не заменяет public smoke каждого профиля.
 
 E01-02 имеет точные child IDs: E01-02.pins, E01-02.inputs, E01-02.owned_capture, E01-02.admission, E01-02.decision_bridge, E01-02.lifecycle_seams. Сетевые slots задаёт каталог. E01-04.early_faults проверяет ранние power-loss seams до определения общей production модели. Минимальный внутренний spool/marker proof не обязан уже быть schema E02. E04 расширяет семантическое покрытие, E05 сочетает доказанные seams в полный lifecycle matrix; окно native/WAL нельзя впервые исследовать лишь в E05. Сокращённые альтернативные child IDs не создаются; supporting artifacts не теряются при этом уточнении.
 
@@ -46,9 +48,9 @@ Mutation sanity gate: намеренно испорченные parity handling,
 
 ## Evidence manifest и stop conditions
 
-D79/F04: applicability и execution verdict — разные поля. До запуска фиксируется versioned `CaseRegistry` с digest: полный список `(ac_id,network,variant_id)`, его task_id, fixture_id/version, profile/fork и applicability rule. ALL разворачивается в ETH/BSC/POLY; каждый перечисленный в AC вариант получает устойчивый именованный variant_id, без выбора удобного поднабора. DOC означает отдельную документальную область, не runtime сети. Registry version меняется при изменении набора variants/rules; старый PASS не переносится автоматически. Единственные task IDs берутся из TASK_DECOMPOSITION, network — отдельное поле.
+D79/F04: applicability и execution verdict — разные поля. До запуска фиксируется versioned `CaseRegistry` с digest: полный список `(ac_id,network,profile,profile_manifest_digest,fork_variant,fixture_kind,suite,variant_id)`, его task_id, fixture_id/version, profile/fork и applicability rule. ALL разворачивается во все семь профилей ETH/BSC/POLY из TESTING_CONTRACT; каждый перечисленный в AC вариант получает устойчивый именованный variant_id, без выбора удобного поднабора. DOC означает отдельную документальную область, не runtime сети. Registry version меняется при изменении набора variants/rules; старый PASS не переносится автоматически. Единственные task IDs берутся из TASK_DECOMPOSITION, network — отдельное поле.
 
-`CaseResult={ac_id,network,variant_id,task_id,fixture_id,fixture_version,applicability,verdict?,run_manifest_ref?,reason?,rule_ref?}`. Case identity уникальна в рамках выбранного CaseRegistry; все ссылки и fixture версии совпадают с его записью. Applicability enum закрыт:
+`CaseResult={schema_version=3,ac_id,network,profile,profile_manifest_digest,fork_variant,fixture_kind,suite,variant_id,task_id,fixture_id,fixture_version,applicability,verdict?,run_manifest_ref?,reason?,rule_ref?}`. Case identity уникальна в рамках выбранного CaseRegistry; все ссылки и fixture версии совпадают с его записью. Applicability enum закрыт:
 
 | applicability | verdict | Evidence / правило |
 |---|---|---|
@@ -60,7 +62,7 @@ D79/F04: applicability и execution verdict — разные поля. До за
 
 Для трёх исключающих applicability run_manifest_ref отсутствует. Неизвестные/несогласованные applicability, verdict или identities отвергаются. Отсутствующий результат не считается NOT_APPLICABLE/NOT_ENABLED или PASS; для запланированного применимого case фиксируется NOT_RUN. Исторические результаты сохраняются отдельно от текущего verdict и не маскируют пропущенный вариант.
 
-Один `RunManifest` schema_version=2 на фактически выполненный fixture run одной network/profile/fork. Для разных сетей оформляются отдельные runs/manifests; DOC fixture не выдаётся за runtime сети. Обязательны:
+Один `RunManifest` schema_version=3 на фактически выполненный fixture run одной network/profile/fork. Для разных сетей оформляются отдельные runs/manifests; DOC fixture не выдаётся за runtime сети. Обязательны:
 
 - run_id, CaseRegistry version/digest и точный список case identities; fixture_id/version и task_id без выдуманного network suffix;
 - requirement_ids, audit_finding_ids (явно пустой список допустим, если finding не относится к run), network/profile/fork; native/patch commits, dependency lock digest, compiler/generator versions, применимые image digest/architecture;

@@ -1,5 +1,7 @@
 # Bootstrap, конфигурация и владение окружением
 
+D82: приведённые ниже mainnet artifacts/команды — baseline трёх mainnet контуров. Для каждого testnet обязательны отдельные проверенные ProfileManifest/genesis/fork/bootstrap/supporting configs по [TESTING_CONTRACT](TESTING_CONTRACT.md); mainnet defaults не наследуются. Polygon Amoy использует собственную L1 Sepolia пару. ENV_READY и credentials привязаны к конкретному profile/network digest; отсутствующий testnet bootstrap блокирует запуск.
+
 Polygon bootstrap также создаёт persistent supporting deployment IDs и read-only `/etc/extractor/polygon-sources.json` по CURRENT_SEMANTICS. Файл связывает роли/адреса/chain identities с deployment provenance; Geth RPC не выдаёт эти IDs и не доказывает роль supporting service. Identity-файлы находятся в существующих native volumes, новый volume не нужен.
 
 D63 добавляет только control evidence внутри Bor adapter: доступ к собственному polygon-l1-geth HTTP RPC для hash-pinned finalized RootChain read. Новый сервис/volume/ETH tx extractor не добавляется. Строгие YAML keys — LIVE_CONFIG_SPEC; finality/GC — CURRENT_SEMANTICS. Bootstrap сохраняет проверенные RootChain address/child interval и supporting L1 identity вместе с конфигурацией; отсутствие online L1 задерживает GC, не готовую Polygon delivery.

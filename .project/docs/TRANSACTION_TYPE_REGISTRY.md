@@ -1,5 +1,7 @@
 # Реестр native transaction types текущей поставки
 
+D82: правила семейства применяются отдельно к каждому mainnet/testnet профилю из [TESTING_CONTRACT](TESTING_CONTRACT.md). Active fork/types, native/supporting compatibility и identity закрепляются ProfileManifest; mainnet source evidence не доказывает testnet runtime. Указанные версии остаются кандидатами.
+
 ETH/BSC/POLY. Source profile и активные fork rules определяют применимость; наличие типа в таблице не включает его раньше native fork. Отложенные сети сохранены в исследовательских документах и истории Git.
 
 Тематическое представление [единого ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); изменения нормативного содержания синхронизируются с root в том же commit.
