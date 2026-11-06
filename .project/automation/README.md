@@ -26,7 +26,7 @@ Before acceptance, verify the returned protection object and the real CI context
 
 ## Independent review evidence
 
-The implementer cannot publish their own approval. A separate read-only reviewer checks the exact head and base. The coordinator records that session's real report as a new issue comment. Use this complete body shape, replacing every placeholder with actual evidence:
+The implementer cannot publish their own approval. A separate read-only reviewer checks the exact head and base. The coordinator records that session's real report as a new comment on the intended pull request. Use this complete body shape, replacing every placeholder with actual evidence:
 
 ````text
 <!-- extractor-review:v1 -->
@@ -48,7 +48,9 @@ The implementer cannot publish their own approval. A separate read-only reviewer
 ```
 ````
 
-Publish the commit status on that exact head only after the independent report passes. Set `context` to `bootstrap/independent-review`, `state` to `success`, and `target_url` to the new issue comment URL. Set `description` to `Review SHA256: ` followed by the SHA-256 of the exact UTF-8 comment body returned by GitHub. The evaluator checks this digest, so editing the comment invalidates the published status. Preserve previous reports; publish a new comment and status for a new review.
+Publish the commit status on that exact head only after the independent report passes. Set `context` to `bootstrap/independent-review`, `state` to `success`, and `target_url` to the new PR comment URL returned by GitHub. Set `description` to `Review SHA256: ` followed by the SHA-256 of the exact UTF-8 comment body returned by GitHub. The evaluator checks this digest, so editing the comment invalidates the published status. Preserve previous reports; publish a new comment and status for a new review.
+
+The collector binds the requested PR number and comment ID to GitHub's response. Both `/pull/NUMBER#issuecomment-ID` and `/issues/NUMBER#issuecomment-ID` URL forms must identify that exact PR and comment in the selected repository. The comment's API `issue_url` must also identify the intended PR. A report on another PR or task issue cannot provide this PR's review evidence.
 
 The collector trusts the configured coordinator to identify the real sessions and publish the returned report. A worker-generated JSON object, a different session name chosen by the author, or an arbitrary success status is not independent evidence. The controller must retain its own session handoff and result records; text alone cannot authenticate a model session.
 

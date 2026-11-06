@@ -10,7 +10,9 @@ import acceptance
 
 HEAD, BASE, MERGE, TREE = (character * 40 for character in "abcd")
 REPOSITORY = "sigaev-pro/bc-indexer"
-COMMENT_URL = f"https://github.com/{REPOSITORY}/issues/4#issuecomment-12"
+PR_NUMBER = 87
+COMMENT_ID = 6693432825
+COMMENT_URL = f"https://github.com/{REPOSITORY}/pull/{PR_NUMBER}#issuecomment-{COMMENT_ID}"
 
 
 def proof():
@@ -24,7 +26,9 @@ def proof():
     snapshot = {
         "schema_version": 1, "repository": REPOSITORY, "task_id": "BOOT-05",
         "coordinator_login": "sigaev-pro", "implementer_session": "worker-1",
+        "pull_request_number": PR_NUMBER, "review_comment_id": COMMENT_ID,
         "pull_request": {
+            "number": PR_NUMBER,
             "state": "open", "draft": False, "mergeable": True, "merge_commit_sha": MERGE,
             "body": "<!-- extractor-task:BOOT-05 -->",
             "head": {"sha": HEAD, "repo": {"full_name": REPOSITORY}},
@@ -54,7 +58,8 @@ def proof():
             "path": acceptance.WORKFLOW_PATH, "event": "pull_request",
             "status": "completed", "conclusion": "success",
         },
-        "review_comment": {"user": {"login": "sigaev-pro"}, "html_url": COMMENT_URL,
+        "review_comment": {"id": COMMENT_ID, "user": {"login": "sigaev-pro"}, "html_url": COMMENT_URL,
+                           "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{PR_NUMBER}",
                            "body": acceptance.REVIEW_MARKER + "\n```json\n" + json.dumps(report) + "\n```"},
         "combined_status": {"sha": HEAD, "statuses": [{
             "context": acceptance.REVIEW_CONTEXT, "state": "success",
@@ -83,6 +88,43 @@ class AcceptanceProofTests(unittest.TestCase):
         result = acceptance.evaluate(proof())
         self.assertEqual(result["verdict"], "PASS", result)
         self.assertEqual(result["head_sha"], HEAD)
+
+    def test_real_pull_comment_url_and_issue_alias_bind_the_same_pr(self):
+        for route in ["pull", "issues"]:
+            snapshot = proof()
+            url = f"https://github.com/{REPOSITORY}/{route}/{PR_NUMBER}#issuecomment-{COMMENT_ID}"
+            snapshot["review_comment"]["html_url"] = url
+            snapshot["combined_status"]["statuses"][0]["target_url"] = url
+            with self.subTest(route=route):
+                result = acceptance.evaluate(snapshot)
+                self.assertEqual(result["verdict"], "PASS", result)
+                self.assertEqual(result["review_url"], url)
+
+    def test_review_comment_cannot_belong_to_a_different_repo_pr_or_comment(self):
+        for condition in ["html_repo", "html_pr", "html_comment", "api_repo", "api_pr",
+                          "response_comment_id", "requested_comment_id", "response_pr_number"]:
+            snapshot = proof()
+            comment = snapshot["review_comment"]
+            comment["html_url"] = COMMENT_URL.replace("/pull/", "/issues/")
+            if condition == "html_repo":
+                comment["html_url"] = comment["html_url"].replace(REPOSITORY, "sigaev-pro/another-repo")
+            elif condition == "html_pr":
+                comment["html_url"] = comment["html_url"].replace(f"/issues/{PR_NUMBER}#", f"/issues/{PR_NUMBER + 1}#")
+            elif condition == "html_comment":
+                comment["html_url"] = comment["html_url"].replace(str(COMMENT_ID), str(COMMENT_ID + 1))
+            elif condition == "api_repo":
+                comment["issue_url"] = comment["issue_url"].replace(REPOSITORY, "sigaev-pro/another-repo")
+            elif condition == "api_pr":
+                comment["issue_url"] = comment["issue_url"].replace(str(PR_NUMBER), str(PR_NUMBER + 1))
+            elif condition == "response_comment_id":
+                comment["id"] += 1
+            elif condition == "requested_comment_id":
+                snapshot["review_comment_id"] += 1
+            else:
+                snapshot["pull_request"]["number"] += 1
+            snapshot["combined_status"]["statuses"][0]["target_url"] = comment["html_url"]
+            with self.subTest(condition=condition):
+                self.assert_blocked(snapshot)
 
     def test_github_null_app_binding_keeps_review_status_required(self):
         snapshot = proof()
@@ -217,7 +259,7 @@ class AcceptanceProofTests(unittest.TestCase):
         def fake_github(repository, path):
             nonlocal pulls
             self.assertEqual(repository, REPOSITORY)
-            if path == "pulls/5":
+            if path == f"pulls/{PR_NUMBER}":
                 pulls += 1
                 result = copy.deepcopy(snapshot["pull_request"])
                 if pulls == 2:
@@ -226,7 +268,7 @@ class AcceptanceProofTests(unittest.TestCase):
             mapping = {
                 f"commits/{HEAD}/check-runs?filter=latest&per_page=100": "check_runs",
                 "actions/runs/10": "ci_run", f"commits/{HEAD}/status?per_page=100": "combined_status",
-                "issues/comments/12": "review_comment", f"compare/{BASE}...{HEAD}": "comparison",
+                f"issues/comments/{COMMENT_ID}": "review_comment", f"compare/{BASE}...{HEAD}": "comparison",
                 f"git/commits/{HEAD}": "head_commit", f"git/commits/{MERGE}": "merge_commit",
                 "branches/main/protection": "protection", "git/ref/heads/main": "base_ref",
             }
@@ -234,7 +276,7 @@ class AcceptanceProofTests(unittest.TestCase):
 
         with patch.object(acceptance, "github", side_effect=fake_github):
             with self.assertRaisesRegex(ValueError, "changed during proof collection"):
-                acceptance.collect(REPOSITORY, 5, "BOOT-05", 12, "sigaev-pro", "worker-1")
+                acceptance.collect(REPOSITORY, PR_NUMBER, "BOOT-05", COMMENT_ID, "sigaev-pro", "worker-1")
 
 
 if __name__ == "__main__":

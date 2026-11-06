@@ -65,6 +65,8 @@ def evaluate(snapshot):
         implementer = snapshot["implementer_session"]
         require(isinstance(implementer, str) and implementer.strip(), "missing implementer session")
         pull = snapshot["pull_request"]
+        number = snapshot["pull_request_number"]
+        require(type(number) is int and number > 0 and pull["number"] == number, "pull request number mismatch")
         head, base = pull["head"]["sha"], pull["base"]["sha"]
         require(re.fullmatch(SHA_PATTERN, head) and re.fullmatch(SHA_PATTERN, base), "invalid commit SHA")
         require(pull["state"] == "open" and pull["draft"] is False, "pull request is not open and ready")
@@ -99,8 +101,14 @@ def evaluate(snapshot):
         require(run["status"] == "completed" and run["conclusion"] == "success", "CI run has not passed")
 
         comment = snapshot["review_comment"]
+        comment_id = snapshot["review_comment_id"]
+        require(type(comment_id) is int and comment_id > 0 and comment["id"] == comment_id, "review comment ID mismatch")
         require(comment["user"]["login"] == coordinator, "review evidence was not recorded by the trusted coordinator")
-        require(re.fullmatch(r"https://github\.com/" + re.escape(repository) + r"/issues/\d+#issuecomment-\d+", comment["html_url"]), "review comment is outside the repository")
+        require(comment["issue_url"] == f"https://api.github.com/repos/{repository}/issues/{number}",
+                "review comment does not belong to the intended pull request")
+        require(re.fullmatch(r"https://github\.com/" + re.escape(repository)
+                             + rf"/(?:pull|issues)/{number}#issuecomment-{comment_id}", comment["html_url"]),
+                "review comment URL does not match the repository, pull request, and comment ID")
         match = re.fullmatch(re.escape(REVIEW_MARKER) + r"\s*```json\n(.*)\n```", comment["body"].strip(), re.S)
         require(match is not None, "review comment has no structured independent report")
         review = parse_json(match.group(1))
@@ -156,6 +164,7 @@ def collect(repository, number, task, comment_id, coordinator, implementer):
     snapshot = {
         "schema_version": 1, "repository": repository, "task_id": task,
         "coordinator_login": coordinator, "implementer_session": implementer,
+        "pull_request_number": number, "review_comment_id": comment_id,
         "pull_request": pull, "check_runs": checks, "ci_run": run,
         "combined_status": github(repository, f"commits/{head}/status?per_page=100"),
         "review_comment": github(repository, f"issues/comments/{comment_id}"),
