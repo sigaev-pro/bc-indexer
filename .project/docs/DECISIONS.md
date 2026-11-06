@@ -1,5 +1,15 @@
 # Дерево решений и журнал интервью
 
+## Owner launch — D92 (2026-11-07)
+
+The owner said to work after accepting the proposed autonomous seven-hour development window. This launch starts at 2026-11-07 02:17:27 Europe/Moscow (2026-11-06 23:17:27 UTC; Unix 1794007047) and ends at 2026-11-07 09:17:27 Europe/Moscow (2026-11-07 06:17:27 UTC; Unix 1794032247). Preparation, automation changes, implementation, review, and handoff all consume this same window. Do not extend it by starting another run or renewing a budget.
+
+The authorized scope is the accepted E01 through E07 backlog in dependency order, plus the automation needed to execute and verify it. A later stage can start only after its gate prerequisites pass. The coordinator may make routine technical decisions, prepare and publish issues/PRs, and merge independently reviewed exact commits after required checks. Preserve the existing limit of three active model sessions including the coordinator, bounded implementation attempts, and the 200-invocation controller budget across configuration changes. Model-invocation accounting must remain visible; no new run may erase earlier usage or attempts.
+
+D92 supersedes D86's stop-before-E01 restriction for this new launch only. Existing D86 runs keep their original authorization. Do not change product requirements, weaken acceptance, deploy production, purchase resources, discard user work, or bypass access controls. Record blocked decisions/access/resources and continue independent authorized work without waiting for routine answers. Collect unresolved questions for the final report. If no useful authorized work remains possible, preserve the blocker and stop honestly rather than inventing progress.
+
+At the deadline, stop substantive work safely, retain state and evidence, and report accepted commits, actual checks, unresolved work, and the next action. Native and product results remain NOT_RUN until actual evidence supports another result. The active Codex Goal records this bounded objective; it does not replace the controller's deadline, permissions, or acceptance checks.
+
 ## Delegated implementation decision — D91 (2026-11-07)
 
 BOOT-09 adds one exact-task artifact acceptance path for E01-01.evidence. It does not authorize E01 or create its product schemas. A trusted bootstrap verifier outside worker-owned paths will execute future candidate validation against fixed D82/EVID vectors for AC-DEV-01-01, AC-DEV-04-02, and AC-DEV-04-03. Synthetic vectors and fake candidates are bootstrap test inputs, never product runtime evidence. The other E01 tasks remain unconfigured.
