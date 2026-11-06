@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "role": {"type": "string"},
+    "stage_limit": {"type": "string", "enum": ["BOOT"]},
+    "read_only": {"type": "boolean"},
+    "project_language": {"type": "string", "enum": ["American English"]},
+    "can_accept_own_work": {"type": "boolean"},
+    "can_start_e01": {"type": "boolean"}
+  },
+  "required": ["role", "stage_limit", "read_only", "project_language", "can_accept_own_work", "can_start_e01"]
+}

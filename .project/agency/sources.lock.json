@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "upstream_repository": "https://github.com/msitarzewski/agency-agents",
+  "upstream_commit": "b859c515d813efcfc4755d3471dd9e7686c7706d",
+  "license_file": "LICENSE.upstream",
+  "sources": {
+    "LICENSE": {
+      "sha256": "9a45258434d5cedf0af73c9ad4771373701225038d246c49219026c33677f66f",
+      "bytes": 1079
+    },
+    "project-management/project-management-project-shepherd.md": {
+      "sha256": "0feb647366d78b61c1633b12e370ffb1dea52facb9d750ef6c952de1e996031c",
+      "bytes": 9825
+    },
+    "specialized/agents-orchestrator.md": {
+      "sha256": "3f900ee286eba5a809388ecc22ad860c4a3ef9ed7ff25488e80eac18f3a0f317",
+      "bytes": 15725
+    },
+    "engineering/engineering-software-architect.md": {
+      "sha256": "b85121691776147bacde26673e68fbbacd6a7f0816d1ca8e203c264d25ce1d30",
+      "bytes": 6485
+    },
+    "engineering/engineering-backend-architect.md": {
+      "sha256": "45d94306c8f0f4c51efb76066008297fa4e87ce5b69f509cfede224084b74dfb",
+      "bytes": 11263
+    },
+    "engineering/engineering-devops-automator.md": {
+      "sha256": "1b67b3bdc6a076d42281e38bb811250eb04415bb241cdd4c3a7df38ecd20e88b",
+      "bytes": 13738
+    },
+    "engineering/engineering-code-reviewer.md": {
+      "sha256": "7509fcc3ea1dda46511b2801996305bf3d4a125576f9655ff0b63df25602f446",
+      "bytes": 3076
+    },
+    "engineering/engineering-technical-writer.md": {
+      "sha256": "bf5c809977e10904b988ab8b218853ce8dfa38b2cbd89a7d2cfadba44ac25761",
+      "bytes": 14214
+    },
+    "testing/testing-test-results-analyzer.md": {
+      "sha256": "d33114b519ba657fc9f29db12495d3c31097a8282d170cfd57cbcb029f61f2de",
+      "bytes": 16017
+    },
+    "testing/testing-reality-checker.md": {
+      "sha256": "6d32fcdb114233e13902ec6372d50293b120e85d490b5e81d372c29808f988a1",
+      "bytes": 10854
+    }
+  },
+  "roles": {
+    "coordinator": {
+      "prompt": "coordinator.md",
+      "sources": [
+        "project-management/project-management-project-shepherd.md",
+        "specialized/agents-orchestrator.md"
+      ]
+    },
+    "architect": {
+      "prompt": "architect.md",
+      "sources": [
+        "engineering/engineering-software-architect.md"
+      ]
+    },
+    "native-engineer": {
+      "prompt": "native-engineer.md",
+      "sources": [
+        "engineering/engineering-backend-architect.md"
+      ]
+    },
+    "protocol-engineer": {
+      "prompt": "protocol-engineer.md",
+      "sources": [
+        "engineering/engineering-backend-architect.md"
+      ]
+    },
+    "devops": {
+      "prompt": "devops.md",
+      "sources": [
+        "engineering/engineering-devops-automator.md"
+      ]
+    },
+    "qa": {
+      "prompt": "qa.md",
+      "sources": [
+        "testing/testing-test-results-analyzer.md"
+      ]
+    },
+    "reviewer": {
+      "prompt": "reviewer.md",
+      "sources": [
+        "engineering/engineering-code-reviewer.md",
+        "testing/testing-reality-checker.md"
+      ]
+    },
+    "technical-writer": {
+      "prompt": "technical-writer.md",
+      "sources": [
+        "engineering/engineering-technical-writer.md"
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "codex": {
+    "version": "0.167.0",
+    "package": "@openai/codex",
+    "integrity": "sha512-1FSQgbTIKAdTub5Ln6z36NT4eXDmBRkinfigzycbgn9yLZdJ3UdkQZqr0N7jnl8/D1xxT/Pz3Fl2l7S2dmRaFA==",
+    "release": "https://github.com/openai/codex/releases/tag/rust-v0.167.0",
+    "checked_on": "2026-11-06",
+    "executable": ".project/cache/codex-0.167.0/node_modules/.bin/codex",
+    "verified_install_platform": "darwin-x64",
+    "platform_package": "@openai/codex@0.167.0-darwin-x64",
+    "platform_integrity": "sha512-wKoBiI6SBSg8fqiEYEOJs/NM/ZzKaCgy1cseX9LJbuDq3GCCKkeW9BUGe1ZEkyhhZ5Yfj+HzdUfp698abP2tDA=="
+  },
+  "model_policy": "Use the owner's existing model configuration. Do not substitute a model to work around a CLI compatibility failure."
+}
