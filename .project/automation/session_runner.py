@@ -151,7 +151,7 @@ def watchdog_cleanup(process, grace=2):
             "ownership": "unreaped direct supervisor; no resume between child census and final group termination"}
 
 
-def supervise(request_path, lock_fd):
+def supervise(request_path, lock_fd, on_interrupt=None):
     request_path = Path(request_path)
     request = acceptance.parse_json(request_path.read_text())
     directory = request_path.parent
@@ -163,22 +163,33 @@ def supervise(request_path, lock_fd):
         acceptance.require(saved["request_sha256"] == request_hash, "saved result belongs to another request")
         return saved
     claim_fd = os.open(directory / "session.lock", os.O_RDWR | os.O_CREAT, 0o600)
-    fcntl.flock(claim_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        fcntl.flock(claim_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BaseException:
+        os.close(claim_fd)
+        raise
     process = None
     interrupted = False
+    interruption_error = None
     old_handlers = {}
 
-    def interrupt(*_args):
-        nonlocal interrupted
+    def interrupt(signum, frame):
+        nonlocal interrupted, interruption_error
         interrupted = True
+        if on_interrupt is not None:
+            try:
+                on_interrupt(signum, frame)
+            except BaseException as error:
+                # A caller's interrupt exception must not bypass owned cleanup.
+                interruption_error = error
 
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        old_handlers[signum] = signal.signal(signum, interrupt)
-    stdout_path, stderr_path = directory / "stdout.jsonl", directory / "stderr.log"
-    started = time.time()
-    deadline = time.monotonic() + min(request.get("timeout_seconds", 3600), max(0, request["deadline"] - started))
-    reason, termination = "completed", "not-needed"
     try:
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            old_handlers[signum] = signal.signal(signum, interrupt)
+        stdout_path, stderr_path = directory / "stdout.jsonl", directory / "stderr.log"
+        started = time.time()
+        deadline = time.monotonic() + min(request.get("timeout_seconds", 3600), max(0, request["deadline"] - started))
+        reason, termination = "completed", "not-needed"
         evidence.atomic_json(directory / "started.json", {"request_sha256": request_hash,
                              "operation_id": request["operation_id"], "supervisor_pid": os.getpid(),
                              "started_at": started})
@@ -198,6 +209,8 @@ def supervise(request_path, lock_fd):
                           "termination": "not-started", "cleanup_complete": True,
                           "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
                 evidence.atomic_json(result_path, result)
+                if interruption_error is not None:
+                    raise interruption_error
                 return result
             with (directory / "stdin.txt").open("rb") as stdin:
                 acceptance.require(time.time() < request["deadline"] and time.monotonic() < deadline
@@ -263,14 +276,20 @@ def supervise(request_path, lock_fd):
                   "cleanup_complete": cleanup_complete,
                   "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
         evidence.atomic_json(result_path, result)
+        if interruption_error is not None:
+            raise interruption_error
         return result
     finally:
-        if process is not None and process.returncode is None:
-            terminate_group(process)
-            process.wait(timeout=10)
-        for signum, handler in old_handlers.items():
-            signal.signal(signum, handler)
-        os.close(claim_fd)
+        try:
+            if process is not None and process.returncode is None:
+                terminate_group(process)
+                process.wait(timeout=10)
+        finally:
+            try:
+                for signum, handler in old_handlers.items():
+                    signal.signal(signum, handler)
+            finally:
+                os.close(claim_fd)
 
 
 def main():

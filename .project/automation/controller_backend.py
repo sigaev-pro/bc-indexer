@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -22,9 +23,11 @@ import task_proofs
 WATCHDOG_GRACE_SECONDS = 5
 
 class RealBackend:
-    def __init__(self, source, canonical_root, store, repository, capture_directory=None, authorization=None):
+    def __init__(self, source, canonical_root, store, repository, capture_directory=None, authorization=None, stop_file=None):
         self.source, self.root = Path(source).resolve(), Path(canonical_root).resolve()
         self.store, self.repository = store, repository
+        if stop_file is not None:
+            self.command_stop_file = Path(stop_file)
         self.launch_bound = None
         if authorization:
             self.bind_launch(authorization)
@@ -86,8 +89,15 @@ class RealBackend:
                    "log_limit": session_runner.LOG_LIMIT, "env": {},
                    "stdin_sha256": session_runner.file_hash(input_path)}
         evidence.atomic_json(request_path, request)
+        caller_handlers = {number: signal.getsignal(number) for number in (signal.SIGTERM, signal.SIGINT)}
+
+        def forward_interrupt(number, frame):
+            handler = caller_handlers[number]
+            if callable(handler):
+                handler(number, frame)
+
         try:
-            result = session_runner.supervise(request_path, self.store.lock_fd)
+            result = session_runner.supervise(request_path, self.store.lock_fd, on_interrupt=forward_interrupt)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             failure = {"operation_id": identifier, "directory": str(directory),
                 "cleanup_complete": False, "error_type": type(error).__name__,

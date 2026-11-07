@@ -173,9 +173,9 @@ class LaunchTests(unittest.TestCase):
             before = copy.deepcopy(run)
             self.now = AUTH["hard_deadline"]
             run["deadline"] += 10000
-            with self.assertRaises(Blocked) as caught:
-                self.driver.run(run, resume=True)
-            self.assertEqual(caught.exception.code, "BUDGET_STOP")
+            self.driver.run(run, resume=True)
+            self.assertEqual(run["status"], "BUDGET_STOP")
+            self.assertEqual(self.store.load(run["run_id"])["blocker"]["code"], "BUDGET_STOP")
             self.assertEqual(run["budget_history"], before["budget_history"])
             self.assertFalse(self.backend.effects)
 
@@ -470,7 +470,7 @@ class FixedDeadlineProcessTests(unittest.TestCase):
             backend.root = Path(temporary)
             backend.store = Store(backend.root / "state")
             backend.launch_bound = {"authorization": AUTH, "monotonic_deadline": 105}
-            def completed(request_path, lock):
+            def completed(request_path, lock, on_interrupt=None):
                 request = controller.read_json(request_path)
                 self.assertEqual(request["timeout_seconds"], 2)
                 self.assertEqual(request["deadline"], AUTH["hard_deadline"])

@@ -1,7 +1,7 @@
 """Run the authorized task graph with durable state and independent acceptance."""
 
 import argparse
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import fcntl
 import hashlib
 import json
@@ -164,6 +164,28 @@ class Store:
                 "BLOCKED_LEASE", "terminal cleanup cannot release a different task lease")
         if not actual["released"]:
             evidence.atomic_json(path, dict(actual, released=True))
+
+
+@contextmanager
+def stop_signals(store, run_id, acknowledge=False):
+    """Scope durable stop handlers; defer new signals until prior stop acknowledgement ends."""
+    numbers = {signal.SIGTERM, signal.SIGINT}
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, numbers)
+    previous = {}
+    try:
+        for number in numbers:
+            previous[number] = signal.signal(number, lambda *_: store.stop(run_id))
+        if acknowledge:
+            store.clear_stop(run_id)
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        yield
+    finally:
+        signal.pthread_sigmask(signal.SIG_BLOCK, numbers)
+        try:
+            for number, handler in previous.items():
+                signal.signal(number, handler)
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
 
 
 class Controller:
@@ -394,12 +416,17 @@ class Controller:
             task["pending"] = replacement
             self.store.save(run)
 
-    def run(self, run, resume=False, renew_budget=False, automatic=False, retry_session=False):
+    def run(self, run, resume=False, renew_budget=False, automatic=False, retry_session=False, acknowledge_stop=True):
         require(not automatic or (resume and not renew_budget and not retry_session),
                 "BLOCKED_RECOVERY_MODE", "automatic recovery cannot authorize budget renewal or session retries")
         require(resume or not (renew_budget or retry_session), "BLOCKED_RECOVERY_MODE",
                 "budget renewal and diagnostic retries require explicit resume")
         require(not (renew_budget and self.launch(run)), "BLOCKED_BUDGET", "D92 has a fixed deadline and shared budget; renewal is not authorized")
+        require(not renew_budget or run["status"] == "BUDGET_STOP", "BLOCKED_BUDGET", "only an explicit budget stop can receive a new budget window")
+        with stop_signals(self.store, run["run_id"], acknowledge=resume and not automatic and acknowledge_stop):
+            return self._run(run, resume, renew_budget, automatic, retry_session)
+
+    def _run(self, run, resume, renew_budget, automatic, retry_session):
         if automatic:
             # A service start is not an operator's decision to continue. Check
             # durable stop state before preflight, reconciliation, or dispatch.
@@ -409,25 +436,23 @@ class Controller:
                 return run
             if run["status"] != "RUNNING":
                 return run
-        if resume:
-            self.window(run["authorization"])
-            if self.launch(run):
-                self.backend.check_configuration(run)
-            gate = self.backend.start_gate(run["catalog"])
-            require(gate.get("passed") is True, "BLOCKED_BOOTSTRAP", "resume requires current preflight and accepted BOOT-09")
-            self.backend.verify_receipt("BOOT-09", gate["bootstrap_gate_receipt"], run)
-            if renew_budget:
-                require(run["status"] == "BUDGET_STOP", "BLOCKED_BUDGET", "only an explicit budget stop can receive a new budget window")
-                run["budget_history"].append({"deadline": run["deadline"], "invocations": run["invocations"]})
-                run["deadline"] = self.clock() + run["limits"]["seconds"]
-                run["budget_baseline"] = run["invocations"]
-            if not automatic:
-                self.store.clear_stop(run["run_id"])
-                for task in run["tasks"].values():
-                    if task["state"] in {"BLOCKED", "FAILED"} and task.get("resume_state") and task.get("blocker", {}).get("code") != "BLOCKED_ATTEMPTS":
-                        task["state"] = task.pop("resume_state")
-                        task.pop("blocker", None)
         try:
+            if resume:
+                self.window(run["authorization"])
+                if self.launch(run):
+                    self.backend.check_configuration(run)
+                gate = self.backend.start_gate(run["catalog"])
+                require(gate.get("passed") is True, "BLOCKED_BOOTSTRAP", "resume requires current preflight and accepted BOOT-09")
+                self.backend.verify_receipt("BOOT-09", gate["bootstrap_gate_receipt"], run)
+                if renew_budget:
+                    run["budget_history"].append({"deadline": run["deadline"], "invocations": run["invocations"]})
+                    run["deadline"] = self.clock() + run["limits"]["seconds"]
+                    run["budget_baseline"] = run["invocations"]
+                if not automatic:
+                    for task in run["tasks"].values():
+                        if task["state"] in {"BLOCKED", "FAILED"} and task.get("resume_state") and task.get("blocker", {}).get("code") != "BLOCKED_ATTEMPTS":
+                            task["state"] = task.pop("resume_state")
+                            task.pop("blocker", None)
             self.budget(run)
             self.reconcile(run)
             if resume and not automatic:
@@ -523,7 +548,7 @@ def main():
             store.stop(args.run_id)
             print(json.dumps({"run_id": args.run_id, "status": "STOP_REQUESTED"}))
             return 0
-        with store.lock():
+        with store.lock(), ExitStack() as signal_contexts:
             if args.command in {"account-sessions", "reserve-session"}:
                 from launch_control import LaunchLedger
                 require(args.authorization_ref == "D92" and args.input, "BLOCKED_SESSION_ACCOUNTING", "explicit D92 input is required")
@@ -540,8 +565,23 @@ def main():
                     print(json.dumps(result))
                     return 0
                 require(args.run_id, "BLOCKED_SESSION_RESERVATION", "product session reservation requires its existing run")
+            if args.command not in {"verify-bootstrap", "run", "initialize"}:
+                require(args.run_id, "BLOCKED_STATE", "continuation requires an explicit run ID")
+                run = store.load(args.run_id)
+                require(run["repository"] == args.repo, "BLOCKED_REPOSITORY", "resume repository changed")
+                require(run["authorization"] == AUTHORIZATIONS[args.authorization_ref], "BLOCKED_AUTHORIZATION", "resume cannot change the run authorization")
+                require(not args.renew_budget or (args.authorization_ref != "D92" and run["status"] == "BUDGET_STOP"),
+                        "BLOCKED_BUDGET", "this run cannot renew its budget")
+                if args.command == "resume" and args.automatic and (store.stopped(run["run_id"]) or run["status"] != "RUNNING"):
+                    if store.stopped(run["run_id"]):
+                        run["status"] = "STOPPED"
+                        store.save(run)
+                    print(json.dumps(summary(run), indent=2))
+                    return 0 if run["status"] == "COMPLETE" else 1
+                signal_contexts.enter_context(stop_signals(store, run["run_id"], acknowledge=args.command == "resume" and not args.automatic))
             backend = RealBackend(ROOT, root, store, args.repo, args.capture_dir,
-                                  AUTHORIZATIONS[args.authorization_ref] if args.command != "verify-bootstrap" else None)
+                                  AUTHORIZATIONS[args.authorization_ref] if args.command != "verify-bootstrap" else None,
+                                  stop_file=store.directory / "stop" / (args.run_id + ".json") if args.command == "resume" else None)
             controller = Controller(store, backend)
             if args.command == "verify-bootstrap":
                 report = backend.verify_bootstrap(catalog())
@@ -551,11 +591,7 @@ def main():
                 require(not args.run_id and not args.renew_budget, "BLOCKED_STATE", "a new run cannot reuse an ID or renew a budget")
                 recipes = read_json(ROOT / ".project/automation/task-recipes.json")
                 run = controller.create(catalog(), recipes, args.repo, {"session_seconds": args.session_timeout}, args.authorization_ref)
-            else:
-                require(args.run_id, "BLOCKED_STATE", "resume requires an explicit run ID")
-                run = store.load(args.run_id)
-                require(run["repository"] == args.repo, "BLOCKED_REPOSITORY", "resume repository changed")
-                require(run["authorization"] == AUTHORIZATIONS[args.authorization_ref], "BLOCKED_AUTHORIZATION", "resume cannot change the run authorization")
+                signal_contexts.enter_context(stop_signals(store, run["run_id"]))
             if args.command == "initialize":
                 controller.reconcile(run)
                 run["status"] = "STOPPED"
@@ -590,10 +626,8 @@ def main():
                     controller_handoff.adopt(controller, run, read_json(args.input), args.expected_revision, args.expected_epoch)
                 print(json.dumps(summary(run), indent=2))
                 return 0
-            for signum in (signal.SIGTERM, signal.SIGINT):
-                signal.signal(signum, lambda *_: store.stop(run["run_id"]))
             report = controller.run(run, resume=args.command == "resume", renew_budget=args.renew_budget,
-                                    automatic=args.automatic, retry_session=args.retry_session)
+                                    automatic=args.automatic, retry_session=args.retry_session, acknowledge_stop=False)
             print(json.dumps(summary(report), indent=2))
             return 0 if report["status"] == "COMPLETE" else 1
     except (Blocked, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
