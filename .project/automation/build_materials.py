@@ -389,7 +389,53 @@ def checksum_entries(data):
     return result
 
 
-def module_metadata(identifier, row, root, commands):
+def native_go_phase(arguments, identifier):
+    """Accept only argument forms emitted by the fixed native executor."""
+    targets = {"geth": ("./cmd/geth", "geth"), "bsc": ("./cmd/geth", "geth"),
+               "bor": ("./cmd/cli/main.go", "bor"), "prysm": ("./cmd/beacon-chain", "beacon-chain"),
+               "heimdall": ("./cmd/heimdalld", "heimdalld")}
+    tail = arguments[1:]
+    if tail in (["version"], ["mod", "download", "-json", "all"], ["list", "-m", "-json", "all"], ["mod", "verify"]):
+        return "metadata"
+    contract.require(identifier in targets, "unexpected Go phase for a module-only component")
+    target, name = targets[identifier]
+    binary = "/proof/binaries/" + identifier + "/" + name
+    if tail == ["version", "-m", binary]:
+        return "inspection"
+    if tail[:1] == ["build"]:
+        phase, flags = "build", tail[1:]
+    else:
+        contract.require(tail[:3] == ["list", "-deps", "-json"], "unexpected native Go command or global argument override")
+        phase, flags = "imports", tail[3:]
+    contract.require(flags and flags[-1] == target, "native Go command selects another source target")
+    values, offset = {}, 0
+    while offset < len(flags) - 1:
+        flag = flags[offset]
+        contract.require(flag not in values, "native Go command repeats a build flag")
+        if flag in {"-trimpath", "-buildvcs=false", "-mod=readonly", "-pgo=prod.pprof"}:
+            values[flag] = True
+            offset += 1
+        else:
+            contract.require(flag in {"-p", "-tags", "-ldflags", "-o"} and offset + 1 < len(flags) - 1,
+                             "native Go command overrides module metadata or uses an unapproved build flag")
+            values[flag] = flags[offset + 1]
+            offset += 2
+    required = {"-trimpath", "-buildvcs=false", "-mod=readonly", "-p", "-ldflags"}
+    if identifier in {"geth", "bsc"}:
+        required.add("-tags")
+        contract.require(values.get("-tags") == "urfave_cli_no_docs", "native build tags differ")
+    if identifier == "bor":
+        required.add("-pgo=prod.pprof")
+    if phase == "build":
+        required.add("-o")
+        contract.require(values.get("-o") == binary, "native build output belongs to another component")
+    contract.require(set(values) == required and re.fullmatch(r"[1-4]", values.get("-p", ""))
+                     and re.fullmatch(r"-X [^\s=]+=[^\s]+(?: -X [^\s=]+=[^\s]+)*", values.get("-ldflags", "")),
+                     "native Go command differs from the fixed build argument forms")
+    return phase
+
+
+def module_metadata(identifier, row, root, commands, build=None):
     """Bind alternate metadata to native Go commands, not an offline sumdb replay."""
     contract.require(identifier in contract.MODULES, "unknown native module metadata owner")
     directory = "sources/" + identifier + "/metadata/"
@@ -431,12 +477,24 @@ def module_metadata(identifier, row, root, commands):
                      and authenticated.get("GOPROXY") == "https://proxy.golang.org" and authenticated.get("GOSUMDB") == "sum.golang.org",
                      "module checksum acquisition lacks its isolated authenticated environment")
     parsed_commands = [(i, command, invocation(command)) for i, command in enumerate(commands)]
-    for _, _, parsed in parsed_commands:
-        if parsed is not None and parsed[0] == owner and parsed[2][0] == "/usr/local/go/bin/go":
+    phases = []
+    for position, command, parsed in parsed_commands:
+        if parsed is not None and parsed[2][0] == "/usr/local/go/bin/go":
+            belongs = parsed[0] == owner or parsed[1].get("GOMODCACHE") == required["GOMODCACHE"] or parsed[1].get("GOFLAGS") == required["GOFLAGS"]
+            if not belongs:
+                continue
+            contract.require(parsed[0] == owner, "native Go phase uses another component container")
+            contract.command_record(command, root)
+            phase = native_go_phase(parsed[2], identifier)
+            authenticated_policy = ("https://proxy.golang.org", "sum.golang.org")
+            policies = {("off", "off")} if phase in {"build", "imports"} else {authenticated_policy}
+            if phase == "inspection":
+                policies.add(("off", "off"))
             contract.require(all(parsed[1].get(key) == value for key, value in required.items())
-                             and (parsed[1].get("GOPROXY"), parsed[1].get("GOSUMDB")) in
-                             {("https://proxy.golang.org", "sum.golang.org"), ("off", "off")},
+                             and (parsed[1].get("GOPROXY"), parsed[1].get("GOSUMDB")) in policies,
                              "native Go phase changed its module metadata or authentication policy")
+            if phase in {"build", "imports"}:
+                phases.append((position, command, phase))
     main = [item for item in json_stream(contract.verify_reference(root, row["modules"]).read_text()) if item.get("Main") is True]
     contract.require(len(main) == 1 and main[0].get("Dir") == "/source"
                      and main[0].get("GoMod") == "/proof/" + directory + "go.mod", "native graph used another module metadata file or root")
@@ -445,7 +503,8 @@ def module_metadata(identifier, row, root, commands):
         matches = [(i, command) for i, command, parsed in parsed_commands
                    if parsed == (owner, {}, ["cat", "/proof/" + directory + name])]
         contract.require(len(matches) == 1 and matches[0][0] > positions[-1], "module metadata capture is missing, duplicated, or out of order")
-        _, command = matches[0]
+        position, command = matches[0]
+        contract.require(all(position < item[0] for item in phases), "module metadata capture follows a build or import phase")
         contract.command_record(command, root)
         limit = 1024 * 1024 if name == "go.mod" else 16 * 1024 * 1024
         contract.require(command["stdout"]["size_bytes"] <= limit, "module metadata capture exceeds its bound")
@@ -465,6 +524,15 @@ def module_metadata(identifier, row, root, commands):
             selected[key] = item[field]
     contract.require(all(key[1].endswith("/go.mod") for key in final_sums.keys() - original_sums.keys() - selected.keys()),
                      "generated checksum file contains an unselected module archive")
+    if build is not None:
+        imports = [item for item in phases if item[2] == "imports"]
+        compiled = [item for item in phases if item[2] == "build"]
+        contract.require(len(imports) == len(compiled) == 1 and imports[0][0] < compiled[0][0]
+                         and imports[0][1]["stdout"] == build["imports"], "final build lacks its accepted import and compile commands")
+        arguments = invocation(compiled[0][1])[2]
+        contract.require(arguments[arguments.index("-o") + 1] == "/proof/" + build["binary"]["path"],
+                         "final binary differs from its accepted compile output")
+        contract.verify_reference(root, build["binary"])
 
 
 def fields(lines):
@@ -673,7 +741,7 @@ def validate_materialized(manifest, root, source, now):
         contract.require(contract.parse_json(contract.verify_reference(root, row["local_modules"]).read_bytes()) == local,
                          "retained local modules differ from their selected source archive")
         acquired = modules(graph, json_stream(contract.verify_reference(root, row["downloads"]).read_text()), source_module, local)
-        module_metadata(identifier, row, root, manifest["commands"])
+        module_metadata(identifier, row, root, manifest["commands"], manifest["builds"].get(identifier))
         artifacts = {(item["module"], item["version"]): item for item in row["artifacts"]}
         contract.require(len(artifacts) == len(row["artifacts"]) and set(artifacts) == set(acquired),
                          "retained module archives differ from the complete resolved closure")

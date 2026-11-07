@@ -78,6 +78,19 @@ class ModuleMetadataTests(unittest.TestCase):
     def validate(self, row):
         materials.module_metadata("geth", row, self.root, self.runner.commands)
 
+    def build_steps(self, imports=True):
+        env = execution.go_environment("geth", "linux/amd64", 1)
+        env.update(GOPROXY="off", GOSUMDB="off")
+        arguments = execution.build_arguments("geth", {"commit": "a" * 40, "version": "v1.0.0"}, 1, [], 2)
+        output = self.root / "binaries/geth/geth"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"synthetic binary for command-binding controls")
+        result = {"binary": contract.reference(self.root, output)}
+        if imports:
+            result["imports"] = self.command([arguments[0], "list", "-deps", "-json", *arguments[2:arguments.index("-o")], arguments[-1]], b"{}\n", env)
+        self.command(arguments, b"", env)
+        return result
+
     def rewrite_capture(self, name, data):
         (self.metadata / name).write_bytes(data)
         command = next(row for row in self.runner.commands if row["argv"][-2:] == ["cat", "/proof/sources/geth/metadata/" + name])
@@ -187,11 +200,92 @@ class ModuleMetadataTests(unittest.TestCase):
         self.runner.commands = copy.deepcopy(original)
         env = execution.go_environment("geth", "linux/amd64", 1)
         env.update(GOPROXY="off", GOSUMDB="off")
-        self.command(["/usr/local/go/bin/go", "build", "./cmd/geth"], b"", env)
+        arguments = execution.build_arguments("geth", {"commit": "a" * 40, "version": "v1.0.0"}, 1, [], 2)
+        self.command(arguments, b"", env)
         self.validate(row)
         self.runner.commands[-1]["argv"][self.runner.commands[-1]["argv"].index("GOFLAGS=" + env["GOFLAGS"])] = "GOFLAGS=-mod=mod"
         with self.assertRaises(ValueError):
             self.validate(row)
+
+    def test_explicit_build_and_import_argument_overrides_are_rejected(self):
+        row = self.fixture()
+        self.build_steps()
+        self.validate(row)
+        original = copy.deepcopy(self.runner.commands)
+        for position in (-1, -2):
+            for arguments in (["-modfile=/proof/other.mod"], ["-modfile", "/proof/other.mod"],
+                              ["-mod=mod"], ["-mod", "mod"], ["-overlay=/proof/overlay.json"],
+                              ["-toolexec=/proof/other-compiler"], ["-pkgdir=/proof/other-packages"]):
+                self.runner.commands = copy.deepcopy(original)
+                self.runner.commands[position]["argv"][-1:-1] = arguments
+                with self.subTest(position=position, arguments=arguments), self.assertRaises(ValueError):
+                    self.validate(row)
+        self.runner.commands = copy.deepcopy(original)
+        argv = self.runner.commands[-1]["argv"]
+        offset = argv.index("/usr/local/go/bin/go") + 1
+        argv[offset:offset] = ["-C", "/proof/other-source"]
+        with self.assertRaises(ValueError):
+            self.validate(row)
+
+    def test_build_and_import_commands_must_be_offline(self):
+        row = self.fixture()
+        self.build_steps()
+        original = copy.deepcopy(self.runner.commands)
+        for position in (-1, -2):
+            self.runner.commands = copy.deepcopy(original)
+            argv = self.runner.commands[position]["argv"]
+            argv[argv.index("GOPROXY=off")] = "GOPROXY=https://proxy.golang.org"
+            argv[argv.index("GOSUMDB=off")] = "GOSUMDB=sum.golang.org"
+            with self.subTest(position=position), self.assertRaises(ValueError):
+                self.validate(row)
+
+    def test_captures_must_precede_present_build_and_import_commands(self):
+        row = self.fixture()
+        self.validate(row)  # The pre-compilation API remains valid.
+        self.build_steps()
+        self.validate(row)
+        original = copy.deepcopy(self.runner.commands)
+        for order in ([0, 1, 2, 5, 3, 4, 6], [0, 1, 2, 5, 6, 3, 4]):
+            self.runner.commands = [copy.deepcopy(original[index]) for index in order]
+            with self.subTest(order=order), self.assertRaises(ValueError):
+                self.validate(row)
+
+    def test_all_fixed_native_build_and_import_forms_remain_valid(self):
+        graph = [{"Path": "github.com/cosmos/cosmos-sdk", "Version": "v0.1.0"},
+                 {"Path": "github.com/cometbft/cometbft", "Version": "v0.3.0"}]
+        for identifier in contract.NATIVE:
+            arguments = execution.build_arguments(identifier, {"commit": "a" * 40, "version": "v1.0.0"}, 1, graph, 4)
+            with self.subTest(identifier=identifier):
+                self.assertEqual(materials.native_go_phase(arguments, identifier), "build")
+                imported = [arguments[0], "list", "-deps", "-json", *arguments[2:arguments.index("-o")], arguments[-1]]
+                self.assertEqual(materials.native_go_phase(imported, identifier), "imports")
+
+    def test_final_build_row_binds_its_imports_binary_and_component_container(self):
+        row = self.fixture()
+        build = self.build_steps()
+        env = execution.go_environment("geth", "linux/amd64", 1)
+        env.update(GOPROXY="off", GOSUMDB="off")
+        self.command(["/usr/local/go/bin/go", "version", "-m", "/proof/binaries/geth/geth"], b"synthetic inspection\n", env)
+        materials.module_metadata("geth", row, self.root, self.runner.commands, build)
+        changed = {**build, "imports": row["modules"]}
+        with self.assertRaises(ValueError):
+            materials.module_metadata("geth", row, self.root, self.runner.commands, changed)
+        alternate = self.root / "other-binary"
+        alternate.write_bytes(b"another synthetic binary")
+        changed = {**build, "binary": contract.reference(self.root, alternate)}
+        with self.assertRaises(ValueError):
+            materials.module_metadata("geth", row, self.root, self.runner.commands, changed)
+        original = copy.deepcopy(self.runner.commands)
+        for order in ([0, 1, 2, 3, 4, 6, 7], [0, 1, 2, 3, 4, 6, 5, 7], [0, 1, 2, 3, 4, 5, 6, 6, 7]):
+            self.runner.commands = [copy.deepcopy(original[index]) for index in order]
+            with self.subTest(order=order), self.assertRaises(ValueError):
+                materials.module_metadata("geth", row, self.root, self.runner.commands, build)
+        for position in (5, 6):
+            self.runner.commands = copy.deepcopy(original)
+            argv = self.runner.commands[position]["argv"]
+            argv[argv.index(self.container)] = "foreign-container"
+            with self.subTest(position=position), self.assertRaises(ValueError):
+                materials.module_metadata("geth", row, self.root, self.runner.commands, build)
 
     def test_post_build_metadata_and_capture_mutation_are_rejected(self):
         row = self.fixture()

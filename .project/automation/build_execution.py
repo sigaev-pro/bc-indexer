@@ -538,7 +538,7 @@ def native_builds(runner, source_caches, authenticate_extra=None, package_source
                        (("binary", binary), ("build_info", info), ("imports", imports), ("dynamic_links", links))}}
             for expected in runner.plan["sources"][identifier]["dependency_inputs"]:
                 contract.require(contract.file_hash(source / expected["path"]) == expected["sha256"], "Go changed a selected native dependency input")
-            materials.module_metadata(identifier, closures[identifier], runner.root, runner.commands)
+            materials.module_metadata(identifier, closures[identifier], runner.root, runner.commands, builds.get(identifier))
         finally:
             runner.cleanup()
     runtime_closure = None

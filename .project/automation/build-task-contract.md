@@ -144,6 +144,15 @@ comes from the successful trusted native Go commands and checksum policy, not a
 claim of independent offline replay of checksum-database proofs. Validate the
 capture's component, container, command order, and digest. Reject changed or
 missing metadata after compilation and during final materialized validation.
+Check the effective Go argument vector as well as `GOFLAGS`: only the fixed
+executor's build/import flag forms, source target, and component output are
+accepted. Explicit module-file/mode overrides, directory changes, overlays,
+substitute tools, and other unapproved flags fail. Import listing and compilation
+must use `GOPROXY=off` and `GOSUMDB=off`, after both metadata captures. The
+pre-compilation check remains valid before those commands exist. Final validation
+also binds the existing build row's import-output descriptor and binary path to
+unique successful import and compile commands on the acquisition container,
+with imports preceding compilation. No new manifest fields are added.
 
 The trusted build driver accepts paired `--package-source-report PATH` and
 `--package-source-report-sha256 SHA256` options when pinned Debian indexes have

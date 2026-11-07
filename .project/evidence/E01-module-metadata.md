@@ -111,3 +111,59 @@ No author Docker, live module download, or full build ran. Tests completed and
 cleaned their disposable files; no background author process remains. Publish
 the checked draft, freeze the head, and obtain independent review and required
 CI before the coordinator's next actual build. Issue #11 remains incomplete.
+
+## Review repair: effective commands and capture order
+
+Both independent Spec and Standards reviews requested changes on frozen head
+`0fca5cc3f83c024d6ea9bd29d9c8f961e5670ac8` in
+[PR #117](https://github.com/sigaev-pro/bc-indexer/pull/117). The validator checked
+`GOFLAGS` but did not reject explicit build arguments overriding the module file,
+online build/import settings, or captures moved after compilation. The actual
+executor used the intended settings, but the final proof did not establish them.
+Exact-head CI `42423965807` passed and missed these findings.
+
+The coordinator's actual Geth diagnostic on that head passed in 183 seconds:
+348 modules, original sources unchanged, a built binary, and executed Geth
+1.17.10 version output. Diagnostic:
+`run_D95_geth_smoke_1794093095/12b491e920290f4067be36871a858a40`.
+Result SHA-256:
+`1a11e13f269726bc9bb8d41b5e9e6a93f2d90773d9aa57bd09ccca8f1931cdf4`.
+The coordinator independently verified that supervisor 69780, worker 69783,
+all owned groups, and owned containers were absent. This is scoped Geth build
+evidence, not validation of the later repair, full parent acceptance, or NATS
+runtime acceptance. It did not satisfy the failed review gate.
+
+Writer ownership returned on 2026-11-08. Three direct red methods produced 19
+failures: explicit module/source/tool overrides for build and import commands,
+online policies for those phases, and captures moved after imports or compilation.
+The corrected validator accepts only the actual fixed native argument forms,
+requires offline import/build settings, and requires both captures first on the
+same component/container. An intermediate positive compatibility test caught
+the initial parser's rejection of Bor's actual `-pgo=prod.pprof` form. That
+parser mismatch was corrected; all five native clients' fixed forms pass.
+
+`module_metadata` keeps its existing pre-compilation call and adds an optional
+existing `build` row. The post-build native caller and final materialized
+validator pass that row, binding its import stdout descriptor and binary output
+path to unique successful commands with imports before compilation. Tests reject
+wrong descriptors/outputs, missing or duplicate phases, reversed order, and
+foreign containers. The product schema is unchanged.
+
+A read-only replay of the actual Geth history passed the corrected validation
+for its observed compilation and captures. In-memory copies with each of the
+three independently reported mutations were rejected. No artifact was changed;
+the command-history digest stayed
+`b14515b4b3e8d7c846ef53e3caba92ef913d03db1c3a2fcd79b480336deebc98`.
+The diagnostic lacks imported-package listing and a complete build row, so this
+replay does not claim final build-row coverage. Disposable tests cover that
+binding; the full operation must still exercise it.
+
+The 30 focused tests passed in 0.643 seconds. All 133 affected build tests passed
+in 33.895 seconds (wrapper exit 0, elapsed 34.201 seconds), with two existing
+opt-in Docker skips. The same focused/broader commands recorded above were used.
+Documentation checks passed for 112 documents, 1,111 local links, 84 catalog
+entries, 16 normative mirrors, and unchanged original v2; whitespace checks passed.
+No Docker, native compilation, or full operation was launched during this repair;
+tests cleaned their disposable files and no background author process remains.
+Publish the frozen repair for fresh exact-head reviews and required CI. Preserve
+both failed reviews and successful diagnostics.
