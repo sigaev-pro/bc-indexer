@@ -1,5 +1,12 @@
 # Дерево решений и журнал интервью
 
+## D94 — Publish existing work before restructuring development (2026-11-07)
+
+After reviewing the elapsed time and limited product progress, the owner authorized only step 1 of the proposed revised plan: inspect and safely stop owned background work, publish completed local commits to working branches and draft PRs, and provide an exact inventory of results, checks, blockers, and the next product task. Retain all failures and historical evidence. Draft publication may expose work that still needs review or verification; it does not grant merge approval or product acceptance.
+
+The current block ends with that publication report. Do not resume new implementation, controller repairs, review rounds, recovery, or native runs under D93 while this narrower instruction is active. The proposed removal of the custom controller from the development path and the remaining revised stages are still proposals, not accepted policy. Preserve the existing specification, catalog, merge checks, and original v2 source. This decision changes the immediate work scope without erasing D93 history.
+
+
 ## D93 — Continuous development in meaningful blocks (2026-11-07)
 
 The owner instructed: remove work windows, continue until the result is complete, and organize the work into meaningful blocks. This is ongoing authorization to complete the accepted E01 through E07 backlog and the automation needed to execute and verify it. It supersedes D92's campaign deadline and the preceding follow-up's stop after steps 1-3. No new owner confirmation is required at a routine block boundary.
