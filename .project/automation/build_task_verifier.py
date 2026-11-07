@@ -189,7 +189,9 @@ def validate_report(report):
     return report
 
 
-def execute(candidate, request_path):
+def execute(candidate, request_path, package_source_report=None, package_source_report_sha256=None):
+    contract.require((package_source_report is None) == (package_source_report_sha256 is None),
+                     "package source report and digest must be supplied together")
     source = Path(__file__).resolve().parents[2]
     candidate, request_path = Path(candidate).resolve(), Path(request_path).resolve()
     outputs, frozen = validate_outputs(candidate), pack(source)
@@ -220,7 +222,7 @@ def execute(candidate, request_path):
         signature = {}
         def authenticate(container):
             signature["path"] = build_update_execution.authenticate(runner, container, independent)
-        builds, modules, os_closures = build_execution.native_builds(runner, caches, authenticate)
+        builds, modules, os_closures = build_execution.native_builds(runner, caches, authenticate, package_source_report, package_source_report_sha256)
         runner.cleanup()
         cleanup_history(runner.spec, runner.cleanups, images)
         _, verifier_source, _ = runner.run(["git", "-C", str(source), "rev-parse", "HEAD"], timeout=30)
@@ -260,9 +262,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", required=True, type=Path)
     parser.add_argument("--request", required=True, type=Path)
+    parser.add_argument("--package-source-report", type=Path, help="Retained real-source report containing exact pinned Debian inputs; signatures are verified again.")
+    parser.add_argument("--package-source-report-sha256", help="Required raw SHA-256 of the retained source report.")
     args = parser.parse_args()
+    if (args.package_source_report is None) != (args.package_source_report_sha256 is None):
+        parser.error("package source report and digest must be supplied together")
     try:
-        print(json.dumps(execute(args.candidate, args.request), sort_keys=True, allow_nan=False))
+        print(json.dumps(execute(args.candidate, args.request, args.package_source_report, args.package_source_report_sha256), sort_keys=True, allow_nan=False))
         return 0
     except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.SubprocessError) as error:
         print(json.dumps({"contract": CONTRACT, "task_id": TASK, "status": "FAIL", "reason": str(error), "runtime": "NOT_RUN"}))

@@ -303,10 +303,10 @@ def oci_layout(runner, identifier, container, binary, epoch):
             (("oci_layout", layout), ("oci_index", index_path), ("oci_manifest", manifest_path), ("oci_config", config_path), ("oci_layer", layer))}
 
 
-def native_builds(runner, source_caches, authenticate_extra=None):
+def native_builds(runner, source_caches, authenticate_extra=None, package_source_report=None, package_source_report_sha256=None):
     from build_os import Packages
     packages = Packages(runner)
-    packages.acquire()
+    packages.acquire(package_source_report, package_source_report_sha256)
     compiler_image = runner.plan["images"]["golang-build-image"]["reference"]
     runtime_image = runner.plan["images"]["debian-runtime-image"]["reference"]
     compiler_cache, runtime_cache = (runner.root / "apt-cache" / name for name in ("compiler", "runtime"))

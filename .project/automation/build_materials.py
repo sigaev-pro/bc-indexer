@@ -5,12 +5,71 @@ import gzip
 import hashlib
 import json
 import lzma
+import math
 from pathlib import Path, PurePosixPath
 import re
 import struct
 import tarfile
+import urllib.parse
 
 import build_contract as contract
+
+
+MAX_PACKAGE_SOURCE_REPORT = 16 * 1024 * 1024
+
+
+def package_source_observations(data):
+    """Read source metadata only; no old component selection or verdict is trusted."""
+    contract.require(len(data) <= MAX_PACKAGE_SOURCE_REPORT, "package source report exceeds its bound")
+    report = contract.parse_json(data)
+    contract.require(type(report) is dict and type(report.get("schema_version")) is int and report["schema_version"] == 1
+                     and report.get("contract") == "component-update-v1" and report.get("mode") in {"check", "update"}
+                     and report.get("synthetic") is False, "package source report has the wrong scope or is synthetic")
+    rows, result = report.get("observations"), {}
+    contract.require(type(rows) is list and 1 <= len(rows) <= 4096, "package source observations are missing or unbounded")
+    for row in rows:
+        contract.require(type(row) is dict and set(row) == {"url", "status", "headers", "body", "observed_at"}
+                         and isinstance(row["url"], str) and row["url"] not in result and type(row["status"]) is int
+                         and type(row["headers"]) is dict and all(isinstance(k, str) and isinstance(v, str) for k, v in row["headers"].items())
+                         and type(row["observed_at"]) in (int, float) and math.isfinite(row["observed_at"]),
+                         "package source observation is malformed or duplicated")
+        parsed = urllib.parse.urlsplit(row["url"])
+        contract.require(parsed.scheme == "https" and parsed.netloc in {"api.github.com", "raw.githubusercontent.com", "go.dev", "dl.google.com",
+                         "registry-1.docker.io", "deb.debian.org", "security.debian.org"}, "package source observation is not official HTTPS")
+        contract.reference_descriptor(row["body"])
+        result[row["url"]] = row
+    return result
+
+
+def package_source_pair(observations, url, digest):
+    match = re.fullmatch(r"https://(deb\.debian\.org/debian|security\.debian\.org/debian-security)/dists/(trixie|trixie-security|trixie-updates)/main/binary-(amd64|arm64)/Packages\.(?:gz|xz)", url)
+    contract.require(match is not None and (match[2] == "trixie-security") == (match[1] == "security.debian.org/debian-security"),
+                     "retained package index has another source or channel")
+    release_url = url.split("/main/", 1)[0] + "/InRelease"
+    index, signed = observations.get(url), observations.get(release_url)
+    contract.require(index is not None and signed is not None and index["status"] == signed["status"] == 200
+                     and index["body"]["sha256"] == digest, "retained package pair is missing, unavailable, or differs from its pin")
+    return index, signed
+
+
+def package_acquisition(acquisition, index, root):
+    contract.require(type(acquisition) is dict, "package acquisition evidence is missing")
+    if acquisition.get("mode") == "live-fetch":
+        contract.require(set(acquisition) == {"mode"}, "live acquisition contains retained-source claims")
+        return
+    contract.require(set(acquisition) == {"mode", "report", "index_observation", "inrelease_observation"}
+                     and acquisition["mode"] == "retained-report", "package acquisition evidence is malformed")
+    contract.reference_descriptor(acquisition["report"])
+    contract.require(acquisition["report"]["size_bytes"] <= MAX_PACKAGE_SOURCE_REPORT, "package source report exceeds its bound")
+    report = contract.verify_reference(root, acquisition["report"])
+    observations = package_source_observations(report.read_bytes())
+    original_index, original_signed = package_source_pair(observations, index["url"], index["packages"]["sha256"])
+    contract.require(acquisition["index_observation"] == original_index and acquisition["inrelease_observation"] == original_signed,
+                     "retained package observation metadata changed")
+    for original, copied in ((original_index, index["packages"]), (original_signed, index["inrelease"])):
+        contract.verify_reference(root, copied)
+        contract.require(all(original["body"][key] == copied[key] for key in ("sha256", "size_bytes")),
+                         "retained package bytes differ from their original observation")
 
 
 def json_stream(data):
@@ -280,11 +339,12 @@ def os_closure(row, root, plan, now, commands):
         release_text = contract.verify_reference(root, index["release"]).read_text()
         release(release_text, index["url"], allowed_indexes[index["url"]], path.stat().st_size, now)
         status = contract.parse_json(contract.verify_reference(root, index["signature_log"]).read_bytes())
-        contract.require(set(status) == {"tool", "exit_code", "command_index", "verifier_sha256", "keyring_sha256", "inrelease_sha256", "release_sha256"}
+        contract.require(set(status) == {"tool", "exit_code", "command_index", "verifier_sha256", "keyring_sha256", "inrelease_sha256", "release_sha256", "acquisition"}
                          and status["tool"] == "sqv" and type(status["exit_code"]) is int and status["exit_code"] == 0
                          and type(status["command_index"]) is int and 0 <= status["command_index"] < len(commands)
                          and all(status[key + "_sha256"] == index[key]["sha256"] for key in ("verifier", "keyring", "inrelease", "release")),
                          "OS closure has no bound signed Release verification")
+        package_acquisition(status["acquisition"], index, root)
         command = commands[status["command_index"]]
         expected_tail = ["/usr/bin/sqv", "--keyring=/usr/share/keyrings/debian-archive-keyring.pgp",
                          "--output=/proof/" + index["release"]["path"], "--cleartext", "/proof/" + index["inrelease"]["path"]]
