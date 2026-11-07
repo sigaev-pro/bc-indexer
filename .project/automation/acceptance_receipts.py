@@ -81,7 +81,7 @@ class Ledger:
         evidence.validate_capture(bundle)
         snapshot = bundle["snapshot"]
         require(snapshot["repository"] == self.repository
-                and (snapshot["task_id"].startswith("BOOT-") or snapshot["task_id"] == artifact_verifier.TASK),
+                and (snapshot["task_id"].startswith("BOOT-") or task_proofs.configured(snapshot["task_id"])),
                 "BLOCKED_EVIDENCE", "this task has no configured acceptance adapter")
         comment = self.read(f"issues/comments/{snapshot['review_comment_id']}")
         for field in ("id", "body", "issue_url", "html_url"):
@@ -117,7 +117,7 @@ class Ledger:
     def from_capture(self, bundle, provenance, task_verification=None):
         self.authenticate_capture(bundle)
         expected = bundle["expected"]
-        if expected["task_id"] == artifact_verifier.TASK:
+        if task_proofs.configured(expected["task_id"]):
             task_verification = task_verification if task_verification is not None else bundle["snapshot"].get("task_verification")
             self.verify_task_proof({"capture": bundle, "task_verification": task_verification})
         pull = self.read(f"pulls/{expected['pull_request_number']}")
@@ -129,13 +129,13 @@ class Ledger:
                 "repository": self.repository, "head_sha": expected["head_sha"], "merge_sha": pull["merge_commit_sha"],
                 "capture": bundle, "merge": facts, "implementation_provenance": provenance,
                 "runtime": "NOT_RUN"}
-        if expected["task_id"] == artifact_verifier.TASK:
+        if task_proofs.configured(expected["task_id"]):
             receipt["task_verification"] = task_verification
         return receipt
 
     def verify(self, task, receipt, fresh=True):
         require(receipt["schema_version"] == 1 and receipt["repository"] == self.repository
-                and receipt["task_id"] == task and (task.startswith("BOOT-") or task == artifact_verifier.TASK),
+                and receipt["task_id"] == task and (task.startswith("BOOT-") or task_proofs.configured(task)),
                 "BLOCKED_EVIDENCE", "acceptance receipt identity mismatch")
         if receipt["kind"] == "historical-bootstrap-import":
             require(task in HISTORICAL, "BLOCKED_EVIDENCE", "unknown historical exception")
@@ -161,7 +161,7 @@ class Ledger:
                     and {p["sha"] for p in commit["parents"]} == {expected["head_sha"], expected["base_sha"]},
                     "BLOCKED_EVIDENCE", "retained merge receipt differs from the accepted tree or parents")
             number = expected["pull_request_number"]
-            if task == artifact_verifier.TASK:
+            if task_proofs.configured(task):
                 self.verify_task_proof(receipt)
         else:
             raise Blocked("BLOCKED_EVIDENCE", "unknown acceptance receipt kind")

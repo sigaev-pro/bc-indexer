@@ -271,9 +271,9 @@ class ArtifactDriverTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "BLOCKED_AUTHORIZATION")
         mutation.assert_not_called()
         run["authorization"] = AUTH
-        run["catalog"]["E01-01.builds"] = {"stage": "E01"}
+        run["catalog"]["E01-01.harness"] = {"stage": "E01"}
         with patch.dict(controller.AUTHORIZATIONS, {AUTH["reference"]: AUTH}), self.assertRaises(Blocked) as caught:
-            backend.perform("prepare", run, {"task_id": "E01-01.builds"}, {"id": "guard"})
+            backend.perform("prepare", run, {"task_id": "E01-01.harness"}, {"id": "guard"})
         self.assertEqual(caught.exception.code, "BLOCKED_UNCONFIGURED_VERIFICATION")
 
     def test_fake_authorized_flow_executes_trusted_driver_and_recovers_verify_crash(self):

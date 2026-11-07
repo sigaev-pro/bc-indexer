@@ -1,6 +1,6 @@
 # AUT-03: Isolated build acceptance
 
-Issue: [98](https://github.com/sigaev-pro/bc-indexer/issues/98). Authorization: D92. This explicit BOOT-09 maintenance follow-up remains outside the fixed 84-task catalog. Status: IN_PROGRESS. No build recipe is enabled and no product build is accepted yet.
+Issue: [98](https://github.com/sigaev-pro/bc-indexer/issues/98). Authorization: D92. This explicit BOOT-09 maintenance follow-up remains outside the fixed 84-task catalog. Status: IN_PROGRESS. The working tree contains a candidate build recipe; the canonical run has not enabled it. No product build is accepted.
 
 ## Owned Docker supervision substep
 
@@ -19,6 +19,20 @@ The real fixture command is opt-in: `EXTRACTOR_DOCKER_FIXTURE=1 python3 -m unitt
 
 Full tracked-tree offline CI passed before this substep commit: exit 0 in 106.11 seconds, 219 tests (the two opt-in Docker cases skipped), component checks, 99 documents, 1,067 local links, 16 mirrors, all 84 catalog entries, and unchanged original v2. This is supervision infrastructure evidence, not build task acceptance.
 
+## Complete adapter candidate
+
+The adapter now defines `build-artifacts-v1` and `component-update-v1`. Product code supplies a closed plan, manifest preflight, and the updater. Trusted code owns fixed source archives, isolated Go closures, signed package acquisition, compiler execution, binary metadata checks, OCI materialization, and retained command/cleanup evidence. Coverage is five native/support clients, ten Go module roots, compiler/runtime OS closures, all seven network-profile bindings, and the 41-component registry. Source-owned replacements and both candidate architectures remain explicit.
+
+The first actual execution route selects linux/amd64. Arm64 remains NOT_RUN. Host Docker/Git/Python/GitHub CLI evidence is distinct from future deployment pins. The route does not require a second full rebuild or claim bit-identical rebuild results; `repeat_build` remains NOT_RUN. Native chain execution and NATS delivery remain NOT_RUN.
+
+Exact task selection now covers verification, external-candidate adoption, public proof binding, retained captures, and receipt replay. Other product tasks stay unconfigured. Independent controls reject stale task/head/base/source/output/publication bindings and preserve the existing artifact receipt path.
+
+The delegated author ended at the provider usage limit before completing the final handoff. The owner requested continuation. Root preserved all changes, confirmed no remaining author/test/controller process or running container, recorded the ended session without claiming task success, and took sole write ownership. The fixed D92 deadline, counters, task catalog, and original receipts were retained. The accepted E01 evidence main was handed off as configuration epoch 3 before further work.
+
+At takeover, all 47 build-adapter tests passed in 3.62 seconds, with the two opt-in Docker tests skipped. The first full-CI attempt stopped at document checks because the new linked contract module had not yet been staged; it did not run the full test suite. Final integrated results will be recorded below before review. Root's separate signed-index preparation diagnostics are not product acceptance or substitutes for these candidate checks.
+
+The next full-CI attempt stopped at whitespace checks for extra final blank lines in six new modules. After staging and fixing those lines, full CI passed in 101.00 seconds: 254 tests, all 54 component negatives, 99 documents, 1,069 local links, 16 normative mirrors, the unchanged 84-task catalog, and unchanged original v2. The two opt-in Docker tests were skipped in this offline run. These results cover the complete candidate before integration of accepted E01 evidence main; integration and exact-head review remain required.
+
 ## Remaining work
 
-Freeze the constrained build-plan and updater interfaces, add independent conformance cases and actual materialization checks, connect exact task/proof/adoption/publication/receipt selection, and obtain independent exact-head review. Missing signed Debian package closures, source observations, compiled bytes, or cleanup evidence must block acceptance. The current pinned caches are preparation only. Preserve deadline `1794032247`, shared invocation accounting, task attempts, original receipts, and all accepted E01 evidence behavior.
+Stage and check the complete candidate, integrate accepted E01 evidence main, and obtain independent exact-head review and protected acceptance. Missing signed Debian package closures, source observations, compiled bytes, or cleanup evidence must block product acceptance. The current pinned caches are preparation only. Preserve deadline `1794032247`, shared invocation accounting, task attempts, original receipts, and all accepted E01 evidence behavior.

@@ -30,6 +30,14 @@
     "commands": [["python3", ".project/automation/ci.py"]],
     "bootstrap_gate": true
   },
+  "E01-01.builds": {
+    "role": "devops",
+    "artifact_contract": "build-artifacts-v1",
+    "allowed_paths": ["build/native/", "scripts/refresh-versions", "scripts/versioning/", "test/builds/", ".project/evidence/E01-01.builds.md", ".project/PROJECT_STATUS.md"],
+    "required_files": ["build/native/plan.py", "build/native/verify.py", "build/native/build-manifest.schema.json", "build/native/README.md", "scripts/refresh-versions", "scripts/versioning/README.md", "test/builds/test_build_contract.py", ".project/evidence/E01-01.builds.md"],
+    "commands": [["python3", ".project/automation/ci.py"], ["python3", "-I", "-m", "unittest", "discover", "-s", "test/builds", "-p", "test_*.py"]],
+    "verifier_timeout_seconds": 7200
+  },
   "E01-01.evidence": {
     "role": "qa",
     "artifact_contract": "evidence-artifacts-v1",

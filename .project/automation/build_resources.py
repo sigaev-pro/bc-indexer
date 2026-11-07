@@ -101,7 +101,7 @@ def validate_inventory(spec, value):
             and type(value["schema_version"]) is int and value["schema_version"] == 1
             and value.get("nonce") == spec["nonce"] and type(value.get("intents")) is list
             and len(value["intents"]) <= 16, "invalid owned Docker creation inventory")
-    names = set()
+    names, identifiers = set(), set()
     for row in value["intents"]:
         require(type(row) is dict and set(row) == {"name", "image_reference", "container_id"}
                 and isinstance(row["name"], str) and re.fullmatch(r"extractor-[a-f0-9]{24}-[a-z0-9-]{1,40}", row["name"])
@@ -110,6 +110,9 @@ def validate_inventory(spec, value):
                 and (row["container_id"] is None or isinstance(row["container_id"], str)
                      and HEX64.fullmatch(row["container_id"])), "invalid owned Docker creation intent")
         names.add(row["name"])
+        if row["container_id"] is not None:
+            require(row["container_id"] not in identifiers, "owned Docker creation inventory repeats an immutable ID")
+            identifiers.add(row["container_id"])
     return value
 
 
@@ -194,10 +197,14 @@ def validate_cleanup(spec, report):
     validate_inventory(spec, inventory)
     require(all(isinstance(row.get("container_id"), str) and HEX64.fullmatch(row["container_id"])
                     for row in inventory["intents"]), "owned Docker cleanup has unresolved creation intents")
+    known = {row["container_id"]: row["image_reference"] for row in inventory["intents"]}
     seen = set()
     for row in report["resources"]:
         require(type(row) is dict and isinstance(row.get("id"), str)
                 and HEX64.fullmatch(row["id"]) and row["id"] not in seen
+                and row["id"] in known and row.get("image_reference") == known[row["id"]]
+                and isinstance(row.get("image_id"), str) and re.fullmatch(r"sha256:[a-f0-9]{64}", row["image_id"])
+                and type(row.get("running")) is bool
                 and row.get("labels") == labels(spec) and row.get("image_reference") in spec["images"]
                 and type(row.get("remove_exit")) is int and row["remove_exit"] == 0,
                 "owned Docker cleanup has invalid resource evidence")

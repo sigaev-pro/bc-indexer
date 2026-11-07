@@ -1,6 +1,6 @@
 # Isolated build acceptance interface
 
-Status: DRAFT for AUT-03, [issue 98](https://github.com/sigaev-pro/bc-indexer/issues/98). This document does not enable a recipe or accept E01-01.builds. The implementation, independent checks, and exact-head review must resolve and freeze this interface before configuration handoff.
+Status: specified for AUT-03, [issue 98](https://github.com/sigaev-pro/bc-indexer/issues/98), pending independent review and protected acceptance. The contract is `build-artifacts-v1`; the updater contract is `component-update-v1`. Only an accepted configuration handoff enables the product task. This document does not accept a build.
 
 ## Existing requirements
 
@@ -18,11 +18,11 @@ Freeze the build contract, independent driver, oracle inputs, task recipe, accep
 
 The implementation must retain negative proof that stale task IDs, candidate hashes, base commits, source packs, profiles, output files, and public bindings are rejected. Existing evidence-task proof checks must continue to pass unchanged.
 
-## Product surface to define and verify
+## Product surface
 
-Keep product outputs in `build/native/`, updater code under `scripts/refresh-versions` and a clearly named helper directory if needed, independent product tests under `test/builds/`, the task evidence report, and the status document. The final recipe must list exact required files and commands. Do not grant write access to the trusted automation or bootstrap inventory through this product task.
+Keep product outputs in `build/native/`, updater helpers under `scripts/versioning/`, independent product tests under `test/builds/`, the task evidence report, and the status document. Required files are `build/native/plan.py`, `build/native/verify.py`, `build/native/build-manifest.schema.json`, `build/native/README.md`, `scripts/refresh-versions`, `scripts/versioning/README.md`, and `test/builds/test_build_contract.py`. The recipe does not grant product write access to trusted automation or the bootstrap inventory.
 
-The build interface must provide explicit operations for preparation, building a selected component, validating artifacts, and reporting a complete requested build set. Every operation identifies its platform, selected lock, source directory, output directory, and resource/time bounds. Inputs must not depend on an author's hidden running node or an unrecorded local compiler. Test fixtures must be explicitly synthetic; they cannot be used as actual build evidence.
+The product provides a constrained build plan, artifact preflight, and the standalone updater. The trusted driver owns preparation, fixed native commands, complete build execution, and evidence assembly. Candidate code cannot supply a shell build command or replace the driver. Inputs must not depend on an author's hidden running node or an unrecorded local compiler. Test fixtures are explicitly synthetic and cannot establish actual build evidence.
 
 The versioned build manifest must identify:
 
@@ -55,3 +55,45 @@ The independent driver must combine behavioral failure mutations with actual bui
 The canonical checkout already has five clean pinned native source caches and three pinned Linux amd64 images. They are preparation only. The observed Docker host is Linux x86_64 with 16 CPUs and about 8 GiB RAM; native builds should run sequentially within explicit limits. Recheck capacity before execution. No native source has yet been built or started during D92.
 
 Finish the concrete interface and independent tests in AUT-03, obtain exact-head review and protected acceptance, then safely hand off the accepted adapter on the existing D92 run. Product implementation and acceptance remain separate from this maintenance task.
+
+## Normative field definitions
+
+[build_contract.py](build_contract.py) is the executable field definition for `BuildPlan`, artifact references, command records, and the nested build manifest. Its constants, `expected_plan`, `limits`, `reference_descriptor`, `command_record`, and `validate_manifest` define the exact closed shapes and cross-field constraints. [build_updates.py](build_updates.py) defines `UpdateReport`, source observations, component selection rules, and the prepared candidate shape. These two modules are interface definitions that implementers may read. Implement product behavior independently; do not import trusted automation at runtime, inspect the oracle fixture modules or tests, or special-case their values.
+
+All protocol JSON rejects duplicate object keys and nonfinite numbers. Hash canonical JSON as UTF-8 `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)` followed by one newline. Hash existing input and artifact files as their raw bytes. Do not confuse these domains. Artifact references contain exactly `path`, `sha256`, and `size_bytes`; paths are relative POSIX paths to regular files under the declared root, without symlink traversal. Each referenced file must exist and match its size and digest.
+
+`BuildPlan` and the manifest have integer `schema_version: 1`, `task_id: E01-01.builds`, and `contract: build-artifacts-v1`. Integer fields reject booleans. Unknown fields, missing coverage, malformed hashes, and changed input bindings fail validation.
+
+## Build plan CLI
+
+Run `python3 -I build/native/plan.py`. Read one JSON object from stdin and emit one JSON object on stdout. The request contains exactly `contract`, `kind: BuildPlan`, `registry_path`, `lock_path`, `platform`, and `limits`. Paths identify explicit input files; the request does not depend on the current directory. Exit 0 with the complete plan or 2 for an invalid request. Send diagnostics to stderr.
+
+The output is the exact projection defined by `expected_plan`: registry and lock raw hashes; both candidate platforms and the other unexecuted platform; five native component IDs; ten module component IDs; each exact source repository/commit/version/dependency-input set; an empty initial patch list; the selected compiler, three image references and platform digests; selected Debian package revisions/artifacts/indexes; all seven profile bindings and dedicated Polygon L1 references; explicit later-owned outputs; `runtime: NOT_RUN`; and `promotion: FORBIDDEN_UNTIL_REQUIRED_GATES`.
+
+Resource limits contain exactly `cpus`, `memory_bytes`, `pids`, and `command_seconds`. Defaults are 4 CPUs, 6 GiB, 256 processes, and 3,600 seconds per command. Allowed ranges are 1–4 CPUs, 512 MiB–6 GiB, 32–256 processes, and 30–3,600 seconds. The launch deadline is an additional upper bound. A plan supports either candidate platform; the current trusted execution route selects linux/amd64. Planning arm64 does not prove an arm64 build.
+
+## Artifact preflight CLI
+
+Run `python3 -I build/native/verify.py`. The stdin request contains exactly `contract`, `kind: VerifyManifest`, `synthetic`, `root`, `manifest_path`, `manifest_sha256`, `profile_id`, `registry_path`, `lock_path`, and `identity`. `manifest_path` is relative to the absolute artifact root. Verify the raw manifest digest before accepting its contents, then require the exact requested identity and profile binding. The identity fields are `run_id`, `operation_id`, `nonce`, `head_sha`, `base_sha`, and `verifier_source_commit`.
+
+Return exactly `{"valid": true, "reason": "..."}` with exit 0 for valid input, or `{"valid": false, "reason": "..."}` with exit 2 for invalid input. The reason is a nonempty English string. Verify every reference and all structural/cross-field invariants in the normative manifest definition. The manifest's top-level fields are exactly `schema_version`, `task_id`, `contract`, `evidence_kind`, `plan`, `plan_sha256`, `builds`, `identity`, `image_inputs`, `host_tools`, `module_closures`, `os_closures`, `profile_bindings`, `updater`, `cleanup`, `commands`, and `runtime`. The JSON Schema must declare this closed versioned root and describe the nested contract.
+
+Synthetic mode permits an explicitly synthetic manifest for protocol controls. It does not relax hashes, coverage, identity, profile, or cleanup requirements. Actual mode rejects synthetic evidence. Actual acceptance also requires the trusted driver's independent ELF, Go graph, signed package, OCI, command, source, and cleanup checks; a product preflight pass alone is insufficient.
+
+## Updater CLI and source transport
+
+Run `python3 -I scripts/refresh-versions check|update --registry PATH --active-lock PATH --expected-lock-sha256 HASH --report PATH`. Update mode additionally requires `--output PATH` for a separate candidate. Exit 0 only for complete successful discovery; exit 1 with an incomplete report for unavailable, malformed, or unresolved sources; exit 2 for invalid arguments, a stale expected active-lock hash, or an output that could overwrite an active input. Check mode and all failed modes create no candidate. Never modify active inputs or separately governed external locks, including rewriting identical bytes.
+
+The optional `--fixture-transport PATH` selects an explicit offline source transport. Its closed object contains integer `schema_version: 1`, `synthetic: true`, and `observations`. Each observation has `url`, integer `status`, string-to-string `headers`, a file `body` reference relative to the transport's directory, and numeric Unix-seconds `observed_at`. Resolve official source requests by exact URL, including pagination. Retain output report bodies as references relative to the report directory. This mode marks the report and any candidate synthetic and never satisfies live-source acceptance.
+
+`UpdateReport` contains exactly the fields in `REPORT_KEYS`: its version/contract/mode/synthetic status, registry and before/after active-lock hashes, completeness and observation time, all 41 component rows, source observations, candidate reference or null, generated-output owners, and external-lock records. Each component row has `id`, `current`, `latest_stable`, `selected`, `compatibility: NOT_RUN`, `notices`, `blocked_reasons`, and `sources`. An incomplete report has no candidate and at least one concrete blocked reason. Complete check mode exposes proposed pins but creates no candidate file.
+
+Use official release/tag, Go download, Docker registry, raw source, and Debian channel inputs as defined in the registered source rules. Follow pagination; resolve annotated tags; honor namespaced generator tags; derive native-owned replacements from the selected owner's go.mod, including valid owner-selected pseudo-versions. Apply Debian version ordering, preserve both candidate architectures, and verify package/image/source byte bindings. Live observations must be fresh; synthetic timestamps remain explicitly synthetic. The trusted runner independently refreshes live observations and authenticates retained Debian signatures with the pinned image-owned verifier/keyring.
+
+Update mode writes a `PREPARED_CANDIDATE` tied to the registry and previous active-lock hashes. It has `release_ready: false`, `active_lock_changed: false`, the exact selected component objects, all existing profiles with build/runtime reset to NOT_RUN, and generated outputs still pending. Neither old runtime evidence nor an untested deployment tool or architecture is promoted by this operation.
+
+## Execution scope
+
+The five native/support clients are Geth, BSC, Bor, Prysm, and Heimdall. The ten separate module roots additionally include NATS server, gRPC Go, NATS Go, Protobuf Go, and grocksdb. Full compiler/runtime OS closures belong to the Go and Debian images. Gateway/reader images, bootstrap manifests, and fixture contracts retain their later task owners.
+
+The current execution route builds linux/amd64 and binds every one of the seven network profiles explicitly. Arm64 build, ABI, and runtime results remain NOT_RUN. The selected descriptors are candidates, not established support. Record actual host Docker/Git/Python/GitHub CLI evidence separately from candidate deployment-tool versions. One actual fixed build and complete immutable inputs are required; a second forced build is not mandatory, and `repeat_build` remains NOT_RUN without that execution. Native chain execution and NATS delivery remain separate gates.
