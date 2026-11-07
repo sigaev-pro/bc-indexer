@@ -112,6 +112,17 @@ class PaginationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pagination loops or changes"):
             self.observations().pages(self.first)
 
+    def test_named_and_numeric_aliases_cannot_repeat_a_logical_page(self):
+        first = self.first + "&page=1"
+        for target in (self.repository + "/releases?page=1&per_page=100",
+                       "https://api.github.com/repositories/15452919/releases?page=1&per_page=100"):
+            with self.subTest(target=target):
+                self.rows = self.rows[:1]
+                self.add(first, [{"tag_name": "v1.14.12"}], '<' + target + '>; rel="next"')
+                self.add(target, [{"tag_name": "v1.14.12"}])
+                with self.assertRaisesRegex(ValueError, "pagination loops"):
+                    self.observations().pages(first)
+
 
 if __name__ == "__main__":
     unittest.main()

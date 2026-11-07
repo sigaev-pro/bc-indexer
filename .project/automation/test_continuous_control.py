@@ -156,7 +156,7 @@ class ContinuousTests(unittest.TestCase):
         with self.store.lock():
             run = self.prepare()
             self.adopt(run)
-            self.store.clear_stop(run["run_id"])
+            self.store.clear_stop(run["run_id"], self.store.stop_generation(run["run_id"]))
             self.now += 86400 * 365
             launch = self.driver.launch(run)
             for index in range(205):
@@ -337,7 +337,7 @@ class ContinuousTests(unittest.TestCase):
         with self.store.lock():
             run = self.prepare()
             self.adopt(run)
-            self.store.clear_stop(run["run_id"])
+            self.store.clear_stop(run["run_id"], self.store.stop_generation(run["run_id"]))
             backend = RealBackend.__new__(RealBackend)
             backend.root, backend.store, backend.launch_bound = self.root, self.store, None
             backend.source = Path(controller.__file__).resolve().parents[2]

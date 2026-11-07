@@ -242,7 +242,7 @@ class RecoveryTests(unittest.TestCase):
                 driver = Controller(store, backend)
                 with store.lock():
                     run = driver.run(driver.create(self.tasks, self.recipes))
-                    store.clear_stop(run["run_id"])
+                    store.clear_stop(run["run_id"], store.stop_generation(run["run_id"]))
                     save = store.save
 
                     def crash_save(current):

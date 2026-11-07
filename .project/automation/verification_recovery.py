@@ -47,14 +47,27 @@ def old_pack_paths(content):
 
 
 @contextmanager
+def directory(path):
+    """Traverse every directory component from the filesystem root without following links."""
+    path = Path(path)
+    require(path.is_absolute() and ".." not in path.parts, "BLOCKED_RECOVERY_EVIDENCE", "unsafe evidence directory")
+    with ExitStack() as stack:
+        fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        stack.callback(os.close, fd)
+        for part in path.parts[1:]:
+            fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            stack.callback(os.close, fd)
+        yield fd
+
+
+@contextmanager
 def regular(root, relative):
     """Open through directory descriptors; links and special files cannot be read."""
     parts = Path(relative).parts
     require(parts and not Path(relative).is_absolute() and all(part not in {".", ".."} for part in parts),
             "BLOCKED_RECOVERY_EVIDENCE", "unsafe evidence path")
     with ExitStack() as stack:
-        fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        stack.callback(os.close, fd)
+        fd = stack.enter_context(directory(root))
         for part in parts[:-1]:
             fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             stack.callback(os.close, fd)
@@ -86,7 +99,8 @@ def inventory(root, operation, guard):
     """Describe owned paths without following symlinks or opening special files."""
     require(re.fullmatch(r"[a-f0-9]{32}", operation), "BLOCKED_RECOVERY_EVIDENCE", "invalid operation ID")
     root = Path(root)
-    names = sorted(path.name for path in root.iterdir() if path.name.startswith(operation))
+    with directory(root) as root_fd, os.scandir(root_fd) as entries:
+        names = sorted(entry.name for entry in entries if entry.name.startswith(operation))
     require(operation in names and all(name == operation or re.fullmatch(operation + r"-check-[0-9]+", name) for name in names),
             "BLOCKED_RECOVERY_EVIDENCE", "operation directories are incomplete or ambiguous")
     result, total = {}, 0
@@ -117,12 +131,9 @@ def inventory(root, operation, guard):
                     require(total <= MAX_BYTES, "BLOCKED_RECOVERY_EVIDENCE", "owned evidence exceeds its total byte bound")
 
     for name in names:
-        fd = os.open(root / name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
+        with directory(root / name) as fd:
             result[name] = {"kind": "directory"}
             walk(fd, name)
-        finally:
-            os.close(fd)
     return result
 
 
@@ -209,13 +220,37 @@ def source_identity(backend, run, document, guard):
     return current, contents
 
 
-def terminal_sessions(controller, run, task, document, manifest, stack, guard, contents):
+def producer_identity(backend, driver, run, contents, accepted_main):
+    """Authenticate a recorded path without claiming a historical disk-state attestation."""
+    relative = ".project/automation/build_task_verifier.py"
+    path = Path(driver)
+    require(path.is_absolute() and path.parts[-3:] == tuple(Path(relative).parts),
+            "BLOCKED_CONFIGURATION", "recorded verifier has an unexpected path")
+    producer = path.parents[2]
+    with directory(producer):
+        pass
+    require(path.resolve() == path and Path(backend.git(producer, "rev-parse", "--show-toplevel")) == producer,
+            "BLOCKED_CONFIGURATION", "recorded verifier source is not its own real worktree")
+    common = backend.git(backend.root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    require(backend.git(producer, "rev-parse", "--path-format=absolute", "--git-common-dir") == common,
+            "BLOCKED_CONFIGURATION", "recorded verifier belongs to another repository")
+    registered = backend.git(backend.root, "worktree", "list", "--porcelain").splitlines()
+    require("worktree " + str(producer) in registered and not backend.git(producer, "status", "--porcelain=v1"),
+            "BLOCKED_CONFIGURATION", "recorded verifier worktree is unregistered or dirty")
+    head = backend.git(producer, "rev-parse", "HEAD")
+    source = run["configuration_source"]["head_sha"]
+    backend.git(producer, "merge-base", "--is-ancestor", source, head)
+    backend.git(producer, "merge-base", "--is-ancestor", head, accepted_main)
+    return {"path": str(producer), "source_sha": source,
+            "driver_sha256": hashlib.sha256(contents[relative]).hexdigest()}
+
+
+def terminal_sessions(controller, run, task, document, manifest, stack, guard, contents, accepted_main):
     """Require a contiguous, normally exited verification prefix with an actual failure."""
     backend, operation = controller.backend, document["operation_id"]
     root = backend.root / ".project/automation/runs" / run["run_id"]
     expected = list(run["recipes"][task["task_id"]]["commands"])
-    driver = backend.root / ".project/automation/build_task_verifier.py"
-    expected.append([sys.executable, "-I", str(driver), "--candidate", task["workspace"]["path"]])
+    expected.append(None)
     identifiers = [operation + "-check-" + str(index) for index in range(len(expected))]
     present = [identifier for identifier in identifiers if identifier in manifest]
     require(present and present == identifiers[:len(present)]
@@ -234,16 +269,23 @@ def terminal_sessions(controller, run, task, document, manifest, stack, guard, c
             require(False, "BLOCKED_SESSION_CLEANUP", "a session still owns its execution lock")
         request, result = raw_json(root, identifier + "/request.json"), raw_json(root, identifier + "/result.json")
         started, heartbeat = raw_json(root, identifier + "/started.json"), raw_json(root, identifier + "/heartbeat.json")
-        command = list(expected[index])
         native = index == len(expected) - 1
+        producer = None
         if native:
-            command += ["--request", str(directory / "request.json")]
+            require(type(request.get("command")) is list and len(request["command"]) == 7,
+                    "BLOCKED_RECOVERY_EVIDENCE", "native verifier command has an unexpected shape")
+            command = [sys.executable, "-I", request["command"][2], "--candidate", task["workspace"]["path"],
+                       "--request", str(directory / "request.json")]
+        else:
+            command = list(expected[index])
         require(request["operation_id"] == result["operation_id"] == started["operation_id"] == heartbeat["operation_id"] == identifier
                 and request["command"] == command and request["cwd"] == task["workspace"]["path"]
                 and request["env"] == {"BOOTSTRAP_HEAD_SHA": document["head_sha"], "BOOTSTRAP_BASE_SHA": document["base_sha"]}
                 and request["stop_file"] == str(controller.store.directory / "stop" / (run["run_id"] + ".json"))
                 and result["request_sha256"] == started["request_sha256"] == evidence.digest(request),
                 "BLOCKED_RECOVERY_EVIDENCE", "session request/result does not bind this candidate, command, or run")
+        if native:
+            producer = producer_identity(backend, command[2], run, contents, accepted_main)
         require(result["reason"] == "completed" and type(result["exit_code"]) is int and result["exit_code"] >= 0
                 and result["cleanup_complete"] is True and result["termination"] == "already-exited"
                 and (result["exit_code"] != 0) == (index == len(present) - 1),
@@ -287,6 +329,8 @@ def terminal_sessions(controller, run, task, document, manifest, stack, guard, c
             require("owned_docker" not in request, "BLOCKED_SESSION_CLEANUP", "unexpected Docker ownership in a recipe command")
         records.append({"operation_id": identifier, "request_sha256": manifest[identifier + "/request.json"]["sha256"],
                         "result_sha256": manifest[identifier + "/result.json"]["sha256"]})
+        if producer is not None:
+            records[-1]["producer"] = producer
     require(all(type(value) is int and value > 0 for value in process_ids | group_ids),
             "BLOCKED_SESSION_CLEANUP", "invalid retained process identity")
     processes = backend.command(["ps", "-axo", "pid=,pgid=,stat="], timeout=10)
@@ -310,6 +354,9 @@ def archive(controller, run, document, revision, epoch, inspect=False):
         controller.window(run["authorization"])
 
     guard()
+    root = backend.root / ".project/automation/runs" / run["run_id"]
+    with directory(root):
+        pass
     require(store.lock_fd is not None and run["status"] == "BLOCKED" and run["authorization"]["reference"] == "D93",
             "BLOCKED_RECOVERY", "recovery requires the D93 repository lock and a blocked run")
     require(type(document) is dict and set(document) in (FIELDS, FIELDS | {"bindings"})
@@ -369,10 +416,10 @@ def archive(controller, run, document, revision, epoch, inspect=False):
             and not backend.git(workspace, "status", "--porcelain=v1"),
             "BLOCKED_HEAD_CHANGED", "the failed candidate changed or has uncommitted files")
     backend.git(workspace, "merge-base", "--is-ancestor", document["base_sha"], document["head_sha"])
-    root = backend.root / ".project/automation/runs" / run["run_id"]
     with ExitStack() as stack:
         manifest = inventory(root, document["operation_id"], guard)
-        records = terminal_sessions(controller, original_run, original_task, document, manifest, stack, guard, contents)
+        records = terminal_sessions(controller, original_run, original_task, document, manifest, stack, guard, contents,
+                                    current_source["accepted_main_sha"])
         bindings = {"sessions": records, "evidence_sha256": evidence.digest(manifest)}
         if inspect:
             return {"status": "INSPECTED", "input": dict(document, bindings=bindings), "revision": revision, "epoch": epoch,

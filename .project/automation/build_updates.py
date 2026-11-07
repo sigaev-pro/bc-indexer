@@ -114,14 +114,16 @@ class Observations:
             alias = repository_alias()
         while url:
             parsed = urllib.parse.urlsplit(url)
-            contract.require(url not in seen and len(seen) < 64 and parsed.scheme == initial.scheme
+            contract.require(len(seen) < 64 and parsed.scheme == initial.scheme
                              and parsed.netloc == initial.netloc,
                              "official pagination loops or changes source identity")
             if parsed.path != initial.path and named and alias is None:
                 alias = repository_alias()
             contract.require(parsed.path == initial.path or (alias is not None and parsed.path == alias),
                              "official pagination loops or changes source identity")
-            seen.add(url)
+            identity = (initial.path, tuple(sorted(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)))) if named else url
+            contract.require(identity not in seen, "official pagination loops or changes source identity")
+            seen.add(identity)
             body = self.json(url)
             contract.require(type(body) is list, "official release or tag page is not a list")
             result.extend(body)

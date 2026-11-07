@@ -101,6 +101,9 @@ alias, and independently refreshes used metadata during live verification.
 Keep the 64-page limit, loop and ambiguous-next-link rejection, and unchanged
 path/origin rules for non-GitHub sources. A numeric URL alone is not identity
 proof, and metadata from another repository endpoint is not a substitute.
+Loop detection uses the bound repository/endpoint identity and normalized query
+ordering, so changing from a named URL to its numeric alias or rearranging query
+parameters cannot make the same page appear new.
 
 `UpdateReport` contains exactly the fields in `REPORT_KEYS`: its version/contract/mode/synthetic status, registry and before/after active-lock hashes, completeness and observation time, all 41 component rows, source observations, candidate reference or null, generated-output owners, and external-lock records. Each component row has `id`, `current`, `latest_stable`, `selected`, `compatibility: NOT_RUN`, `notices`, `blocked_reasons`, and `sources`. An incomplete report has no candidate and at least one concrete blocked reason. Complete check mode exposes proposed pins but creates no candidate file.
 

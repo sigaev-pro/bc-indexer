@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -74,7 +75,7 @@ class VerificationRecoveryTests(unittest.TestCase):
         self.backend.processes = ""
         self.backend.issue_state, self.backend.pulls = "open", []
         self.git("init", "-q")
-        self.write(".gitignore", ".project/automation/state/\n.project/automation/runs/\n")
+        self.write(".gitignore", ".project/automation/state/\n.project/automation/runs\n")
         self.write(".project/AGENTS.md", "Synthetic source only.\n")
         self.write(".project/automation/frozen.py", "# Old reviewed implementation.\r\n")
         self.write(".project/automation/build_task_verifier.py", 'PACK_MODULES = ("frozen",)\n'
@@ -421,14 +422,144 @@ class VerificationRecoveryTests(unittest.TestCase):
     def test_new_stop_during_explicit_acknowledgement_is_preserved(self):
         self.store.stop(RUN)
         original = Store.clear_stop
-        def new_stop(store, run_id):
-            original(store, run_id)
+        def new_stop(store, run_id, observed):
+            original(store, run_id, observed)
             store.stop(run_id)
         before = self.store.run_path(RUN).read_bytes()
         with patch.object(Store, "clear_stop", new_stop):
             self.assertEqual(self.cli_resume()["code"], "STOPPED")
         self.assertTrue(self.store.stopped(RUN))
         self.assertEqual(before, self.store.run_path(RUN).read_bytes())
+
+    def test_new_stop_before_deletion_is_not_acknowledged_as_the_observed_stop(self):
+        self.store.stop(RUN)
+        original = Store.clear_stop
+        def newer_stop(store, run_id, *args):
+            store.stop(run_id)
+            return original(store, run_id, *args)
+        before = self.store.run_path(RUN).read_bytes()
+        with patch.object(Store, "clear_stop", newer_stop):
+            self.assertEqual(self.cli_resume()["code"], "STOPPED")
+        self.assertTrue(self.store.stopped(RUN))
+        self.assertEqual(before, self.store.run_path(RUN).read_bytes())
+
+    def test_stop_writer_and_acknowledgement_coordinate_only_the_short_delete_boundary(self):
+        self.store.stop(RUN)
+        path = self.store.directory / "stop" / (RUN + ".json")
+        original = Path.unlink
+        started, finished, errors = threading.Event(), threading.Event(), []
+        def stop_writer():
+            started.set()
+            try:
+                self.store.stop(RUN)
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                finished.set()
+        writer = threading.Thread(target=stop_writer)
+        def concurrent_stop(target, *args, **kwargs):
+            if target == path:
+                writer.start()
+                self.assertTrue(started.wait(2))
+                self.assertFalse(finished.wait(0.05), "writer must share the short acknowledgement lock")
+            return original(target, *args, **kwargs)
+        try:
+            with patch.object(Path, "unlink", concurrent_stop):
+                self.assertIn(self.cli_resume()["code"], {"STOPPED", "BLOCKED_RECOVERY"})
+        finally:
+            if writer.ident is not None:
+                writer.join(3)
+        self.assertFalse(writer.is_alive())
+        self.assertEqual(errors, [])
+        self.assertTrue(self.store.stopped(RUN))
+
+    def test_no_stop_resume_never_acknowledges_a_marker(self):
+        before = self.store_bytes()
+        with patch.object(Store, "clear_stop", side_effect=AssertionError("no stop was observed")):
+            self.assertEqual(self.cli_resume()["code"], "BLOCKED_RECOVERY")
+            self.assertEqual(self.cli_resume(automatic=True)["code"], "BLOCKED_RECOVERY")
+        self.assertEqual(before, self.store_bytes())
+
+    def set_recorded_driver(self, path):
+        directory = self.sessions[-1]
+        request = recovery.raw_json(directory, "request.json")
+        request["command"][2] = str(path)
+        evidence.atomic_json(directory / "request.json", request)
+        for name in ("started.json", "result.json"):
+            value = recovery.raw_json(directory, name)
+            value["request_sha256"] = evidence.digest(request)
+            evidence.atomic_json(directory / name, value)
+
+    def test_historical_driver_uses_its_recorded_accepted_worktree(self):
+        producer = self.root.parent / "old-accepted-source"
+        self.git("worktree", "add", "-q", "--detach", str(producer), self.old)
+        self.set_recorded_driver(producer / ".project/automation/build_task_verifier.py")
+        with self.store.lock():
+            document = self.inspect()
+            binding = document["bindings"]["sessions"][-1]["producer"]
+            self.assertEqual(binding["path"], str(producer))
+            self.assertEqual(binding["source_sha"], self.old)
+            self.assertEqual(binding["driver_sha256"], self.frozen["files"][".project/automation/build_task_verifier.py"])
+            self.assertEqual(self.apply(document)["status"], "ARCHIVED_FAILED")
+
+    def test_advanced_canonical_producer_binds_the_old_driver_not_current_bytes(self):
+        with self.store.lock():
+            document = self.inspect()
+            producer = document["bindings"]["sessions"][-1]["producer"]
+            self.assertEqual(producer["path"], str(self.root))
+            old_digest = self.frozen["files"][".project/automation/build_task_verifier.py"]
+            self.assertEqual(producer["driver_sha256"], old_digest)
+            self.assertNotEqual(old_digest, hashlib.sha256((self.root / ".project/automation/build_task_verifier.py").read_bytes()).hexdigest())
+
+    def test_foreign_dirty_unaccepted_wrong_driver_and_linked_producers_fail(self):
+        producer = self.root.parent / "old-accepted-source"
+        self.git("worktree", "add", "-q", "--detach", str(producer), self.old)
+        driver = producer / ".project/automation/build_task_verifier.py"
+        with self.store.lock():
+            self.set_recorded_driver(driver)
+            self.inspect()
+            dirty = producer / "dirty.txt"
+            dirty.write_text("Unreviewed source.\n")
+            with self.assertRaises(Blocked):
+                self.inspect()
+            self.commit("unaccepted producer", producer)
+            with self.assertRaises(Blocked):
+                self.inspect()
+            self.set_recorded_driver(producer / ".project/automation/other_verifier.py")
+            with self.assertRaises(Blocked):
+                self.inspect()
+            link = self.root.parent / "linked-source"
+            link.symlink_to(self.root, target_is_directory=True)
+            self.set_recorded_driver(link / ".project/automation/build_task_verifier.py")
+            with self.assertRaises((Blocked, OSError)):
+                self.inspect()
+            foreign = self.root.parent / "foreign-repository"
+            self.git("clone", "-q", "--no-hardlinks", str(self.root), str(foreign))
+            self.set_recorded_driver(foreign / ".project/automation/build_task_verifier.py")
+            with self.assertRaisesRegex(Blocked, "another repository"):
+                self.inspect()
+
+    def test_symlinked_input_ancestor_cannot_archive_outside_objects(self):
+        with self.store.lock():
+            document = self.inspect()
+        source = self.execution.parent
+        outside = self.root.parent / "outside-runs"
+        source.rename(outside)
+        source.symlink_to(outside, target_is_directory=True)
+        try:
+            with self.store.lock():
+                self.backend.configuration()
+                before = self.store_bytes()
+                with self.assertRaises((Blocked, OSError)):
+                    self.inspect()
+                with patch.object(self.backend, "configuration", side_effect=AssertionError("unsafe input ancestry reached source checks")):
+                    with self.assertRaises((Blocked, OSError)):
+                        self.apply(document)
+                self.assertEqual(before, self.store_bytes())
+                self.assertFalse(read_lease(self.store)["released"])
+        finally:
+            source.unlink()
+            outside.rename(source)
 
     def test_active_or_uncertain_external_owner_blocks_inspection(self):
         with self.store.lock():

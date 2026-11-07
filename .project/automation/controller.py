@@ -132,16 +132,47 @@ class Store:
     def stopped(self, run_id):
         return (self.directory / "stop" / (run_id + ".json")).exists()
 
+    @contextmanager
+    def stop_lock(self, run_id):
+        """Serialize only marker publication/acknowledgement, independently of the run lock."""
+        self.run_path(run_id)
+        numbers = {signal.SIGTERM, signal.SIGINT}
+        previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, numbers)
+        fd = None
+        try:
+            directory = self.directory / "stop-locks"
+            evidence.durable_directory(directory)
+            fd = os.open(directory / (run_id + ".lock"), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            if fd is not None:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+
+    def stop_generation(self, run_id):
+        path = self.directory / "stop" / (run_id + ".json")
+        if not path.exists():
+            return None
+        with self.stop_lock(run_id):
+            return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+
     def stop(self, run_id):
         self.load(run_id)
-        evidence.atomic_json(self.directory / "stop" / (run_id + ".json"),
-                             {"run_id": run_id, "requested_at": time.time(), "reason": "operator stop"})
+        with self.stop_lock(run_id):
+            evidence.atomic_json(self.directory / "stop" / (run_id + ".json"),
+                                 {"run_id": run_id, "generation": uuid.uuid4().hex,
+                                  "requested_at": time.time(), "reason": "operator stop"})
 
-    def clear_stop(self, run_id):
-        path = self.directory / "stop" / (run_id + ".json")
-        if path.exists():
-            path.unlink()
-            evidence.sync_directory(path.parent)
+    def clear_stop(self, run_id, observed):
+        if observed is None:
+            return
+        with self.stop_lock(run_id):
+            path = self.directory / "stop" / (run_id + ".json")
+            if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() == observed:
+                path.unlink()
+                evidence.sync_directory(path.parent)
 
     def lease(self, run, task):
         path = self.directory / "leases" / (task["task_id"] + ".json")
@@ -168,8 +199,11 @@ class Store:
             evidence.atomic_json(path, dict(actual, released=True))
 
 
+UNOBSERVED_STOP = object()
+
+
 @contextmanager
-def stop_signals(store, run_id, acknowledge=False):
+def stop_signals(store, run_id, acknowledge=False, observed_stop=UNOBSERVED_STOP):
     """Scope durable stop handlers; defer new signals until prior stop acknowledgement ends."""
     numbers = {signal.SIGTERM, signal.SIGINT}
     previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, numbers)
@@ -178,7 +212,9 @@ def stop_signals(store, run_id, acknowledge=False):
         for number in numbers:
             previous[number] = signal.signal(number, lambda *_: store.stop(run_id))
         if acknowledge:
-            store.clear_stop(run_id)
+            if observed_stop is UNOBSERVED_STOP:
+                observed_stop = store.stop_generation(run_id)
+            store.clear_stop(run_id, observed_stop)
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
         yield
     finally:
@@ -196,9 +232,11 @@ def recovery_resume_guard(store, run, resume, automatic):
                  for task in run["tasks"].values())
     if not (run.get("failure_recovery") or failed):
         return
-    if resume and not automatic and store.stopped(run["run_id"]):
-        with stop_signals(store, run["run_id"], acknowledge=True):
-            require(not store.stopped(run["run_id"]), "STOPPED", "a new operator stop arrived during acknowledgement")
+    if resume and not automatic:
+        observed = store.stop_generation(run["run_id"])
+        if observed is not None:
+            with stop_signals(store, run["run_id"], acknowledge=True, observed_stop=observed):
+                require(not store.stopped(run["run_id"]), "STOPPED", "a new operator stop arrived during acknowledgement")
     raise Blocked("BLOCKED_RECOVERY", "archive the diagnosed failed verification or finish its exact retained lease release; no work was resumed")
 
 
