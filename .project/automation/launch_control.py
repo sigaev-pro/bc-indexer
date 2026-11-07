@@ -156,9 +156,10 @@ class LaunchLedger:
         limits = limits or {"invocations": 200, "implementation_attempts": 3}
         require(self.used(record) < min(self.authorization["invocation_limit"], limits["invocations"]), "BUDGET_STOP", "shared D92 invocation budget is exhausted")
         require(len(self.active(record)) < 3, "BLOCKED_SESSION_CAPACITY", "three coordinator/worker/reviewer slots are already occupied")
-        require(not any(row["task_id"] == task_id and row["role"] != "coordinator" for row in self.active(record))
+        require(not any(row["task_id"] == task_id and row["role"] != "coordinator"
+                        and (role == "implementer" or row["role"] == "implementer") for row in self.active(record))
                 if task_id is not None else True,
-                "BLOCKED_SESSION_OWNERSHIP", "another active or uncertain session already owns this task")
+                "BLOCKED_SESSION_OWNERSHIP", "an implementation cannot overlap another active or uncertain task session")
         if role == "implementer":
             require(self.attempts(record, task_id) < min(3, limits["implementation_attempts"]), "BLOCKED_ATTEMPTS", "the launch's implementation attempts are exhausted")
         row = {"invocation_id": key, "role": role, "task_id": task_id, "run_id": run_id, "origin": origin,

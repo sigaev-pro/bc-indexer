@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import time
+import uuid
 
 import acceptance
 from acceptance_receipts import HISTORICAL, Ledger
@@ -60,13 +61,51 @@ class RealBackend:
 
     def command(self, arguments, cwd=None, payload=None, timeout=30):
         timeout = min(timeout, self.remaining())
+        wall_deadline, monotonic_deadline = time.time() + timeout, time.monotonic() + timeout
+        if getattr(self, "launch_bound", None):
+            wall_deadline = min(wall_deadline, self.launch_bound["authorization"]["hard_deadline"])
+            monotonic_deadline = min(monotonic_deadline, self.launch_bound["monotonic_deadline"])
+        require(self.store.lock_fd is not None, "BLOCKED_LOCK", "ordinary commands require the repository writer lock")
+        cleanup_blocker = self.store.directory / "command-cleanup-blocker.json"
+        require(not cleanup_blocker.exists(), "BLOCKED_COMMAND_CLEANUP",
+                "an earlier command has unconfirmed cleanup; preserve its evidence for reviewed recovery")
+        identifier = "command-" + uuid.uuid4().hex
+        directory = self.store.directory / "commands" / identifier
+        evidence.durable_directory(directory)
+        input_path = directory / "stdin.txt"
+        with input_path.open("x", encoding="utf-8") as stream:
+            os.chmod(input_path, 0o600)
+            stream.write(payload or "")
+            stream.flush()
+            os.fsync(stream.fileno())
+        evidence.sync_directory(directory)
+        request_path = directory / "request.json"
+        request = {"operation_id": identifier, "command": arguments, "cwd": str(cwd or self.root),
+                   "deadline": wall_deadline, "timeout_seconds": max(0, monotonic_deadline - time.monotonic()),
+                   "stop_file": str(getattr(self, "command_stop_file", directory / "stop.json")),
+                   "log_limit": session_runner.LOG_LIMIT, "env": {},
+                   "stdin_sha256": session_runner.file_hash(input_path)}
+        evidence.atomic_json(request_path, request)
         try:
-            result = subprocess.run(arguments, cwd=cwd or self.root, input=payload,
-                                    capture_output=True, text=True, timeout=timeout)
-        except (OSError, subprocess.SubprocessError) as error:
-            raise Blocked("BLOCKED_ACCESS", f"command could not complete: {arguments[0]}") from error
-        require(len(result.stdout.encode()) <= session_runner.LOG_LIMIT, "BLOCKED_OUTPUT", "command output exceeded its bound")
-        return result
+            result = session_runner.supervise(request_path, self.store.lock_fd)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            failure = {"operation_id": identifier, "directory": str(directory),
+                "cleanup_complete": False, "error_type": type(error).__name__,
+                "note": "No confirmed command result; preserve ownership evidence and reconcile remote effects."}
+            evidence.atomic_json(directory / "adapter-failure.json", failure)
+            evidence.atomic_json(cleanup_blocker, failure)
+            raise Blocked("BLOCKED_COMMAND_CLEANUP", "command cleanup is unconfirmed; retained evidence: " + str(directory)) from error
+        if result.get("cleanup_complete") is not True:
+            evidence.atomic_json(cleanup_blocker, {"operation_id": identifier, "directory": str(directory),
+                "cleanup_complete": False, "result_sha256": evidence.digest(result)})
+        require(result.get("cleanup_complete") is True, "BLOCKED_COMMAND_CLEANUP",
+                "command process-group cleanup is unconfirmed; retained evidence: " + str(directory))
+        if result["reason"] == "stopped":
+            raise Blocked("STOPPED", "ordinary command stopped; reconcile possible remote effects: " + str(directory))
+        require(result["reason"] == "completed", "BLOCKED_ACCESS",
+                "bounded command did not complete; local group cleanup confirmed, remote effects require reconciliation: " + str(directory))
+        return subprocess.CompletedProcess(arguments, result["exit_code"],
+                                           (directory / "stdout.jsonl").read_text(), (directory / "stderr.log").read_text())
 
     def git(self, directory, *arguments):
         result = self.command(["git", *arguments], cwd=directory)
@@ -83,8 +122,11 @@ class RealBackend:
         raise Blocked("BLOCKED_ACCESS", "GitHub read failed after bounded retries: " + path)
 
     def mutate(self, method, path, body):
-        result = self.command(["gh", "api", "--method", method, f"repos/{self.repository}/{path}", "--input", "-"],
-                              payload=json.dumps(body))
+        try:
+            result = self.command(["gh", "api", "--method", method, f"repos/{self.repository}/{path}", "--input", "-"],
+                                  payload=json.dumps(body))
+        except Blocked as error:
+            raise Blocked("BLOCKED_REMOTE_UNCERTAIN", "GitHub mutation response is unknown; reconcile before retry. " + str(error)) from error
         require(result.returncode == 0, "BLOCKED_REMOTE_UNCERTAIN",
                 "GitHub mutation did not confirm success; reconcile before retry: " + path)
         return acceptance.parse_json(result.stdout)
@@ -247,6 +289,7 @@ class RealBackend:
         return self.root / ".project/automation/runs" / run["run_id"] / operation["id"]
 
     def check_stop(self, run):
+        self.command_stop_file = self.store.directory / "stop" / (run["run_id"] + ".json")
         if self.store.stopped(run["run_id"]):
             raise Blocked("STOPPED", "operator requested a stop")
         if time.time() >= run["deadline"]:

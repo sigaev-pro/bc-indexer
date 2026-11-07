@@ -4,6 +4,7 @@ import copy
 from contextlib import redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -134,6 +135,31 @@ class LaunchTests(unittest.TestCase):
             with self.assertRaises(Blocked):
                 self.ledger.import_observations(later)
             self.assertEqual(self.ledger.used(self.ledger.load()), 4)
+
+    def test_parallel_read_only_reviews_share_task_within_three_slot_cap(self):
+        with self.store.lock():
+            self.ledger.import_observations(observations(self.now))
+            self.ledger.reserve("standards-review", "reviewer", TASK, origin="coordinator-managed")
+            self.ledger.reserve("spec-review", "reviewer", TASK, origin="coordinator-managed")
+            record = self.ledger.load()
+            self.assertEqual(self.ledger.used(record), 5)
+            self.assertEqual(len(self.ledger.active(record)), 3)
+            with self.assertRaises(Blocked) as caught:
+                self.ledger.reserve("fourth-session", "reviewer", "AUT-01", origin="coordinator-managed")
+            self.assertEqual(caught.exception.code, "BLOCKED_SESSION_CAPACITY")
+
+    def test_writer_cannot_overlap_review_in_either_reservation_order(self):
+        for first, second in (("implementer", "reviewer"), ("reviewer", "implementer")):
+            with self.subTest(first=first), tempfile.TemporaryDirectory() as temporary:
+                store = Store(Path(temporary) / "state")
+                ledger = LaunchLedger(store, AUTH, lambda: self.now)
+                with store.lock():
+                    ledger.import_observations(observations(self.now))
+                    ledger.reserve("first-owner", first, TASK, origin="coordinator-managed")
+                    with self.assertRaises(Blocked) as caught:
+                        ledger.reserve("overlapping-owner", second, TASK, origin="coordinator-managed")
+                    self.assertEqual(caught.exception.code, "BLOCKED_SESSION_OWNERSHIP")
+                    self.assertEqual(ledger.used(ledger.load()), 4)
 
     def test_fixed_deadline_includes_setup_and_prevents_new_run_or_renewal(self):
         with self.store.lock():
@@ -424,18 +450,94 @@ class LaunchTests(unittest.TestCase):
 
 
 class FixedDeadlineProcessTests(unittest.TestCase):
+    def test_ordinary_command_timeout_cleans_up_its_actual_descendant(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(); store = Store(root / "state")
+            backend = RealBackend.__new__(RealBackend)
+            backend.root, backend.store = root, store
+            marker = root / "escaped-child"
+            child = "import time; from pathlib import Path; time.sleep(0.7); Path(" + repr(str(marker)) + ").write_text('escaped')"
+            parent = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c'," + repr(child) + "]); time.sleep(2)"
+            with store.lock(), self.assertRaises(Blocked):
+                backend.command([sys.executable, "-c", parent], timeout=0.25)
+            # The disposable descendant is self-bounded even on the pre-fix path.
+            time.sleep(0.9)
+            self.assertFalse(marker.exists(), "the timed-out command's descendant continued working")
+
     def test_command_remaining_time_is_bounded_by_fixed_and_monotonic_deadline(self):
-        backend = RealBackend.__new__(RealBackend)
-        backend.root = Path("/tmp")
-        backend.launch_bound = {"authorization": AUTH, "monotonic_deadline": 105}
-        with patch("controller_backend.time.time", return_value=AUTH["hard_deadline"] - 2), \
-                patch("controller_backend.time.monotonic", return_value=100), \
-                patch("controller_backend.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")) as command:
-            backend.command(["synthetic"], timeout=30)
-            self.assertEqual(command.call_args.kwargs["timeout"], 2)
-        with patch("controller_backend.time.time", return_value=AUTH["started_at"]), \
-                patch("controller_backend.time.monotonic", return_value=106), self.assertRaises(Blocked):
-            backend.command(["synthetic"])
+        with tempfile.TemporaryDirectory() as temporary:
+            backend = RealBackend.__new__(RealBackend)
+            backend.root = Path(temporary)
+            backend.store = Store(backend.root / "state")
+            backend.launch_bound = {"authorization": AUTH, "monotonic_deadline": 105}
+            def completed(request_path, lock):
+                request = controller.read_json(request_path)
+                self.assertEqual(request["timeout_seconds"], 2)
+                self.assertEqual(request["deadline"], AUTH["hard_deadline"])
+                for name in ("stdout.jsonl", "stderr.log"):
+                    (request_path.parent / name).write_text("")
+                return {"cleanup_complete": True, "reason": "completed", "exit_code": 0}
+            with backend.store.lock(), patch("controller_backend.time.time", return_value=AUTH["hard_deadline"] - 2), \
+                    patch("controller_backend.time.monotonic", return_value=100), \
+                    patch("controller_backend.session_runner.supervise", side_effect=completed):
+                backend.command(["synthetic"], timeout=30)
+            with patch("controller_backend.time.time", return_value=AUTH["started_at"]), \
+                    patch("controller_backend.time.monotonic", return_value=106), self.assertRaises(Blocked):
+                backend.command(["synthetic"])
+
+    def test_resistant_descendant_is_forced_before_return_and_cannot_write_later(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(); store = Store(root / "state")
+            backend = RealBackend.__new__(RealBackend); backend.root, backend.store = root, store
+            marker = root / "resistant-child"
+            child = "import signal,time; from pathlib import Path; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(4.1); Path(" + repr(str(marker)) + ").write_text('escaped')"
+            parent = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c'," + repr(child) + "]); time.sleep(5)"
+            started = time.monotonic()
+            with store.lock(), self.assertRaises(Blocked):
+                backend.command([sys.executable, "-c", parent], timeout=0.25)
+            self.assertLess(time.monotonic() - started, 4)
+            result = controller.read_json(next((store.directory / "commands").glob("*/result.json")))
+            self.assertEqual(result["termination"], "forced")
+            self.assertTrue(result["cleanup_complete"])
+            time.sleep(max(0, 4.5 - (time.monotonic() - started)))
+            self.assertFalse(marker.exists())
+
+    def test_uncertain_cleanup_is_retained_and_blocks_further_commands(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(); store = Store(root / "state")
+            backend = RealBackend.__new__(RealBackend); backend.root, backend.store = root, store
+            with store.lock(), patch.object(session_runner, "confirm_group_exit", return_value=False), self.assertRaises(Blocked) as caught:
+                backend.command([sys.executable, "-c", "print('local command')"])
+            self.assertEqual(caught.exception.code, "BLOCKED_COMMAND_CLEANUP")
+            blocker = controller.read_json(store.directory / "command-cleanup-blocker.json")
+            self.assertFalse(blocker["cleanup_complete"])
+            self.assertTrue((Path(blocker["directory"]) / "result.json").is_file())
+            replacement = RealBackend.__new__(RealBackend); replacement.root, replacement.store = root, store
+            with store.lock(), patch.object(session_runner, "supervise") as spawn, self.assertRaises(Blocked):
+                replacement.command([sys.executable, "-c", "print('must not start')"])
+            spawn.assert_not_called()
+
+    def test_command_evidence_has_bounded_streams_private_files_and_no_inherited_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(); store = Store(root / "state")
+            backend = RealBackend.__new__(RealBackend); backend.root, backend.store = root, store
+            with store.lock(), patch.dict(os.environ, {"AUT01_PRIVATE_TEST_TOKEN": "synthetic-private-value"}), \
+                    patch.object(session_runner, "LOG_LIMIT", 1024), self.assertRaises(Blocked):
+                backend.command([sys.executable, "-c", "import sys; sys.stdout.write('x'*10000); sys.stderr.write('y'*10000)"])
+            directory = next((store.directory / "commands").iterdir())
+            self.assertEqual(controller.read_json(directory / "request.json")["env"], {})
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+            self.assertLessEqual(sum((directory / name).stat().st_size for name in ("stdout.jsonl", "stderr.log")), 1024)
+            for name in ("request.json", "stdin.txt", "stdout.jsonl", "stderr.log", "result.json"):
+                self.assertEqual((directory / name).stat().st_mode & 0o777, 0o600)
+                self.assertNotIn(b"synthetic-private-value", (directory / name).read_bytes())
+
+    def test_mutation_timeout_never_implies_remote_failure_or_automatic_retry(self):
+        backend = RealBackend.__new__(RealBackend); backend.repository = "sigaev-pro/bc-indexer"
+        with patch.object(backend, "command", side_effect=Blocked("BLOCKED_ACCESS", "local cleanup confirmed")) as command, self.assertRaises(Blocked) as caught:
+            backend.mutate("POST", "synthetic/no-network", {"fixture": True})
+        self.assertEqual(caught.exception.code, "BLOCKED_REMOTE_UNCERTAIN")
+        self.assertEqual(command.call_count, 1)
 
     def test_expired_request_never_spawns_a_worker_and_records_no_exit_code(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -476,6 +578,8 @@ class ExternalGitTests(unittest.TestCase):
             git("-c", "user.name=Isolated test", "-c", "user.email=test@example.invalid", "commit", "-qm", "synthetic candidate", cwd=path)
             backend = RealBackend.__new__(RealBackend)
             backend.root, backend.source = root, source
+            backend.store = Store(root / "state")
+            self.enterContext(backend.store.lock())
             backend.read = lambda endpoint: {"object": {"sha": base}}
             run = {"recipes": recipes}
             document = {"task_id": TASK, "worktree": str(path), "branch": "isolated-candidate", "base_sha": base,

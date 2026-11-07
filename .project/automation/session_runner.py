@@ -228,6 +228,8 @@ def supervise(request_path, lock_fd):
                     break
                 else:
                     for key, _ in selector.select(timeout=0.1):
+                        if written >= request["log_limit"]:
+                            break
                         chunk = os.read(key.fd, min(65536, max(1, request["log_limit"] - written)))
                         if not chunk:
                             selector.unregister(key.fileobj)
