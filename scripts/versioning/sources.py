@@ -58,13 +58,42 @@ def official(url):
     return parsed
 
 
+def credential_echo(value, secrets):
+    """Inspect literal and nested percent-encoded forms within a finite bound."""
+    for _ in range(8):
+        if any(secret in value for secret in secrets):
+            return True
+        decoded = urllib.parse.unquote(value)
+        if decoded == value:
+            return False
+        value = decoded
+    # Do not forward an encoding depth that the guard has not inspected.
+    return True
+
+
 class Redirect(urllib.request.HTTPRedirectHandler):
+    def __init__(self, secret_values=lambda: ()):
+        super().__init__()
+        self.secret_values = secret_values
+
     def redirect_request(self, request, response, code, message, headers, newurl):
-        official(newurl)
-        redirected = super().redirect_request(request, response, code, message, headers, newurl)
-        if origin(newurl) != origin(request.full_url):
-            redirected.remove_header("Authorization")
-        return redirected
+        secrets = list(self.secret_values())
+        authorization = request.get_header("Authorization")
+        if authorization:
+            secrets.append(authorization.split(" ", 1)[-1])
+        try:
+            need(not credential_echo(newurl, secrets)
+                 and not any(credential_echo(k, secrets) or credential_echo(v, secrets) for k, v in headers.items()),
+                 "Redirect response contains credential data or excessive encoding")
+            official(newurl)
+            redirected = super().redirect_request(request, response, code, message, headers, newurl)
+            if origin(newurl) != origin(request.full_url):
+                redirected.remove_header("Authorization")
+            return redirected
+        except BaseException:
+            if response is not None:
+                response.close()
+            raise
 
 
 class Transport:
@@ -80,7 +109,7 @@ class Transport:
         self.tokens = {}
         self.github_checked = False
         self.github_token = None
-        self.opener = urllib.request.build_opener(Redirect())
+        self.opener = None if self.synthetic else urllib.request.build_opener(Redirect(self.secret_values))
         if fixture:
             path = Path(fixture)
             value = decode(path.read_bytes())
@@ -162,7 +191,7 @@ class Transport:
         return [value for value in [self.github_token, *self.tokens.values()] if isinstance(value, str) and value]
 
     def contains_secret(self, value):
-        return any(secret in value for secret in self.secret_values())
+        return credential_echo(value, self.secret_values())
 
     def copy(self, source, target):
         total = 0

@@ -248,61 +248,40 @@ def discover(registry, active, transport, mode):
     return [by_id[e["id"]] for e in registry["components"]], selected, packages.indexes
 
 
-class Publication:
-    """Retain an inode handle until the complete output transaction finishes."""
-
-    def __init__(self, path, staging, fd):
-        self.path, self.staging, self.fd = Path(path), Path(staging), fd
-        info = os.fstat(fd)
-        self.identity = info.st_dev, info.st_ino
-
-    def remove_owned(self, path):
-        try:
-            info = path.lstat()
-            if (info.st_dev, info.st_ino) == self.identity:
-                path.unlink()
-        except FileNotFoundError:
-            pass
-
-    def rollback(self):
-        # The retained descriptor prevents inode reuse after a concurrent unlink.
-        self.remove_owned(self.path)
-        self.remove_owned(self.staging)
-
-    def finish(self):
-        self.remove_owned(self.staging)
-
-    def close(self):
-        if self.fd is not None:
-            fd, self.fd = self.fd, None
-            os.close(fd)
-
-
-def exclusive_json(path, value):
+def stage_json(directory, label, value):
+    """Prepare bounded, unpromoted diagnostic bytes in the owned evidence folder."""
+    need(label in {"candidate", "report"}, "Unknown preparation artifact")
     payload = encode(value)
-    path = Path(path)
-    fd, staging = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=path.parent)
-    owner = Publication(path, staging, fd)
+    need(len(payload) <= 64 * 1024**2, "Prepared JSON exceeds the metadata size bound")
+    fd, staging = tempfile.mkstemp(prefix="unpromoted-" + label + "-", suffix=".json", dir=directory)
     try:
-        output_fd = os.dup(fd)
         try:
-            stream = os.fdopen(output_fd, "wb")
+            stream = os.fdopen(fd, "wb")
         except BaseException:
-            os.close(output_fd)
+            os.close(fd)
             raise
         with stream:
             need(stream.write(payload) == len(payload), "Incomplete JSON output write")
             stream.flush()
             os.fsync(stream.fileno())
-        # link() publishes complete bytes atomically and never replaces a name.
-        os.link(staging, path)
-        return owner
+        return Path(staging)
     except BaseException:
-        try:
-            owner.rollback()
-        finally:
-            owner.close()
+        # Only private preparation paths are cleaned. Final outputs are never deleted.
+        Path(staging).unlink(missing_ok=True)
         raise
+
+
+def publish_outputs(directory, report_path, report, candidate_path=None, candidate=None):
+    candidate_stage = None
+    if candidate is not None:
+        candidate_stage = stage_json(directory, "candidate", candidate)
+        report["candidate"] = describe(report_path.parent, candidate_stage)
+        report["candidate"]["path"] = Path(candidate_path).absolute().relative_to(report_path.parent).as_posix()
+    report_stage = stage_json(directory, "report", report)
+    os.link(report_stage, report_path)
+    if candidate_stage is not None:
+        # Final commit point. No fallible cleanup or report work follows this link.
+        os.link(candidate_stage, candidate_path)
 
 
 def arguments(argv):
@@ -346,28 +325,16 @@ def run(argv):
                   registry_sha256=registry_hash, active_lock_before=lock_hash, active_lock_after=lock_hash,
                   complete=complete, observed_at=time.time(), components=rows, observations=list(transport.rows.values()), candidate=None,
                   generated_outputs=[dict(id=o["id"], owner_tasks=o["owner_tasks"], state="NOT_RUN") for o in registry["generated_outputs"]], external_locks=external)
-    publications = []
-    try:
-        if complete and args.mode == "update":
-            profiles = copy.deepcopy(active["profiles"])
-            for profile in profiles:
-                profile.update(build="NOT_RUN", runtime="NOT_RUN")
-            candidate = dict(schema_version=1, registry_sha256=registry_hash, previous_lock_sha256=lock_hash,
-                             status="PREPARED_CANDIDATE", release_ready=False, active_lock_changed=False, synthetic=transport.synthetic,
-                             components=selected, package_indexes=indexes, profiles=profiles,
-                             pending_outputs=[dict(id=o["id"], status="PENDING_IMPLEMENTATION", runtime="NOT_RUN") for o in registry["generated_outputs"]])
-            publications.append(exclusive_json(args.output, candidate))
-            report["candidate"] = describe(report_path.parent, args.output)
-        publications.append(exclusive_json(report_path, report))
-        for publication in publications:
-            publication.finish()
-    except BaseException:
-        for publication in reversed(publications):
-            publication.rollback()
-        raise
-    finally:
-        for publication in publications:
-            publication.close()
+    candidate = None
+    if complete and args.mode == "update":
+        profiles = copy.deepcopy(active["profiles"])
+        for profile in profiles:
+            profile.update(build="NOT_RUN", runtime="NOT_RUN")
+        candidate = dict(schema_version=1, registry_sha256=registry_hash, previous_lock_sha256=lock_hash,
+                         status="PREPARED_CANDIDATE", release_ready=False, active_lock_changed=False, synthetic=transport.synthetic,
+                         components=selected, package_indexes=indexes, profiles=profiles,
+                         pending_outputs=[dict(id=o["id"], status="PENDING_IMPLEMENTATION", runtime="NOT_RUN") for o in registry["generated_outputs"]])
+    publish_outputs(transport.directory, report_path, report, args.output, candidate)
     return 0 if complete else 1
 
 

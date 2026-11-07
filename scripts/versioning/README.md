@@ -19,18 +19,34 @@ active input, even with identical bytes.
 
 Exit 0 means complete source discovery. Exit 1 produces an incomplete report
 with concrete blocked reasons and no candidate. Exit 2 means invalid arguments,
-stale input hashes, an invalid fixture transport, or unsafe output paths.
+stale input hashes, an invalid fixture transport, unsafe output paths, or an
+output I/O or publication failure.
 Check mode exposes proposed exact pins but never creates a candidate. Failed
-update mode never retains a newly created candidate. Existing output files are
+update mode never publishes an owned file at the requested candidate path.
+Existing output files are
 preserved rather than overwritten; choose fresh paths for another attempt.
 
-Outputs are first written to owned temporary files in their destination
-directories, flushed, synchronized and closed. An exclusive hard link then
-publishes each complete file without replacing an existing name. The updater
-retains an open handle to each created inode through the output transaction.
-If report publication fails, rollback removes only outputs that still belong
-to those retained inodes. A concurrent replacement is preserved. Temporary
-files and retained handles are cleaned on completion or a handled failure.
+Outputs are first prepared in the invocation's owned evidence directory,
+flushed, synchronized and closed. At most two preparation blobs are retained,
+each limited to 64 MiB and named `unpromoted-candidate-...json` or
+`unpromoted-report-...json`. They are diagnostic preparation evidence, distinct
+from the requested candidate output. Failed partial preparation files are
+removed only within that owned directory. Completed blobs remain with the
+other discovery evidence for the caller to archive or clean.
+
+An exclusive hard link publishes the report first. The candidate's exclusive
+link is the final commit point, after all fallible preparation and report work.
+No fallible cleanup follows that link. Final output paths are never deleted
+or replaced, including on collisions or concurrent replacements. All writer
+handles are closed before either publication.
+
+On exit 2, a report may remain even though the candidate was not published.
+Its `complete` field describes source discovery, and its candidate reference
+describes the intended bytes; neither proves publication. Consumers must
+require exit 0 and verify the actual candidate file against the report's
+reference. A missing or different candidate, an exit-2 report, or an unpromoted
+preparation blob cannot establish a successful update. The report is retained
+without rewriting or deleting it after a failed candidate commit.
 
 ## Selection and retained evidence
 
@@ -76,12 +92,18 @@ incomplete results.
 GitHub authorization is sent only to the exact `https://api.github.com` origin
 (including its equivalent explicit port 443). Cross-origin redirects remove
 authorization; credentials are never attached to raw-source or download hosts.
+Before urllib can follow a redirect, the guard checks its raw response headers
+and destination for literal and percent-encoded credential echoes. It inspects
+up to eight decoding layers and rejects deeper unresolved encoding. Rejected
+redirect responses are closed without issuing a follow-up request. Actual
+offline opener tests cover these boundaries as well as valid safe redirects.
 Token values reject whitespace, controls and header injection. Live transport
 errors retain only an error type, never exception text that could contain a
 credential. Responses that echo a known token in headers or body bytes fail
 acquisition, including tokens split across read blocks. Such response bytes
 are discarded; retained error observations contain no token. Synthetic
-transport never reads credential variables or runs the credential helper.
+transport never reads credential variables, builds an HTTP opener, or runs the
+credential helper.
 
 Each row distinguishes current version, latest stable version, selected exact
 pin, compatibility NOT_RUN, notices, blockers and source URLs. No compatibility
