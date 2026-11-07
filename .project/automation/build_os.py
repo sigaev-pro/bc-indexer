@@ -185,7 +185,7 @@ class Packages:
                              and contract.file_hash(path) == record["SHA256"], "retained Debian package changed")
         else:
             self.runner.fetch(index["base"] + "/" + record["Filename"], path,
-                              expected_sha256=record["SHA256"], maximum=max(1, int(record["Size"])))
+                              expected_sha256=record["SHA256"], maximum=max(1, int(record["Size"])), retry_package_archive=True)
         contract.require(path.stat().st_size == int(record["Size"]), "Debian package size differs from its signed index")
         return path
 

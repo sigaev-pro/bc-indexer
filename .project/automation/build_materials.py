@@ -16,6 +16,108 @@ import build_contract as contract
 
 
 MAX_PACKAGE_SOURCE_REPORT = 16 * 1024 * 1024
+SIGNATURE_LOG_FIELDS = {"tool", "exit_code", "command_index", "verifier_sha256", "keyring_sha256",
+                        "inrelease_sha256", "release_sha256", "acquisition"}
+
+
+def package_archive_url(url):
+    contract.require(isinstance(url, str), "package archive URL is missing")
+    parsed = urllib.parse.urlsplit(url)
+    contract.require(parsed.scheme == "https" and parsed.netloc in {"deb.debian.org", "security.debian.org"}
+                     and not parsed.query and not parsed.fragment
+                     and re.fullmatch(r"/(?:debian|debian-security)/pool/.+\.deb", parsed.path)
+                     and all(part not in {".", "..", ""} for part in parsed.path.split("/")[1:]),
+                     "transport recovery is limited to official package archive GETs")
+
+
+def package_fetch_journal(value, root):
+    contract.require(type(value) is dict and set(value) == {"schema_version", "requests"}
+                     and type(value["schema_version"]) is int and value["schema_version"] == 1
+                     and type(value["requests"]) is list and 1 <= len(value["requests"]) <= 4096, "invalid package transport journal")
+    result, identifiers = {}, set()
+    for request in value["requests"]:
+        contract.require(type(request) is dict and set(request) == {"request_id", "url", "output", "outcome", "attempts"}
+                         and isinstance(request["request_id"], str) and re.fullmatch(r"[a-f0-9]{32}", request["request_id"])
+                         and request["request_id"] not in identifiers, "invalid or duplicated package transport request")
+        identifiers.add(request["request_id"])
+        package_archive_url(request["url"])
+        contract.verify_reference(root, request["output"])
+        contract.require(request["output"]["path"] not in result, "package transport output is duplicated")
+        attempts = request["attempts"]
+        contract.require(type(attempts) is list and len(attempts) in {1, 2}
+                         and request["outcome"] == ("FIRST_ATTEMPT_SUCCESS" if len(attempts) == 1 else "RECOVERED_TRANSPORT"),
+                         "package transport is incomplete or exceeds its retry bound")
+        previous = 0
+        for ordinal, attempt in enumerate(attempts, 1):
+            contract.require(type(attempt) is dict and set(attempt) == {"ordinal", "state", "started_at", "finished_at", "response_url", "status", "headers", "error", "body", "exception_partial_size", "retained_exception_partial_size", "observed_body_size", "body_truncated"}
+                             and type(attempt["ordinal"]) is int and attempt["ordinal"] == ordinal
+                             and all(type(attempt[key]) in (int, float) and math.isfinite(attempt[key]) for key in ("started_at", "finished_at"))
+                             and previous <= attempt["started_at"] <= attempt["finished_at"], "package attempt identity or times differ")
+            previous = attempt["finished_at"]
+            contract.require(type(attempt["headers"]) is dict and all(k in {"content-type", "docker-content-digest", "link", "etag", "last-modified"}
+                             and isinstance(v, str) for k, v in attempt["headers"].items()), "package attempt has unsafe response metadata")
+            contract.verify_reference(root, attempt["body"])
+            contract.require(attempt["body"]["size_bytes"] <= request["output"]["size_bytes"], "package attempt exceeds the archive bound")
+            contract.require(type(attempt["observed_body_size"]) is int and attempt["observed_body_size"] == attempt["body"]["size_bytes"]
+                             and attempt["body_truncated"] is False, "package attempt omitted or truncated observed bytes")
+            contract.require(type(attempt["exception_partial_size"]) is int and type(attempt["retained_exception_partial_size"]) is int
+                             and 0 <= attempt["retained_exception_partial_size"] == attempt["exception_partial_size"] <= attempt["body"]["size_bytes"],
+                             "package attempt omits available exception bytes or exceeds its bound")
+            if ordinal == len(attempts):
+                contract.require(attempt["state"] == "SUCCEEDED" and attempt["error"] is None
+                                 and attempt["exception_partial_size"] == 0
+                                 and type(attempt["status"]) is int and attempt["status"] == 200
+                                 and isinstance(attempt["response_url"], str)
+                                 and all(attempt["body"][key] == request["output"][key] for key in ("sha256", "size_bytes")),
+                                 "package success does not bind the exact archive")
+                parsed = urllib.parse.urlsplit(attempt["response_url"])
+                contract.require(parsed.scheme == "https" and parsed.netloc in {"deb.debian.org", "security.debian.org"}, "package response changed official source")
+            else:
+                error = attempt["error"]
+                contract.require(attempt["state"] == "FAILED" and type(error) is dict
+                                 and set(error) == {"type", "wrapped_type", "ssl_reason", "retryable"}
+                                 and (error["type"], error["wrapped_type"]) in {("SSLEOFError", None), ("URLError", "SSLEOFError")}
+                                 and error["ssl_reason"] == "UNEXPECTED_EOF_WHILE_READING" and error["retryable"] is True
+                                 and (attempt["status"] is None or type(attempt["status"]) is int and attempt["status"] == 200),
+                                 "package retry does not retain the permitted typed transport failure")
+        result[request["output"]["path"]] = request
+    return result
+
+
+def read_signature_log(reference, root):
+    status = contract.parse_json(contract.verify_reference(root, reference).read_bytes())
+    contract.require(type(status) is dict and set(status) in
+                     (SIGNATURE_LOG_FIELDS, SIGNATURE_LOG_FIELDS | {"archive_fetches", "original_signature_log"}),
+                     "OS signature log has an invalid shape")
+    if "archive_fetches" in status:
+        original = contract.parse_json(contract.verify_reference(root, status["original_signature_log"]).read_bytes())
+        contract.require(type(original) is dict and set(original) == SIGNATURE_LOG_FIELDS
+                         and contract.canonical(original) == contract.canonical({key: status[key] for key in SIGNATURE_LOG_FIELDS}),
+                         "extended OS signature log differs from its preserved original")
+    return status
+
+
+def package_transports(closures, root):
+    references = []
+    for closure in closures:
+        for index in closure["signed_indexes"]:
+            status = read_signature_log(index["signature_log"], root)
+            contract.require("archive_fetches" in status, "OS closure has no sealed package transport evidence")
+            references.append(status["archive_fetches"])
+    contract.require(references and all(reference == references[0] for reference in references), "OS closures bind different package transport journals")
+    contract.reference_descriptor(references[0])
+    contract.require(references[0]["size_bytes"] <= 32 * 1024 * 1024, "package transport journal exceeds its bound")
+    requests = package_fetch_journal(contract.parse_json(contract.verify_reference(root, references[0]).read_bytes()), root)
+    for closure in closures:
+        wanted = {(p["name"], p["version"], p["architecture"]) for p in closure["packages"]}
+        indexes = {row["url"]: package_index(contract.verify_reference(root, row["packages"]), wanted) for row in closure["signed_indexes"]}
+        for package in closure["packages"]:
+            request = requests.get(package["archive"]["path"])
+            record = indexes[package["index_url"]].get((package["name"], package["version"], package["architecture"]))
+            contract.require(request is not None and record is not None and request["output"] == package["archive"]
+                             and request["url"] == package["index_url"].split("/dists/", 1)[0] + "/" + record["Filename"],
+                             "package transport does not bind its signed source and retained archive")
+    return {"requests": len(requests), "recovered": sum(row["outcome"] == "RECOVERED_TRANSPORT" for row in requests.values())}
 
 
 def package_source_observations(data):
@@ -325,6 +427,21 @@ def installed(value, architecture):
     return result
 
 
+def signature_status(index, root, commands):
+    status = read_signature_log(index["signature_log"], root)
+    contract.require(status["tool"] == "sqv" and type(status["exit_code"]) is int and status["exit_code"] == 0
+                     and type(status["command_index"]) is int and 0 <= status["command_index"] < len(commands)
+                     and all(status[key + "_sha256"] == index[key]["sha256"] for key in ("verifier", "keyring", "inrelease", "release")),
+                     "OS closure has no bound signed Release verification")
+    package_acquisition(status["acquisition"], index, root)
+    command = commands[status["command_index"]]
+    expected_tail = ["/usr/bin/sqv", "--keyring=/usr/share/keyrings/debian-archive-keyring.pgp",
+                     "--output=/proof/" + index["release"]["path"], "--cleartext", "/proof/" + index["inrelease"]["path"]]
+    contract.require(command["exit_code"] == 0 and command["argv"][:3] == ["docker", "container", "exec"]
+                     and command["argv"][4:] == expected_tail, "signed Release verification used another command or weakened policy")
+    return status
+
+
 def os_closure(row, root, plan, now, commands):
     architecture = plan["platform"].split("/")[1]
     required = installed(contract.verify_reference(root, row["installed"]).read_text(), architecture)
@@ -338,18 +455,7 @@ def os_closure(row, root, plan, now, commands):
         contract.require(contract.file_hash(path) == allowed_indexes[index["url"]], "selected Packages payload changed")
         release_text = contract.verify_reference(root, index["release"]).read_text()
         release(release_text, index["url"], allowed_indexes[index["url"]], path.stat().st_size, now)
-        status = contract.parse_json(contract.verify_reference(root, index["signature_log"]).read_bytes())
-        contract.require(set(status) == {"tool", "exit_code", "command_index", "verifier_sha256", "keyring_sha256", "inrelease_sha256", "release_sha256", "acquisition"}
-                         and status["tool"] == "sqv" and type(status["exit_code"]) is int and status["exit_code"] == 0
-                         and type(status["command_index"]) is int and 0 <= status["command_index"] < len(commands)
-                         and all(status[key + "_sha256"] == index[key]["sha256"] for key in ("verifier", "keyring", "inrelease", "release")),
-                         "OS closure has no bound signed Release verification")
-        package_acquisition(status["acquisition"], index, root)
-        command = commands[status["command_index"]]
-        expected_tail = ["/usr/bin/sqv", "--keyring=/usr/share/keyrings/debian-archive-keyring.pgp",
-                         "--output=/proof/" + index["release"]["path"], "--cleartext", "/proof/" + index["inrelease"]["path"]]
-        contract.require(command["exit_code"] == 0 and command["argv"][:3] == ["docker", "container", "exec"]
-                         and command["argv"][4:] == expected_tail, "signed Release verification used another command or weakened policy")
+        signature_status(index, root, commands)
         records[index["url"]] = package_index(path, required)
     for key, package in actual.items():
         record = records[package["index_url"]].get(key)
@@ -448,6 +554,7 @@ def image_input(row, root, platform):
 def validate_materialized(manifest, root, source, now):
     """Only actual fixed-command execution may call this acceptance inspection."""
     contract.validate_manifest(manifest, root, source)
+    package_transports(list(manifest["os_closures"].values()), root)
     plan = manifest["plan"]
     for row in manifest["image_inputs"].values():
         image_input(row, root, plan["platform"])
