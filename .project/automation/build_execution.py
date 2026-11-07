@@ -373,12 +373,22 @@ class Runner:
         contract.require(0 < epoch <= time.time(), "source commit timestamp is invalid")
         return source, archive, epoch
 
+    def prepare_module_metadata(self, identifier, archive):
+        contract.require(identifier in contract.MODULES, "unknown native module metadata owner")
+        target = self.root / "sources" / identifier / "metadata"
+        target.mkdir()
+        for name, data in materials.archived_module_metadata(archive).items():
+            with (target / name).open("xb") as stream:
+                stream.write(data)
+
 
 def go_environment(identifier, platform, epoch):
     return {"GOTOOLCHAIN": "local", "GOWORK": "off", "GOENV": "off", "GOOS": "linux", "GOARCH": platform.split("/")[1],
             "CGO_ENABLED": "1", "GOPATH": "/proof/cache/" + identifier + "/gopath", "GOMODCACHE": "/proof/cache/" + identifier + "/mod",
             "GOCACHE": "/proof/cache/" + identifier + "/build", "GOPROXY": "https://proxy.golang.org", "GOSUMDB": "sum.golang.org",
-            "GOFLAGS": "-mod=readonly", "SOURCE_DATE_EPOCH": str(epoch), "TZ": "UTC", "LANG": "C.UTF-8"}
+            "GOPRIVATE": "", "GONOSUMDB": "", "GONOPROXY": "",
+            "GOFLAGS": "-mod=readonly -modfile=/proof/sources/" + identifier + "/metadata/go.mod",
+            "SOURCE_DATE_EPOCH": str(epoch), "TZ": "UTC", "LANG": "C.UTF-8"}
 
 
 def build_arguments(identifier, pin, epoch, graph, cpus):
@@ -465,6 +475,7 @@ def native_builds(runner, source_caches, authenticate_extra=None, package_source
     compiler_closure = None
     for identifier in contract.MODULES:
         source, archive, epoch = runner.archive_source(identifier, Path(source_caches) / identifier)
+        runner.prepare_module_metadata(identifier, archive)
         epochs[identifier] = epoch
         container = runner.container("go-" + identifier, compiler_image, source, network="bridge", package_cache=compiler_cache)
         try:
@@ -503,6 +514,9 @@ def native_builds(runner, source_caches, authenticate_extra=None, package_source
                 **{key: contract.reference(runner.root, value) for key, value in
                    (("source_archive", archive), ("downloads", downloads), ("modules", modules),
                     ("local_modules", local_path), ("verification", verification))}}
+            for name in ("go.mod", "go.sum"):
+                runner.inside(container, ["cat", "/proof/sources/" + identifier + "/metadata/" + name], timeout=30)
+            materials.module_metadata(identifier, closures[identifier], runner.root, runner.commands)
             if identifier in contract.NATIVE:
                 (runner.root / "binaries" / identifier).mkdir(parents=True)
                 arguments = build_arguments(identifier, runner.plan["sources"][identifier], epoch, graph, runner.plan["limits"]["cpus"])
@@ -524,6 +538,7 @@ def native_builds(runner, source_caches, authenticate_extra=None, package_source
                        (("binary", binary), ("build_info", info), ("imports", imports), ("dynamic_links", links))}}
             for expected in runner.plan["sources"][identifier]["dependency_inputs"]:
                 contract.require(contract.file_hash(source / expected["path"]) == expected["sha256"], "Go changed a selected native dependency input")
+            materials.module_metadata(identifier, closures[identifier], runner.root, runner.commands, builds.get(identifier))
         finally:
             runner.cleanup()
     runtime_closure = None
