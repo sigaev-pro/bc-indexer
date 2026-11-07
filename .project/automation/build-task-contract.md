@@ -1,6 +1,6 @@
 # Isolated build acceptance interface
 
-Status: specified for AUT-03, [issue 98](https://github.com/sigaev-pro/bc-indexer/issues/98), pending independent review and protected acceptance. The contract is `build-artifacts-v1`; the updater contract is `component-update-v1`. Only an accepted configuration handoff enables the product task. This document does not accept a build.
+Status: AUT-03 was accepted through [PR #100](https://github.com/sigaev-pro/bc-indexer/pull/100), closing [issue #98](https://github.com/sigaev-pro/bc-indexer/issues/98). The contract is `build-artifacts-v1`; the updater contract is `component-update-v1`. Only an accepted configuration handoff enables the product task. Native builds remain NOT_RUN until separately executed and accepted.
 
 ## Existing requirements
 
@@ -44,7 +44,7 @@ Use independent controlled official-source fixtures to test success and failure 
 
 ## Actual execution and cleanup
 
-Run real build commands through owned supervision with the original D92 absolute deadline. Preparation is outside the 1,800-second standard runtime-test budget; it is still inside the launch deadline. Each command needs a bounded timeout and resource limits. Do not erase a failed attempt with a successful retry.
+Run real build commands through owned supervision. D93 removes the campaign deadline after explicit adoption; each build verification still has a finite timeout of at most 7,200 seconds, and each command retains its own timeout and resource limits. Historical D92 executions remain bounded by their original absolute deadline. Preparation is outside the 1,800-second standard runtime-test budget. Do not erase a failed attempt with a successful retry.
 
 Docker daemon resources outlive the host CLI. Record immutable owned container IDs and task/run labels before execution. On success, failure, interruption, or timeout, reconcile and clean only those resources, then confirm their state. A killed host process group alone is insufficient. Retain uncertainty and block further dispatch if ownership or cleanup cannot be proved. Never use global prune or touch unrelated images, containers, or volumes.
 
@@ -54,7 +54,7 @@ The independent driver must combine behavioral failure mutations with actual bui
 
 The canonical checkout already has five clean pinned native source caches and three pinned Linux amd64 images. They are preparation only. The observed Docker host is Linux x86_64 with 16 CPUs and about 8 GiB RAM; native builds should run sequentially within explicit limits. Recheck capacity before execution. No native source has yet been built or started during D92.
 
-Finish the concrete interface and independent tests in AUT-03, obtain exact-head review and protected acceptance, then safely hand off the accepted adapter on the existing D92 run. Product implementation and acceptance remain separate from this maintenance task.
+AUT-03 was accepted through PR #100. Adopt the accepted configuration and D93 policy on the existing run through the [continuous-work procedure](continuous-work.md), then execute E01-01.builds. Product implementation and acceptance remain separate from maintenance acceptance.
 
 ## Normative field definitions
 

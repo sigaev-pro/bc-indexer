@@ -68,7 +68,7 @@ def adopt(controller, run, document, revision, epoch):
     """Adopt real Git outputs and honest coordinator attestations, never fake CLI logs."""
     boundary(controller, run, revision, epoch)
     controller.backend.check_configuration(run)
-    require(document.get("schema_version") == 1 and document.get("authorization_ref") == "D92"
+    require(document.get("schema_version") == 1 and document.get("authorization_ref") == run["authorization"]["reference"]
             and document.get("coordinator_agent_id") == "/root" and document.get("run_id") == run["run_id"]
             and document.get("configuration_epoch") == epoch,
             "BLOCKED_EXTERNAL_CANDIDATE", "candidate attestation does not identify this launch configuration")

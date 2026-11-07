@@ -1,5 +1,15 @@
 # Дерево решений и журнал интервью
 
+## D93 — Continuous development in meaningful blocks (2026-11-07)
+
+The owner instructed: remove work windows, continue until the result is complete, and organize the work into meaningful blocks. This is ongoing authorization to complete the accepted E01 through E07 backlog and the automation needed to execute and verify it. It supersedes D92's campaign deadline and the preceding follow-up's stop after steps 1-3. No new owner confirmation is required at a routine block boundary.
+
+A block has one concrete outcome, explicit scope and acceptance checks, an issue or linked subtask, and a durable checkpoint. Complete its implementation, appropriate checks, independent exact-head review where required, related documentation, and commit before advancing. Protected publication and merge remain governed by the existing acceptance checks. Continue to the next ready block automatically in dependency order. A partial checkpoint remains explicitly incomplete and cannot satisfy its parent task or gate.
+
+Campaign elapsed time, cumulative model invocations, and ordinary implementation/review-repair counts are recorded rather than used as arbitrary stopping windows. Preserve all previous attempts and failures. When the same approach stops making progress, diagnose the cause or split the work into a new meaningful block with retained provenance; do not repeat unchanged failures or relabel them as success. Finite command/session timeouts, resource bounds, three active model sessions, explicit operator stop, D83's test-run limits and evidence rules, independent review, and access boundaries remain enforced. A technical timeout leads to cleanup and recovery planning, not automatic campaign completion or another routine owner-permission request.
+
+Stop when the accepted result is complete, when the owner explicitly asks to stop, or when no useful authorized work can proceed without missing access, resources, or a product-scope decision. Report a real blocker and continue independent ready work when possible. This authorization does not grant production deployment, purchases, weakened acceptance, or fabricated runtime results. Old launch records remain historical evidence; adoption of this policy must retain their receipts, counters, failures, and provenance.
+
 ## D92 addendum — one additional AUT-03 repair cycle (2026-11-07)
 
 The owner explicitly said to perform steps 1–3: fix the remaining AUT-03 cleanup race, add its regression and run checks, obtain both independent exact-head reviews, and merge PR #100 only if all required checks pass. This authorizes implementation attempt 4 / review-repair cycle 3 for this issue only. Preserve all previous attempts and findings; do not reset counters or weaken acceptance. Issue #11 is outside this follow-up. The original D92 deadline and invocation/session limits remain unchanged.

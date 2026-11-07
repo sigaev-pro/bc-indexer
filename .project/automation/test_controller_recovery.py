@@ -82,6 +82,12 @@ class RecoveryTests(unittest.TestCase):
             code = controller.main()
         return code, json.loads(output.getvalue())
 
+    @staticmethod
+    def configure_service(arguments, run):
+        values = {"RECORDED_RUN_ID": run["run_id"], "RECORDED_AUTHORIZATION_REF": run["authorization"]["reference"],
+                  "RECORDED_STAGE_LIMIT": run["authorization"]["stage_limit"]}
+        return [values.get(value, value) for value in arguments]
+
     def test_service_templates_preserve_stop_and_budget_through_actual_cli(self):
         for arguments in self.service_arguments():
             for status, marker in (("STOPPED", True), ("STOPPED", False), ("RUNNING", True),
@@ -95,7 +101,7 @@ class RecoveryTests(unittest.TestCase):
                     if marker:
                         self.store.stop(run["run_id"])
                     before = self.store.load(run["run_id"])
-                    actual = [run["run_id"] if value == "RECORDED_RUN_ID" else value for value in arguments]
+                    actual = self.configure_service(arguments, run)
                     with patch.object(backend, "start_gate") as gate:
                         code, report = self.call_cli(actual, backend)
                     gate.assert_not_called()
@@ -125,7 +131,7 @@ class RecoveryTests(unittest.TestCase):
             backend.crash = "after:pr"
             with self.assertRaises(Crash):
                 Controller(self.store, backend).run(run)
-        arguments = [run["run_id"] if value == "RECORDED_RUN_ID" else value for value in self.service_arguments()[0]]
+        arguments = self.configure_service(self.service_arguments()[0], run)
         code, report = self.call_cli(arguments, backend)
         self.assertEqual(code, 0)
         self.assertEqual(report["status"], "COMPLETE")

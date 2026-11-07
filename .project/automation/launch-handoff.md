@@ -1,5 +1,7 @@
 # D92 launch, accounting, and configuration handoff
 
+This records the historical D92 policy. D93 now authorizes continuous work in meaningful blocks. Use the [continuous-work procedure](continuous-work.md) to adopt D93 explicitly; ordinary resume cannot change an old run's policy. Retain all D92 history and its original deadline.
+
 D92 starts at Unix time `1794007047` and ends at `1794032247` (2026-11-07 06:17:27 UTC). Preparation, preflight, implementation, review, recovery, and configuration changes consume that same window. Only process cleanup and honest completion accounting may finish after the deadline. This procedure preserves the existing D86 run; it never widens or renews that run.
 
 The canonical state directory contains `launches/D92.json` and the single D92 run, `run_D92_1794007047`. Both use the repository writer lock and fsynced atomic JSON. A configuration change appends an epoch to this run. It does not create a fresh budget or replace task history. Keep the canonical state directory and retained acceptance evidence when moving execution to another host; a separate empty directory is not a continuation of this launch.

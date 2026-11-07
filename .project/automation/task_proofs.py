@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 
@@ -59,6 +60,11 @@ def check_recipe(recipe, source, task_id=verifier.TASK):
 def check_verification(proof, head, base):
     selected = adapter(proof["task_id"])
     build = selected.TASK == "E01-01.builds"
+    if build:
+        from controller import AUTHORIZATIONS
+        acceptance.require(proof["authorization"] == AUTHORIZATIONS.get(proof["authorization"].get("reference"))
+                           and proof["authorization"]["reference"] in {"D92", "D93"},
+                           "native build proof requires an exact reviewed product authorization")
     acceptance.require(proof["task_id"] == selected.TASK and proof["head_sha"] == head and proof["base_sha"] == base
                        and proof["passed"] is True and proof["runtime"] == "NOT_RUN", "artifact proof identity differs")
     recipe = proof["recipe"]
@@ -78,6 +84,13 @@ def check_verification(proof, head, base):
     acceptance.require(len(checks) == len(recipe["commands"]) + 1, "artifact proof is missing required executions")
     for number, row in enumerate(checks):
         request, execution = row["request"], row["execution"]
+        if build:
+            acceptance.require(type(request["timeout_seconds"]) in (int, float)
+                               and 0 < request["timeout_seconds"] <= 7200
+                               and type(request["deadline"]) in (int, float) and math.isfinite(request["deadline"]) and request["deadline"] > 0
+                               and (proof["authorization"]["reference"] == "D93"
+                                    or request["deadline"] <= proof["authorization"]["hard_deadline"]),
+                               "each build proof execution requires a finite authorized deadline")
         acceptance.require(request["operation_id"] == execution["operation_id"]
                            == proof["verification_operation_id"] + "-check-" + str(number)
                            and execution["request_sha256"] == evidence.digest(request)
@@ -108,9 +121,8 @@ def check_verification(proof, head, base):
                     and report["trusted_pack"] == recipe["trusted_pack"]
                     and report["identity"]["head_sha"] == head and report["identity"]["base_sha"] == base
                     and report["identity"]["verifier_source_commit"] == proof["verifier_source_commit"]
-                    and report["cleanup"]["spec"] == request["owned_docker"]
-                    and type(request["timeout_seconds"]) in (int, float) and 0 < request["timeout_seconds"] <= 7200
-                    and request["deadline"] <= proof["authorization"]["hard_deadline"], "build execution source, ownership, or original deadline differs")
+                    and report["cleanup"]["spec"] == request["owned_docker"],
+                    "build execution source, ownership, or finite execution deadline differs")
                 build_resources.validate_cleanup(request["owned_docker"], execution["docker_cleanup"])
                 acceptance.require(execution["docker_cleanup"]["creation_inventory"] == report["cleanup"]["history"][-1]["creation_inventory"],
                                    "supervisor and build driver disagree about Docker creation history")

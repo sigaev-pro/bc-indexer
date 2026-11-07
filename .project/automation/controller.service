@@ -5,7 +5,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=ABSOLUTE_REPOSITORY_PATH
-ExecStart=ABSOLUTE_PYTHON_PATH ABSOLUTE_REPOSITORY_PATH/.project/automation/controller.py resume --automatic --run-id RECORDED_RUN_ID
+ExecStart=ABSOLUTE_PYTHON_PATH ABSOLUTE_REPOSITORY_PATH/.project/automation/controller.py resume --automatic --run-id RECORDED_RUN_ID --authorization-ref RECORDED_AUTHORIZATION_REF --stage-limit RECORDED_STAGE_LIMIT
 Restart=no
 TimeoutStopSec=30
 KillMode=control-group

@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -43,19 +44,21 @@ class RealBackend:
         self.cached_receipts = None
 
     def bind_launch(self, authorization):
-        from launch_control import check_window, fixed
-        if not fixed(authorization):
+        from launch_control import accounted, check_window, continuous
+        if not accounted(authorization):
             return
         check_window(authorization, time.time())
         if self.launch_bound is None:
             self.launch_bound = {"authorization": dict(authorization),
-                                 "monotonic_deadline": time.monotonic() + authorization["hard_deadline"] - time.time()}
+                                 "monotonic_deadline": None if continuous(authorization) else time.monotonic() + authorization["hard_deadline"] - time.time()}
         require(self.launch_bound["authorization"] == authorization, "BLOCKED_AUTHORIZATION", "backend launch binding changed")
-        require(time.monotonic() < self.launch_bound["monotonic_deadline"], "BUDGET_STOP", "fixed launch elapsed-time bound expired")
+        require(continuous(authorization) or time.monotonic() < self.launch_bound["monotonic_deadline"],
+                "BUDGET_STOP", "fixed launch elapsed-time bound expired")
 
     def remaining(self):
         bound = getattr(self, "launch_bound", None)
-        if bound is None:
+        from launch_control import continuous
+        if bound is None or continuous(bound["authorization"]):
             return float("inf")
         remaining = min(bound["authorization"]["hard_deadline"] - time.time(),
                         bound["monotonic_deadline"] - time.monotonic())
@@ -63,9 +66,11 @@ class RealBackend:
         return remaining
 
     def command(self, arguments, cwd=None, payload=None, timeout=30):
+        require(type(timeout) in (int, float) and math.isfinite(timeout) and timeout > 0,
+                "BLOCKED_BUDGET", "each command requires a finite positive timeout")
         timeout = min(timeout, self.remaining())
         wall_deadline, monotonic_deadline = time.time() + timeout, time.monotonic() + timeout
-        if getattr(self, "launch_bound", None):
+        if getattr(self, "launch_bound", None) and self.launch_bound["monotonic_deadline"] is not None:
             wall_deadline = min(wall_deadline, self.launch_bound["authorization"]["hard_deadline"])
             monotonic_deadline = min(monotonic_deadline, self.launch_bound["monotonic_deadline"])
         require(self.store.lock_fd is not None, "BLOCKED_LOCK", "ordinary commands require the repository writer lock")
@@ -302,7 +307,8 @@ class RealBackend:
         self.command_stop_file = self.store.directory / "stop" / (run["run_id"] + ".json")
         if self.store.stopped(run["run_id"]):
             raise Blocked("STOPPED", "operator requested a stop")
-        if time.time() >= run["deadline"]:
+        from launch_control import remaining
+        if remaining(run, time.time()) <= 0:
             raise Blocked("BUDGET_STOP", "run wall-time budget expired")
         if "authorization" in run:
             self.bind_launch(run["authorization"])
@@ -330,7 +336,8 @@ class RealBackend:
 
     def perform(self, action, run, task, operation):
         self.check_stop(run)
-        if run["authorization"]["reference"] == "D92":
+        from launch_control import accounted
+        if accounted(run["authorization"]):
             self.check_configuration(run)
         require(self.git(self.root, "remote", "get-url", "origin") in {
             f"git@github.com:{self.repository}.git", f"https://github.com/{self.repository}.git"},
@@ -463,8 +470,11 @@ class RealBackend:
                 "cleanup_complete": bool(records) and all(record["cleanup_complete"] for record in records)}
 
     def supervised(self, run, operation_id, command, cwd, stdin="", timeout=3600, environment=None, owned_images=None):
+        require(type(timeout) in (int, float) and math.isfinite(timeout) and timeout > 0,
+                "BLOCKED_BUDGET", "each supervised operation requires a finite positive timeout")
         self.check_stop(run)
-        remaining = min(timeout, self.remaining(), run["deadline"] - time.time())
+        from launch_control import remaining as campaign_remaining
+        remaining = min(timeout, self.remaining(), campaign_remaining(run, time.time()))
         require(remaining > 0, "BUDGET_STOP", "session cannot start after its launch deadline")
         directory = self.root / ".project/automation/runs" / run["run_id"] / operation_id
         evidence.durable_directory(directory)
@@ -472,7 +482,7 @@ class RealBackend:
         if owned_images is not None:
             command = [*command, "--request", str(request_path)]
         request = {"operation_id": operation_id, "command": command, "cwd": str(cwd),
-                   "deadline": min(run["deadline"], time.time() + remaining),
+                   "deadline": min(time.time() + remaining, run["deadline"] if run["deadline"] is not None else float("inf")),
                    "timeout_seconds": remaining,
                    "stop_file": str(self.store.directory / "stop" / (run["run_id"] + ".json")),
                    "log_limit": session_runner.LOG_LIMIT, "env": environment or {},
@@ -516,7 +526,8 @@ class RealBackend:
                                        cwd=self.root, start_new_session=True, pass_fds=(self.store.lock_fd,),
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             # D92 starts cleanup at its deadline; grace is only for cleanup itself.
-            grace = 0 if getattr(self, "launch_bound", None) else WATCHDOG_GRACE_SECONDS
+            bound = getattr(self, "launch_bound", None)
+            grace = 0 if bound and bound["monotonic_deadline"] is not None else WATCHDOG_GRACE_SECONDS
             watchdog_deadline = time.monotonic() + min(remaining, max(0, request["deadline"] - time.time())) + grace
             while not session_runner.exited_unreaped(process):
                 stop = self.store.stopped(run["run_id"])
@@ -595,6 +606,9 @@ class RealBackend:
                 "The accepted registry and source locks are read-only; update writes a separate candidate and never promotes the active lock.")
         if run["authorization"]["reference"] == "D92":
             handoff.update(hard_deadline=run["authorization"]["hard_deadline"],
+                           configuration_epoch=run["configuration_epoch"], shared_invocations_used=run["invocations"])
+        elif run["authorization"]["reference"] == "D93":
+            handoff.update(work_policy="D93: complete the current issue block, retain evidence, then continue the next ready block",
                            configuration_epoch=run["configuration_epoch"], shared_invocations_used=run["invocations"])
         prompt, revision = self.role_prompt("reviewer" if review else recipe["role"], handoff)
         directory = self.directory(run, operation)
@@ -685,8 +699,8 @@ class RealBackend:
 
     def do_review(self, run, task, operation, directory):
         result = self.model(run, task, operation, review=True)
-        if run["authorization"]["reference"] == "D92":
-            from launch_control import LaunchLedger
+        from launch_control import LaunchLedger, accounted
+        if accounted(run["authorization"]):
             authors = {row.get("canonical_agent_id") for row in LaunchLedger(self.store, run["authorization"]).load()["sessions"].values()
                        if row["task_id"] == task["task_id"] and row["role"] == "implementer"}
             require(result["canonical_agent_id"] not in authors, "BLOCKED_REVIEW", "reviewer previously implemented this task")
@@ -824,7 +838,8 @@ class RealBackend:
         intent_path = directory / "merge-intent.json"
         if not pull["merged"]:
             self.candidate(run, task)
-            deadline = min(run["deadline"], time.time() + 900)
+            from launch_control import remaining
+            deadline = time.time() + min(900, remaining(run, time.time()))
             while True:
                 self.check_stop(run)
                 checks = self.read(f"commits/{expected['head_sha']}/check-runs?filter=latest&per_page=100")

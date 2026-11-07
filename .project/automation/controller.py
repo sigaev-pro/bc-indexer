@@ -25,6 +25,8 @@ AUTHORIZATION = {"reference": "D86", "stage_limit": "BOOT"}
 AUTHORIZATIONS = {"D86": dict(AUTHORIZATION)}
 AUTHORIZATIONS["D92"] = {"reference": "D92", "stage_limit": "E07", "started_at": 1794007047,
                          "hard_deadline": 1794032247, "invocation_limit": 200}
+AUTHORIZATIONS["D93"] = {"reference": "D93", "stage_limit": "E07", "mode": "continuous",
+                         "started_at": 1794032764, "invocation_limit": None}
 STAGES = ("BOOT", "E01", "E02", "E03", "E04", "E05", "E06", "E07")
 DEFAULT_LIMITS = {"seconds": 86400, "invocations": 200, "session_seconds": 3600,
                   "implementation_attempts": 3, "model_sessions": 3}
@@ -194,8 +196,8 @@ class Controller:
         self.store, self.backend, self.clock = store, backend, clock
 
     def launch(self, run):
-        from launch_control import LaunchLedger, fixed
-        return LaunchLedger(self.store, run["authorization"], self.clock) if fixed(run["authorization"]) else None
+        from launch_control import LaunchLedger, accounted
+        return LaunchLedger(self.store, run["authorization"], self.clock) if accounted(run["authorization"]) else None
 
     def window(self, authorization):
         from launch_control import check_window
@@ -206,6 +208,8 @@ class Controller:
 
     def create(self, tasks, recipes, repository="sigaev-pro/bc-indexer", limits=None, authorization_ref="D86"):
         require(repository == "sigaev-pro/bc-indexer", "BLOCKED_REPOSITORY", "this launch authorizes only sigaev-pro/bc-indexer")
+        require(authorization_ref != "D93", "BLOCKED_AUTHORIZATION",
+                "D93 continues the existing D92 run; use adopt-authorization to preserve its history")
         limit = dict(DEFAULT_LIMITS, **(limits or {}))
         require(set(limit) == set(DEFAULT_LIMITS) and all(type(v) is int and 1 <= v <= DEFAULT_LIMITS[k]
                 for k, v in limit.items()), "BLOCKED_BUDGET", "limits may only narrow the accepted defaults")
@@ -298,7 +302,12 @@ class Controller:
         launch = self.launch(run)
         if launch:
             launch.sync(run)
-        if self.clock() >= run["deadline"] or (not launch and run["invocations"] - run["budget_baseline"] >= run["limits"]["invocations"]):
+        from launch_control import continuous
+        if continuous(run["authorization"]):
+            require(run["deadline"] is None and all(run["limits"][key] is None
+                    for key in ("seconds", "invocations", "implementation_attempts")),
+                    "BLOCKED_CONFIGURATION", "D93 must retain its explicit continuous policy")
+        elif self.clock() >= run["deadline"] or (not launch and run["invocations"] - run["budget_baseline"] >= run["limits"]["invocations"]):
             raise Blocked("BUDGET_STOP", "the bounded run budget is exhausted")
 
     def action(self, run, task, action):
@@ -347,7 +356,13 @@ class Controller:
                     "BLOCKED_REVIEW", "review session or exact head is not independently verified")
             task["review"] = result
             if result["verdict"] == "REQUEST_CHANGES":
-                require(task["attempts"] < run["limits"]["implementation_attempts"],
+                from launch_control import continuous
+                history = task.setdefault("review_history", [])
+                repeated_head = any(item["head_sha"] == result["head_sha"] for item in history)
+                history.append(dict(result))
+                require(not continuous(run["authorization"]) or not repeated_head,
+                        "BLOCKED_NO_PROGRESS", "the same candidate failed review again; diagnose it before another attempt")
+                require(continuous(run["authorization"]) or task["attempts"] < run["limits"]["implementation_attempts"],
                         "BLOCKED_ATTEMPTS", "two review repair cycles are exhausted")
                 task["state"] = "IMPLEMENTING"
                 task.pop("verification", None)
@@ -421,7 +436,7 @@ class Controller:
                 "BLOCKED_RECOVERY_MODE", "automatic recovery cannot authorize budget renewal or session retries")
         require(resume or not (renew_budget or retry_session), "BLOCKED_RECOVERY_MODE",
                 "budget renewal and diagnostic retries require explicit resume")
-        require(not (renew_budget and self.launch(run)), "BLOCKED_BUDGET", "D92 has a fixed deadline and shared budget; renewal is not authorized")
+        require(not (renew_budget and self.launch(run)), "BLOCKED_BUDGET", "accounted launches cannot reset their policy or history through budget renewal")
         require(not renew_budget or run["status"] == "BUDGET_STOP", "BLOCKED_BUDGET", "only an explicit budget stop can receive a new budget window")
         with stop_signals(self.store, run["run_id"], acknowledge=resume and not automatic and acknowledge_stop):
             return self._run(run, resume, renew_budget, automatic, retry_session)
@@ -508,7 +523,7 @@ def summary(run):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["verify-bootstrap", "initialize", "run", "resume", "status", "stop",
-                                             "account-sessions", "reserve-session", "handoff", "adopt-candidate"])
+                                             "account-sessions", "reserve-session", "handoff", "adopt-candidate", "adopt-authorization"])
     parser.add_argument("--repo", default="sigaev-pro/bc-indexer")
     parser.add_argument("--run-id")
     parser.add_argument("--input", type=Path, help="Explicit coordinator observations, reservation, or candidate attestation JSON.")
@@ -535,10 +550,10 @@ def main():
         if args.command == "status":
             paths = [store.run_path(args.run_id)] if args.run_id else sorted((store.directory / "runs").glob("*.json"))
             reports = []
-            from launch_control import LaunchLedger, fixed
+            from launch_control import LaunchLedger, accounted
             for path in paths:
                 run = store.load(path.stem)
-                if fixed(run["authorization"]):
+                if accounted(run["authorization"]):
                     LaunchLedger(store, run["authorization"]).sync(run)
                 reports.append(summary(run))
             print(json.dumps(reports, indent=2))
@@ -551,15 +566,16 @@ def main():
         with store.lock(), ExitStack() as signal_contexts:
             if args.command in {"account-sessions", "reserve-session"}:
                 from launch_control import LaunchLedger
-                require(args.authorization_ref == "D92" and args.input, "BLOCKED_SESSION_ACCOUNTING", "explicit D92 input is required")
-                launch = LaunchLedger(store, AUTHORIZATIONS["D92"])
+                require(args.authorization_ref in {"D92", "D93"} and args.input, "BLOCKED_SESSION_ACCOUNTING", "explicit accounted launch input is required")
+                launch = LaunchLedger(store, AUTHORIZATIONS[args.authorization_ref])
                 document = read_json(args.input)
                 if args.command == "account-sessions":
                     record = launch.import_observations(document)
                     print(json.dumps({"used": launch.used(record), "active": [row["invocation_id"] for row in launch.active(record)],
                                       "ledger_sha256": evidence.digest(record)}))
                     return 0
-                if document["task_id"] is None or document["task_id"] == "AUT-01":
+                if document["task_id"] is None or document["task_id"] == "AUT-01" or (
+                        args.authorization_ref == "D93" and re.fullmatch(r"AUT-[0-9]{2,}", document["task_id"])):
                     result = launch.reserve(document["invocation_id"], document["role"], document["task_id"],
                                             origin="coordinator-managed")
                     print(json.dumps(result))
@@ -569,8 +585,9 @@ def main():
                 require(args.run_id, "BLOCKED_STATE", "continuation requires an explicit run ID")
                 run = store.load(args.run_id)
                 require(run["repository"] == args.repo, "BLOCKED_REPOSITORY", "resume repository changed")
-                require(run["authorization"] == AUTHORIZATIONS[args.authorization_ref], "BLOCKED_AUTHORIZATION", "resume cannot change the run authorization")
-                require(not args.renew_budget or (args.authorization_ref != "D92" and run["status"] == "BUDGET_STOP"),
+                require(args.command == "adopt-authorization" or run["authorization"] == AUTHORIZATIONS[args.authorization_ref],
+                        "BLOCKED_AUTHORIZATION", "resume cannot change the run authorization")
+                require(not args.renew_budget or (args.authorization_ref == "D86" and run["status"] == "BUDGET_STOP"),
                         "BLOCKED_BUDGET", "this run cannot renew its budget")
                 if args.command == "resume" and args.automatic and (store.stopped(run["run_id"]) or run["status"] != "RUNNING"):
                     if store.stopped(run["run_id"]):
@@ -583,6 +600,15 @@ def main():
                                   AUTHORIZATIONS[args.authorization_ref] if args.command != "verify-bootstrap" else None,
                                   stop_file=store.directory / "stop" / (args.run_id + ".json") if args.command == "resume" else None)
             controller = Controller(store, backend)
+            if args.command == "adopt-authorization":
+                require(args.authorization_ref == "D93" and args.input
+                        and args.expected_revision is not None and args.expected_epoch is not None,
+                        "BLOCKED_AUTHORIZATION", "D93 adoption requires bootstrap observations and the expected revision and epoch")
+                import continuous_control
+                continuous_control.adopt(controller, run, read_json(ROOT / ".project/automation/task-recipes.json"),
+                                         read_json(args.input), args.expected_revision, args.expected_epoch)
+                print(json.dumps(summary(run), indent=2))
+                return 0
             if args.command == "verify-bootstrap":
                 report = backend.verify_bootstrap(catalog())
                 print(json.dumps(report, indent=2))

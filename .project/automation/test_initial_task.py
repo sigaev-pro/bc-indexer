@@ -304,7 +304,7 @@ class ArtifactDriverTests(unittest.TestCase):
             proof = recovered["tasks"][verifier.TASK]["verification"]
             task_proofs.check_verification(proof, HEAD, BASE)
             self.assertEqual(proof["runtime"], "NOT_RUN")
-            self.assertEqual(set(controller.AUTHORIZATIONS), {"D86", "D92"})
+            self.assertEqual(set(controller.AUTHORIZATIONS), {"D86", "D92", "D93"})
 
 
 class ArtifactReceiptTests(unittest.TestCase):
@@ -424,7 +424,8 @@ class ArtifactReceiptTests(unittest.TestCase):
                 task = {"task_id": verifier.TASK, "workspace": {"base_sha": BASE},
                         "pull": {"number": PR_NUMBER, "comment_id": COMMENT_ID},
                         "worker": {"commit_sha": HEAD, "session_id": "worker-1"}, "verification": self.task_proof}
-                run = {"deadline": time.time() + 20, "recipes": {verifier.TASK: recipe_fixture()}}
+                run = {"deadline": time.time() + 20, "authorization": controller.AUTHORIZATION,
+                       "recipes": {verifier.TASK: recipe_fixture()}}
                 with patch.object(acceptance, "collect", return_value=snapshot), patch.object(backend, "mutate") as mutate:
                     with self.assertRaises(Blocked):
                         backend.do_merge(run, task, {"id": "merge"}, self.path / mode)
