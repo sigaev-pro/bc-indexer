@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Standalone entry point for component-update-v1."""
+
+from pathlib import Path
+import sys
+
+root = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(root / "scripts/versioning"), str(root / "build/native")]
+from update import main
+
+if __name__ == "__main__":
+    sys.exit(main())
