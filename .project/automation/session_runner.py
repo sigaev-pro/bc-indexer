@@ -151,7 +151,7 @@ def watchdog_cleanup(process, grace=2):
             "ownership": "unreaped direct supervisor; no resume between child census and final group termination"}
 
 
-def supervise(request_path, lock_fd):
+def supervise(request_path, lock_fd, on_interrupt=None):
     request_path = Path(request_path)
     request = acceptance.parse_json(request_path.read_text())
     directory = request_path.parent
@@ -163,22 +163,33 @@ def supervise(request_path, lock_fd):
         acceptance.require(saved["request_sha256"] == request_hash, "saved result belongs to another request")
         return saved
     claim_fd = os.open(directory / "session.lock", os.O_RDWR | os.O_CREAT, 0o600)
-    fcntl.flock(claim_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        fcntl.flock(claim_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BaseException:
+        os.close(claim_fd)
+        raise
     process = None
     interrupted = False
+    interruption_error = None
     old_handlers = {}
 
-    def interrupt(*_args):
-        nonlocal interrupted
+    def interrupt(signum, frame):
+        nonlocal interrupted, interruption_error
         interrupted = True
+        if on_interrupt is not None:
+            try:
+                on_interrupt(signum, frame)
+            except BaseException as error:
+                # A caller's interrupt exception must not bypass owned cleanup.
+                interruption_error = error
 
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        old_handlers[signum] = signal.signal(signum, interrupt)
-    stdout_path, stderr_path = directory / "stdout.jsonl", directory / "stderr.log"
-    started = time.time()
-    deadline = time.monotonic() + min(request.get("timeout_seconds", 3600), max(0, request["deadline"] - started))
-    reason, termination = "completed", "not-needed"
     try:
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            old_handlers[signum] = signal.signal(signum, interrupt)
+        stdout_path, stderr_path = directory / "stdout.jsonl", directory / "stderr.log"
+        started = time.time()
+        deadline = time.monotonic() + min(request.get("timeout_seconds", 3600), max(0, request["deadline"] - started))
+        reason, termination = "completed", "not-needed"
         evidence.atomic_json(directory / "started.json", {"request_sha256": request_hash,
                              "operation_id": request["operation_id"], "supervisor_pid": os.getpid(),
                              "started_at": started})
@@ -187,7 +198,24 @@ def supervise(request_path, lock_fd):
         with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
             os.chmod(stdout_path, 0o600)
             os.chmod(stderr_path, 0o600)
+            stopped = interrupted or Path(request["stop_file"]).exists()
+            if stopped or time.time() >= request["deadline"] or time.monotonic() >= deadline:
+                for stream in (stdout, stderr):
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                result = {"schema_version": 1, "operation_id": request["operation_id"],
+                          "request_sha256": request_hash, "started_at": started, "finished_at": time.time(),
+                          "exit_code": None, "reason": "stopped" if stopped else "timeout",
+                          "termination": "not-started", "cleanup_complete": True,
+                          "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
+                evidence.atomic_json(result_path, result)
+                if interruption_error is not None:
+                    raise interruption_error
+                return result
             with (directory / "stdin.txt").open("rb") as stdin:
+                acceptance.require(time.time() < request["deadline"] and time.monotonic() < deadline
+                                   and not interrupted and not Path(request["stop_file"]).exists(),
+                                   "session deadline or stop forbids worker dispatch")
                 process = subprocess.Popen(request["command"], cwd=request["cwd"], stdin=stdin,
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
                                            pass_fds=(lock_fd,), env=dict(os.environ, **request.get("env", {})))
@@ -213,6 +241,8 @@ def supervise(request_path, lock_fd):
                     break
                 else:
                     for key, _ in selector.select(timeout=0.1):
+                        if written >= request["log_limit"]:
+                            break
                         chunk = os.read(key.fd, min(65536, max(1, request["log_limit"] - written)))
                         if not chunk:
                             selector.unregister(key.fileobj)
@@ -246,14 +276,20 @@ def supervise(request_path, lock_fd):
                   "cleanup_complete": cleanup_complete,
                   "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
         evidence.atomic_json(result_path, result)
+        if interruption_error is not None:
+            raise interruption_error
         return result
     finally:
-        if process is not None and process.returncode is None:
-            terminate_group(process)
-            process.wait(timeout=10)
-        for signum, handler in old_handlers.items():
-            signal.signal(signum, handler)
-        os.close(claim_fd)
+        try:
+            if process is not None and process.returncode is None:
+                terminate_group(process)
+                process.wait(timeout=10)
+        finally:
+            try:
+                for signum, handler in old_handlers.items():
+                    signal.signal(signum, handler)
+            finally:
+                os.close(claim_fd)
 
 
 def main():

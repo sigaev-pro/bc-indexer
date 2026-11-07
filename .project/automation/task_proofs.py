@@ -26,7 +26,8 @@ def check_recipe(recipe, source):
     acceptance.require(recipe["role"] == "qa"
                        and set(recipe["allowed_paths"]) == {"test/evidence/", ".project/evidence/E01-01.evidence.md", ".project/PROJECT_STATUS.md"}
                        and set(recipe["required_files"]) == set(verifier.OUTPUTS) | {".project/evidence/E01-01.evidence.md"}
-                       and recipe["commands"] == [["python3", ".project/automation/ci.py"]],
+                       and recipe["commands"] == [["python3", ".project/automation/ci.py"],
+                                                  ["python3", "-I", "-m", "unittest", "discover", "-s", "test/evidence", "-p", "test_*.py"]],
                        "initial task recipe does not match its exact trusted output and path contract")
 
 
