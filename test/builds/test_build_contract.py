@@ -179,6 +179,55 @@ class UpdateTests(unittest.TestCase):
         self.fixture.add(url, [dict(tag_name="v9.0.0-beta", draft=False, prerelease=True)])
         self.assertEqual(self.invoke("update").returncode, 1)
 
+    def test_download_checksum_mismatch(self):
+        self.fixture.add("https://go.dev/dl/go3.2.1.linux-arm64.tar.gz", b"changed archive")
+        result = self.invoke("update")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse((self.root / "candidate.json").exists())
+
+    def test_image_platform_bytes_mismatch(self):
+        url = next(url for url in self.fixture.rows if "/library/golang/manifests/sha256:" in url)
+        self.fixture.add(url, packed(dict(schemaVersion=2, changed=True)))
+        self.assertEqual(self.invoke("update").returncode, 1)
+
+    def test_fixture_unknown_fields_and_boolean_status(self):
+        row = self.fixture.rows["https://go.dev/dl/?mode=json"]
+        row["extra"] = True
+        self.assertEqual(self.invoke().returncode, 2)
+        del row["extra"]
+        row["status"] = True
+        self.assertEqual(self.invoke().returncode, 2)
+
+    def test_native_bundle_pseudo_version_binding(self):
+        native = next(e for e in self.fixture.registry["components"] if e["id"] == "bor")["source"]
+        url = next(url for url in self.fixture.rows if url.startswith("https://raw.githubusercontent.com/" + native["repository"] + "/") and url.endswith("/go.mod"))
+        body = (self.root / self.fixture.rows[url]["body"]["path"]).read_bytes()
+        short = "123456789abc"
+        pseudo = "v0.1.0-20200102030405-" + short
+        body = body.replace(b"github.com/0xPolygon/cometbft v3.2.1", ("github.com/0xPolygon/cometbft " + pseudo).encode())
+        self.fixture.add(url, body)
+        self.fixture.add("https://api.github.com/repos/0xPolygon/cometbft/commits/" + short,
+                         dict(sha=short + "d" * 28, commit=dict(committer=dict(date="2020-01-02T03:04:05Z"))))
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads((self.root / "report.json").read_bytes())
+        selected = next(r["selected"] for r in report["components"] if r["id"] == "bor-cometbft")
+        self.assertEqual(selected["version"], pseudo)
+        self.assertEqual(selected["owner_component"], "bor")
+        (self.root / "report.json").unlink()
+        self.fixture.add("https://api.github.com/repos/0xPolygon/cometbft/commits/" + short,
+                         dict(sha=short + "d" * 28, commit=dict(committer=dict(date="2020-01-02T03:04:06Z"))))
+        self.assertEqual(self.invoke("update").returncode, 1)
+
+    def test_debian_epoch_tilde_and_revision_order(self):
+        # Import only product-owned helpers; no trusted test or oracle imports.
+        sys.path[:0] = [str(PROJECT / "scripts/versioning"), str(PROJECT / "build/native")]
+        from sources import debian_order
+        for lower, higher in (("1.0~rc1-1", "1.0-1"), ("1.0-9", "1.0-10"), ("99.0-1", "1:1.0-1"), ("1.0-1", "1.0-1+b1")):
+            self.assertLess(debian_order(lower, higher), 0)
+            self.assertGreater(debian_order(higher, lower), 0)
+        self.assertEqual(debian_order("1.01-1", "1.1-1"), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
