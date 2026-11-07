@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "case-result.schema.json",
+  "title": "One case result, evidence schema version 3",
+  "type": "object",
+  "required": ["schema_version", "ac_id", "network", "profile", "profile_manifest_digest", "fork_variant", "fixture_kind", "suite", "variant_id", "task_id", "fixture_id", "fixture_version", "applicability"],
+  "$ref": "evidence-definitions.schema.json#/$defs/caseProperties",
+  "properties": {
+    "schema_version": {"type": "integer", "const": 3},
+    "ac_id": {}, "network": {}, "profile": {}, "profile_manifest_digest": {}, "fork_variant": {}, "fixture_kind": {}, "suite": {}, "variant_id": {},
+    "task_id": {}, "fixture_id": {}, "fixture_version": {}, "applicability": {}, "reason": {}, "rule_ref": {},
+    "verdict": {"enum": ["NOT_RUN", "PASS", "FAIL"]},
+    "run_manifest_ref": {"$ref": "evidence-definitions.schema.json#/$defs/runRef"}
+  },
+  "additionalProperties": false,
+  "if": {"properties": {"applicability": {"const": "APPLICABLE"}}},
+  "then": {
+    "required": ["verdict"],
+    "if": {"properties": {"verdict": {"const": "NOT_RUN"}}},
+    "then": {"not": {"required": ["run_manifest_ref"]}},
+    "else": {"required": ["run_manifest_ref"]}
+  },
+  "else": {"not": {"anyOf": [{"required": ["verdict"]}, {"required": ["run_manifest_ref"]}]}}
+}

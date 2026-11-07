@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reader-boundary-manifest.schema.json",
+  "title": "D87 reader boundary evidence, version 1",
+  "type": "object",
+  "required": ["schema_version", "boundary_id", "artifact_path", "network", "profile", "profile_manifest_digest", "fork_variant", "fixture_kind", "suite", "case_identities", "run_started", "run_id", "run_manifest_path", "run_plan_ref", "oracle_ref", "expectation", "source_boundaries", "delivery_boundaries", "streams", "logical_comparison", "phase_times", "conditions", "reader_complete", "comparison_passed"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "boundary_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"},
+    "artifact_path": {"$ref": "evidence-definitions.schema.json#/$defs/text"},
+    "network": {"enum": ["ETH", "BSC", "POLY"]},
+    "profile": {"$ref": "evidence-definitions.schema.json#/$defs/runtimeProfile"},
+    "profile_manifest_digest": {"$ref": "evidence-definitions.schema.json#/$defs/digest"},
+    "fork_variant": {"$ref": "evidence-definitions.schema.json#/$defs/text", "not": {"const": "NOT_APPLICABLE"}},
+    "fixture_kind": {"enum": ["native-seam", "local-e2e", "public"]},
+    "suite": {"$ref": "evidence-definitions.schema.json#/$defs/suite"},
+    "case_identities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "evidence-definitions.schema.json#/$defs/identity"}},
+    "run_started": {"type": "boolean"},
+    "run_id": {"$ref": "#/$defs/nullableText"},
+    "run_manifest_path": {"$ref": "#/$defs/nullableText"},
+    "run_plan_ref": {"$ref": "#/$defs/nullableRef"},
+    "oracle_ref": {"$ref": "#/$defs/nullableRef"},
+    "expectation": {
+      "type": "object", "required": ["mode", "predicate_ref"],
+      "properties": {"mode": {"enum": ["positive_delivery", "declared_negative"]}, "predicate_ref": {"$ref": "#/$defs/nullableRef"}},
+      "additionalProperties": false,
+      "if": {"properties": {"mode": {"const": "positive_delivery"}}},
+      "then": {"properties": {"predicate_ref": {"type": "null"}}},
+      "else": {"properties": {"predicate_ref": {"$ref": "evidence-definitions.schema.json#/$defs/artifactRef"}}}
+    },
+    "source_boundaries": {"type": "array", "items": {"$ref": "#/$defs/sourceBoundary"}},
+    "delivery_boundaries": {"type": "array", "items": {"$ref": "#/$defs/deliveryBoundary"}},
+    "streams": {"type": "array", "items": {"$ref": "#/$defs/stream"}},
+    "logical_comparison": {
+      "type": "object", "required": ["expected_ref", "actual_ref", "diff_ref"],
+      "properties": {"expected_ref": {"$ref": "#/$defs/nullableRef"}, "actual_ref": {"$ref": "#/$defs/nullableRef"}, "diff_ref": {"$ref": "#/$defs/nullableRef"}},
+      "additionalProperties": false
+    },
+    "phase_times": {
+      "type": "object", "required": ["startup", "observation", "shutdown_drain", "stream_closure", "reconstruction", "comparison"],
+      "properties": {"startup": {"$ref": "#/$defs/phase"}, "observation": {"$ref": "#/$defs/phase"}, "shutdown_drain": {"$ref": "#/$defs/phase"}, "stream_closure": {"$ref": "#/$defs/phase"}, "reconstruction": {"$ref": "#/$defs/phase"}, "comparison": {"$ref": "#/$defs/phase"}},
+      "additionalProperties": false
+    },
+    "conditions": {
+      "type": "object", "required": ["source_closure", "delivery_closure", "terminal_fence", "stream_coverage", "reconstruction", "semantic_comparison"],
+      "properties": {"source_closure": {"$ref": "#/$defs/condition"}, "delivery_closure": {"$ref": "#/$defs/condition"}, "terminal_fence": {"$ref": "#/$defs/condition"}, "stream_coverage": {"$ref": "#/$defs/condition"}, "reconstruction": {"$ref": "#/$defs/condition"}, "semantic_comparison": {"$ref": "#/$defs/condition"}},
+      "additionalProperties": false
+    },
+    "reader_complete": {"type": "boolean"},
+    "comparison_passed": {"type": ["boolean", "null"]}
+  },
+  "additionalProperties": false,
+  "if": {"properties": {"run_started": {"const": true}}},
+  "then": {
+    "properties": {
+      "run_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"},
+      "run_manifest_path": {"$ref": "evidence-definitions.schema.json#/$defs/text"},
+      "run_plan_ref": {"$ref": "evidence-definitions.schema.json#/$defs/artifactRef"},
+      "oracle_ref": {"$ref": "evidence-definitions.schema.json#/$defs/artifactRef"}
+    }
+  },
+  "else": {
+    "properties": {
+      "run_id": {"type": "null"}, "run_manifest_path": {"type": "null"}, "reader_complete": {"const": false}, "comparison_passed": {"type": "null"},
+      "source_boundaries": {"maxItems": 0}, "delivery_boundaries": {"maxItems": 0}, "streams": {"maxItems": 0},
+      "logical_comparison": {"properties": {"expected_ref": {"type": "null"}, "actual_ref": {"type": "null"}, "diff_ref": {"type": "null"}}},
+      "conditions": {"additionalProperties": {"properties": {"status": {"const": "NOT_RUN"}}}},
+      "phase_times": {"additionalProperties": {"properties": {"started_at": {"type": "null"}, "finished_at": {"type": "null"}}}}
+    }
+  },
+  "$defs": {
+    "nullableText": {"anyOf": [{"type": "null"}, {"$ref": "evidence-definitions.schema.json#/$defs/text"}]},
+    "nullableTime": {"anyOf": [{"type": "null"}, {"$ref": "evidence-definitions.schema.json#/$defs/time"}]},
+    "nullableRef": {"anyOf": [{"type": "null"}, {"$ref": "evidence-definitions.schema.json#/$defs/artifactRef"}]},
+    "references": {"type": "array", "items": {"$ref": "evidence-definitions.schema.json#/$defs/artifactRef"}},
+    "generation": {"type": "integer", "minimum": 0},
+    "sourceBoundary": {
+      "type": "object", "required": ["source_id", "baseline_ref", "admission_set_ref", "terminal_frontier_ref", "transitions_ref"],
+      "properties": {"source_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "baseline_ref": {"$ref": "#/$defs/nullableRef"}, "admission_set_ref": {"$ref": "#/$defs/nullableRef"}, "terminal_frontier_ref": {"$ref": "#/$defs/nullableRef"}, "transitions_ref": {"$ref": "#/$defs/nullableRef"}},
+      "additionalProperties": false
+    },
+    "deliveryBoundary": {
+      "type": "object", "required": ["destination_id", "binding_digest", "episode_id", "generation", "manifest_refs", "highwater_ref", "seal_ref", "puback_ref", "attempt_census_ref", "attempt_classifications_ref"],
+      "properties": {
+        "destination_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "binding_digest": {"$ref": "evidence-definitions.schema.json#/$defs/digest"}, "episode_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "generation": {"$ref": "#/$defs/generation"},
+        "manifest_refs": {"$ref": "#/$defs/references"}, "highwater_ref": {"$ref": "#/$defs/nullableRef"}, "seal_ref": {"$ref": "#/$defs/nullableRef"}, "puback_ref": {"$ref": "#/$defs/nullableRef"}, "attempt_census_ref": {"$ref": "#/$defs/nullableRef"}, "attempt_classifications_ref": {"$ref": "#/$defs/nullableRef"}
+      },
+      "additionalProperties": false
+    },
+    "stream": {
+      "type": "object", "required": ["stream_id", "destination_id", "generation", "config_ref", "lower_sequence", "upper_sequence", "seal_ref", "coverage_ref", "raw_message_refs", "terminal_fence"],
+      "properties": {
+        "stream_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "destination_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "generation": {"$ref": "#/$defs/generation"},
+        "config_ref": {"$ref": "#/$defs/nullableRef"}, "lower_sequence": {"type": "integer", "minimum": 0}, "upper_sequence": {"type": ["integer", "null"], "minimum": 0},
+        "seal_ref": {"$ref": "#/$defs/nullableRef"}, "coverage_ref": {"$ref": "#/$defs/nullableRef"}, "raw_message_refs": {"$ref": "#/$defs/references"},
+        "terminal_fence": {
+          "type": "object", "required": ["implementation_ref", "conformance_ref", "process_events_ref", "ingress_restrictions_ref", "recovered_frontiers_ref"],
+          "properties": {"implementation_ref": {"$ref": "#/$defs/nullableRef"}, "conformance_ref": {"$ref": "#/$defs/nullableRef"}, "process_events_ref": {"$ref": "#/$defs/nullableRef"}, "ingress_restrictions_ref": {"$ref": "#/$defs/nullableRef"}, "recovered_frontiers_ref": {"$ref": "#/$defs/nullableRef"}},
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "phase": {
+      "type": "object", "required": ["started_at", "finished_at", "deadline_seconds"],
+      "properties": {"started_at": {"$ref": "#/$defs/nullableTime"}, "finished_at": {"$ref": "#/$defs/nullableTime"}, "deadline_seconds": {"type": "number", "exclusiveMinimum": 0}},
+      "additionalProperties": false
+    },
+    "condition": {
+      "type": "object", "required": ["status", "evidence_refs", "reason", "missing_obligations"],
+      "properties": {"status": {"enum": ["NOT_RUN", "SATISFIED", "FAILED", "INCOMPLETE"]}, "evidence_refs": {"$ref": "#/$defs/references"}, "reason": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "missing_obligations": {"type": "array", "items": {"$ref": "evidence-definitions.schema.json#/$defs/text"}}},
+      "additionalProperties": false,
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "SATISFIED"}}}, "then": {"properties": {"evidence_refs": {"minItems": 1}, "missing_obligations": {"maxItems": 0}}}},
+        {"if": {"properties": {"status": {"const": "FAILED"}}}, "then": {"properties": {"evidence_refs": {"minItems": 1}}}},
+        {"if": {"properties": {"status": {"const": "INCOMPLETE"}}}, "then": {"properties": {"missing_obligations": {"minItems": 1}}}},
+        {"if": {"properties": {"status": {"const": "NOT_RUN"}}}, "then": {"properties": {"evidence_refs": {"maxItems": 0}}}}
+      ]
+    }
+  }
+}

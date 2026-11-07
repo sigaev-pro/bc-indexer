@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "composite-manifest.schema.json",
+  "title": "Composite run linkage, evidence schema version 3",
+  "type": "object",
+  "required": ["schema_version", "run_id", "verdict", "correlation_id", "required_profiles", "children", "integration_outcome"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 3},
+    "run_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"},
+    "verdict": {"$ref": "evidence-definitions.schema.json#/$defs/executionVerdict"},
+    "correlation_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"},
+    "required_profiles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "evidence-definitions.schema.json#/$defs/runtimeProfile"}},
+    "children": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {
+        "type": "object", "required": ["path", "run_id", "sha256", "profile", "verdict"],
+        "properties": {"path": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "run_id": {"$ref": "evidence-definitions.schema.json#/$defs/text"}, "sha256": {"$ref": "evidence-definitions.schema.json#/$defs/digest"}, "profile": {"$ref": "evidence-definitions.schema.json#/$defs/runtimeProfile"}, "verdict": {"$ref": "evidence-definitions.schema.json#/$defs/executionVerdict"}},
+        "additionalProperties": false
+      }
+    },
+    "integration_outcome": {
+      "type": "object", "required": ["scenario", "verdict"],
+      "properties": {"scenario": {"const": "TC08"}, "verdict": {"$ref": "evidence-definitions.schema.json#/$defs/executionVerdict"}, "reason": {"$ref": "evidence-definitions.schema.json#/$defs/text"}},
+      "additionalProperties": false
+    },
+    "started_at": {"$ref": "evidence-definitions.schema.json#/$defs/time"},
+    "finished_at": {"$ref": "evidence-definitions.schema.json#/$defs/time"},
+    "phases": {"$ref": "evidence-definitions.schema.json#/$defs/phases"},
+    "resource_deadline_manifest_digest": {"$ref": "evidence-definitions.schema.json#/$defs/digest"},
+    "run_mode": {"enum": ["standard", "extended"]}
+  },
+  "additionalProperties": false,
+  "if": {"anyOf": [{"required": ["started_at"]}, {"required": ["finished_at"]}, {"required": ["phases"]}, {"required": ["resource_deadline_manifest_digest"]}]},
+  "then": {"required": ["started_at", "finished_at", "phases", "resource_deadline_manifest_digest"]}
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 3,
+  "profiles": {
+    "ethereum-mainnet": "ETH",
+    "ethereum-sepolia": "ETH",
+    "ethereum-hoodi": "ETH",
+    "bsc-mainnet": "BSC",
+    "bsc-testnet": "BSC",
+    "polygon-pos-mainnet": "POLY",
+    "polygon-pos-amoy": "POLY"
+  }
+}

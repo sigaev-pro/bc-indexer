@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prerequisite-plan.schema.json",
+  "title": "Stage prerequisite constraints",
+  "type": "object",
+  "required": ["stages"],
+  "properties": {
+    "stages": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {
+        "type": "object", "required": ["stage", "dependencies", "evidence"],
+        "properties": {
+          "stage": {"enum": ["E01", "E02", "E03", "E04", "E05", "E06", "E07"]},
+          "dependencies": {"type": "array", "uniqueItems": true, "items": {"enum": ["E01", "E02", "E03", "E04", "E05", "E06", "E07"]}},
+          "evidence": {"$ref": "evidence-definitions.schema.json#/$defs/textList"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
