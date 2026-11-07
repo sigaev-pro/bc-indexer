@@ -27,7 +27,7 @@ TASK, CONTRACT, OUTPUTS = contract.TASK, contract.CONTRACT, contract.OUTPUTS
 PACK_MODULES = ("acceptance", "acceptance_receipts", "build_candidate_guard", "build_contract", "build_execution", "build_materials", "build_os",
                 "build_product_commands", "build_resources", "build_task_verifier", "build_update_execution", "build_update_vectors",
                 "build_updates", "build_vectors", "check_docs", "check_environment", "ci", "controller", "controller_backend",
-                "controller_handoff", "evidence", "evidence_task_verifier", "launch_control", "reader_evidence_vectors", "session_runner", "task_proofs")
+                "controller_handoff", "verification_recovery", "evidence", "evidence_task_verifier", "launch_control", "reader_evidence_vectors", "session_runner", "task_proofs")
 PACK_FILES = tuple(".project/automation/" + name + ".py" for name in PACK_MODULES) + (
     ".project/automation/build-task-contract.md", ".project/automation/task-recipes.json",
     ".project/automation/evidence-task-contract.md", ".project/automation/reader-evidence-contract.md",

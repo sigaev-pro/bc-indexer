@@ -132,16 +132,47 @@ class Store:
     def stopped(self, run_id):
         return (self.directory / "stop" / (run_id + ".json")).exists()
 
+    @contextmanager
+    def stop_lock(self, run_id):
+        """Serialize only marker publication/acknowledgement, independently of the run lock."""
+        self.run_path(run_id)
+        numbers = {signal.SIGTERM, signal.SIGINT}
+        previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, numbers)
+        fd = None
+        try:
+            directory = self.directory / "stop-locks"
+            evidence.durable_directory(directory)
+            fd = os.open(directory / (run_id + ".lock"), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            if fd is not None:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+
+    def stop_generation(self, run_id):
+        path = self.directory / "stop" / (run_id + ".json")
+        if not path.exists():
+            return None
+        with self.stop_lock(run_id):
+            return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+
     def stop(self, run_id):
         self.load(run_id)
-        evidence.atomic_json(self.directory / "stop" / (run_id + ".json"),
-                             {"run_id": run_id, "requested_at": time.time(), "reason": "operator stop"})
+        with self.stop_lock(run_id):
+            evidence.atomic_json(self.directory / "stop" / (run_id + ".json"),
+                                 {"run_id": run_id, "generation": uuid.uuid4().hex,
+                                  "requested_at": time.time(), "reason": "operator stop"})
 
-    def clear_stop(self, run_id):
-        path = self.directory / "stop" / (run_id + ".json")
-        if path.exists():
-            path.unlink()
-            evidence.sync_directory(path.parent)
+    def clear_stop(self, run_id, observed):
+        if observed is None:
+            return
+        with self.stop_lock(run_id):
+            path = self.directory / "stop" / (run_id + ".json")
+            if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() == observed:
+                path.unlink()
+                evidence.sync_directory(path.parent)
 
     def lease(self, run, task):
         path = self.directory / "leases" / (task["task_id"] + ".json")
@@ -168,8 +199,11 @@ class Store:
             evidence.atomic_json(path, dict(actual, released=True))
 
 
+UNOBSERVED_STOP = object()
+
+
 @contextmanager
-def stop_signals(store, run_id, acknowledge=False):
+def stop_signals(store, run_id, acknowledge=False, observed_stop=UNOBSERVED_STOP):
     """Scope durable stop handlers; defer new signals until prior stop acknowledgement ends."""
     numbers = {signal.SIGTERM, signal.SIGINT}
     previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, numbers)
@@ -178,7 +212,9 @@ def stop_signals(store, run_id, acknowledge=False):
         for number in numbers:
             previous[number] = signal.signal(number, lambda *_: store.stop(run_id))
         if acknowledge:
-            store.clear_stop(run_id)
+            if observed_stop is UNOBSERVED_STOP:
+                observed_stop = store.stop_generation(run_id)
+            store.clear_stop(run_id, observed_stop)
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
         yield
     finally:
@@ -188,6 +224,20 @@ def stop_signals(store, run_id, acknowledge=False):
                 signal.signal(number, handler)
         finally:
             signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+
+
+def recovery_resume_guard(store, run, resume, automatic):
+    """Explicit resume may acknowledge a prior stop, but cannot retry a failed verifier."""
+    failed = any(task.get("state") == "FAILED" and task.get("pending", {}).get("action") == "verify"
+                 for task in run["tasks"].values())
+    if not (run.get("failure_recovery") or failed):
+        return
+    if resume and not automatic:
+        observed = store.stop_generation(run["run_id"])
+        if observed is not None:
+            with stop_signals(store, run["run_id"], acknowledge=True, observed_stop=observed):
+                require(not store.stopped(run["run_id"]), "STOPPED", "a new operator stop arrived during acknowledgement")
+    raise Blocked("BLOCKED_RECOVERY", "archive the diagnosed failed verification or finish its exact retained lease release; no work was resumed")
 
 
 class Controller:
@@ -438,6 +488,7 @@ class Controller:
                 "budget renewal and diagnostic retries require explicit resume")
         require(not (renew_budget and self.launch(run)), "BLOCKED_BUDGET", "accounted launches cannot reset their policy or history through budget renewal")
         require(not renew_budget or run["status"] == "BUDGET_STOP", "BLOCKED_BUDGET", "only an explicit budget stop can receive a new budget window")
+        recovery_resume_guard(self.store, run, resume, automatic)
         with stop_signals(self.store, run["run_id"], acknowledge=resume and not automatic and acknowledge_stop):
             return self._run(run, resume, renew_budget, automatic, retry_session)
 
@@ -523,12 +574,14 @@ def summary(run):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["verify-bootstrap", "initialize", "run", "resume", "status", "stop",
-                                             "account-sessions", "reserve-session", "handoff", "adopt-candidate", "adopt-authorization"])
+                                             "account-sessions", "reserve-session", "handoff", "adopt-candidate", "adopt-authorization",
+                                             "archive-failed-verification"])
     parser.add_argument("--repo", default="sigaev-pro/bc-indexer")
     parser.add_argument("--run-id")
     parser.add_argument("--input", type=Path, help="Explicit coordinator observations, reservation, or candidate attestation JSON.")
     parser.add_argument("--expected-revision", type=int)
     parser.add_argument("--expected-epoch", type=int)
+    parser.add_argument("--inspect", action="store_true", help="Inspect failed-verification bindings without changing run, lease, stop, or ledger state.")
     parser.add_argument("--capture-dir", type=Path, help="Directory containing durable pre-merge captures for manually accepted tasks.")
     parser.add_argument("--stage-limit", choices=STAGES, default="BOOT")
     parser.add_argument("--authorization-ref", choices=sorted(AUTHORIZATIONS), default="D86")
@@ -538,6 +591,7 @@ def main():
     parser.add_argument("--retry-session", action="store_true", help="Explicitly allow one diagnostic retry of a failed model session with proven cleanup.")
     args = parser.parse_args()
     try:
+        require(not args.inspect or args.command == "archive-failed-verification", "BLOCKED_RECOVERY", "inspection requires the failed-verification command")
         require(not (args.automatic or args.retry_session or args.renew_budget) or args.command == "resume",
                 "BLOCKED_RECOVERY_MODE", "recovery options require resume")
         require(not args.automatic or not (args.retry_session or args.renew_budget),
@@ -589,6 +643,12 @@ def main():
                         "BLOCKED_AUTHORIZATION", "resume cannot change the run authorization")
                 require(not args.renew_budget or (args.authorization_ref == "D86" and run["status"] == "BUDGET_STOP"),
                         "BLOCKED_BUDGET", "this run cannot renew its budget")
+                if args.command == "resume":
+                    recovery_resume_guard(store, run, True, args.automatic)
+                require(not run.get("failure_recovery") or args.command == "archive-failed-verification",
+                        "BLOCKED_RECOVERY", "finish the retained failed-verification lease release first")
+                if args.command == "archive-failed-verification":
+                    require(not store.stopped(run["run_id"]), "STOPPED", "operator stop forbids failed-verification recovery")
                 if args.command == "resume" and args.automatic and (store.stopped(run["run_id"]) or run["status"] != "RUNNING"):
                     if store.stopped(run["run_id"]):
                         run["status"] = "STOPPED"
@@ -598,8 +658,16 @@ def main():
                 signal_contexts.enter_context(stop_signals(store, run["run_id"], acknowledge=args.command == "resume" and not args.automatic))
             backend = RealBackend(ROOT, root, store, args.repo, args.capture_dir,
                                   AUTHORIZATIONS[args.authorization_ref] if args.command != "verify-bootstrap" else None,
-                                  stop_file=store.directory / "stop" / (args.run_id + ".json") if args.command == "resume" else None)
+                                  stop_file=store.directory / "stop" / (args.run_id + ".json") if args.command in {"resume", "archive-failed-verification"} else None)
             controller = Controller(store, backend)
+            if args.command == "archive-failed-verification":
+                require(args.input and args.expected_revision is not None and args.expected_epoch is not None,
+                        "BLOCKED_RECOVERY", "archival requires explicit diagnosis input, revision, and epoch")
+                import verification_recovery
+                result = verification_recovery.archive(controller, run, read_json(args.input),
+                                                       args.expected_revision, args.expected_epoch, args.inspect)
+                print(json.dumps(result, indent=2))
+                return 0
             if args.command == "adopt-authorization":
                 require(args.authorization_ref == "D93" and args.input
                         and args.expected_revision is not None and args.expected_epoch is not None,

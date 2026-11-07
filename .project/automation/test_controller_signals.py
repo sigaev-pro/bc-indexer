@@ -118,18 +118,22 @@ class ControllerSignalTests(unittest.TestCase):
                     self.assertFalse(session_runner.live_group_members(controller.read_json(heartbeat)["process_group"]))
 
     def test_new_signal_during_prior_stop_acknowledgement_is_not_cleared(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            store = Store(Path(temporary) / "state")
-            with store.lock():
-                run = Controller(store, FakeBackend()).create(graph(), {})
-                store.stop(run["run_id"])
-                clear = store.clear_stop
-                def signal_before_clear(run_id):
-                    os.kill(os.getpid(), signal.SIGTERM)
-                    clear(run_id)
-                with patch.object(store, "clear_stop", side_effect=signal_before_clear):
-                    with controller.stop_signals(store, run["run_id"], acknowledge=True):
-                        self.assertTrue(store.stopped(run["run_id"]), "new pending SIGTERM was erased by prior-stop acknowledgement")
+        for number in (signal.SIGTERM, signal.SIGINT):
+            for boundary in ("stop_generation", "clear_stop"):
+                with self.subTest(number=number, boundary=boundary), tempfile.TemporaryDirectory() as temporary:
+                    store = Store(Path(temporary) / "state")
+                    with store.lock():
+                        run = Controller(store, FakeBackend()).create(graph(), {})
+                        store.stop(run["run_id"])
+                        original = getattr(store, boundary)
+                        def interrupt(*args):
+                            mask = signal.pthread_sigmask(signal.SIG_BLOCK, set())
+                            self.assertIn(number, mask, "acknowledgement must defer signals before observing a generation")
+                            os.kill(os.getpid(), number)
+                            return original(*args)
+                        with patch.object(store, boundary, side_effect=interrupt):
+                            with controller.stop_signals(store, run["run_id"], acknowledge=True):
+                                self.assertTrue(store.stopped(run["run_id"]), "new pending signal was erased by prior-stop acknowledgement")
 
     def test_ordinary_command_restores_handlers_on_normal_timeout_and_install_failure(self):
         for outcome in ("normal", "timeout", "install-failure"):

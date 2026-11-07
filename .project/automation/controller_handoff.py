@@ -8,6 +8,7 @@ import evidence
 
 
 def boundary(controller, run, revision, epoch):
+    require(not run.get("failure_recovery"), "BLOCKED_HANDOFF", "failed-verification lease release is still pending")
     require(run["revision"] == revision and run.get("configuration_epoch", 1) == epoch,
             "BLOCKED_REVISION", "run revision or configuration epoch changed; inspect current state")
     require(controller.launch(run) is not None, "BLOCKED_AUTHORIZATION", "handoff cannot widen or reset a D86 run")
@@ -77,6 +78,9 @@ def adopt(controller, run, document, revision, epoch):
             and controller.backend.eligible_recipe(task_id, run["recipes"]),
             "BLOCKED_UNCONFIGURED_VERIFICATION", "candidate has no eligible task-specific adapter")
     task = run["tasks"][task_id]
+    failures = task.get("failed_verifications", [])
+    require(document["head_sha"] not in {row["head_sha"] for row in failures},
+            "BLOCKED_EXTERNAL_CANDIDATE", "a failed verification requires a different reviewed candidate")
     require(task["state"] in {"PLANNED", "READY", "REVIEW", "IMPLEMENTING", "BLOCKED"}
             and not task.get("verification") and not task.get("pull") and not task.get("receipt"),
             "BLOCKED_EXTERNAL_CANDIDATE", "task already has verification, publication, or acceptance to reconcile")

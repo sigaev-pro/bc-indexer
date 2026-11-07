@@ -99,12 +99,31 @@ class Observations:
 
     def pages(self, url):
         initial, seen, result = urllib.parse.urlsplit(url), set(), []
+        named = re.fullmatch(r"/repos/([^/]+/[^/]+)(/.*)", initial.path) if initial.netloc == "api.github.com" else None
+        metadata_url = "https://api.github.com/repos/" + named[1] if named else None
+        alias = None
+
+        def repository_alias():
+            metadata = self.json(metadata_url)
+            contract.require(type(metadata) is dict and type(metadata.get("id")) is int and metadata["id"] > 0
+                             and metadata.get("full_name") == named[1] and metadata.get("url") == metadata_url,
+                             "official repository metadata has an invalid or different identity")
+            return "/repositories/" + str(metadata["id"]) + named[2]
+
+        if metadata_url in self.rows:
+            alias = repository_alias()
         while url:
             parsed = urllib.parse.urlsplit(url)
-            contract.require(url not in seen and len(seen) < 64 and parsed.scheme == initial.scheme
-                             and parsed.netloc == initial.netloc and parsed.path == initial.path,
+            contract.require(len(seen) < 64 and parsed.scheme == initial.scheme
+                             and parsed.netloc == initial.netloc,
                              "official pagination loops or changes source identity")
-            seen.add(url)
+            if parsed.path != initial.path and named and alias is None:
+                alias = repository_alias()
+            contract.require(parsed.path == initial.path or (alias is not None and parsed.path == alias),
+                             "official pagination loops or changes source identity")
+            identity = (initial.path, tuple(sorted(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)))) if named else url
+            contract.require(identity not in seen, "official pagination loops or changes source identity")
+            seen.add(identity)
             body = self.json(url)
             contract.require(type(body) is list, "official release or tag page is not a list")
             result.extend(body)
