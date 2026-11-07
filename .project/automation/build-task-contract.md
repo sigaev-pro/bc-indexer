@@ -160,6 +160,15 @@ discovery and independent refresh still run; retained build inputs do not
 replace those live checks. Without the paired options, acquisition still
 fetches the exact pinned inputs from their configured URLs.
 
+APT `--print-uris` archive rows contain a quoted local mirror URI, destination
+basename, and size, with an optional fourth display-digest field. Accept both
+three- and four-field forms. Validate any present digest's syntax, but use the
+authenticated index's exact filename, size, and SHA-256 to authorize and verify
+the archive. Decode percent escapes in the source URI once; preserve APT's
+destination basename, including an encoded epoch. Reject unsafe URI components,
+path traversal, malformed rows, and cache symlinks. The display digest never
+replaces signed SHA-256 verification.
+
 The five native/support clients are Geth, BSC, Bor, Prysm, and Heimdall. The ten separate module roots additionally include NATS server, gRPC Go, NATS Go, Protobuf Go, and grocksdb. Full compiler/runtime OS closures belong to the Go and Debian images. Gateway/reader images, bootstrap manifests, and fixture contracts retain their later task owners.
 
 The current execution route builds linux/amd64 and binds every one of the seven network profiles explicitly. Arm64 build, ABI, and runtime results remain NOT_RUN. The selected descriptors are candidates, not established support. Record actual host Docker/Git/Python/GitHub CLI evidence separately from candidate deployment-tool versions. One actual fixed build and complete immutable inputs are required; a second forced build is not mandatory, and `repeat_build` remains NOT_RUN without that execution. Native chain execution and NATS delivery remain separate gates.
