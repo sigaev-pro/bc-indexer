@@ -5,6 +5,7 @@ import copy
 import functools
 import gzip
 import hashlib
+import io
 import lzma
 from pathlib import Path
 import re
@@ -156,9 +157,12 @@ class Packages:
             self.urls.update(transport.used - before)
             digest = hashlib.sha256(payload).hexdigest()
             self.indexes.append(dict(url=url, sha256=digest))
-            decoder = gzip.decompress if compression == "gz" else lzma.decompress
-            decoded = decoder(payload)
-            need(len(decoded) <= 512 * 1024**2, "Decoded package index exceeds the size bound")
+            maximum = 512 * 1024**2
+            stream = (gzip.GzipFile(fileobj=io.BytesIO(payload), mode="rb") if compression == "gz"
+                      else lzma.LZMAFile(io.BytesIO(payload), mode="rb"))
+            with stream:
+                decoded = stream.read(maximum + 1)
+            need(len(decoded) <= maximum, "Decoded package index exceeds the size bound")
             for row in control_records(decoded.decode()):
                 if row.get("Package") not in wanted:
                     continue
