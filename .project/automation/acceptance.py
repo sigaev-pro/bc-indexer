@@ -154,17 +154,17 @@ def evaluate(snapshot):
         require(status["description"] == f"Review SHA256: {digest}", "review evidence changed after its status was published")
         extra = {}
         if not task.startswith("BOOT-"):
-            import evidence_task_verifier as artifact_verifier
             import task_proofs
-            require(task == artifact_verifier.TASK, "this product task has no acceptance adapter")
+            require(task_proofs.configured(task), "this product task has no acceptance adapter")
             proof = task_proofs.check_verification(snapshot["task_verification"], head, base)
+            require(proof["task_id"] == task, "task proof belongs to another product task")
             require(review.get("controller_verification") == task_proofs.publication(proof),
                     "task proof differs from the coordinator's verification attestation")
             ancestry = snapshot["verifier_source_ancestry"]
             require(ancestry["status"] in {"identical", "ahead"}
                     and ancestry["merge_base_commit"]["sha"] == proof["verifier_source_commit"],
                     "trusted verifier source was not accepted before the candidate base")
-            extra = {"scope": "artifact-conformance", "runtime": "NOT_RUN", "task_proof_sha256": task_proofs.publication(proof)["proof_sha256"]}
+            extra = {"scope": task_proofs.publication(proof)["scope"], "runtime": "NOT_RUN", "task_proof_sha256": task_proofs.publication(proof)["proof_sha256"]}
         return {"verdict": "PASS", "task_id": task, "head_sha": head, "base_sha": base, **extra,
                 "ci_run_id": run["id"], "review_url": comment["html_url"],
                 "review_status_id": status["id"], "errors": []}
@@ -185,8 +185,8 @@ def collect(repository, number, task, comment_id, coordinator, implementer, task
     require(re.fullmatch(TASK_PATTERN, task), "invalid task ID")
     require(number > 0 and comment_id > 0, "pull request and comment IDs must be positive")
     if not task.startswith("BOOT-"):
-        import evidence_task_verifier as artifact_verifier
-        require(task == artifact_verifier.TASK and task_verification is not None,
+        import task_proofs
+        require(task_proofs.configured(task) and task_verification is not None and task_verification["task_id"] == task,
                 "product acceptance requires the configured exact-task verification proof")
     pull = github(repository, f"pulls/{number}")
     head, base = pull["head"]["sha"], pull["base"]["sha"]

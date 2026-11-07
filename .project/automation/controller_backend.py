@@ -38,7 +38,7 @@ class RealBackend:
                            "source_state": "modified" if self.git(self.source, "status", "--porcelain=v1") else "clean",
                            "commit_contains_executing_files": not bool(self.git(self.source, "status", "--porcelain=v1")),
                            "source_sha256": {name: hashlib.sha256((self.source / ".project/automation" / name).read_bytes()).hexdigest()
-                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "acceptance_receipts.py", "evidence.py", "acceptance.py", "evidence_task_verifier.py", "task_proofs.py", "launch_control.py")}}
+                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "build_candidate_guard.py", "acceptance_receipts.py", "evidence.py", "acceptance.py", "evidence_task_verifier.py", "task_proofs.py", "launch_control.py", "build_task_verifier.py", "build_contract.py", "build_execution.py", "build_resources.py", "build_materials.py", "build_os.py", "build_product_commands.py", "build_updates.py", "build_update_execution.py")}}
         self.roles = None
         self.cached_receipts = None
 
@@ -185,7 +185,7 @@ class RealBackend:
                 result[task] = self.ledger.save(self.ledger.historical(task))
         if self.ledger.directory.exists():
             for path in sorted(self.ledger.directory.glob("*.json")):
-                require(path.stem.startswith("BOOT-") or path.stem == artifact_verifier.TASK,
+                require(path.stem.startswith("BOOT-") or task_proofs.configured(path.stem),
                         "BLOCKED_UNCONFIGURED_VERIFICATION", "receipt has no configured task acceptance adapter")
                 result[path.stem] = self.ledger.load(path.stem)
         if self.captures.exists():
@@ -197,7 +197,7 @@ class RealBackend:
                 require(task in run["catalog"], "BLOCKED_EVIDENCE", "capture names an unknown task")
                 if task in result:
                     continue
-                require(task.startswith("BOOT-") or (task == artifact_verifier.TASK and bundle["snapshot"].get("task_verification")),
+                require(task.startswith("BOOT-") or (task_proofs.configured(task) and bundle["snapshot"].get("task_verification")),
                         "BLOCKED_EVIDENCE", "a generic product capture is insufficient; retain its authenticated task proof")
                 try:
                     receipt = self.ledger.from_capture(bundle, {"capture_origin": "retained coordinator capture",
@@ -233,7 +233,7 @@ class RealBackend:
                 "initial_artifact_task": {"task_id": artifact_verifier.TASK, "contract": artifact_verifier.CONTRACT,
                     "configured": True, "trusted_pack": artifact_verifier.pack(self.source), "authorization_required": True},
                 "unconfigured_e01_tasks": sorted(task for task, spec in tasks.items()
-                    if spec["stage"] == "E01" and task != artifact_verifier.TASK),
+                    if spec["stage"] == "E01" and not (task_proofs.configured(task) and task in recipes)),
                 "executing_source": self.provenance}
 
     def snapshot_recipes(self, recipes):
@@ -267,16 +267,16 @@ class RealBackend:
             return False
         if task_id.startswith("BOOT-"):
             return True
-        if task_id != artifact_verifier.TASK:
+        if not task_proofs.configured(task_id):
             return False
         self.artifact_recipe({"recipes": recipes}, {"task_id": task_id})
         return True
 
     def artifact_recipe(self, run, task):
-        require(task["task_id"] == artifact_verifier.TASK, "BLOCKED_UNCONFIGURED_VERIFICATION",
+        require(task_proofs.configured(task["task_id"]), "BLOCKED_UNCONFIGURED_VERIFICATION",
                 "this product task has no configured verifier or acceptance adapter")
         try:
-            task_proofs.check_recipe(run["recipes"][task["task_id"]], self.source)
+            task_proofs.check_recipe(run["recipes"][task["task_id"]], self.source, task["task_id"])
         except (ValueError, KeyError, TypeError) as error:
             raise Blocked("BLOCKED_VERIFIER_CHANGED", str(error)) from error
 
@@ -412,7 +412,7 @@ class RealBackend:
         identifiers = [operation["id"]]
         if operation["action"] == "verify":
             count = len(run["recipes"][task["task_id"]]["commands"])
-            if task["task_id"] == artifact_verifier.TASK:
+            if task_proofs.configured(task["task_id"]):
                 count += 1
             identifiers = [operation["id"] + "-check-" + str(number)
                            for number in range(count)]
@@ -441,6 +441,13 @@ class RealBackend:
                         "retained session instructions or logs changed")
             require(result.get("cleanup_complete") is True and result["termination"] in {"already-exited", "graceful", "forced", "not-started"},
                     "BLOCKED_SESSION_CLEANUP", "retained session lacks proven complete process-group cleanup")
+            if "owned_docker" in request:
+                import build_resources
+                try:
+                    build_resources.validate_cleanup(request["owned_docker"], result["docker_cleanup"])
+                    require(not build_resources.members(request["owned_docker"]), "BLOCKED_SESSION_CLEANUP", "owned Docker resources remain after the retained execution")
+                except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
+                    raise Blocked("BLOCKED_SESSION_CLEANUP", str(error)) from error
             if result["reason"] == "stopped":
                 outcome = outcome or "stopped"
             elif result["reason"] != "completed" or result["exit_code"] != 0:
@@ -455,23 +462,36 @@ class RealBackend:
         return {"operation_id": operation["id"], "outcome": outcome or "completed", "sessions": records,
                 "cleanup_complete": bool(records) and all(record["cleanup_complete"] for record in records)}
 
-    def supervised(self, run, operation_id, command, cwd, stdin="", timeout=3600, environment=None):
+    def supervised(self, run, operation_id, command, cwd, stdin="", timeout=3600, environment=None, owned_images=None):
         self.check_stop(run)
         remaining = min(timeout, self.remaining(), run["deadline"] - time.time())
         require(remaining > 0, "BUDGET_STOP", "session cannot start after its launch deadline")
         directory = self.root / ".project/automation/runs" / run["run_id"] / operation_id
         evidence.durable_directory(directory)
         request_path = directory / "request.json"
+        if owned_images is not None:
+            command = [*command, "--request", str(request_path)]
         request = {"operation_id": operation_id, "command": command, "cwd": str(cwd),
                    "deadline": min(run["deadline"], time.time() + remaining),
                    "timeout_seconds": remaining,
                    "stop_file": str(self.store.directory / "stop" / (run["run_id"] + ".json")),
                    "log_limit": session_runner.LOG_LIMIT, "env": environment or {},
                    "stdin_sha256": hashlib.sha256(stdin.encode()).hexdigest()}
+        if owned_images is not None:
+            import secrets
+            import build_resources
+            previous = read_json(request_path) if request_path.exists() else {}
+            request["owned_docker"] = {"schema_version": 1, "run_id": run["run_id"],
+                "task_id": "E01-01.builds", "operation_id": operation_id,
+                "nonce": previous.get("owned_docker", {}).get("nonce", secrets.token_hex(32)),
+                "images": owned_images}
+            build_resources.validate(request["owned_docker"])
         if request_path.exists():
             saved = read_json(request_path)
             require(all(saved[key] == request[key] for key in ("operation_id", "command", "cwd", "stop_file", "env", "stdin_sha256")),
                     "BLOCKED_SESSION", "retained session request differs from the resumed command")
+            require(saved.get("owned_docker") == request.get("owned_docker"),
+                    "BLOCKED_SESSION", "retained Docker ownership differs from the resumed command")
             request = saved
         else:
             # The stdin file contains instructions, never a saved process environment.
@@ -503,6 +523,14 @@ class RealBackend:
                 expired = time.monotonic() >= watchdog_deadline or time.time() >= request["deadline"] + grace
                 if stop or expired:
                     cleanup = session_runner.watchdog_cleanup(process)
+                    cleanup["candidate_groups"] = session_runner.build_candidate_guard.confirm_all(directory / "candidate-groups")
+                    if not cleanup["candidate_groups"]["complete"]:
+                        cleanup["cleanup_uncertain"] = True
+                    if "owned_docker" in request:
+                        import build_resources
+                        cleanup["docker"] = build_resources.cleanup(request["owned_docker"], directory / "docker-resources.json")
+                        if not cleanup["docker"]["complete"]:
+                            cleanup["cleanup_uncertain"] = True
                     evidence.atomic_json(directory / "watchdog.json", {
                         "operation_id": operation_id, "supervisor_pid": process.pid,
                         "reason": "operator stop" if stop else "monotonic watchdog timeout", "cleanup": cleanup})
@@ -521,6 +549,14 @@ class RealBackend:
             raise Blocked("STOPPED" if stopped else "FAILED_SESSION", "parent watchdog stopped an unresponsive supervisor; inspect retained cleanup evidence")
         require(result.get("cleanup_complete") is True, "BLOCKED_SESSION_CLEANUP",
                 "session lacks proven complete process-group cleanup; preserve work for reviewed recovery")
+        if "owned_docker" in request:
+            import build_resources
+            try:
+                build_resources.validate_cleanup(request["owned_docker"], result["docker_cleanup"])
+                require(not build_resources.members(request["owned_docker"]), "BLOCKED_SESSION_CLEANUP",
+                        "owned Docker containers remain after the retained cleanup")
+            except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
+                raise Blocked("BLOCKED_SESSION_CLEANUP", "owned Docker cleanup is unproved: " + str(error)) from error
         if result["reason"] == "stopped":
             raise Blocked("STOPPED", "supervised process stopped; work and logs are retained")
         require(result["reason"] == "completed" and result["exit_code"] == 0,
@@ -550,6 +586,13 @@ class RealBackend:
                                 "Required outputs: " + json.dumps(recipe["required_files"]) +
                                 ". The trusted verifier and recipe are outside your allowed paths. "
                                 "Synthetic bootstrap vectors are test inputs, never product runtime evidence.")
+        elif task["task_id"] == "E01-01.builds":
+            handoff["task"] += ("\nFollow .project/automation/build-task-contract.md. Required outputs: " + json.dumps(recipe["required_files"]) +
+                ". Implement the closed plan, materialized preflight, and standalone check/update interfaces. "
+                "The controller owns actual native compilation, signature verification, Docker lifecycle, and retained build proof. "
+                "Do not start native builds, containers, nodes, or services during authoring. "
+                "Use independently authored synthetic unit inputs; do not read or copy the trusted *_vectors.py oracle answers. "
+                "The accepted registry and source locks are read-only; update writes a separate candidate and never promotes the active lock.")
         if run["authorization"]["reference"] == "D92":
             handoff.update(hard_deadline=run["authorization"]["hard_deadline"],
                            configuration_epoch=run["configuration_epoch"], shared_invocations_used=run["invocations"])
@@ -618,8 +661,8 @@ class RealBackend:
 
     def external_candidate(self, run, task, document):
         """Check real Git outputs; this is provenance, not task acceptance."""
-        require(document["task_id"] == artifact_verifier.TASK, "BLOCKED_UNCONFIGURED_VERIFICATION",
-                "external adoption is configured only for the initial evidence artifact task")
+        require(task_proofs.configured(document["task_id"]) and document["task_id"] == task["task_id"], "BLOCKED_UNCONFIGURED_VERIFICATION",
+                "external adoption requires an exact configured task adapter")
         self.artifact_recipe(run, task)
         require(all(re.fullmatch(acceptance.SHA_PATTERN, document[key]) for key in ("head_sha", "base_sha"))
                 and document["head_sha"] != document["base_sha"], "BLOCKED_EXTERNAL_CANDIDATE", "candidate needs exact distinct Git commits")
@@ -671,17 +714,22 @@ class RealBackend:
             files[name] = hashlib.sha256((workspace / name).read_bytes()).hexdigest()
         checks = []
         commands = list(recipe["commands"])
-        artifact = task["task_id"] == artifact_verifier.TASK
+        artifact = task_proofs.configured(task["task_id"])
+        build = task["task_id"] == "E01-01.builds"
         if artifact:
             self.artifact_recipe(run, task)
-            commands.append([sys.executable, "-I", str(self.source / ".project/automation/evidence_task_verifier.py"),
+            driver = "build_task_verifier.py" if build else "evidence_task_verifier.py"
+            commands.append([sys.executable, "-I", str(self.source / ".project/automation" / driver),
                              "--candidate", str(workspace)])
         for number, command in enumerate(commands):
             require(isinstance(command, list) and command and all(isinstance(arg, str) for arg in command),
                     "BLOCKED_VERIFICATION", "verification command must be an argument array")
-            execution_directory, execution = self.supervised(run, operation["id"] + "-check-" + str(number), command, workspace,
-                                           timeout=600, environment={"BOOTSTRAP_HEAD_SHA": head,
-                                                                   "BOOTSTRAP_BASE_SHA": task["workspace"]["base_sha"]})
+            options = {"timeout": 600, "environment": {"BOOTSTRAP_HEAD_SHA": head, "BOOTSTRAP_BASE_SHA": task["workspace"]["base_sha"]}}
+            if build and number == len(commands) - 1:
+                import build_contract
+                _, lock, _, _ = build_contract.inputs(self.source)
+                options.update(timeout=recipe["verifier_timeout_seconds"], owned_images=[lock["components"][name]["pull_reference"] for name in build_contract.IMAGES])
+            execution_directory, execution = self.supervised(run, operation["id"] + "-check-" + str(number), command, workspace, **options)
             check = {"command": command, "execution": execution}
             if artifact:
                 check.update(request=read_json(execution_directory / "request.json"),
@@ -695,7 +743,7 @@ class RealBackend:
         result = {"passed": True, "head_sha": head, "files": files, "checks": checks,
                   "recipe_sha256": evidence.digest(recipe), "runtime": "NOT_RUN"}
         if artifact:
-            result.update(task_id=artifact_verifier.TASK, base_sha=task["workspace"]["base_sha"], recipe=recipe,
+            result.update(task_id=task["task_id"], base_sha=task["workspace"]["base_sha"], recipe=recipe,
                           verifier_source_commit=self.provenance["checkout_head_sha"], authorization=run["authorization"],
                           verification_operation_id=operation["id"])
             try:
@@ -709,10 +757,11 @@ class RealBackend:
         require(task["verification"]["passed"] is True and task["review"]["verdict"] == "PASS",
                 "BLOCKED_EVIDENCE", "publication requires independent verification and review")
         binding = None
-        if task["task_id"] == artifact_verifier.TASK:
+        if task_proofs.configured(task["task_id"]):
             self.artifact_recipe(run, task)
             require(task["verification"]["head_sha"] == head and task["verification"]["base_sha"] == task["workspace"]["base_sha"],
                     "BLOCKED_ARTIFACT_PROOF", "artifact proof identifies a different candidate or base")
+            require(task["verification"]["task_id"] == task["task_id"], "BLOCKED_ARTIFACT_PROOF", "publication proof belongs to another task")
             binding = task_proofs.publication(task["verification"])
         branch = task["workspace"]["branch"]
         remote = self.git(self.root, "ls-remote", "origin", "refs/heads/" + branch)
@@ -763,8 +812,9 @@ class RealBackend:
                 "base_sha": task["workspace"]["base_sha"]}
 
     def do_merge(self, run, task, operation, directory):
-        if task["task_id"] == artifact_verifier.TASK:
+        if task_proofs.configured(task["task_id"]):
             self.artifact_recipe(run, task)
+            require(task["verification"]["task_id"] == task["task_id"], "BLOCKED_ARTIFACT_PROOF", "merge proof belongs to another task")
             task_proofs.check_verification(task["verification"], task["worker"]["commit_sha"], task["workspace"]["base_sha"])
         expected = {"repository": self.repository, "task_id": task["task_id"], "pull_request_number": task["pull"]["number"],
                     "review_comment_id": task["pull"]["comment_id"], "coordinator_login": "sigaev-pro",
@@ -786,12 +836,12 @@ class RealBackend:
                 time.sleep(2)
             self.candidate(run, task)
             try:
-                options = {"task_verification": task["verification"]} if task["task_id"] == artifact_verifier.TASK else {}
+                options = {"task_verification": task["verification"]} if task_proofs.configured(task["task_id"]) else {}
                 captured = evidence.capture(expected, directory / "evidence", **options)
             except (ValueError, KeyError, TypeError) as error:
                 raise Blocked("BLOCKED_ACCEPTANCE", str(error)) from error
             bundle = read_json(captured["path"])
-            if task["task_id"] == artifact_verifier.TASK:
+            if task_proofs.configured(task["task_id"]):
                 self.ledger.verify_task_proof({"capture": bundle, "task_verification": task["verification"]})
             evidence.atomic_json(intent_path, {"capture": bundle, "provenance": self.provenance})
             self.check_stop(run)
