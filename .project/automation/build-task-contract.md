@@ -90,6 +90,21 @@ Run `python3 -I scripts/refresh-versions check|update --registry PATH --active-l
 
 The optional `--fixture-transport PATH` selects an explicit offline source transport. Its closed object contains integer `schema_version: 1`, `synthetic: true`, and `observations`. Each observation has `url`, integer `status`, string-to-string `headers`, a file `body` reference relative to the transport's directory, and numeric Unix-seconds `observed_at`. Resolve official source requests by exact URL, including pagination. Retain output report bodies as references relative to the report directory. This mode marks the report and any candidate synthetic and never satisfies live-source acceptance.
 
+GitHub may paginate a configured `/repos/{owner}/{repo}/...` endpoint through
+`/repositories/{id}/...`. Retain an HTTP 200 metadata observation from the exact
+configured `https://api.github.com/repos/{owner}/{repo}` endpoint before using
+that alias. Its positive integer `id`, matching `full_name`, and canonical named
+API `url` bind the identity; both strings must match the configured spelling exactly. Only that
+numeric ID with the original endpoint tail and origin is allowed. The trusted
+validator also authenticates metadata when a report includes it without an
+alias, and independently refreshes used metadata during live verification.
+Keep the 64-page limit, loop and ambiguous-next-link rejection, and unchanged
+path/origin rules for non-GitHub sources. A numeric URL alone is not identity
+proof, and metadata from another repository endpoint is not a substitute.
+Loop detection uses the bound repository/endpoint identity and normalized query
+ordering, so changing from a named URL to its numeric alias or rearranging query
+parameters cannot make the same page appear new.
+
 `UpdateReport` contains exactly the fields in `REPORT_KEYS`: its version/contract/mode/synthetic status, registry and before/after active-lock hashes, completeness and observation time, all 41 component rows, source observations, candidate reference or null, generated-output owners, and external-lock records. Each component row has `id`, `current`, `latest_stable`, `selected`, `compatibility: NOT_RUN`, `notices`, `blocked_reasons`, and `sources`. An incomplete report has no candidate and at least one concrete blocked reason. Complete check mode exposes proposed pins but creates no candidate file.
 
 Use official release/tag, Go download, Docker registry, raw source, and Debian channel inputs as defined in the registered source rules. Follow pagination; resolve annotated tags; honor namespaced generator tags; derive native-owned replacements from the selected owner's go.mod, including valid owner-selected pseudo-versions. Apply Debian version ordering, preserve both candidate architectures, and verify package/image/source byte bindings. Live observations must be fresh; synthetic timestamps remain explicitly synthetic. The trusted runner independently refreshes live observations and authenticates retained Debian signatures with the pinned image-owned verifier/keyring.
