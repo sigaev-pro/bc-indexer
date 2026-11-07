@@ -1,6 +1,10 @@
 """Synthetic 41-component source controls, not live updater acceptance."""
 
 import copy
+import gzip
+import hashlib
+import json
+import lzma
 from pathlib import Path
 import tempfile
 import unittest
@@ -26,6 +30,96 @@ class UpdateTests(unittest.TestCase):
 
     def row(self, report, name):
         return next(row for row in report["components"] if row["id"] == name)
+
+    def package_observations(self):
+        transport = json.loads(self.fixture["transport"].read_bytes())
+        self.assertTrue(transport["synthetic"])
+        return {row["url"]: row for row in transport["observations"]
+                if row["url"].endswith(("/Packages.gz", "/Packages.xz"))}
+
+    def report_with_indexes(self, urls, mode="check"):
+        observations = self.package_observations()
+        indexes = [{"url": url, "sha256": hashlib.sha256(
+            (self.fixture["root"] / observations[url]["body"]["path"]).read_bytes()).hexdigest()} for url in urls]
+        report = copy.deepcopy(self.fixture["report"])
+        for row in report["components"]:
+            if "package_indexes" in row["selected"]:
+                row["selected"]["package_indexes"] = copy.deepcopy(indexes)
+                row["sources"] = [urls[0]]
+        if mode == "update":
+            candidate = copy.deepcopy(self.fixture["candidate"])
+            candidate.update(package_indexes=indexes, components={row["id"]: row["selected"] for row in report["components"]})
+            path = self.fixture["root"] / "selected-candidate.json"
+            path.write_bytes(contract.canonical(candidate))
+            report.update(mode=mode, candidate=contract.reference(self.fixture["root"], path))
+        return report
+
+    def test_transport_covers_every_active_lock_package_index_url(self):
+        observations = self.package_observations()
+        active_urls = {row["url"] for row in self.fixture["active"]["package_indexes"]}
+        self.assertEqual(len(active_urls), 6)
+        self.assertFalse(active_urls - observations.keys(), sorted(active_urls - observations.keys()))
+        expected = set()
+        for channel in ("trixie", "trixie-security", "trixie-updates"):
+            base = "https://security.debian.org/debian-security" if channel == "trixie-security" else "https://deb.debian.org/debian"
+            for architecture in ("amd64", "arm64"):
+                for suffix in ("gz", "xz"):
+                    expected.add(base + "/dists/" + channel + "/main/binary-" + architecture + "/Packages." + suffix)
+        self.assertEqual(set(observations), expected)
+
+    def test_compressed_package_bodies_decode_equally_and_bind_exact_hashes(self):
+        observations = self.package_observations()
+        packages = {row["source"]["package"] for row in self.fixture["registry"]["components"]
+                    if row["pin_kind"] == "distribution_package"}
+        for index in self.fixture["candidate"]["package_indexes"]:
+            prefix = index["url"].rsplit(".", 1)[0]
+            decoded, hashes = [], []
+            for suffix, decompress in (("gz", gzip.decompress), ("xz", lzma.decompress)):
+                with self.subTest(url=prefix, suffix=suffix):
+                    observation = observations[prefix + "." + suffix]
+                    self.assertEqual(observation["status"], 200)
+                    reference = observation["body"]
+                    payload = (self.fixture["root"] / reference["path"]).read_bytes()
+                    digest = hashlib.sha256(payload).hexdigest()
+                    self.assertEqual(reference["sha256"], digest)
+                    self.assertEqual(reference["size_bytes"], len(payload))
+                    decoded.append(decompress(payload))
+                    hashes.append(digest)
+            self.assertEqual(decoded[0], decoded[1])
+            self.assertNotEqual(hashes[0], hashes[1])
+            self.assertEqual(index["sha256"], hashes[0])
+            records = [dict(line.split(": ", 1) for line in stanza.splitlines())
+                       for stanza in decoded[0].decode().strip().split("\n\n")]
+            self.assertEqual({row["Package"] for row in records}, packages)
+            self.assertEqual({row["Architecture"] for row in records}, {prefix.split("/binary-", 1)[1].split("/", 1)[0]})
+
+    def test_check_and_update_accept_either_compression_and_active_lock_urls(self):
+        active_urls = [row["url"] for row in self.fixture["active"]["package_indexes"]]
+        choices = {suffix: [url.rsplit(".", 1)[0] + "." + suffix for url in active_urls] for suffix in ("gz", "xz")}
+        choices["active-lock"] = active_urls
+        for label, urls in choices.items():
+            for mode in ("check", "update"):
+                with self.subTest(selection=label, mode=mode):
+                    result = self.validate(self.report_with_indexes(urls, mode), mode=mode)
+                    self.assertTrue(result["complete"])
+                    self.assertEqual(len(result["selected"]), 41)
+                    self.assertEqual({row["index_url"] for row in result["bindings"]}, set(urls))
+                    self.assertTrue(all(row["compatibility"] == "NOT_RUN" for row in result["selected"].values()))
+
+    def test_selected_index_hash_cannot_use_the_other_compressed_representation(self):
+        observations = self.package_observations()
+        active_urls = [row["url"] for row in self.fixture["active"]["package_indexes"]]
+        for suffix, other in (("gz", "xz"), ("xz", "gz")):
+            with self.subTest(suffix=suffix):
+                urls = [url.rsplit(".", 1)[0] + "." + suffix for url in active_urls]
+                report = self.report_with_indexes(urls)
+                self.assertTrue(self.validate(report)["complete"])
+                wrong = observations[urls[0].rsplit(".", 1)[0] + "." + other]["body"]["sha256"]
+                for row in report["components"]:
+                    if "package_indexes" in row["selected"]:
+                        row["selected"]["package_indexes"][0]["sha256"] = wrong
+                with self.assertRaisesRegex(ValueError, "package index hash differs"):
+                    self.validate(report)
 
     def test_complete_synthetic_check_covers_every_source_kind(self):
         result = self.validate()

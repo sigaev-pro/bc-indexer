@@ -3,6 +3,7 @@
 import copy
 import gzip
 import hashlib
+import lzma
 from pathlib import Path
 import urllib.parse
 
@@ -134,10 +135,14 @@ def fixture(root, source):
                     item["artifacts"].append({"platform": "linux/" + architecture, "version": version, "url": base + "/" + filename,
                                               "sha256": digest, "payload_verified": True})
                     add(base + "/" + filename, payload)
-            url = base + "/dists/" + channel + "/main/binary-" + architecture + "/Packages.gz"
-            payload = gzip.compress(("\n".join(records) + "\n").encode(), mtime=0)
-            add(url, payload)
-            indexes.append({"url": url, "sha256": hashlib.sha256(payload).hexdigest()})
+            records_bytes = ("\n".join(records) + "\n").encode()
+            for suffix, payload in (("gz", gzip.compress(records_bytes, mtime=0)),
+                                    ("xz", lzma.compress(records_bytes, format=lzma.FORMAT_XZ))):
+                url = base + "/dists/" + channel + "/main/binary-" + architecture + "/Packages." + suffix
+                add(url, payload)
+                # The transport serves both forms; each candidate selects one per pair.
+                if suffix == "gz":
+                    indexes.append({"url": url, "sha256": hashlib.sha256(payload).hexdigest()})
     for entry in package_entries:
         selected[entry["id"]]["package_indexes"] = copy.deepcopy(indexes)
         newest[entry["id"]] = selected[entry["id"]]["version_by_platform"]
