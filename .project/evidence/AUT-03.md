@@ -45,7 +45,15 @@ Both re-review axes checked `f624f56de88cc79bae6f95b9c1b8e99a3b56cbe4`. They con
 
 Implementation attempt 3 / repair cycle 2 uses a trusted live group leader with a parent lifeline. The leader kills its own group if the driver disappears. Normal cleanup uses the existing unreaped-child invariant and reaps only after confirming group absence. A durable intent precedes dispatch; the outer supervisor and parent watchdog inspect candidate-group cleanup without signaling stale recorded PIDs. The frozen trusted source sets include the new guard. New real-process regressions cover outer SIGTERM, SIGKILL, operator stop, deadline, unresolved intents, and the no-signal-after-reap rule. The targeted suite passes 55 tests in 19.52 seconds, with the two opt-in Docker cases skipped. Full CI and both final exact-head reviews remain required.
 
-## Remaining acceptance steps
+## Final bounded review result
+
+Spec passed head `1c2c3d4fd2026a20565a00045472ecc2c5b79e18`, including independent parent SIGTERM/SIGKILL, pre-dispatch parent death, expired deadline, unresolved-intent, and no-signal-after-reap checks. Its targeted suite ran 55 tests in 17.933 seconds, with two Docker cases skipped. Standards also confirmed both ownership fixes and ran the same suite in 19.28 seconds, but retained one P2 normal-cleanup race.
+
+The driver closes its lifeline before `finish_group`. The guard then kills its own group concurrently with explicit termination. A plain wrapper delaying the existing termination call by 0.0001 or 0.001 seconds reproduced a valid command being rejected: `terminate_group` returned `cleanup-denied`, while immediate bounded confirmation returned true. The leader stayed unreaped; syscall tracing recorded EPERM from `killpg(SIGTERM)`. This is a completion defect, not false acceptance. The observation remains retained even though other controls passed. Both reviewers cleaned their fixtures and returned ownership.
+
+The proposed repair keeps the normal lifeline open through explicit owned-group cleanup and closes it in an outer `finally`, retaining failure handling and parent-death protection. It needs a scheduling-window regression and both fresh independent reviews. No fourth implementation was started: DEVELOPMENT_AUTOPILOT:85 allows two review-repair cycles (three implementations), and D92 preserves the bound. Status is BLOCKED_REVIEW_LIMIT. Draft PR #100 remains unmerged, the original BOOT-09 receipt is unchanged, and product E01-01.builds remains blocked. Extra-cycle authorization is required before more implementation; the original deadline is unchanged.
+
+## Retained checks and uncompleted acceptance
 
 Full CI for the second repaired tree exited 0 in 114.36 seconds. Durable stdout, stderr, timestamps, and exit status were retained. The targeted and complete checks do not replace both final exact-head independent reviews or protected GitHub acceptance.
 
