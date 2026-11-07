@@ -2,6 +2,10 @@
 
 ## E01-01.builds — Combined real-source preparation review
 
+CI `42405291880` and independent Standards review rejected combined head `702f1e1` because the corpus still referenced the previous candidate-lock hash. Root refreshed that derived binding and its canonical source digest only; all 33 source mappings and seven profiles remain unchanged. Required next checks are corpus validation, full CI, and fresh exact-head reviews. The prior failure and review remain evidence; no previous runtime result is carried forward.
+
+Corrected corpus validation passes with 217 acceptance cases, 677 baseline variants, and 36083 expanded cells. Full local CI passes: 305 tests in 123.699 seconds, with two Docker integration skips. Publish the correction and obtain fresh independent reviews plus exact-head GitHub CI before merge.
+
 Root combined the published trusted Engine-tag repair `688ce7f` and package-candidate refresh `480eb4c` for one exact-head review under D95. Both scoped histories and evidence are retained below. The only merge conflict was this status log; both entries are preserved. Product repair `e79d59e` remains in draft PR #107. Next: check and publish the combined preparation PR, obtain independent Spec/Standards reviews and required CI, merge through branch protection, synchronize the product candidate, and start a fresh real verification operation. Issue #11 remains incomplete; native builds and NATS runtime are NOT_RUN.
 
 Combined checks pass: 81 trusted build tests with two Docker integration checks explicitly skipped, 54 rejected structural negatives, 108 documents, 1106 local links, 84 catalog entries, and 16 unchanged normative mirrors. Whitespace checks pass. Skipped Docker controls do not prove the actual build or native runtime.
