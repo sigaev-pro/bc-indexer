@@ -587,7 +587,7 @@ def main():
                 require(run["repository"] == args.repo, "BLOCKED_REPOSITORY", "resume repository changed")
                 require(args.command == "adopt-authorization" or run["authorization"] == AUTHORIZATIONS[args.authorization_ref],
                         "BLOCKED_AUTHORIZATION", "resume cannot change the run authorization")
-                require(not args.renew_budget or (args.authorization_ref != "D92" and run["status"] == "BUDGET_STOP"),
+                require(not args.renew_budget or (args.authorization_ref == "D86" and run["status"] == "BUDGET_STOP"),
                         "BLOCKED_BUDGET", "this run cannot renew its budget")
                 if args.command == "resume" and args.automatic and (store.stopped(run["run_id"]) or run["status"] != "RUNNING"):
                     if store.stopped(run["run_id"]):

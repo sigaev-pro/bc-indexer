@@ -1,7 +1,12 @@
 """Synthetic D93 policy tests; these are not native build or runtime evidence."""
 
 import copy
+from contextlib import redirect_stdout
+import io
+import json
 from pathlib import Path
+import plistlib
+import shlex
 import sys
 import time
 import unittest
@@ -229,6 +234,104 @@ class ContinuousTests(unittest.TestCase):
                 with self.assertRaises(Blocked): backend.command(["unused"], timeout=value)
                 with self.assertRaises(Blocked): backend.supervised({}, "unused", ["unused"], self.root, timeout=value)
                 spawn.assert_not_called()
+
+    def test_inherited_start_times_complete_unchanged_and_release_capacity(self):
+        observations = fixtures.observations
+        for known in (False, True):
+            with self.subTest(known=known):
+                self.setUp()
+                def initial(now, active=False):
+                    doc = observations(now, active)
+                    if known: doc["observations"][0]["started_at"] = fixtures.AUTH["started_at"]
+                    return doc
+                with self.store.lock(), patch.object(fixtures, "observations", side_effect=initial):
+                    run = self.prepare()
+                    self.adopt(run)
+                    launch = self.driver.launch(run)
+                    root = copy.deepcopy(launch.load()["sessions"]["initial-root"]["observation"])
+                    root.update(status="completed", observed_at=self.now, completed_at=self.now, cleanup_confirmed=True)
+                    for changed_start in (fixtures.AUTH["started_at"] + 1, self.now, None if known else fixtures.AUTH["started_at"]):
+                        changed = dict(root, started_at=changed_start)
+                        with self.assertRaises(Blocked):
+                            launch.import_observations({"schema_version": 1, "authorization_ref": "D93",
+                                "coordinator_agent_id": "/root", "observations": [changed]})
+                    launch.reserve("capacity-one", "reviewer", "AUT-05")
+                    launch.reserve("capacity-two", "reviewer", "AUT-05")
+                    with self.assertRaises(Blocked): launch.reserve("capacity-three", "reviewer", "AUT-05")
+                    doc = {"schema_version": 1, "authorization_ref": "D93", "coordinator_agent_id": "/root", "observations": [root]}
+                    result = launch.import_observations(doc)
+                    self.assertEqual(result["sessions"]["initial-root"]["started_at"], initial(self.now)["observations"][0]["started_at"])
+                    launch.reserve("capacity-three", "reviewer", "AUT-05")
+                    self.assertEqual(len(launch.active(launch.load())), 3)
+
+    def test_new_invocations_cannot_claim_predecessor_start_times(self):
+        with self.store.lock():
+            run = self.prepare()
+            self.adopt(run)
+            launch = self.driver.launch(run)
+            launch.reserve("new-review", "reviewer", "AUT-05", origin="coordinator-managed")
+            row = dict(self.bootstrap()["observations"][0], invocation_id="new-review", task_id="AUT-05",
+                       started_at=fixtures.AUTH["started_at"])
+            doc = {"schema_version": 1, "authorization_ref": "D93", "coordinator_agent_id": "/root", "observations": [row]}
+            before = launch.load()
+            with self.assertRaises(Blocked): launch.import_observations(doc)
+            self.assertEqual(launch.load(), before)
+
+    def test_configuration_change_after_preflight_blocks_each_accounted_policy(self):
+        backend = RealBackend.__new__(RealBackend)
+        backend.check_stop = lambda run: None
+        def stale(run):
+            if changed: raise Blocked("BLOCKED_CONFIGURATION", "Synthetic source changed after preflight")
+        backend.check_configuration = stale
+        for reference in ("D92", "D93"):
+            run = {"authorization": AUTHORIZATIONS[reference]}
+            changed = False
+            backend.check_configuration(run)
+            changed = True
+            with self.subTest(policy=reference), patch.object(backend, "git") as external:
+                with self.assertRaises(Blocked) as caught: backend.perform("prepare", run, {}, {})
+                self.assertEqual(caught.exception.code, "BLOCKED_CONFIGURATION")
+                external.assert_not_called()
+
+    def test_historical_author_cannot_review_another_workers_repair(self):
+        with self.store.lock():
+            run = self.prepare()
+            old_run = copy.deepcopy(run)
+            self.adopt(run)
+            backend = RealBackend.__new__(RealBackend)
+            backend.store = self.store
+            backend.candidate = lambda current, task: "a" * 40
+            task = {"task_id": TASK, "workspace": {"base_sha": "b" * 40},
+                    "worker": {"session_id": "latest-worker", "canonical_agent_id": "/root/new_worker"}}
+            result = {"head_sha": "a" * 40, "base_sha": "b" * 40, "session_id": "review",
+                      "canonical_agent_id": "/root/evidence", "checks": ["Synthetic parser control"], "verdict": "PASS", "findings": []}
+            for current in (old_run, run):
+                with self.subTest(policy=current["authorization"]["reference"]), patch.object(backend, "model", return_value=copy.deepcopy(result)):
+                    with self.assertRaises(Blocked) as caught: backend.do_review(current, task, {}, self.root)
+                    self.assertEqual(caught.exception.code, "BLOCKED_REVIEW")
+            result["canonical_agent_id"] = "/root/independent_reviewer"
+            with patch.object(backend, "model", return_value=result):
+                self.assertTrue(backend.do_review(run, task, {}, self.root)["verified"])
+
+    def test_service_templates_resume_the_recorded_policy_and_preserve_stop(self):
+        with self.store.lock():
+            run = self.prepare()
+            self.adopt(run)
+        directory = Path(controller.__file__).parent
+        launchd = plistlib.loads((directory / "controller.launchd.plist").read_bytes())["ProgramArguments"]
+        line = next(line for line in (directory / "controller.service").read_text().splitlines() if line.startswith("ExecStart="))
+        systemd = shlex.split(line.partition("=")[2])
+        substitutions = {"RECORDED_RUN_ID": run["run_id"], "RECORDED_AUTHORIZATION_REF": "D93", "RECORDED_STAGE_LIMIT": "E07"}
+        for template in (launchd, systemd):
+            arguments = [substitutions.get(value, value) for value in template[template.index("resume"):]]
+            output = io.StringIO()
+            with self.subTest(template=template[0]), patch("sys.argv", ["controller.py", *arguments]), \
+                    patch("controller.evidence.repository_root", return_value=self.root), patch("controller.Store", return_value=self.store), \
+                    patch("controller_backend.RealBackend") as backend, redirect_stdout(output):
+                self.assertEqual(controller.main(), 1)
+                backend.assert_not_called()
+            self.assertEqual(json.loads(output.getvalue())["status"], "STOPPED")
+            self.assertTrue(self.store.stopped(run["run_id"]))
 
     def test_model_and_verifier_requests_keep_finite_deadlines(self):
         with self.store.lock():

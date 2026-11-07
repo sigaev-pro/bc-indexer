@@ -68,6 +68,15 @@ class LaunchLedger:
             require(record.get("run_id") and self.store.load(record["run_id"])["authorization"] == self.authorization,
                     "BLOCKED_AUTHORIZATION", "finish the prepared authorization adoption before accounting or dispatch")
 
+    def predecessor_sessions(self, record):
+        if not continuous(self.authorization):
+            return {}
+        predecessor = record["predecessor"]
+        prior = LaunchLedger(self.store, predecessor["authorization"], self.clock).load()
+        require(evidence.digest(prior) == predecessor["ledger_sha256"],
+                "BLOCKED_SESSION_ACCOUNTING", "authenticated predecessor accounting changed")
+        return prior["sessions"]
+
     @staticmethod
     def used(record):
         return max(record["initial_held_invocations"], len(record["sessions"]))
@@ -110,6 +119,7 @@ class LaunchLedger:
                 and document["coordinator_agent_id"] == "/root", "BLOCKED_SESSION_ACCOUNTING", "unexpected observation authority")
         if any(item["sha256"] == evidence.digest(document) for item in record["observation_history"]):
             return record
+        inherited = self.predecessor_sessions(record)
         rows = document["observations"]
         require(isinstance(rows, list) and rows and len({row["invocation_id"] for row in rows}) == len(rows),
                 "BLOCKED_SESSION_ACCOUNTING", "observations must have unique invocation identities")
@@ -127,8 +137,13 @@ class LaunchLedger:
             require(type(observed) in {int, float} and self.authorization["started_at"] <= observed <= self.clock(),
                     "BLOCKED_SESSION_ACCOUNTING", "observation time is outside the known launch history")
             started, completed = row.get("started_at"), row.get("completed_at")
+            original = inherited.get(key, {})
+            require(not original or started == original.get("started_at"),
+                    "BLOCKED_SESSION_ACCOUNTING", "an inherited start timestamp must remain unchanged, including an unknown start")
+            retained_start = (original.get("started_at") is not None and started == original["started_at"]
+                              and all(row[field] == original[field] for field in ("role", "task_id", "canonical_agent_id")))
             require(started is None or (type(started) in {int, float}
-                    and self.authorization["started_at"] <= started <= observed
+                    and started <= observed and (self.authorization["started_at"] <= started or retained_start)
                     and (continuous(self.authorization) or started < self.authorization["hard_deadline"])),
                     "BLOCKED_SESSION_ACCOUNTING", "observed start is outside the authorized window")
             require(row.get("evidence") and isinstance(row["evidence"], str), "BLOCKED_SESSION_ACCOUNTING", "observation needs an actual evidence reference")

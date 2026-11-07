@@ -9,6 +9,8 @@
     <string>ABSOLUTE_PYTHON_PATH</string>
     <string>ABSOLUTE_REPOSITORY_PATH/.project/automation/controller.py</string>
     <string>resume</string><string>--automatic</string><string>--run-id</string><string>RECORDED_RUN_ID</string>
+    <string>--authorization-ref</string><string>RECORDED_AUTHORIZATION_REF</string>
+    <string>--stage-limit</string><string>RECORDED_STAGE_LIMIT</string>
   </array>
   <key>WorkingDirectory</key><string>ABSOLUTE_REPOSITORY_PATH</string>
   <key>RunAtLoad</key><false/>

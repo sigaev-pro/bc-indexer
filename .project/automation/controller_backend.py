@@ -336,7 +336,8 @@ class RealBackend:
 
     def perform(self, action, run, task, operation):
         self.check_stop(run)
-        if run["authorization"]["reference"] == "D92":
+        from launch_control import accounted
+        if accounted(run["authorization"]):
             self.check_configuration(run)
         require(self.git(self.root, "remote", "get-url", "origin") in {
             f"git@github.com:{self.repository}.git", f"https://github.com/{self.repository}.git"},
@@ -698,8 +699,8 @@ class RealBackend:
 
     def do_review(self, run, task, operation, directory):
         result = self.model(run, task, operation, review=True)
-        if run["authorization"]["reference"] == "D92":
-            from launch_control import LaunchLedger
+        from launch_control import LaunchLedger, accounted
+        if accounted(run["authorization"]):
             authors = {row.get("canonical_agent_id") for row in LaunchLedger(self.store, run["authorization"]).load()["sessions"].values()
                        if row["task_id"] == task["task_id"] and row["role"] == "implementer"}
             require(result["canonical_agent_id"] not in authors, "BLOCKED_REVIEW", "reviewer previously implemented this task")

@@ -1,6 +1,6 @@
 # Isolated build acceptance interface
 
-Status: specified for AUT-03, [issue 98](https://github.com/sigaev-pro/bc-indexer/issues/98), pending independent review and protected acceptance. The contract is `build-artifacts-v1`; the updater contract is `component-update-v1`. Only an accepted configuration handoff enables the product task. This document does not accept a build.
+Status: AUT-03 was accepted through [PR #100](https://github.com/sigaev-pro/bc-indexer/pull/100), closing [issue #98](https://github.com/sigaev-pro/bc-indexer/issues/98). The contract is `build-artifacts-v1`; the updater contract is `component-update-v1`. Only an accepted configuration handoff enables the product task. Native builds remain NOT_RUN until separately executed and accepted.
 
 ## Existing requirements
 

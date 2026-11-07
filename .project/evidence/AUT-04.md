@@ -20,4 +20,10 @@ Earlier local runs failed on legacy synthetic fixtures missing explicit authoriz
 
 ## Remaining work
 
+Independent review of `ffda7fbc5561bafa45d3f7a47bd72ddb53d30989` returned REQUEST_CHANGES on both axes. Spec found two D93-only omissions in operation-level frozen-source checks and historical-author exclusion, plus a stale build-contract status. Standards reproduced failure to complete an inherited session with a known pre-D93 start and confirmed missing authorization/stage arguments in both service templates. Its independent full CI passed 278 tests with two Docker skips and 54 component negatives. These review failures remain retained; passing CI did not accept the candidate.
+
+The repair applies both operation and reviewer checks to every accounted policy, authenticates inherited start times against the immutable predecessor ledger, keeps inherited unknown starts unknown, and supplies the recorded policy in service commands. Regressions cover prior authors after another worker's repair, source changes after preflight, inherited completion and capacity release, fabricated old starts, and both service templates preserving a stopped D93 run. The legacy service tests were also updated to substitute the new explicit authorization/stage placeholders.
+
+Repair validation passed: 71 focused controller/accounting/build-adapter tests, 27 recovery/continuous-policy tests, and full portable CI with 283 tests (two Docker skips), 54/54 component negatives, 103 documents, 1,083 local links, 84 catalog issues, 16 mirrors, and unchanged v2 bytes. The full run took 114.642 seconds. Fresh independent exact-head review and protected acceptance remain pending.
+
 Obtain independent Standards and Spec reviews of the exact candidate, complete GitHub CI and protected acceptance, then adopt D93 using actual bootstrap observations. Preserve the canonical old ledger and accepted receipt bytes. Continue with E01-01.builds after adoption. Native builds and native/NATS runtime remain `NOT_RUN`.
