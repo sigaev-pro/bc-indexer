@@ -2,6 +2,8 @@
 
 BOOT-06 records the initial component inventory and exact candidate inputs checked on 2026-11-06. It does not replace the specification's existing source pins or promote a runtime release. The full updater remains an E01/E07 task under [TESTING_CONTRACT](../../docs/TESTING_CONTRACT.md).
 
+The E01 build candidate refresh on 2026-11-07 updates the two Debian Security package-index hashes and `zlib1g-dev` to `1:1.3.dfsg+really1.3.1-1+deb13u1` on both candidate platforms. Other component selections and compatibility constraints stay as recorded by BOOT-06. This metadata refresh does not promote an active release or prove signatures, builds, platform support, or runtime behavior. [Refresh evidence](../../evidence/E01-package-refresh.md) records the official observations and remaining checks.
+
 `registry.json` defines each component's official source, stable channel, pin method, profile scope, update rule, and verification requirement. `candidate-lock.json` binds that registry by SHA-256 and records 41 components, seven profiles, 11 open compatibility constraints, and eight generated outputs that later tasks must produce. The baseline section identifies the unchanged specification bytes and existing documented candidates. Separate agency source/tool locks are referenced without changing them.
 
 Run the offline check from the repository root:

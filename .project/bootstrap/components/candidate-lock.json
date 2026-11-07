@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "candidate_id": "BOOT-06-2026-11-06",
+  "candidate_id": "E01-BUILD-OS-2026-11-07",
   "registry_sha256": "339f4f86ad1a4eeefa48df6e03aafa3c1b20c4f186a25017891c6479000ffdce",
-  "checked_on": "2026-11-06",
+  "checked_on": "2026-11-07",
   "status": "METADATA_VERIFIED_CANDIDATE",
   "release_ready": false,
   "active_lock_changed": false,
@@ -1017,27 +1017,27 @@
     "debian-zlib1g-dev": {
       "package": "zlib1g-dev",
       "version_by_platform": {
-        "linux/amd64": "1:1.3.dfsg+really1.3.1-1+b1",
-        "linux/arm64": "1:1.3.dfsg+really1.3.1-1+b1"
+        "linux/amd64": "1:1.3.dfsg+really1.3.1-1+deb13u1",
+        "linux/arm64": "1:1.3.dfsg+really1.3.1-1+deb13u1"
       },
       "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
       "compatibility": "NOT_RUN",
       "artifacts": [
         {
-          "name": "zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_amd64.deb",
-          "version": "1:1.3.dfsg+really1.3.1-1+b1",
+          "name": "zlib1g-dev_1.3.dfsg+really1.3.1-1+deb13u1_amd64.deb",
+          "version": "1:1.3.dfsg+really1.3.1-1+deb13u1",
           "platform": "linux/amd64",
-          "url": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_amd64.deb",
-          "sha256": "76ed5c858e1aef38b7be93acce5910e457e77bd6271471b9d05fb42e78826224",
+          "url": "https://security.debian.org/debian-security/pool/updates/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+deb13u1_amd64.deb",
+          "sha256": "88ebb839a7a54c97dceb647e2a2bfa2451d6f440801ceef3d56f654022637eb9",
           "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
           "payload_verified": false
         },
         {
-          "name": "zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_arm64.deb",
-          "version": "1:1.3.dfsg+really1.3.1-1+b1",
+          "name": "zlib1g-dev_1.3.dfsg+really1.3.1-1+deb13u1_arm64.deb",
+          "version": "1:1.3.dfsg+really1.3.1-1+deb13u1",
           "platform": "linux/arm64",
-          "url": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_arm64.deb",
-          "sha256": "745ebcf1fa115e230af76216355d7290a24f1790fe3780249b519c0e4d30534f",
+          "url": "https://security.debian.org/debian-security/pool/updates/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+deb13u1_arm64.deb",
+          "sha256": "b8f6740af90accda9a571ae7f3e5b0a40a83c2e9d095f4cab56b92b8ae744757",
           "evidence_type": "OFFICIAL_PACKAGE_INDEX_METADATA",
           "payload_verified": false
         }
@@ -1476,13 +1476,13 @@
     },
     {
       "url": "https://security.debian.org/debian-security/dists/trixie-security/main/binary-amd64/Packages.xz",
-      "sha256": "5f9fc5aa45642005a7d58bf8782e6fe1a483b9082f4e1918dfb186fa490d2a20",
+      "sha256": "164725afc7af9fc86dfd019c09b84299dbdab681d3f086c94a411bf391b3bff0",
       "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
       "signature_verification": "PENDING_E01"
     },
     {
       "url": "https://security.debian.org/debian-security/dists/trixie-security/main/binary-arm64/Packages.xz",
-      "sha256": "d8c68d608f887ed0e3c00dfd19ab78877477a0fbe247ae0c4f005d07104ca2da",
+      "sha256": "c3303803f7724416bbc7b2007ee087f3d18650d22eaf4eed3a3a129e39cafd52",
       "evidence_type": "OFFICIAL_INDEX_BYTES_HASHED",
       "signature_verification": "PENDING_E01"
     },
