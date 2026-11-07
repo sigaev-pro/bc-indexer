@@ -194,18 +194,29 @@ class Packages:
             if not line.startswith("'"):
                 continue
             fields = shlex.split(line)
-            contract.require(len(fields) == 4 and fields[0].startswith("file:/proof/mirror/repo-")
-                             and Path(fields[1]).name == fields[1] and fields[2].isdigit(), "APT returned an unexpected archive request")
-            local = urllib.parse.unquote(urllib.parse.urlsplit(fields[0]).path).removeprefix("/proof/")
-            prefix, filename = local.split("/pool/", 1)
-            number = int(prefix.removeprefix("mirror/repo-"))
-            selected = self.by_filename.get((number, "pool/" + filename))
+            contract.require(len(fields) in {3, 4} and fields[0].startswith("file:/proof/mirror/repo-")
+                             and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+%:~_-]*\.deb", fields[1])
+                             and re.fullmatch(r"[0-9]+", fields[2]), "APT returned an unexpected archive request")
+            # APT may omit its display hash when the index has no MD5 field.
+            # Authentication always uses the signed index's SHA-256 below.
+            if len(fields) == 4:
+                contract.require(re.fullmatch(r"(?:MD5Sum:[0-9a-fA-F]{32}|SHA1:[0-9a-fA-F]{40}|SHA256:[0-9a-fA-F]{64}|SHA512:[0-9a-fA-F]{128})", fields[3]),
+                                 "APT returned a malformed optional archive digest")
+            uri = urllib.parse.urlsplit(fields[0])
+            contract.require(uri.scheme == "file" and not uri.netloc and not uri.query and not uri.fragment
+                             and not re.search(r"%(?![0-9a-fA-F]{2})", uri.path), "APT archive URI has an unsafe source")
+            local = urllib.parse.unquote(uri.path, errors="strict")
+            match = re.fullmatch(r"/proof/mirror/repo-(0|[1-9][0-9]*)/(pool/.+)", local)
+            contract.require(match is not None and "\\" not in local and "\x00" not in local
+                             and all(part not in {"", ".", ".."} for part in match[2].split("/")), "APT archive URI escapes its mirror")
+            selected = self.by_filename.get((int(match[1]), match[2]))
             contract.require(selected is not None and int(selected["record"]["Size"]) == int(fields[2]),
                              "APT requested a package outside the exact signed indexes")
             archive = self.archive(selected)
             target = Path(cache) / fields[1]
+            contract.require(not target.is_symlink(), "APT cache target is a symlink")
             if target.exists():
-                contract.require(contract.file_hash(target) == selected["record"]["SHA256"], "APT cache contains another archive")
+                contract.require(target.is_file() and contract.file_hash(target) == selected["record"]["SHA256"], "APT cache contains another archive")
             else:
                 shutil.copyfile(archive, target)
 
