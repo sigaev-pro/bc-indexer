@@ -169,6 +169,38 @@ destination basename, including an encoded epoch. Reject unsafe URI components,
 path traversal, malformed rows, and cache symlinks. The display digest never
 replaces signed SHA-256 verification.
 
+Package archive GETs may explicitly opt into one technical transport retry
+within preparation. The only retryable error is typed `ssl.SSLEOFError` with
+reason `UNEXPECTED_EOF_WHILE_READING`, either direct or in `URLError.reason`.
+Allow at most two total attempts, both under the original absolute deadline,
+monotonic bound, and operator stop. Metadata, updater, and image fetches do not
+use this policy. Certificate, HTTP, malformed response, size/hash, filesystem,
+deadline, stop, and runtime-case failures never gain a retry.
+
+Before each package dispatch, durably journal its intent. Preserve failed
+attempt metadata and separately hashed files containing only bytes actually
+written; do not claim access to bytes buffered inside the transport. Retry from
+zero into another file. Retain byte-valued partial data explicitly exposed by
+a read exception within the same archive-size bound, and record any truncation;
+this does not make `IncompleteRead` retryable. Recheck deadline/stop immediately
+at dispatch after intent persistence. Record only sanitized error types/reason and allowed
+response headers, with URL, ordinal, times, size, and digest. Failure to retain
+the journal forbids further dispatch. Keep successful source-observation fields
+unchanged and distinguish `FIRST_ATTEMPT_SUCCESS` from `RECOVERED_TRANSPORT` in
+the separate package journal.
+
+Before final acceptance, seal that journal into the OS proof. Verify its
+captured reference and trusted in-memory contents, all failed/successful body
+references, and every original signature-log reference and command binding.
+Write new immutable signature-log extensions with an `archive_fetches` file
+reference; preserve the original logs. Refresh the intended closure references
+only after all extensions are written. Final materialized validation requires
+this shared sealed journal and binds each installed archive to its exact signed
+source and successful request. No package acquisition may follow sealing.
+This extends trusted log contents without changing the product manifest shape.
+Recovered preparation transport does not erase any earlier failed full run or
+replace D83's runtime-case evidence rules.
+
 The five native/support clients are Geth, BSC, Bor, Prysm, and Heimdall. The ten separate module roots additionally include NATS server, gRPC Go, NATS Go, Protobuf Go, and grocksdb. Full compiler/runtime OS closures belong to the Go and Debian images. Gateway/reader images, bootstrap manifests, and fixture contracts retain their later task owners.
 
 The current execution route builds linux/amd64 and binds every one of the seven network profiles explicitly. Arm64 build, ABI, and runtime results remain NOT_RUN. The selected descriptors are candidates, not established support. Record actual host Docker/Git/Python/GitHub CLI evidence separately from candidate deployment-tool versions. One actual fixed build and complete immutable inputs are required; a second forced build is not mandatory, and `repeat_build` remains NOT_RUN without that execution. Native chain execution and NATS delivery remain separate gates.

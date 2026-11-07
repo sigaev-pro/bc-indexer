@@ -7,11 +7,13 @@ import json
 import os
 from pathlib import Path
 import shutil
+import ssl
 import subprocess
 import tarfile
 import time
 import urllib.parse
 import urllib.request
+import uuid
 
 import build_contract as contract
 import build_materials as materials
@@ -48,6 +50,8 @@ class Runner:
         self.deadline = self.request["deadline"]
         self.monotonic_deadline = time.monotonic() + max(0, self.deadline - time.time())
         self.commands, self.cleanups, self.fetches = [], [], []
+        self.package_fetches, self.package_journal_reference = [], None
+        self.package_fetches_sealed = False
         self.cleaning = False
         self.root.mkdir(mode=0o700, parents=True, exist_ok=False)
         (self.root / "logs").mkdir()
@@ -97,7 +101,10 @@ class Runner:
         contract.require(stdout.stat().st_size + stderr.stat().st_size <= 1024 * 1024, "Docker control output exceeded its bound")
         return subprocess.CompletedProcess(arguments, code, stdout.read_text(), stderr.read_text())
 
-    def fetch(self, url, output, headers=None, expected_sha256=None, maximum=MAX_FETCH):
+    def fetch(self, url, output, headers=None, expected_sha256=None, maximum=MAX_FETCH, retry_package_archive=False):
+        if retry_package_archive:
+            contract.require(not headers, "package archive recovery does not accept authentication headers")
+            return self.fetch_package(url, output, expected_sha256, maximum)
         official_url(url)
         output = Path(output)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -126,6 +133,139 @@ class Runner:
                              "started_at": started, "finished_at": time.time()})
         evidence.atomic_json(self.root / "source-observations.json", self.fetches)
         return output
+
+    def write_package_journal(self):
+        path = self.root / "package-fetch-journal.json"
+        if self.package_journal_reference is not None:
+            contract.verify_reference(self.root, self.package_journal_reference)
+        else:
+            contract.require(not path.exists(), "unexpected package transport journal already exists")
+        value = {"schema_version": 1, "requests": self.package_fetches}
+        evidence.atomic_json(path, value)
+        reference = contract.reference(self.root, path)
+        contract.require(reference["sha256"] == contract.digest(value), "package transport journal changed during persistence")
+        self.package_journal_reference = reference
+
+    def fetch_package(self, url, output, digest, size):
+        materials.package_archive_url(url)
+        contract.require(not self.package_fetches_sealed and isinstance(digest, str) and contract.HEX.fullmatch(digest)
+                         and type(size) is int and 0 < size <= MAX_FETCH, "package recovery requires an unsealed exact archive pin")
+        output = Path(output)
+        expected = contract.reference_descriptor({"path": output.relative_to(self.root).as_posix(), "sha256": digest, "size_bytes": size})
+        contract.require(not output.exists() and not output.is_symlink(), "package output already exists")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        record = {"request_id": uuid.uuid4().hex, "url": url, "output": expected, "outcome": "IN_PROGRESS", "attempts": []}
+        self.package_fetches.append(record)
+        directory = self.root / "package-fetches" / record["request_id"]
+        directory.mkdir(parents=True)
+        for ordinal in (1, 2):
+            timeout = self.remaining(60)
+            attempt = {"ordinal": ordinal, "state": "STARTED", "started_at": time.time(), "finished_at": None,
+                       "response_url": None, "status": None, "headers": {}, "error": None, "body": None,
+                       "exception_partial_size": 0, "retained_exception_partial_size": 0}
+            record["attempts"].append(attempt)
+            record["outcome"] = "IN_PROGRESS"
+            self.write_package_journal()  # Intent must be durable before network dispatch.
+            path = directory / (str(ordinal) + ".body")
+            transport_error = None
+            try:
+                with path.open("xb") as stream:
+                    try:
+                        request = urllib.request.Request(url, headers={"User-Agent": "extractor-build-verifier/1"})
+                        try:
+                            timeout = self.remaining(60)
+                            response = urllib.request.urlopen(request, timeout=timeout)
+                        except Exception as error:
+                            if isinstance(error, urllib.error.HTTPError):
+                                attempt.update(response_url=error.url, status=error.code,
+                                    headers={key.lower(): value for key, value in (error.headers or {}).items()
+                                             if key.lower() in {"content-type", "docker-content-digest", "link", "etag", "last-modified"}})
+                            transport_error = error
+                            raise
+                        with response:
+                            attempt.update(response_url=response.url, status=response.status,
+                                headers={key.lower(): value for key, value in response.headers.items()
+                                         if key.lower() in {"content-type", "docker-content-digest", "link", "etag", "last-modified"}})
+                            official_url(response.url)
+                            contract.require(type(response.status) is int and response.status == 200, "package archive response did not succeed")
+                            total = 0
+                            while True:
+                                self.remaining()
+                                try:
+                                    block = response.read(1024 * 1024)
+                                except Exception as error:
+                                    transport_error = error
+                                    partial = getattr(error, "partial", None)
+                                    if isinstance(partial, bytes):
+                                        attempt["exception_partial_size"] = len(partial)
+                                        retained = stream.write(partial[:size - total])
+                                        attempt["retained_exception_partial_size"] = retained
+                                        contract.require(retained == len(partial), "package exception bytes exceeded its exact size")
+                                    raise
+                                if not block:
+                                    break
+                                total += len(block)
+                                contract.require(total <= size, "package archive exceeded its exact size")
+                                stream.write(block)
+                    finally:
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                attempt["body"] = contract.reference(self.root, path)
+                contract.require(attempt["body"]["sha256"] == digest and attempt["body"]["size_bytes"] == size,
+                                 "package archive differs from its exact size or SHA-256")
+                os.link(path, output)  # Keep the attempt bytes and publish without overwriting.
+            except Exception as error:
+                cause = error.reason if isinstance(error, urllib.error.URLError) else error
+                retryable = (error is transport_error and type(error) in {ssl.SSLEOFError, urllib.error.URLError}
+                             and type(cause) is ssl.SSLEOFError
+                             and getattr(cause, "reason", None) == "UNEXPECTED_EOF_WHILE_READING")
+                attempt.update(state="FAILED", finished_at=time.time(), error={"type": type(error).__name__,
+                    "wrapped_type": type(cause).__name__ if cause is not error else None,
+                    "ssl_reason": "UNEXPECTED_EOF_WHILE_READING" if retryable else None, "retryable": retryable})
+                if path.is_file():
+                    attempt["body"] = contract.reference(self.root, path)
+                record["outcome"] = "FAILED"
+                self.write_package_journal()  # Failure to retain evidence forbids another dispatch.
+                if retryable and ordinal == 1:
+                    continue
+                raise
+            attempt.update(state="SUCCEEDED", finished_at=time.time())
+            record["outcome"] = "FIRST_ATTEMPT_SUCCESS" if ordinal == 1 else "RECOVERED_TRANSPORT"
+            self.write_package_journal()
+            self.fetches.append({"url": url, "status": 200, "headers": attempt["headers"], "body": contract.reference(self.root, output),
+                                 "started_at": attempt["started_at"], "finished_at": attempt["finished_at"]})
+            evidence.atomic_json(self.root / "source-observations.json", self.fetches)
+            return output
+
+    def seal_package_fetches(self, closures):
+        contract.require(not self.package_fetches_sealed and self.package_journal_reference is not None,
+                         "package transport journal is missing or already sealed")
+        journal = contract.verify_reference(self.root, self.package_journal_reference)
+        expected = {"schema_version": 1, "requests": self.package_fetches}
+        contract.require(journal.read_bytes() == contract.canonical(expected), "package transport journal differs from trusted memory")
+        materials.package_fetch_journal(expected, self.root)
+        originals = {}
+        for closure in closures:
+            for index in closure["signed_indexes"]:
+                status = materials.signature_status(index, self.root, self.commands)
+                contract.require("archive_fetches" not in status, "OS signature log already has transport evidence")
+                originals[index["signature_log"]["path"]] = status
+        # Extend immutable logs only after validating every previously captured binding.
+        sealed = self.root / "package-fetches" / "sealed.json"
+        contract.require(not sealed.exists(), "sealed package journal already exists")
+        evidence.atomic_json(sealed, expected)
+        reference = contract.reference(self.root, sealed)
+        replacements = {}
+        for number, (path, status) in enumerate(originals.items()):
+            output = self.root / "os" / ("transport-signature-" + str(number) + ".json")
+            contract.require(not output.exists(), "extended OS signature log already exists")
+            evidence.atomic_json(output, {**status, "archive_fetches": reference})
+            replacements[path] = contract.reference(self.root, output)
+        for closure in closures:
+            closure["signed_indexes"] = [{**index, "signature_log": replacements[index["signature_log"]["path"]]}
+                                         for index in closure["signed_indexes"]]
+        self.package_fetches_sealed = True
+        return reference
 
     def container(self, step, image, source=None, network="none", package_cache=None, temporary_bytes=None):
         limits = self.plan["limits"]
@@ -410,4 +550,5 @@ def native_builds(runner, source_caches, authenticate_extra=None, package_source
             builds[identifier].update(oci_layout(runner, identifier, container, binary, epochs[identifier]))
         finally:
             runner.cleanup()
+    runner.seal_package_fetches([compiler_closure, runtime_closure])
     return builds, closures, {"golang-build-image": compiler_closure, "debian-runtime-image": runtime_closure}
