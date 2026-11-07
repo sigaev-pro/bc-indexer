@@ -455,23 +455,36 @@ class RealBackend:
         return {"operation_id": operation["id"], "outcome": outcome or "completed", "sessions": records,
                 "cleanup_complete": bool(records) and all(record["cleanup_complete"] for record in records)}
 
-    def supervised(self, run, operation_id, command, cwd, stdin="", timeout=3600, environment=None):
+    def supervised(self, run, operation_id, command, cwd, stdin="", timeout=3600, environment=None, owned_images=None):
         self.check_stop(run)
         remaining = min(timeout, self.remaining(), run["deadline"] - time.time())
         require(remaining > 0, "BUDGET_STOP", "session cannot start after its launch deadline")
         directory = self.root / ".project/automation/runs" / run["run_id"] / operation_id
         evidence.durable_directory(directory)
         request_path = directory / "request.json"
+        if owned_images is not None:
+            command = [*command, "--request", str(request_path)]
         request = {"operation_id": operation_id, "command": command, "cwd": str(cwd),
                    "deadline": min(run["deadline"], time.time() + remaining),
                    "timeout_seconds": remaining,
                    "stop_file": str(self.store.directory / "stop" / (run["run_id"] + ".json")),
                    "log_limit": session_runner.LOG_LIMIT, "env": environment or {},
                    "stdin_sha256": hashlib.sha256(stdin.encode()).hexdigest()}
+        if owned_images is not None:
+            import secrets
+            import build_resources
+            previous = read_json(request_path) if request_path.exists() else {}
+            request["owned_docker"] = {"schema_version": 1, "run_id": run["run_id"],
+                "task_id": "E01-01.builds", "operation_id": operation_id,
+                "nonce": previous.get("owned_docker", {}).get("nonce", secrets.token_hex(32)),
+                "images": owned_images}
+            build_resources.validate(request["owned_docker"])
         if request_path.exists():
             saved = read_json(request_path)
             require(all(saved[key] == request[key] for key in ("operation_id", "command", "cwd", "stop_file", "env", "stdin_sha256")),
                     "BLOCKED_SESSION", "retained session request differs from the resumed command")
+            require(saved.get("owned_docker") == request.get("owned_docker"),
+                    "BLOCKED_SESSION", "retained Docker ownership differs from the resumed command")
             request = saved
         else:
             # The stdin file contains instructions, never a saved process environment.
@@ -503,6 +516,11 @@ class RealBackend:
                 expired = time.monotonic() >= watchdog_deadline or time.time() >= request["deadline"] + grace
                 if stop or expired:
                     cleanup = session_runner.watchdog_cleanup(process)
+                    if "owned_docker" in request:
+                        import build_resources
+                        cleanup["docker"] = build_resources.cleanup(request["owned_docker"], directory / "docker-resources.json")
+                        if not cleanup["docker"]["complete"]:
+                            cleanup["cleanup_uncertain"] = True
                     evidence.atomic_json(directory / "watchdog.json", {
                         "operation_id": operation_id, "supervisor_pid": process.pid,
                         "reason": "operator stop" if stop else "monotonic watchdog timeout", "cleanup": cleanup})
@@ -521,6 +539,14 @@ class RealBackend:
             raise Blocked("STOPPED" if stopped else "FAILED_SESSION", "parent watchdog stopped an unresponsive supervisor; inspect retained cleanup evidence")
         require(result.get("cleanup_complete") is True, "BLOCKED_SESSION_CLEANUP",
                 "session lacks proven complete process-group cleanup; preserve work for reviewed recovery")
+        if "owned_docker" in request:
+            import build_resources
+            try:
+                build_resources.validate_cleanup(request["owned_docker"], result["docker_cleanup"])
+                require(not build_resources.members(request["owned_docker"]), "BLOCKED_SESSION_CLEANUP",
+                        "owned Docker containers remain after the retained cleanup")
+            except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
+                raise Blocked("BLOCKED_SESSION_CLEANUP", "owned Docker cleanup is unproved: " + str(error)) from error
         if result["reason"] == "stopped":
             raise Blocked("STOPPED", "supervised process stopped; work and logs are retained")
         require(result["reason"] == "completed" and result["exit_code"] == 0,
