@@ -8,6 +8,7 @@ Task: `HANDOFF-PUBLISH-01`, linked to existing issues [#11](https://github.com/s
 - [PR #107](https://github.com/sigaev-pro/bc-indexer/pull/107): build contracts, manifest schema, planner/verifier, and version-refresh tools at `7022c0dd172e68e35eb6d73eef5487223583c674` on `feat/e01-native-builds-repair`. The PR remains a draft. Real native build acceptance is incomplete.
 - `archive/e01-builds-failed-f17` retains `f17bb195d1baf62e93c596ed0fc067f2c6b60574`, the candidate from the failed real-source verification. The original local worktree and branch remain unchanged.
 - `archive/e01-builds-before-aut05-7723` retains `7723a1704b7f0f43987611c6d218ecdd73eda256`, the earlier product history before accepted-source synchronization.
+- [PR #108](https://github.com/sigaev-pro/bc-indexer/pull/108) publishes this report, the current status, and D94's publication-only scope. It remains a draft.
 
 Remote refs and both draft PR heads were checked directly after publication. `main` remains `f917e73a7e5ec3de28110faddb6a924d2e04cf9e`; no changes were merged. The old local `master` tip is already an ancestor of `origin/main`, so it did not require a separate publication. Other named worktree branches matched their existing remote refs.
 
@@ -19,11 +20,11 @@ The earlier candidate `2e01564` passed CI but received REQUEST_CHANGES from both
 
 The product head `7022c0d` has recorded passing results for 51 isolated tests, independent Spec and Standards reviews, and 292 portable CI tests with two opt-in Docker skips and 54 negative controls. The independent reviews included 20 and 27 additional control groups. These are code-level results. The earlier real verification of `f17bb19` failed on GitHub pagination before compilation; the repaired head has not completed a replacement real verification.
 
-GitHub automatically started fresh CI after publication: run `42398930314` for AUT06 and run `42398999006` for the product branch. Both were in progress at the remote publication check. Their eventual results do not replace the remaining review and product acceptance requirements.
+GitHub automatically started fresh CI after publication. Both exact-head runs subsequently completed successfully: [run 42398930314](https://github.com/sigaev-pro/bc-indexer/actions/runs/42398930314) for AUT06 and [run 42398999006](https://github.com/sigaev-pro/bc-indexer/actions/runs/42398999006) for the product branch. These results do not replace the remaining review and product acceptance requirements.
 
 ## Background work and retained evidence
 
-All worktrees were clean at intake. The AUT06 author model session was interrupted; its launch-ledger entry is now cancelled with confirmed cleanup. No agent was restarted. Supervisor PID 46060, process group 46078, and all 28 recorded child groups were absent. No matching project processes or running Docker containers were found. No process needed to be killed during this handoff.
+All worktrees were clean at intake. The AUT06 author model session was interrupted; its launch-ledger entry is now cancelled with confirmed cleanup. No agent was restarted. Supervisor PID 46060, process group 46078, and all 28 recorded child groups were absent. No matching project processes, running Docker containers, or project launchd jobs were found. No process needed to be killed during this handoff.
 
 The retained diagnostic is under `.project/worktrees/aut06-verification-recovery/.project/automation/runs/aut06-repair-ci-diagnostic/commands/command-f7bc89c533f04f6486ac0db804f7094d/`. Its result reports exit zero, complete command cleanup, and complete candidate cleanup. Recorded output hashes match the files:
 

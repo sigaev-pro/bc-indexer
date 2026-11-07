@@ -1,12 +1,12 @@
 # Состояние проекта
 
-## HANDOFF-PUBLISH-01 — Code published; handoff documentation ready
+## HANDOFF-PUBLISH-01 — Complete; all work published in draft PRs
 
 The owner authorized step 1 only: inspect and stop owned background work, publish completed local commits in working branches and draft PRs, and report verified results and blockers. Do not start new implementation, review rounds, recovery, native builds, or merges in this block. See D94. This checkpoint concerns existing issues #11 and #105; it does not add a product task to the fixed catalog.
 
 All worktrees were clean at intake. The interrupted AUT06 author session is recorded as cancelled with verified cleanup. Its retained supervisor diagnostic passed 323 tests with two opt-in Docker skips and all 54 negative controls on clean `db07c163d3d5679308d04bb9b9c3b967973333c0`; the earlier wrapper timeout remains retained. The supervisor, its process group, and all 28 recorded child groups are absent. No matching project process or running Docker container was found.
 
-Published and remotely verified: draft [PR #106](https://github.com/sigaev-pro/bc-indexer/pull/106) at `db07c16`, draft [PR #107](https://github.com/sigaev-pro/bc-indexer/pull/107) at `7022c0d`, and two archive branches retaining `f17bb19` and `7723a17`. Main remains `f917e73`; no merge or deployment occurred. See the [publication report](docs/PUBLICATION_HANDOFF_2026_11_07.md) for exact checks, retained failures, process cleanup, and blockers. The next product task remains issue #11, actual client build verification. This block ends with the handoff report; further implementation and workflow changes await agreement under D94.
+Published and remotely verified: draft [PR #106](https://github.com/sigaev-pro/bc-indexer/pull/106) at `db07c16`, draft [PR #107](https://github.com/sigaev-pro/bc-indexer/pull/107) at `7022c0d`, draft documentation [PR #108](https://github.com/sigaev-pro/bc-indexer/pull/108), and two archive branches retaining `f17bb19` and `7723a17`. GitHub CI passed for both code heads. Main remains `f917e73`; no merge or deployment occurred. See the [publication report](docs/PUBLICATION_HANDOFF_2026_11_07.md) for exact checks, retained failures, process cleanup, and blockers. The next product task remains issue #11, actual client build verification. This block ends with the handoff report; further implementation and workflow changes await agreement under D94.
 
 
 ## Точка продолжения
