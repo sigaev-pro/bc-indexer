@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 import resource
-import signal
+import secrets
 import subprocess
 import sys
 import time
@@ -15,30 +15,24 @@ import build_contract as contract
 import build_update_vectors
 import build_updates
 import build_vectors
+import evidence
+import session_runner
 
 
 def finish_group(process):
     """Stop owned descendants, reap the direct child, and reject live writers."""
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    termination = session_runner.terminate_group(process, grace=0.1)
+    contract.require(termination in {"already-exited", "graceful", "forced"}
+                     and session_runner.confirm_group_exit(process), "candidate group ownership or cleanup is uncertain")
     process.wait(timeout=5)
-    deadline = time.monotonic() + 5
-    while True:
-        observed = subprocess.run(["ps", "-axo", "pgid=,stat="], capture_output=True, text=True, timeout=5, check=True)
-        live = [line for line in observed.stdout.splitlines()
-                if len(parts := line.split()) >= 2 and parts[0] == str(process.pid) and not parts[1].startswith("Z")]
-        if not live:
-            return
-        contract.require(time.monotonic() < deadline, "candidate command still has live child processes")
-        time.sleep(0.02)
 
 
 class Commands:
     def __init__(self, candidate, source, directory, deadline):
         self.candidate, self.source, self.directory = (Path(value).resolve() for value in (candidate, source, directory))
         self.directory.mkdir(parents=True, exist_ok=False)
+        self.groups = Path(os.environ.get("BOOTSTRAP_CANDIDATE_GROUPS", self.directory / "candidate-groups")).resolve()
+        self.groups.mkdir(parents=True, exist_ok=True)
         self.deadline = deadline
         self.outcomes = []
         self.registry, self.lock, self.registry_hash, self.lock_hash = contract.inputs(self.source)
@@ -72,24 +66,57 @@ class Commands:
         def bounds():
             resource.setrlimit(resource.RLIMIT_FSIZE, (256 * 1024 * 1024, 256 * 1024 * 1024))
         payload = b"" if request is None else contract.canonical(request)
+        token = secrets.token_hex(16)
+        intent = self.groups / (token + ".json")
+        input_path = self.directory / (identifier + ".stdin")
+        result_path = self.directory / (identifier + ".result.json")
+        request_path = self.directory / (identifier + ".request.json")
+        input_path.write_bytes(payload)
+        evidence.atomic_json(intent, {"token": token, "state": "pending", "group": None}, exclusive=True)
+        evidence.atomic_json(request_path, {"command": command, "stdin": str(input_path), "result": str(result_path),
+                                           "deadline": min(self.deadline, time.time() + remaining)}, exclusive=True)
+        read_end, write_end = os.pipe()
+        actual_exit = None
         with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, cwd=self.candidate,
-                                       start_new_session=True, preexec_fn=bounds)
+            try:
+                process = subprocess.Popen([sys.executable, "-I", str(Path(__file__).with_name("build_candidate_guard.py")),
+                                            str(request_path), str(intent), str(read_end)],
+                                           stdout=stdout, stderr=stderr, cwd=self.candidate,
+                                           start_new_session=True, preexec_fn=bounds, pass_fds=(read_end,))
+            except BaseException:
+                os.close(write_end)
+                raise
+            finally:
+                os.close(read_end)
             error = None
             cleanup_confirmed = False
             try:
-                process.communicate(payload, timeout=remaining)
+                until = time.monotonic() + remaining
+                while not result_path.exists():
+                    if time.monotonic() >= until:
+                        raise subprocess.TimeoutExpired(command, remaining)
+                    contract.require(not session_runner.exited_unreaped(process), "candidate guard exited without a result")
+                    time.sleep(0.01)
+                result = contract.parse_json(result_path.read_bytes())
+                contract.require(result.get("group") == process.pid, "candidate result has another process owner")
+                if result.get("error") == "timeout":
+                    raise subprocess.TimeoutExpired(command, remaining)
+                contract.require(result.get("error") is None and type(result.get("exit_code")) is int,
+                                 "candidate guard returned an invalid result")
+                actual_exit = result["exit_code"]
             except BaseException as failure:
                 error = failure
             finally:
+                os.close(write_end)
                 try:
                     finish_group(process)
                     cleanup_confirmed = True
+                    evidence.atomic_json(intent, {"token": token, "state": "complete", "group": process.pid})
                 except BaseException as failure:
                     error = failure
         contract.require(stdout_path.stat().st_size <= 8 * 1024 * 1024 and stderr_path.stat().st_size <= 8 * 1024 * 1024,
                          "candidate protocol output exceeded its bound")
-        row = {"id": identifier, "expected_exit": expected, "actual_exit": process.returncode,
+        row = {"id": identifier, "expected_exit": expected, "actual_exit": actual_exit,
                "process_group": process.pid, "cleanup_confirmed": cleanup_confirmed,
                "command": command, "stdin_sha256": hashlib.sha256(payload).hexdigest(),
                "stdout_sha256": contract.file_hash(stdout_path), "stderr_sha256": contract.file_hash(stderr_path)}
@@ -98,7 +125,7 @@ class Commands:
         if error is not None:
             raise error
         contract.require(self.fingerprint_inputs() == self.input_state, "candidate updater mutated an active input, even if its bytes were restored")
-        contract.require(process.returncode == expected, "candidate disagreed with independent control: " + identifier)
+        contract.require(actual_exit == expected, "candidate disagreed with independent control: " + identifier)
         return stdout_path.read_bytes()
 
     def plan_request(self, platform="linux/amd64", limits=None):

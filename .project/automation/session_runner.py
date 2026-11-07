@@ -13,6 +13,7 @@ import time
 
 import acceptance
 import evidence
+import build_candidate_guard
 
 LOG_LIMIT = 8 * 1024 * 1024
 
@@ -169,6 +170,9 @@ def supervise(request_path, lock_fd, on_interrupt=None):
         if docker is not None:
             docker.validate_cleanup(request["owned_docker"], saved["docker_cleanup"])
             acceptance.require(not docker.members(request["owned_docker"]), "owned Docker resources reappeared after cleanup")
+        if "candidate_cleanup" in saved:
+            acceptance.require(saved["candidate_cleanup"]["complete"] and build_candidate_guard.confirm_all(directory / "candidate-groups")["complete"],
+                               "saved session has uncertain candidate cleanup")
         return saved
     claim_fd = os.open(directory / "session.lock", os.O_RDWR | os.O_CREAT, 0o600)
     try:
@@ -230,9 +234,13 @@ def supervise(request_path, lock_fd, on_interrupt=None):
                                    "session deadline or stop forbids worker dispatch")
                 if docker is not None:
                     docker.begin(request["owned_docker"], docker_inventory)
+                candidate_groups = directory / "candidate-groups"
+                candidate_groups.mkdir(exist_ok=True)
+                environment = dict(os.environ, **request.get("env", {}))
+                environment["BOOTSTRAP_CANDIDATE_GROUPS"] = str(candidate_groups)
                 process = subprocess.Popen(request["command"], cwd=request["cwd"], stdin=stdin,
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
-                                           pass_fds=(lock_fd,), env=dict(os.environ, **request.get("env", {})))
+                                           pass_fds=(lock_fd,), env=environment)
             selector = selectors.DefaultSelector()
             selector.register(process.stdout, selectors.EVENT_READ, stdout)
             selector.register(process.stderr, selectors.EVENT_READ, stderr)
@@ -280,6 +288,10 @@ def supervise(request_path, lock_fd, on_interrupt=None):
                 evidence.atomic_json(directory / "cleanup.json", {"operation_id": request["operation_id"],
                                      "termination": termination, "reason": reason})
             process.wait(timeout=10)
+            candidate_cleanup = build_candidate_guard.confirm_all(candidate_groups)
+            cleanup_complete = cleanup_complete and candidate_cleanup["complete"]
+            if not cleanup_complete:
+                reason = "cleanup-uncertain"
             docker_cleanup = None
             if docker is not None:
                 docker_cleanup = docker.cleanup(request["owned_docker"], docker_inventory)
@@ -294,7 +306,7 @@ def supervise(request_path, lock_fd, on_interrupt=None):
         result = {"schema_version": 1, "operation_id": request["operation_id"],
                   "request_sha256": request_hash, "started_at": started, "finished_at": time.time(),
                   "exit_code": process.returncode, "reason": reason, "termination": termination,
-                  "cleanup_complete": cleanup_complete,
+                  "cleanup_complete": cleanup_complete, "candidate_cleanup": candidate_cleanup,
                   "stdout_sha256": file_hash(stdout_path), "stderr_sha256": file_hash(stderr_path)}
         if docker is not None:
             result["docker_cleanup"] = docker_cleanup

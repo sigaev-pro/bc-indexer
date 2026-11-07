@@ -38,7 +38,7 @@ class RealBackend:
                            "source_state": "modified" if self.git(self.source, "status", "--porcelain=v1") else "clean",
                            "commit_contains_executing_files": not bool(self.git(self.source, "status", "--porcelain=v1")),
                            "source_sha256": {name: hashlib.sha256((self.source / ".project/automation" / name).read_bytes()).hexdigest()
-                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "acceptance_receipts.py", "evidence.py", "acceptance.py", "evidence_task_verifier.py", "task_proofs.py", "launch_control.py", "build_task_verifier.py", "build_contract.py", "build_execution.py", "build_resources.py", "build_materials.py", "build_os.py", "build_product_commands.py", "build_updates.py", "build_update_execution.py")}}
+                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "build_candidate_guard.py", "acceptance_receipts.py", "evidence.py", "acceptance.py", "evidence_task_verifier.py", "task_proofs.py", "launch_control.py", "build_task_verifier.py", "build_contract.py", "build_execution.py", "build_resources.py", "build_materials.py", "build_os.py", "build_product_commands.py", "build_updates.py", "build_update_execution.py")}}
         self.roles = None
         self.cached_receipts = None
 
@@ -523,6 +523,9 @@ class RealBackend:
                 expired = time.monotonic() >= watchdog_deadline or time.time() >= request["deadline"] + grace
                 if stop or expired:
                     cleanup = session_runner.watchdog_cleanup(process)
+                    cleanup["candidate_groups"] = session_runner.build_candidate_guard.confirm_all(directory / "candidate-groups")
+                    if not cleanup["candidate_groups"]["complete"]:
+                        cleanup["cleanup_uncertain"] = True
                     if "owned_docker" in request:
                         import build_resources
                         cleanup["docker"] = build_resources.cleanup(request["owned_docker"], directory / "docker-resources.json")

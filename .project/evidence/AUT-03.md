@@ -39,7 +39,15 @@ Both independent axes reviewed head `453315a19dc2abc8c55dee20a5a18f3cb562d360` a
 
 The first repair retains a separately hashed local-module inventory derived from the exact source archive and verifies package confinement. Every governed candidate external lock now participates in before/after fingerprints. Candidate commands run in owned process groups; descendants are stopped, the direct child is reaped, and live group members block success. A final trusted materialized validation follows all candidate preflights. Four new regression tests cover the Prysm shape and escape cases, both external locks, delayed descendant writes on normal exit and timeout, and synchronous artifact mutation after candidate success. The targeted suite passes 51 tests in 7.66 seconds, with two opt-in Docker cases skipped. Full repaired CI and both exact-head re-reviews remain required.
 
-## Acceptance still required
+## Second review and process-ownership repair
+
+Both re-review axes checked `f624f56de88cc79bae6f95b9c1b8e99a3b56cbe4`. They confirmed the original artifact, local-module, and external-lock fixes, including an archive from the exact pinned Prysm commit with 16 local files. They still returned REQUEST_CHANGES: nested candidate groups survived outer driver SIGTERM/SIGKILL, and normal cleanup signaled a group after `communicate()` had reaped its leader. Their disposable reproductions and processes were removed before root resumed ownership. These failed results remain part of the attempt history.
+
+Implementation attempt 3 / repair cycle 2 uses a trusted live group leader with a parent lifeline. The leader kills its own group if the driver disappears. Normal cleanup uses the existing unreaped-child invariant and reaps only after confirming group absence. A durable intent precedes dispatch; the outer supervisor and parent watchdog inspect candidate-group cleanup without signaling stale recorded PIDs. The frozen trusted source sets include the new guard. New real-process regressions cover outer SIGTERM, SIGKILL, operator stop, deadline, unresolved intents, and the no-signal-after-reap rule. The targeted suite passes 55 tests in 19.52 seconds, with the two opt-in Docker cases skipped. Full CI and both final exact-head reviews remain required.
+
+## Remaining acceptance steps
+
+Full CI for the second repaired tree exited 0 in 114.36 seconds. Durable stdout, stderr, timestamps, and exit status were retained. The targeted and complete checks do not replace both final exact-head independent reviews or protected GitHub acceptance.
 
 Full repaired CI exited 0 in 104.34 seconds. Its stdout, stderr, command, times, and actual exit code are retained separately from the interrupted run. This is validation of the first repaired tree; it is not an independent review or product build result. Both exact-head re-reviews are still required after committing it.
 
