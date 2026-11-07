@@ -121,6 +121,45 @@ Update mode writes a `PREPARED_CANDIDATE` tied to the registry and previous acti
 
 ## Execution scope
 
+The trusted build driver accepts paired `--package-source-report PATH` and
+`--package-source-report-sha256 SHA256` options when pinned Debian indexes have
+already been retained. Both options are required together. The digest names
+the exact raw source report; it does not assert that its original run passed.
+The report must declare `component-update-v1`, version 1, check/update mode,
+and `synthetic: false`. Its observation URLs must be unique official HTTPS
+sources. Historical component selections and overall verdicts are not reused.
+Unrelated report body references do not need to resolve.
+
+For every index in the build plan, select an HTTP 200 observation with the exact
+URL and pinned digest, plus an HTTP 200 raw `InRelease` from that same channel.
+Require bounded regular files without symlink traversal, including ancestors.
+The report limit is 16 MiB and 4,096 observations; each compressed index is at
+most 256 MiB and each `InRelease` at most 16 MiB. Copy the original report bytes
+and the selected bodies into the new owned proof directory, checking sizes and
+hashes again. Preserve original observation times, URLs, headers, and references.
+Do not label the copy as a fresh HTTP observation or substitute a newer index.
+
+The signature log now includes `acquisition`. Normal fetching records exactly
+`{"mode":"live-fetch"}`. Retained input records exactly `mode: retained-report`,
+a `report` file reference, `index_observation`, and `inrelease_observation`.
+Those observations are exact rows from the copied report. Their original body
+sizes and hashes must match the new proof's copied bytes. The signature-log
+hash binds this provenance without changing the BuildPlan or manifest shape.
+Final materialized validation verifies the copied report and selected bodies;
+the original report directory is no longer needed.
+
+Copying does not authenticate Debian metadata. Each run must execute the
+unchanged pinned-image-owned `sqv` command and keyring on the copied raw
+`InRelease`, then check its authenticated Release against the exact channel,
+index hash and size, current publication-time policy, and any `Valid-Until`.
+An absent `Valid-Until` on stable `trixie` keeps the existing Debian policy;
+no new expiry is invented. Expired security/updates metadata fails. These checks
+remain required before installation and during final validation. Complete OS
+closure and package-archive checks remain mandatory. Current live updater
+discovery and independent refresh still run; retained build inputs do not
+replace those live checks. Without the paired options, acquisition still
+fetches the exact pinned inputs from their configured URLs.
+
 The five native/support clients are Geth, BSC, Bor, Prysm, and Heimdall. The ten separate module roots additionally include NATS server, gRPC Go, NATS Go, Protobuf Go, and grocksdb. Full compiler/runtime OS closures belong to the Go and Debian images. Gateway/reader images, bootstrap manifests, and fixture contracts retain their later task owners.
 
 The current execution route builds linux/amd64 and binds every one of the seven network profiles explicitly. Arm64 build, ABI, and runtime results remain NOT_RUN. The selected descriptors are candidates, not established support. Record actual host Docker/Git/Python/GitHub CLI evidence separately from candidate deployment-tool versions. One actual fixed build and complete immutable inputs are required; a second forced build is not mandatory, and `repeat_build` remains NOT_RUN without that execution. Native chain execution and NATS delivery remain separate gates.
