@@ -34,6 +34,8 @@ def fixture(root, source):
             continue
         item = copy.deepcopy(active["components"][identifier])
         source_info = entry["source"]
+        repository_url = "https://api.github.com/repos/" + source_info["repository"]
+        repository_id = int(hashlib.sha256(source_info["repository"].encode()).hexdigest()[:12], 16) + 1
         version = "nats-88.2.0" if identifier == "nats-chart" else "cmd/protoc-gen-go-grpc/v88.2.0" if identifier == "protoc-gen-go-grpc" else "v88.2.0"
         commit = hashlib.sha1(((identifier if source_info["channel"] == "upstream-bundle" else source_info["repository"]) + "-synthetic-source").encode()).hexdigest()
         if source_info["channel"] == "upstream-bundle":
@@ -49,6 +51,13 @@ def fixture(root, source):
                                        "body": "Synthetic stable release with no runtime compatibility claim."},
                                       {"tag_name": "v999.0.0", "draft": True, "prerelease": False},
                                       {"tag_name": "v999.0.0-rc.1", "draft": False, "prerelease": True}])
+        add(repository_url, {"id": repository_id, "full_name": source_info["repository"], "url": repository_url})
+        parsed = urllib.parse.urlsplit(source_info["url"])
+        tail = parsed.path.removeprefix("/repos/" + source_info["repository"])
+        next_url = urllib.parse.urlunsplit(("https", "api.github.com", "/repositories/" + str(repository_id) + tail,
+                                           parsed.query + ("&" if parsed.query else "") + "page=2", ""))
+        add(next_url, [])
+        responses[source_info["url"]]["headers"]["link"] = '<' + next_url + '>; rel="next", <' + next_url + '>; rel="last"'
         if source_info["channel"] == "upstream-bundle":
             add("https://api.github.com/repos/" + source_info["repository"] + "/commits/" + commit[:12],
                 {"sha": commit, "commit": {"committer": {"date": "2000-01-01T00:00:00Z"}}})
