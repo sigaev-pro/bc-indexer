@@ -1,6 +1,6 @@
 # Initial evidence task handoff
 
-This is the trusted bootstrap acceptance contract for `E01-01.evidence`, not its implementation. D91 supplies this interface within the accepted D82/EVID requirements. D86 still prohibits actual E01 dispatch. The controller may execute it only after a later reviewed owner launch and accepted BOOT-09.
+This is the trusted acceptance contract for `E01-01.evidence`, not its implementation. D91 supplies the version 3 interface within D82/EVID; AUT-02 adds the existing D87 reader boundary obligation. The historical D86 authorization remains BOOT only. D92 permits E01 work through the reviewed launch, accepted BOOT-09, and frozen task configuration; installing this verifier does not accept the product task.
 
 The future worker owns `test/evidence/`, `.project/evidence/E01-01.evidence.md`, and its status update. It cannot change this contract, the trusted verifier, task recipes, or controller code. It supplies:
 

@@ -21,6 +21,8 @@ Commands ran in the isolated AUT-02 worktree based on `a076de93d948b08892171fd84
 
 The protocol-stub tests validate driver plumbing and rejection behavior. Their lookup table is explicitly a disposable bootstrap fixture; it is not the product validator and cannot establish E01 acceptance. The real schema candidate still requires its own independent review and the actual supervised trusted driver proof.
 
+The coordinator also ran this trusted driver against the independently authored E01 schema's working source. All 138 conformance outcomes passed in 16.15 seconds, with runtime NOT_RUN and vector digest `7c2058cabf4f5fba1398cc3c5e5188cdeb7c1f2a1ba400248b5aea3aceb7f1b9`. This was a diagnostic before the product's final commit, not an exact-head acceptance capture. The source and product still require their separate reviewed acceptance paths.
+
 ## Remaining acceptance
 
 Integrate the accepted AUT-01 source without resetting D92 budgets; review this exact final commit independently; pass protected CI; retain pre-merge capture and verified merge facts. Then adopt the updated trusted source through the supported safe handoff before accepting E01-01.evidence. Runtime source closure, producer durability, terminal fence conformance, full stream coverage, reconstruction, and semantic comparison remain NOT_RUN here.
