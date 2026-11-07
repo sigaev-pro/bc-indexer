@@ -7,6 +7,7 @@ Successful validation is artifact conformance, not acceptance or runtime proof.
 """
 
 import datetime
+from decimal import Decimal, DecimalException
 from fractions import Fraction
 import hashlib
 import json
@@ -38,8 +39,8 @@ READER_CONDITIONS = (
     "reconstruction", "semantic_comparison",
 )
 TIME_PATTERN = re.compile(
-    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
-    r"(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})\Z"
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})"
+    r"(?:\.(?P<fraction>[0-9]+))?(?:Z|[+-](?P<offset_hour>[0-9]{2}):(?P<offset_minute>[0-9]{2}))\Z"
 )
 
 
@@ -64,13 +65,40 @@ def reject_constant(_value):
     raise InvalidEvidence("JSON contains a nonfinite number")
 
 
+def canonical_float(value):
+    """D91 uses Python JSON float spelling; unsupported decimal precision fails closed."""
+    approximate = float(value)
+    require(math.isfinite(approximate) and Decimal(str(approximate)) == value,
+            "JSON number exceeds the lossless canonical precision boundary")
+    return approximate
+
+
+def parse_decimal(text):
+    try:
+        value = Decimal(text)
+        canonical_float(value)
+        return value
+    except (DecimalException, OverflowError) as error:
+        raise InvalidEvidence("JSON number exceeds the supported numeric range") from error
+
+
 def parse_json(text):
-    return json.loads(text, object_pairs_hook=unique_object, parse_constant=reject_constant)
+    return json.loads(text, object_pairs_hook=unique_object, parse_constant=reject_constant, parse_float=parse_decimal)
+
+
+def canonical_value(value):
+    if type(value) is Decimal:
+        return canonical_float(value)
+    if type(value) is dict:
+        return {key: canonical_value(item) for key, item in value.items()}
+    if type(value) is list:
+        return [canonical_value(item) for item in value]
+    return value
 
 
 def canonical(value):
     """Use D91's exact manifest and registry digest encoding."""
-    return (json.dumps(value, sort_keys=True, separators=(",", ":"),
+    return (json.dumps(canonical_value(value), sort_keys=True, separators=(",", ":"),
                        ensure_ascii=True, allow_nan=False) + "\n").encode("utf-8")
 
 
@@ -83,24 +111,42 @@ def identity(value):
 
 
 def timestamp(value):
-    require(isinstance(value, str) and TIME_PATTERN.fullmatch(value) is not None,
+    match = TIME_PATTERN.fullmatch(value) if isinstance(value, str) else None
+    require(match is not None,
             "timestamp must use the documented RFC 3339 profile")
+    require(int(match["hour"]) < 24 and int(match["minute"]) < 60 and int(match["second"]) < 60,
+            "timestamp has an invalid hour, minute, or second")
+    require(match["offset_hour"] is None or (int(match["offset_hour"]) < 24 and int(match["offset_minute"]) < 60),
+            "timestamp has an invalid offset hour or minute")
     try:
         parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
         epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
         whole = parsed.replace(microsecond=0) - epoch
-        fraction = re.search(r"\.([0-9]+)", value)
+        fraction = match["fraction"]
         # Preserve sub-microsecond ordering instead of truncating it in datetime.
-        remainder = Fraction(int(fraction[1]), 10 ** len(fraction[1])) if fraction else Fraction(0)
+        remainder = Fraction(int(fraction), 10 ** len(fraction)) if fraction else Fraction(0)
         return Fraction(whole.days * 86400 + whole.seconds) + remainder
     except ValueError as error:
         raise InvalidEvidence("timestamp has an invalid date, time, or offset") from error
+
+
+def finite_number(value):
+    return type(value) is int or (type(value) is float and math.isfinite(value)) or (type(value) is Decimal and value.is_finite())
+
+
+def exact_number(value):
+    """Use decimal JSON meaning, including for Python floats passed through the API."""
+    if type(value) is float:
+        return Fraction(str(value))
+    return Fraction(value)
 
 
 def json_equal(left, right):
     """JSON booleans are not numbers, even though Python bool subclasses int."""
     if isinstance(left, bool) != isinstance(right, bool):
         return False
+    if finite_number(left) and finite_number(right):
+        return exact_number(left) == exact_number(right)
     if type(left) is dict and type(right) is dict:
         return left.keys() == right.keys() and all(json_equal(left[k], right[k]) for k in left)
     if type(left) is list and type(right) is list:
@@ -109,9 +155,9 @@ def json_equal(left, right):
 
 
 def uniqueness_key(value):
-    """Hash JSON values with integral floats normalized to their integer value."""
-    if type(value) is float and math.isfinite(value) and value.is_integer():
-        return int(value)
+    """Hash JSON values with integral numbers normalized to their exact integer value."""
+    if finite_number(value) and exact_number(value).denominator == 1:
+        return exact_number(value).numerator
     if type(value) is dict:
         return {key: uniqueness_key(item) for key, item in value.items()}
     if type(value) is list:
@@ -184,8 +230,8 @@ class SchemaValidator:
             "object": lambda v: type(v) is dict,
             "array": lambda v: type(v) is list,
             "string": lambda v: type(v) is str,
-            "integer": lambda v: type(v) is int or (type(v) is float and math.isfinite(v) and v.is_integer()),
-            "number": lambda v: type(v) is int or (type(v) is float and math.isfinite(v)),
+            "integer": lambda v: finite_number(v) and exact_number(v).denominator == 1,
+            "number": finite_number,
             "boolean": lambda v: type(v) is bool,
             "null": lambda v: v is None,
         }
@@ -235,14 +281,14 @@ class SchemaValidator:
             if "format" in schema:
                 require(schema["format"] == "date-time", "schema uses an unsupported format")
                 timestamp(value)
-        elif type(value) in (int, float):
-            require(type(value) is int or math.isfinite(value), location + ": nonfinite number")
+        elif type(value) in (int, float, Decimal):
+            require(finite_number(value), location + ": nonfinite number")
             for keyword, compare in (
                 ("minimum", lambda a, b: a >= b), ("maximum", lambda a, b: a <= b),
                 ("exclusiveMinimum", lambda a, b: a > b), ("exclusiveMaximum", lambda a, b: a < b),
             ):
                 if keyword in schema:
-                    require(compare(value, schema[keyword]), location + ": number is outside its bounds")
+                    require(compare(exact_number(value), exact_number(schema[keyword])), location + ": number is outside its bounds")
 
 
 class EvidenceValidator:
@@ -353,15 +399,15 @@ class EvidenceValidator:
             require(started <= begin <= end <= finished, "phase falls outside the run or has reversed timestamps")
             elapsed = end - begin
             if "duration_seconds" in phase:
-                require(elapsed == Fraction(str(phase["duration_seconds"])),
+                require(elapsed == exact_number(phase["duration_seconds"]),
                         "phase duration differs from its timestamps")
-            require(elapsed <= Fraction(str(phase["deadline_seconds"])) or verdict == "FAIL",
+            require(elapsed <= exact_number(phase["deadline_seconds"]) or verdict == "FAIL",
                     "a run that exceeded a phase deadline cannot report PASS")
             phases[name] = (begin, end)
         require(phases["preparation"][1] <= phases["execution"][0]
                 and phases["execution"][1] <= phases["teardown"][0], "required phases overlap or are out of order")
         if document.get("run_mode", "standard") == "standard":
-            require(document["phases"]["execution"]["deadline_seconds"] <= 1800,
+            require(exact_number(document["phases"]["execution"]["deadline_seconds"]) <= 1800,
                     "standard execution deadline exceeds 1800 seconds")
         return phases
 
@@ -477,16 +523,16 @@ class EvidenceValidator:
             source_ids.add(source["source_id"])
             references.extend(source[field] for field in source_fields)
         for delivery in deliveries:
-            key = tuple(delivery[field] for field in ("destination_id", "binding_digest", "episode_id", "generation"))
+            key = tuple(delivery[field] for field in ("destination_id", "binding_digest", "episode_id")) + (exact_number(delivery["generation"]),)
             require(key not in delivery_ids, "reader boundary repeats a delivery episode")
             delivery_ids.add(key)
             references.extend(delivery["manifest_refs"])
             references.extend(delivery[field] for field in delivery_fields)
         for stream in streams:
-            key = tuple(stream[field] for field in ("stream_id", "destination_id", "generation"))
+            key = (stream["stream_id"], stream["destination_id"], exact_number(stream["generation"]))
             require(key not in stream_ids, "reader boundary repeats a stream identity")
             stream_ids.add(key)
-            require(stream["upper_sequence"] is None or stream["lower_sequence"] <= stream["upper_sequence"],
+            require(stream["upper_sequence"] is None or exact_number(stream["lower_sequence"]) <= exact_number(stream["upper_sequence"]),
                     "stream upper sequence precedes its lower sequence")
             references.extend(stream[field] for field in stream_fields)
             references.extend(stream["raw_message_refs"])
@@ -509,7 +555,7 @@ class EvidenceValidator:
         if statuses["stream_coverage"] == "SATISFIED":
             require(streams and all(stream["upper_sequence"] is not None
                                    and all(stream[field] is not None for field in stream_fields)
-                                   and (stream["upper_sequence"] == stream["lower_sequence"] or stream["raw_message_refs"])
+                                   and (exact_number(stream["upper_sequence"]) == exact_number(stream["lower_sequence"]) or stream["raw_message_refs"])
                                    for stream in streams), "stream coverage lacks bounds, configuration, seal, coverage, or raw bytes")
         if statuses["semantic_comparison"] == "SATISFIED":
             require(all(reference is not None for reference in document["logical_comparison"].values()),
@@ -545,7 +591,7 @@ class EvidenceValidator:
             require(finish is None or start <= finish <= run_end, "reader phase finish is reversed or outside execution")
             if positive_pass:
                 require(start is not None and finish is not None, "positive reader completion requires every phase timestamp")
-                require(finish - start <= Fraction(str(phase["deadline_seconds"])),
+                require(finish - start <= exact_number(phase["deadline_seconds"]),
                         "positive reader completion exceeded a phase deadline")
 
     def validate(self, kind, document):
