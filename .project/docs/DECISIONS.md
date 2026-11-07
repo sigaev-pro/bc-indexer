@@ -1,5 +1,16 @@
 # Дерево решений и журнал интервью
 
+## D95 — Issue-driven delivery and the remaining approved stages (2026-11-07)
+
+After confirming publication was complete and discussing step 2, the owner instructed to do everything. Continue the remaining agreed stages in order: establish a simpler issue-driven workflow; complete actual reproducible client builds; then deliver the first complete Ethereum-to-NATS flow and its checks before extending network coverage. This resumes implementation and supersedes D94's publication-only stopping point.
+
+The default workflow uses existing issues and dependencies, small reviewable blocks, working branches, commits and pushes after each completed block, and draft PRs while verification is incomplete. CI and independent exact-head review gate merging. The custom persistent controller, its launch accounting, recovery transitions, and service installation are optional legacy tooling, not prerequisites for direct development. Preserve all existing failures, receipts, and original runtime state; no historical attempt becomes successful because the workflow changes.
+
+A catalog issue may contain several explicitly scoped PRs. Each merged block must pass its own declared checks and independent review; the parent remains open until all its outputs and acceptance criteria pass. Partial blocks do not unlock downstream tasks or gates. [DEVELOPMENT_WORKFLOW](DEVELOPMENT_WORKFLOW.md) is the authoritative operational procedure.
+
+The accepted product specification, fixed task catalog, dependency gates, English-language rule, test evidence requirements, and production-deployment boundary remain in force. Use available standard tools and existing bounded test/verifier commands directly. Retain useful technical timeouts and resource limits; do not spend a product block extending the controller. Document the exact next tasks and their completion criteria. Follow D83's maximum 30-minute runtime test duration, excluding preparation and builds. Later network/testnet coverage remains required; the Ethereum flow is the first integration milestone, not a reduction in scope.
+
+
 ## D94 — Publish existing work before restructuring development (2026-11-07)
 
 After reviewing the elapsed time and limited product progress, the owner authorized only step 1 of the proposed revised plan: inspect and safely stop owned background work, publish completed local commits to working branches and draft PRs, and provide an exact inventory of results, checks, blockers, and the next product task. Retain all failures and historical evidence. Draft publication may expose work that still needs review or verification; it does not grant merge approval or product acceptance.

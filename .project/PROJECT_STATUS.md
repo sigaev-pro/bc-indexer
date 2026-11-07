@@ -1,5 +1,10 @@
 # Состояние проекта
 
+## WORKFLOW-01 — Step 2 in progress under D95
+
+The owner authorized the remaining agreed stages. Current block: [WORKFLOW-01, issue #109](https://github.com/sigaev-pro/bc-indexer/issues/109). The [direct workflow](docs/DEVELOPMENT_WORKFLOW.md) now defines prompt publication, exact-head review, protected merges, and the dependency-ordered queue. Controller launches and recovery are optional legacy operations. Product code and the accepted specification are unchanged. Documentation checks passed for 106 documents, 1,102 local links, 84 catalog entries, and 16 normative mirrors; all eight agent roles verified; whitespace checks passed. GitHub CI and independent exact-head review remain pending. The next block is actual client build verification under issue #11; the publication-only stop below is historical and superseded by D95.
+
+
 ## HANDOFF-PUBLISH-01 — Complete; all work published in draft PRs
 
 The owner authorized step 1 only: inspect and stop owned background work, publish completed local commits in working branches and draft PRs, and report verified results and blockers. Do not start new implementation, review rounds, recovery, native builds, or merges in this block. See D94. This checkpoint concerns existing issues #11 and #105; it does not add a product task to the fixed catalog.

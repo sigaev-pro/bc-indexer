@@ -4,7 +4,7 @@
 
 D84 authorizes implementation of the accepted specification: native execution data through confirmed delivery to NATS. D64's earlier documentation-only restriction is superseded. Code, builds, runtime tests, and the test environment are allowed through the task and gate process. Production deployment requires separate authorization.
 
-Create the complete issue backlog before product code. Complete BOOT, then E01 through E07 in dependency order. Follow [DEVELOPMENT_AUTOPILOT](../DEVELOPMENT_AUTOPILOT.md) and [ISSUE_CATALOG](docs/ISSUE_CATALOG.md) in `sigaev-pro/bc-indexer`. A written specification or an open issue is not proof that work is done. Change runtime NOT_RUN only when actual evidence supports the new result.
+The complete issue backlog exists. Complete E01 through E07 in dependency order using [DEVELOPMENT_WORKFLOW](docs/DEVELOPMENT_WORKFLOW.md) and [ISSUE_CATALOG](docs/ISSUE_CATALOG.md) in `sigaev-pro/bc-indexer`. BOOT is accepted. A written specification or an open issue is not proof that work is done. Change runtime NOT_RUN only when actual evidence supports the new result.
 
 ## Project language
 
@@ -18,7 +18,7 @@ Every writer must check the language before saving or publishing. Every reviewer
 
 ## Start and handoff
 
-Follow D93's continuous-work policy in [DECISIONS](docs/DECISIONS.md). Work through the accepted backlog in meaningful blocks with a concrete outcome, checks, review, commit, and saved next action. Continue automatically after a completed block. Campaign time and routine repair counts are progress records, not reasons to request permission to continue. Keep technical timeouts, resource limits, test evidence rules, and acceptance gates intact.
+Follow D95's issue-driven workflow in [DECISIONS](docs/DECISIONS.md). Work through the accepted backlog in meaningful blocks with a concrete outcome, checks, commit, push, review, and saved next action. Continue automatically after a completed block. Campaign time and routine repair counts are progress records, not reasons to request permission to continue. Keep technical timeouts, resource limits, test evidence rules, and acceptance gates intact. The custom controller and its launch/recovery state are optional legacy tools; ordinary work requires no controller invocation or session-ledger reservation.
 
 At the start of work, after resuming, and before a handoff, read [PROJECT_STATUS.md](PROJECT_STATUS.md). It records the current task, verified results, and next action.
 
@@ -28,8 +28,8 @@ Before a substantial task, record its ID and status in PROJECT_STATUS.md. Record
 
 ## Changes, verification, and commits
 
-After completing a task or subtask, update the status documents, run the required checks, and commit all related changes. Move to the next task only after the commit succeeds. This rule also applies to documentation-only changes. Check `git status` and report the commit hash. If committing fails, record the stopping point and resolve the failure before continuing. Push only when separately authorized, including an explicit launch of the workflow that grants that permission.
+After completing a block, update the status documents, run its checks, commit all related changes, and push the working branch. D95 authorizes this publication and protected merges within the accepted development scope. Keep incomplete work in a draft PR; CI and review gate merging, not publication. Move to the next block only after its commit and push succeed. This rule also applies to documentation-only changes. Check `git status` and report the commit hash. Resolve a publication failure before advancing. Partial blocks do not close the parent issue or unlock dependent tasks.
 
 Keep `evm-transaction-extractor-tz-v2.md` unchanged. The working specification is `evm-transaction-extractor-tz-v3-codex.md`. Update it from accepted decisions and keep unresolved questions visible.
 
-Make and record technical decisions within the accepted requirements without asking the owner to repeat an existing approval. Do not guess changes to the user's guarantees or scope: record BLOCKED_DECISION and continue independent authorized work. An implementer cannot accept their own work. Require an independent review and checks for the exact commit. Use D83 for test retries and DEVELOPMENT_AUTOPILOT for orchestration attempts. Never advance through a failed or incomplete gate.
+Make and record technical decisions within the accepted requirements without asking the owner to repeat an existing approval. Do not guess changes to the user's guarantees or scope: record BLOCKED_DECISION and continue independent authorized work. An implementer cannot accept their own work. Require independent Spec and Standards review and checks for the exact commit before merging. Use D83 for test retries and DEVELOPMENT_WORKFLOW for direct execution and handoffs. Never advance through a failed or incomplete gate.

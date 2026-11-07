@@ -1,5 +1,7 @@
 # Continuous development under D93
 
+**Legacy controller reference.** D95's [issue-driven workflow](../docs/DEVELOPMENT_WORKFLOW.md) governs current product work. This file describes retained D93 controller mechanics only. Its reservations, adoption, handoff, and recovery steps are not prerequisites for direct sessions, drafts, or evidence-producing product checks. Use them only for an explicitly scoped controller task; preserve historical state.
+
 [D93](../docs/DECISIONS.md) is the current owner authorization. Complete the accepted backlog in dependency order, with one concrete, reviewable outcome per block. Record the issue/subtask, scope, checks, failures, acceptance, commit, and next action. Continue to the next ready block without asking for routine permission. A real blocker on one task does not prevent independent ready work.
 
 Campaign time, invocation totals, and ordinary implementation/review repair counts are history, not stopping limits. Keep all attempts. A repeated review failure on the same commit produces `BLOCKED_NO_PROGRESS`: diagnose the cause and prepare a changed candidate, rather than repeatedly submitting it. Failed processes still require cleanup and a diagnostic recovery; failed product verification is not a retryable model-session error. D83's test failure rules remain unchanged.

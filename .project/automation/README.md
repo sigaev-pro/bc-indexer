@@ -1,5 +1,7 @@
 # Bootstrap checks and merge acceptance
 
+**D95 workflow boundary:** ordinary development follows [DEVELOPMENT_WORKFLOW](../docs/DEVELOPMENT_WORKFLOW.md). The standalone checks, evidence readers, and bounded process helpers below may be reused directly. Controller launches, recipe registration, session ledgers, service setup, and recovery of the historical failed run are optional legacy operations, not prerequisites for product work. Controller-specific commands in this guide apply only to an explicitly scoped legacy task. Preserve all old runs and receipts unchanged.
+
 Run `python3 .project/automation/ci.py` from the repository root. It checks only Git-tracked paths, so local caches, logs, and other worktrees do not change the result. It validates the specification mirrors, immutable original, Markdown links/tables, REQ/AC mapping, task graph, Python syntax, JSON, agency roles, and all tracked `test_*.py` unittest modules under `.project`. It also runs the component validator and its negative cases when BOOT-06 files are present. A tracked test module with no unittest cases is an error; adding a different test framework requires an explicit CI update.
 
 These are bootstrap checks. Native execution, delivery, public-network tests, and the full product matrix remain NOT_RUN. Product stages must add their own required checks and evidence; `bootstrap/ci` alone cannot accept those stages.
