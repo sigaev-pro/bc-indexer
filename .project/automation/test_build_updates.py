@@ -31,6 +31,102 @@ class UpdateTests(unittest.TestCase):
     def row(self, report, name):
         return next(row for row in report["components"] if row["id"] == name)
 
+    def release_rows(self, *tags):
+        return [{"tag_name": tag, "draft": False, "prerelease": False} for tag in tags]
+
+    def replace_release_rows(self, report, identifier, rows):
+        entry = next(entry for entry in self.fixture["registry"]["components"] if entry["id"] == identifier)
+        observation = next(row for row in report["observations"] if row["url"] == entry["source"]["url"])
+        path = self.fixture["root"] / "release-selection.json"
+        path.write_bytes(contract.canonical(rows))
+        observation["body"] = contract.reference(self.fixture["root"], path)
+        return entry
+
+    def select_release(self, identifier, rows):
+        report = copy.deepcopy(self.fixture["report"])
+        entry = self.replace_release_rows(report, identifier, rows)
+        observations = updates.Observations(self.fixture["root"], report["observations"], vectors.FIXTURE_TIME, True)
+        return updates.latest(entry, observations)
+
+    def test_engine_selection_compares_modern_and_legacy_tags_numerically(self):
+        for tags, expected in ((("v28.5.2", "docker-v29.9.3"), "docker-v29.9.3"),
+                               (("docker-v29.9.3", "v30.0.0"), "v30.0.0"),
+                               (("docker-v29.9.3", "docker-v29.10.0"), "docker-v29.10.0")):
+            for ordered in (tags, tags[::-1]):
+                with self.subTest(tags=ordered):
+                    self.assertEqual(self.select_release("docker-engine", self.release_rows(*ordered)), expected)
+
+    def test_engine_selection_rejects_other_modules_and_unstable_or_malformed_tags(self):
+        rejected = ("api/v999.0.0", "client/v999.0.0", "api/docker-v999.0.0", "client/docker-v999.0.0",
+                    "docker-v999.0.0-rc.1", "v999.0.0-beta.1", "docker-v999.0.0+build", "v999.0.0-extra",
+                    "docker-v999.0", "v999.0", "999.0.0", "nats-999.0.0", "go999.0.0", "latest", None)
+        for tag in rejected:
+            with self.subTest(tag=tag):
+                rows = self.release_rows("v28.5.2", tag)
+                self.assertEqual(self.select_release("docker-engine", rows), "v28.5.2")
+                with self.assertRaisesRegex(ValueError, "no selectable stable release"):
+                    self.select_release("docker-engine", self.release_rows(tag))
+
+    def test_engine_selection_honors_draft_and_prerelease_flags(self):
+        rows = self.release_rows("docker-v29.9.3", "docker-v999.0.0", "v999.0.0")
+        rows[1]["draft"] = True
+        rows[2]["prerelease"] = True
+        self.assertEqual(self.select_release("docker-engine", rows), "docker-v29.9.3")
+        for flag in ("draft", "prerelease"):
+            malformed = copy.deepcopy(rows)
+            malformed[1][flag] = 1
+            with self.subTest(flag=flag), self.assertRaisesRegex(ValueError, "stability flags are malformed"):
+                self.select_release("docker-engine", malformed)
+
+    def test_other_release_sources_keep_their_registered_tag_forms(self):
+        for identifier, tag in (("geth", "v99.2.0"), ("protoc", "v99.2"),
+                                ("nats-chart", "nats-99.2.0"), ("bor-cometbft", "v99.2.0-polygon")):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(self.select_release(identifier, self.release_rows(tag, "docker-v999.0.0")), tag)
+
+    def test_engine_component_cannot_use_another_repository(self):
+        entry = copy.deepcopy(next(entry for entry in self.fixture["registry"]["components"] if entry["id"] == "docker-engine"))
+        entry["source"]["repository"] = "docker/compose"
+        observations = updates.Observations(self.fixture["root"], self.fixture["report"]["observations"], vectors.FIXTURE_TIME, True)
+        with self.assertRaisesRegex(ValueError, "official moby/moby release source"):
+            updates.latest(entry, observations)
+
+    def test_engine_report_preserves_exact_tag_and_authenticated_commit(self):
+        for mode in ("check", "update"):
+            for version in ("docker-v29.9.3", "v30.0.0"):
+                with self.subTest(mode=mode, version=version):
+                    report = copy.deepcopy(self.fixture["report"])
+                    row = self.row(report, "docker-engine")
+                    old_version = row["selected"]["version"]
+                    self.replace_release_rows(report, "docker-engine", self.release_rows(
+                        "v28.5.2", version, "api/v999.0.0", "client/v999.0.0"))
+                    old_url = "https://api.github.com/repos/moby/moby/git/ref/tags/" + old_version
+                    tag = next(item for item in report["observations"] if item["url"] == old_url)
+                    tag["url"] = old_url.removesuffix(old_version) + version
+                    row["latest_stable"] = row["selected"]["version"] = version
+                    if mode == "update":
+                        candidate = copy.deepcopy(self.fixture["candidate"])
+                        candidate["components"]["docker-engine"] = copy.deepcopy(row["selected"])
+                        path = self.fixture["root"] / "engine-candidate.json"
+                        path.write_bytes(contract.canonical(candidate))
+                        report.update(mode=mode, candidate=contract.reference(self.fixture["root"], path))
+                    result = self.validate(report, mode=mode)
+                    self.assertTrue(result["complete"])
+                    self.assertEqual(result["selected"]["docker-engine"]["version"], version)
+                    self.assertIn(tag["url"], result["observations"].used)
+                    if mode == "check":
+                        for substituted in ("v28.5.2", version.removeprefix("docker-")):
+                            if substituted == version:
+                                continue
+                            wrong = copy.deepcopy(report)
+                            altered = self.row(wrong, "docker-engine")
+                            altered["latest_stable"] = altered["selected"]["version"] = substituted
+                            with self.assertRaisesRegex(ValueError, "incomplete or unstable release listing"):
+                                self.validate(wrong)
+                        row["selected"]["commit"] = "f" * 40
+                        with self.assertRaisesRegex(ValueError, "peeled commit differs"):
+                            self.validate(report)
+
     def package_observations(self):
         transport = json.loads(self.fixture["transport"].read_bytes())
         self.assertTrue(transport["synthetic"])

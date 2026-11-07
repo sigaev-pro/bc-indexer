@@ -153,12 +153,21 @@ class Observations:
 def latest(entry, observations):
     source = entry["source"]
     if source["kind"] == "github_releases":
+        engine = entry["id"] == "docker-engine"
+        if engine:
+            contract.require(source["repository"] == "moby/moby", "Docker Engine requires the official moby/moby release source")
         rows = observations.pages(source["url"])
         eligible = []
         for row in rows:
             contract.require(type(row.get("draft")) is bool and type(row.get("prerelease")) is bool, "release stability flags are malformed")
             version = row.get("tag_name")
-            score = stable(version, vendor=source["channel"] == "upstream-bundle")
+            if engine:
+                # Moby also publishes API and client modules. Only whole Engine
+                # tags belong to this component; retain the original tag below.
+                match = re.fullmatch(r"(?:docker-v|v)([0-9]+)\.([0-9]+)\.([0-9]+)", version) if isinstance(version, str) else None
+                score = tuple(int(part) for part in match.groups()) if match else None
+            else:
+                score = stable(version, vendor=source["channel"] == "upstream-bundle")
             if row["draft"] or row["prerelease"] or score is None:
                 continue
             if "tag_filter" in source and not re.fullmatch(source["tag_filter"], version):
