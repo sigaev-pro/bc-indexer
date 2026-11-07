@@ -59,6 +59,14 @@ def validate_outputs(candidate):
     return result
 
 
+def final_preflights(commands, manifest, root, source):
+    for profile in manifest["plan"]["profiles"]:
+        commands.preflight("actual-accept-" + profile["id"], manifest, root, profile["id"])
+    # Candidate commands and their process groups are finished before this last
+    # trusted read of every retained materialized artifact.
+    build_materials.validate_materialized(manifest, root, source, time.time())
+
+
 def expected_outcomes():
     expected = {"plan-amd64": 0, "plan-arm64": 0, "plan-bounded-resources": 0}
     expected.update({"plan-reject-" + name: 2 for name in ("unknown-platform", "boolean-cpu", "unbounded-cpu", "unknown-field")})
@@ -159,7 +167,10 @@ def validate_report(report):
     contract.require(type(report["outcomes"]) is list and len(report["outcomes"]) == len(expected)
                      and {row["id"] for row in report["outcomes"]} == set(expected)
                      and all(type(row["actual_exit"]) is int and type(row["expected_exit"]) is int
-                             and row["actual_exit"] == row["expected_exit"] == expected[row["id"]] for row in report["outcomes"]), "build report is missing independent positive, negative, or live checks")
+                             and row["actual_exit"] == row["expected_exit"] == expected[row["id"]]
+                             and row.get("cleanup_confirmed") is True
+                             and type(row.get("process_group")) is int and row["process_group"] > 0
+                             for row in report["outcomes"]), "build report is missing independent checks or candidate process cleanup")
     cleanup = report["cleanup"]
     contract.require(set(cleanup) == {"spec", "history"} and cleanup["spec"]["nonce"] == report["identity"]["nonce"]
                      and cleanup["spec"]["run_id"] == report["identity"]["run_id"]
@@ -227,8 +238,7 @@ def execute(candidate, request_path):
                     "os_closures": os_closures, "profile_bindings": build_vectors.bindings(plan, builds), "updater": updater,
                     "cleanup": contract.reference(runner.root, runner.root / "cleanup-history.json"), "commands": runner.commands, "runtime": "NOT_RUN"}
         build_materials.validate_materialized(manifest, runner.root, source, time.time())
-        for profile in plan["profiles"]:
-            commands.preflight("actual-accept-" + profile["id"], manifest, runner.root, profile["id"])
+        final_preflights(commands, manifest, runner.root, source)
         contract.require(validate_outputs(candidate) == outputs and pack(source) == frozen, "verification changed product outputs or trusted inputs")
         path = runner.root / "manifest.json"
         path.write_bytes(contract.canonical(manifest))

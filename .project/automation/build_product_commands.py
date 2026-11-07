@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import resource
+import signal
 import subprocess
 import sys
 import time
@@ -14,6 +15,24 @@ import build_contract as contract
 import build_update_vectors
 import build_updates
 import build_vectors
+
+
+def finish_group(process):
+    """Stop owned descendants, reap the direct child, and reject live writers."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait(timeout=5)
+    deadline = time.monotonic() + 5
+    while True:
+        observed = subprocess.run(["ps", "-axo", "pgid=,stat="], capture_output=True, text=True, timeout=5, check=True)
+        live = [line for line in observed.stdout.splitlines()
+                if len(parts := line.split()) >= 2 and parts[0] == str(process.pid) and not parts[1].startswith("Z")]
+        if not live:
+            return
+        contract.require(time.monotonic() < deadline, "candidate command still has live child processes")
+        time.sleep(0.02)
 
 
 class Commands:
@@ -26,13 +45,22 @@ class Commands:
         self.registry_path, self.lock_path = self.directory / "registry.json", self.directory / "active-lock.json"
         self.registry_path.write_bytes((self.source / ".project/bootstrap/components/registry.json").read_bytes())
         self.lock_path.write_bytes((self.source / ".project/bootstrap/components/candidate-lock.json").read_bytes())
+        self.external_paths = []
+        for name in self.registry["external_lock_paths"]:
+            path = contract.safe_file(self.candidate, name)
+            contract.require(contract.file_hash(path) == contract.file_hash(contract.safe_file(self.source, name)),
+                             "candidate external lock differs from its trusted input")
+            self.external_paths.append((name, path))
         self.input_state = self.fingerprint_inputs()
 
     def fingerprint_inputs(self):
         result = {}
-        for path in (self.registry_path, self.lock_path):
+        paths = [(str(self.registry_path), self.registry_path), (str(self.lock_path), self.lock_path)]
+        paths.extend((name, contract.safe_file(self.candidate, name)) for name, _ in self.external_paths)
+        for name, path in paths:
+            contract.require(not path.is_symlink(), "protected input became a symlink")
             stat = path.stat()
-            result[path.name] = {"sha256": contract.file_hash(path), "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+            result[name] = {"sha256": contract.file_hash(path), "size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
                                  "ctime_ns": stat.st_ctime_ns, "inode": stat.st_ino, "mode": stat.st_mode}
         return result
 
@@ -45,17 +73,32 @@ class Commands:
             resource.setrlimit(resource.RLIMIT_FSIZE, (256 * 1024 * 1024, 256 * 1024 * 1024))
         payload = b"" if request is None else contract.canonical(request)
         with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-            result = subprocess.run(command, input=payload, stdout=stdout, stderr=stderr, cwd=self.candidate,
-                                    timeout=remaining, preexec_fn=bounds)
+            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, cwd=self.candidate,
+                                       start_new_session=True, preexec_fn=bounds)
+            error = None
+            cleanup_confirmed = False
+            try:
+                process.communicate(payload, timeout=remaining)
+            except BaseException as failure:
+                error = failure
+            finally:
+                try:
+                    finish_group(process)
+                    cleanup_confirmed = True
+                except BaseException as failure:
+                    error = failure
         contract.require(stdout_path.stat().st_size <= 8 * 1024 * 1024 and stderr_path.stat().st_size <= 8 * 1024 * 1024,
                          "candidate protocol output exceeded its bound")
-        row = {"id": identifier, "expected_exit": expected, "actual_exit": result.returncode,
+        row = {"id": identifier, "expected_exit": expected, "actual_exit": process.returncode,
+               "process_group": process.pid, "cleanup_confirmed": cleanup_confirmed,
                "command": command, "stdin_sha256": hashlib.sha256(payload).hexdigest(),
                "stdout_sha256": contract.file_hash(stdout_path), "stderr_sha256": contract.file_hash(stderr_path)}
         self.outcomes.append(row)
         (self.directory / "outcomes.json").write_bytes(contract.canonical(self.outcomes))
+        if error is not None:
+            raise error
         contract.require(self.fingerprint_inputs() == self.input_state, "candidate updater mutated an active input, even if its bytes were restored")
-        contract.require(result.returncode == expected, "candidate disagreed with independent control: " + identifier)
+        contract.require(process.returncode == expected, "candidate disagreed with independent control: " + identifier)
         return stdout_path.read_bytes()
 
     def plan_request(self, platform="linux/amd64", limits=None):

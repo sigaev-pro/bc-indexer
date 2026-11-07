@@ -55,6 +55,46 @@ class MaterialTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 materials.imported_packages(value, "synthetic/native", "geth")
 
+    def test_prysm_source_contained_replacement_is_bound_and_confined(self):
+        # Pinned Prysm 96d418cd964b083e37519a9df274030a1beac7db uses this local replacement.
+        name, relative = "github.com/tyler-smith/go-bip39", "third_party/go-bip39"
+        owner = {"Path": "./" + relative, "Dir": "/source/" + relative, "GoMod": "/source/" + relative + "/go.mod"}
+        graph = [{"Path": "synthetic/native", "Main": True}, {"Path": name, "Version": "v1.1.0", "Replace": owner}]
+        rows = [{"ImportPath": "synthetic/native/cmd", "Module": {"Path": "synthetic/native", "Main": True, "Dir": "/source"}},
+                {"ImportPath": name, "Dir": owner["Dir"], "Module": copy.deepcopy(graph[1])}]
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "source.tar"
+            def write_archive(module=name, link=False):
+                with tarfile.open(archive, "w:") as stream:
+                    for path, data in {"go.mod": b"module synthetic/native\n", relative + "/go.mod": ("module " + module + "\n").encode(),
+                                       relative + "/bip39.go": b"package bip39\n"}.items():
+                        entry = tarfile.TarInfo(path)
+                        if link and path.endswith("/go.mod"):
+                            entry.type, entry.linkname = tarfile.SYMTYPE, "../../outside/go.mod"
+                            stream.addfile(entry)
+                        else:
+                            entry.size = len(data)
+                            stream.addfile(entry, io.BytesIO(data))
+            write_archive()
+            local = materials.local_modules(graph, archive)
+            self.assertEqual(local[name]["files"][relative + "/bip39.go"]["sha256"], hashlib.sha256(b"package bip39\n").hexdigest())
+            self.assertEqual(materials.modules(graph, [], "synthetic/native", local), {})
+            materials.imported_packages(rows, "synthetic/native", "prysm", local)
+            for change in ({"Path": "../other"}, {"Path": "/outside"}, {"Dir": "/source/elsewhere"}, {"GoMod": "/outside/go.mod"}):
+                changed = copy.deepcopy(graph)
+                changed[1]["Replace"].update(change)
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    materials.local_modules(changed, archive)
+            for directory in ("/source/third_party/other", "/source/third_party/go-bip39/../outside", "/proof/cache/prysm/mod/other"):
+                changed = copy.deepcopy(rows)
+                changed[1]["Dir"] = directory
+                with self.subTest(directory=directory), self.assertRaises(ValueError):
+                    materials.imported_packages(changed, "synthetic/native", "prysm", local)
+            for module, link in (("other/module", False), (name, True)):
+                write_archive(module, link)
+                with self.subTest(module=module, link=link), self.assertRaises(ValueError):
+                    materials.local_modules(graph, archive)
+
     def test_binary_header_and_compiler_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "synthetic-elf"

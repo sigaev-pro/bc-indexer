@@ -33,7 +33,15 @@ At takeover, all 47 build-adapter tests passed in 3.62 seconds, with the two opt
 
 The next full-CI attempt stopped at whitespace checks for extra final blank lines in six new modules. After staging and fixing those lines, full CI passed in 101.00 seconds: 254 tests, all 54 component negatives, 99 documents, 1,069 local links, 16 normative mirrors, the unchanged 84-task catalog, and unchanged original v2. The two opt-in Docker tests were skipped in this offline run. These results cover the complete candidate before integration of accepted E01 evidence main; integration and exact-head review remain required.
 
-## Remaining work
+## Independent review and first repair
+
+Both independent axes reviewed head `453315a19dc2abc8c55dee20a5a18f3cb562d360` against accepted base `eda0a33fb6a8611ac661d5ae717709e1bab87030` and returned REQUEST_CHANGES. Spec reproduced two defects: the pinned Prysm source-contained go-bip39 replacement was rejected, and identical-byte external-lock rewrites escaped the guard. Standards reproduced a third: candidate preflight could modify an artifact after its last trusted validation. Both reviewers completed their subprocesses and returned read-only ownership before root resumed edits. Their independent checks included the 47-test adapter suite, six extra Spec controls, 17 existing evidence-task regressions, and 22 acceptance regressions; no native build was claimed.
+
+The first repair retains a separately hashed local-module inventory derived from the exact source archive and verifies package confinement. Every governed candidate external lock now participates in before/after fingerprints. Candidate commands run in owned process groups; descendants are stopped, the direct child is reaped, and live group members block success. A final trusted materialized validation follows all candidate preflights. Four new regression tests cover the Prysm shape and escape cases, both external locks, delayed descendant writes on normal exit and timeout, and synchronous artifact mutation after candidate success. The targeted suite passes 51 tests in 7.66 seconds, with two opt-in Docker cases skipped. Full repaired CI and both exact-head re-reviews remain required.
+
+## Acceptance still required
+
+Full repaired CI exited 0 in 104.34 seconds. Its stdout, stderr, command, times, and actual exit code are retained separately from the interrupted run. This is validation of the first repaired tree; it is not an independent review or product build result. Both exact-head re-reviews are still required after committing it.
 
 Integration with accepted main `eda0a33fb6a8611ac661d5ae717709e1bab87030` preserved both status histories and all accepted E01 files. The earlier interrupted integrated run had no retained result and is not counted as a pass. Its replacement retained stdout, stderr, and the actual exit code: full CI exited 0 in 101.11 seconds, with 254 tests (two opt-in Docker cases skipped), all 54 component negatives, 101 documents, 1,075 local links, 16 normative mirrors, the unchanged 84-task catalog, and unchanged original v2. The run checked the staged integration tree before its merge commit.
 

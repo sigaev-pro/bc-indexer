@@ -41,13 +41,58 @@ def effective(row):
     return target["Path"], target["Version"]
 
 
-def modules(value, downloads, source_module):
-    contract.require(value and downloads, "resolved Go closure is empty")
+def local_modules(value, source_archive):
+    """Bind local replacements to regular files in the selected source archive."""
+    result = {}
+    for row in value:
+        replacement = row.get("Replace")
+        if replacement is None or replacement.get("Version"):
+            continue
+        path = replacement.get("Path", "")
+        relative = path.removeprefix("./")
+        contract.require(path.startswith("./") and relative
+                         and all(part not in {"", ".", ".."} for part in relative.split("/"))
+                         and "\\" not in relative, "local module replacement escapes its native source")
+        directory = "/source/" + relative
+        contract.require(replacement.get("Dir") == directory and replacement.get("GoMod") == directory + "/go.mod",
+                         "local module metadata differs from its archived source directory")
+        contract.require(isinstance(row.get("Path"), str) and row["Path"] not in result
+                         and isinstance(row.get("Version"), str) and row["Version"].startswith("v"),
+                         "local module identity is missing or duplicated")
+        files, go_mod = {}, None
+        with tarfile.open(source_archive, "r:") as archive:
+            names = set()
+            for member in archive:
+                contract.require(member.name not in names, "source archive repeats an entry")
+                names.add(member.name)
+                name = PurePosixPath(member.name)
+                contract.require(not name.is_absolute() and ".." not in name.parts, "source archive contains an unsafe path")
+                if relative == member.name or relative.startswith(member.name.rstrip("/") + "/"):
+                    contract.require(member.isdir(), "local module source traverses a non-directory")
+                if not member.name.startswith(relative + "/") or member.isdir():
+                    continue
+                contract.require(member.isfile(), "local module source contains a link or special file")
+                with archive.extractfile(member) as stream:
+                    digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                files[member.name] = {"sha256": digest, "size_bytes": member.size}
+                if member.name == relative + "/go.mod":
+                    contract.require(member.size <= 1024 * 1024, "local module go.mod exceeds its bound")
+                    go_mod = archive.extractfile(member).read().decode()
+        found = re.findall(r"^module\s+([^\s]+)\s*$", go_mod or "", re.M)
+        contract.require(len(found) == 1 and found[0].strip('"') == row["Path"],
+                         "local module is missing or has another archived identity")
+        result[row["Path"]] = {"path": relative, "version": row["Version"], "files": files}
+    return result
+
+
+def modules(value, downloads, source_module, local=None):
+    contract.require(value and isinstance(downloads, list), "resolved Go closure is empty")
+    local = local or {}
     mains = [row for row in value if row.get("Main") is True]
     contract.require(len(mains) == 1 and mains[0]["Path"] == source_module, "resolved graph uses another native root")
     paths = [row["Path"] for row in value]
     contract.require(len(paths) == len(set(paths)), "resolved graph repeats a module")
-    required = {effective(row) for row in value if row.get("Main") is not True}
+    required = {effective(row) for row in value if row.get("Main") is not True and row["Path"] not in local}
     acquired = {}
     for row in downloads:
         contract.require(not row.get("Error") and not row.get("Replace"), "module acquisition has an error or unresolved replacement")
@@ -63,8 +108,9 @@ def modules(value, downloads, source_module):
     return acquired
 
 
-def imported_packages(rows, source_module, identifier):
+def imported_packages(rows, source_module, identifier, local=None):
     contract.require(rows, "compiled package graph is empty")
+    local = local or {}
     seen, main = set(), False
     cache = "/proof/cache/" + identifier + "/"
     for row in rows:
@@ -84,6 +130,18 @@ def imported_packages(rows, source_module, identifier):
             contract.require(module["Path"] == source_module and module.get("Dir") == "/source",
                              "native package uses another source root")
             main = True
+        elif module.get("Path") in local:
+            selected = local[module["Path"]]
+            directory = "/source/" + selected["path"]
+            package_dir = row.get("Dir", "")
+            contract.require(owner.get("Path") == "./" + selected["path"] and not owner.get("Version")
+                             and module.get("Version") == selected["version"]
+                             and owner.get("Dir") == directory and owner.get("GoMod") == directory + "/go.mod"
+                             and (name == module["Path"] or name.startswith(module["Path"] + "/"))
+                             and (package_dir == directory or package_dir.startswith(directory + "/"))
+                             and ".." not in PurePosixPath(package_dir).parts
+                             and str(PurePosixPath(package_dir)) == package_dir,
+                             "local package differs from its verified source-contained module")
         else:
             contract.require(isinstance(owner.get("Dir"), str) and owner["Dir"].startswith(cache),
                              "native package graph shares another component's cache")
@@ -338,7 +396,10 @@ def validate_materialized(manifest, root, source, now):
         source_archive(archive, plan["sources"][identifier]["dependency_inputs"])
         source_module = archive_module(archive)
         graph = json_stream(contract.verify_reference(root, row["modules"]).read_text())
-        acquired = modules(graph, json_stream(contract.verify_reference(root, row["downloads"]).read_text()), source_module)
+        local = local_modules(graph, archive)
+        contract.require(contract.parse_json(contract.verify_reference(root, row["local_modules"]).read_bytes()) == local,
+                         "retained local modules differ from their selected source archive")
+        acquired = modules(graph, json_stream(contract.verify_reference(root, row["downloads"]).read_text()), source_module, local)
         artifacts = {(item["module"], item["version"]): item for item in row["artifacts"]}
         contract.require(len(artifacts) == len(row["artifacts"]) and set(artifacts) == set(acquired),
                          "retained module archives differ from the complete resolved closure")
@@ -355,7 +416,7 @@ def validate_materialized(manifest, root, source, now):
             elf(contract.verify_reference(root, build["binary"]), plan["platform"])
             build_info(contract.verify_reference(root, build["build_info"]).read_text(), plan["compiler"]["version"],
                        source_module, row["source_commit"], plan["platform"])
-            imported_packages(json_stream(contract.verify_reference(root, build["imports"]).read_text()), source_module, identifier)
+            imported_packages(json_stream(contract.verify_reference(root, build["imports"]).read_text()), source_module, identifier, local)
             oci(build, root, plan, identifier)
     for identifier, row in manifest["os_closures"].items():
         complete = os_closure(row, root, plan, now, manifest["commands"])

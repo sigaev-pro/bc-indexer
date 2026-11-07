@@ -30,7 +30,7 @@ def fixture(root, source):
     images = {name: {**plan["images"][name], **{key: copy.deepcopy(ref) for key in ("index", "manifest", "config", "inspection", "archive")}}
               for name in contract.IMAGES}
     modules = {name: {"source_commit": plan["sources"][name]["commit"],
-                      **{key: copy.deepcopy(ref) for key in ("source_archive", "modules", "downloads", "verification")},
+                      **{key: copy.deepcopy(ref) for key in ("source_archive", "modules", "local_modules", "downloads", "verification")},
                       "artifacts": [{"module": "synthetic/dependency", "version": "v1.0.0", **{key: copy.deepcopy(ref) for key in ("zip", "mod", "info")}}]}
                for name in contract.MODULES}
     builds = {name: {"source_commit": plan["sources"][name]["commit"], "compiler_image": plan["images"]["golang-build-image"]["reference"],

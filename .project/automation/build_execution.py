@@ -340,7 +340,10 @@ def native_builds(runner, source_caches, authenticate_extra=None):
             _, modules, _ = runner.inside(container, ["/usr/local/go/bin/go", "list", "-m", "-json", "all"], environment=env)
             _, verification, _ = runner.inside(container, ["/usr/local/go/bin/go", "mod", "verify"], environment=env)
             graph = materials.json_stream(modules.read_text())
-            downloaded = materials.modules(graph, materials.json_stream(downloads.read_text()), materials.archive_module(archive))
+            local = materials.local_modules(graph, archive)
+            local_path = archive.parent / "local-modules.json"
+            local_path.write_bytes(contract.canonical(local))
+            downloaded = materials.modules(graph, materials.json_stream(downloads.read_text()), materials.archive_module(archive), local)
             artifacts = []
             for (module, version), row in sorted(downloaded.items()):
                 item = {"module": module, "version": version}
@@ -350,7 +353,8 @@ def native_builds(runner, source_caches, authenticate_extra=None):
                 artifacts.append(item)
             closures[identifier] = {"source_commit": runner.plan["sources"][identifier]["commit"], "artifacts": artifacts,
                 **{key: contract.reference(runner.root, value) for key, value in
-                   (("source_archive", archive), ("downloads", downloads), ("modules", modules), ("verification", verification))}}
+                   (("source_archive", archive), ("downloads", downloads), ("modules", modules),
+                    ("local_modules", local_path), ("verification", verification))}}
             if identifier in contract.NATIVE:
                 (runner.root / "binaries" / identifier).mkdir(parents=True)
                 arguments = build_arguments(identifier, runner.plan["sources"][identifier], epoch, graph, runner.plan["limits"]["cpus"])
@@ -359,7 +363,7 @@ def native_builds(runner, source_caches, authenticate_extra=None):
                     compile_env["CGO_CFLAGS"] = "-O2 -D__BLST_PORTABLE__"
                 _, imports, _ = runner.inside(container, [arguments[0], "list", "-deps", "-json", *arguments[2:arguments.index("-o")], arguments[-1]],
                                                 environment=compile_env)
-                materials.imported_packages(materials.json_stream(imports.read_text()), materials.archive_module(archive), identifier)
+                materials.imported_packages(materials.json_stream(imports.read_text()), materials.archive_module(archive), identifier, local)
                 runner.inside(container, arguments, environment=compile_env)
                 binary = runner.root / "binaries" / identifier / NAMES[identifier]
                 _, info, _ = runner.inside(container, ["/usr/local/go/bin/go", "version", "-m", arguments[arguments.index("-o") + 1]],

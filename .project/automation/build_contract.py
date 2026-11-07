@@ -205,9 +205,9 @@ def validate_manifest(manifest, root, source, allow_synthetic=False, input_snaps
             and type(manifest["os_closures"]) is dict and set(manifest["os_closures"]) == set(OS_IMAGES),
             "build manifest omits a required client or dependency closure")
     for identifier, row in manifest["module_closures"].items():
-        require(type(row) is dict and set(row) == {"source_commit", "source_archive", "modules", "downloads", "verification", "artifacts"}
+        require(type(row) is dict and set(row) == {"source_commit", "source_archive", "modules", "local_modules", "downloads", "verification", "artifacts"}
                 and row["source_commit"] == plan["sources"][identifier]["commit"], "module closure source differs")
-        for key in ("source_archive", "modules", "downloads", "verification"):
+        for key in ("source_archive", "modules", "local_modules", "downloads", "verification"):
             verify(root, row[key])
         require(type(row["artifacts"]) is list and row["artifacts"], "module closure has no retained cache artifacts")
         for item in row["artifacts"]:

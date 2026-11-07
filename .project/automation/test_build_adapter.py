@@ -78,7 +78,8 @@ def transport_proof():
               "inputs": {"registry_json": (SOURCE / ".project/bootstrap/components/registry.json").read_text(),
                          "lock_json": (SOURCE / ".project/bootstrap/components/candidate-lock.json").read_text()},
               "outputs": {name: files[name] for name in verifier.OUTPUTS}, "outcomes": [{"id": name, "expected_exit": code, "actual_exit": code,
-                    "stdout_sha256": "a" * 64, "stderr_sha256": "b" * 64} for name, code in verifier.expected_outcomes().items()],
+                    "stdout_sha256": "a" * 64, "stderr_sha256": "b" * 64,
+                    "process_group": 123, "cleanup_confirmed": True} for name, code in verifier.expected_outcomes().items()],
               "manifest": manifest, "manifest_sha256": contract.digest(manifest),
               "manifest_ref": {"path": "manifest.json", "sha256": contract.digest(manifest), "size_bytes": len(contract.canonical(manifest))},
               "materialized_root": "/synthetic/verify-check-2/build-artifacts", "cleanup": {"spec": spec, "history": [cleanup]},
@@ -137,6 +138,7 @@ class BuildAdapterTests(unittest.TestCase):
     def test_malformed_or_partial_report_cannot_be_rehashed_into_acceptance(self):
         for mutation in (lambda r: r["manifest"]["builds"].pop("bor"), lambda r: r["manifest"]["module_closures"].pop("grpc-go"),
                          lambda r: r["manifest"]["os_closures"].pop("golang-build-image"), lambda r: r["outcomes"].pop(),
+                         lambda r: r["outcomes"][0].update(cleanup_confirmed=False),
                          lambda r: r.update(evidence_kind="synthetic-fixture"), lambda r: r["manifest"].update(schema_version=True),
                          lambda r: r["manifest"]["builds"]["geth"].update(binary={"path": "../fake", "size_bytes": 128, "sha256": "f" * 64}),
                          lambda r: r["manifest"]["profile_bindings"][0].update(native_component="bsc"),
