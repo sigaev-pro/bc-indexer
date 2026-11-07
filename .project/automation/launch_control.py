@@ -1,10 +1,10 @@
-"""Account for the fixed D92 launch without manufacturing provider executions."""
+"""Retain model-session accounting across reviewed launch policies."""
 
 import copy
 import re
 import time
 
-from controller import Blocked, read_json, require
+from controller import Blocked, read_json, require, validate_authorization
 import evidence
 
 ROLES = {"coordinator", "implementer", "reviewer"}
@@ -14,7 +14,26 @@ def fixed(authorization):
     return authorization.get("reference") == "D92"
 
 
+def continuous(authorization):
+    validate_authorization(authorization)
+    return authorization.get("reference") == "D93"
+
+
+def accounted(authorization):
+    validate_authorization(authorization)
+    return authorization["reference"] in {"D92", "D93"}
+
+
+def remaining(run, now):
+    """Only a reviewed D93 run can omit its campaign deadline."""
+    if continuous(run["authorization"]):
+        require(run["deadline"] is None, "BLOCKED_CONFIGURATION", "continuous run has a campaign deadline")
+        return float("inf")
+    return run["deadline"] - now
+
+
 def check_window(authorization, now):
+    validate_authorization(authorization)
     if fixed(authorization):
         require(authorization["started_at"] <= now < authorization["hard_deadline"],
                 "BUDGET_STOP", "the fixed D92 launch window is not active; setup and all continuations share its deadline")
@@ -24,8 +43,8 @@ class LaunchLedger:
     """One canonical reservation ledger, shared before and after configuration epochs."""
     def __init__(self, store, authorization, clock=time.time):
         self.store, self.authorization, self.clock = store, authorization, clock
-        require(fixed(authorization), "BLOCKED_AUTHORIZATION", "shared launch accounting requires D92")
-        self.path = store.directory / "launches/D92.json"
+        require(accounted(authorization), "BLOCKED_AUTHORIZATION", "shared accounting requires an accepted launch policy")
+        self.path = store.directory / "launches" / (authorization["reference"] + ".json")
 
     def load(self):
         if self.path.exists():
@@ -33,13 +52,21 @@ class LaunchLedger:
             require(record["schema_version"] == 1 and record["authorization"] == self.authorization,
                     "BLOCKED_LAUNCH", "retained launch differs from the owner authorization")
             return record
+        require(not continuous(self.authorization), "BLOCKED_AUTHORIZATION", "D93 requires an adopted predecessor ledger")
         return {"schema_version": 1, "authorization": copy.deepcopy(self.authorization), "sessions": {},
                 "initial_observations_imported": False, "observation_history": [], "run_id": None,
                 "initial_held_invocations": 3}
 
     def save(self, record):
         require(self.store.lock_fd is not None, "BLOCKED_LOCK", "launch accounting requires the repository lock")
+        require(not fixed(self.authorization) or not (self.store.directory / "launches/D93.json").exists(),
+                "BLOCKED_AUTHORIZATION", "the D92 predecessor ledger is read-only after preparing D93")
         evidence.atomic_json(self.path, record)
+
+    def require_active_policy(self, record):
+        if continuous(self.authorization):
+            require(record.get("run_id") and self.store.load(record["run_id"])["authorization"] == self.authorization,
+                    "BLOCKED_AUTHORIZATION", "finish the prepared authorization adoption before accounting or dispatch")
 
     @staticmethod
     def used(record):
@@ -74,10 +101,12 @@ class LaunchLedger:
         record["run_id"] = run_id
         self.save(record)
 
-    def import_observations(self, document):
+    def import_observations(self, document, *, record=None, persist=True):
         """The trusted coordinator records observed facts, including late initial accounting."""
-        record = self.load()
-        require(document["schema_version"] == 1 and document["authorization_ref"] == "D92"
+        if record is None:
+            self.require_active_policy(self.load())
+        record = copy.deepcopy(record) if record is not None else self.load()
+        require(document["schema_version"] == 1 and document["authorization_ref"] == self.authorization["reference"]
                 and document["coordinator_agent_id"] == "/root", "BLOCKED_SESSION_ACCOUNTING", "unexpected observation authority")
         if any(item["sha256"] == evidence.digest(document) for item in record["observation_history"]):
             return record
@@ -99,7 +128,8 @@ class LaunchLedger:
                     "BLOCKED_SESSION_ACCOUNTING", "observation time is outside the known launch history")
             started, completed = row.get("started_at"), row.get("completed_at")
             require(started is None or (type(started) in {int, float}
-                    and self.authorization["started_at"] <= started < self.authorization["hard_deadline"] and started <= observed),
+                    and self.authorization["started_at"] <= started <= observed
+                    and (continuous(self.authorization) or started < self.authorization["hard_deadline"])),
                     "BLOCKED_SESSION_ACCOUNTING", "observed start is outside the authorized window")
             require(row.get("evidence") and isinstance(row["evidence"], str), "BLOCKED_SESSION_ACCOUNTING", "observation needs an actual evidence reference")
             if row["status"] in {"completed", "cancelled"}:
@@ -133,16 +163,21 @@ class LaunchLedger:
                     and any(row["role"] == "coordinator" and row["canonical_agent_id"] == "/root" for row in record["sessions"].values()),
                     "BLOCKED_SESSION_ACCOUNTING", "the initial coordinator and two delegated invocations must be accounted explicitly")
             record["initial_observations_imported"] = True
-        require(self.used(record) <= self.authorization["invocation_limit"], "BUDGET_STOP", "observed invocations exceed the shared launch budget")
+        require(continuous(self.authorization) or self.used(record) <= self.authorization["invocation_limit"],
+                "BUDGET_STOP", "observed invocations exceed the shared launch budget")
+        require(not continuous(self.authorization) or len(self.active(record)) <= 3,
+                "BLOCKED_SESSION_CAPACITY", "observations exceed the three-session capacity")
         digest = evidence.digest(document)
         if not any(item["sha256"] == digest for item in record["observation_history"]):
             record["observation_history"].append({"sha256": digest, "document": copy.deepcopy(document)})
-        self.save(record)
+        if persist:
+            self.save(record)
         return record
 
     def reserve(self, key, role, task_id, run_id=None, origin="controller", limits=None):
         check_window(self.authorization, self.clock())
         record = self.load()
+        self.require_active_policy(record)
         require(record["initial_observations_imported"], "BLOCKED_SESSION_ACCOUNTING", "import actual initial collaboration observations before dispatch")
         if key in record["sessions"]:
             old = record["sessions"][key]
@@ -154,14 +189,16 @@ class LaunchLedger:
                 and (task_id is None if role == "coordinator" else isinstance(task_id, str)),
                 "BLOCKED_SESSION_RESERVATION", "invalid reservation identity or role")
         limits = limits or {"invocations": 200, "implementation_attempts": 3}
-        require(self.used(record) < min(self.authorization["invocation_limit"], limits["invocations"]), "BUDGET_STOP", "shared D92 invocation budget is exhausted")
+        require(continuous(self.authorization) or self.used(record) < min(self.authorization["invocation_limit"], limits["invocations"]),
+                "BUDGET_STOP", "shared D92 invocation budget is exhausted")
         require(len(self.active(record)) < 3, "BLOCKED_SESSION_CAPACITY", "three coordinator/worker/reviewer slots are already occupied")
         require(not any(row["task_id"] == task_id and row["role"] != "coordinator"
                         and (role == "implementer" or row["role"] == "implementer") for row in self.active(record))
                 if task_id is not None else True,
                 "BLOCKED_SESSION_OWNERSHIP", "an implementation cannot overlap another active or uncertain task session")
         if role == "implementer":
-            require(self.attempts(record, task_id) < min(3, limits["implementation_attempts"]), "BLOCKED_ATTEMPTS", "the launch's implementation attempts are exhausted")
+            require(continuous(self.authorization) or self.attempts(record, task_id) < min(3, limits["implementation_attempts"]),
+                    "BLOCKED_ATTEMPTS", "the launch's implementation attempts are exhausted")
         row = {"invocation_id": key, "role": role, "task_id": task_id, "run_id": run_id, "origin": origin,
                "accounting": "reserved-before-start", "status": "reserved", "canonical_agent_id": None,
                "reserved_at": self.clock(), "cleanup_confirmed": False, "history": []}

@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from controller import Blocked, Store
+from controller import AUTHORIZATION, Blocked, Store
 from controller_backend import RealBackend
 import controller_backend
 import evidence
@@ -111,7 +111,7 @@ class RuntimeTests(unittest.TestCase):
     def test_stale_pid_record_cannot_signal_or_adopt_an_unrelated_process(self):
         backend = RealBackend.__new__(RealBackend)
         backend.root, backend.source, backend.store = self.root, self.root, self.store
-        run = {"run_id": "test_run_123", "deadline": time.time() + 10}
+        run = {"run_id": "test_run_123", "deadline": time.time() + 10, "authorization": AUTHORIZATION}
         directory = self.root / ".project/automation/runs/test_run_123/op"
         evidence.durable_directory(directory)
         command = [sys.executable, "-c", "raise SystemExit('must not launch')"]
@@ -174,7 +174,7 @@ class RuntimeTests(unittest.TestCase):
                           "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True)\n"
                           "os.kill(os.getpid(), signal.SIGSTOP)\n"
                           "time.sleep(30)\n")
-        run = {"run_id": "watchdog_run", "deadline": time.time() + 10}
+        run = {"run_id": "watchdog_run", "deadline": time.time() + 10, "authorization": AUTHORIZATION}
         started = time.monotonic()
         with self.store.lock(), patch.object(controller_backend, "WATCHDOG_GRACE_SECONDS", 0.1):
             with self.assertRaises(Blocked) as caught:
@@ -220,7 +220,7 @@ class RuntimeTests(unittest.TestCase):
         worker = ("import signal,time; from pathlib import Path; "
                   "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
                   f"Path({str(marker)!r}).write_text('started'); time.sleep(6)")
-        run = {"run_id": "prespawn_run", "deadline": time.time() + 15}
+        run = {"run_id": "prespawn_run", "deadline": time.time() + 15, "authorization": AUTHORIZATION}
         started = time.monotonic()
         original_launch = subprocess.Popen
 

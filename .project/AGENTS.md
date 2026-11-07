@@ -18,6 +18,8 @@ Every writer must check the language before saving or publishing. Every reviewer
 
 ## Start and handoff
 
+Follow D93's continuous-work policy in [DECISIONS](docs/DECISIONS.md). Work through the accepted backlog in meaningful blocks with a concrete outcome, checks, review, commit, and saved next action. Continue automatically after a completed block. Campaign time and routine repair counts are progress records, not reasons to request permission to continue. Keep technical timeouts, resource limits, test evidence rules, and acceptance gates intact.
+
 At the start of work, after resuming, and before a handoff, read [PROJECT_STATUS.md](PROJECT_STATUS.md). It records the current task, verified results, and next action.
 
 For planning, read [DECISIONS](docs/DECISIONS.md). For implementation, read the task, dependencies, and gate in [DEVELOPMENT_PLAN](docs/DEVELOPMENT_PLAN.md) and [TASK_DECOMPOSITION](docs/TASK_DECOMPOSITION.md). Use [CONTEXT](CONTEXT.md) for project terms. Provide these rules explicitly to every worker and reviewer, including sessions in separate worktrees.

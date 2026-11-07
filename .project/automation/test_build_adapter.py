@@ -100,7 +100,7 @@ def transport_proof():
         checks.append({"request": request, "execution": result, "stdout": stdout, "stderr": ""})
     return {"passed": True, "task_id": verifier.TASK, "head_sha": HEAD, "base_sha": BASE, "runtime": "NOT_RUN",
             "recipe": recipe, "recipe_sha256": evidence.digest(recipe), "verifier_source_commit": BASE,
-            "authorization": {"reference": "TEST_ONLY_LAUNCH", "stage_limit": "E01", "hard_deadline": 1900000000},
+            "authorization": dict(controller.AUTHORIZATIONS["D93"]),
             "verification_operation_id": "verify", "files": files, "checks": checks}
 
 
@@ -122,6 +122,27 @@ class BuildAdapterTests(unittest.TestCase):
         proof = transport_proof()
         self.assertEqual(task_proofs.check_verification(proof, HEAD, BASE), proof)
         self.assertEqual(task_proofs.publication(proof)["scope"], "isolated-native-builds")
+
+    def test_finite_build_deadlines_and_exact_authority_are_required(self):
+        proof = transport_proof()
+        proof["authorization"] = dict(controller.AUTHORIZATIONS["D92"])
+        for row in proof["checks"]:
+            row["request"]["deadline"] = proof["authorization"]["hard_deadline"]
+            row["execution"]["request_sha256"] = evidence.digest(row["request"])
+        self.assertEqual(task_proofs.check_verification(proof, HEAD, BASE), proof)
+        for mode in ("unknown-policy", "infinite-deadline", "missing-deadline", "negative-deadline", "unbounded-timeout", "expired-d92"):
+            changed = copy.deepcopy(proof if mode == "expired-d92" else transport_proof())
+            if mode == "unknown-policy": changed["authorization"]["reference"] = "UNREVIEWED"
+            request = changed["checks"][0]["request"]
+            if mode == "infinite-deadline": request["deadline"] = float("inf")
+            if mode == "missing-deadline": request["deadline"] = None
+            if mode == "negative-deadline": request["deadline"] = -1
+            if mode == "unbounded-timeout": request["timeout_seconds"] = 7201
+            if mode == "expired-d92": request["deadline"] += 1
+            if mode != "infinite-deadline":
+                changed["checks"][0]["execution"]["request_sha256"] = evidence.digest(request)
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                task_proofs.check_verification(changed, HEAD, BASE)
 
     def test_stale_task_head_base_source_outputs_and_cleanup_are_rejected(self):
         mutations = [lambda p: p.update(task_id="E01-01.evidence"), lambda p: p.update(head_sha="f" * 40),
