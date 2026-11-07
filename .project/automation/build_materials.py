@@ -16,6 +16,8 @@ import build_contract as contract
 
 
 MAX_PACKAGE_SOURCE_REPORT = 16 * 1024 * 1024
+SIGNATURE_LOG_FIELDS = {"tool", "exit_code", "command_index", "verifier_sha256", "keyring_sha256",
+                        "inrelease_sha256", "release_sha256", "acquisition"}
 
 
 def package_archive_url(url):
@@ -47,7 +49,7 @@ def package_fetch_journal(value, root):
                          "package transport is incomplete or exceeds its retry bound")
         previous = 0
         for ordinal, attempt in enumerate(attempts, 1):
-            contract.require(type(attempt) is dict and set(attempt) == {"ordinal", "state", "started_at", "finished_at", "response_url", "status", "headers", "error", "body", "exception_partial_size", "retained_exception_partial_size"}
+            contract.require(type(attempt) is dict and set(attempt) == {"ordinal", "state", "started_at", "finished_at", "response_url", "status", "headers", "error", "body", "exception_partial_size", "retained_exception_partial_size", "observed_body_size", "body_truncated"}
                              and type(attempt["ordinal"]) is int and attempt["ordinal"] == ordinal
                              and all(type(attempt[key]) in (int, float) and math.isfinite(attempt[key]) for key in ("started_at", "finished_at"))
                              and previous <= attempt["started_at"] <= attempt["finished_at"], "package attempt identity or times differ")
@@ -56,6 +58,8 @@ def package_fetch_journal(value, root):
                              and isinstance(v, str) for k, v in attempt["headers"].items()), "package attempt has unsafe response metadata")
             contract.verify_reference(root, attempt["body"])
             contract.require(attempt["body"]["size_bytes"] <= request["output"]["size_bytes"], "package attempt exceeds the archive bound")
+            contract.require(type(attempt["observed_body_size"]) is int and attempt["observed_body_size"] == attempt["body"]["size_bytes"]
+                             and attempt["body_truncated"] is False, "package attempt omitted or truncated observed bytes")
             contract.require(type(attempt["exception_partial_size"]) is int and type(attempt["retained_exception_partial_size"]) is int
                              and 0 <= attempt["retained_exception_partial_size"] == attempt["exception_partial_size"] <= attempt["body"]["size_bytes"],
                              "package attempt omits available exception bytes or exceeds its bound")
@@ -80,11 +84,24 @@ def package_fetch_journal(value, root):
     return result
 
 
+def read_signature_log(reference, root):
+    status = contract.parse_json(contract.verify_reference(root, reference).read_bytes())
+    contract.require(type(status) is dict and set(status) in
+                     (SIGNATURE_LOG_FIELDS, SIGNATURE_LOG_FIELDS | {"archive_fetches", "original_signature_log"}),
+                     "OS signature log has an invalid shape")
+    if "archive_fetches" in status:
+        original = contract.parse_json(contract.verify_reference(root, status["original_signature_log"]).read_bytes())
+        contract.require(type(original) is dict and set(original) == SIGNATURE_LOG_FIELDS
+                         and contract.canonical(original) == contract.canonical({key: status[key] for key in SIGNATURE_LOG_FIELDS}),
+                         "extended OS signature log differs from its preserved original")
+    return status
+
+
 def package_transports(closures, root):
     references = []
     for closure in closures:
         for index in closure["signed_indexes"]:
-            status = contract.parse_json(contract.verify_reference(root, index["signature_log"]).read_bytes())
+            status = read_signature_log(index["signature_log"], root)
             contract.require("archive_fetches" in status, "OS closure has no sealed package transport evidence")
             references.append(status["archive_fetches"])
     contract.require(references and all(reference == references[0] for reference in references), "OS closures bind different package transport journals")
@@ -411,10 +428,8 @@ def installed(value, architecture):
 
 
 def signature_status(index, root, commands):
-    status = contract.parse_json(contract.verify_reference(root, index["signature_log"]).read_bytes())
-    keys = {"tool", "exit_code", "command_index", "verifier_sha256", "keyring_sha256", "inrelease_sha256", "release_sha256", "acquisition"}
-    contract.require(set(status) in (keys, keys | {"archive_fetches"})
-                     and status["tool"] == "sqv" and type(status["exit_code"]) is int and status["exit_code"] == 0
+    status = read_signature_log(index["signature_log"], root)
+    contract.require(status["tool"] == "sqv" and type(status["exit_code"]) is int and status["exit_code"] == 0
                      and type(status["command_index"]) is int and 0 <= status["command_index"] < len(commands)
                      and all(status[key + "_sha256"] == index[key]["sha256"] for key in ("verifier", "keyring", "inrelease", "release")),
                      "OS closure has no bound signed Release verification")

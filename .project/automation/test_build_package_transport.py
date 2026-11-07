@@ -141,8 +141,66 @@ class PackageTransportTests(unittest.TestCase):
             self.assertEqual(contract.verify_reference(self.root, attempt["body"]).read_bytes(), b"written-" + retained)
             self.assertEqual(attempt["exception_partial_size"], len(partial))
             self.assertEqual(attempt["retained_exception_partial_size"], len(retained))
+            self.assertEqual(attempt["observed_body_size"], len(b"written-") + len(partial))
+            self.assertIs(attempt["body_truncated"], len(retained) != len(partial))
             self.assertFalse(attempt["error"]["retryable"])
             self.assertFalse(self.output.exists())
+
+    def test_wrapped_exception_partial_is_retained_once(self):
+        for duplicate in (False, True):
+            with self.subTest(outer_also_exposes_partial=duplicate):
+                self.output = self.root / ("wrapped-" + str(duplicate) + ".deb")
+                cause = eof()
+                cause.partial = b"available"
+                wrapped = urllib.error.URLError(cause)
+                if duplicate:
+                    wrapped.partial = cause.partial
+                with patch.object(execution.urllib.request, "urlopen", side_effect=[Response([b"written-", wrapped]), Response()]) as opened:
+                    self.fetch()
+                self.assertEqual(opened.call_count, 2)
+                first, second = self.journal()["requests"][-1]["attempts"]
+                self.assertEqual(contract.verify_reference(self.root, first["body"]).read_bytes(), b"written-available")
+                self.assertEqual(first["exception_partial_size"], len(cause.partial))
+                self.assertEqual(first["retained_exception_partial_size"], len(cause.partial))
+                self.assertEqual(contract.verify_reference(self.root, second["body"]).read_bytes(), BODY)
+                materials.package_fetch_journal(self.journal(), self.root)
+
+    def test_oversized_wrapped_partial_is_retained_but_cannot_retry(self):
+        cause = eof()
+        cause.partial = BODY * 3
+        with patch.object(execution.urllib.request, "urlopen",
+                          side_effect=[Response([b"written-", urllib.error.URLError(cause)]), Response()]) as opened:
+            with self.assertRaisesRegex(ValueError, "exceeded its exact size"):
+                self.fetch()
+        self.assertEqual(opened.call_count, 1)
+        attempt = self.journal()["requests"][0]["attempts"][0]
+        self.assertEqual(contract.verify_reference(self.root, attempt["body"]).read_bytes(), (b"written-" + cause.partial)[:len(BODY)])
+        self.assertEqual(attempt["exception_partial_size"], len(cause.partial))
+        self.assertEqual(attempt["retained_exception_partial_size"], len(BODY) - len(b"written-"))
+        self.assertEqual(attempt["observed_body_size"], len(b"written-") + len(cause.partial))
+        self.assertIs(attempt["body_truncated"], True)
+        self.assertFalse(attempt["error"]["retryable"])
+        self.assertFalse(self.output.exists())
+
+    def test_oversized_read_retains_bounded_prefix_and_never_retries(self):
+        for prefix in (b"", b"written-"):
+            with self.subTest(prefix=prefix):
+                self.output = self.root / ("oversized-" + str(len(prefix)) + ".deb")
+                parts = ([prefix] if prefix else []) + [BODY * 3]
+                with patch.object(execution.urllib.request, "urlopen", side_effect=[Response(parts), Response()]) as opened:
+                    with self.assertRaisesRegex(ValueError, "exceeded its exact size"):
+                        self.fetch()
+                self.assertEqual(opened.call_count, 1)
+                request = self.journal()["requests"][-1]
+                self.assertEqual(request["outcome"], "FAILED")
+                self.assertEqual(len(request["attempts"]), 1)
+                attempt = request["attempts"][0]
+                self.assertEqual(contract.verify_reference(self.root, attempt["body"]).read_bytes(),
+                                 (prefix + BODY * 3)[:len(BODY)])
+                self.assertEqual(attempt["observed_body_size"], len(prefix) + len(BODY * 3))
+                self.assertIs(attempt["body_truncated"], True)
+                self.assertFalse(attempt["error"]["retryable"])
+                self.assertFalse(self.output.exists())
 
     def test_two_eofs_stop_without_a_third_attempt_or_success(self):
         with patch.object(execution.urllib.request, "urlopen", side_effect=[eof(), eof(), Response()]) as opened:
@@ -262,6 +320,8 @@ class PackageTransportTests(unittest.TestCase):
         reference = self.runner.seal_package_fetches([closure])
         contract.verify_reference(self.root, original)
         self.assertNotEqual(original, closure["signed_indexes"][0]["signature_log"])
+        extension = json.loads(contract.verify_reference(self.root, closure["signed_indexes"][0]["signature_log"]).read_bytes())
+        self.assertEqual(extension["original_signature_log"], original)
         self.assertEqual(materials.package_transports([closure], self.root), {"requests": 1, "recovered": 1})
         plan = {"platform": "linux/amd64", "package_indexes": [{"url": closure["signed_indexes"][0]["url"],
                 "sha256": closure["signed_indexes"][0]["packages"]["sha256"]}]}
@@ -295,6 +355,57 @@ class PackageTransportTests(unittest.TestCase):
         self.runner.package_journal_reference = contract.reference(self.root, journal)
         with self.assertRaisesRegex(ValueError, "trusted memory"):
             self.runner.seal_package_fetches([closure])
+
+    def test_original_signature_log_remains_bound_after_sealing(self):
+        with patch.object(execution.urllib.request, "urlopen", return_value=Response()):
+            self.fetch()
+        closure = self.closure()
+        original = copy.deepcopy(closure["signed_indexes"][0]["signature_log"])
+        self.runner.seal_package_fetches([closure])
+        plan = {"platform": "linux/amd64", "package_indexes": [{"url": closure["signed_indexes"][0]["url"],
+                "sha256": closure["signed_indexes"][0]["packages"]["sha256"]}]}
+        checks = {"transports": lambda: materials.package_transports([closure], self.root),
+                  "closure": lambda: materials.os_closure(closure, self.root, plan, time.time(), self.runner.commands)}
+        for check in checks.values():
+            check()
+        path = self.root / original["path"]
+        path.write_bytes(path.read_bytes() + b"\n")
+        for name, check in checks.items():
+            with self.subTest(validator=name), self.assertRaises(ValueError):
+                check()
+
+    def test_extended_signature_log_requires_the_same_original_core_fields(self):
+        with patch.object(execution.urllib.request, "urlopen", return_value=Response()):
+            self.fetch()
+        closure = self.closure()
+        original_path = self.root / closure["signed_indexes"][0]["signature_log"]["path"]
+        original = json.loads(original_path.read_bytes())
+        self.runner.seal_package_fetches([closure])
+        index = closure["signed_indexes"][0]
+        extension_path = self.root / index["signature_log"]["path"]
+        extension = json.loads(extension_path.read_bytes())
+        plan = {"platform": "linux/amd64", "package_indexes": [{"url": index["url"], "sha256": index["packages"]["sha256"]}]}
+        checks = {"transports": lambda: materials.package_transports([closure], self.root),
+                  "closure": lambda: materials.os_closure(closure, self.root, plan, time.time(), self.runner.commands)}
+        mutations = {"tool": "another-tool", "exit_code": False, "command_index": 1,
+                     "acquisition": {"mode": "retained-report"},
+                     **{key + "_sha256": "0" * 64 for key in ("verifier", "keyring", "inrelease", "release")}}
+        for key, value in mutations.items():
+            original_path.write_bytes(contract.canonical({**original, key: value}))
+            changed = {**extension, "original_signature_log": contract.reference(self.root, original_path)}
+            extension_path.write_bytes(contract.canonical(changed))
+            index["signature_log"] = contract.reference(self.root, extension_path)
+            for name, check in checks.items():
+                with self.subTest(field=key, validator=name), self.assertRaisesRegex(ValueError, "preserved original"):
+                    check()
+        original_path.write_bytes(contract.canonical(original))
+        changed = dict(extension)
+        del changed["original_signature_log"]
+        extension_path.write_bytes(contract.canonical(changed))
+        index["signature_log"] = contract.reference(self.root, extension_path)
+        for name, check in checks.items():
+            with self.subTest(missing_original=True, validator=name), self.assertRaisesRegex(ValueError, "invalid shape"):
+                check()
 
     def test_sealed_replay_rejects_missing_failure_and_wrong_source_bindings(self):
         with patch.object(execution.urllib.request, "urlopen", side_effect=[eof(), Response()]):

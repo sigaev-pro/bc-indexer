@@ -98,3 +98,72 @@ publish the frozen draft referencing #11, let the coordinator run a fresh
 bounded diagnostic with one genuine typed EOF injection, obtain independent
 reviews and CI, and only then start a corrected full run after acceptance.
 Issue #11 remains incomplete.
+
+## Review repair: original logs and available bytes
+
+Both independent Spec and Standards reviews requested changes on frozen head
+`2926d6dd642532090309dae87aebfce2ecf4ff74` in
+[PR #116](https://github.com/sigaev-pro/bc-indexer/pull/116). Final validation
+did not bind the preserved original signature logs after sealing. Oversized
+normal reads discarded available bytes, and wrapped read exceptions did not
+retain partial bytes exposed only by their cause. These findings remained
+blocking despite the previous portable checks.
+
+The coordinator's diagnostic on that same head passed in 315.84 seconds:
+the exact Go version, three signatures, 13 exact installed roots, 225 installed
+packages, and exactly one explicitly injected/recovered TLS EOF. Its then-current
+sealed proof validators passed. Result SHA-256:
+`9571c28dd770a2f524023ec456118365ff0301eebbbea4f6d0251dfaa939142e`.
+The coordinator independently verified that supervisor 21669, worker 21671,
+all recorded candidate groups, and owned containers were absent. This is a
+successful but insufficient diagnostic of the old head, not acceptance or
+validation of the repair.
+
+Writer ownership returned on 2026-11-08. Three direct regression methods failed
+with five subcase failures before implementation: a wrapped cause's partial
+bytes were omitted, oversized first/later read blocks lost their bounded
+prefixes, and both `package_transports` and `os_closure` accepted a changed
+original log after sealing. The red command exited 1.
+
+Each immutable extension now includes the previously captured
+`original_signature_log` descriptor. Both validators verify those original bytes
+and require all original core fields, including JSON types, to match the
+extension. No original file is rewritten or rehashed into a replacement trusted
+expectation. Controls cover post-seal mutation, a missing descriptor, and
+changed core fields even when the attacker recomputes local descriptors.
+
+Package attempts now record `observed_body_size` and `body_truncated`. Oversized
+normal reads retain their available prefix up to the exact archive bound before
+failing. Partial bytes exposed through `URLError.reason` are retained when the
+outer exception does not expose them; duplicate outer/cause data is retained
+once. Oversized direct or wrapped partials remain nonretryable. Sealed journal
+validation rejects omitted or truncated bytes. The existing two-attempt limit,
+typed EOF classification, deadline/stop, exact hash/size checks, successful
+source-observation fields, and seal API are unchanged.
+
+Repair checks:
+
+- All 18 transport tests passed in 0.302 seconds, including five new methods.
+- All 118 trusted build tests passed in 33.073 seconds; the two existing opt-in
+  Docker checks were skipped. Wrapper exit 0, elapsed 33.497 seconds.
+- Documentation checks passed for 111 documents, 1,110 local links, 84 catalog
+  entries, 16 normative mirrors, and unchanged original v2. Whitespace checks
+  passed.
+
+Commands:
+
+```bash
+cd .project/automation
+python3 -m unittest test_build_package_transport
+cd ../..
+python3 -m unittest discover -s .project/automation -p 'test_build*.py'
+python3 .project/automation/check_docs.py
+git diff --check
+```
+
+All new controls use disposable synthetic files and mocked transport. No author
+live fetch, Docker, full build, or background process ran; temporary test files
+were cleaned. Publish the repair to PR #116 and freeze it for fresh independent
+reviews, required GitHub CI, and a new coordinator diagnostic. The earlier
+failed operation and review outcomes remain unchanged. Issue #11 is incomplete;
+native builds and runtime remain NOT_RUN.

@@ -162,7 +162,8 @@ class Runner:
             timeout = self.remaining(60)
             attempt = {"ordinal": ordinal, "state": "STARTED", "started_at": time.time(), "finished_at": None,
                        "response_url": None, "status": None, "headers": {}, "error": None, "body": None,
-                       "exception_partial_size": 0, "retained_exception_partial_size": 0}
+                       "exception_partial_size": 0, "retained_exception_partial_size": 0,
+                       "observed_body_size": 0, "body_truncated": False}
             record["attempts"].append(attempt)
             record["outcome"] = "IN_PROGRESS"
             self.write_package_journal()  # Intent must be durable before network dispatch.
@@ -196,17 +197,24 @@ class Runner:
                                 except Exception as error:
                                     transport_error = error
                                     partial = getattr(error, "partial", None)
+                                    if not isinstance(partial, bytes) and isinstance(error, urllib.error.URLError):
+                                        partial = getattr(error.reason, "partial", None)
+                                    # A wrapper can expose the same bytes as its cause. Retain one sequence.
                                     if isinstance(partial, bytes):
                                         attempt["exception_partial_size"] = len(partial)
+                                        attempt["observed_body_size"] += len(partial)
+                                        attempt["body_truncated"] = len(partial) > size - total
                                         retained = stream.write(partial[:size - total])
                                         attempt["retained_exception_partial_size"] = retained
                                         contract.require(retained == len(partial), "package exception bytes exceeded its exact size")
                                     raise
                                 if not block:
                                     break
-                                total += len(block)
-                                contract.require(total <= size, "package archive exceeded its exact size")
-                                stream.write(block)
+                                attempt["observed_body_size"] += len(block)
+                                attempt["body_truncated"] = len(block) > size - total
+                                retained = stream.write(block[:size - total])
+                                total += retained
+                                contract.require(retained == len(block), "package archive exceeded its exact size")
                     finally:
                         stream.flush()
                         os.fsync(stream.fileno())
@@ -249,17 +257,17 @@ class Runner:
             for index in closure["signed_indexes"]:
                 status = materials.signature_status(index, self.root, self.commands)
                 contract.require("archive_fetches" not in status, "OS signature log already has transport evidence")
-                originals[index["signature_log"]["path"]] = status
+                originals[index["signature_log"]["path"]] = (status, dict(index["signature_log"]))
         # Extend immutable logs only after validating every previously captured binding.
         sealed = self.root / "package-fetches" / "sealed.json"
         contract.require(not sealed.exists(), "sealed package journal already exists")
         evidence.atomic_json(sealed, expected)
         reference = contract.reference(self.root, sealed)
         replacements = {}
-        for number, (path, status) in enumerate(originals.items()):
+        for number, (path, (status, original)) in enumerate(originals.items()):
             output = self.root / "os" / ("transport-signature-" + str(number) + ".json")
             contract.require(not output.exists(), "extended OS signature log already exists")
-            evidence.atomic_json(output, {**status, "archive_fetches": reference})
+            evidence.atomic_json(output, {**status, "archive_fetches": reference, "original_signature_log": original})
             replacements[path] = contract.reference(self.root, output)
         for closure in closures:
             closure["signed_indexes"] = [{**index, "signature_log": replacements[index["signature_log"]["path"]]}

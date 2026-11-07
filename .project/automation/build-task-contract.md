@@ -181,8 +181,11 @@ Before each package dispatch, durably journal its intent. Preserve failed
 attempt metadata and separately hashed files containing only bytes actually
 written; do not claim access to bytes buffered inside the transport. Retry from
 zero into another file. Retain byte-valued partial data explicitly exposed by
-a read exception within the same archive-size bound, and record any truncation;
-this does not make `IncompleteRead` retryable. Recheck deadline/stop immediately
+a read exception, including its `URLError.reason` when the wrapper does not
+expose partial bytes; do not concatenate duplicate wrapper/cause data. For an
+oversized normal read or partial, preserve the available prefix within the
+archive-size bound and record the observed byte count and truncation. Oversized
+data and `IncompleteRead` remain nonretryable. Recheck deadline/stop immediately
 at dispatch after intent persistence. Record only sanitized error types/reason and allowed
 response headers, with URL, ordinal, times, size, and digest. Failure to retain
 the journal forbids further dispatch. Keep successful source-observation fields
@@ -192,9 +195,11 @@ the separate package journal.
 Before final acceptance, seal that journal into the OS proof. Verify its
 captured reference and trusted in-memory contents, all failed/successful body
 references, and every original signature-log reference and command binding.
-Write new immutable signature-log extensions with an `archive_fetches` file
-reference; preserve the original logs. Refresh the intended closure references
+Write new immutable signature-log extensions with `archive_fetches` and
+`original_signature_log` file references; preserve the original logs. Refresh the intended closure references
 only after all extensions are written. Final materialized validation requires
+the original log bytes to match their captured descriptors and all original
+core fields to match the extensions, including their JSON types. It requires
 this shared sealed journal and binds each installed archive to its exact signed
 source and successful request. No package acquisition may follow sealing.
 This extends trusted log contents without changing the product manifest shape.
