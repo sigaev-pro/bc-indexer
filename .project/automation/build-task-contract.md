@@ -121,6 +121,30 @@ Update mode writes a `PREPARED_CANDIDATE` tied to the registry and previous acti
 
 ## Execution scope
 
+Go acquisition uses per-component alternate metadata at
+`/proof/sources/<component>/metadata/go.mod` and its paired `go.sum`. Copy the
+original root files from the exact source archive; an absent original checksum
+file starts empty. Keep `/source` read-only and retain its original `go.mod`,
+`go.sum`, source code, and selected dependency-input checks. Use the same explicit
+`-mod=readonly -modfile=...` across download, graph listing, verification, import
+listing, and compilation. Local relative replacements remain rooted at `/source`,
+not the metadata directory. Each component keeps its own existing module cache.
+
+Require successful native download/list/verify commands with the official Go
+proxy and checksum database and explicit empty `GOPRIVATE`, `GONOSUMDB`, and
+`GONOPROXY`; compilation keeps its existing offline policy. Capture each generated
+metadata file with an exact component-bound `cat` command after acquisition.
+Existing command stdout descriptors retain the bytes without changing the
+product manifest schema. Verify the copied module file is byte-identical to the
+archived input, all original checksum entries remain unchanged, and every
+selected download's `Sum` and `GoModSum` matches the captured checksum file.
+Reject duplicate/conflicting entries and new unselected archive hashes. Additional
+`/go.mod` entries for graph-loading versions are allowed: their authentication
+comes from the successful trusted native Go commands and checksum policy, not a
+claim of independent offline replay of checksum-database proofs. Validate the
+capture's component, container, command order, and digest. Reject changed or
+missing metadata after compilation and during final materialized validation.
+
 The trusted build driver accepts paired `--package-source-report PATH` and
 `--package-source-report-sha256 SHA256` options when pinned Debian indexes have
 already been retained. Both options are required together. The digest names

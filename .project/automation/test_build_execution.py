@@ -79,11 +79,11 @@ class ExecutionTests(unittest.TestCase):
     def test_native_caches_and_explicit_toolchain_stay_separate(self):
         values = [execution.go_environment(name, "linux/amd64", 1) for name in contract.MODULES]
         self.assertEqual(len({row["GOMODCACHE"] for row in values}), 10)
-        for value in values:
+        for name, value in zip(contract.MODULES, values):
             self.assertEqual(value["GOTOOLCHAIN"], "local")
             self.assertEqual(value["GOWORK"], "off")
             self.assertEqual(value["GOENV"], "off")
-            self.assertEqual(value["GOFLAGS"], "-mod=readonly")
+            self.assertEqual(value["GOFLAGS"], "-mod=readonly -modfile=/proof/sources/" + name + "/metadata/go.mod")
 
     def test_official_sources_reject_credentials_and_host_substitution(self):
         execution.official_url("https://deb.debian.org/debian/dists/trixie/InRelease")

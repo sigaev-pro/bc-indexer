@@ -361,6 +361,112 @@ def archive_module(path):
     return found[0].strip('"')
 
 
+def archived_module_metadata(path):
+    result = {}
+    with tarfile.open(path, "r:") as archive:
+        for member in archive:
+            if member.name not in {"go.mod", "go.sum"}:
+                continue
+            limit = 1024 * 1024 if member.name == "go.mod" else 16 * 1024 * 1024
+            contract.require(member.name not in result and member.isfile() and member.size <= limit,
+                             "archived module metadata is duplicated, unsafe, or unbounded")
+            result[member.name] = archive.extractfile(member).read()
+    contract.require("go.mod" in result, "archived module file is missing")
+    result.setdefault("go.sum", b"")
+    return result
+
+
+def checksum_entries(data):
+    contract.require(len(data) <= 16 * 1024 * 1024, "module checksum file exceeds its bound")
+    result = {}
+    for line in data.decode().splitlines():
+        fields = line.split()
+        contract.require(len(fields) == 3 and fields[1].startswith("v")
+                         and re.fullmatch(r"h1:[A-Za-z0-9+/]{43}=", fields[2]), "invalid module checksum entry")
+        key = tuple(fields[:2])
+        contract.require(key not in result, "module checksum entry is duplicated or conflicting")
+        result[key] = fields[2]
+    return result
+
+
+def module_metadata(identifier, row, root, commands):
+    """Bind alternate metadata to native Go commands, not an offline sumdb replay."""
+    contract.require(identifier in contract.MODULES, "unknown native module metadata owner")
+    directory = "sources/" + identifier + "/metadata/"
+    originals = archived_module_metadata(contract.verify_reference(root, row["source_archive"]))
+
+    def invocation(command):
+        argv = command["argv"]
+        if argv[:3] != ["docker", "container", "exec"]:
+            return None
+        offset, environment = 3, {}
+        while offset < len(argv) and argv[offset] == "--env":
+            contract.require(offset + 1 < len(argv) and "=" in argv[offset + 1], "invalid native Go environment")
+            key, value = argv[offset + 1].split("=", 1)
+            contract.require(key not in environment, "native Go environment repeats a variable")
+            environment[key] = value
+            offset += 2
+        contract.require(offset + 1 < len(argv), "native command has no container or executable")
+        return argv[offset], environment, argv[offset + 1:]
+
+    owner, authenticated, positions = None, None, []
+    for field, tail in (("downloads", ["mod", "download", "-json", "all"]),
+                        ("modules", ["list", "-m", "-json", "all"]), ("verification", ["mod", "verify"])):
+        matches = [(i, command) for i, command in enumerate(commands) if command.get("stdout") == row[field]]
+        contract.require(len(matches) == 1, "module metadata lacks a unique native command")
+        position, command = matches[0]
+        contract.command_record(command, root)
+        parsed = invocation(command)
+        contract.require(parsed is not None and parsed[2] == ["/usr/local/go/bin/go", *tail], "module metadata used another native command")
+        if owner is None:
+            owner, authenticated = parsed[:2]
+        contract.require(parsed[:2] == (owner, authenticated), "module acquisition crossed its component or environment")
+        positions.append(position)
+    contract.require(positions == sorted(set(positions)), "module acquisition commands are out of order")
+    required = {"GOFLAGS": "-mod=readonly -modfile=/proof/" + directory + "go.mod", "GOTOOLCHAIN": "local",
+                "GOWORK": "off", "GOENV": "off", "GOPRIVATE": "", "GONOSUMDB": "", "GONOPROXY": "",
+                "GOMODCACHE": "/proof/cache/" + identifier + "/mod", "GOPATH": "/proof/cache/" + identifier + "/gopath",
+                "GOCACHE": "/proof/cache/" + identifier + "/build"}
+    contract.require(all(authenticated.get(key) == value for key, value in required.items())
+                     and authenticated.get("GOPROXY") == "https://proxy.golang.org" and authenticated.get("GOSUMDB") == "sum.golang.org",
+                     "module checksum acquisition lacks its isolated authenticated environment")
+    parsed_commands = [(i, command, invocation(command)) for i, command in enumerate(commands)]
+    for _, _, parsed in parsed_commands:
+        if parsed is not None and parsed[0] == owner and parsed[2][0] == "/usr/local/go/bin/go":
+            contract.require(all(parsed[1].get(key) == value for key, value in required.items())
+                             and (parsed[1].get("GOPROXY"), parsed[1].get("GOSUMDB")) in
+                             {("https://proxy.golang.org", "sum.golang.org"), ("off", "off")},
+                             "native Go phase changed its module metadata or authentication policy")
+    main = [item for item in json_stream(contract.verify_reference(root, row["modules"]).read_text()) if item.get("Main") is True]
+    contract.require(len(main) == 1 and main[0].get("Dir") == "/source"
+                     and main[0].get("GoMod") == "/proof/" + directory + "go.mod", "native graph used another module metadata file or root")
+    captured = {}
+    for name in ("go.mod", "go.sum"):
+        matches = [(i, command) for i, command, parsed in parsed_commands
+                   if parsed == (owner, {}, ["cat", "/proof/" + directory + name])]
+        contract.require(len(matches) == 1 and matches[0][0] > positions[-1], "module metadata capture is missing, duplicated, or out of order")
+        _, command = matches[0]
+        contract.command_record(command, root)
+        limit = 1024 * 1024 if name == "go.mod" else 16 * 1024 * 1024
+        contract.require(command["stdout"]["size_bytes"] <= limit, "module metadata capture exceeds its bound")
+        captured[name] = contract.verify_reference(root, command["stdout"]).read_bytes()
+        actual = contract.safe_file(root, directory + name)
+        contract.require(actual.stat().st_size == len(captured[name]) and actual.read_bytes() == captured[name],
+                         "module metadata changed after its captured native verification")
+    contract.require(captured["go.mod"] == originals["go.mod"], "alternate module file differs from its archived input")
+    original_sums, final_sums = checksum_entries(originals["go.sum"]), checksum_entries(captured["go.sum"])
+    contract.require(all(final_sums.get(key) == value for key, value in original_sums.items()), "original module checksum entries changed or disappeared")
+    selected = {}
+    for item in json_stream(contract.verify_reference(root, row["downloads"]).read_text()):
+        contract.require(not item.get("Error"), "module download contains an error")
+        for field, suffix in (("Sum", ""), ("GoModSum", "/go.mod")):
+            key = (item["Path"], item["Version"] + suffix)
+            contract.require(key not in selected and final_sums.get(key) == item.get(field), "selected module checksum differs from its authenticated download")
+            selected[key] = item[field]
+    contract.require(all(key[1].endswith("/go.mod") for key in final_sums.keys() - original_sums.keys() - selected.keys()),
+                     "generated checksum file contains an unselected module archive")
+
+
 def fields(lines):
     """Read Debian control records while preserving multiline hash sections."""
     record, current = {}, None
@@ -567,6 +673,7 @@ def validate_materialized(manifest, root, source, now):
         contract.require(contract.parse_json(contract.verify_reference(root, row["local_modules"]).read_bytes()) == local,
                          "retained local modules differ from their selected source archive")
         acquired = modules(graph, json_stream(contract.verify_reference(root, row["downloads"]).read_text()), source_module, local)
+        module_metadata(identifier, row, root, manifest["commands"])
         artifacts = {(item["module"], item["version"]): item for item in row["artifacts"]}
         contract.require(len(artifacts) == len(row["artifacts"]) and set(artifacts) == set(acquired),
                          "retained module archives differ from the complete resolved closure")
