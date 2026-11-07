@@ -24,6 +24,14 @@ Check mode exposes proposed exact pins but never creates a candidate. Failed
 update mode never retains a newly created candidate. Existing output files are
 preserved rather than overwritten; choose fresh paths for another attempt.
 
+Outputs are first written to owned temporary files in their destination
+directories, flushed, synchronized and closed. An exclusive hard link then
+publishes each complete file without replacing an existing name. The updater
+retains an open handle to each created inode through the output transaction.
+If report publication fails, rollback removes only outputs that still belong
+to those retained inodes. A concurrent replacement is preserved. Temporary
+files and retained handles are cleaned on completion or a handled failure.
+
 ## Selection and retained evidence
 
 All 41 registry entries appear in every discovery report. GitHub release and
@@ -41,6 +49,8 @@ platform manifest bytes are hashed. Debian packages use all six accepted
 architecture/channel indexes and Debian epoch/upstream/revision ordering.
 Update mode verifies selected package archives against exact size and SHA-256.
 NATS chart metadata must match the selected chart and server versions.
+Malformed or truncated gzip/XZ package indexes produce blocked source rows
+and an incomplete report in both modes; they never create a candidate.
 
 HTTPS requests are restricted to registered official hosts. Transport follows
 validated redirects, bounds pagination, rejects duplicate JSON keys and
