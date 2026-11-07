@@ -58,6 +58,23 @@ their selected owner's go.mod, including commit-and-timestamp-verified
 pseudo-versions. Dependency input paths retain their independent owner and
 are rehashed from the newly selected commit.
 
+GitHub may link a named repository page to `/repositories/{id}`. Before using
+that alias, the updater fetches and retains metadata from the exact configured
+`/repos/{owner}/{repo}` endpoint. The metadata must contain a positive integer
+`id` (not a boolean), a `full_name` exactly equal to the configured owner/repo,
+and the exact canonical `https://api.github.com/repos/{owner}/{repo}` URL.
+Matching is case-sensitive; missing fields, malformed values and foreign
+identities fail. No known repository ID is embedded in the implementation.
+The numeric page must use that ID, the original endpoint tail and the same
+official API origin. Named and numeric aliases share a logical page identity
+for loop detection, including normalized query ordering. The 64-page limit
+and one-next-link rule remain enforced.
+
+Repository metadata is acquired only when a numeric alias needs it and appears
+in the component's retained source references. Named-only paging does not add
+an unnecessary metadata request. Non-GitHub page identity rules and the
+credential-aware redirect guard remain unchanged.
+
 Go source and both Linux archives are selected from official checksums. Update
 mode also downloads and hashes their bytes. Official OCI tags must match the
 selected Go/NATS version or stable Debian 13 slim channel; index and both

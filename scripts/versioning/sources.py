@@ -221,11 +221,39 @@ class Transport:
 
     def pages(self, url, repository=None):
         initial = official(url)
+        initial_origin = origin(url)
+        named = (re.fullmatch(r"/repos/([^/]+)/([^/]+)(/.*)", initial.path)
+                 if repository is None and initial_origin == ("https", "api.github.com", 443) else None)
+        repository_id = None
         seen, values = set(), []
         while url:
             target = official(url)
-            need(url not in seen and len(seen) < 64 and (target.scheme, target.netloc, target.path) == (initial.scheme, initial.netloc, initial.path), "Invalid official pagination")
-            seen.add(url)
+            need(len(seen) < 64, "Official pagination exceeds the page limit")
+            if named is not None:
+                need(origin(url) == initial_origin, "GitHub pagination changed origin")
+                if target.path != initial.path:
+                    alias = re.fullmatch(r"/repositories/([1-9][0-9]*)(/.*)", target.path)
+                    need(alias is not None and alias[2] == named[3], "GitHub pagination changed repository endpoint")
+                    if repository_id is None:
+                        metadata_url = urllib.parse.urlunsplit((initial.scheme, initial.netloc,
+                                                               "/repos/" + named[1] + "/" + named[2], "", ""))
+                        metadata = self.json(metadata_url)
+                        need(type(metadata) is dict and type(metadata.get("id")) is int and metadata["id"] > 0,
+                             "GitHub repository metadata has no positive integer identity")
+                        configured_name = named[1] + "/" + named[2]
+                        need(metadata.get("full_name") == configured_name
+                             and metadata.get("url") == "https://api.github.com/repos/" + configured_name,
+                             "GitHub repository metadata differs from the configured named identity")
+                        repository_id = metadata["id"]
+                    need(alias[1] == str(repository_id), "GitHub numeric pagination belongs to another repository")
+                # Named and numeric aliases identify the same logical page.
+                page_key = (initial.path, tuple(sorted(urllib.parse.parse_qsl(target.query, keep_blank_values=True))))
+            else:
+                need((target.scheme, target.netloc, target.path) == (initial.scheme, initial.netloc, initial.path),
+                     "Invalid official pagination")
+                page_key = url
+            need(page_key not in seen, "Official pagination contains a loop")
+            seen.add(page_key)
             body = self.json(url)
             if repository is not None:
                 need(type(body) is dict and body.get("name") == repository, "Image tag source belongs to another repository")
