@@ -1,5 +1,32 @@
 # Состояние проекта
 
+## E01-01.builds — Synchronize the published candidate for direct verification
+
+D95 workflow PR #110 is accepted at `146746e`; the standalone GitHub pagination block PR #111 is accepted at `fe14767`, with both review axes and GitHub CI passing. Parent issue #11 remains open. The published product branch is being merged with accepted main using a normal merge; existing product implementation bytes are unchanged from reviewed `7022c0d`. Preserve the original failed `f17bb19` worktree and canonical run unchanged.
+
+Next: check and publish this synchronized candidate, then run fresh real-source verification and native builds with the existing standalone verifier and bounded process supervisor in a new owned evidence directory. No controller launch, ledger reservation, or recovery transition is required. Native builds and native/NATS runtime remain NOT_RUN until actual results exist. Do not change this candidate while its verification is running.
+
+
+## E01-01.builds — Standalone pagination repair checked under D95
+
+2026-11-07: Workflow [PR #110](https://github.com/sigaev-pro/bc-indexer/pull/110) is accepted at `146746ee2a60d51450e7e3e4a96039c03c4ad689`. Direct author `d95-build-checks-author-001` owns the isolated `build/standalone-github-pagination` branch at that base. This [issue #11](https://github.com/sigaev-pro/bc-indexer/issues/11) block extracts the completed trusted GitHub pagination repair from retained `db07c163d3d5679308d04bb9b9c3b967973333c0`: exact official metadata, numeric aliases, retained source references, and logical loop rejection. Allowed paths are the updater, synthetic vectors, pagination tests, required verifier registration, pagination contract prose, this status, and the block evidence report. Required checks are focused updater/pagination tests, documentation validation, and whitespace checks; GitHub runs full CI. No profile or native runtime result is established by these synthetic controls. Next: implement the narrow extraction, check, commit, push, and open a draft PR referencing #11. The parent issue remains incomplete; controller state and the original failed candidate remain untouched.
+
+The extraction is complete and byte-identical to the retained repaired files. All 24 focused tests pass; documentation and whitespace checks pass. Existing verifier registration already covers the updater modules and is unchanged. [Block evidence](evidence/E01-build-checks.md) records hashes, historical failures, checks, and remaining parent requirements. Next: commit and push this block, open a draft PR referencing #11, and obtain GitHub CI plus independent Spec and Standards review. No controller operation, native build, live acquisition, or canonical-state change occurred; runtime remains NOT_RUN.
+
+## WORKFLOW-01 — Step 2 in progress under D95
+
+The owner authorized the remaining agreed stages. Current block: [WORKFLOW-01, issue #109](https://github.com/sigaev-pro/bc-indexer/issues/109). The [direct workflow](docs/DEVELOPMENT_WORKFLOW.md) now defines prompt publication, exact-head review, protected merges, and the dependency-ordered queue. Controller launches and recovery are optional legacy operations. Product code and the accepted specification are unchanged. Documentation checks passed for 106 documents, 1,102 local links, 84 catalog entries, and 16 normative mirrors; all eight agent roles verified; whitespace checks passed. GitHub CI and independent exact-head review remain pending. The next block is actual client build verification under issue #11; the publication-only stop below is historical and superseded by D95.
+
+
+## HANDOFF-PUBLISH-01 — Complete; all work published in draft PRs
+
+The owner authorized step 1 only: inspect and stop owned background work, publish completed local commits in working branches and draft PRs, and report verified results and blockers. Do not start new implementation, review rounds, recovery, native builds, or merges in this block. See D94. This checkpoint concerns existing issues #11 and #105; it does not add a product task to the fixed catalog.
+
+All worktrees were clean at intake. The interrupted AUT06 author session is recorded as cancelled with verified cleanup. Its retained supervisor diagnostic passed 323 tests with two opt-in Docker skips and all 54 negative controls on clean `db07c163d3d5679308d04bb9b9c3b967973333c0`; the earlier wrapper timeout remains retained. The supervisor, its process group, and all 28 recorded child groups are absent. No matching project process or running Docker container was found.
+
+Published and remotely verified: draft [PR #106](https://github.com/sigaev-pro/bc-indexer/pull/106) at `db07c16`, draft [PR #107](https://github.com/sigaev-pro/bc-indexer/pull/107) at `7022c0d`, draft documentation [PR #108](https://github.com/sigaev-pro/bc-indexer/pull/108), and two archive branches retaining `f17bb19` and `7723a17`. GitHub CI passed for both code heads. Main remains `f917e73`; no merge or deployment occurred. See the [publication report](docs/PUBLICATION_HANDOFF_2026_11_07.md) for exact checks, retained failures, process cleanup, and blockers. The next product task remains issue #11, actual client build verification. This block ends with the handoff report; further implementation and workflow changes await agreement under D94.
+
+
 ## Точка продолжения
 
 2026-11-07: **E01-01.builds PAGINATION_REPAIR_CHECKED / D93**. Invocation `d93-e01-builds-author-050` repaired numeric GitHub pagination only in `e01-native-builds-repair`. Numeric aliases now require retained metadata with the configured repository's exact full_name/canonical URL and positive integer ID; endpoint/origin, loop, ambiguity and page bounds remain enforced. All 11 focused and 51 isolated product tests passed. The original failed canonical operation and immutable worktree remain unchanged; maintenance #105 owns trusted validation/recovery. Next: commit this repair, run exact-head portable CI and return ownership. This repair's live check and all native compilation/runtime remain NOT_RUN; the previous canonical live failure remains retained.
