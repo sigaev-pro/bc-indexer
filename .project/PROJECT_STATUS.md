@@ -1,5 +1,19 @@
 # Состояние проекта
 
+## WORKFLOW-01 — Step 2 in progress under D95
+
+The owner authorized the remaining agreed stages. Current block: [WORKFLOW-01, issue #109](https://github.com/sigaev-pro/bc-indexer/issues/109). The [direct workflow](docs/DEVELOPMENT_WORKFLOW.md) now defines prompt publication, exact-head review, protected merges, and the dependency-ordered queue. Controller launches and recovery are optional legacy operations. Product code and the accepted specification are unchanged. Documentation checks passed for 106 documents, 1,102 local links, 84 catalog entries, and 16 normative mirrors; all eight agent roles verified; whitespace checks passed. GitHub CI and independent exact-head review remain pending. The next block is actual client build verification under issue #11; the publication-only stop below is historical and superseded by D95.
+
+
+## HANDOFF-PUBLISH-01 — Complete; all work published in draft PRs
+
+The owner authorized step 1 only: inspect and stop owned background work, publish completed local commits in working branches and draft PRs, and report verified results and blockers. Do not start new implementation, review rounds, recovery, native builds, or merges in this block. See D94. This checkpoint concerns existing issues #11 and #105; it does not add a product task to the fixed catalog.
+
+All worktrees were clean at intake. The interrupted AUT06 author session is recorded as cancelled with verified cleanup. Its retained supervisor diagnostic passed 323 tests with two opt-in Docker skips and all 54 negative controls on clean `db07c163d3d5679308d04bb9b9c3b967973333c0`; the earlier wrapper timeout remains retained. The supervisor, its process group, and all 28 recorded child groups are absent. No matching project process or running Docker container was found.
+
+Published and remotely verified: draft [PR #106](https://github.com/sigaev-pro/bc-indexer/pull/106) at `db07c16`, draft [PR #107](https://github.com/sigaev-pro/bc-indexer/pull/107) at `7022c0d`, draft documentation [PR #108](https://github.com/sigaev-pro/bc-indexer/pull/108), and two archive branches retaining `f17bb19` and `7723a17`. GitHub CI passed for both code heads. Main remains `f917e73`; no merge or deployment occurred. See the [publication report](docs/PUBLICATION_HANDOFF_2026_11_07.md) for exact checks, retained failures, process cleanup, and blockers. The next product task remains issue #11, actual client build verification. This block ends with the handoff report; further implementation and workflow changes await agreement under D94.
+
+
 ## Точка продолжения
 
 2026-11-07: **AUT-05 EXPANDED_REPAIR_CHECKED / D93**. All 17 focused updater tests pass after the independently reproduced Chart.yaml provenance-order repair. Full portable CI passed in 144.69 seconds: 292 tests with two opt-in Docker skips, component checks, 104 documents/1,086 links, all 84 catalog entries, 16 mirrors, and unchanged v2. [AUT-05 evidence](evidence/AUT-05.md) retains the failed diagnostics, the historical compression-only Spec PASS, the new regression failures, and checked module hashes. The compression fixture is unchanged from `dbd4c90`; all metadata/hash/version/server-compatibility and source-reference conditions remain required. Next: commit, return ownership for both fresh exact-head reviews, obtain protected acceptance, and safely hand off the accepted source. Product files, locks, canonical state, and ledger remain untouched; native builds and runtime remain NOT_RUN.

@@ -1,4 +1,12 @@
-# Разработка extractor с agency-agents
+# Development workflow
+
+**Current procedure — D95.** Use the [issue-driven workflow](.project/docs/DEVELOPMENT_WORKFLOW.md) for ordinary development. It defines the branch/commit/push/review cycle and the next tasks. Read [PROJECT_STATUS](.project/PROJECT_STATUS.md) first. Work continues through the accepted backlog; the controller, session ledger, service installation, and recovery of its old run are not prerequisites.
+
+The eight [project roles](.project/agency/README.md) remain useful in direct sessions. Publish completed blocks promptly in draft PRs; merge through CI, independent review, task evidence, and branch protection. Preserve all product requirements and profile gates.
+
+## Historical controller procedure — optional legacy reference
+
+The remaining material records the previous controller-based process. Its launch prerequisites and operational instructions apply only to an explicitly scoped legacy controller task. D95 and DEVELOPMENT_WORKFLOW govern current product work; historical setup commands below are not a request to start services or resume old runs.
 
 **D93 — Continuous work in meaningful blocks.** Complete the accepted E01 through E07 backlog in dependency and gate order, including necessary automation. Each block has a concrete outcome, scope, checks, review, commit, and durable next action. Continue to the next ready block without another owner confirmation. Campaign time and routine repair counts do not impose stopping windows; technical timeouts and acceptance requirements remain enforced. Preserve all previous launch history, attempts, and receipts. The authoritative policy is [D93](.project/docs/DECISIONS.md); the current block is recorded in [PROJECT_STATUS](.project/PROJECT_STATUS.md). D92's seven-hour window is historical and no longer governs new work.
 
