@@ -4,6 +4,8 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -118,6 +120,34 @@ class ReaderOracleTests(unittest.TestCase):
                 reader.write_text(json.dumps(bad))
                 with self.subTest(field=field), self.assertRaises(ValueError):
                     verifier.validate_outputs(root)
+
+    def test_reader_schema_version_requires_integer_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            protocol_stub(root)
+            reader = root / "test/evidence/reader-boundary-manifest.schema.json"
+            schema = json.loads(reader.read_text())
+            for value in (True, 1.0, "1", None):
+                schema["properties"]["schema_version"]["const"] = value
+                reader.write_text(json.dumps(schema))
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    verifier.validate_outputs(root)
+            schema["properties"]["schema_version"]["const"] = 1
+            reader.write_text(json.dumps(schema))
+            self.assertIn("test/evidence/reader-boundary-manifest.schema.json", verifier.validate_outputs(root))
+
+    def test_driver_rejects_boolean_reader_schema_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            protocol_stub(root)
+            reader = root / "test/evidence/reader-boundary-manifest.schema.json"
+            schema = json.loads(reader.read_text())
+            schema["properties"]["schema_version"]["const"] = True
+            reader.write_text(json.dumps(schema))
+            result = subprocess.run([sys.executable, "-I", verifier.__file__, "--candidate", str(root)],
+                                    capture_output=True, text=True, timeout=20)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("reader boundary schema", result.stdout)
 
 
 if __name__ == "__main__":

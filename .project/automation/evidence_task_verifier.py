@@ -209,8 +209,9 @@ def validate_outputs(candidate):
               and schema.get("properties", {}).get("schema_version", {}).get("const") == 3,
               "schema does not declare the required v3 fields: " + filename)
     reader_schema = json.loads((root / OUTPUTS[-1]).read_text())
+    reader_version = reader_schema.get("properties", {}).get("schema_version", {}).get("const")
     check(reader_schema.get("type") == "object" and reader_vectors.REQUIRED <= set(reader_schema.get("required", []))
-          and reader_schema.get("properties", {}).get("schema_version", {}).get("const") == 1,
+          and type(reader_version) is int and reader_version == 1,
           "reader boundary schema does not declare the required D87 fields")
     return hashes
 
