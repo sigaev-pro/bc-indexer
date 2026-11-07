@@ -7,11 +7,14 @@ import gzip
 import hashlib
 import io
 import lzma
+import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import time
 import uuid
+import zlib
 
 from core import (PLATFORMS, decode, describe, encode, hex_string, load_inputs,
                   need, regular, sha)
@@ -158,10 +161,13 @@ class Packages:
             digest = hashlib.sha256(payload).hexdigest()
             self.indexes.append(dict(url=url, sha256=digest))
             maximum = 512 * 1024**2
-            stream = (gzip.GzipFile(fileobj=io.BytesIO(payload), mode="rb") if compression == "gz"
-                      else lzma.LZMAFile(io.BytesIO(payload), mode="rb"))
-            with stream:
-                decoded = stream.read(maximum + 1)
+            try:
+                stream = (gzip.GzipFile(fileobj=io.BytesIO(payload), mode="rb") if compression == "gz"
+                          else lzma.LZMAFile(io.BytesIO(payload), mode="rb"))
+                with stream:
+                    decoded = stream.read(maximum + 1)
+            except (EOFError, OSError, lzma.LZMAError, zlib.error) as error:
+                raise ValueError("Malformed compressed package index: " + url + ": " + str(error)) from error
             need(len(decoded) <= maximum, "Decoded package index exceeds the size bound")
             for row in control_records(decoded.decode()):
                 if row.get("Package") not in wanted:
@@ -242,9 +248,61 @@ def discover(registry, active, transport, mode):
     return [by_id[e["id"]] for e in registry["components"]], selected, packages.indexes
 
 
+class Publication:
+    """Retain an inode handle until the complete output transaction finishes."""
+
+    def __init__(self, path, staging, fd):
+        self.path, self.staging, self.fd = Path(path), Path(staging), fd
+        info = os.fstat(fd)
+        self.identity = info.st_dev, info.st_ino
+
+    def remove_owned(self, path):
+        try:
+            info = path.lstat()
+            if (info.st_dev, info.st_ino) == self.identity:
+                path.unlink()
+        except FileNotFoundError:
+            pass
+
+    def rollback(self):
+        # The retained descriptor prevents inode reuse after a concurrent unlink.
+        self.remove_owned(self.path)
+        self.remove_owned(self.staging)
+
+    def finish(self):
+        self.remove_owned(self.staging)
+
+    def close(self):
+        if self.fd is not None:
+            fd, self.fd = self.fd, None
+            os.close(fd)
+
+
 def exclusive_json(path, value):
-    with Path(path).open("xb") as stream:
-        stream.write(encode(value))
+    payload = encode(value)
+    path = Path(path)
+    fd, staging = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=path.parent)
+    owner = Publication(path, staging, fd)
+    try:
+        output_fd = os.dup(fd)
+        try:
+            stream = os.fdopen(output_fd, "wb")
+        except BaseException:
+            os.close(output_fd)
+            raise
+        with stream:
+            need(stream.write(payload) == len(payload), "Incomplete JSON output write")
+            stream.flush()
+            os.fsync(stream.fileno())
+        # link() publishes complete bytes atomically and never replaces a name.
+        os.link(staging, path)
+        return owner
+    except BaseException:
+        try:
+            owner.rollback()
+        finally:
+            owner.close()
+        raise
 
 
 def arguments(argv):
@@ -288,7 +346,7 @@ def run(argv):
                   registry_sha256=registry_hash, active_lock_before=lock_hash, active_lock_after=lock_hash,
                   complete=complete, observed_at=time.time(), components=rows, observations=list(transport.rows.values()), candidate=None,
                   generated_outputs=[dict(id=o["id"], owner_tasks=o["owner_tasks"], state="NOT_RUN") for o in registry["generated_outputs"]], external_locks=external)
-    candidate_written = False
+    publications = []
     try:
         if complete and args.mode == "update":
             profiles = copy.deepcopy(active["profiles"])
@@ -298,14 +356,18 @@ def run(argv):
                              status="PREPARED_CANDIDATE", release_ready=False, active_lock_changed=False, synthetic=transport.synthetic,
                              components=selected, package_indexes=indexes, profiles=profiles,
                              pending_outputs=[dict(id=o["id"], status="PENDING_IMPLEMENTATION", runtime="NOT_RUN") for o in registry["generated_outputs"]])
-            exclusive_json(args.output, candidate)
-            candidate_written = True
+            publications.append(exclusive_json(args.output, candidate))
             report["candidate"] = describe(report_path.parent, args.output)
-        exclusive_json(report_path, report)
+        publications.append(exclusive_json(report_path, report))
+        for publication in publications:
+            publication.finish()
     except BaseException:
-        if candidate_written:
-            Path(args.output).unlink()
+        for publication in reversed(publications):
+            publication.rollback()
         raise
+    finally:
+        for publication in publications:
+            publication.close()
     return 0 if complete else 1
 
 
