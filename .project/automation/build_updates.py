@@ -353,7 +353,6 @@ def validate_report(report, root, registry, active, registry_hash, lock_hash, mo
             contract.require(item["version_by_platform"] == row["latest_stable"] == expected_versions, "package selection is not the latest exact stable revision for each platform")
         else:
             raise ValueError("unhandled registered updater component")
-        contract.require(row["sources"] and set(row["sources"]) <= observations.used, "component source references are missing or unverified")
     chart = selected["nats-chart"]
     chart_url = "https://raw.githubusercontent.com/" + chart["source_repository"] + "/" + chart["commit"] + "/helm/charts/nats/Chart.yaml"
     chart_bytes = observations.data(chart_url)
@@ -367,4 +366,7 @@ def validate_report(report, root, registry, active, registry_hash, lock_hash, mo
                      and chart.get("chart_metadata") == {"version": chart_fields["version"], "app_version": chart_fields["appVersion"],
                                                         "url": chart_url, "sha256": hashlib.sha256(chart_bytes).hexdigest()},
                      "NATS chart is not compatible with its selected server metadata")
+    # Check declared provenance after every required source has been authenticated.
+    for row in rows:
+        contract.require(row["sources"] and set(row["sources"]) <= observations.used, "component source references are missing or unverified")
     return {"complete": True, "bindings": bindings, "observations": observations, "selected": selected}

@@ -121,6 +121,91 @@ class UpdateTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "package index hash differs"):
                     self.validate(report)
 
+    def chart_source_report(self):
+        report = copy.deepcopy(self.fixture["report"])
+        row = self.row(report, "nats-chart")
+        row["sources"].append(row["selected"]["chart_metadata"]["url"])
+        return report
+
+    def test_chart_source_is_authenticated_before_checking_report_references(self):
+        for mode in ("check", "update"):
+            with self.subTest(mode=mode):
+                report = self.chart_source_report()
+                url = self.row(report, "nats-chart")["selected"]["chart_metadata"]["url"]
+                if mode == "update":
+                    path = self.fixture["root"] / "chart-candidate.json"
+                    path.write_bytes(contract.canonical(self.fixture["candidate"]))
+                    report.update(mode=mode, candidate=contract.reference(self.fixture["root"], path))
+                result = self.validate(report, mode=mode)
+                self.assertTrue(result["complete"])
+                self.assertIn(url, result["observations"].used)
+                self.assertEqual(len(result["selected"]), 41)
+
+    def test_declared_chart_metadata_must_match_authenticated_bytes(self):
+        for field, value in (("version", "0.0.1"), ("app_version", "0.0.1"),
+                             ("url", "https://raw.githubusercontent.com/nats-io/k8s/main/Chart.yaml"),
+                             ("sha256", "0" * 64)):
+            with self.subTest(field=field):
+                report = self.chart_source_report()
+                self.row(report, "nats-chart")["selected"]["chart_metadata"][field] = value
+                with self.assertRaisesRegex(ValueError, "NATS chart is not compatible"):
+                    self.validate(report)
+
+    def test_changed_chart_bytes_cannot_bypass_version_and_server_checks_with_new_hashes(self):
+        for field in ("version", "app_version", "duplicate_version", "missing_version"):
+            with self.subTest(field=field):
+                report = self.chart_source_report()
+                metadata = self.row(report, "nats-chart")["selected"]["chart_metadata"]
+                if field in ("version", "app_version"):
+                    metadata[field] = "0.0.1"
+                lines = ["name: nats", "version: " + metadata["version"], "appVersion: " + metadata["app_version"]]
+                if field == "duplicate_version":
+                    lines.append(lines[1])
+                if field == "missing_version":
+                    lines.pop(1)
+                path = self.fixture["root"] / ("changed-chart-" + field + ".yaml")
+                path.write_bytes(("\n".join(lines) + "\n").encode())
+                observation = next(row for row in report["observations"] if row["url"] == metadata["url"])
+                observation["body"] = contract.reference(self.fixture["root"], path)
+                metadata["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+                message = "not compatible" if field in ("version", "app_version") else "no unique version metadata"
+                with self.assertRaisesRegex(ValueError, message):
+                    self.validate(report)
+
+    def test_chart_source_requires_present_exact_bytes(self):
+        for mutation in ("missing_observation", "missing_file", "forged_body_hash", "forged_bytes"):
+            with self.subTest(mutation=mutation):
+                report = self.chart_source_report()
+                url = self.row(report, "nats-chart")["selected"]["chart_metadata"]["url"]
+                observation = next(row for row in report["observations"] if row["url"] == url)
+                if mutation == "missing_observation":
+                    report["observations"].remove(observation)
+                elif mutation == "missing_file":
+                    observation["body"]["path"] = "absent-chart.yaml"
+                elif mutation == "forged_body_hash":
+                    observation["body"]["sha256"] = "0" * 64
+                else:
+                    path = self.fixture["root"] / "forged-chart.yaml"
+                    path.write_bytes(b"forged chart bytes\n")
+                    observation["body"]["path"] = path.name
+                with self.assertRaises(ValueError):
+                    self.validate(report)
+
+    def test_recorded_but_unvalidated_source_cannot_be_claimed_as_provenance(self):
+        report = self.chart_source_report()
+        chart = self.row(report, "nats-chart")
+        url = chart["selected"]["chart_metadata"]["url"].rsplit("/", 1)[0] + "/unvalidated.yaml"
+        path = self.fixture["root"] / "unvalidated.yaml"
+        path.write_bytes(b"Recorded bytes are not authenticated chart metadata.\n")
+        report["observations"].append({"url": url, "status": 200, "headers": {},
+                                       "body": contract.reference(self.fixture["root"], path), "observed_at": vectors.FIXTURE_TIME})
+        result = self.validate(report)
+        self.assertTrue(result["complete"])
+        self.assertNotIn(url, result["observations"].used)
+        chart["sources"].append(url)
+        with self.assertRaisesRegex(ValueError, "source references are missing or unverified"):
+            self.validate(report)
+
     def test_complete_synthetic_check_covers_every_source_kind(self):
         result = self.validate()
         self.assertTrue(result["complete"])
