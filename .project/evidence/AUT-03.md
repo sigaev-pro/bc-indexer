@@ -35,4 +35,6 @@ The next full-CI attempt stopped at whitespace checks for extra final blank line
 
 ## Remaining work
 
-Stage and check the complete candidate, integrate accepted E01 evidence main, and obtain independent exact-head review and protected acceptance. Missing signed Debian package closures, source observations, compiled bytes, or cleanup evidence must block product acceptance. The current pinned caches are preparation only. Preserve deadline `1794032247`, shared invocation accounting, task attempts, original receipts, and all accepted E01 evidence behavior.
+Integration with accepted main `eda0a33fb6a8611ac661d5ae717709e1bab87030` preserved both status histories and all accepted E01 files. The earlier interrupted integrated run had no retained result and is not counted as a pass. Its replacement retained stdout, stderr, and the actual exit code: full CI exited 0 in 101.11 seconds, with 254 tests (two opt-in Docker cases skipped), all 54 component negatives, 101 documents, 1,075 local links, 16 normative mirrors, the unchanged 84-task catalog, and unchanged original v2. The run checked the staged integration tree before its merge commit.
+
+Commit the checked integration and obtain independent exact-head review and protected acceptance. Missing signed Debian package closures, source observations, compiled bytes, or cleanup evidence must block product acceptance. The current pinned caches are preparation only. Preserve deadline `1794032247`, shared invocation accounting, task attempts, original receipts, and all accepted E01 evidence behavior.

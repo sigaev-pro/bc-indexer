@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "case-registry.schema.json",
+  "title": "Resolved case registry, evidence schema version 3",
+  "type": "object",
+  "required": ["schema_version", "version", "cases"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 3},
+    "version": {"$ref": "evidence-definitions.schema.json#/$defs/text"},
+    "cases": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "evidence-definitions.schema.json#/$defs/registryCase"}}
+  },
+  "additionalProperties": false
+}
