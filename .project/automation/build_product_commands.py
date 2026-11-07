@@ -22,7 +22,9 @@ import session_runner
 def finish_group(process):
     """Stop owned descendants, reap the direct child, and reject live writers."""
     termination = session_runner.terminate_group(process, grace=0.1)
-    contract.require(termination in {"already-exited", "graceful", "forced"}
+    # Darwin can deny a group signal while its members are already exiting.
+    # Only confirmed absence under unreaped ownership resolves that transient.
+    contract.require(termination in {"already-exited", "graceful", "forced", "cleanup-denied"}
                      and session_runner.confirm_group_exit(process), "candidate group ownership or cleanup is uncertain")
     process.wait(timeout=5)
 
@@ -107,13 +109,14 @@ class Commands:
             except BaseException as failure:
                 error = failure
             finally:
-                os.close(write_end)
                 try:
                     finish_group(process)
                     cleanup_confirmed = True
                     evidence.atomic_json(intent, {"token": token, "state": "complete", "group": process.pid})
                 except BaseException as failure:
                     error = failure
+                finally:
+                    os.close(write_end)
         contract.require(stdout_path.stat().st_size <= 8 * 1024 * 1024 and stderr_path.stat().st_size <= 8 * 1024 * 1024,
                          "candidate protocol output exceeded its bound")
         row = {"id": identifier, "expected_exit": expected, "actual_exit": actual_exit,

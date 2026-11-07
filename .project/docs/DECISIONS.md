@@ -1,5 +1,9 @@
 # Дерево решений и журнал интервью
 
+## D92 addendum — one additional AUT-03 repair cycle (2026-11-07)
+
+The owner explicitly said to perform steps 1–3: fix the remaining AUT-03 cleanup race, add its regression and run checks, obtain both independent exact-head reviews, and merge PR #100 only if all required checks pass. This authorizes implementation attempt 4 / review-repair cycle 3 for this issue only. Preserve all previous attempts and findings; do not reset counters or weaken acceptance. Issue #11 is outside this follow-up. The original D92 deadline and invocation/session limits remain unchanged.
+
 ## Owner launch — D92 (2026-11-07)
 
 The owner said to work after accepting the proposed autonomous seven-hour development window. This launch starts at 2026-11-07 02:17:27 Europe/Moscow (2026-11-06 23:17:27 UTC; Unix 1794007047) and ends at 2026-11-07 09:17:27 Europe/Moscow (2026-11-07 06:17:27 UTC; Unix 1794032247). Preparation, automation changes, implementation, review, and handoff all consume this same window. Do not extend it by starting another run or renewing a budget.

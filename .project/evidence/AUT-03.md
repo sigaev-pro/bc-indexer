@@ -55,6 +55,14 @@ The proposed repair keeps the normal lifeline open through explicit owned-group 
 
 ## Retained checks and uncompleted acceptance
 
+## Owner-authorized additional repair
+
+The owner explicitly authorized steps 1–3 and one additional repair/review cycle. D92's addendum records implementation attempt 4 / repair cycle 3; all earlier findings remain retained and issue #11 stays out of scope. The new scheduling regression failed on the old code (three assertion failures and two errors). Keeping the lifeline open through cleanup removes the competing self-termination. A subsequent targeted run exposed another Darwin signal-transition denial in an existing preflight test. Cleanup now resolves that denial only after the existing bounded check proves group absence while the leader remains unreaped; live groups and lost ownership still fail.
+
+Three new tests cover scheduling delays from zero through 50 milliseconds, lifeline closure on cleanup failure, and both actual-absence and still-live cases after a reported signal denial. The targeted suite then passed 58 tests with two Docker skips in 23.75 seconds. That run reported a fixture child not yet reaped; the test now retains its owned process and explicitly reaps it after absence confirmation. Full CI and both exact-head reviews follow; no acceptance is claimed from the targeted result alone.
+
+Full CI for the complete additional repair exited 0 in 117.82 seconds. Its logs and exit record are retained, including the earlier failed controls. The checked candidate still requires both independent exact-head verdicts and protected GitHub acceptance; issue #11 remains outside this authorized follow-up.
+
 Full CI for the second repaired tree exited 0 in 114.36 seconds. Durable stdout, stderr, timestamps, and exit status were retained. The targeted and complete checks do not replace both final exact-head independent reviews or protected GitHub acceptance.
 
 Full repaired CI exited 0 in 104.34 seconds. Its stdout, stderr, command, times, and actual exit code are retained separately from the interrupted run. This is validation of the first repaired tree; it is not an independent review or product build result. Both exact-head re-reviews are still required after committing it.

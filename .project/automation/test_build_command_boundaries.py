@@ -15,6 +15,7 @@ from unittest import mock
 
 import build_contract as contract
 from build_product_commands import Commands, finish_group
+import build_product_commands
 import build_candidate_guard
 import build_task_verifier as verifier
 import build_vectors
@@ -26,6 +27,62 @@ SOURCE = Path(__file__).resolve().parents[2]
 
 
 class CommandBoundaryTests(unittest.TestCase):
+    def test_signal_denial_requires_actual_group_absence(self):
+        terminate = session_runner.terminate_group
+        for actually_stopped in (True, False):
+            with self.subTest(actually_stopped=actually_stopped), tempfile.TemporaryDirectory() as root:
+                commands = self.commands(root)
+                owned = []
+                def report_denial(process, grace=0.1):
+                    owned.append(process)
+                    if actually_stopped:
+                        terminate(process, grace=grace)
+                    return "cleanup-denied"
+                with mock.patch.object(session_runner, "terminate_group", side_effect=report_denial):
+                    if actually_stopped:
+                        commands.call("denial", [sys.executable, "-I", "-c", "pass"])
+                        self.assertTrue(commands.outcomes[-1]["cleanup_confirmed"])
+                    else:
+                        with self.assertRaisesRegex(ValueError, "ownership or cleanup"):
+                            commands.call("denial", [sys.executable, "-I", "-c", "pass"])
+                        self.assertFalse(commands.outcomes[-1]["cleanup_confirmed"])
+                self.assertTrue(build_candidate_guard.confirm_all(commands.groups)["complete"])
+                for process in owned:
+                    if process.returncode is None:
+                        finish_group(process)
+
+    def test_normal_cleanup_keeps_lifeline_open_across_scheduling_delays(self):
+        for delay in (0, 0.0001, 0.001, 0.005, 0.05):
+            with self.subTest(delay=delay), tempfile.TemporaryDirectory() as root:
+                commands = self.commands(root)
+                def delayed_cleanup(process):
+                    time.sleep(delay)
+                    try:
+                        self.assertFalse(session_runner.exited_unreaped(process), "lifeline closed before explicit cleanup")
+                    finally:
+                        finish_group(process)
+                with mock.patch.object(build_product_commands, "finish_group", side_effect=delayed_cleanup):
+                    commands.call("normal", [sys.executable, "-I", "-c", "pass"])
+                self.assertEqual(commands.outcomes[-1]["actual_exit"], 0)
+                self.assertTrue(commands.outcomes[-1]["cleanup_confirmed"])
+
+    def test_cleanup_failure_still_closes_lifeline_and_remains_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            commands = self.commands(root)
+            owned = []
+            def denied(process):
+                owned.append(process)
+                raise ValueError("injected cleanup denial")
+            try:
+                with mock.patch.object(build_product_commands, "finish_group", side_effect=denied):
+                    with self.assertRaisesRegex(ValueError, "injected cleanup denial"):
+                        commands.call("denied", [sys.executable, "-I", "-c", "pass"])
+                self.assertFalse(commands.outcomes[-1]["cleanup_confirmed"])
+                self.assertTrue(build_candidate_guard.confirm_all(commands.groups)["complete"])
+            finally:
+                for process in owned:
+                    finish_group(process)
+
     def commands(self, root):
         candidate = Path(root) / "candidate"
         candidate.mkdir()
