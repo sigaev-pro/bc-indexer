@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "decision": "D90",
-  "candidate_lock_sha256": "8a523fa9fc6ecc21ef3c2f5cd9b36827a5820c83de0c849aea194b4e762b21f5",
+  "candidate_lock_sha256": "eb0adab45fa3789d225db66dcee8de75d9f9fca2412cdde35e7fdc9652159e8d",
   "classification": "SOURCE_CANDIDATE_NOT_RUNTIME_ACCEPTANCE",
   "sources": {
     "geth-config": {

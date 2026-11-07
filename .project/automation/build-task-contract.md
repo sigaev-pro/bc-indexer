@@ -109,6 +109,14 @@ parameters cannot make the same page appear new.
 
 Use official release/tag, Go download, Docker registry, raw source, and Debian channel inputs as defined in the registered source rules. Follow pagination; resolve annotated tags; honor namespaced generator tags; derive native-owned replacements from the selected owner's go.mod, including valid owner-selected pseudo-versions. Apply Debian version ordering, preserve both candidate architectures, and verify package/image/source byte bindings. Live observations must be fresh; synthetic timestamps remain explicitly synthetic. The trusted runner independently refreshes live observations and authenticates retained Debian signatures with the pinned image-owned verifier/keyring.
 
+Docker Engine uses the registered `moby/moby` release source. Eligible Engine tags
+are exactly `docker-vN.N.N` or legacy `vN.N.N`, with three numeric components.
+Compare those components numerically while retaining the original tag for source
+resolution and report evidence. Exclude draft and prerelease records, version
+suffixes, and separate module namespaces such as `api/` and `client/`, even when
+their version numbers are higher. These Engine rules do not change the tag forms
+of other registered sources.
+
 Update mode writes a `PREPARED_CANDIDATE` tied to the registry and previous active-lock hashes. It has `release_ready: false`, `active_lock_changed: false`, the exact selected component objects, all existing profiles with build/runtime reset to NOT_RUN, and generated outputs still pending. Neither old runtime evidence nor an untested deployment tool or architecture is promoted by this operation.
 
 ## Execution scope

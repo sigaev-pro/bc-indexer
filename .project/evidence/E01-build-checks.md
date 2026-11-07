@@ -1,4 +1,4 @@
-# E01-01.builds: standalone GitHub pagination check
+# E01-01.builds: standalone version-source checks
 
 Date: 2026-11-07. Parent: [issue #11](https://github.com/sigaev-pro/bc-indexer/issues/11). Direct author: `d95-build-checks-author-001`. Base: `146746ee2a60d51450e7e3e4a96039c03c4ad689`, the accepted D95 workflow [PR #110](https://github.com/sigaev-pro/bc-indexer/pull/110).
 
@@ -34,3 +34,60 @@ Documentation validation passed for 107 documents, 1,103 local links, 84 catalog
 ## Remaining parent work
 
 This block fixes a standalone check; it does not complete issue #11 or unlock its dependents. Actual version-source verification, pinned native/supporting builds, manifests, and all applicable ETH/BSC/POLY profile evidence remain required. Live acquisition, native builds, and native/NATS runtime are NOT_RUN in this block. The canonical run, original failed candidate, product sources, active locks, and specification remain unchanged. Disposable test fixtures were cleaned up. Next: publish this draft, obtain both independent exact-head reviews and GitHub CI, then let the coordinator merge through protection and continue direct build verification.
+
+## Docker Engine release-selection follow-up
+
+Date: 2026-11-07. Author: `/root/boot03_controller`. Base:
+`fe14767132587d93bac502a7782606879c1a962a`, which accepted the pagination block
+above through [PR #111](https://github.com/sigaev-pro/bc-indexer/pull/111).
+Branch: `build/engine-release-tags`. This remains a partial issue #11 block.
+
+The coordinator reported that a live product check selected legacy `v28.5.2`
+instead of the available Engine tag `docker-v29.9.3`. The product scripts have a
+separate writer. This block independently reproduced the equivalent trusted
+verifier defect from retained synthetic source observations: reversing those
+two rows still selected `v28.5.2`. A second control showed that the generic
+parser incorrectly admitted unrelated `api/v999.0.0` and `client/v999.0.0`
+module tags. The existing parser stripped namespaces but did not understand
+the Engine prefix. The active lock already records `docker-v29.9.3`; no pin
+was changed to repair the check.
+
+Before the source fix, three targeted regression methods exited 1 in 2.389
+seconds with eight assertion failures and six errors. They covered numeric
+selection, unwanted tag forms, and full report validation. The two-row control
+failed in both orders, and valid modern-tag reports failed selection. These
+failures remain part of this record; they are not native build failures.
+
+The repair applies only to the `docker-engine` component from `moby/moby`.
+It accepts complete `docker-vN.N.N` and legacy `vN.N.N` tags, compares their
+three numeric components, and keeps the original tag for exact source
+resolution. Drafts, prereleases, suffixes, partial versions, and unrelated
+module tags are excluded. Existing source formats, synthetic transport,
+pagination, source hashes, annotated-tag resolution, and candidate restrictions
+remain intact. No verifier registration change was needed.
+
+The focused command, run from `.project/automation`, was:
+
+```bash
+python3 -m unittest test_build_updates test_build_pagination
+```
+
+It passed all 30 methods in 10.684 seconds (wrapper exit 0, 10.89 seconds).
+The six new methods include both tag orders, numeric minor-version ordering,
+invalid-only sources, draft/prerelease flags and malformed flags, component
+repository identity, unaffected source formats, and complete check/update
+reports with authenticated tag objects. Report negatives reject older or
+normalized-away tags and a forged peeled commit. The other 24 methods retain
+the existing updater/vector and pagination controls. These are synthetic
+checks, not live-source acceptance.
+
+Documentation checks pass for 107 documents, 1,104 local links, 84 catalog
+entries, 16 normative mirrors, and unchanged original v2. Whitespace checks
+pass. Full CI is delegated to GitHub for the pushed head; independent Spec and
+Standards review remain pending.
+
+Native builds and runtime remain NOT_RUN. The earlier live failure, original
+failed candidate, and canonical evidence remain unchanged. Disposable fixtures
+were cleaned up, and no background command was started. Next: publish the
+checked commit in a draft PR referencing #11, obtain GitHub CI and independent
+Spec and Standards review, then continue direct builds after protected merge.
