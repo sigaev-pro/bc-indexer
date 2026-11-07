@@ -1,5 +1,9 @@
 # Состояние проекта
 
+## E01-01.builds — Docker Engine release selection repair
+
+2026-11-07: Direct author `docker_product_fix` repaired the product selector from base `8207904f9de1fcafbb584d20a0265b3df1847b1c` under D95 and issue #11. The previous verifier was stopped before this writer handoff. Official Moby metadata exposed a selector defect: `docker-v29.9.3` was ignored in favor of `v28.5.2`. Five new tests failed before the fix; all 56 product builds tests now pass. The retained two-row replay selects `docker-v29.9.3` twice. Selection now accepts complete current and legacy Engine tags only for the official stable Docker Engine source, preserving original tag bytes and excluding API/client namespaces and suffixes. Documentation and whitespace checks pass. [Repair evidence](evidence/E01-01.builds.md) records scope, failures, and checks. Trusted automation, active pins, registry, and catalog are unchanged. Native compilation and runtime remain NOT_RUN for all seven profiles. Next: publish this checked block and return ownership for fresh real-source verification and independent exact-head review; issue #11 remains open.
+
 ## E01-01.builds — Synchronize the published candidate for direct verification
 
 D95 workflow PR #110 is accepted at `146746e`; the standalone GitHub pagination block PR #111 is accepted at `fe14767`, with both review axes and GitHub CI passing. Parent issue #11 remains open. The published product branch is being merged with accepted main using a normal merge; existing product implementation bytes are unchanged from reviewed `7022c0d`. Preserve the original failed `f17bb19` worktree and canonical run unchanged.

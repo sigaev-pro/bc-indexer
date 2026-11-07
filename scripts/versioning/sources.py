@@ -302,7 +302,13 @@ def select_release(entry, transport):
             if row["draft"] or row["prerelease"]:
                 continue
             version = row.get("tag_name")
-        score = version_key(version, source["channel"] == "upstream-bundle")
+        if (entry["id"] == "docker-engine" and kind == "github_releases"
+                and source.get("repository") == "moby/moby" and source["channel"] == "stable"):
+            # Moby also publishes API and client tags; only Engine tags belong here.
+            match = re.fullmatch(r"(?:docker-)?v([0-9]+)\.([0-9]+)\.([0-9]+)", version) if isinstance(version, str) else None
+            score = tuple(int(part) for part in match.groups()) if match else None
+        else:
+            score = version_key(version, source["channel"] == "upstream-bundle")
         if score is not None and ("tag_filter" not in source or re.fullmatch(source["tag_filter"], version)):
             candidates.append((score, version))
     need(candidates, "Official source has no stable selectable release")
