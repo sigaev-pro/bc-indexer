@@ -62,6 +62,27 @@ JSON metadata is limited to 64 MiB. Failure observations are retained beside
 the report in its uniquely named source directory; the caller owns that
 directory and may archive it with the report. There are no background workers.
 
+Live GitHub API requests reuse existing credentials in this order: nonempty
+`GH_TOKEN`, then nonempty `GITHUB_TOKEN`, then the existing `github.com`
+authentication returned by `gh auth token --hostname github.com`. The helper
+runs at most once per transport, with no interactive input, prompts disabled,
+captured output and a maximum five-second timeout within the discovery deadline.
+It does not start a login or refresh credentials. Tokens never appear in command
+arguments. Malformed selected tokens are rejected without trying a lower-priority
+identity. If credentials are absent or the helper fails, requests remain
+unauthenticated; source failures and rate-limit responses still produce honest
+incomplete results.
+
+GitHub authorization is sent only to the exact `https://api.github.com` origin
+(including its equivalent explicit port 443). Cross-origin redirects remove
+authorization; credentials are never attached to raw-source or download hosts.
+Token values reject whitespace, controls and header injection. Live transport
+errors retain only an error type, never exception text that could contain a
+credential. Responses that echo a known token in headers or body bytes fail
+acquisition, including tokens split across read blocks. Such response bytes
+are discarded; retained error observations contain no token. Synthetic
+transport never reads credential variables or runs the credential helper.
+
 Each row distinguishes current version, latest stable version, selected exact
 pin, compatibility NOT_RUN, notices, blockers and source URLs. No compatibility
 or security clearance is inferred from a stable version. InRelease bytes are

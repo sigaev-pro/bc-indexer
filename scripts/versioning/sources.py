@@ -4,8 +4,10 @@ import datetime
 import functools
 import hashlib
 import math
+import os
 from pathlib import Path
 import re
+import subprocess
 import time
 import urllib.error
 import urllib.parse
@@ -15,6 +17,38 @@ from core import closed, decode, describe, hex_string, need, ref, sha
 
 HOSTS = {"api.github.com", "raw.githubusercontent.com", "go.dev", "dl.google.com",
          "registry-1.docker.io", "deb.debian.org", "security.debian.org"}
+
+
+def origin(url):
+    parsed = urllib.parse.urlsplit(url)
+    return parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
+
+
+def valid_token(value):
+    # Permit bearer-token characters, never whitespace, controls or separators.
+    return value if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9._~+/=-]{1,4096}", value) else None
+
+
+def github_credential(timeout_seconds):
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        value = os.environ.get(name)
+        if value:
+            return valid_token(value)
+    environment = dict(os.environ)
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        environment.pop(name, None)
+    environment.update(GH_HOST="github.com", GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
+    try:
+        result = subprocess.run(["gh", "auth", "token", "--hostname", "github.com"],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                timeout=min(5, timeout_seconds), env=environment, check=False)
+        if result.returncode != 0 or len(result.stdout) > 4098:
+            return None
+        value = result.stdout.removesuffix(b"\n").removesuffix(b"\r").decode("ascii")
+        return valid_token(value)
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        # A helper error may contain captured credentials. Never stringify it.
+        return None
 
 
 def official(url):
@@ -28,7 +62,7 @@ class Redirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, response, code, message, headers, newurl):
         official(newurl)
         redirected = super().redirect_request(request, response, code, message, headers, newurl)
-        if urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(request.full_url).netloc:
+        if origin(newurl) != origin(request.full_url):
             redirected.remove_header("Authorization")
         return redirected
 
@@ -44,6 +78,8 @@ class Transport:
         self.used = set()
         self.deadline = time.monotonic() + deadline_seconds
         self.tokens = {}
+        self.github_checked = False
+        self.github_token = None
         self.opener = urllib.request.build_opener(Redirect())
         if fixture:
             path = Path(fixture)
@@ -68,6 +104,10 @@ class Transport:
 
     def fetch(self, url):
         parsed = official(url)
+        if not self.synthetic and origin(url) == ("https", "api.github.com", 443) and not self.github_checked:
+            self.github_token = github_credential(self.timeout())
+            self.github_checked = True
+        need(not self.contains_secret(url), "Official source URL contains credential data")
         self.used.add(url)
         if url in self.rows:
             return ref(self.root, self.rows[url]["body"])
@@ -84,6 +124,8 @@ class Transport:
                     self.copy(stream, output)
             else:
                 request_headers = {"User-Agent": "extractor-component-updater/1", "Accept": "application/json"}
+                if origin(url) == ("https", "api.github.com", 443) and self.github_token is not None:
+                    request_headers["Authorization"] = "Bearer " + self.github_token
                 if parsed.hostname == "registry-1.docker.io":
                     repository = parsed.path.split("/v2/", 1)[1].rsplit("/", 2)[0]
                     token = self.tokens.get(repository)
@@ -101,18 +143,32 @@ class Transport:
                 with response, destination.open("xb") as output:
                     status = response.status
                     headers = {k.lower(): v for k, v in response.headers.items()}
+                    need(not any(self.contains_secret(k) or self.contains_secret(v) for k, v in headers.items()),
+                         "Official response exposed credential data")
+                    headers = {k: v for k, v in headers.items() if k not in {"authorization", "proxy-authorization", "set-cookie"}}
                     self.copy(response, output)
         except (ValueError, OSError, urllib.error.URLError) as error:
             if destination.exists():
                 destination.unlink()
-            destination.write_bytes(("Source acquisition failed: " + str(error)).encode())
+            detail = str(error) if self.synthetic else type(error).__name__
+            destination.write_bytes(("Source acquisition failed: " + detail).encode())
+            headers = {}
             status = 0
         self.rows[url] = dict(url=url, status=status, headers=headers, body=describe(self.root, destination), observed_at=observed)
         need(status == 200, "Official source unavailable (status " + str(status) + "): " + url)
         return destination
 
+    def secret_values(self):
+        return [value for value in [self.github_token, *self.tokens.values()] if isinstance(value, str) and value]
+
+    def contains_secret(self, value):
+        return any(secret in value for secret in self.secret_values())
+
     def copy(self, source, target):
         total = 0
+        secrets = [value.encode() for value in self.secret_values()]
+        overlap = max((len(value) - 1 for value in secrets), default=0)
+        tail = b""
         while True:
             self.timeout()
             block = source.read(1024 * 1024)
@@ -120,6 +176,9 @@ class Transport:
                 return
             total += len(block)
             need(total <= 1024**3, "Official artifact exceeds the 1 GiB acquisition limit")
+            scan = tail + block
+            need(not any(secret in scan for secret in secrets), "Official response exposed credential data")
+            tail = scan[-overlap:] if overlap else b""
             target.write(block)
 
     def data(self, url):
