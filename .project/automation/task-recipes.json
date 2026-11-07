@@ -34,7 +34,7 @@
     "role": "qa",
     "artifact_contract": "evidence-artifacts-v1",
     "allowed_paths": ["test/evidence/", ".project/evidence/E01-01.evidence.md", ".project/PROJECT_STATUS.md"],
-    "required_files": ["test/evidence/case-registry.schema.json", "test/evidence/case-result.schema.json", "test/evidence/run-manifest.schema.json", "test/evidence/profile-registry.json", "test/evidence/validate.py", "test/evidence/README.md", ".project/evidence/E01-01.evidence.md"],
-    "commands": [["python3", ".project/automation/ci.py"]]
+    "required_files": ["test/evidence/case-registry.schema.json", "test/evidence/case-result.schema.json", "test/evidence/run-manifest.schema.json", "test/evidence/profile-registry.json", "test/evidence/validate.py", "test/evidence/README.md", "test/evidence/reader-boundary-manifest.schema.json", ".project/evidence/E01-01.evidence.md"],
+    "commands": [["python3", ".project/automation/ci.py"], ["python3", "-I", "-m", "unittest", "discover", "-s", "test/evidence", "-p", "test_*.py"]]
   }
 }

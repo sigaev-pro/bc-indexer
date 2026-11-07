@@ -6,13 +6,15 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import time
+import uuid
 
 import acceptance
 from acceptance_receipts import HISTORICAL, Ledger
-from controller import Blocked, in_scope, read_json, require
+from controller import Blocked, catalog, in_scope, read_json, require
 import evidence
 import session_runner
 import evidence_task_verifier as artifact_verifier
@@ -21,9 +23,14 @@ import task_proofs
 WATCHDOG_GRACE_SECONDS = 5
 
 class RealBackend:
-    def __init__(self, source, canonical_root, store, repository, capture_directory=None):
+    def __init__(self, source, canonical_root, store, repository, capture_directory=None, authorization=None, stop_file=None):
         self.source, self.root = Path(source).resolve(), Path(canonical_root).resolve()
         self.store, self.repository = store, repository
+        if stop_file is not None:
+            self.command_stop_file = Path(stop_file)
+        self.launch_bound = None
+        if authorization:
+            self.bind_launch(authorization)
         require(repository == "sigaev-pro/bc-indexer", "BLOCKED_REPOSITORY", "unexpected repository")
         self.captures = Path(capture_directory or self.root / ".project/automation/runs/acceptance").resolve()
         self.ledger = Ledger(store.directory / "accepted", self.read, repository)
@@ -31,18 +38,84 @@ class RealBackend:
                            "source_state": "modified" if self.git(self.source, "status", "--porcelain=v1") else "clean",
                            "commit_contains_executing_files": not bool(self.git(self.source, "status", "--porcelain=v1")),
                            "source_sha256": {name: hashlib.sha256((self.source / ".project/automation" / name).read_bytes()).hexdigest()
-                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "acceptance_receipts.py", "evidence.py", "acceptance.py", "evidence_task_verifier.py", "task_proofs.py")}}
+                                             for name in ("controller.py", "controller_backend.py", "session_runner.py", "acceptance_receipts.py", "evidence.py", "acceptance.py", "evidence_task_verifier.py", "task_proofs.py", "launch_control.py")}}
         self.roles = None
         self.cached_receipts = None
 
+    def bind_launch(self, authorization):
+        from launch_control import check_window, fixed
+        if not fixed(authorization):
+            return
+        check_window(authorization, time.time())
+        if self.launch_bound is None:
+            self.launch_bound = {"authorization": dict(authorization),
+                                 "monotonic_deadline": time.monotonic() + authorization["hard_deadline"] - time.time()}
+        require(self.launch_bound["authorization"] == authorization, "BLOCKED_AUTHORIZATION", "backend launch binding changed")
+        require(time.monotonic() < self.launch_bound["monotonic_deadline"], "BUDGET_STOP", "fixed launch elapsed-time bound expired")
+
+    def remaining(self):
+        bound = getattr(self, "launch_bound", None)
+        if bound is None:
+            return float("inf")
+        remaining = min(bound["authorization"]["hard_deadline"] - time.time(),
+                        bound["monotonic_deadline"] - time.monotonic())
+        require(remaining > 0, "BUDGET_STOP", "the fixed D92 deadline expired")
+        return remaining
+
     def command(self, arguments, cwd=None, payload=None, timeout=30):
+        timeout = min(timeout, self.remaining())
+        wall_deadline, monotonic_deadline = time.time() + timeout, time.monotonic() + timeout
+        if getattr(self, "launch_bound", None):
+            wall_deadline = min(wall_deadline, self.launch_bound["authorization"]["hard_deadline"])
+            monotonic_deadline = min(monotonic_deadline, self.launch_bound["monotonic_deadline"])
+        require(self.store.lock_fd is not None, "BLOCKED_LOCK", "ordinary commands require the repository writer lock")
+        cleanup_blocker = self.store.directory / "command-cleanup-blocker.json"
+        require(not cleanup_blocker.exists(), "BLOCKED_COMMAND_CLEANUP",
+                "an earlier command has unconfirmed cleanup; preserve its evidence for reviewed recovery")
+        identifier = "command-" + uuid.uuid4().hex
+        directory = self.store.directory / "commands" / identifier
+        evidence.durable_directory(directory)
+        input_path = directory / "stdin.txt"
+        with input_path.open("x", encoding="utf-8") as stream:
+            os.chmod(input_path, 0o600)
+            stream.write(payload or "")
+            stream.flush()
+            os.fsync(stream.fileno())
+        evidence.sync_directory(directory)
+        request_path = directory / "request.json"
+        request = {"operation_id": identifier, "command": arguments, "cwd": str(cwd or self.root),
+                   "deadline": wall_deadline, "timeout_seconds": max(0, monotonic_deadline - time.monotonic()),
+                   "stop_file": str(getattr(self, "command_stop_file", directory / "stop.json")),
+                   "log_limit": session_runner.LOG_LIMIT, "env": {},
+                   "stdin_sha256": session_runner.file_hash(input_path)}
+        evidence.atomic_json(request_path, request)
+        caller_handlers = {number: signal.getsignal(number) for number in (signal.SIGTERM, signal.SIGINT)}
+
+        def forward_interrupt(number, frame):
+            handler = caller_handlers[number]
+            if callable(handler):
+                handler(number, frame)
+
         try:
-            result = subprocess.run(arguments, cwd=cwd or self.root, input=payload,
-                                    capture_output=True, text=True, timeout=timeout)
-        except (OSError, subprocess.SubprocessError) as error:
-            raise Blocked("BLOCKED_ACCESS", f"command could not complete: {arguments[0]}") from error
-        require(len(result.stdout.encode()) <= session_runner.LOG_LIMIT, "BLOCKED_OUTPUT", "command output exceeded its bound")
-        return result
+            result = session_runner.supervise(request_path, self.store.lock_fd, on_interrupt=forward_interrupt)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            failure = {"operation_id": identifier, "directory": str(directory),
+                "cleanup_complete": False, "error_type": type(error).__name__,
+                "note": "No confirmed command result; preserve ownership evidence and reconcile remote effects."}
+            evidence.atomic_json(directory / "adapter-failure.json", failure)
+            evidence.atomic_json(cleanup_blocker, failure)
+            raise Blocked("BLOCKED_COMMAND_CLEANUP", "command cleanup is unconfirmed; retained evidence: " + str(directory)) from error
+        if result.get("cleanup_complete") is not True:
+            evidence.atomic_json(cleanup_blocker, {"operation_id": identifier, "directory": str(directory),
+                "cleanup_complete": False, "result_sha256": evidence.digest(result)})
+        require(result.get("cleanup_complete") is True, "BLOCKED_COMMAND_CLEANUP",
+                "command process-group cleanup is unconfirmed; retained evidence: " + str(directory))
+        if result["reason"] == "stopped":
+            raise Blocked("STOPPED", "ordinary command stopped; reconcile possible remote effects: " + str(directory))
+        require(result["reason"] == "completed", "BLOCKED_ACCESS",
+                "bounded command did not complete; local group cleanup confirmed, remote effects require reconciliation: " + str(directory))
+        return subprocess.CompletedProcess(arguments, result["exit_code"],
+                                           (directory / "stdout.jsonl").read_text(), (directory / "stderr.log").read_text())
 
     def git(self, directory, *arguments):
         result = self.command(["git", *arguments], cwd=directory)
@@ -59,8 +132,11 @@ class RealBackend:
         raise Blocked("BLOCKED_ACCESS", "GitHub read failed after bounded retries: " + path)
 
     def mutate(self, method, path, body):
-        result = self.command(["gh", "api", "--method", method, f"repos/{self.repository}/{path}", "--input", "-"],
-                              payload=json.dumps(body))
+        try:
+            result = self.command(["gh", "api", "--method", method, f"repos/{self.repository}/{path}", "--input", "-"],
+                                  payload=json.dumps(body))
+        except Blocked as error:
+            raise Blocked("BLOCKED_REMOTE_UNCERTAIN", "GitHub mutation response is unknown; reconcile before retry. " + str(error)) from error
         require(result.returncode == 0, "BLOCKED_REMOTE_UNCERTAIN",
                 "GitHub mutation did not confirm success; reconcile before retry: " + path)
         return acceptance.parse_json(result.stdout)
@@ -163,6 +239,39 @@ class RealBackend:
     def snapshot_recipes(self, recipes):
         return task_proofs.snapshot(recipes, self.source)
 
+    def configuration(self):
+        """Only an accepted, clean source may become a new launch configuration."""
+        require(not self.git(self.source, "status", "--porcelain=v1"), "BLOCKED_SOURCE", "configuration source has uncommitted work")
+        head = self.git(self.source, "rev-parse", "HEAD")
+        main = self.read("git/ref/heads/main")["object"]["sha"]
+        self.git(self.source, "merge-base", "--is-ancestor", head, main)
+        names = self.git(self.source, "ls-files", ".project/automation", ".project/agency", ".project/AGENTS.md").splitlines()
+        return {"head_sha": head, "accepted_main_sha": main,
+                "catalog_sha256": evidence.digest(catalog(self.source)),
+                "files": {name: hashlib.sha256((self.source / name).read_bytes()).hexdigest() for name in names}}
+
+    def check_configuration(self, run):
+        saved = run["configuration_source"]
+        require(saved and saved.get("files"), "BLOCKED_CONFIGURATION", "run has no frozen accepted source configuration")
+        require(saved["catalog_sha256"] == run["catalog_sha256"] == evidence.digest(catalog(self.source)),
+                "BLOCKED_CONFIGURATION", "the frozen task graph changed")
+        actual = self.git(self.source, "ls-files", ".project/automation", ".project/agency", ".project/AGENTS.md").splitlines()
+        require(set(actual) == set(saved["files"]) and not self.git(self.source, "status", "--porcelain=v1")
+                and all((self.source / name).is_file() and hashlib.sha256((self.source / name).read_bytes()).hexdigest() == digest
+                        for name, digest in saved["files"].items()),
+                "BLOCKED_CONFIGURATION", "executing source differs from the frozen run; use a reviewed safe handoff")
+
+    def eligible_recipe(self, task_id, recipes):
+        recipe = recipes.get(task_id)
+        if not recipe or not recipe.get("required_files") or not recipe.get("commands"):
+            return False
+        if task_id.startswith("BOOT-"):
+            return True
+        if task_id != artifact_verifier.TASK:
+            return False
+        self.artifact_recipe({"recipes": recipes}, {"task_id": task_id})
+        return True
+
     def artifact_recipe(self, run, task):
         require(task["task_id"] == artifact_verifier.TASK, "BLOCKED_UNCONFIGURED_VERIFICATION",
                 "this product task has no configured verifier or acceptance adapter")
@@ -190,10 +299,14 @@ class RealBackend:
         return self.root / ".project/automation/runs" / run["run_id"] / operation["id"]
 
     def check_stop(self, run):
+        self.command_stop_file = self.store.directory / "stop" / (run["run_id"] + ".json")
         if self.store.stopped(run["run_id"]):
             raise Blocked("STOPPED", "operator requested a stop")
         if time.time() >= run["deadline"]:
             raise Blocked("BUDGET_STOP", "run wall-time budget expired")
+        if "authorization" in run:
+            self.bind_launch(run["authorization"])
+        self.remaining()
 
     def head(self, task):
         workspace = task["workspace"]
@@ -217,6 +330,8 @@ class RealBackend:
 
     def perform(self, action, run, task, operation):
         self.check_stop(run)
+        if run["authorization"]["reference"] == "D92":
+            self.check_configuration(run)
         require(self.git(self.root, "remote", "get-url", "origin") in {
             f"git@github.com:{self.repository}.git", f"https://github.com/{self.repository}.git"},
             "BLOCKED_REPOSITORY", "repository transport identity changed")
@@ -292,7 +407,7 @@ class RealBackend:
             spec.loader.exec_module(self.roles)
         return self.roles.render(role, handoff)
 
-    def session_recovery(self, run, task, operation):
+    def session_recovery(self, run, task, operation, include_completed=False):
         """Authenticate terminal process evidence before an operator retry."""
         identifiers = [operation["id"]]
         if operation["action"] == "verify":
@@ -324,7 +439,7 @@ class RealBackend:
                                    ("stdout.jsonl", result["stdout_sha256"]), ("stderr.log", result["stderr_sha256"])):
                 require(session_runner.file_hash(directory / name) == expected, "BLOCKED_EVIDENCE",
                         "retained session instructions or logs changed")
-            require(result.get("cleanup_complete") is True and result["termination"] in {"already-exited", "graceful", "forced"},
+            require(result.get("cleanup_complete") is True and result["termination"] in {"already-exited", "graceful", "forced", "not-started"},
                     "BLOCKED_SESSION_CLEANUP", "retained session lacks proven complete process-group cleanup")
             if result["reason"] == "stopped":
                 outcome = outcome or "stopped"
@@ -335,17 +450,21 @@ class RealBackend:
                             "reason": result["reason"], "exit_code": result["exit_code"], "cleanup_complete": True})
         if records and operation.get("failure", {}).get("code") == "FAILED_SESSION":
             outcome = "failed"
-        if outcome is None:
+        if outcome is None and (not include_completed or not records):
             return None
-        return {"operation_id": operation["id"], "outcome": outcome, "sessions": records}
+        return {"operation_id": operation["id"], "outcome": outcome or "completed", "sessions": records,
+                "cleanup_complete": bool(records) and all(record["cleanup_complete"] for record in records)}
 
     def supervised(self, run, operation_id, command, cwd, stdin="", timeout=3600, environment=None):
+        self.check_stop(run)
+        remaining = min(timeout, self.remaining(), run["deadline"] - time.time())
+        require(remaining > 0, "BUDGET_STOP", "session cannot start after its launch deadline")
         directory = self.root / ".project/automation/runs" / run["run_id"] / operation_id
         evidence.durable_directory(directory)
         request_path = directory / "request.json"
         request = {"operation_id": operation_id, "command": command, "cwd": str(cwd),
-                   "deadline": min(run["deadline"], time.time() + timeout),
-                   "timeout_seconds": timeout,
+                   "deadline": min(run["deadline"], time.time() + remaining),
+                   "timeout_seconds": remaining,
                    "stop_file": str(self.store.directory / "stop" / (run["run_id"] + ".json")),
                    "log_limit": session_runner.LOG_LIMIT, "env": environment or {},
                    "stdin_sha256": hashlib.sha256(stdin.encode()).hexdigest()}
@@ -370,14 +489,18 @@ class RealBackend:
         if not result_path.exists():
             require(not (directory / "started.json").exists(), "BLOCKED_SESSION_INTERRUPTED",
                     "session started without a durable result; preserve work and inspect its process/log evidence")
+            self.check_stop(run)
+            require(time.time() < request["deadline"], "BUDGET_STOP", "retained session deadline expired before dispatch")
             process = subprocess.Popen([sys.executable, str(self.source / ".project/automation/session_runner.py"),
                                         "--request", str(request_path), "--lock-fd", str(self.store.lock_fd)],
                                        cwd=self.root, start_new_session=True, pass_fds=(self.store.lock_fd,),
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            watchdog_deadline = time.monotonic() + min(timeout, max(0, request["deadline"] - time.time())) + WATCHDOG_GRACE_SECONDS
+            # D92 starts cleanup at its deadline; grace is only for cleanup itself.
+            grace = 0 if getattr(self, "launch_bound", None) else WATCHDOG_GRACE_SECONDS
+            watchdog_deadline = time.monotonic() + min(remaining, max(0, request["deadline"] - time.time())) + grace
             while not session_runner.exited_unreaped(process):
                 stop = self.store.stopped(run["run_id"])
-                expired = time.monotonic() >= watchdog_deadline
+                expired = time.monotonic() >= watchdog_deadline or time.time() >= request["deadline"] + grace
                 if stop or expired:
                     cleanup = session_runner.watchdog_cleanup(process)
                     evidence.atomic_json(directory / "watchdog.json", {
@@ -427,6 +550,9 @@ class RealBackend:
                                 "Required outputs: " + json.dumps(recipe["required_files"]) +
                                 ". The trusted verifier and recipe are outside your allowed paths. "
                                 "Synthetic bootstrap vectors are test inputs, never product runtime evidence.")
+        if run["authorization"]["reference"] == "D92":
+            handoff.update(hard_deadline=run["authorization"]["hard_deadline"],
+                           configuration_epoch=run["configuration_epoch"], shared_invocations_used=run["invocations"])
         prompt, revision = self.role_prompt("reviewer" if review else recipe["role"], handoff)
         directory = self.directory(run, operation)
         handoff_path = directory / "handoff.json"
@@ -459,6 +585,9 @@ class RealBackend:
                      and all(isinstance(value, str) and value.strip() for value in result[key])),
                     "BLOCKED_EVIDENCE", "model result contains an invalid field: " + key)
         result.update(role_revision=revision, execution=execution, artifact_directory=str(directory))
+        threads = {event["thread_id"] for event in events if event.get("type") == "thread.started" and event.get("thread_id")}
+        require(len(threads) == 1, "BLOCKED_EVIDENCE", "model process did not retain its actual provider thread identity")
+        result["canonical_agent_id"] = "codex-thread:" + next(iter(threads))
         return result
 
     def do_worker(self, run, task, operation, directory):
@@ -487,10 +616,40 @@ class RealBackend:
         result["verified"] = True
         return result
 
+    def external_candidate(self, run, task, document):
+        """Check real Git outputs; this is provenance, not task acceptance."""
+        require(document["task_id"] == artifact_verifier.TASK, "BLOCKED_UNCONFIGURED_VERIFICATION",
+                "external adoption is configured only for the initial evidence artifact task")
+        self.artifact_recipe(run, task)
+        require(all(re.fullmatch(acceptance.SHA_PATTERN, document[key]) for key in ("head_sha", "base_sha"))
+                and document["head_sha"] != document["base_sha"], "BLOCKED_EXTERNAL_CANDIDATE", "candidate needs exact distinct Git commits")
+        workspace = {"path": document["worktree"], "branch": document["branch"], "base_sha": document["base_sha"]}
+        probe = dict(task, workspace=workspace, worker={"commit_sha": document["head_sha"]})
+        self.candidate(run, probe)
+        path = Path(workspace["path"])
+        self.git(path, "merge-base", "--is-ancestor", workspace["base_sha"], document["head_sha"])
+        changed = self.git(path, "diff", "--no-renames", "--name-only", workspace["base_sha"], document["head_sha"]).splitlines()
+        allowed = run["recipes"][task["task_id"]]["allowed_paths"]
+        require(changed and all(any(name == prefix or (prefix.endswith("/") and name.startswith(prefix)) for prefix in allowed)
+                and (path / name).resolve().is_relative_to(path) for name in changed),
+                "BLOCKED_PATHS", "external candidate changes a forbidden path")
+        outputs = run["recipes"][task["task_id"]]["required_files"]
+        for name in outputs:
+            require((path / name).is_file() and (path / name).resolve().is_relative_to(path),
+                    "BLOCKED_EVIDENCE", "external candidate is missing a required tracked artifact")
+            self.git(path, "cat-file", "-e", document["head_sha"] + ":" + name)
+        return {"commit_sha": document["head_sha"], "changed_files": changed, "evidence": outputs}
+
     def do_review(self, run, task, operation, directory):
         result = self.model(run, task, operation, review=True)
+        if run["authorization"]["reference"] == "D92":
+            from launch_control import LaunchLedger
+            authors = {row.get("canonical_agent_id") for row in LaunchLedger(self.store, run["authorization"]).load()["sessions"].values()
+                       if row["task_id"] == task["task_id"] and row["role"] == "implementer"}
+            require(result["canonical_agent_id"] not in authors, "BLOCKED_REVIEW", "reviewer previously implemented this task")
         require(result["head_sha"] == self.candidate(run, task) and result["base_sha"] == task["workspace"]["base_sha"]
-                and result["session_id"] != task["worker"]["session_id"] and result["checks"],
+                and result["session_id"] != task["worker"]["session_id"] and result["checks"]
+                and result["canonical_agent_id"] != task["worker"].get("canonical_agent_id"),
                 "BLOCKED_REVIEW", "review is stale, self-authored, or lacks checks")
         require(result["verdict"] in {"PASS", "REQUEST_CHANGES"}
                 and (result["verdict"] != "PASS" or not result["findings"]),
@@ -574,11 +733,17 @@ class RealBackend:
                 "BLOCKED_REMOTE", "existing pull request does not match the task candidate")
         report = {"schema_version": 1, "repository": self.repository, "task_id": task["task_id"],
                   "head_sha": head, "base_sha": task["workspace"]["base_sha"],
-                  "implementer_session": task["worker"]["session_id"], "reviewer_session": task["review"]["session_id"],
+                  "implementer_session": task["worker"].get("canonical_agent_id", task["worker"]["session_id"]),
+                  "reviewer_session": task["review"].get("canonical_agent_id", task["review"]["session_id"]),
                   "read_only": True, "verdict": "PASS", "findings": [], "checks": task["review"]["checks"],
                   "unverified": task["review"]["unverified"], "operation_id": operation["id"]}
         if binding is not None:
             report["controller_verification"] = binding
+        if task["worker"].get("origin") == "coordinator-attested":
+            report["execution_provenance"] = {"kind": "coordinator-attested collaboration",
+                "implementer_invocation": task["worker"]["invocation_id"],
+                "candidate_attestation_sha256": task["worker"]["attestation_sha256"],
+                "note": "Canonical agent identities are observed collaboration identities; no provider CLI execution is asserted."}
         body = acceptance.REVIEW_MARKER + "\n```json\n" + json.dumps(report, indent=2) + "\n```"
         comments = [c for c in self.pages(f"issues/{pull['number']}/comments") if c["body"] == body]
         require(len(comments) <= 1, "BLOCKED_REMOTE", "independent report is duplicated")

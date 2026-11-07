@@ -42,6 +42,9 @@ def protocol_stub(root, behavior="oracle"):
         (directory / (name + ".schema.json")).write_text(json.dumps({"type": "object", "required": required,
             "properties": {"schema_version": {"const": 3}}, "description": "BOOTSTRAP PROTOCOL STUB ONLY"}))
     (directory / "profile-registry.json").write_text(json.dumps({"schema_version": 3, "profiles": verifier.PROFILES}))
+    (directory / "reader-boundary-manifest.schema.json").write_text(json.dumps({"type": "object",
+        "required": sorted(verifier.reader_vectors.REQUIRED), "properties": {"schema_version": {"const": 1}},
+        "description": "BOOTSTRAP PROTOCOL STUB ONLY; NOT A D87 IMPLEMENTATION"}))
     (directory / "README.md").write_text("BOOTSTRAP PROTOCOL STUB ONLY. No product schemas or runtime proof.\n")
     table = {verifier.digest(vector["request"]): 0 if vector["valid"] else 2 for vector in verifier.vectors()}
     script = "import json,sys,hashlib,time\nrequest=json.load(sys.stdin)\n"
@@ -59,6 +62,7 @@ def protocol_stub(root, behavior="oracle"):
     else:
         script += "time.sleep(20)\n"
     (directory / "validate.py").write_text(script)
+    (directory / "test_protocol_stub.py").write_text("import unittest\nfrom pathlib import Path\nclass StubSmoke(unittest.TestCase):\n def test_protocol_stub_exists(self):\n  self.assertTrue((Path(__file__).parent / 'validate.py').is_file())\n")
     (root / ".project/evidence").mkdir(parents=True)
     (root / ".project/evidence/E01-01.evidence.md").write_text("Synthetic bootstrap adapter fixture only.\n")
     (root / ".project/automation").mkdir(parents=True)
@@ -290,7 +294,7 @@ class ArtifactDriverTests(unittest.TestCase):
                     driver.run(run)
                 prior = store.load(run["run_id"])
                 operation = prior["tasks"][verifier.TASK]["pending"]
-                artifact_log = backend.real.directory(run, {"id": operation["id"] + "-check-1"}) / "result.json"
+                artifact_log = backend.real.directory(run, {"id": operation["id"] + "-check-" + str(len(recipes[verifier.TASK]["commands"]))}) / "result.json"
                 original = artifact_log.read_bytes()
                 recovered = driver.run(prior, resume=True)
             self.assertEqual(recovered["tasks"][verifier.TASK]["state"], "DONE")
@@ -300,7 +304,7 @@ class ArtifactDriverTests(unittest.TestCase):
             proof = recovered["tasks"][verifier.TASK]["verification"]
             task_proofs.check_verification(proof, HEAD, BASE)
             self.assertEqual(proof["runtime"], "NOT_RUN")
-            self.assertEqual(set(controller.AUTHORIZATIONS), {"D86"})
+            self.assertEqual(set(controller.AUTHORIZATIONS), {"D86", "D92"})
 
 
 class ArtifactReceiptTests(unittest.TestCase):
