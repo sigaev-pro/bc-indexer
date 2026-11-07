@@ -1,0 +1,1129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:extractor:build-manifest:v1",
+  "title": "Materialized native build manifest",
+  "description": "Closed build-artifacts-v1 structure. The preflight also verifies raw artifact bytes, canonical plan equality, input coverage, identity and profile bindings. Independent trusted execution verifies source, package signatures, dependency graphs and resource ownership.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "contract",
+    "evidence_kind",
+    "plan",
+    "plan_sha256",
+    "builds",
+    "identity",
+    "image_inputs",
+    "host_tools",
+    "module_closures",
+    "os_closures",
+    "profile_bindings",
+    "updater",
+    "cleanup",
+    "commands",
+    "runtime"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    },
+    "task_id": {
+      "const": "E01-01.builds"
+    },
+    "contract": {
+      "const": "build-artifacts-v1"
+    },
+    "evidence_kind": {
+      "enum": [
+        "actual-build",
+        "synthetic-fixture"
+      ]
+    },
+    "plan": {
+      "$ref": "#/$defs/plan"
+    },
+    "plan_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "builds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "geth",
+        "bsc",
+        "bor",
+        "prysm",
+        "heimdall"
+      ],
+      "properties": {
+        "geth": {
+          "$ref": "#/$defs/build"
+        },
+        "bsc": {
+          "$ref": "#/$defs/build"
+        },
+        "bor": {
+          "$ref": "#/$defs/build"
+        },
+        "prysm": {
+          "$ref": "#/$defs/build"
+        },
+        "heimdall": {
+          "$ref": "#/$defs/build"
+        }
+      }
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "image_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "golang-build-image",
+        "debian-runtime-image",
+        "nats-runtime-image"
+      ],
+      "properties": {
+        "golang-build-image": {
+          "$ref": "#/$defs/image"
+        },
+        "debian-runtime-image": {
+          "$ref": "#/$defs/image"
+        },
+        "nats-runtime-image": {
+          "$ref": "#/$defs/image"
+        }
+      }
+    },
+    "host_tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "docker",
+        "git",
+        "python",
+        "github_cli"
+      ],
+      "properties": {
+        "docker": {
+          "$ref": "#/$defs/artifact"
+        },
+        "git": {
+          "$ref": "#/$defs/artifact"
+        },
+        "python": {
+          "$ref": "#/$defs/artifact"
+        },
+        "github_cli": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "module_closures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "geth",
+        "bsc",
+        "bor",
+        "prysm",
+        "heimdall",
+        "nats-server",
+        "grpc-go",
+        "nats-go",
+        "protobuf-go",
+        "grocksdb"
+      ],
+      "properties": {
+        "geth": {
+          "$ref": "#/$defs/module"
+        },
+        "bsc": {
+          "$ref": "#/$defs/module"
+        },
+        "bor": {
+          "$ref": "#/$defs/module"
+        },
+        "prysm": {
+          "$ref": "#/$defs/module"
+        },
+        "heimdall": {
+          "$ref": "#/$defs/module"
+        },
+        "nats-server": {
+          "$ref": "#/$defs/module"
+        },
+        "grpc-go": {
+          "$ref": "#/$defs/module"
+        },
+        "nats-go": {
+          "$ref": "#/$defs/module"
+        },
+        "protobuf-go": {
+          "$ref": "#/$defs/module"
+        },
+        "grocksdb": {
+          "$ref": "#/$defs/module"
+        }
+      }
+    },
+    "os_closures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "golang-build-image",
+        "debian-runtime-image"
+      ],
+      "properties": {
+        "golang-build-image": {
+          "$ref": "#/$defs/os"
+        },
+        "debian-runtime-image": {
+          "$ref": "#/$defs/os"
+        }
+      }
+    },
+    "profile_bindings": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "$ref": "#/$defs/binding"
+      }
+    },
+    "updater": {
+      "$ref": "#/$defs/updater"
+    },
+    "cleanup": {
+      "$ref": "#/$defs/artifact"
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    },
+    "runtime": {
+      "const": "NOT_RUN"
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "operation_id",
+        "nonce",
+        "head_sha",
+        "base_sha",
+        "verifier_source_commit"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,160}$"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,160}$"
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "head_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "base_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "verifier_source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "env",
+        "exit_code",
+        "started_at",
+        "finished_at",
+        "stdout",
+        "stderr"
+      ],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "exit_code": {
+          "const": 0,
+          "type": "integer"
+        },
+        "started_at": {
+          "type": "number"
+        },
+        "finished_at": {
+          "type": "number"
+        },
+        "stdout": {
+          "$ref": "#/$defs/artifact"
+        },
+        "stderr": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "commit",
+        "version",
+        "dependency_inputs"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "version": {
+          "type": "string"
+        },
+        "dependency_inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "Exact dependency input descriptor from the selected lock; semantic equality is required."
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpus",
+        "memory_bytes",
+        "pids",
+        "command_seconds"
+      ],
+      "properties": {
+        "cpus": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "memory_bytes": {
+          "type": "integer",
+          "minimum": 536870912,
+          "maximum": 6442450944
+        },
+        "pids": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 256
+        },
+        "command_seconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 3600
+        }
+      }
+    },
+    "imagePin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "platform_digest"
+      ],
+      "properties": {
+        "reference": {
+          "type": "string",
+          "pattern": "^[^\\s@]+@sha256:[0-9a-f]{64}$"
+        },
+        "platform_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "l1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "execution_component",
+        "consensus_component",
+        "dedicated_instance",
+        "share_with_other_profiles"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string"
+        },
+        "execution_component": {
+          "enum": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall"
+          ]
+        },
+        "consensus_component": {
+          "enum": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall"
+          ]
+        },
+        "dedicated_instance": {
+          "const": true
+        },
+        "share_with_other_profiles": {
+          "const": false
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "chain_id",
+        "native_component",
+        "consensus_component",
+        "supporting_l1"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "chain_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "native_component": {
+          "enum": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall"
+          ]
+        },
+        "consensus_component": {
+          "enum": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall",
+            null
+          ]
+        },
+        "supporting_l1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/l1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_commit",
+        "compiler_image",
+        "binary",
+        "build_info",
+        "imports",
+        "dynamic_links",
+        "oci_layout",
+        "oci_index",
+        "oci_manifest",
+        "oci_config",
+        "oci_layer",
+        "version_output",
+        "runtime_packages",
+        "repeat_build"
+      ],
+      "properties": {
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "compiler_image": {
+          "type": "string"
+        },
+        "binary": {
+          "$ref": "#/$defs/artifact"
+        },
+        "build_info": {
+          "$ref": "#/$defs/artifact"
+        },
+        "imports": {
+          "$ref": "#/$defs/artifact"
+        },
+        "dynamic_links": {
+          "$ref": "#/$defs/artifact"
+        },
+        "oci_layout": {
+          "$ref": "#/$defs/artifact"
+        },
+        "oci_index": {
+          "$ref": "#/$defs/artifact"
+        },
+        "oci_manifest": {
+          "$ref": "#/$defs/artifact"
+        },
+        "oci_config": {
+          "$ref": "#/$defs/artifact"
+        },
+        "oci_layer": {
+          "$ref": "#/$defs/artifact"
+        },
+        "version_output": {
+          "$ref": "#/$defs/artifact"
+        },
+        "runtime_packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "version",
+              "architecture"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "architecture": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "repeat_build": {
+          "const": "NOT_RUN"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "platform_digest",
+        "index",
+        "manifest",
+        "config",
+        "inspection",
+        "archive"
+      ],
+      "properties": {
+        "reference": {
+          "type": "string"
+        },
+        "platform_digest": {
+          "type": "string"
+        },
+        "index": {
+          "$ref": "#/$defs/artifact"
+        },
+        "manifest": {
+          "$ref": "#/$defs/artifact"
+        },
+        "config": {
+          "$ref": "#/$defs/artifact"
+        },
+        "inspection": {
+          "$ref": "#/$defs/artifact"
+        },
+        "archive": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_commit",
+        "source_archive",
+        "modules",
+        "local_modules",
+        "downloads",
+        "verification",
+        "artifacts"
+      ],
+      "properties": {
+        "source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "source_archive": {
+          "$ref": "#/$defs/artifact"
+        },
+        "modules": {
+          "$ref": "#/$defs/artifact"
+        },
+        "local_modules": {
+          "$ref": "#/$defs/artifact"
+        },
+        "downloads": {
+          "$ref": "#/$defs/artifact"
+        },
+        "verification": {
+          "$ref": "#/$defs/artifact"
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "module",
+              "version",
+              "zip",
+              "mod",
+              "info"
+            ],
+            "properties": {
+              "module": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "zip": {
+                "$ref": "#/$defs/artifact"
+              },
+              "mod": {
+                "$ref": "#/$defs/artifact"
+              },
+              "info": {
+                "$ref": "#/$defs/artifact"
+              }
+            }
+          }
+        }
+      }
+    },
+    "os": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image_reference",
+        "installed",
+        "signed_indexes",
+        "packages"
+      ],
+      "properties": {
+        "image_reference": {
+          "type": "string"
+        },
+        "installed": {
+          "$ref": "#/$defs/artifact"
+        },
+        "signed_indexes": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "url",
+              "inrelease",
+              "release",
+              "packages",
+              "signature_log",
+              "keyring",
+              "verifier"
+            ],
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "inrelease": {
+                "$ref": "#/$defs/artifact"
+              },
+              "release": {
+                "$ref": "#/$defs/artifact"
+              },
+              "packages": {
+                "$ref": "#/$defs/artifact"
+              },
+              "signature_log": {
+                "$ref": "#/$defs/artifact"
+              },
+              "keyring": {
+                "$ref": "#/$defs/artifact"
+              },
+              "verifier": {
+                "$ref": "#/$defs/artifact"
+              }
+            }
+          }
+        },
+        "packages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "version",
+              "architecture",
+              "index_url",
+              "archive"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "architecture": {
+                "enum": [
+                  "amd64",
+                  "arm64",
+                  "all"
+                ]
+              },
+              "index_url": {
+                "type": "string"
+              },
+              "archive": {
+                "$ref": "#/$defs/artifact"
+              }
+            }
+          }
+        }
+      }
+    },
+    "updater": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report",
+        "candidate",
+        "check_report",
+        "independent_report",
+        "signature_proof",
+        "active_lock_before",
+        "active_lock_after",
+        "live_sources"
+      ],
+      "properties": {
+        "report": {
+          "$ref": "#/$defs/artifact"
+        },
+        "candidate": {
+          "$ref": "#/$defs/artifact"
+        },
+        "check_report": {
+          "$ref": "#/$defs/artifact"
+        },
+        "independent_report": {
+          "$ref": "#/$defs/artifact"
+        },
+        "signature_proof": {
+          "$ref": "#/$defs/artifact"
+        },
+        "active_lock_before": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "active_lock_after": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "live_sources": {
+          "const": true
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "chain_id",
+        "native_component",
+        "consensus_component",
+        "supporting_l1",
+        "native_binary_sha256",
+        "consensus_binary_sha256",
+        "supporting_l1_binary_sha256"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "chain_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "native_component": {
+          "enum": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall"
+          ]
+        },
+        "consensus_component": {
+          "enum": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall",
+            null
+          ]
+        },
+        "supporting_l1": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/l1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "native_binary_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "consensus_binary_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supporting_l1_binary_sha256": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "execution_component",
+                "consensus_component"
+              ],
+              "properties": {
+                "execution_component": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "consensus_component": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "task_id",
+        "contract",
+        "platform",
+        "registry_sha256",
+        "lock_sha256",
+        "candidate_platforms",
+        "unexecuted_platforms",
+        "native_components",
+        "module_components",
+        "sources",
+        "patches",
+        "limits",
+        "compiler",
+        "images",
+        "packages",
+        "package_indexes",
+        "profiles",
+        "later_outputs",
+        "runtime",
+        "promotion"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "task_id": {
+          "const": "E01-01.builds"
+        },
+        "contract": {
+          "const": "build-artifacts-v1"
+        },
+        "platform": {
+          "enum": [
+            "linux/amd64",
+            "linux/arm64"
+          ]
+        },
+        "registry_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "lock_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "candidate_platforms": {
+          "const": [
+            "linux/amd64",
+            "linux/arm64"
+          ]
+        },
+        "unexecuted_platforms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "enum": [
+              "linux/amd64",
+              "linux/arm64"
+            ]
+          }
+        },
+        "native_components": {
+          "const": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall"
+          ]
+        },
+        "module_components": {
+          "const": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall",
+            "nats-server",
+            "grpc-go",
+            "nats-go",
+            "protobuf-go",
+            "grocksdb"
+          ]
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "geth",
+            "bsc",
+            "bor",
+            "prysm",
+            "heimdall",
+            "nats-server",
+            "grpc-go",
+            "nats-go",
+            "protobuf-go",
+            "grocksdb"
+          ],
+          "properties": {
+            "geth": {
+              "$ref": "#/$defs/source"
+            },
+            "bsc": {
+              "$ref": "#/$defs/source"
+            },
+            "bor": {
+              "$ref": "#/$defs/source"
+            },
+            "prysm": {
+              "$ref": "#/$defs/source"
+            },
+            "heimdall": {
+              "$ref": "#/$defs/source"
+            },
+            "nats-server": {
+              "$ref": "#/$defs/source"
+            },
+            "grpc-go": {
+              "$ref": "#/$defs/source"
+            },
+            "nats-go": {
+              "$ref": "#/$defs/source"
+            },
+            "protobuf-go": {
+              "$ref": "#/$defs/source"
+            },
+            "grocksdb": {
+              "$ref": "#/$defs/source"
+            }
+          }
+        },
+        "patches": {
+          "const": []
+        },
+        "limits": {
+          "$ref": "#/$defs/limits"
+        },
+        "compiler": {
+          "type": "object",
+          "description": "Exact Go component object from the selected immutable lock."
+        },
+        "images": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "golang-build-image",
+            "debian-runtime-image",
+            "nats-runtime-image"
+          ],
+          "properties": {
+            "golang-build-image": {
+              "$ref": "#/$defs/imagePin"
+            },
+            "debian-runtime-image": {
+              "$ref": "#/$defs/imagePin"
+            },
+            "nats-runtime-image": {
+              "$ref": "#/$defs/imagePin"
+            }
+          }
+        },
+        "packages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "package",
+              "version",
+              "artifacts"
+            ],
+            "properties": {
+              "package": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "artifacts": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "package_indexes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "profiles": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "items": {
+            "$ref": "#/$defs/profile"
+          }
+        },
+        "later_outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runtime": {
+          "const": "NOT_RUN"
+        },
+        "promotion": {
+          "const": "FORBIDDEN_UNTIL_REQUIRED_GATES"
+        }
+      }
+    }
+  }
+}
