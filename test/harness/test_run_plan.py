@@ -3,10 +3,12 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -84,6 +86,120 @@ def retarget(plan, bundle, profile, kind, suite):
 
 
 class RunPlanTests(unittest.TestCase):
+    def test_late_fsync_failure_does_not_leave_a_success_record(self):
+        for fail_at in (4, 5):
+            with self.subTest(fail_at=fail_at), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                _, _, pin = setup(root)
+                output = root / "frozen"
+                original_fsync, calls = os.fsync, []
+                def fail_late(descriptor):
+                    calls.append(descriptor)
+                    if len(calls) == fail_at:
+                        raise OSError("injected late resolution fsync failure")
+                    return original_fsync(descriptor)
+                with patch.object(os, "fsync", side_effect=fail_late), self.assertRaises(OSError):
+                    run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
+                self.assertFalse((output / "resolution.json").exists())
+
+    def test_existing_foreign_publication_marker_is_never_replaced(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            _, _, pin = setup(root)
+            output = root / "frozen"
+            original_fsync, calls = os.fsync, []
+            def add_foreign_marker(descriptor):
+                original_fsync(descriptor)
+                calls.append(descriptor)
+                if len(calls) == 4:
+                    (output / "resolution.json").write_bytes(b"unrelated marker")
+            with patch.object(os, "fsync", side_effect=add_foreign_marker), self.assertRaises(FileExistsError):
+                run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
+            self.assertEqual((output / "resolution.json").read_bytes(), b"unrelated marker")
+
+    def test_replaced_output_directory_never_receives_snapshot_writes(self):
+        for stage in ("creation", "first-fsync"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                _, _, pin = setup(root)
+                output, moved, unrelated = root / "frozen", root / "moved", root / "unrelated"
+                unrelated.mkdir()
+                (unrelated / "keep.txt").write_bytes(b"unrelated bytes")
+                original_mkdir, original_fsync = os.mkdir, os.fsync
+                changed = [False]
+                def replace():
+                    if not changed[0] and output.is_dir():
+                        output.rename(moved)
+                        output.symlink_to(unrelated, target_is_directory=True)
+                        changed[0] = True
+                def mkdir(path, *args, **kwargs):
+                    result = original_mkdir(path, *args, **kwargs)
+                    if stage == "creation" and Path(path).name == "frozen": replace()
+                    return result
+                def fsync(descriptor):
+                    result = original_fsync(descriptor)
+                    if stage == "first-fsync": replace()
+                    return result
+                with patch.object(os, "mkdir", side_effect=mkdir), patch.object(os, "fsync", side_effect=fsync):
+                    with self.assertRaises((OSError, ValueError)):
+                        run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
+                self.assertTrue(changed[0])
+                self.assertEqual(sorted(path.name for path in unrelated.iterdir()), ["keep.txt"])
+                self.assertEqual((unrelated / "keep.txt").read_bytes(), b"unrelated bytes")
+                self.assertTrue(output.is_symlink())
+
+    def test_snapshot_replacement_is_detected_and_unrelated_replacement_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            _, _, pin = setup(root)
+            output = root / "frozen"
+            original_fsync, changed = os.fsync, [False]
+            def replace_snapshot(descriptor):
+                result = original_fsync(descriptor)
+                snapshot = output / "plan.json"
+                if not changed[0] and snapshot.exists() and os.fstat(descriptor).st_ino == snapshot.stat().st_ino:
+                    replacement = root / "replacement.json"
+                    replacement.write_bytes(b"{}")
+                    replacement.replace(snapshot)
+                    changed[0] = True
+                return result
+            with patch.object(os, "fsync", side_effect=replace_snapshot), self.assertRaises(ValueError):
+                run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
+            self.assertTrue(changed[0])
+            self.assertEqual((output / "plan.json").read_bytes(), b"{}")
+            self.assertFalse((output / "resolution.json").exists())
+
+    def test_deadline_after_resolution_fsync_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            _, _, pin = setup(root)
+            output = root / "frozen"
+            original_fsync, original_clock = os.fsync, time.monotonic
+            calls, expired = [], [False]
+            def fsync(descriptor):
+                original_fsync(descriptor)
+                calls.append(descriptor)
+                if len(calls) == 4: expired[0] = True
+            with patch.object(os, "fsync", side_effect=fsync), patch.object(time, "monotonic", side_effect=lambda: original_clock() + (31 if expired[0] else 0)):
+                with self.assertRaises(ValueError):
+                    run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
+            self.assertFalse((output / "resolution.json").exists())
+
+    def test_constrained_lexical_fields_reject_trailing_newlines(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            plan, _, pin = setup(root)
+            for number, mutation in enumerate((lambda p: p.update(plan_id=p["plan_id"] + "\n"),
+                             lambda p: p["fixtures"][0]["identity"].update(chain_id="15001\n"),
+                             lambda p: (p["fixtures"][0]["identity"].update(genesis_hash="0x" + "2" * 64 + "\n"),
+                                        p["sources"][0]["start"].update(block_hash="0x" + "2" * 64 + "\n")))):
+                with self.subTest(number=number):
+                    changed = copy.deepcopy(plan)
+                    mutation(changed)
+                    write(root / "plan.json", changed)
+                    result, _ = self.call(root, pin)
+                    self.assertEqual(result.returncode, 2, result.stdout)
+
     def test_schema_external_references_resolve_to_existing_local_contracts(self):
         schema = json.loads((HERE / "run-plan.schema.json").read_text())
         def check(value):
@@ -291,13 +407,15 @@ class RunPlanTests(unittest.TestCase):
             _, _, pin = setup(root)
             raw = (root / "plan.json").read_bytes()
             output = root / "frozen"
-            original_open = Path.open
-            def replacing(path, *args, **kwargs):
-                if path == output / "registry.json":
-                    with original_open(root / "oracle.txt", "wb") as stream:
-                        stream.write(b"changed after plan capture")
-                return original_open(path, *args, **kwargs)
-            with patch.object(Path, "open", new=replacing), self.assertRaises(ValueError):
+            original_fsync, changed = os.fsync, [False]
+            def replacing(descriptor):
+                result = original_fsync(descriptor)
+                path = output / "registry.json"
+                if not changed[0] and path.exists() and os.fstat(descriptor).st_ino == path.stat().st_ino:
+                    (root / "oracle.txt").write_bytes(b"changed after plan capture")
+                    changed[0] = True
+                return result
+            with patch.object(os, "fsync", side_effect=replacing), self.assertRaises(ValueError):
                 run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
             self.assertFalse((output / "resolution.json").exists())
             self.assertEqual((output / "plan.json").read_bytes(), raw)

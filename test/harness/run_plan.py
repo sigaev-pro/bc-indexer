@@ -5,7 +5,6 @@ import argparse
 import hashlib
 import importlib.util
 import json
-import os
 from pathlib import Path
 import sys
 import time
@@ -13,6 +12,7 @@ import time
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from artifacts import Rejected, artifact, check_deadline, read_bytes, require
+from freeze_output import publish
 
 SPEC = importlib.util.spec_from_file_location("run_plan_evidence", HERE.parent / "evidence/validate.py")
 evidence = importlib.util.module_from_spec(SPEC)
@@ -204,21 +204,11 @@ def resolve(plan_path, registry_path, registry_sha256, output=None):
     for ref in [plan_ref, registry_ref, schema_ref, *resolved.values()]:
         artifact(ref, max(JSON_LIMIT, ARTIFACT_LIMIT), deadline=deadline)
     if output is not None:
-        require(output.is_absolute() and not output.exists(), "Freeze output must be a new absolute directory")
-        require(not any(parent.is_symlink() for parent in (output, *output.parents)), "Symlink freeze output")
-        output.mkdir(mode=0o700)
-        for filename, data in (("plan.json", raw), ("registry.json", registry_raw), ("run-plan.schema.json", schema_raw)):
-            with (output / filename).open("xb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-        for ref in [plan_ref, registry_ref, schema_ref, *resolved.values()]:
-            artifact(ref, max(JSON_LIMIT, ARTIFACT_LIMIT), deadline=deadline)
-        check_deadline(deadline)
-        with (output / "resolution.json").open("xb") as stream:
-            stream.write(evidence.canonical(report))
-            stream.flush()
-            os.fsync(stream.fileno())
+        def verify_authority():
+            for ref in [plan_ref, registry_ref, schema_ref, *resolved.values()]:
+                artifact(ref, max(JSON_LIMIT, ARTIFACT_LIMIT), deadline=deadline)
+        publish(output, {"plan.json": raw, "registry.json": registry_raw, SCHEMA_NAME: schema_raw},
+                evidence.canonical(report), verify_authority, deadline)
     return report
 
 

@@ -48,7 +48,7 @@
     },
     "actions": {"type": "array", "maxItems": 100000, "items": {
       "type": "object", "required": ["action_id", "profile", "kind", "count", "input", "expected", "outcome", "fault_id"], "additionalProperties": false,
-      "properties": {"action_id": {"$ref": "#/$defs/name"}, "profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}, "kind": {"enum": ["native-import", "controlled-transaction", "fault", "observe"]}, "count": {"$ref": "#/$defs/positive"}, "input": {"$ref": "#/$defs/optionalArtifact"}, "expected": {"$ref": "#/$defs/artifact"}, "outcome": {"enum": ["applied", "included-success", "included-revert", "rejected-before-inclusion", "fault-observed", "observed"]}, "fault_id": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/name"}]}, "signer_chain_id": {"type": "string", "pattern": "^[1-9][0-9]{0,77}$"}}
+      "properties": {"action_id": {"$ref": "#/$defs/name"}, "profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}, "kind": {"enum": ["native-import", "controlled-transaction", "fault", "observe"]}, "count": {"$ref": "#/$defs/positive"}, "input": {"$ref": "#/$defs/optionalArtifact"}, "expected": {"$ref": "#/$defs/artifact"}, "outcome": {"enum": ["applied", "included-success", "included-revert", "rejected-before-inclusion", "fault-observed", "observed"]}, "fault_id": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/name"}]}, "signer_chain_id": {"type": "string", "pattern": "^[1-9][0-9]{0,77}$(?![\\s\\S])"}}
     }},
     "quotas": {"type": "array", "minItems": 1, "maxItems": 100000, "items": {
       "type": "object", "required": ["case_identity", "minimum"], "additionalProperties": false,
@@ -61,9 +61,9 @@
     "terminal_fence": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/fence"}]}
   },
   "$defs": {
-    "name": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
-    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "hash": {"type": "string", "pattern": "^0x[0-9a-f]{64}$"},
+    "name": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$(?![\\s\\S])"},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$(?![\\s\\S])"},
+    "hash": {"type": "string", "pattern": "^0x[0-9a-f]{64}$(?![\\s\\S])"},
     "count": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
     "positive": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
     "optionalPositive": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/positive"}]},
@@ -74,18 +74,18 @@
       "type": "object", "required": ["fixture_id", "fixture_version", "profile", "fork_variant", "identity", "inputs", "oracle", "preparation", "public_correspondence"], "additionalProperties": false,
       "properties": {"fixture_id": {"$ref": "#/$defs/name"}, "fixture_version": {"$ref": "#/$defs/name"}, "profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}, "fork_variant": {"$ref": "#/$defs/name"},
         "identity": {"type": "object", "required": ["kind", "chain_id", "genesis_hash", "native_config"], "additionalProperties": false,
-          "properties": {"kind": {"enum": ["test-only", "public"]}, "chain_id": {"type": "string", "pattern": "^[1-9][0-9]{0,77}$"}, "genesis_hash": {"$ref": "#/$defs/hash"}, "native_config": {"$ref": "#/$defs/artifact"}}},
+          "properties": {"kind": {"enum": ["test-only", "public"]}, "chain_id": {"type": "string", "pattern": "^[1-9][0-9]{0,77}$(?![\\s\\S])"}, "genesis_hash": {"$ref": "#/$defs/hash"}, "native_config": {"$ref": "#/$defs/artifact"}}},
         "inputs": {"type": "array", "minItems": 1, "maxItems": 10000, "uniqueItems": true, "items": {"$ref": "#/$defs/artifact"}},
         "oracle": {"$ref": "#/$defs/artifact"}, "preparation": {"$ref": "#/$defs/artifact"}, "public_correspondence": {"$ref": "#/$defs/optionalArtifact"}
       }
     },
     "fence": {
       "type": "object", "required": ["implementation", "source_commit", "build", "configuration", "topology", "prior_conformance"], "additionalProperties": false,
-      "properties": {"implementation": {"$ref": "#/$defs/artifact"}, "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "build": {"$ref": "#/$defs/artifact"}, "configuration": {"$ref": "#/$defs/artifact"},
+      "properties": {"implementation": {"$ref": "#/$defs/artifact"}, "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$(?![\\s\\S])"}, "build": {"$ref": "#/$defs/artifact"}, "configuration": {"$ref": "#/$defs/artifact"},
         "topology": {"type": "object", "required": ["kind", "replicas"], "additionalProperties": false,
           "properties": {"kind": {"enum": ["standalone", "cluster"]}, "replicas": {"$ref": "#/$defs/positive"}}},
         "prior_conformance": {"type": "object", "required": ["artifact", "implementation_sha256", "source_commit", "build_sha256", "configuration_sha256", "topology_digest"], "additionalProperties": false,
-          "properties": {"artifact": {"$ref": "#/$defs/artifact"}, "implementation_sha256": {"$ref": "#/$defs/digest"}, "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "build_sha256": {"$ref": "#/$defs/digest"}, "configuration_sha256": {"$ref": "#/$defs/digest"}, "topology_digest": {"$ref": "#/$defs/digest"}}}
+          "properties": {"artifact": {"$ref": "#/$defs/artifact"}, "implementation_sha256": {"$ref": "#/$defs/digest"}, "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$(?![\\s\\S])"}, "build_sha256": {"$ref": "#/$defs/digest"}, "configuration_sha256": {"$ref": "#/$defs/digest"}, "topology_digest": {"$ref": "#/$defs/digest"}}}
       }
     }
   }

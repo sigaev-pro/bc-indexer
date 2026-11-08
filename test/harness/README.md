@@ -302,10 +302,29 @@ Exit 0 means offline resolution succeeded. The report always has
 state, CaseResult or RunManifest. Exit 2 means invalid declarations, changed
 artifacts or another validation failure. `check` creates no output.
 
-`freeze` copies the exact authenticated plan, registry and schema buffers and
-writes `resolution.json` last. Original authority and referenced bytes are
-rechecked before that final record. A failure during publication may retain
-incomplete snapshots, without a resolution record; those are not a frozen plan.
+`freeze` copies the exact authenticated plan, registry and schema buffers through
+exclusive writes relative to a held, no-follow directory descriptor. It checks
+the directory identity, snapshot inodes and bytes, original authority references
+and remaining validation time before publishing `resolution.json`. The resolution
+is prepared in a bounded private file, closed and fsynced before the final
+exclusive atomic link. An existing marker is never replaced. A rejected attempt
+may retain snapshots and one private `.pending` file, but it does not publish a
+new resolution marker. Unrelated replacement files/directories are preserved.
+Only `resolution.json` is the publication marker; private prepared files are not
+a completed freeze.
+
+The final link is the publication boundary. No fallible cleanup afterward can
+turn published success into a reported failure. This offline artifact is not a
+power-loss durability protocol: directory publication across a host crash needs
+inspection and later revalidation. Do not reuse this contract for WAL or delivery
+evidence. The bounded prepared file may remain to avoid unsafe cleanup of a
+possibly replaced path.
+
+The frozen schema is a byte-bound snapshot of the reviewed repository contract,
+not a standalone validation bundle. It depends on the repository's reviewed
+`test/evidence/evidence-definitions.schema.json`, other evidence schemas and
+`test/evidence/validate.py` evaluator. Use that reviewed repository version when
+resolving the plan; copying the schema alone does not copy its dependencies.
 Relative artifact paths resolve against the original plan directory recorded in
 the report, not the snapshot directory. Absolute paths are allowed; traversal,
 symlinks and nonregular files reject. External large payloads are not copied.

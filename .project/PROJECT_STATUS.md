@@ -2,7 +2,23 @@
 
 ## E01-01.harness — Define and validate shared RunPlan admission
 
-Status: READY_FOR_REVIEW. The offline RunPlan block now has a closed version-1
+Status: READY_FOR_REVIEW. PR #125 candidate
+`b85f89768c1e6d54d0ecc876ebb3624617953ade` passed the offline Spec review,
+but Standards reproduced publication defects: a late fsync error left a success
+record; an output-directory replacement redirected writes; a replaced snapshot
+was not rechecked; late durability work could exceed the validation budget; and
+some lexical patterns accepted a trailing newline. The original rejected
+candidate remains in history. The focused repair now uses held no-follow
+directory descriptors, exclusive fd-relative writes, snapshot identity/byte
+checks and final authority/deadline checks before atomic publication. Schema
+lexical endings reject trailing newlines. All five defect classes were red
+before correction and now pass; unrelated replacements are preserved.
+No runtime or broader scope was added. All 15 focused methods passed in
+3.841 seconds, including final-marker collision preservation and both file and
+directory fsync failures. Commit and independent re-review follow; the earlier
+nine-test result below is historical.
+
+The offline RunPlan block has a closed version-1
 schema and `check`/`freeze` CLI. It authenticates plan/registry/input bytes,
 resolves exact v3 case identities, preserves partial coverage as NOT_RUN, and
 checks finite source stops, public-network action boundaries and one standard
