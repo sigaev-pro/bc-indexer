@@ -1,5 +1,29 @@
 # Состояние проекта
 
+## E01-01.harness — Build the private Bor server and IPC import slice
+
+Status: IN_PROGRESS. The private BSC block is accepted in PR #123, merge
+`8ebbf9b02b3825428623c50afef5b98173f895d2`. Its final head
+`c78b19bce76af41613ff7af49e093acc9e150c9f` passed both independent reviews
+and exact-head CI run 42507020616/check 128811736118. The final 19-control
+campaign passed in 164.508 seconds, with all 42 command cleanup records and
+12 owner-label absence checks. Issue #12 remains open. Earlier BSC pending
+statements below are historical and do not override this accepted result.
+
+The first Bor source checkpoint freezes the private two-block oracle before
+generation. Five portable comparison tests first exposed 31 missing-rejection
+subcases, then passed after implementation. They cover native header/config
+identity, signer versus header coinbase, base-fee/tip/burn accounting, both exact
+Bor logs, joined receipts, selected balances/nonces and unchanged empty-block
+state. The next step is a separately pinned Bor-only preparation/IPC helper,
+using the accepted CLI binary in one owned finite container. Actual genesis
+contract validators and effective disabled execution flags still require native
+verification. Preserve genuine Bor consensus and all first-profile restrictions.
+
+No Bor runtime result is claimed yet. All public profiles, the complete quick
+suite, lifecycle, capture, NATS and later gates remain incomplete or NOT_RUN.
+One author owns this worktree; root owns publication, review and acceptance.
+
 ## E01-01.harness — Build the private BSC Parlia import slice
 
 Current checkpoint: the partial BSC block is READY_FOR_REVIEW with final native

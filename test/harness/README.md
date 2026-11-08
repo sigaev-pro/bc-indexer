@@ -245,6 +245,12 @@ budget. Individual native runs retain their own shorter deadlines.
 
 ## Remaining work in issue 12
 
+The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)
+and portable comparison seam in `bor.py`. It distinguishes header coinbase from
+native author, base-fee routing from tip routing, and the two exact Bor logs.
+It does not yet start the accepted `bor server`, prepare blocks or import over
+IPC. Those native operations and controls remain NOT_RUN.
+
 Complete BSC fixture/fork coverage, the Bor native adapter, all other required
 fixture families, shared ProfileManifest/RunPlan resolution,
 supporting services, public mainnet/testnet smoke, and integration with future
