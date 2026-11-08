@@ -2,6 +2,19 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+The hot-store correction now has actual positive evidence on
+`b6da76388f1e9da481437de769a68061a8b79056`. Preparation 4 passed in
+229.347142061 seconds, preserving preparation 3 and its earlier results.
+The new external observer-tool pin is
+`4b515f3709cbff42c29e458fcd9ebbd734dc8d8d212d8709f70c65d1d6e16c4a`.
+The measured BSC positive passed all seven native commands and the independent
+comparison in 33.054069097 seconds; proof SHA256
+`2457a84ff77753456ab9e6a95d9ee6cc896018dfb2a20a70553e0f6e9d908fc5`.
+All owned groups/containers were absent. The explicit 19-control driver is now
+implemented; its real campaign is pending. All 40 portable tests pass in 9.477
+seconds. Helper/preparation/runtime bytes are unchanged by this control-driver
+checkpoint. Public profiles, full quick, capture/NATS and issue 12 stay open.
+
 The second measured BSC run on `ce1f3b2fd004b339c3a3418da80ca752e1a32e2c`
 retained FAIL after 21.783390208 seconds: the lock-file exceptions worked, but
 native freezer opening still requested write access to `headers.meta` despite

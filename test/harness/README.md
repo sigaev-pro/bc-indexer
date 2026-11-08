@@ -217,14 +217,28 @@ DESCRIPTION` to retain that history under a new identity. A successful previous
 preparation requires an explicitly changed helper source before a follow-up;
 its PASS remains intact and the attempt counter increments. Authentic Parlia
 preparation has passed, but measured runs retained observer-lock/freezer failures
-after six successful native CLI commands. The hot-only observer needs a new
-preparation/tool pin and corrected measured run.
+after six successful native CLI commands. The hot-only observer now has a new
+successful preparation/tool pin and measured positive run; the retained evidence
+records their exact source and proof identities.
 No complete quick-suite or public-profile result is claimed.
+
+Run explicit controls with `python3 -B test/harness/bsc_exercise.py REQUEST
+--observer-tool TOOL --observer-tool-sha256 TRUSTED_SHA --output NEW`. The driver
+has a finite 900-second total budget and retains every measured negative as FAIL
+while separately reporting whether its expected rejection occurred. It includes
+authorized corrupt and prefix-only RLP, wrong expectations/header identities,
+raw/config/binary/tool authority rejection, incomplete real hot DB, timeout and
+parent/process-group loss. Missing-state/receipt controls mutate copies of actual
+retained observations and are labeled artifact-comparison checks, not new native
+execution. The deliberately invalid build negative receives its own explicit
+invalid authority solely to reach binary-byte validation; it is never a positive
+build or an override of the original observer pin. Portable CI does not execute
+this driver or launch native resources.
 
 ## Remaining work in issue 12
 
-BSC and Bor native fixture adapters, their authenticated system state, all other
-required fixture families and forks, shared ProfileManifest/RunPlan resolution,
+Complete BSC fixture/fork coverage, the Bor native adapter, all other required
+fixture families, shared ProfileManifest/RunPlan resolution,
 supporting services, public mainnet/testnet smoke, and integration with future
 capture and Gateway components remain unimplemented here. The collector and NATS
 are absent by design at this first native seam. E03 delivery and later composed
