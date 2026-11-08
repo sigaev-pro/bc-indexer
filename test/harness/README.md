@@ -234,6 +234,11 @@ execution. The deliberately invalid build negative receives its own explicit
 invalid authority solely to reach binary-byte validation; it is never a positive
 build or an override of the original observer pin. Portable CI does not execute
 this driver or launch native resources.
+Corrupt/prefix-chain controls require the exact native command stage, exit and
+diagnostic, so an unrelated launch/init failure cannot pass them. Each resource
+dispatch reserves startup/termination/cleanup time and passes the same earlier
+campaign bound to its child; expiry stops new work while owned cleanup finishes.
+The retained control proof includes shared and per-dispatch monotonic budgets.
 
 ## Remaining work in issue 12
 

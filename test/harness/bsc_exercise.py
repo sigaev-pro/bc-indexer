@@ -39,11 +39,31 @@ def first_rlp_item(data):
     return data[:offset + size]
 
 
+def validate_native_rejection(name, proof, deadline=None):
+    """Accept only the pinned client's intended rejecting stage and diagnostic."""
+    expected = {
+        "native-corruption": (2, ["import", "/inputs/blocks"], (b"Import error", b"unexpected EOF")),
+        "incomplete-chain": (5, ["dump", "--iterative=false", "--limit", "0", "2"], (b"header for block 2 not found",)),
+    }
+    require(name in expected, "Unknown native rejection control")
+    count, tail, messages = expected[name]
+    require(proof["result"] == "FAIL" and len(proof["commands"]) == count, "Native rejection occurred at the wrong stage")
+    command = proof["commands"][-1]
+    _, request = json_artifact(command["request"], 1024 * 1024, deadline=deadline)
+    _, result = json_artifact(command["result"], 1024 * 1024, deadline=deadline)
+    _, stderr = read_artifact(command["stderr"], 8 * 1024 * 1024, deadline=deadline)
+    require(result["argv"] == request["argv"] and request["argv"][-len(tail):] == tail and
+            type(result["exit_code"]) is int and result["exit_code"] == 1 and result["reason"] == "NATIVE_EXIT" and
+            result["cleanup_complete"] is True and result["process_group_absent"] is True and
+            all(message in stderr for message in messages), "Native control failed for another reason")
+
+
 def resource_controls(image, output, summary, deadline):
-    require(time.monotonic() + 100 < deadline, "Insufficient control cleanup budget")
+    dispatch = time.monotonic()
+    require(dispatch + 60 <= deadline, "Insufficient resource execution/cleanup budget")
     target = output / "container-timeout"
     target.mkdir()
-    runner = Native(target, time.monotonic() + 45)
+    runner = Native(target, min(deadline, dispatch + 45))
     try:
         runner.command(image, ["/bin/sleep", "30"], [], cap=36)
         raise AssertionError("Expected owned timeout")
@@ -52,16 +72,22 @@ def resource_controls(image, output, summary, deadline):
         result = load(runner.commands[0]["result"]["path"])
         require(result["reason"] == "DEADLINE" and result["cleanup_complete"], "Timeout cleanup failed")
     summary["controls"].append({"name": "container-timeout", "control_result": "PASS",
-                                "native_owner_nonce": runner.nonce, "commands": runner.commands})
+                                "native_owner_nonce": runner.nonce, "commands": runner.commands,
+                                "dispatch_monotonic": dispatch, "operation_deadline_monotonic": runner.deadline})
     for number, group in ((signal.SIGTERM, False), (signal.SIGKILL, False), (signal.SIGTERM, True), (signal.SIGKILL, True)):
+        # Ten seconds for startup, five for parent exit, 35 for owned cleanup,
+        # and a ten-second admission margin. Never reset the campaign deadline.
+        dispatch = time.monotonic()
+        require(dispatch + 60 <= deadline, "Insufficient resource execution/cleanup budget")
+        child_deadline = min(deadline, dispatch + 90)
         name = ("parent-group-stop-" if group else "parent-stop-") + str(number)
         target = output / name
         target.mkdir()
-        child = subprocess.Popen([sys.executable, "-I", str(Path(__file__).with_name("exercise.py")), "--owned-sleep", str(target), image],
+        child = subprocess.Popen([sys.executable, "-I", str(Path(__file__).with_name("exercise.py")), "--owned-sleep", str(target), image, str(child_deadline)],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         request_path, result_path = target / "logs/000.request.json", target / "logs/000.result.json"
         try:
-            until = time.monotonic() + 10
+            until = min(deadline, time.monotonic() + 10)
             while time.monotonic() < until:
                 if request_path.exists():
                     request = load(request_path)
@@ -79,9 +105,11 @@ def resource_controls(image, output, summary, deadline):
                 time.sleep(0.05)
             result = load(result_path)
             require(result["reason"] == "PARENT_EXIT" and result["cleanup_complete"] and result["process_group_absent"], "Parent-loss cleanup failed")
+            require(time.monotonic() <= deadline, "Resource control budget expired after cleanup")
             summary["controls"].append({"name": name, "control_result": "PASS", "request": reference(request_path),
                                         "result": reference(result_path), "container": request["container"],
-                                        "termination_scope": "process-group" if group else "process", "parent_exit_code": child.returncode})
+                                        "termination_scope": "process-group" if group else "process", "parent_exit_code": child.returncode,
+                                        "dispatch_monotonic": dispatch, "operation_deadline_monotonic": child_deadline})
         finally:
             if child.poll() is None:
                 child.terminate()
@@ -134,6 +162,7 @@ def exercise(request_path, tool_path, tool_sha, output):
     origins, sources = source_snapshot(output, ("bsc_exercise.py", "bsc_run.py", "bsc_inputs.py", "bsc.py", "artifacts.py",
                                                 "compare.py", "run.py", "native.py", "owned.py", "exercise.py"), deadline)
     summary = {"schema_version": 1, "kind": "explicit-bsc-native-controls", "result": "FAIL", "quick_suite": "NOT_RUN",
+               "started_monotonic": started, "deadline_monotonic": deadline, "deadline_seconds": 900,
                "source_request": admitted["request_ref"], "observer_tool": admitted["tool_ref"], "external_observer_tool_sha256": tool_sha,
                "harness_sources": sources, "controls": []}
     positive = None
@@ -210,7 +239,7 @@ def exercise(request_path, tool_path, tool_sha, output):
                 else:
                     require(result.returncode == 2 and proof["result"] == "FAIL", "Negative native control did not retain FAIL")
                     if name in ("native-corruption", "incomplete-chain"):
-                        require(load(proof["commands"][-1]["result"]["path"])["reason"] == "NATIVE_EXIT", "Incomplete/corrupt chain did not fail native validation")
+                        validate_native_rejection(name, proof, deadline)
                     else:
                         require(len(proof["commands"]) == 7 and ("Account " if name == "wrong-oracle" else "Native header identity") in proof.get("error", ""), "Comparison control failed for another reason")
             row["control_result"] = "PASS"

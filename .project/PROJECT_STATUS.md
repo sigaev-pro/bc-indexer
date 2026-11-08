@@ -2,6 +2,24 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+The first real 19-control campaign on `3e1e4cb5c3dbf112ca23c2b8635e8c56a820df13`
+completed PASS in 138.263239408 seconds. Its SHA256 is
+`f48040cb71637053a839269c1759acde9b3b77e091f7722c3455a5ab548cdbdd`.
+All 42 command results recorded cleanup/group absence; independent exact-label
+checks found no containers for any of its 12 owners. This remains historical
+evidence because review found two driver defects: generic native-exit matching
+could accept the wrong stage, and resource subchecks did not inherit/check the
+shared campaign deadline at every dispatch.
+
+The corrected driver verifies exact native command stage, exit and diagnostic.
+A bounded virtual-clock regression reproduces the old late dispatch; each new
+resource now requires execution/cleanup reserve and inherits a deadline clipped
+to the campaign. Cleanup still finishes after interruption, with no subsequent
+dispatch. Budget metadata is retained. All 43 harness tests pass in 9.309 seconds;
+the final five focused controls pass in 0.229 seconds. One fresh 19-control
+campaign is required on the corrected source. Helper, preparation and native
+runtime behavior are unchanged; all earlier results remain intact.
+
 The hot-store correction now has actual positive evidence on
 `b6da76388f1e9da481437de769a68061a8b79056`. Preparation 4 passed in
 229.347142061 seconds, preserving preparation 3 and its earlier results.
