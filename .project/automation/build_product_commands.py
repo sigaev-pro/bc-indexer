@@ -19,6 +19,10 @@ import evidence
 import session_runner
 
 
+SMALL_PREFLIGHT_SECONDS = 10
+ACTUAL_MATERIALIZED_PREFLIGHT_SECONDS = 300
+
+
 def finish_group(process):
     """Stop owned descendants, reap the direct child, and reject live writers."""
     termination = session_runner.terminate_group(process, grace=0.1)
@@ -158,7 +162,11 @@ class Commands:
             self.call("plan-reject-" + identifier, command, request, expected=2, timeout=10)
         return result
 
-    def preflight(self, identifier, manifest, root, profile="ethereum-mainnet", synthetic=False, expected=0, alter=None):
+    def preflight(self, identifier, manifest, root, profile="ethereum-mainnet", synthetic=False, expected=0, alter=None,
+                  *, materialized=False):
+        contract.require(type(materialized) is bool and (not materialized or synthetic is False),
+                         "materialized preflight budget requires an explicit trusted actual-mode choice")
+        timeout = ACTUAL_MATERIALIZED_PREFLIGHT_SECONDS if materialized else SMALL_PREFLIGHT_SECONDS
         root = Path(root)
         path = root / (identifier + ".json")
         path.write_bytes(contract.canonical(manifest))
@@ -168,7 +176,7 @@ class Commands:
         if alter:
             alter(request)
         value = contract.parse_json(self.call(identifier, [sys.executable, "-I", str(self.candidate / "build/native/verify.py")],
-                                             request, expected=expected, timeout=10))
+                                             request, expected=expected, timeout=timeout))
         contract.require(type(value) is dict and set(value) == {"valid", "reason"} and value["valid"] is (expected == 0)
                          and isinstance(value["reason"], str) and value["reason"], "preflight returned a malformed validity report")
 

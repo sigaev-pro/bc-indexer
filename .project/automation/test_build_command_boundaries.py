@@ -2,6 +2,7 @@
 
 import shutil
 import hashlib
+import json
 import os
 from pathlib import Path
 import signal
@@ -234,6 +235,95 @@ class CommandBoundaryTests(unittest.TestCase):
                         verifier.final_preflights(commands, manifest, artifacts, SOURCE)
                     self.assertEqual(final_check.call_count, 1)
                     self.assertEqual(len(commands.outcomes), len(manifest["plan"]["profiles"]))
+
+    def test_final_materialized_budget_is_selected_by_trusted_orchestration(self):
+        with tempfile.TemporaryDirectory() as root:
+            commands = self.commands(root)
+            artifacts = Path(root) / "artifacts"
+            manifest = build_vectors.fixture(artifacts, SOURCE)
+            with mock.patch.object(commands, "call", return_value=b'{"valid":true,"reason":"Validated"}') as called, mock.patch.object(verifier.build_materials, "validate_materialized") as checked:
+                verifier.final_preflights(commands, manifest, artifacts, SOURCE)
+            self.assertEqual(len(called.call_args_list), len(manifest["plan"]["profiles"]))
+            self.assertEqual([item.kwargs["timeout"] for item in called.call_args_list], [300] * len(manifest["plan"]["profiles"]))
+            checked.assert_called_once()
+
+    def test_small_control_budget_does_not_follow_candidate_declarations(self):
+        with tempfile.TemporaryDirectory() as root:
+            commands = self.commands(root)
+            artifacts = Path(root) / "artifacts"
+            manifest = build_vectors.fixture(artifacts, SOURCE)
+            manifest.update(evidence_kind="ACTUAL", declared_bytes=1 << 60, timeout_seconds=999999)
+            with mock.patch.object(commands, "call", return_value=b'{"valid":true,"reason":"Validated"}') as called:
+                commands.preflight("candidate-claims-actual", manifest, artifacts,
+                                   alter=lambda request: request.update(kind="ActualMaterialized", timeout_seconds=999999))
+            self.assertEqual(called.call_args.kwargs["timeout"], 10)
+            with mock.patch.object(commands, "call", side_effect=lambda *args, **kwargs: contract.canonical({"valid": kwargs.get("expected", 0) == 0, "reason": "Synthetic control"})) as called:
+                commands.preflight_controls()
+            self.assertTrue(called.call_args_list)
+            self.assertTrue(all(item.kwargs["timeout"] == 10 for item in called.call_args_list))
+            negative = next(item for item in called.call_args_list if item.args[0] == "synthetic-cannot-be-actual")
+            self.assertFalse(negative.args[2]["synthetic"])
+            self.assertEqual(negative.kwargs["expected"], 2)
+
+    def test_materialized_budget_keeps_original_deadline_and_owned_cleanup(self):
+        with tempfile.TemporaryDirectory() as root:
+            commands = self.commands(root)
+            artifacts = Path(root) / "artifacts"
+            manifest = build_vectors.fixture(artifacts, SOURCE)
+            script = commands.candidate / "build/native/verify.py"
+            script.parent.mkdir(parents=True)
+            script.write_text("import time\ntime.sleep(30)\n")
+            commands.deadline = time.time() + 0.3
+            started = time.monotonic()
+            with self.assertRaises(subprocess.TimeoutExpired):
+                commands.preflight("materialized-timeout", manifest, artifacts, materialized=True)
+            self.assertLess(time.monotonic() - started, 5)
+            request = json.loads((commands.directory / "materialized-timeout.request.json").read_text())
+            self.assertLessEqual(request["deadline"], commands.deadline)
+            self.assertTrue(commands.outcomes[-1]["cleanup_confirmed"])
+            self.assertIsNone(commands.outcomes[-1]["actual_exit"])
+            self.assertTrue(build_candidate_guard.confirm_all(commands.groups)["complete"])
+            with mock.patch.object(build_product_commands.subprocess, "Popen") as launched:
+                with self.assertRaisesRegex(ValueError, "original launch deadline"):
+                    commands.preflight("materialized-already-expired", manifest, artifacts, materialized=True)
+                launched.assert_not_called()
+
+    def test_plan_controls_keep_ten_seconds_and_invalid_budget_choices_do_not_dispatch(self):
+        with tempfile.TemporaryDirectory() as root:
+            commands = self.commands(root)
+            def response(*args, **kwargs):
+                if kwargs.get("expected") == 2:
+                    return b""
+                request = args[2]
+                return contract.canonical(contract.expected_plan(commands.registry, commands.lock, commands.registry_hash,
+                                          commands.lock_hash, request["platform"], request["limits"]))
+            with mock.patch.object(commands, "call", side_effect=response) as called:
+                commands.plans()
+            self.assertEqual(len(called.call_args_list), 7)
+            self.assertTrue(all(item.kwargs["timeout"] == 10 for item in called.call_args_list))
+            artifacts = Path(root) / "artifacts"
+            manifest = build_vectors.fixture(artifacts, SOURCE)
+            for choice in ({"materialized": 1}, {"materialized": "true"}, {"materialized": True, "synthetic": True}):
+                with self.subTest(choice=choice), mock.patch.object(commands, "call") as called:
+                    with self.assertRaisesRegex(ValueError, "explicit trusted actual-mode choice"):
+                        commands.preflight("invalid-budget-choice", manifest, artifacts, **choice)
+                    called.assert_not_called()
+
+    def test_materialized_preflight_still_rejects_malformed_candidate_responses(self):
+        responses = ['{}', '{"valid":true,"reason":""}', '{"valid":true,"reason":"ok","timeout":300}',
+                     '{"valid":false,"reason":"wrong verdict"}', 'not-json']
+        with tempfile.TemporaryDirectory() as root:
+            commands = self.commands(root)
+            artifacts = Path(root) / "artifacts"
+            manifest = build_vectors.fixture(artifacts, SOURCE)
+            script = commands.candidate / "build/native/verify.py"
+            script.parent.mkdir(parents=True)
+            for index, response in enumerate(responses):
+                script.write_text("print(" + repr(response) + ")\n")
+                with self.subTest(response=response), self.assertRaises(ValueError):
+                    commands.preflight("materialized-invalid-" + str(index), manifest, artifacts, materialized=True)
+                self.assertTrue(commands.outcomes[-1]["cleanup_confirmed"])
+            self.assertTrue(build_candidate_guard.confirm_all(commands.groups)["complete"])
 
 
 if __name__ == "__main__":

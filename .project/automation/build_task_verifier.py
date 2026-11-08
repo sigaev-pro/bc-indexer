@@ -61,7 +61,7 @@ def validate_outputs(candidate):
 
 def final_preflights(commands, manifest, root, source):
     for profile in manifest["plan"]["profiles"]:
-        commands.preflight("actual-accept-" + profile["id"], manifest, root, profile["id"])
+        commands.preflight("actual-accept-" + profile["id"], manifest, root, profile["id"], materialized=True)
     # Candidate commands and their process groups are finished before this last
     # trusted read of every retained materialized artifact.
     build_materials.validate_materialized(manifest, root, source, time.time())
