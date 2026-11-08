@@ -130,7 +130,8 @@ def package_source_observations(data):
     rows, result = report.get("observations"), {}
     contract.require(type(rows) is list and 1 <= len(rows) <= 4096, "package source observations are missing or unbounded")
     for row in rows:
-        contract.require(type(row) is dict and set(row) == {"url", "status", "headers", "body", "observed_at"}
+        contract.require(type(row) is dict and set(row) in ({"url", "status", "headers", "body", "observed_at"},
+                                                         {"url", "status", "headers", "body", "observed_at", "acquisition"})
                          and isinstance(row["url"], str) and row["url"] not in result and type(row["status"]) is int
                          and type(row["headers"]) is dict and all(isinstance(k, str) and isinstance(v, str) for k, v in row["headers"].items())
                          and type(row["observed_at"]) in (int, float) and math.isfinite(row["observed_at"]),
@@ -139,6 +140,9 @@ def package_source_observations(data):
         contract.require(parsed.scheme == "https" and parsed.netloc in {"api.github.com", "raw.githubusercontent.com", "go.dev", "dl.google.com",
                          "registry-1.docker.io", "deb.debian.org", "security.debian.org"}, "package source observation is not official HTTPS")
         contract.reference_descriptor(row["body"])
+        if "acquisition" in row:
+            # Historical input bytes only: fresh signatures establish acceptance.
+            contract.reference_descriptor(row["acquisition"])
         result[row["url"]] = row
     return result
 
@@ -728,6 +732,8 @@ def image_input(row, root, platform):
 def validate_materialized(manifest, root, source, now):
     """Only actual fixed-command execution may call this acceptance inspection."""
     contract.validate_manifest(manifest, root, source)
+    import build_source_evidence
+    build_source_evidence.validate_updater_journals(manifest["updater"], root)
     package_transports(list(manifest["os_closures"].values()), root)
     plan = manifest["plan"]
     for row in manifest["image_inputs"].values():

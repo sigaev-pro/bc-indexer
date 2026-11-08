@@ -119,6 +119,78 @@ of other registered sources.
 
 Update mode writes a `PREPARED_CANDIDATE` tied to the registry and previous active-lock hashes. It has `release_ready: false`, `active_lock_changed: false`, the exact selected component objects, all existing profiles with build/runtime reset to NOT_RUN, and generated outputs still pending. Neither old runtime evidence nor an untested deployment tool or architecture is promoted by this operation.
 
+### Bounded source GET evidence
+
+Current output observations contain exactly `url`, `status`, `headers`, `body`,
+`observed_at`, and `acquisition`. The last field is an ordinary artifact reference
+to a closed, at-most-1-MiB journal. The explicit synthetic transport input keeps
+its original five-field observation shape; replay creates separate output
+evidence marked synthetic. Historical package-source reports may still supply
+five-field observations as untrusted retained inputs. That exception cannot
+establish current live-source or build acceptance.
+
+[build_source_evidence.py](build_source_evidence.py) defines the journal and its
+independent validation. Its fields are `schema_version: 1`, `url`, `synthetic`,
+`transport` (`urllib` or `gh`), `outcome`, and `attempts`. There are at most two
+attempts for the same GET URL. Outcomes are `IN_PROGRESS`, `FAILED`,
+`FIRST_ATTEMPT_SUCCESS`, and `RECOVERED_TRANSPORT`; unfinished evidence cannot
+establish acceptance. Every attempt has exactly `ordinal`, `state`, `started_at`,
+`finished_at`, `observed_at`, `status`, `headers`, `body`, `error`, `observed_bytes`,
+`truncated`, and `process`. Ordinals start at one. States are `STARTED`, `FAILED`,
+and `SUCCEEDED`. A successful attempt has HTTP status 200, complete body bytes,
+and no error; the final observation must exactly match its status, headers, body,
+and observation time. A failed product observation uses status zero and a safe
+diagnostic body; available response bytes remain separately referenced in the
+journal. Count only bytes actually returned to the transport, and mark any
+omitted bytes explicitly. Never concatenate failed and successful responses.
+
+Errors contain exactly `type`, `reason_type`, `code`, `errno`, and `retryable`.
+Only exact `TimeoutError`, or that exact type in `URLError.reason`, permits
+`NETWORK_TIMEOUT`. `SSL_EOF` requires exact `ssl.SSLEOFError` with reason
+`UNEXPECTED_EOF_WHILE_READING`, directly or wrapped in `URLError`. Trusted GitHub
+acquisition additionally permits `GH_EOF` only for exit 1 with the exact retained
+`Get "<same URL>": EOF` diagnostic. Unknown transport errors, HTTP/authentication
+failures, certificates, redirects, invalid content, oversized output, filesystem
+failures, caller cancellation, and exhausted deadlines do not gain a retry.
+The remaining error codes are `REQUEST_DEADLINE`, `UNKNOWN_TRANSPORT`, `LOCAL_IO`,
+and `REJECTED`. Never infer a retry from status zero or a generic `URLError`.
+
+The trusted GET implementation is [build_source_transport.py](build_source_transport.py).
+One monotonic 60-second budget spans both attempts; socket operations use at most
+30 seconds and the operation deadline remains an upper bound. Check time and
+stop before dispatch and during reads. On supported POSIX CLI hosts, a scoped
+alarm bounds blocked reads, restores the previous handler/timer, and preserves
+earlier caller cancellation without reclassifying it as a network timeout.
+Keep the earliest observed inherited monotonic deadline on the runner, including
+after its one-shot alarm is consumed or rearmed. Subsequent source and native
+command admission cannot extend that bound. A request-local deadline remains a
+different cause; a terminal trusted GET still fails its independent pass.
+Unsupported execution contexts fail closed. GitHub subprocesses remain in the
+supervised driver group; restore the request alarm before bounded child cleanup.
+Persist intent before GET and retain terminal attempt evidence before any retry.
+Terminal trusted acquisition or persistence failure fences the runner against
+later source/native dispatch; owned cleanup remains allowed. Token acquisition
+and native/Docker/build commands are outside this retry mechanism.
+
+For `urllib`, `process` is null. For `gh`, it contains exactly `argv`, `exit_code`,
+`stdout`, and `stderr`; the fixed argv is `gh api --include --method GET <URL>`.
+Hash-bound raw process output preserves the actual failure and is independent of
+`manifest.commands`, which still requires successful native commands. No secret
+request headers or credential values belong in evidence. The trusted response
+bound remains 256 MiB, headers 64 KiB, and stderr 1 MiB. The product's existing
+1-GiB artifact bound remains unchanged. Wall timestamps describe observations;
+they do not prove elapsed monotonic duration.
+
+The internal updater signature proof additionally binds `check_report`, the
+check-mode independent report. The existing manifest already binds the product
+check/update reports and the update-mode independent report. After all candidate
+preflights, verify all four reports and their nested acquisition/body/process
+references again. The two independent reports must belong to their respective
+invocation directories and retain the correct mode. This adds no public
+BuildManifest field, does not reclassify prior failed operations, and does not
+replace the two live updater passes, independent source selection, signatures,
+hashes, pagination rules, or D83's corrected-run requirement.
+
 ## Execution scope
 
 Go acquisition uses per-component alternate metadata at

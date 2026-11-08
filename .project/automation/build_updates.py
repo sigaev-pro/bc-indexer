@@ -15,13 +15,14 @@ import urllib.parse
 
 import build_contract as contract
 import build_materials as materials
+import build_source_evidence
 
 
 UPDATE_CONTRACT = "component-update-v1"
 REPORT_KEYS = {"schema_version", "contract", "mode", "synthetic", "registry_sha256", "active_lock_before", "active_lock_after",
                "complete", "observed_at", "components", "observations", "candidate", "generated_outputs", "external_locks"}
 ROW_KEYS = {"id", "current", "latest_stable", "selected", "compatibility", "notices", "blocked_reasons", "sources"}
-OBSERVATION_KEYS = {"url", "status", "headers", "body", "observed_at"}
+OBSERVATION_KEYS = build_source_evidence.OBSERVATION_KEYS
 
 
 def stable(value, vendor=False):
@@ -81,6 +82,7 @@ class Observations:
             if not synthetic:
                 contract.require(now - 3600 <= row["observed_at"] <= now + 300, "updater source observation is stale or from the future")
             contract.verify_reference(self.root, row["body"])
+            build_source_evidence.validate_observation(row, self.root, synthetic)
             self.rows[row["url"]] = row
 
     def file(self, url):

@@ -25,7 +25,7 @@ import build_vectors
 
 TASK, CONTRACT, OUTPUTS = contract.TASK, contract.CONTRACT, contract.OUTPUTS
 PACK_MODULES = ("acceptance", "acceptance_receipts", "build_candidate_guard", "build_contract", "build_execution", "build_materials", "build_os",
-                "build_product_commands", "build_resources", "build_task_verifier", "build_update_execution", "build_update_vectors",
+                "build_product_commands", "build_resources", "build_source_evidence", "build_source_transport", "build_task_verifier", "build_update_execution", "build_update_vectors",
                 "build_updates", "build_vectors", "check_docs", "check_environment", "ci", "controller", "controller_backend",
                 "controller_handoff", "evidence", "evidence_task_verifier", "launch_control", "reader_evidence_vectors", "session_runner", "task_proofs")
 PACK_FILES = tuple(".project/automation/" + name + ".py" for name in PACK_MODULES) + (
@@ -210,7 +210,7 @@ def execute(candidate, request_path, package_source_report=None, package_source_
             host_tools[key] = contract.reference(runner.root, path)
         check = commands.updater("live-update-check", "check")
         update = commands.updater("live-update-create", "update")
-        build_update_execution.refresh(runner, check, registry, lock, registry_hash, lock_hash)
+        independent_check = build_update_execution.refresh(runner, check, registry, lock, registry_hash, lock_hash)
         independent = build_update_execution.refresh(runner, update, registry, lock, registry_hash, lock_hash)
         images = runner.acquire_images()
         _, daemon, _ = runner.run(["docker", "info", "--format", "{{json .}}"], timeout=30)
@@ -221,7 +221,7 @@ def execute(candidate, request_path, package_source_report=None, package_source_
         caches = Path(common.read_text().strip()).parent / ".project/cache/native-sources"
         signature = {}
         def authenticate(container):
-            signature["path"] = build_update_execution.authenticate(runner, container, independent)
+            signature["path"] = build_update_execution.authenticate(runner, container, independent, independent_check["path"])
         builds, modules, os_closures = build_execution.native_builds(runner, caches, authenticate, package_source_report, package_source_report_sha256)
         runner.cleanup()
         cleanup_history(runner.spec, runner.cleanups, images)

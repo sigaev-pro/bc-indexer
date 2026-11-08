@@ -57,8 +57,10 @@ class Runner:
         (self.root / "logs").mkdir()
 
     def remaining(self, requested=3600):
+        contract.require(not getattr(self, "source_acquisition_blocked", False), "terminal source acquisition forbids more work")
         available = min(requested, self.plan["limits"]["command_seconds"], self.deadline - time.time(),
-                        self.monotonic_deadline - time.monotonic())
+                        self.monotonic_deadline - time.monotonic(),
+                        getattr(self, "source_caller_deadline", float("inf")) - time.monotonic())
         contract.require(available > 0 and not Path(self.request["stop_file"]).exists(), "build deadline or stop forbids more work")
         return available
 
