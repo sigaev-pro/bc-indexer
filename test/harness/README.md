@@ -245,6 +245,52 @@ budget. Individual native runs retain their own shorter deadlines.
 
 ## Remaining work in issue 12
 
+The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)
+and portable comparison seam in `bor.py`. It distinguishes header coinbase from
+native author, base-fee routing from tip routing, and the two exact Bor logs.
+The implementation now includes `prepare_bor.py --build-manifest PATH --sha256
+SHA --output NEW` and `bor_run.py check|run REQUEST --observer-tool TOOL
+--observer-tool-sha256 TRUSTED_SHA --output NEW`. Preparation has a separate
+1,800-second bound and uses only the accepted isolated Bor graph. Its helper
+verifies the tracked public signer and bounded native IPC shutdown before
+genuine Prepare/Authorize/Seal/InsertChain generation. The external tool pin is
+supplied by the trusted caller, outside mutable scenario input.
+
+The measured path owns one container containing the accepted `bor server` and
+its local IPC helper. It requires fresh genesis/head 0, exact node chain config
+and contract validator identity before `admin_importChain`, then full raw chain,
+native body receipts, authors and complete small-fixture state dumps. Raw IPC
+bytes and server logs have fixed limits; the operation deadline also stops an
+import that outlives its RPC call. Normal success requires an actual server exit
+of zero without forced cleanup. Kill remains a bounded failure-cleanup fallback.
+`dumpconfig` proves parsed execution flags using explicit `=false` values; its
+intentional chain/datadir neutralization is covered by actual launch arguments,
+genesis/head 0 and `admin_nodeInfo`, not treated as the launched path values.
+
+The corrected native preparation and one measured server/IPC import passed on
+source commit `6a5fc4996374bc3cc10597a0b5edd8c6741536eb`; earlier failed
+preparations remain recorded in the task evidence. This is a private native seam,
+not a complete quick suite or a public-profile result.
+
+`bor_exercise.py REQUEST --observer-tool TOOL --observer-tool-sha256 TRUSTED_SHA
+--output NEW` runs the explicit 19-control campaign within one 900-second bound.
+It retains reauthorized corrupt/prefix inputs, altered oracle/identity failures,
+admission tampering, and three clearly labeled retained-observation comparisons.
+Corrupt/prefix success requires exact IPC request/response identity and the
+intended native failure stage. Five resource controls start the real accepted
+Bor server in a fresh private data directory, retain its exact owned IPC-ready
+event from a bounded live log prefix, confirm it is still running, then test deadline or parent/process-group
+termination. Each dispatch reserves execution and cleanup time under the same
+campaign deadline. Final success revalidates the original authority artifacts.
+The helper and its caller-pinned preparation can be reused when only this Python
+campaign changes. Its first execution retained 14 successful controls before a
+readiness-log buffering failure. The corrected owner flushes bounded writes;
+the live poll permits appends while final artifact hashing remains strict.
+The corrected campaign passed all 19 controls in 60.287 seconds on source
+`b25215c7c0152a984ad7157af598a3e37c4cce3c`. Fresh Ethereum/BSC compatibility
+positives also passed using accepted prepared inputs. Exact final-head review,
+CI and protected acceptance remain separate from these measured results.
+
 Complete BSC fixture/fork coverage, the Bor native adapter, all other required
 fixture families, shared ProfileManifest/RunPlan resolution,
 supporting services, public mainnet/testnet smoke, and integration with future

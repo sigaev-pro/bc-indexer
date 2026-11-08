@@ -1,5 +1,38 @@
 # Состояние проекта
 
+## E01-01.harness — Build the private Bor server and IPC import slice
+
+Status: READY_FOR_REVIEW. Draft PR #124 now has a complete private Bor result
+on executed source `b25215c7c0152a984ad7157af598a3e37c4cce3c`: all 19
+controls passed in 60.287208683 seconds. The actual server used the accepted
+Bor binary, fresh genesis, genuine validator contract and local IPC import.
+Corruption/prefix failures, oracle/identity checks, bounded state/receipt/log
+comparisons, deadline and parent/process-group interruption controls passed.
+All 11 command groups and exact-owner container queries are clean. The final
+source passed 61 portable harness tests; source/document/whitespace checks pass.
+
+Because the shared owner now flushes its bounded live output, compatibility
+positives reused accepted Ethereum and BSC preparation: PASS in 4.534311259 and
+22.616163411 seconds. All 13 additional command groups and both exact owners
+are clean. No helper or native-client rebuild was needed for this correction.
+The result checkpoint changes documentation only; executed source bytes stay
+unchanged. Exact final-head CI, independent reviews and protected acceptance
+remain the coordinator's next steps. Issue #12 remains open.
+
+Preparation 3 on `6a5fc4996374bc3cc10597a0b5edd8c6741536eb` passed in
+235.444298286 seconds; its external tool pin remains unchanged. The first
+measured import passed in 5.241974693 seconds. Two failed preparations and the
+first campaign's 14-control partial FAIL remain immutable in
+[task evidence](evidence/E01-01.harness.md), with their causes and cleanup.
+No earlier failure is relabeled. The independent oracle was fixed before
+generation and has not changed.
+
+The preceding private BSC block remains accepted in PR #123, merge
+`8ebbf9b02b3825428623c50afef5b98173f895d2`. Earlier BSC pending statements
+below are historical. All public profiles, the complete quick suite, lifecycle,
+capture, NATS and later gates remain incomplete or NOT_RUN. Root owns publication,
+review and acceptance; this block does not close the parent task.
+
 ## E01-01.harness — Build the private BSC Parlia import slice
 
 Current checkpoint: the partial BSC block is READY_FOR_REVIEW with final native
