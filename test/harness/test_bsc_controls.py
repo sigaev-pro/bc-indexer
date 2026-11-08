@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import subprocess
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -13,9 +14,26 @@ from artifacts import Rejected
 from bsc_exercise import first_rlp_item
 import bsc_exercise
 from test_harness import ref, write_json
+from test_bsc_inputs import fixture
 
 
 class BscControlInputTests(unittest.TestCase):
+    def test_final_authority_check_uses_campaign_budget_and_rejects_replacement(self):
+        for name in ("request.json", "manifest.json", "fixture.json", "tool.json"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                fixture(root)
+                admitted = bsc_exercise.admit(root / "request.json", root / "tool.json",
+                                              ref(root / "tool.json")["sha256"])
+                admitted["deadline"] = time.monotonic() - 1
+                campaign = {**admitted, "deadline": time.monotonic() + 30}
+                bsc_exercise.revalidate_authority(campaign)
+                path = root / name
+                path.write_bytes(path.read_bytes() + b" ")
+                with self.assertRaises(Rejected):
+                    bsc_exercise.revalidate_authority(campaign)
+                self.assertLess(admitted["deadline"], time.monotonic())
+
     def test_first_complete_native_rlp_list_keeps_exact_bytes(self):
         first = b"\xf8\x38" + b"x" * 56
         self.assertEqual(first_rlp_item(first + b"\xc0"), first)

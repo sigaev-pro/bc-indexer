@@ -14,7 +14,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from artifacts import (Rejected, artifact, copy_artifact, json_artifact, load, read_artifact,
-                       reference, require, source_snapshot, sources_unchanged)
+                       reference, require, revalidate_authority, source_snapshot, sources_unchanged)
 from bsc import compare_native
 from bsc_inputs import admit
 from bsc_run import observer_mounts
@@ -267,6 +267,7 @@ def exercise(request_path, tool_path, tool_sha, output):
         incomplete_hot_store(admitted, output, summary, deadline)
         resource_controls(admitted["image"], output, summary, deadline)
         sources_unchanged(origins, deadline)
+        revalidate_authority({**admitted, "deadline": deadline})
         require(time.monotonic() < deadline, "Control deadline expired")
         summary["result"] = "PASS"
     finally:

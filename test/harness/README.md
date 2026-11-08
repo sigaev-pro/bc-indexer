@@ -239,6 +239,9 @@ diagnostic, so an unrelated launch/init failure cannot pass them. Each resource
 dispatch reserves startup/termination/cleanup time and passes the same earlier
 campaign bound to its child; expiry stops new work while owned cleanup finishes.
 The retained control proof includes shared and per-dispatch monotonic budgets.
+Before reporting PASS, the campaign rechecks the original request, build,
+fixture, observer authority and their required bytes under its remaining total
+budget. Individual native runs retain their own shorter deadlines.
 
 ## Remaining work in issue 12
 

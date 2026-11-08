@@ -2,6 +2,21 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+Current checkpoint: the corrected 19-control campaign on
+`04d5b908c1e4744ad8b91bdefe7d81c2fb3618fa` passed in 145.041236892 seconds.
+Its proof SHA256 is `fa532333cf5dc98df52990e29336a66191b0f883e2ac3830282622393d0a231c`.
+All 42 command results prove cleanup/group absence, and all 12 owner-label
+container checks are empty. The final campaign guard now also rechecks its
+original authority references before PASS; four mutation subcases reject
+replaced request/build/fixture/tool manifests. A fresh campaign on this final
+guard remains pending. Issue 12 stays open; public profiles, the complete quick
+suite, native capture and NATS remain NOT_RUN.
+
+### Historical BSC checkpoints
+
+The following entries preserve the status at each earlier source checkpoint;
+their pending statements do not override the current checkpoint above.
+
 The first real 19-control campaign on `3e1e4cb5c3dbf112ca23c2b8635e8c56a820df13`
 completed PASS in 138.263239408 seconds. Its SHA256 is
 `f48040cb71637053a839269c1759acde9b3b77e091f7722c3455a5ab548cdbdd`.
