@@ -12,6 +12,7 @@ import unittest
 import build_contract as contract
 import build_update_vectors as vectors
 import build_updates as updates
+import build_source_evidence
 
 
 SOURCE = Path(__file__).resolve().parents[2]
@@ -25,7 +26,11 @@ class UpdateTests(unittest.TestCase):
 
     def validate(self, report=None, mode="check", synthetic=True):
         f = self.fixture
-        return updates.validate_report(report or f["report"], f["root"], f["registry"], f["active"],
+        report = copy.deepcopy(report or f["report"])
+        # These controls change source semantics; give the changed fixture fresh
+        # transport evidence so its intended source check remains the failure.
+        report["observations"] = [build_source_evidence.fixture_observation(row, f["root"]) for row in report["observations"]]
+        return updates.validate_report(report, f["root"], f["registry"], f["active"],
                                        f["registry_hash"], f["lock_hash"], mode, synthetic, vectors.FIXTURE_TIME)
 
     def row(self, report, name):
@@ -40,6 +45,7 @@ class UpdateTests(unittest.TestCase):
         path = self.fixture["root"] / "release-selection.json"
         path.write_bytes(contract.canonical(rows))
         observation["body"] = contract.reference(self.fixture["root"], path)
+        observation.update(build_source_evidence.fixture_observation(observation, self.fixture["root"]))
         return entry
 
     def select_release(self, identifier, rows):

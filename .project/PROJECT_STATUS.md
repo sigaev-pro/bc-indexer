@@ -1,5 +1,33 @@
 # Состояние проекта
 
+## E01-01.builds — PR #118 contract text aligned with the reviewed code
+
+2026-11-08: Both independent reviewers found no remaining code blocker on `e5e34bb1fedbcb4cb483e5d982a5b85250c8ad5c`. Their only remaining finding was a stale four-field process-proof sentence that contradicted the new eight-field definition. Root owns this documentation-only correction after both reviewers returned clean ownership. The old sentence now references the single current definition; no code, tests, schema implementation or retry policy changes.
+
+Documentation checks passed: 113 documents, 1,117 links, 84 catalog entries, 16 mirrors and unchanged original v2. Whitespace passed; the diff contains only this status, the contract and the evidence note, so code and tests are unchanged from the reviewed head. Next: commit and push, obtain exact-head confirmation from both reviewers, then run the bounded actual-source diagnostic. PR #118 and the parent build remain unaccepted until their respective remaining checks pass. Earlier failed reviews and preparations remain preserved.
+
+## E01-01.builds — PR #118 raw-stream evidence repair
+
+2026-11-08: Candidate `090fdc4a7c12d5c0db12a7f0afda8d5481134706` passed Spec review and fixed both original findings, but Standards found that raw stdout/stderr overflow omitted an available safe prefix without separate raw-byte accounting. The retained review history and reproduction are in [the source transport evidence](evidence/E01-source-transport.md).
+
+The scoped repair retains the bounded safe prefix and adds closed internal stdout/stderr observed counts and truncation flags. Decoded-body fields stay separate; public BuildManifest fields and retry classes are unchanged. All 30 focused methods and 163 affected build tests pass, with two existing opt-in Docker skips and no ResourceWarning. Document and whitespace checks pass. Remote CI and independent reviews of the new commit remain required. Parent issue #11 stays open; this block claims no live-source or native execution result.
+
+## E01-01.builds — PR #118 repair ready for fresh independent review
+
+2026-11-08: Both independent axes requested changes on trusted source-recovery candidate `8560c00cc3d62d50b4a04bd4d0ab0089e2a0c7c3`, despite its exact-head CI passing 377 tests and 54 component negatives. The two findings are retained in [the evidence](evidence/E01-source-transport.md): effective GitHub credentials were not protected in raw outputs, and an incomplete HTTP read could leave a started attempt without its available partial bytes.
+
+The scoped repair privately binds effective GitHub authentication, scans raw outputs before retention, and records incomplete HTTP reads as terminal nonretryable failures with bounded partial bytes. All 26 focused methods and 159 affected build tests pass, with two existing opt-in Docker skips and no ResourceWarning. Document and whitespace checks pass. The new commit requires remote CI and both independent reviews. Parent issue #11 remains open. Native compilation, actual-source diagnostics, and runtime acceptance are not claimed by this repair.
+
+## E01-01.builds — Trusted source recovery ready for cumulative checks
+
+2026-11-08: Root transferred sole writer ownership of `build/source-transport` to `/root/boot04_preflight` from accepted `23eb96dffd3019bb4c6b1c345ab29707a5ec1751`. The two failed preparation operations remain failed and unchanged. This scoped block adds bounded same-URL GET recovery, explicitly bound source-attempt evidence, an internal reference to the first independent refresh report, and final nested-evidence checks. Native command success, dependency pins, product BuildManifest fields, D83, and parent issue #11 gates remain intact.
+
+The first full portable CI passed 375 tests and 54 component negatives, with two existing opt-in Docker skips. A later direct control reproduced loss of an inherited deadline between requests; the runner now retains that bound across future source/native admission. All 20 focused transport/evidence tests pass with tracemalloc and ResourceWarnings enabled after the correction. A supervised synthetic product-interface check passed for 148 observations with exit 0 and confirmed cleanup; it is not product or live-source acceptance. [Block evidence](evidence/E01-source-transport.md) retains both preparation failures, discovered implementation gaps and corrections, exact boundaries, checks, and the stable diagnostic API. No author live requests, Docker actions, native builds, full runs, or controller changes occurred. Next: commit/push a frozen draft, its cumulative CI, independent Spec/Standards review, and the coordinator's bounded actual-source diagnostic. Issue #11 remains incomplete and runtime remains NOT_RUN.
+
+## E01-01.builds — Trusted source acquisition repair in progress
+
+2026-11-08: Sole writer `/root/boot03_controller` owns `build/source-transport` from accepted `23eb96dffd3019bb4c6b1c345ab29707a5ec1751` under D95. Preserve the trusted GitHub EOF failure `2b78ba25349204d63d61149c699c19` and subsequent product source-discovery failure `19e78cfb03ebc965a6a62af27f8040`; both ended before compilation and cleanup was independently confirmed. The coordinated product correction runs first in its separate worktree. This trusted block will validate closed per-observation acquisition evidence, bound official GET recovery to two attempts and one request deadline, retain failed attempts outside the all-success native command list, and preserve legacy retained source inputs without inventing acquisition proof. Authentication, pagination, signatures, hashes, pins, and product build-manifest fields remain unchanged. Next: product publication, narrow trusted integration/tests, checked commit/push, and independent reviews before any new full operation.
+
 ## E01-01.builds — Module metadata review repair checked
 
 2026-11-08: Both independent reviewers requested changes on PR #117 head `0fca5cc3f83c024d6ea9bd29d9c8f961e5670ac8`. Ownership returned to `/root/boot03_controller` for one focused repair: validate effective Go arguments, require offline build/import settings, and require captures before present build/import commands on the correct component/container. Preserve the pre-compilation API and bind existing final build rows without a schema change. The coordinator's actual Geth diagnostic passed in 183 seconds with 348 modules and a built Geth 1.17.10 binary; cleanup was independently confirmed. That diagnostic does not satisfy the failed review gate or prove the whole parent task. Next: direct red regressions, correction, affected checks, commit/push the frozen repair, and fresh independent reviews/CI. No author Docker or full run is authorized.

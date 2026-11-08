@@ -7,6 +7,7 @@ import unittest
 
 import build_contract as contract
 import build_updates as updates
+import build_source_evidence
 
 
 class PaginationTests(unittest.TestCase):
@@ -32,7 +33,9 @@ class PaginationTests(unittest.TestCase):
         return row
 
     def observations(self, rows=None):
-        return updates.Observations(self.root, self.rows if rows is None else rows, 946684800, True)
+        # Bind modified synthetic responses before testing pagination semantics.
+        rows = [build_source_evidence.fixture_observation(row, self.root) for row in (self.rows if rows is None else rows)]
+        return updates.Observations(self.root, rows, 946684800, True)
 
     def test_named_release_endpoint_follows_bound_numeric_repository_alias(self):
         observations = self.observations()
