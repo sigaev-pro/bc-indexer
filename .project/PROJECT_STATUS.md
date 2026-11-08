@@ -1,5 +1,41 @@
 # Состояние проекта
 
+## E01-01.harness — Prove the NATS terminal fence
+
+Status: READY_FOR_REVIEW for the first NATS input/comparator checkpoint.
+Eight focused methods passed in 0.076 seconds. The public read-only inspector
+authenticated 84 retained references and the exact NATS image executable in
+4.425 seconds, with its implementation hashes retained in the inspection proof.
+The frontier predicate rejects incomplete identities, changing terms/leaders,
+unapplied work and unhealthy groups. It does not establish a complete fence.
+Native overlay preparation, source conformance, ingress census and unchanged-image
+process restart remain NOT_RUN. No runtime admission changed; issue #12 remains
+open. The next checkpoint adds the isolated native overlay after publication.
+
+Accepted prior block: the offline RunPlan block is accepted in PR #125, merge
+`08de707807444528e14b9607eea4e1860adfd5cd`, after 17 focused tests, exact-head CI
+and both independent reviews passed. Earlier pending statements are historical.
+Its output remains offline: runtime admission is false and cases stay NOT_RUN.
+Exclusive output ownership and the demonstrated concurrent-writer limitations
+are explicit. Issue #12 is OPEN. GitHub briefly auto-closed it from a negated
+closing phrase; the coordinator immediately reopened it and corrected the PR.
+No dependent work was started.
+
+Remaining NATS work: implement
+source-native conformance at the required fault boundaries, and separately prove
+unchanged-image process exit/restart and recovered frontiers. Start with ordinary
+FileStorage publishing in standalone and three-voter configurations. Read
+TESTING_CONTRACT104–114 and retain instrumentation/runtime distinctions. No
+production capture, standardized delivery or public-profile acceptance is claimed.
+
+Base: `08de707807444528e14b9607eea4e1860adfd5cd`.
+Branch/worktree: `feat/e01-harness-nats-fence` / `e01-harness-nats-fence`.
+One writer: `/root/boot04_preflight`; root owns publication and acceptance.
+First checkpoint: reviewed source, deterministic fixtures/oracle and focused
+tests, committed and pushed before native preparation. Reuse accepted inputs;
+do not rebuild the five clients or change active locks. Finite test/resource
+deadlines remain required; no arbitrary campaign stopping window applies.
+
 ## E01-01.harness — Define and validate shared RunPlan admission
 
 Status: READY_FOR_REVIEW. PR #125 re-review of
