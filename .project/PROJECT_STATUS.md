@@ -2,18 +2,26 @@
 
 ## E01-01.harness — Execute native NATS fence conformance
 
-Status: READY_FOR_REVIEW for the native collection and retry-lineage correction.
-The 17 focused tests pass; the strict Python frontier predicates are unchanged.
-The corrected Go overlay and its new selector controls still require fresh
-compilation and actual execution after publication. Preparation on
-`6f5145d1f1752cba7315bbd2485d3ac13fecadfb` passed in 55.490422044 seconds.
-Measured attempt 1 failed in 4.587200176 seconds: standalone and pre-proposal
-passed, but delayed apply captured a premature collection before every voter
-was healthy and committed. The strict independent predicate correctly rejected
-it. Lost acknowledgment and leader change remain NOT_RUN. All owned processes
-and containers are absent; the failed proof is preserved. Next: publish and
-review the correction, then use fresh preparation and a measured retry linked
-to the retained FAIL with explicit old/new tool pins. Issue #12 stays open.
+Status: READY_FOR_REVIEW for actual source-native conformance. Executed source
+`125439f7a040e491934fdd3960b8f87282624854` prepared successfully in 56.274827659
+seconds. Measured attempt 2 passed all five declared native cases in 9.403554072
+seconds. The author revalidated 292 unique artifact references, every case
+report, the old/new tool pins and the retained first failure. All eight commands
+in preparation 2 and run 2 report cleanup and process-group absence; parent PIDs
+and exact `extractor.harness` container labels are absent. Only documentation
+changes follow the executed source. Next: final exact-head CI, both independent
+reviews and protected acceptance of this partial block.
+
+Coverage is one standalone storage barrier and four R3 cases. Standalone
+acknowledgment loss, unchanged-image native process restart, complete group and
+ingress census, the full terminal fence and public-profile evidence remain
+unfinished. Runtime admission stays false; issue #12 remains open.
+
+Historical attempt 1 remains FAIL with its original hash. Its delayed-apply
+collection was premature; the independent predicate correctly rejected it.
+The corrected native wait preserves that strict predicate, and attempt 2 links
+the failed proof and separately pinned old/new tools against the same accepted
+build/source. No failed result was replaced or relabeled.
 
 Historical source review correction: the 16 focused
 tests pass in 0.120 seconds after reproducing 14 failing regression subcases.

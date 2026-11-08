@@ -61,10 +61,13 @@ closure. Its proof retains the old/new tool pins and increments the old attempt
 ordinal. Missing or modified predecessor artifacts reject. Failures remain
 failures. The source checkpoint's portable tests use
 synthetic reports and temporary files only: native preparation, compilation and
-execution require separate actual evidence. The first preparation passed; its
-first measured run remains FAIL because the delayed-apply collection was selected
-too early. See the [retained harness evidence](../../.project/evidence/E01-01.harness.md)
-for exact identities, cleanup and the correction awaiting fresh execution.
+execution require separate actual evidence. Corrected source `125439f` prepared
+successfully in 56.275 seconds, then passed the five declared cases in 9.404
+seconds. The first measured run remains FAIL because its delayed-apply collection
+was selected too early; attempt 2 preserves that failure and both tool pins.
+See the [retained harness evidence](../../.project/evidence/E01-01.harness.md) for
+exact identities and cleanup. These results do not complete standalone
+acknowledgment-loss coverage, unchanged-image recovery or runtime admission.
 
 ## NATS input inspection and frontier predicate
 
