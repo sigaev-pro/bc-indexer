@@ -279,11 +279,14 @@ admission tampering, and three clearly labeled retained-observation comparisons.
 Corrupt/prefix success requires exact IPC request/response identity and the
 intended native failure stage. Five resource controls start the real accepted
 Bor server in a fresh private data directory, retain its exact owned IPC-ready
-event, confirm it is still running, then test deadline or parent/process-group
+event from a bounded live log prefix, confirm it is still running, then test deadline or parent/process-group
 termination. Each dispatch reserves execution and cleanup time under the same
 campaign deadline. Final success revalidates the original authority artifacts.
 The helper and its caller-pinned preparation can be reused when only this Python
-campaign changes. The new campaign is NOT_RUN until its retained execution.
+campaign changes. Its first execution retained 14 successful controls before a
+readiness-log buffering failure. The corrected owner flushes bounded writes;
+the live poll permits appends while final artifact hashing remains strict.
+The complete corrected campaign remains pending its retained execution.
 
 Complete BSC fixture/fork coverage, the Bor native adapter, all other required
 fixture families, shared ProfileManifest/RunPlan resolution,

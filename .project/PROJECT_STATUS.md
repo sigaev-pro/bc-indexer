@@ -39,9 +39,17 @@ body receipts, both Bor logs and independent state/fee comparisons. All five
 command groups and both exact owners' containers are absent. The earlier
 preparation failures above are historical and remain immutable.
 
-The next checked source block adds the explicit 19-control campaign. Its native
-execution is still NOT_RUN; the accepted helper bytes and preparation pin stay
-unchanged. All public profiles, the complete quick suite, lifecycle, capture,
+The first 19-control campaign on `cbc38f59ecb4f28544bcdfe82c7411b1214fc14e`
+retained 14 successful controls, then failed after 49.616517846 seconds because
+the owned log writer buffered the real IPC-ready event until process exit.
+All seven command groups and exact-owner containers are absent. The correction
+flushes each bounded output write and polls a bounded live prefix that permits
+normal append growth; immutable artifact readers stay strict. Its regression
+reproduced zero visible bytes before the fix. A fresh campaign and Ethereum/BSC
+compatibility positives are pending on the corrected shared owner. Native helper
+bytes and the preparation pin remain unchanged.
+
+All public profiles, the complete quick suite, lifecycle, capture,
 NATS and later gates remain incomplete or NOT_RUN.
 One author owns this worktree; root owns publication, review and acceptance.
 

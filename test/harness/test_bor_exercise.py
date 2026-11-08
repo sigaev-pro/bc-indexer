@@ -2,8 +2,12 @@
 
 import copy
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +16,60 @@ import bor_exercise
 
 
 class BorCampaignTests(unittest.TestCase):
+    def test_live_log_growth_is_bounded_without_requiring_immutable_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary).resolve() / "live.log"
+            path.write_bytes(b"ready\n")
+            read = os.read
+            def growing(descriptor, size):
+                with path.open("ab") as stream:
+                    stream.write(b"later\n")
+                return read(descriptor, size)
+            with patch.object(bor_exercise.os, "read", side_effect=growing):
+                self.assertEqual(bor_exercise.read_live_prefix(path, time.monotonic() + 2, 12), b"ready\n")
+            with patch.object(bor_exercise.os, "read") as reader:
+                with self.assertRaisesRegex(Rejected, "byte limit"):
+                    bor_exercise.read_live_prefix(path, time.monotonic() + 2, 11)
+                reader.assert_not_called()
+            with self.assertRaisesRegex(Rejected, "deadline"):
+                bor_exercise.read_live_prefix(path, time.monotonic() - 1)
+            path.write_bytes(b"ready\n")
+            with patch.object(bor_exercise.os, "read", side_effect=growing):
+                with self.assertRaisesRegex(Rejected, "byte limit"):
+                    bor_exercise.read_live_prefix(path, time.monotonic() + 2, 11)
+
+    def test_owned_output_is_visible_before_native_exit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            docker = root / "docker"
+            docker.write_text("#!/usr/bin/env python3\nimport sys,time\n"
+                              "if sys.argv[1]=='run':\n print('ready',file=sys.stderr,flush=True)\n time.sleep(30)\n")
+            docker.chmod(0o700)
+            request = root / "request.json"
+            request.write_text(json.dumps({"argv": [str(docker), "run"], "docker": str(docker), "container": "owned-test",
+                                           "deadline": time.monotonic() + 10, "output": str(root / "command")}))
+            read_fd, write_fd = os.pipe()
+            child = subprocess.Popen([sys.executable, "-I", str(Path(__file__).with_name("owned.py")), str(request), str(read_fd)],
+                                     pass_fds=(read_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.close(read_fd)
+            try:
+                until = time.monotonic() + 2
+                visible = b""
+                while time.monotonic() < until:
+                    if (root / "command.stderr").exists():
+                        visible = (root / "command.stderr").read_bytes()
+                    if visible:
+                        break
+                    time.sleep(0.01)
+                self.assertIsNone(child.poll())
+                self.assertEqual(visible, b"ready\n")
+            finally:
+                os.close(write_fd)
+                child.wait(timeout=12)
+                result = json.loads((root / "command.result.json").read_text())
+                self.assertTrue(result["cleanup_complete"])
+                self.assertTrue(result["process_group_absent"])
+
     def proof(self, root, name):
         def artifact(filename, value):
             path = root / filename

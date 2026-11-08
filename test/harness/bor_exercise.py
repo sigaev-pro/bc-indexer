@@ -8,13 +8,14 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from artifacts import (Rejected, copy_artifact, decode_json, json_artifact, load, read_artifact,
-                       read_bytes, reference, require, source_snapshot, sources_unchanged)
+from artifacts import (Rejected, check_deadline, copy_artifact, decode_json, json_artifact, load, read_artifact,
+                       reference, regular, require, source_snapshot, sources_unchanged)
 from bor import compare_native
 from bor_inputs import admit, revalidate_authority
 from bsc_exercise import first_rlp_item
@@ -87,6 +88,27 @@ def owned_server(target, image, deadline, cap):
     return 0
 
 
+def read_live_prefix(path, deadline, maximum=8 * 1024 * 1024):
+    """Read a bounded existing prefix of an append-only owned log, not an artifact."""
+    check_deadline(deadline)
+    descriptor = os.open(regular(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        initial = os.fstat(descriptor)
+        require(stat.S_ISREG(initial.st_mode) and initial.st_size <= maximum, "Owned live log exceeds its byte limit")
+        remaining, pieces = initial.st_size, []
+        while remaining:
+            check_deadline(deadline)
+            piece = os.read(descriptor, min(remaining, 65536))
+            require(piece, "Owned live log shrank")
+            pieces.append(piece)
+            remaining -= len(piece)
+        require(os.fstat(descriptor).st_size <= maximum, "Owned live log grew beyond its byte limit")
+        check_deadline(deadline)
+        return b"".join(pieces)
+    finally:
+        os.close(descriptor)
+
+
 def server_stop_control(admitted, positive, output, summary, deadline, number, group):
     dispatch = time.monotonic()
     require(dispatch + 100 <= deadline, "Insufficient server execution/cleanup budget")
@@ -113,7 +135,7 @@ def server_stop_control(admitted, positive, output, summary, deadline, number, g
             require(child.poll() is None, "Owned Bor parent exited before readiness")
             stderr_path = target / "logs/000.stderr"
             if request_path.exists() and stderr_path.exists():
-                raw = read_bytes(stderr_path, 8 * 1024 * 1024, deadline)
+                raw = read_live_prefix(stderr_path, deadline)
                 for line in raw.splitlines():
                     try:
                         event = decode_json(line, deadline)

@@ -82,6 +82,7 @@ def execute(request, lifeline):
                             continue
                         available = max(0, OUTPUT_LIMIT - counts[key.data])
                         streams[key.data].write(data[:available])
+                        streams[key.data].flush()
                         counts[key.data] += len(data)
                         if counts[key.data] > OUTPUT_LIMIT:
                             reason = "OUTPUT_LIMIT"
