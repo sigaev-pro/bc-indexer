@@ -48,7 +48,8 @@ def source_checks(paths):
 
 def run_tests(paths):
     tests = [path for path in paths if path.name.startswith("test_") and path.suffix == ".py"
-             and path.is_relative_to(ROOT / ".project")]
+             and (path.is_relative_to(ROOT / ".project") or
+                  path.is_relative_to(ROOT / "test/harness"))]
     suite = unittest.TestSuite()
     for path in tests:
         module_name = "bootstrap_test_" + hashlib.sha256(str(path.relative_to(ROOT)).encode()).hexdigest()[:16]
