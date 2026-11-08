@@ -168,8 +168,8 @@ func observe(datadir, output string) {
 	config := rawdb.ReadChainConfig(db, genesisHash)
 	require(config != nil, "Missing chain config")
 	head := rawdb.ReadHeadHeaderHash(db)
-	height := rawdb.ReadHeaderNumber(db, head)
-	require(height != nil && *height == 2, "Wrong imported head")
+	height, present := rawdb.ReadHeaderNumber(db, head)
+	require(present && height == 2, "Wrong imported head")
 	rows := []map[string]interface{}{}
 	for number := uint64(1); number <= 2; number++ {
 		hash := rawdb.ReadCanonicalHash(db, number)
@@ -203,7 +203,7 @@ func observe(datadir, output string) {
 			"gas_used": block.GasUsed(), "base_fee": baseFee, "withdrawals": len(block.Withdrawals()), "transactions": txs, "receipts": rxs})
 	}
 	save(filepath.Join(output, "observation.json"), map[string]interface{}{"schema_version": 1, "chain_id": config.ChainID,
-		"genesis_hash": genesisHash.Hex(), "head_number": *height, "head_hash": head.Hex(), "blocks": rows})
+		"genesis_hash": genesisHash.Hex(), "head_number": height, "head_hash": head.Hex(), "blocks": rows})
 	save(filepath.Join(output, "native-config.json"), config)
 }
 

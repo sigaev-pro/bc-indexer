@@ -6,7 +6,7 @@ import re
 import time
 
 from artifacts import (artifact, closed, load, reference, require, check_deadline,
-                       json_artifact, pinned_json, read_artifact)
+                       json_artifact, pinned_json, read_artifact, captured_json)
 from bsc import validate_oracle
 
 
@@ -31,7 +31,7 @@ def build_input(value, deadline):
 def admit(request_path, tool_path, tool_sha, started=None, deadline=None):
     started = time.monotonic() if started is None else started
     deadline = min(deadline or started + 1800, started + 1800)
-    request = load(request_path, 1024 * 1024, deadline)
+    request_ref, request = captured_json(request_path, 1024 * 1024, deadline)
     closed(request, {"schema_version", "kind", "build_manifest", "profile_association", "fixture", "deadline_seconds"}, "BSC request")
     require(type(request["schema_version"]) is int and request["schema_version"] == 1 and request["kind"] == "bsc-native-import" and
             request["profile_association"] == "bsc-mainnet", "Wrong BSC request")
@@ -102,5 +102,5 @@ def admit(request_path, tool_path, tool_sha, started=None, deadline=None):
         require(type(block["number"]) is int and block["number"] == number and
                 all(type(block[key]) is int and block[key] >= 0 for key in ("timestamp", "transactions", "gas_used")) and
                 all(re.fullmatch(r"0x[0-9a-f]{64}", block[key]) for key in ("hash", "state_root")), "Invalid prepared block")
-    return {"request": request, "manifest": manifest, "binary": binary, "image": image, "fixture": fixture,
+    return {"request": request, "request_ref": request_ref, "manifest": manifest, "binary": binary, "image": image, "fixture": fixture,
             "paths": paths, "expected": expected, "deadline": deadline, "tool": tool, "tool_ref": tool_ref}

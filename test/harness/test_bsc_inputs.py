@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bsc_inputs import canonical_digest
 import bsc_inputs
 import artifacts
+import bsc_run
+import test_bsc
 from test_harness import ref, write_json
 
 HERE = Path(__file__).resolve().parent
@@ -187,6 +190,47 @@ class BscInputTests(unittest.TestCase):
             with patch.object(artifacts, "decode_json", side_effect=replace_before_parse):
                 _, result = artifacts.json_artifact(original)
             self.assertEqual(result, {"value": 1})
+
+    def test_measured_pass_cannot_retain_changed_authority_references(self):
+        for changed_name in (None, "tool.json", "manifest.json", "fixture.json", "request.json"):
+            with self.subTest(changed=changed_name), tempfile.TemporaryDirectory() as directory:
+                base = Path(directory).resolve(); root = base / "inputs"; root.mkdir()
+                _, scenario, request = fixture(root)
+                shape = test_bsc.BscObservationTests(); shape.setUp()
+                for n, block in enumerate(shape.observation["blocks"]):
+                    scenario["prepared_blocks"][n].update({key: block[key] for key in ("hash", "state_root", "timestamp", "gas_used")})
+                    scenario["prepared_blocks"][n]["transactions"] = len(block["transactions"])
+                write_json(root / "fixture.json", scenario)
+                request["fixture"] = ref(root / "fixture.json"); write_json(root / "request.json", request)
+                pin = ref(root / "tool.json")["sha256"]
+                class SimulatedNative:
+                    def __init__(self, output, deadline):
+                        self.output, self.commands, self.cleanup_complete, self.nonce = output, [], True, "synthetic-only"
+                        (output / "logs").mkdir()
+                    def command(self, image, argv, mounts, **kwargs):
+                        index = len(self.commands)
+                        stdout = self.output / "logs" / f"{index:03d}.stdout"
+                        stderr = stdout.with_suffix(".stderr")
+                        stdout.write_text(""); stderr.write_text("")
+                        if "dump" in argv:
+                            number = int(argv[-1])
+                            write_json(stdout, shape.states[max(0, number - 1)])
+                            write_json(stderr, {"msg": "State dump configured", "block": str(number), "hash": shape.identities[number]})
+                        if "export" in argv:
+                            (self.output / "state/export.rlp").write_bytes((root / "full_chain").read_bytes())
+                        if "observe" in argv:
+                            write_json(self.output / "observations/observation.json", shape.observation)
+                            write_json(self.output / "observations/native-config.json", scenario["native_config"])
+                            if changed_name:
+                                with (root / changed_name).open("ab") as stream:
+                                    stream.write(b" ")
+                        self.commands.append({"synthetic": True})
+                        return stdout
+                with patch.object(bsc_run, "Native", SimulatedNative):
+                    result = bsc_run.measured(root / "request.json", root / "tool.json", pin, base / "run", time.monotonic())
+                self.assertEqual(result["result"], "PASS" if changed_name is None else "FAIL", result)
+                if changed_name:
+                    self.assertIn("Artifact bytes changed", result["error"])
 
 
 if __name__ == "__main__":

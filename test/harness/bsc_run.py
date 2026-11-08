@@ -12,7 +12,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from artifacts import (artifact, copy_artifact, load, reference, require,
-                       source_snapshot, sources_unchanged, check_deadline)
+                       source_snapshot, sources_unchanged, check_deadline, revalidate_authority)
 from bsc import compare_native
 from bsc_inputs import admit
 from compare import compare_headers
@@ -33,7 +33,7 @@ def measured(request_path, tool_path, tool_sha, output, started):
              "run_id": uuid.uuid4().hex, "native_owner_nonce": runner.nonce, "result": "FAIL", "suite": "quick", "suite_result": "NOT_RUN",
              "profile_results": {profile: "NOT_RUN" for profile in PROFILES}, "case_results": [],
              "remaining_cases": "All public profile/case cells are NOT_RUN", "harness_sources": sources,
-             "request": reference(request_path, deadline=deadline), "build_manifest": admitted["request"]["build_manifest"],
+             "request": admitted["request_ref"], "build_manifest": admitted["request"]["build_manifest"],
              "fixture": admitted["request"]["fixture"], "fixture_identity": admitted["fixture"]["identity"],
              "profile_association": "bsc-mainnet", "observer_tool": admitted["tool_ref"], "external_observer_tool_sha256": tool_sha,
              "deadline_seconds": admitted["request"]["deadline_seconds"], "cleanup_complete": False}
@@ -77,6 +77,7 @@ def measured(request_path, tool_path, tool_sha, output, started):
                                  "native_config": reference(observations / "native-config.json", deadline=deadline)}
         check_deadline(deadline)
         sources_unchanged(origins, deadline)
+        revalidate_authority(admitted)
         proof["result"] = "PASS"
     except (ValueError, OSError, KeyError, TypeError, InterruptedError, subprocess.SubprocessError) as error:
         proof["error"] = str(error)

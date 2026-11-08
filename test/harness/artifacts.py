@@ -190,6 +190,35 @@ def pinned_json(path, expected_sha256, maximum=64 * 1024 * 1024, deadline=None):
     return {"path": str(path), "sha256": expected_sha256, "size_bytes": len(data)}, decode_json(data, deadline)
 
 
+def captured_json(path, maximum=64 * 1024 * 1024, deadline=None):
+    data = read_bytes(path, maximum, deadline)
+    ref = {"path": str(path), "sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
+    return ref, decode_json(data, deadline)
+
+
+def revalidate_authority(admitted):
+    """A PASS must still resolve every original authority/input reference."""
+    deadline = admitted["deadline"]
+    request = admitted["request"]
+    for ref in (admitted["request_ref"], request["build_manifest"], request["fixture"]):
+        artifact(ref, deadline=deadline)
+    for name in admitted["paths"]:
+        artifact(admitted["fixture"][name], 16 * 1024 * 1024, deadline=deadline)
+    component = "bsc" if "tool" in admitted else "geth"
+    build_root = Path(request["build_manifest"]["path"]).parent
+    artifact(admitted["manifest"]["builds"][component]["binary"], 256 * 1024 * 1024, build_root, deadline)
+    if "tool" in admitted:
+        artifact(admitted["tool_ref"], 1024 * 1024, deadline=deadline)
+        tool = admitted["tool"]
+        for name in ("source_archive", "source", "binary"):
+            artifact(tool[name], 256 * 1024 * 1024, deadline=deadline)
+        for ref in tool["metadata"]:
+            artifact(ref, 1024 * 1024, deadline=deadline)
+        for row in tool["commands"]:
+            for ref in row.values():
+                artifact(ref, 8 * 1024 * 1024, deadline=deadline)
+
+
 def build_input(value, profile, deadline=None):
     path, manifest = json_artifact(value, deadline=deadline)
     require(manifest.get("evidence_kind") == "actual-build" and
@@ -211,7 +240,7 @@ def build_input(value, profile, deadline=None):
 def admit(path, started=None, deadline=None):
     started = time.monotonic() if started is None else started
     deadline = min(started + 1800, deadline) if deadline is not None else started + 1800
-    request = load(path, 1024 * 1024, deadline)
+    request_ref, request = captured_json(path, 1024 * 1024, deadline)
     closed(request, {"schema_version", "build_manifest", "profile_association", "fixture",
                      "deadline_seconds"}, "request")
     require(type(request["schema_version"]) is int and request["schema_version"] == 1,
@@ -242,6 +271,6 @@ def admit(path, started=None, deadline=None):
             "Exactly two prepared blocks are required")
     from compare import validate_oracle
     validate_oracle(expected, fixture["prepared_blocks"])
-    return {"request": request, "manifest": manifest, "build_path": build_path,
+    return {"request": request, "request_ref": request_ref, "manifest": manifest, "build_path": build_path,
             "binary": binary, "image": image, "fixture": fixture, "paths": paths,
             "expected": expected, "deadline": deadline}

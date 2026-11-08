@@ -2,6 +2,26 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+Follow-up review confirmed the immutable-buffer fix, then found that a manifest
+replaced after capture could still leave an invalid reference in a PASS proof.
+Four complete seven-command simulations reproduced this for tool, build, fixture
+and request JSON. Both native runners now retain the request's authenticated
+buffer identity and revalidate all required original authority/scenario/tool
+references before PASS. Replacements produce retained FAIL results; unchanged
+inputs still pass. All 36 portable harness tests pass in 10.554 seconds. This
+repair and the pinned BSC header-number API fix precede the third preparation.
+The earlier source-review failures and both preparation failures remain retained.
+
+The second linked preparation on `be248e8bd6cb1f6ef3c4744636c753f921aca9ef`
+passed module verification and the corrected scratch boundary, then compilation
+identified the pinned BSC API's `(uint64, bool)` return from `ReadHeaderNumber`.
+The helper incorrectly expected a pointer. Preparation recorded FAIL after
+197.309844342 seconds; cleanup was complete and the exact owner had no remaining
+containers. Proof SHA256:
+`8f44fe640675ecb1b7dc13a2dcf6cf82b17c1c8462311426e168b4da18d858bd`.
+The source-confirmed three-line fix retains the explicit missing-header rejection.
+A new linked preparation is required; no key/generation/import success is claimed.
+
 Independent source review rejected the earlier observer authority boundary:
 the tool manifest was hashed and reopened for JSON parsing, allowing a file
 replacement between those steps. The exact replacement was reproduced before

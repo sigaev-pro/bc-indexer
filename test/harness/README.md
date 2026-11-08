@@ -179,6 +179,11 @@ Authenticated JSON is parsed from the exact bounded byte buffer whose size and
 digest were verified. Replacing a file between checking and parsing cannot
 change the admitted tool, build, fixture or oracle. This same primitive protects
 the existing Ethereum JSON admission path without changing its public schema.
+Before PASS, both runners revalidate the original request, build, fixture and
+scenario references; BSC also revalidates its pinned tool and provenance refs.
+Post-capture replacement therefore retains a failed run rather than a PASS whose
+authority references no longer match their recorded bytes. Relative build
+artifact roots remain attached to the original BuildManifest location.
 
 Use `python3 -B test/harness/bsc_run.py check REQUEST --observer-tool TOOL
 --observer-tool-sha256 TRUSTED_SHA` for read-only admission. Add `run` instead of
