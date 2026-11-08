@@ -307,6 +307,90 @@ class SourceTransportTests(unittest.TestCase):
                 self.assertEqual(journal["attempts"][0]["status"], 503)
                 self.assertEqual(ref(self.root, journal["attempts"][0]["body"]).read_bytes(), b"temporarily unavailable")
 
+    def test_outer_alarm_after_network_guard_blocks_later_url(self):
+        previous = signal.getsignal(signal.SIGALRM)
+        original_need = sources.need
+        events = []
+        def outer(*args):
+            events.append("expired")
+            raise TimeoutError("outer operation deadline")
+        def delayed_status(ok, message):
+            if message == "Official source did not return HTTP 200":
+                self.assertIs(signal.getsignal(signal.SIGALRM), outer)
+                time.sleep(0.2)
+            return original_need(ok, message)
+        signal.signal(signal.SIGALRM, outer)
+        signal.setitimer(signal.ITIMER_REAL, 0.03)
+        try:
+            with mock.patch.object(self.transport.opener, "open", side_effect=lambda *a, **k: Response(b"[]")) as network, \
+                 mock.patch.object(sources, "need", delayed_status):
+                with self.assertRaises(ValueError):
+                    self.transport.fetch(URL)
+            self.assertEqual(events, ["expired"])
+            self.assertEqual(network.call_count, 1)
+            with mock.patch.object(self.transport.opener, "open", return_value=Response(b"[]")) as later:
+                with self.assertRaisesRegex(ValueError, "outer.*deadline"):
+                    self.transport.fetch(URL + "&page=2")
+            later.assert_not_called()
+            self.assertEqual(self.journal()["attempts"][0]["error"]["code"], "REQUEST_DEADLINE")
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+
+    def test_outer_deadline_survives_completed_request_and_later_timer(self):
+        previous = signal.getsignal(signal.SIGALRM)
+        events = []
+        def outer(*args):
+            events.append("expired")
+        signal.signal(signal.SIGALRM, outer)
+        signal.setitimer(signal.ITIMER_REAL, 0.06)
+        try:
+            with mock.patch.object(self.transport.opener, "open", side_effect=lambda *a, **k: Response(b"[]")) as network:
+                self.assertEqual(self.transport.data(URL), b"[]")
+                time.sleep(0.09)
+                self.assertEqual(events, ["expired"])
+                signal.setitimer(signal.ITIMER_REAL, 1)
+                with self.assertRaisesRegex(ValueError, "outer.*deadline"):
+                    self.transport.fetch(URL + "&page=2")
+            self.assertEqual(network.call_count, 1)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+
+    def test_single_request_deadline_does_not_become_outer_deadline(self):
+        def slow(*args, **kwargs):
+            time.sleep(0.2)
+            return Response(b"[]")
+        with mock.patch.object(sources, "REQUEST_SECONDS", 0.03), \
+             mock.patch.object(self.transport.opener, "open", side_effect=slow):
+            with self.assertRaises(ValueError):
+                self.transport.fetch(URL)
+        with mock.patch.object(self.transport.opener, "open", return_value=Response(b"[]")) as later:
+            self.assertEqual(self.transport.data(URL + "&page=2"), b"[]")
+        later.assert_called_once()
+
+    def test_later_timer_cannot_extend_retained_outer_read_deadline(self):
+        previous = signal.getsignal(signal.SIGALRM)
+        signal.signal(signal.SIGALRM, lambda *args: None)
+        signal.setitimer(signal.ITIMER_REAL, 0.08)
+        try:
+            with mock.patch.object(self.transport.opener, "open", return_value=Response(b"[]")):
+                self.transport.fetch(URL)
+            signal.setitimer(signal.ITIMER_REAL, 1)
+            class Slow(Response):
+                def read(self, size):
+                    time.sleep(0.3)
+                    return b"[]"
+            started = time.monotonic()
+            with mock.patch.object(self.transport.opener, "open", return_value=Slow()) as network:
+                with self.assertRaisesRegex(ValueError, "outer.*deadline"):
+                    self.transport.fetch(URL + "&page=2")
+            self.assertEqual(network.call_count, 1)
+            self.assertLess(time.monotonic() - started, 0.2)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+
     def test_normal_and_exception_exit_restore_remaining_outer_timer(self):
         old = signal.getsignal(signal.SIGALRM)
         def outer(*args):

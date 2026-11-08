@@ -141,6 +141,11 @@ unavailable guard fails explicitly before dispatch.
 An expired inherited timer latches the whole transport closed, including when
 its one-shot handler raises a normal exception. No later URL may dispatch
 after that outer deadline; the latch is distinct from a single GET deadline.
+The transport retains the earliest observed inherited timer as an absolute
+monotonic deadline across setup, status validation, evidence persistence and
+later requests. Consuming the one-shot signal or arming a later timer cannot
+extend that bound. The network guard, final completion and next admission all
+check the retained deadline.
 
 Live GitHub API requests reuse existing credentials in this order: nonempty
 `GH_TOKEN`, then nonempty `GITHUB_TOKEN`, then the existing `github.com`

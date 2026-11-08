@@ -1,5 +1,11 @@
 # Состояние проекта
 
+## E01-01.builds — Outer deadline transition repair ready for review
+
+2026-11-08: Standards re-review requested changes on `4135ec2d5d153495a8a1feb3de5c40b4627f2bb9`. During-open cancellation and terminal-body persistence controls passed. One remaining counterexample expires the inherited alarm after the network guard exits, during HTTP status validation; a later URL could still dispatch. Preserve the inherited absolute deadline across the entire fetch transition and later requests, add that exact regression and relevant controls, then check and publish the product-only correction. Previous review results and failures remain preserved. Trusted work remains separately owned; no live or native operation is authorized here.
+
+The transport now retains the earliest inherited monotonic deadline across setup, network reads, status validation, persistence and later requests. Consuming its signal or arming a later timer cannot extend it. The exact delayed-status and between-request controls failed before the repair; a single-request timeout control remained valid. Final checks pass: 23 focused tests, all 79 product tests, documentation validation and whitespace checks. Next: publish this clean correction to PR #107, return ownership and require independent review of the exact new head. No journal shape, retry policy, pin or native runtime claim changed.
+
 ## E01-01.builds — Source acquisition review repair ready for review
 
 2026-11-08: Product writer ownership returned to `/root/boot03_controller` at `e3e6c555c6d3785b0a32cd1582389d7f4c50185f`. Standards review requested two corrections: an expired inherited one-shot alarm did not block a later URL, and failed terminal diagnostic-body persistence did not block a later URL. Spec review passed 73 tests and six negatives; CI `42430932686` passed, but those checks missed both cross-request defects and do not establish acceptance. Add direct red regressions, latch outer expiry and terminal evidence failure, then run affected checks and publish the correction to PR #107. Trusted implementation remains separately owned. No live request, native build or old-artifact change is part of this repair.

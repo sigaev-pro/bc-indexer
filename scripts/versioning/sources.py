@@ -177,6 +177,8 @@ class Transport:
         self.network_error = None
         self.persistence_failed = False
         self.outer_expired = False
+        self.outer_deadline = None
+        self.retain_outer_deadline()
         self.tokens = {}
         self.github_checked = False
         self.github_token = None
@@ -197,10 +199,28 @@ class Transport:
                 ref(path.parent, row["body"])
                 self.fixture[row["url"]] = (path.parent, row)
 
+    def retain_outer_deadline(self):
+        # A one-shot alarm may be consumed outside the network guard. Retain
+        # its earliest absolute bound across transitions and later requests.
+        if hasattr(signal, "getitimer"):
+            observed = time.monotonic()
+            delay, _ = signal.getitimer(signal.ITIMER_REAL)
+            if delay > 0:
+                deadline = observed + delay
+                self.outer_deadline = deadline if self.outer_deadline is None else min(self.outer_deadline, deadline)
+
+    def outer_deadline_reached(self):
+        if self.outer_deadline is not None and time.monotonic() >= self.outer_deadline:
+            self.outer_expired = True
+        return self.outer_expired
+
     def timeout(self):
-        if self.outer_expired:
+        if self.outer_deadline_reached():
             raise RequestDeadline("Official-source outer operation deadline expired")
-        remaining = min(self.deadline, self.request_deadline) - time.monotonic()
+        deadline = min(self.deadline, self.request_deadline)
+        if self.outer_deadline is not None:
+            deadline = min(deadline, self.outer_deadline)
+        remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise RequestDeadline("Official-source discovery or request deadline exceeded")
         return min(30, remaining)
@@ -241,12 +261,12 @@ class Transport:
         cause = error.reason if type(error) is urllib.error.URLError else error
         network = error is self.network_error and status in (None, 200)
         code = "REJECTED"
-        if network and type(cause) is TimeoutError:
+        if self.outer_deadline_reached() or isinstance(error, RequestDeadline):
+            code = "REQUEST_DEADLINE"
+        elif network and type(cause) is TimeoutError:
             code = "NETWORK_TIMEOUT"
         elif network and type(cause) is ssl.SSLEOFError and getattr(cause, "reason", None) == "UNEXPECTED_EOF_WHILE_READING":
             code = "SSL_EOF"
-        elif isinstance(error, RequestDeadline):
-            code = "REQUEST_DEADLINE"
         elif network:
             code = "UNKNOWN_TRANSPORT"
         elif isinstance(error, OSError):
@@ -260,6 +280,7 @@ class Transport:
                     retryable=code in {"NETWORK_TIMEOUT", "SSL_EOF"})
 
     def fetch(self, url):
+        self.retain_outer_deadline()
         need(not self.persistence_failed, "Source evidence persistence failed; further requests are blocked")
         self.request_deadline = min(self.deadline, time.monotonic() + REQUEST_SECONDS)
         self.timeout()
@@ -304,7 +325,10 @@ class Transport:
             try:
                 # Admission is checked again after the intent has reached disk.
                 self.timeout()
-                with request_timer(self.request_deadline, guard):
+                network_deadline = self.request_deadline
+                if self.outer_deadline is not None:
+                    network_deadline = min(network_deadline, self.outer_deadline)
+                with request_timer(network_deadline, guard):
                     if self.synthetic:
                         need(url in self.fixture, "Synthetic transport has no response for " + url)
                         fixture_root, row = self.fixture[url]
@@ -356,6 +380,7 @@ class Transport:
             finally:
                 if guard["outer_expired"]:
                     self.outer_expired = True
+                self.outer_deadline_reached()
             # File persistence errors are outside network classification. Never
             # send another request when its preceding evidence cannot be kept.
             try:
@@ -384,6 +409,7 @@ class Transport:
             self.rows[url] = dict(url=url, status=0 if failure else attempt["status"],
                                  headers={} if failure else attempt["headers"], body=body_ref,
                                  observed_at=attempt["observed_at"], acquisition=journal_ref)
+            self.timeout()
             need(failure is None, "Official source unavailable (status 0): " + url)
             return destination
 
