@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 
-from artifacts import Rejected, load, reference, require
+from artifacts import Rejected, load, reference, require, copy_artifact
 
 
 class Native:
@@ -54,10 +54,12 @@ class Native:
         read_fd, write_fd = os.pipe()
         process = None
         self.cleanup_complete = False
+        self.failed = True
         try:
             process = subprocess.Popen([sys.executable, "-I", str(Path(__file__).with_name("owned.py")),
                                         str(request_path), str(read_fd)], pass_fds=(read_fd,),
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                       start_new_session=True)
             os.close(read_fd)
             read_fd = None
             process.wait(timeout=max(1, self.deadline - time.monotonic()))
@@ -69,11 +71,12 @@ class Native:
                 process.wait(timeout=35)
             result_path = prefix.with_suffix(".result.json")
             if result_path.exists():
-                result = load(result_path)
-                self.commands.append({"request": reference(request_path), "result": reference(result_path),
-                                      "stdout": reference(prefix.with_suffix(".stdout")),
-                                      "stderr": reference(prefix.with_suffix(".stderr")),
-                                      "cleanup": reference(prefix.with_suffix(".cleanup.json"))})
+                result = load(result_path, 1024 * 1024, self.deadline)
+                self.commands.append({"request": reference(request_path, 1024 * 1024, self.deadline),
+                                      "result": reference(result_path, 1024 * 1024, self.deadline),
+                                      "stdout": reference(prefix.with_suffix(".stdout"), 8 * 1024 * 1024, self.deadline),
+                                      "stderr": reference(prefix.with_suffix(".stderr"), 8 * 1024 * 1024, self.deadline),
+                                      "cleanup": reference(prefix.with_suffix(".cleanup.json"), 1024 * 1024, self.deadline)})
                 self.failed = result["reason"] is not None or result["exit_code"] != 0 or not result["cleanup_complete"]
                 self.cleanup_complete = result["cleanup_complete"]
             else:
@@ -82,10 +85,8 @@ class Native:
         return prefix.with_suffix(".stdout")
 
 
-def copy_verified(source, destination, expected):
-    shutil.copyfile(source, destination)
-    require(reference(destination)["sha256"] == expected["sha256"] and
-            destination.stat().st_size == expected["size_bytes"], "Input changed while copying")
+def copy_verified(source, destination, expected, deadline=None):
+    return copy_artifact(source, destination, expected, deadline=deadline)
 
 
 def new_output(path):

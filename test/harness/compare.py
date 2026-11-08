@@ -1,8 +1,9 @@
 """Compare observations with literal expectations, never with derived balances."""
 
 import re
+import json
 
-from artifacts import closed, digest, load, require
+from artifacts import closed, digest, load, require, read_bytes, check_deadline
 
 
 def validate_oracle(expected, prepared):
@@ -51,14 +52,54 @@ def compare_state(observed, expected, state_root):
                 account.get("balance") == expected_account["balance"], "Account state mismatch: " + address)
 
 
+def compare_headers(admitted):
+    logs = admitted.get("header_observations")
+    require(type(logs) is list and len(logs) == 3, "Native header identity observations are missing")
+    expected_hashes = [admitted["fixture"]["identity"]["genesis_hash"]] + [
+        block["hash"] for block in admitted["fixture"]["prepared_blocks"]]
+    deadline = admitted.get("deadline")
+
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            require(key not in result, "Native header identity log repeats a JSON key")
+            result[key] = value
+        return result
+
+    for number, (path, expected_hash) in enumerate(zip(logs, expected_hashes)):
+        events = []
+        for line in read_bytes(path, 8 * 1024 * 1024, deadline).decode("utf-8").splitlines():
+            check_deadline(deadline)
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line, object_pairs_hook=pairs,
+                                   parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite log")))
+            except ValueError as error:
+                raise ValueError("Native header identity log is malformed") from error
+            require(type(event) is dict, "Native header identity log is not an object")
+            if event.get("msg") == "State dump configured":
+                events.append(event)
+        require(len(events) == 1, "Native header identity event is missing or ambiguous")
+        event = events[0]
+        # The pinned native JSON handler renders *big.Int as a decimal string.
+        require(type(event.get("block")) is str and event["block"] == str(number) and
+                type(event.get("hash")) is str and re.fullmatch(r"0x[0-9a-f]{64}", event["hash"]) and
+                event["hash"] == expected_hash, "Native header identity differs from prepared input")
+    check_deadline(deadline)
+
+
 def compare(admitted, dumps, exported):
     fixture = admitted["fixture"]
     expected = admitted["expected"]
     validate_oracle(expected, fixture["prepared_blocks"])
-    require(digest(exported) == (fixture["full_chain"]["sha256"], fixture["full_chain"]["size_bytes"]),
+    deadline = admitted.get("deadline")
+    require(digest(exported, 16 * 1024 * 1024, deadline=deadline) ==
+            (fixture["full_chain"]["sha256"], fixture["full_chain"]["size_bytes"]),
             "Complete native chain differs from prepared input")
+    compare_headers(admitted)
     require(len(dumps) == 2, "Both native block states are required")
     for dump, block, prepared in zip(dumps, expected["blocks"], fixture["prepared_blocks"]):
-        compare_state(load(dump, 8 * 1024 * 1024), block, prepared["state_root"])
+        compare_state(load(dump, 8 * 1024 * 1024, deadline), block, prepared["state_root"])
     return [{"scenario": "value-transfer", "result": "PASS", "block": fixture["prepared_blocks"][0]},
             {"scenario": "empty-block", "result": "PASS", "block": fixture["prepared_blocks"][1]}]

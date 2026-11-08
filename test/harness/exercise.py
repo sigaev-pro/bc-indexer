@@ -10,6 +10,7 @@ import sys
 import time
 import signal
 import shutil
+import os
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from artifacts import admit, load, reference, require
@@ -28,7 +29,8 @@ def exercise(request_path, output):
     summary = {"schema_version": 1, "kind": "explicit-native-controls", "result": "FAIL",
                "source_request": reference(request_path), "controls": [], "quick_suite": "NOT_RUN"}
     try:
-        for name in ("positive", "native-corruption", "wrong-oracle", "genesis-tamper", "rlp-tamper", "binary-tamper"):
+        for name in ("positive", "native-corruption", "wrong-oracle", "wrong-genesis-hash", "wrong-block-hash",
+                     "genesis-tamper", "rlp-tamper", "binary-tamper"):
             require(time.monotonic() - start < 900, "Control campaign deadline expired")
             inputs = output / (name + "-inputs")
             inputs.mkdir()
@@ -46,6 +48,10 @@ def exercise(request_path, output):
                 expected["blocks"][0]["accounts"]["1000000000000000000000000000000000000000"]["balance"] = "999"
                 save(inputs / "expected.json", expected)
                 changed["expected"] = reference(inputs / "expected.json")
+            elif name == "wrong-genesis-hash":
+                changed["identity"]["genesis_hash"] = "0x" + "0" * 64
+            elif name == "wrong-block-hash":
+                changed["prepared_blocks"][0]["hash"] = "0x" + "0" * 64
             elif name == "genesis-tamper":
                 (inputs / "genesis.json").write_bytes(Path(fixture["genesis"]["path"]).read_bytes() + b" ")
                 changed["genesis"]["path"] = str(inputs / "genesis.json")
@@ -77,15 +83,18 @@ def exercise(request_path, output):
                 row["proof"] = reference(run_output / "proof.json")
                 require(proof["cleanup_complete"] and proof["suite_result"] == "NOT_RUN", "Control cleanup/scope failed")
                 if name == "positive":
-                    require(result.returncode == 0 and proof["result"] == "PASS" and len(proof["commands"]) == 5,
+                    require(result.returncode == 0 and proof["result"] == "PASS" and len(proof["commands"]) == 6,
                             "Positive native control failed")
                 elif name == "native-corruption":
                     require(result.returncode == 2 and proof["result"] == "FAIL" and len(proof["commands"]) == 2 and
                             load(proof["commands"][-1]["result"]["path"])["reason"] == "NATIVE_EXIT",
                             "Corrupt input did not reach and fail native import")
-                else:
-                    require(result.returncode == 2 and proof["result"] == "FAIL" and len(proof["commands"]) == 5 and
+                elif name == "wrong-oracle":
+                    require(result.returncode == 2 and proof["result"] == "FAIL" and len(proof["commands"]) == 6 and
                             proof.get("error", "").startswith("Account state mismatch"), "Wrong oracle was not detected")
+                else:
+                    require(result.returncode == 2 and proof["result"] == "FAIL" and len(proof["commands"]) == 6 and
+                            proof.get("error", "").startswith("Native header identity"), "Wrong native identity was not detected")
             row["control_result"] = "PASS"
             summary["controls"].append(row)
         # This checks the actual resource boundary, not an Ethereum scenario.
@@ -102,12 +111,15 @@ def exercise(request_path, output):
                     "Actual container deadline or cleanup failed")
         summary["controls"].append({"name": "container-timeout", "control_result": "PASS",
                                     "native_owner_nonce": runner.nonce, "commands": runner.commands})
-        for number in (signal.SIGTERM, signal.SIGKILL):
-            child_output = output / ("parent-stop-" + str(number))
+        for number, group in ((signal.SIGTERM, False), (signal.SIGKILL, False),
+                              (signal.SIGTERM, True), (signal.SIGKILL, True)):
+            label = ("parent-group-stop-" if group else "parent-stop-") + str(number)
+            child_output = output / label
             child_output.mkdir()
             image = admit(request_path)["image"]
             child = subprocess.Popen([sys.executable, "-I", str(Path(__file__)), "--owned-sleep",
-                                      str(child_output), image], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                      str(child_output), image], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     start_new_session=True)
             try:
                 wait_until = time.monotonic() + 10
                 request_log = child_output / "logs/000.request.json"
@@ -125,7 +137,10 @@ def exercise(request_path, output):
                     time.sleep(0.05)
                 else:
                     raise ValueError("Owned real container did not start")
-                child.send_signal(number)
+                if group:
+                    os.killpg(child.pid, number)
+                else:
+                    child.send_signal(number)
                 child.wait(timeout=5)
                 result_log = child_output / "logs/000.result.json"
                 wait_until = time.monotonic() + 35
@@ -133,7 +148,8 @@ def exercise(request_path, output):
                     time.sleep(0.05)
                 result = load(result_log)
                 require(result["reason"] == "PARENT_EXIT" and result["cleanup_complete"], "Parent-loss cleanup failed")
-                summary["controls"].append({"name": "parent-stop-" + str(number), "control_result": "PASS",
+                summary["controls"].append({"name": label, "control_result": "PASS",
+                                            "termination_scope": "process-group" if group else "process",
                                             "parent_exit_code": child.returncode, "request": reference(request_log),
                                             "result": reference(result_log), "container": name})
             finally:

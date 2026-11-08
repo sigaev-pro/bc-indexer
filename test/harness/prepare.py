@@ -5,63 +5,72 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import shutil
+import io
 import sys
 import time
 import tarfile
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from artifacts import artifact, build_input, load, reference, require, source_snapshot, sources_unchanged
+from artifacts import (artifact, build_input, load, reference, require, source_snapshot,
+                       sources_unchanged, copy_artifact, read_bytes, check_deadline)
 from native import Native, new_output
 
 
 def prepare(manifest_path, expected_sha, output, previous=None, correction=None):
-    manifest_ref = reference(manifest_path)
+    started = time.monotonic()
+    deadline = started + 900
+    manifest_ref = reference(manifest_path, 64 * 1024 * 1024, deadline)
     require(manifest_ref["sha256"] == expected_sha, "BuildManifest digest mismatch")
-    _, manifest, _, _ = build_input(manifest_ref, "ethereum-mainnet")
+    _, manifest, _, _ = build_input(manifest_ref, "ethereum-mainnet", deadline)
     previous_ref = None
     attempt = 1
     if previous is not None:
-        old = load(previous)
+        old = load(previous, deadline=deadline)
         require(old["kind"] == "fixture-preparation" and old["result"] == "FAIL" and
                 old["build_manifest"] == manifest_ref and correction, "Invalid preparation retry")
-        previous_ref = reference(previous)
+        previous_ref = reference(previous, deadline=deadline)
         attempt = old.get("attempt_index", 1) + 1
     else:
         require(correction is None, "Correction needs a previous failed attempt")
     require(not output.is_relative_to(manifest_path.parent), "Preparation cannot write inside accepted build storage")
     output = new_output(output)
-    started = time.monotonic()
-    runner = Native(output, started + 900)
+    runner = Native(output, deadline)
     proof = {"schema_version": 1, "kind": "fixture-preparation", "result": "FAIL",
              "build_manifest": manifest_ref, "native_import": "NOT_RUN", "run_id": uuid.uuid4().hex,
              "attempt_index": attempt, "previous_attempt": previous_ref, "correction": correction}
-    origins, proof["harness_sources"] = source_snapshot(output, ("prepare.py", "artifacts.py", "native.py", "owned.py"))
+    origins, proof["harness_sources"] = source_snapshot(output, ("prepare.py", "artifacts.py", "native.py", "owned.py"), deadline)
     proof["native_owner_nonce"] = runner.nonce
     try:
         fixture_dir = Path(__file__).with_name("fixtures")
         for filename in ("genesis.json", "expected.json", "ORACLE.md", "generate.go"):
-            shutil.copyfile(fixture_dir / filename, output / filename)
+            source_ref = reference(fixture_dir / filename, 1024 * 1024, deadline)
+            copy_artifact(fixture_dir / filename, output / filename, source_ref, 1024 * 1024, deadline)
         # Freeze the independent oracle before running the native input generator.
-        proof["expected_before_generation"] = reference(output / "expected.json")
-        proof["oracle_notes"] = reference(output / "ORACLE.md")
+        proof["expected_before_generation"] = reference(output / "expected.json", deadline=deadline)
+        proof["oracle_notes"] = reference(output / "ORACLE.md", deadline=deadline)
         closure = manifest["module_closures"]["geth"]
-        archive = artifact(closure["source_archive"], 256 * 1024 * 1024, manifest_path.parent)
+        archive = artifact(closure["source_archive"], 256 * 1024 * 1024, manifest_path.parent, deadline)
         require(closure["source_commit"] == manifest["builds"]["geth"]["source_commit"], "Source closure mismatch")
         source = output / "source"
         source.mkdir()
-        with tarfile.open(archive) as stream:
-            stream.extractall(source, filter="data")
-        proof["source_archive"] = closure["source_archive"]
+        proof["source_archive"] = copy_artifact(archive, output / "source.tar", closure["source_archive"],
+                                                256 * 1024 * 1024, deadline)
+        archive_bytes = read_bytes(output / "source.tar", closure["source_archive"]["size_bytes"], deadline)
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes)) as stream:
+            for member in stream:
+                check_deadline(deadline)
+                stream.extract(member, source, filter="data")
+        del archive_bytes
         for row in closure["artifacts"]:
             require(time.monotonic() < started + 850, "Preparation deadline expired")
             for field in ("info", "mod", "zip"):
-                artifact(row[field], 1024 * 1024 * 1024, manifest_path.parent)
+                artifact(row[field], 1024 * 1024 * 1024, manifest_path.parent, deadline)
         metadata = output / "metadata"
         metadata.mkdir()
         for filename in ("go.mod", "go.sum"):
-            shutil.copyfile(source / filename, metadata / filename)
+            metadata_ref = reference(source / filename, 1024 * 1024, deadline)
+            copy_artifact(source / filename, metadata / filename, metadata_ref, 1024 * 1024, deadline)
         compiler = manifest["image_inputs"]["golang-build-image"]["reference"]
         require(compiler.startswith("docker.io/library/golang@sha256:"), "Unpinned compiler")
         mounts = [(source, "/source", True), (manifest_path.parent / "cache/geth/mod", "/modules", True),
@@ -79,26 +88,27 @@ def prepare(manifest_path, expected_sha, output, previous=None, correction=None)
         runner.command(compiler, ["/usr/local/go/bin/go", "build", "-p", "2", "-trimpath",
                                   "-o", "/work/generated/generate", "/work/generate.go"], mounts,
                        cap=700, memory="4g", cwd="/source", environment=environment)
-        proof["generator_binary"] = reference(output / "generated/generate")
+        proof["generator_binary"] = reference(output / "generated/generate", deadline=deadline)
         runner.command(compiler, ["/work/generated/generate", "/work/genesis.json", "/work/generated"],
                        mounts, cap=120, memory="1g")
-        require(reference(output / "expected.json") == proof["expected_before_generation"], "Oracle changed during preparation")
-        metadata_value = load(output / "generated/generated.json")
-        genesis = load(output / "genesis.json")
+        require(reference(output / "expected.json", deadline=deadline) == proof["expected_before_generation"], "Oracle changed during preparation")
+        metadata_value = load(output / "generated/generated.json", deadline=deadline)
+        genesis = load(output / "genesis.json", deadline=deadline)
         config_sha = hashlib.sha256(json.dumps(genesis["config"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         fixture = {"schema_version": 1, "identity": {"kind": "private-local", "chain_id": 31337,
                    "genesis_hash": metadata_value["genesis_hash"], "config_sha256": config_sha},
-                   "prepared_blocks": metadata_value["blocks"], "generator": reference(output / "generate.go")}
+                   "prepared_blocks": metadata_value["blocks"], "generator": reference(output / "generate.go", deadline=deadline)}
         for field, filename in {"genesis": "genesis.json", "blocks": "generated/blocks.rlp", "full_chain": "generated/full-chain.rlp",
                                 "expected": "expected.json"}.items():
-            fixture[field] = reference(output / filename)
+            fixture[field] = reference(output / filename, deadline=deadline)
         (output / "fixture.json").write_text(json.dumps(fixture, sort_keys=True, indent=2) + "\n")
         request = {"schema_version": 1, "build_manifest": manifest_ref,
-                   "profile_association": "ethereum-mainnet", "fixture": reference(output / "fixture.json"),
+                   "profile_association": "ethereum-mainnet", "fixture": reference(output / "fixture.json", deadline=deadline),
                    "deadline_seconds": 300}
         (output / "request.json").write_text(json.dumps(request, sort_keys=True, indent=2) + "\n")
-        sources_unchanged(origins)
-        proof.update(result="PASS", fixture=reference(output / "fixture.json"), request=reference(output / "request.json"))
+        sources_unchanged(origins, deadline)
+        proof.update(result="PASS", fixture=reference(output / "fixture.json", deadline=deadline),
+                     request=reference(output / "request.json", deadline=deadline))
     finally:
         proof.update(commands=runner.commands, elapsed_seconds=time.monotonic() - started)
         (output / "preparation.json").write_text(json.dumps(proof, sort_keys=True, indent=2) + "\n")

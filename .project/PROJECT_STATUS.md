@@ -1,5 +1,24 @@
 # Состояние проекта
 
+## E01-01.harness — Repair the rejected first candidate
+
+2026-11-08: Both independent review axes requested changes to PR #122 at
+`b9f9328d7052b412f795df4f58ab155f69ea2c87`. The earlier checks and native
+diagnostics remain accurate history, but this candidate is not accepted. The
+confirmed defects are guardian survival when the parent process group is killed,
+unbounded actual artifact reads/copies despite declared limits, and unverified
+reported genesis/block hashes. The author owns one scoped repair block with
+red-before-green controls, aggregate deadlines, fresh frozen-source verification,
+and retained failed-candidate history. Root owns publication and acceptance.
+Issue #12 remains open; all public profiles, full quick coverage, capture, NATS,
+and later stage gates remain NOT_RUN.
+
+The three repairs now pass 22 focused portable tests, including the original
+counterexamples. Native identity uses pinned JSON header observations at 0/1/2
+with canonical decimal-string heights. Source is ready for full CI and a fresh
+committed native verification; previous native successes remain rejected-candidate
+history. No new adapter or acceptance gate has been opened.
+
 ## E01-01.harness — First partial runner verified; independent review pending
 
 2026-11-08: Implementation commit `e1c7821251d0f347a4c62245e7fa591c2af633c7`

@@ -79,10 +79,11 @@ python3 -I test/harness/exercise.py "$HARNESS_PREPARATION/request.json" \
 ```
 
 This separately records a positive import, a newly authorized truncated RLP input
-that native import must reject, a wrong independent balance that comparison must
-reject, and changed binary/genesis/RLP bytes that admission must reject before
-creating native state. Real container timeout and parent SIGTERM/SIGKILL controls
-test resource ownership with `/bin/sleep`; they are not Ethereum scenarios.
+that native import must reject, a wrong independent balance, and independently
+reauthorized false genesis/block hashes that comparison must reject. Changed
+binary/genesis/RLP bytes must reject before native state creation. Real container
+timeout and parent SIGTERM/SIGKILL controls test both individual-parent and whole
+parent-process-group termination with `/bin/sleep`; they are not Ethereum scenarios.
 Expected negative native attempts retain `result: FAIL`; only the control's
 expectation gets `control_result: PASS`. The control campaign has a separate
 900-second bound and never becomes a quick-suite result.
@@ -103,9 +104,16 @@ prepared block identities. The config digest uses sorted compact JSON over the
 complete native config. The fixed fixture uses chain ID 31337 and historical
 London proof-of-work rules; it makes no claim about current public fork heads.
 
+Admission checks the opened regular file's actual size before reading. Reads and
+copies consume at most the admitted byte count, check for growth, and share the
+run's original monotonic deadline. A later file or source snapshot cannot reset
+that budget. Static oversize rejects before copying. Copied input uses an
+exclusive destination; a failed bounded proof read also fences later dispatch.
+
 `proof.json` records the local run identity, source snapshots, admitted and copied
 input references, selected build/profile, actual fixture identity, both observed
-states, complete exported chain, command/stdout/stderr/cleanup records, measured
+states, native header observations, complete exported chain,
+command/stdout/stderr/cleanup records, measured
 duration, scenario results, and remaining coverage. `run_id` is an evidence
 identity; `native_owner_nonce` identifies its owned Docker commands. These are
 distinct fields, never interchangeable. The source snapshots keep executed Python
@@ -113,7 +121,18 @@ bytes available even after a later checkout changes. Native block hashes/roots
 bind input; balances/nonces/gas/fee expectations come from
 [the independent oracle](fixtures/ORACLE.md).
 
-The ownership guard keeps the child group leader unreaped with `waitid(WNOWAIT)`
+Six native commands initialize/import, dump heights 0/1/2, and export the complete
+chain. Each dump uses pinned Geth JSON logging. Exactly one `State dump configured`
+event must report the expected height and full `header.Hash().Hex()` value. The
+pinned native JSON handler renders `header.Number` as a canonical decimal string,
+so the accepted heights are exactly `"0"`, `"1"`, and `"2"`. Missing, ambiguous,
+malformed, differently typed, or mismatched identity rejects PASS. The raw stderr
+observations and parser source bytes are retained. This binds the reported genesis
+and both block hashes to actual stored native headers without a custom hash
+implementation. The genesis dump is an identity observation, not a third scenario.
+
+The guardian runs in its own session so parent-group termination cannot kill the
+cleanup owner. It keeps the native child group leader unreaped with `waitid(WNOWAIT)`
 until termination. This covers a leader that exits before its descendants. It
 then reaps the leader, proves process-group absence, and separately verifies that
 its exact named container is absent. It never signals a reaped PID. A parent
@@ -129,7 +148,8 @@ not a native runtime CaseResult. There is no implicit retry in the measured runn
 
 The pure comparison boundary is `compare_state(observed, expected, state_root)`
 and `compare(admitted, dumps, exported)` in `compare.py`. It validates literal
-expectations, requires every expected address, and compares the full raw chain.
+expectations, requires every expected address, compares the full raw chain, and
+binds native header identity through the admitted record's `header_observations`.
 Record validation and artifact hashes provide reproducibility and internal
 consistency. Independent review and an observed real invocation establish the
 execution claim; a caller-created JSON record alone does not.
