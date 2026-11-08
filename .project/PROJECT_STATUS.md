@@ -10,16 +10,21 @@ campaign passed in 164.508 seconds, with all 42 command cleanup records and
 12 owner-label absence checks. Issue #12 remains open. Earlier BSC pending
 statements below are historical and do not override this accepted result.
 
-The Bor oracle/comparison checkpoint is committed as
-`b921d435a0670d7ad60c1891a4c07bc3eba179b7` and published in draft PR #124.
-Its independent source review and hosted CI passed. The next checked source
-block adds caller-pinned tool admission, offline native preparation and the
-finite server/IPC runner. All 57 portable tests pass in 11.238 seconds. Strict
-shutdown requires exit 0 without a forced kill; effective execution flags,
-fresh readiness and final original artifact references are checked. Native
-helper compilation and the first actual preparation/import remain NOT_RUN.
-Run one bounded preparation on this committed source next, retaining every
-failure and linking any corrected attempt. The original oracle remains frozen.
+The Bor oracle/comparison checkpoint `b921d435a0670d7ad60c1891a4c07bc3eba179b7`
+is published in draft PR #124. Executable checkpoint
+`eabd92a9152e915b996ddc3b91b1c7f2b9560b5a` passed hosted CI, but independent
+review rejected its key selector and exit-zero stream-copy error handling.
+Its first preparation is retained as FAIL after 318.166995272 seconds:
+module verification and helper compilation passed; public-key verification
+rejected the source declaration shape. All three command groups and the exact
+owner's containers are absent. No measured Bor import ran on that source.
+
+The narrow correction selects the unique tracked key constant while preserving
+derived-address verification, propagates every native Wait error and requires
+an empty cleanup error before success. The exit-zero copy-error regression was
+red before this correction and now passes. The next action is a fresh linked
+preparation with a new compiled tool pin on this checked source. Earlier
+artifacts are immutable; the original oracle remains frozen.
 
 No Bor runtime result is claimed yet. All public profiles, the complete quick
 suite, lifecycle, capture, NATS and later gates remain incomplete or NOT_RUN.

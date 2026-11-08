@@ -83,7 +83,7 @@ func testKey(source string) (*ecdsa.PrivateKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	pattern := regexp.MustCompile(`\bprivKey,\s*_\s*=\s*crypto\.HexToECDSA\("([0-9a-fA-F]{64})"\)`)
+	pattern := regexp.MustCompile(`(?m)^\s*privKey\s*=\s*"([0-9a-fA-F]{64})"\s*$`)
 	matches := pattern.FindAllSubmatch(data, -1)
 	if len(matches) != 1 {
 		return nil, errors.New("missing unique tracked span-0 test key")
@@ -415,7 +415,7 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 			message = exit.Error()
 		}
 		exitCode := command.ProcessState.ExitCode()
-		if returned == nil && (forced || exitCode != 0) {
+		if returned == nil && (exit != nil || forced || exitCode != 0) {
 			returned = errors.New("native server did not stop cleanly")
 		}
 		if err := saveJSON(filepath.Join(output, "server-cleanup.json"), map[string]any{"pid": command.Process.Pid,

@@ -53,7 +53,7 @@ def validate_runtime(directory, admitted, deadline):
     cleanup = load(directory / "server-cleanup.json", deadline=deadline)
     require(cleanup.get("wait_completed") is True and cleanup.get("unexpected_exit") is False and
             cleanup.get("forced_kill") is False and type(cleanup.get("exit_code")) is int and cleanup["exit_code"] == 0 and
-            type(cleanup.get("pid")) is int and cleanup["pid"] > 0,
+            cleanup.get("exit") == "" and type(cleanup.get("pid")) is int and cleanup["pid"] > 0,
             "Native server wait is not confirmed")
     _, full = read_artifact(admitted["fixture"]["full_chain"], 16 * 1024 * 1024, deadline=deadline)
     require(read_bytes(directory / "full-chain.rlp", 16 * 1024 * 1024, deadline) == full,

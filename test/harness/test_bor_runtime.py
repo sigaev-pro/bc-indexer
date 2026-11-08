@@ -54,7 +54,7 @@ def runtime_fixture(root):
                "node_info": {"protocols": {"eth": {"network": 15001, "config": admitted["fixture"]["native_config"]}}},
                "validators": [{"address": sample.expected["validator"]}]})
     write_json(runtime / "server-cleanup.json", {"wait_completed": True, "unexpected_exit": False,
-                                                "forced_kill": False, "exit_code": 0, "pid": 123})
+                                                "forced_kill": False, "exit_code": 0, "exit": "", "pid": 123})
     (runtime / "full-chain.rlp").write_bytes((root / "full_chain").read_bytes())
     write_json(runtime / "observed.json", sample.observed)
     for n, state in enumerate(sample.states, 1):
@@ -77,7 +77,8 @@ class BorRuntimeEvidenceTests(unittest.TestCase):
 
     def test_forced_failed_or_unconfirmed_server_shutdown_cannot_pass(self):
         for field, value in (("exit_code", 1), ("exit_code", -1), ("exit_code", False),
-                             ("forced_kill", True), ("unexpected_exit", True), ("wait_completed", False)):
+                             ("forced_kill", True), ("unexpected_exit", True), ("wait_completed", False),
+                             ("exit", "retained output byte limit exceeded")):
             with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
                 admitted, runtime = runtime_fixture(Path(directory).resolve())
                 path = runtime / "server-cleanup.json"; record = json.loads(path.read_text())
