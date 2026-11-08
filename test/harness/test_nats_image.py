@@ -28,7 +28,8 @@ def native_document(directory, topology="R3"):
               "restart_publication_denial": encoded(b'-ERR \'Permissions Violation for Publish to "fence.input"\'\r\n')}
     def call(name, subject, request_body, response, order):
         index = len(result["rpc"]) + 1
-        reply = f"_INBOX.IMAGE.R{index}".encode()
+        role, connection = ("manager", count) if index <= 2 else ("reader", 2 * count + 3)
+        reply = f"_INBOX.IMAGE.{role}.C{connection:03d}.R{index}".encode()
         body = json.dumps(request_body).encode()
         payload = json.dumps(response).encode()
         row = {"name": name, "request": encoded(b"PUB " + subject.encode() + b" " + reply + b" " + str(len(body)).encode() + b"\r\n" + body + b"\r\n"),
@@ -55,22 +56,31 @@ def native_document(directory, topology="R3"):
         result["initial_inventory"].append(row)
     wire = directory / "wire"
     wire.mkdir()
-    connect = json.dumps({"user": "publisher", "pass": "fixture-only", "verbose": False, "pedantic": True, "protocol": 1},
-                         sort_keys=True, separators=(",", ":")).encode()
-    sent = b"CONNECT " + connect + b"\r\nSUB _INBOX.IMAGE.> 1\r\nPING\r\n"
-    info = {"server_id": basic["processes"][0]["info_id"], "server_name": "image-S-1", "version": "2.15.2", "git_commit": "5a815f1",
-            "go": "go1.27.3", "host": "127.0.0.1", "port": 19001, "proto": 1, "max_payload": 8192, "headers": True,
-            "auth_required": True, "jetstream": True, "client_id": 7, "client_ip": "127.0.0.1", "api_lvl": 5, "xkey": "PUBLIC-KEY"}
-    received = b"INFO " + json.dumps(info).encode() + b"\r\nPONG\r\nINFO "
-    received += json.dumps({**info, "connect_info": True, "remote_account": "APP"}).encode() + b"\r\n"
+    sessions = [("reader", index, []) for index in range(count)]
+    sessions += [("manager", 0, result["rpc"][:2]), ("publisher", 0, basic["census"]["attempts"])]
+    sessions += [("reader", count + index, []) for index in range(count)]
+    denied_reply = f"_INBOX.IMAGE.reader.C{2 * count + 2:03d}.DENIED".encode()
+    sessions += [("reader", count, [{"request": encoded(b"PUB fence.input " + denied_reply + b" 9\r\nforbidden\r\n"),
+                                     "response": result["restart_publication_denial"]}]), ("reader", count, result["rpc"][2:])]
+    for index, (role, process_index, rows) in enumerate(sessions):
+        process = basic["processes"][process_index]
+        connect = json.dumps({"user": role, "pass": "fixture-only", "verbose": False, "pedantic": True, "protocol": 1},
+                             sort_keys=True, separators=(",", ":")).encode()
+        sent = b"CONNECT " + connect + f"\r\nSUB _INBOX.IMAGE.{role}.C{index:03d}.> 1\r\nPING\r\n".encode()
+        info = {"server_id": process["info_id"], "server_name": process["name"], "version": "2.15.2", "git_commit": "5a815f1",
+                "go": "go1.27.3", "host": "127.0.0.1", "port": 19001 + process_index % count, "proto": 1, "max_payload": 8192,
+                "headers": True, "auth_required": True, "jetstream": True, "client_id": index + 7,
+                "client_ip": "127.0.0.1", "api_lvl": 5, "xkey": "PUBLIC-KEY"}
+        received = b"INFO " + json.dumps(info).encode() + b"\r\nPONG\r\nINFO "
+        received += json.dumps({**info, "connect_info": True, "remote_account": "APP"}).encode() + b"\r\n"
+        sent += b"".join(base64.b64decode(row["request"]) for row in rows)
+        received += b"".join(base64.b64decode(row["response"]) for row in rows)
+        (wire / f"{index:03d}-{role}.sent").write_bytes(sent)
+        (wire / f"{index:03d}-{role}.received").write_bytes(received)
     (directory / "attempts").mkdir()
     for attempt in basic["census"]["attempts"]:
-        sent += base64.b64decode(attempt["request"])
-        received += base64.b64decode(attempt["response"])
         for field in ("request", "response"):
             (directory / "attempts" / f"{attempt['ordinal']:03d}.{field}").write_bytes(base64.b64decode(attempt[field]))
-    (wire / "004-publisher.sent").write_bytes(sent)
-    (wire / "004-publisher.received").write_bytes(received)
     (directory / "rpc").mkdir()
     for index, row in enumerate(result["rpc"], 1):
         for key in ("request", "response"):
@@ -100,6 +110,41 @@ def native_document(directory, topology="R3"):
 
 
 class NativeProofTests(unittest.TestCase):
+    def test_every_connection_scope_and_selected_process_is_bound(self):
+        for mutation in ("manager-ack", "reader-prefix", "reader-identity", "missing", "extra"):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = native_document(root, "standalone")
+                self.assertEqual(validate_report(value, root)["upper_sequence"], 4)
+                if mutation == "manager-ack":
+                    # Exact foreign frame from attempt 02's manager socket.
+                    path = root / "wire/001-manager.received"
+                    path.write_bytes(path.read_bytes() + b'MSG _INBOX.IMAGE.P1 1 26\r\n{"stream":"FENCE","seq":1}\r\n')
+                elif mutation == "reader-prefix":
+                    path = root / "wire/005-reader.sent"
+                    path.write_bytes(path.read_bytes().replace(b"reader.C005.>", b"reader.C003.>"))
+                elif mutation == "reader-identity":
+                    path = root / "wire/005-reader.received"
+                    path.write_bytes(path.read_bytes().replace(b'"server_name": "image-S-1"', b'"server_name": "foreign"'))
+                elif mutation == "missing":
+                    (root / "wire/000-reader.sent").unlink()
+                else:
+                    (root / "wire/099-manager.sent").write_bytes(b"unaccounted connection")
+                with self.subTest(mutation=mutation), self.assertRaises(ValueError): validate_report(value, root)
+
+    def test_matching_info_frames_must_match_the_selected_process_config(self):
+        for update in ({"server_name": "foreign-node"}, {"port": 19003}, {"proto": 2}, {"max_payload": 4096},
+                       {"proto": True}, {"port": 19001.0}, {"max_payload": "8192"}):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = native_document(root, "standalone")
+                path = root / "wire/002-publisher.received"
+                initial, pong, connected, rest = path.read_bytes().split(b"\r\n", 3)
+                first, second = json.loads(initial[5:]), json.loads(connected[5:])
+                first.update(update)
+                second.update(update)
+                path.write_bytes(b"\r\n".join([b"INFO " + json.dumps(first).encode(), pong, b"INFO " + json.dumps(second).encode(), rest]))
+                with self.subTest(update=update), self.assertRaises(ValueError): validate_report(value, root)
     def test_every_retained_attempt_http_record_and_snapshot_byte_is_bound(self):
         def duplicate_http(root):
             row = json.loads((root / "http/0000.json").read_text())
@@ -132,7 +177,7 @@ class NativeProofTests(unittest.TestCase):
                     payload["config"].update(num_replicas=True, max_age=False)
                     data = json.dumps(payload).encode()
                     row["body"] = encoded(data)
-                    row["response"] = encoded(b"MSG _INBOX.IMAGE.R3 1 " + str(len(data)).encode() + b"\r\n" + data + b"\r\n")
+                    row["response"] = encoded(b"MSG _INBOX.IMAGE.reader.C005.R3 1 " + str(len(data)).encode() + b"\r\n" + data + b"\r\n")
                     (root / "rpc/003.response").write_bytes(base64.b64decode(row["response"]))
                 else:
                     change_body(value["initial_inventory"][0], lambda j: j["account_details"][0]["stream_detail"][0]["config"].update(num_replicas=True, max_age=False))
@@ -145,7 +190,7 @@ class NativeProofTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temp:
                 root = Path(temp).resolve()
                 value = native_document(root, "standalone")
-                path = root / "wire/004-publisher.received"
+                path = root / "wire/002-publisher.received"
                 initial, pong, connected, rest = path.read_bytes().split(b"\r\n", 3)
                 info = json.loads(connected[5:])
                 info.update(update)
@@ -182,8 +227,9 @@ class NativeProofTests(unittest.TestCase):
                     bad = copy.deepcopy(value)
                     mutate(bad)
                     with self.subTest(topology=topology, mutate=mutate), self.assertRaises(ValueError): validate_report(bad, root)
-                (root / "wire" / "004-publisher.sent").write_bytes(b"unaccounted publication")
-                with self.assertRaisesRegex(ValueError, "ingress"): validate_report(value, root)
+                position = 2 if topology == "standalone" else 4
+                (root / "wire" / f"{position:03d}-publisher.sent").write_bytes(b"unaccounted publication")
+                with self.assertRaisesRegex(ValueError, "requests or subscription"): validate_report(value, root)
 
     def test_original_stream_group_is_bound_before_restart(self):
         with tempfile.TemporaryDirectory() as temp:

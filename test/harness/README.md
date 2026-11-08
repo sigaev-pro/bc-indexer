@@ -34,14 +34,25 @@ start a native process or authenticate an executable/tool from supplied fields.
 
 The later [nats_image.py](nats_image.py) source checkpoint adds preparation and
 measurement around the unchanged accepted executable. Its static, standard
-library Go coordinator has portable tests. The first source prepared successfully
-with the pinned compiler, then failed before standalone publication on the
-protocol 1 handshake; R3 stayed NOT_RUN. That failed attempt remains retained.
-The corrected coordinator requires fresh preparation and a new pinned tool;
-corrected standalone/R3 execution is still **NOT_RUN**. The independent
+library Go coordinator has portable tests. Two preparations passed, but both
+measured attempts remain FAIL: the first stopped at the protocol 1 handshake;
+the second captured all five publication ACKs, then rejected a publisher ACK
+on the manager connection because both subscribed to the same wildcard inbox.
+Neither attempt completed standalone recovery; R3 stayed NOT_RUN. The repaired
+coordinator requires fresh preparation and a new pinned tool. Corrected
+standalone/R3 execution is still **NOT_RUN**. The independent
 [collection](nats_image_collection.py) and [raw-byte join](nats_image_proof.py)
 checks extend the supplied predicate; they cannot establish native truth alone.
 Issue #12 stays open and `runtime_admitted` remains false.
+
+Subscriptions use `_INBOX.IMAGE.<role>.C<ordinal>.>` for each connection;
+each role's ACL permits only its own inbox namespace. The census records the
+publisher inbox explicitly. Management, publication, reader and denied-publish
+replies retain exact correlation; an unexpected message fails instead of being
+discarded. Every raw connection is joined to its own process/configuration,
+including typed INFO server name, port, protocol and payload limit. Standalone
+Raft absence accepts only the pinned native 404 body `No Raft nodes registered`;
+generic errors and absent R3 groups reject.
 
 ```sh
 python3 -I test/harness/nats_image.py prepare /absolute/BuildManifest.json \

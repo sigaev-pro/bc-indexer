@@ -1,15 +1,16 @@
 # Unchanged-image NATS expectations
 
 These expectations are fixed before driver compilation or native execution.
-They describe a limited private standalone/R3 fixture. The current first
-checkpoint validates supplied census and process observations only; it does
-not authenticate a native run or prove the terminal fence.
+They describe a limited private standalone/R3 fixture. The offline predicate
+alone establishes supplied-observation consistency. A successful image proof
+also requires authenticated preparation and actual native execution; neither
+of the two retained failed measured attempts proves the terminal fence.
 
 The accepted production executable remains unchanged, from
 `nats@sha256:afae2fdbe2e326c65e1246cb83b9d05d319188734f3bd577ac8072daae78a10f`,
 source `5a815f11a911efa2c88fd1dbfb18ed89a449bfc1`. Its SHA256 is
 `33f3fe3fed80b2b229bd9fe4b735257ad8583cd2349452a0c74f3d768b593e66`.
-The eventual runner must authenticate the accepted build, prepared driver and
+The runner must authenticate the accepted build, prepared driver and
 accepted source-native conformance separately. Supplied hashes or JSON values
 alone do not establish those prerequisites.
 
@@ -34,6 +35,21 @@ stored sequences are exactly `1..messages+1`, with no gaps or extra messages.
 The census retains complete PUB/MSG frames, connection/frame ordinals, reply
 correlation and server/application event order. A PONG, timeout, different reply
 or duplicate JSON field cannot stand in for the original server response.
+
+Each connection has a distinct `_INBOX.IMAGE.<role>.C<ordinal>` prefix.
+Subscriptions end in `.>` within that prefix; role ACLs allow only that role's
+namespace. Readiness connections use the reader role, so simultaneous readers
+also have distinct subscriptions. Management/export replies end in `.R<n>`,
+publication replies in `.P<n>`, and the denied publication in `.DENIED`.
+The complete raw stream for every connection must match its declared exchanges,
+including the initial INFO, PONG and CONNECT INFO. Both INFO frames must match
+the selected native process name, ID, listen host/port, protocol 1 and configured
+payload limit with strict JSON types. Uncorrelated frames are never discarded.
+
+The supported standalone has never registered a Raft node. Its account inventory
+requests may return native HTTP 404 with exactly `No Raft nodes registered`,
+without a newline. Empty, generic or filter-miss 404 bodies are not evidence of
+that condition; R3 requires successful complete inventories and group samples.
 
 Each topology uses explicit `image-S-N` names and their native member IDs, APP
 and SYS accounts, loopback endpoints and distinct `/proof/stores/image-S-N`

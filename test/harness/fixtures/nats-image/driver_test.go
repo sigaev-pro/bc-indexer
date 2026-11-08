@@ -72,7 +72,7 @@ func TestProtocolOneConsumesAndBindsConnectInfo(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			w, err := connect(ctx, listener.Addr().String(), "manager", filepath.Join(t.TempDir(), "wire"))
+			w, err := connect(ctx, listener.Addr().String(), "manager", filepath.Join(t.TempDir(), "wire"), 0)
 			if mode == "valid" {
 				if err != nil {
 					t.Fatal(err)
@@ -91,6 +91,107 @@ func TestProtocolOneConsumesAndBindsConnectInfo(t *testing.T) {
 			<-done
 		})
 	}
+}
+
+func TestConnectionSubscriptionsHaveSeparateRoleAndConnectionScopes(t *testing.T) {
+	for index, role := range []string{"manager", "publisher", "reader", "reader"} {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		subscription := make(chan string, 1)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			conn.SetDeadline(time.Now().Add(time.Second))
+			info := map[string]any{"server_id": "NATIVE-ID", "server_name": "image-S-1", "version": "2.15.2", "git_commit": "5a815f1",
+				"go": "go1.27.3", "host": "127.0.0.1", "port": 19001, "proto": 1, "max_payload": 8192, "headers": true,
+				"auth_required": true, "jetstream": true, "client_id": 7, "client_ip": "127.0.0.1", "api_lvl": 5, "xkey": "PUBLIC-KEY"}
+			data, _ := json.Marshal(info)
+			fmt.Fprintf(conn, "INFO %s\r\n", data)
+			reader := bufio.NewReader(conn)
+			for i := 0; i < 3; i++ {
+				line, err := reader.ReadString('\n')
+				if err != nil {
+					return
+				}
+				if i == 1 {
+					subscription <- line
+				}
+			}
+			info["connect_info"], info["remote_account"] = true, "APP"
+			data, _ = json.Marshal(info)
+			fmt.Fprintf(conn, "PONG\r\nINFO %s\r\n", data)
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		w, err := connect(ctx, listener.Addr().String(), role, filepath.Join(t.TempDir(), "wire"), index)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.conn.Close()
+		cancel()
+		listener.Close()
+		<-done
+		select {
+		case actual := <-subscription:
+			want := fmt.Sprintf("SUB _INBOX.IMAGE.%s.C%03d.> 1\r\n", role, index)
+			if actual != want {
+				t.Errorf("role %s connection %d subscribed to %q; want %q", role, index, actual, want)
+			}
+		default:
+			t.Fatal("subscription not observed")
+		}
+	}
+}
+
+func TestInfoMustMatchSelectedProcessConfiguration(t *testing.T) {
+	process := &processRecord{Name: "image-S-1", InfoID: "native-id", Config: []byte(`{"server_name":"image-S-1","listen":"127.0.0.1:19001","max_payload":8192}`)}
+	baseline := map[string]any{"server_name": "image-S-1", "server_id": "native-id", "host": "127.0.0.1", "port": json.Number("19001"), "proto": json.Number("1"), "max_payload": json.Number("8192")}
+	if err := bindInfo(baseline, process, "127.0.0.1:19001"); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []struct {
+		key   string
+		value any
+	}{
+		{"server_name", "foreign-node"}, {"server_id", "foreign-id"}, {"host", "127.0.0.2"},
+		{"port", json.Number("19003")}, {"proto", json.Number("2")}, {"max_payload", json.Number("4096")},
+		{"port", json.Number("19001.0")}, {"proto", true}, {"max_payload", "8192"},
+	} {
+		copy := make(map[string]any)
+		for key, value := range baseline {
+			copy[key] = value
+		}
+		copy[change.key] = change.value
+		if bindInfo(copy, process, "127.0.0.1:19001") == nil {
+			t.Errorf("accepted changed %s=%v", change.key, change.value)
+		}
+	}
+}
+
+func TestCapturedPublisherAckCannotSatisfyManagementReply(t *testing.T) {
+	// This exact response shape was retained in failed attempt 02's manager
+	// socket. The repair must isolate subscriptions, never skip this message.
+	left, right := net.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer right.Close()
+		fmt.Fprint(right, "MSG _INBOX.IMAGE.P1 1 26\r\n{\"stream\":\"FENCE\",\"seq\":1}\r\n")
+	}()
+	w := wire{conn: left, reader: bufio.NewReader(left), ctx: ctx}
+	if _, _, err := w.response("_INBOX.IMAGE.manager.C001.R2"); err == nil {
+		t.Fatal("foreign publisher acknowledgment accepted")
+	}
+	left.Close()
+	<-done
 }
 
 func TestStrictNativeJSON(t *testing.T) {

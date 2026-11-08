@@ -2,20 +2,33 @@
 
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: IN_PROGRESS, repairing the first actual image attempt and confirmed
-review findings. Published source `4645131abfd20a799ea74bb672cc0ded09f88a3f`
+Status: READY_FOR_REVIEW for the scoped attempt-02 repair. Forty affected
+Python methods and 11 host Go methods, including eight handshake subcases,
+pass. Every connection now has its own role-scoped inbox; retained wire bytes
+bind all requests, replies and INFO fields to the selected process/config.
+The exact pinned standalone no-Raft response is recognized without accepting
+generic 404 responses or missing R3 groups. Next: publish this source checkpoint,
+prepare a fresh pinned driver, then run attempt 03 linked to failed attempt 02.
+No new native operation is active; no successful unchanged-image fence is claimed.
+
+Historical attempt 01: source `4645131abfd20a799ea74bb672cc0ded09f88a3f`
 prepared successfully with the pinned compiler in 58.348 seconds. Measured
 attempt 01 failed in 1.656 seconds before standalone publication because the
 driver returned at PONG without consuming the native post-CONNECT INFO. R3
 remained NOT_RUN. The original proof, tool and source are retained unchanged;
 native processes, owned process group and exact-label containers are absent.
 
-The checked repair now closes retained artifact joins, immutable snapshot byte
+The first checked repair closed retained artifact joins, immutable snapshot byte
 bindings, strict configuration types and the positive bounded retry counter.
-The affected suite passes 37 Python methods and eight host Go tests, including
-eight handshake subcases. Next: publish this corrected source checkpoint, then
-prepare a new externally pinned tool before a corrected measured attempt.
-No successful unchanged-image fence or public runtime admission is claimed.
+That checkpoint passed 37 Python methods and eight host Go tests, including
+eight handshake subcases. Those results remain historical evidence.
+
+Historical attempt 02: published `181a91c73597596b9e924208ee9e5daced3547a2`
+prepared successfully in 63.897 seconds. Measured attempt 02 passed the handshake
+and received all five publication ACKs, then failed at seal because the manager
+and publisher shared a wildcard inbox subscription. R3 remained NOT_RUN; cleanup
+completed. Both preparations, tools, failures and the unchanged plan are retained.
+Fresh driver preparation is required before another measured attempt.
 
 The first published checkpoint `98120a100b66ca8bbd1f0249d2bc857e1afe94a9`
 had one confirmed review defect: it allowed overlapping voters to share a PID
@@ -29,12 +42,12 @@ exact-head CI passed. Its five source-native cases and retained failed attempt
 are accepted partial evidence. Earlier readiness statements below are historical.
 Issue #12 remains open; no product or public-profile gate is unlocked.
 
-Implement the next bounded standalone/R3 slice using the unchanged pinned NATS
+Scope retained from the original handoff: implement the bounded standalone/R3 slice using the unchanged pinned NATS
 image and executable. Bind every framed publication/ACK, old child exit,
 same-store restart with publishing disabled, complete native group collection
 and exact interval export. Use a separately pinned driver and accepted offline
 inputs. Commit the checked source checkpoint before native preparation or runs.
-All new image-fence outcomes are NOT_RUN. Root owns publication and acceptance;
+The repaired image-fence outcomes are NOT_RUN. Root owns publication and acceptance;
 the assigned author owns this worktree. No generic controller or public work.
 
 Base: `522eebc5155e655a7556bf1163376bedf88ddc42`.

@@ -24,6 +24,7 @@ type wire struct {
 	ctx    context.Context
 	frames int
 	info   map[string]any
+	inbox  string
 }
 
 type auditedConn struct {
@@ -55,7 +56,40 @@ func (c *auditedConn) Close() error {
 	c.closed = true
 	return errors.Join(c.Conn.Close(), c.input.file.Sync(), c.output.file.Sync(), c.input.file.Close(), c.output.file.Close())
 }
-func connect(ctx context.Context, address, user, logBase string) (*wire, error) {
+func bindInfo(info map[string]any, process *processRecord, address string) error {
+	var config map[string]any
+	if err := strictJSON(process.Config, &config); err != nil {
+		return err
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	proto, protoOK := info["proto"].(json.Number)
+	nativePort, portOK := info["port"].(json.Number)
+	payload, payloadOK := info["max_payload"].(json.Number)
+	configuredPayload, configOK := config["max_payload"].(json.Number)
+	if config["listen"] != address || config["server_name"] != process.Name || info["server_name"] != process.Name ||
+		info["host"] != host || !protoOK || proto.String() != "1" || !portOK || nativePort.String() != port ||
+		!payloadOK || !configOK || payload.String() != configuredPayload.String() ||
+		(process.InfoID != "" && info["server_id"] != process.InfoID) {
+		return errors.New("native INFO disagrees with the selected process configuration")
+	}
+	return nil
+}
+
+func inboxPrefix(user string, connection int) (string, error) {
+	if (user != "manager" && user != "publisher" && user != "reader") || connection < 0 || connection >= 64 {
+		return "", errors.New("unsupported connection scope")
+	}
+	return fmt.Sprintf("_INBOX.IMAGE.%s.C%03d", user, connection), nil
+}
+
+func connect(ctx context.Context, address, user, logBase string, connection int) (*wire, error) {
+	inbox, err := inboxPrefix(user, connection)
+	if err != nil {
+		return nil, err
+	}
 	dialer := net.Dialer{Timeout: time.Second}
 	native, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
@@ -73,7 +107,7 @@ func connect(ctx context.Context, address, user, logBase string) (*wire, error) 
 		return nil, err
 	}
 	conn := &auditedConn{Conn: native, input: &boundedLog{file: input}, output: &boundedLog{file: output}}
-	w := &wire{conn: conn, reader: bufio.NewReaderSize(conn, 16384), ctx: ctx}
+	w := &wire{conn: conn, reader: bufio.NewReaderSize(conn, 16384), ctx: ctx, inbox: inbox}
 	ok := false
 	defer func() {
 		if !ok {
@@ -97,7 +131,7 @@ func connect(ctx context.Context, address, user, logBase string) (*wire, error) 
 	if err != nil {
 		return nil, err
 	}
-	for _, frame := range [][]byte{append(append([]byte("CONNECT "), options...), '\r', '\n'), []byte("SUB _INBOX.IMAGE.> 1\r\n"), []byte("PING\r\n")} {
+	for _, frame := range [][]byte{append(append([]byte("CONNECT "), options...), '\r', '\n'), []byte("SUB " + inbox + ".> 1\r\n"), []byte("PING\r\n")} {
 		if err = w.send(frame); err != nil {
 			return nil, err
 		}

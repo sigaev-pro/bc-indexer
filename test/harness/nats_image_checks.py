@@ -55,10 +55,16 @@ def member_id(name):
     return "".join(alphabet[byte % 62] for byte in hashlib.sha256(name.encode()).digest()[:8])
 
 
+def inbox(role, connection):
+    require(role in ("publisher", "manager", "reader"), "Unsupported inbox role")
+    return f"_INBOX.IMAGE.{role}.C{number(connection, 'connection position', 0, 63):03d}"
+
+
 def validate_census(plan, census):
     validate_plan(plan)
-    closed(census, {"connection", "closed_order", "attempts"}, "Publication census")
+    closed(census, {"connection", "inbox", "closed_order", "attempts"}, "Publication census")
     require(census["connection"] == "publisher-1", "Undeclared publisher connection")
+    require(census["inbox"] in (inbox("publisher", 2), inbox("publisher", 4)), "Undeclared publisher inbox")
     attempts = census["attempts"]
     logical_messages = [0, 1, 1, *range(2, plan["messages"])]
     require(isinstance(attempts, list) and len(attempts) == len(logical_messages), "Incomplete or extra publication attempts")
@@ -84,7 +90,7 @@ def validate_census(plan, census):
         else:
             require(attempt["retry_of"] is None, "Unexpected retry")
         data = payload(logical, plan["payload_bytes"])
-        reply = f"_INBOX.IMAGE.P{ordinal}".encode()
+        reply = f"{census['inbox']}.P{ordinal}".encode()
         request = b"PUB fence.input " + reply + b" " + str(len(data)).encode() + b"\r\n" + data + b"\r\n"
         require(raw(attempt["request"], 8192, "publication frame") == request, "Publication bytes or reply correlation changed")
         response = raw(attempt["response"], 8192, "acknowledgment frame")
@@ -109,7 +115,7 @@ def expected_config(topology, generation, index):
     number(index, "server position", 0, count - 1)
     def user(name, subjects):
         return {"user": name, "password": "fixture-only", "permissions": {
-            "publish": {"allow": list(subjects)}, "subscribe": {"allow": ["_INBOX.IMAGE.>"]}, "allow_responses": False}}
+            "publish": {"allow": list(subjects)}, "subscribe": {"allow": [f"_INBOX.IMAGE.{name}.>"]}, "allow_responses": False}}
     reader = user("reader", READ_SUBJECTS)
     app_users = [reader] if generation == 1 else [user("publisher", ["fence.input"]),
         user("manager", ["$JS.API.STREAM.CREATE.FENCE", "$JS.API.STREAM.UPDATE.FENCE", *READ_SUBJECTS]), reader]
@@ -191,6 +197,8 @@ def validate_observations(value):
     require(type(value["schema_version"]) is int and value["schema_version"] == 1 and
             value["kind"] == "nats-image-supplied-observations", "Unsupported observation document")
     stored = validate_census(value["plan"], value["census"])
+    count = 1 if value["topology"] == "standalone" else 3
+    require(value["census"]["inbox"] == inbox("publisher", count + 1), "Publisher inbox does not match its connection")
     validate_processes(value["topology"], value["processes"], value["boundaries"], value["census"])
     return {"schema_version": 1, "kind": "nats-image-supplied-observation-check", "observation_valid": True,
             "topology": value["topology"], "expected_stored_messages": len(stored),

@@ -7,7 +7,7 @@ import re
 import stat
 
 from artifacts import artifact, check_deadline, closed, decode_json, read_bytes, require
-from nats_image_checks import raw, number
+from nats_image_checks import raw, number, inbox
 from nats_image_collection import JSZ, monitor, state, stream_config, validate_collections
 
 
@@ -68,7 +68,7 @@ def config_join(left, right, plan, topology, sealed):
     require(json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True), "Native configuration join changed bytes or types")
 
 
-def handshake(initial, connected):
+def handshake(initial, connected, process):
     require(type(initial) is dict and type(connected) is dict and "connect_info" not in initial and
             connected.get("connect_info") is True and connected.get("remote_account") == "APP" and
             connected.get("acc_is_sys", False) is False, "Native CONNECT account binding changed")
@@ -79,14 +79,19 @@ def handshake(initial, connected):
                 "Native INFO numeric identity changed")
     for key in ("headers", "auth_required", "jetstream"):
         require(initial.get(key) is True and connected.get(key) is True, "Native INFO capability changed")
+    config = decode_json(raw(process["config_bytes"], 65536, "selected process config"))
+    require(initial["server_id"] == process["info_id"] and initial["server_name"] == process["name"] == config["server_name"] and
+            f"{initial['host']}:{initial['port']}" == config["listen"] and initial["proto"] == 1 and
+            number(config["max_payload"], "configured max payload", 1) == initial["max_payload"],
+            "Native INFO disagrees with the selected process configuration")
 
 
-def rpc(row, index, name, subject, request_body):
+def rpc(row, index, name, subject, request_body, inbox_scope):
     closed(row, {"name", "request", "response", "body", "order"}, "Native API exchange")
     require(row["name"] == name, "Native API operation changed")
     request = raw(row["request"], 16384, "API request")
     prefix, separator, rest = request.partition(b"\r\n")
-    reply = f"_INBOX.IMAGE.R{index}".encode()
+    reply = f"{inbox_scope}.R{index}".encode()
     fields = prefix.split(b" ")
     require(separator and fields[:3] == [b"PUB", subject.encode(), reply] and len(fields) == 4 and
             fields[3] == str(len(rest) - 2).encode() and rest.endswith(b"\r\n"), "Native API request framing changed")
@@ -100,6 +105,45 @@ def rpc(row, index, name, subject, request_body):
     require(type(value) is dict and "error" not in value, "Native API rejected the request")
     number(row["order"], "API response order", 1)
     return value
+
+
+def wire_sessions(value, directory, deadline):
+    """Join every connection's actual frames to its selected native process."""
+    basic, calls = value["basic"], value["rpc"]
+    count = 1 if basic["topology"] == "standalone" else 3
+    sessions = [("reader", index, [], []) for index in range(count)]
+    def exchanges(rows):
+        return ([raw(row["request"], 16384, "wire request") for row in rows],
+                [raw(row["response"], 32768, "wire response") for row in rows])
+    sessions.append(("manager", 0, *exchanges(calls[:2])))
+    sessions.append(("publisher", 0, *exchanges(basic["census"]["attempts"])))
+    sessions.extend(("reader", count + index, [], []) for index in range(count))
+    denied_reply = (inbox("reader", 2 * count + 2) + ".DENIED").encode()
+    sessions.append(("reader", count, [b"PUB fence.input " + denied_reply + b" 9\r\nforbidden\r\n"],
+                     [raw(value["restart_publication_denial"], 1024, "denial")]))
+    sessions.append(("reader", count, *exchanges(calls[2:])))
+    files = regular_files(directory / "wire", 128, deadline)
+    expected_paths = set()
+    for index, (role, process_index, requests, responses) in enumerate(sessions):
+        check_deadline(deadline)
+        name = f"{index:03d}-{role}"
+        expected_paths.update((name + ".sent", name + ".received"))
+        require(name + ".sent" in files and name + ".received" in files, "Connection wire evidence missing")
+        options = json.dumps({"user": role, "pass": "fixture-only", "verbose": False, "pedantic": True, "protocol": 1},
+                             sort_keys=True, separators=(",", ":")).encode()
+        expected = b"CONNECT " + options + b"\r\nSUB " + inbox(role, index).encode() + b".> 1\r\nPING\r\n" + b"".join(requests)
+        require(read_bytes(files[name + ".sent"], 2 * 1024 * 1024, deadline) == expected,
+                "Raw connection requests or subscription scope changed")
+        received = read_bytes(files[name + ".received"], 2 * 1024 * 1024, deadline)
+        first, separator, remaining = received.partition(b"\r\n")
+        require(separator and first.startswith(b"INFO "), "Raw native INFO missing")
+        pong, separator, remaining = remaining.partition(b"\r\n")
+        require(separator and pong == b"PONG", "Raw native handshake PONG missing")
+        connected, separator, remaining = remaining.partition(b"\r\n")
+        require(separator and connected.startswith(b"INFO "), "Raw native CONNECT INFO missing")
+        handshake(decode_json(first[5:]), decode_json(connected[5:]), basic["processes"][process_index])
+        require(remaining == b"".join(responses), "Raw connection replies disagree with their complete census or RPC exchange")
+    require(set(files) == expected_paths, "Extra connection wire evidence")
 
 
 def validate_report(value, directory, deadline=None):
@@ -160,10 +204,11 @@ def validate_report(value, directory, deadline=None):
     config = {"name": "FENCE", "subjects": ["fence.input"], "retention": "limits", "storage": "file", "num_replicas": count,
               "max_msgs": plan["messages"] + 17, "max_bytes": 8388608, "max_age": 0, "discard": "new",
               "deny_delete": True, "deny_purge": True, "allow_rollup_hdrs": False, "sealed": False}
-    require(rpc(calls[0], 1, "create", "$JS.API.STREAM.CREATE.FENCE", config) == value["initial"], "Initial API response substituted")
-    require(rpc(calls[1], 2, "seal", "$JS.API.STREAM.UPDATE.FENCE", {**value["initial"]["config"], "sealed": True}) == value["sealed"],
+    manager, reader = inbox("manager", count), inbox("reader", 2 * count + 3)
+    require(rpc(calls[0], 1, "create", "$JS.API.STREAM.CREATE.FENCE", config, manager) == value["initial"], "Initial API response substituted")
+    require(rpc(calls[1], 2, "seal", "$JS.API.STREAM.UPDATE.FENCE", {**value["initial"]["config"], "sealed": True}, manager) == value["sealed"],
             "Seal API response substituted")
-    info = rpc(calls[2], 3, "fenced-info", "$JS.API.STREAM.INFO.FENCE", {})
+    info = rpc(calls[2], 3, "fenced-info", "$JS.API.STREAM.INFO.FENCE", {}, reader)
     config_join(info.get("config"), value["sealed"]["config"], plan, basic["topology"], True)
     require(info.get("created") == value["sealed"]["created"] and
             state(info.get("state"), plan["messages"] + 1) == state(value["sealed"]["state"], plan["messages"] + 1),
@@ -173,7 +218,7 @@ def validate_report(value, directory, deadline=None):
             basic["boundaries"]["fence_checked"] < calls[2]["order"] < value["exports"][0]["order"], "Native API stage order changed")
     for index, exported in enumerate(value["exports"], 1):
         call = calls[index + 2]
-        rpc(call, index + 3, f"export-{index}", "$JS.API.STREAM.MSG.GET.FENCE", {"seq": index})
+        rpc(call, index + 3, f"export-{index}", "$JS.API.STREAM.MSG.GET.FENCE", {"seq": index}, reader)
         require(exported["response"] == call["body"] and exported["order"] == call["order"], "Export body or order substituted")
     require(raw(value["restart_publication_denial"], 1024, "publish denial") ==
             b'-ERR \'Permissions Violation for Publish to "fence.input"\'\r\n', "Restart data publish was not rejected")
@@ -195,25 +240,6 @@ def validate_report(value, directory, deadline=None):
                 "Original stream/group/configuration identity changed")
         state(stream.get("state"), 0)
         require(calls[0]["order"] < observation["order"] < basic["census"]["attempts"][0]["forwarded_order"], "Initial inventory occurred after publication")
-    # The native socket audit is independent of summary row serialization.
-    publishers = sorted((directory / "wire").glob("*-publisher.sent"))
-    require(len(publishers) == 1, "Missing or extra publisher connection")
-    sent = read_bytes(publishers[0], 2 * 1024 * 1024, deadline)
-    expected_connect = json.dumps({"user": "publisher", "pass": "fixture-only", "verbose": False, "pedantic": True, "protocol": 1},
-                                  sort_keys=True, separators=(",", ":")).encode()
-    expected = b"CONNECT " + expected_connect + b"\r\nSUB _INBOX.IMAGE.> 1\r\nPING\r\n"
-    expected += b"".join(raw(row["request"], 16384, "publish request") for row in basic["census"]["attempts"])
-    require(sent == expected, "Raw publisher ingress disagrees with its complete census")
-    received = read_bytes(publishers[0].with_suffix(".received"), 2 * 1024 * 1024, deadline)
-    line, separator, remaining = received.partition(b"\r\n")
-    require(separator and line.startswith(b"INFO "), "Raw publisher INFO missing")
-    initial = decode_json(line[5:])
-    require(initial.get("server_id") == basic["processes"][0]["info_id"], "Raw publisher server identity changed")
-    pong, separator, remaining = remaining.partition(b"\r\n")
-    require(separator and pong == b"PONG", "Raw native handshake PONG missing")
-    connected, separator, remaining = remaining.partition(b"\r\n")
-    require(separator and connected.startswith(b"INFO "), "Raw native CONNECT INFO missing")
-    handshake(initial, decode_json(connected[5:]))
-    expected = b"".join(raw(row["response"], 32768, "publish response") for row in basic["census"]["attempts"])
-    require(remaining == expected, "Raw native replies disagree with the ACK census")
+    # Socket audits are independent of summary row serialization.
+    wire_sessions(value, directory, deadline)
     return {**result, "ordinary_path": "PUB/FileStorage/Limits/default-persist/no-batching/no-consumers", "runtime_admitted": False}

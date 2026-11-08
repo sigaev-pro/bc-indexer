@@ -46,6 +46,7 @@ type attempt struct {
 }
 type census struct {
 	Connection string    `json:"connection"`
+	Inbox      string    `json:"inbox"`
 	Closed     int64     `json:"closed_order"`
 	Attempts   []attempt `json:"attempts"`
 }
@@ -100,8 +101,28 @@ func (r *runtimeState) open(index int, user string) (*wire, error) {
 	if len(r.wires) >= 64 {
 		return nil, errors.New("connection count exceeded")
 	}
-	w, err := connect(r.ctx, fmt.Sprintf("127.0.0.1:%d", 19001+index), user, filepath.Join(r.dir, "wire", fmt.Sprintf("%03d-%s", len(r.wires), user)))
+	address := fmt.Sprintf("127.0.0.1:%d", 19001+index)
+	var selected *nativeChild
+	for i := len(r.children) - 1; i >= 0; i-- {
+		if r.children[i].record.Name == fmt.Sprintf("image-S-%d", index+1) {
+			selected = r.children[i]
+			break
+		}
+	}
+	if selected == nil {
+		return nil, errors.New("connection has no selected native process")
+	}
+	select {
+	case <-selected.done:
+		return nil, errors.New("selected native process already exited")
+	default:
+	}
+	w, err := connect(r.ctx, address, user, filepath.Join(r.dir, "wire", fmt.Sprintf("%03d-%s", len(r.wires), user)), len(r.wires))
 	if err != nil {
+		return nil, err
+	}
+	if err = bindInfo(w.info, selected.record, address); err != nil {
+		w.conn.Close()
 		return nil, err
 	}
 	r.wires = append(r.wires, w)
@@ -161,7 +182,7 @@ func (r *runtimeState) ready(count, generation int) error {
 	return nil
 }
 func (r *runtimeState) rpc(w *wire, output *report, name, subject string, body []byte) (map[string]any, error) {
-	reply := "_INBOX.IMAGE.R" + strconv.Itoa(len(output.RPC)+1)
+	reply := w.inbox + ".R" + strconv.Itoa(len(output.RPC)+1)
 	row := rpcRecord{Name: name, Request: publication(subject, reply, body)}
 	// Durable intended request precedes native dispatch; wire files retain the
 	// actual available bytes if writing or reading later fails.
@@ -200,9 +221,10 @@ func (r *runtimeState) publications(output *report, p plan) error {
 		logical = append(logical, i)
 	}
 	output.Basic.Census.Connection = "publisher-1"
+	output.Basic.Census.Inbox = w.inbox
 	for index, message := range logical {
 		ordinal := index + 1
-		reply := fmt.Sprintf("_INBOX.IMAGE.P%d", ordinal)
+		reply := fmt.Sprintf("%s.P%d", w.inbox, ordinal)
 		row := attempt{Ordinal: ordinal, Logical: message, Connection: "publisher-1", Request: publication("fence.input", reply, payload(message, p.PayloadBytes)), Result: "ACK", Outcome: "UNKNOWN"}
 		if ordinal == 3 {
 			previous := 2
@@ -363,7 +385,7 @@ func execute(r *runtimeState, in input, out *report) (err error) {
 	if err != nil {
 		return err
 	}
-	if err = denied.send(publication("fence.input", "_INBOX.IMAGE.DENIED", []byte("forbidden"))); err != nil {
+	if err = denied.send(publication("fence.input", denied.inbox+".DENIED", []byte("forbidden"))); err != nil {
 		return err
 	}
 	if out.Denial, err = denied.line(); err != nil {

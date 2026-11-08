@@ -35,7 +35,7 @@ def document(topology="R3"):
             nonlocal order
             order += 1
             return {"node": name, "path": path, "status": status, "order": order,
-                    "body": encoded(json.dumps(value).encode() if status == 200 else b"")}
+                    "body": encoded(json.dumps(value).encode() if status == 200 else b"No Raft nodes registered")}
         nodes = {}
         for process in basic["processes"][count:]:
             name = process["name"]
@@ -92,6 +92,23 @@ def change_export(observation, mutate):
 
 
 class CollectionTests(unittest.TestCase):
+    def test_standalone_absence_uses_exact_pinned_native_response(self):
+        bodies = (b"No Raft nodes registered",)
+        for body in bodies:
+            value = document("standalone")
+            for bracket in (value["before"], value["after"]):
+                for node in bracket["nodes"].values():
+                    for row in node["raft_inventory"].values(): row["body"] = encoded(body)
+            self.assertEqual(collection.validate_collections(**value)["upper_sequence"], 4)
+        for body in (b"", b"404 page not found\n", bodies[0] + b"\n", b"No Raft nodes",
+                     b"No Raft nodes returned, check supplied filters"):
+            row = {"node": "image-S-1", "path": "/raftz?acc=APP", "status": 404, "body": encoded(body), "order": 1}
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                collection.monitor(row, row["node"], row["path"], set(), absent=True)
+        for body in bodies:
+            row = {"node": "image-S-1", "path": "/raftz?acc=APP", "status": 404, "body": encoded(body), "order": 1}
+            with self.assertRaises(ValueError): collection.monitor(row, row["node"], row["path"], set())
+
     def test_both_topologies_and_every_sequence_are_required(self):
         for topology in ("standalone", "R3"):
             value = document(topology)

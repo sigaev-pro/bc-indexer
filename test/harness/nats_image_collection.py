@@ -22,7 +22,9 @@ def monitor(observation, node, path, orders, *, absent=False):
     status = number(observation["status"], "HTTP status", 100, 599)
     data = raw(observation["body"], 1024 * 1024, "monitoring body")
     if absent and status == 404:
-        require(data == b"", "Unexpected absent-Raft response")
+        # Pinned HandleRaftz emits these exact bytes when standalone has never
+        # registered a Raft node. A filter miss or arbitrary 404 is not proof.
+        require(path.startswith("/raftz?acc=") and data == b"No Raft nodes registered", "Unexpected absent-Raft response")
         return {}
     require(status == 200, "Native monitoring request failed")
     value = decode_json(data)

@@ -21,9 +21,10 @@ def sample(topology="R3"):
     plan = {"schema_version": 1, "messages": 3, "payload_bytes": 32,
             "measured_seconds": 900, "topologies": ["standalone", "R3"]}
     attempts = []
+    prefix = "_INBOX.IMAGE.publisher.C002" if topology == "standalone" else "_INBOX.IMAGE.publisher.C004"
     for ordinal, logical in enumerate((0, 1, 1, 2), 1):
         data = checks.payload(logical, plan["payload_bytes"])
-        reply = f"_INBOX.IMAGE.P{ordinal}".encode()
+        reply = f"{prefix}.P{ordinal}".encode()
         ack = json.dumps({"stream": "FENCE", "seq": ordinal}, separators=(",", ":")).encode() + b"\r\n"
         attempts.append({"ordinal": ordinal, "logical_message": logical, "connection": "publisher-1",
                          "frame_ordinal": ordinal + 3,
@@ -52,7 +53,7 @@ def sample(topology="R3"):
                               "exited_order": 42 + index if generation == 0 else 71 + index,
                               "exit_code": 0, "wait_error": None, "forced_kill": False})
     return {"schema_version": 1, "kind": "nats-image-supplied-observations", "plan": plan,
-            "topology": topology, "census": {"connection": "publisher-1", "closed_order": 40, "attempts": attempts},
+            "topology": topology, "census": {"connection": "publisher-1", "inbox": prefix, "closed_order": 40, "attempts": attempts},
             "boundaries": boundaries, "processes": processes}
 
 
@@ -99,7 +100,7 @@ class ImageObservationTests(unittest.TestCase):
         for body in (b'{"stream":"FENCE","seq":3}', b'{"stream":"OTHER","seq":2}',
                      b'{"stream":"FENCE","seq":3,"seq":2}', b'{"stream":"OTHER","stream":"FENCE","seq":2}'):
             census = copy.deepcopy(document["census"])
-            census["attempts"][1]["response"] = encoded(b"MSG _INBOX.IMAGE.P2 1 " + str(len(body)).encode() + b"\r\n" + body + b"\r\n")
+            census["attempts"][1]["response"] = encoded(b"MSG " + census["inbox"].encode() + b".P2 1 " + str(len(body)).encode() + b"\r\n" + body + b"\r\n")
             with self.assertRaises(ValueError):
                 checks.validate_census(document["plan"], census)
         for field, raw in (("request", base64.b64decode(original["request"]).replace(b"\xff", b"\xfe", 1)),
