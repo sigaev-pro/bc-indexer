@@ -11,6 +11,33 @@ or any lifecycle acceptance case. All seven public profile results remain
 `NOT_RUN`. Individual local scenario results do not close AC-CAP-01-01, whose
 owner is E01-02.lifecycle_seams.
 
+## Unchanged-image observation predicates
+
+[nats_image_checks.py](nats_image_checks.py) is an early offline predicate over
+supplied observations. It validates a closed plan, exact binary publication and
+ACK bytes, one declared lost-ACK/retry pair, process generation/Wait ordering,
+original store identities and fixed restart permissions. Its
+[expectations](fixtures/nats-image/ORACLE.md) are fixed before native execution.
+
+```sh
+python3 -I test/harness/nats_image_checks.py /absolute/observations.json \
+  --sha256 EXTERNALLY_PINNED_OBSERVATION_SHA256
+```
+
+The input document contains exactly `schema_version: 1`,
+`kind: nats-image-supplied-observations`, `plan`, `topology`, `census`,
+`boundaries` and `processes`; the portable tests provide complete synthetic
+examples. The checker reads and hashes one bounded buffer and creates no files.
+Its `observation_valid` result establishes internal consistency only and always
+retains `runtime_admitted: false` with explicit missing evidence. It does not
+start a native process or authenticate an executable/tool from supplied fields.
+
+The unchanged-image driver and preparation/run interface are unfinished. Actual
+ingress observation, old-process exits, same-store recovery, complete native
+account/group enumeration, bracketed frontier/export and resource cleanup still
+require their implementation and retained native evidence. No public-profile or
+product acceptance follows from this predicate checkpoint; issue #12 stays open.
+
 ## Source-native NATS conformance
 
 [nats_conformance.py](nats_conformance.py) prepares an in-package test executable

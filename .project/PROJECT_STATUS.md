@@ -1,5 +1,35 @@
 # Состояние проекта
 
+## E01-01.harness — Prove the unchanged-image NATS fence
+
+Status: IN_PROGRESS with the first supplied-observation checkpoint ready to
+publish. Six new portable methods passed in 0.249 seconds: bounded plan and
+binary byte expectations, full publication/ACK/retry census, exact process/Wait
+ordering, same-store identities and restart ACLs. The bounded offline checker
+authenticates its input buffer but does not establish native truth. Driver,
+preparation, complete group/interval proof and all new native runs are NOT_RUN.
+Next: publish this coherent checkpoint, then continue the driver and runner on
+the same partial PR. Native execution still requires its later runnable source
+checkpoint and handoff.
+
+PR #127 is accepted at merge
+`522eebc5155e655a7556bf1163376bedf88ddc42`, with both independent reviews and
+exact-head CI passed. Its five source-native cases and retained failed attempt
+are accepted partial evidence. Earlier readiness statements below are historical.
+Issue #12 remains open; no product or public-profile gate is unlocked.
+
+Implement the next bounded standalone/R3 slice using the unchanged pinned NATS
+image and executable. Bind every framed publication/ACK, old child exit,
+same-store restart with publishing disabled, complete native group collection
+and exact interval export. Use a separately pinned driver and accepted offline
+inputs. Commit the checked source checkpoint before native preparation or runs.
+All new image-fence outcomes are NOT_RUN. Root owns publication and acceptance;
+the assigned author owns this worktree. No generic controller or public work.
+
+Base: `522eebc5155e655a7556bf1163376bedf88ddc42`.
+Branch/worktree: `feat/e01-harness-nats-image-fence` /
+`e01-harness-nats-image-fence`. Sole writer: `/root/boot04_preflight`.
+
 ## E01-01.harness — Execute native NATS fence conformance
 
 Status: READY_FOR_REVIEW for actual source-native conformance. Executed source
