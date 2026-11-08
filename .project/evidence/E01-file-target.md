@@ -135,3 +135,51 @@ materialized acceptance:
 It includes the per-client ELF/build-info/OCI checks; no diagnostic-only bypass
 is provided. Actual remaining binaries and parent issue #11 acceptance remain
 pending independent review and execution.
+
+## Actual remaining-client diagnostic
+
+The coordinator executed the reviewed helper after both independent code axes
+and exact-head CI passed on `b382aae725c7cde4b9561cb2f149cbb0a63d6086`.
+Base: `0e64930f73336abdde7b547add6872714d52dd47`.
+Product candidate: `dc48176b2fc03e567cd5e89e10a833486a750285`.
+CI: `42440734067`, check `128609219107`, PASS.
+
+Operation: `run_D95_remaining_native_1794107042 / 34d6045183932e1cb8fcbf208aac`.
+The actual diagnostic passed in 1,653.251 seconds, with exit 0 and complete
+cleanup. Exact bindings:
+
+- Helper SHA256: `44bb30c243e0e0e89c867ccf11c4a199b4b893e1ea54ac0d16ecb11677b0d0f9`.
+- Request SHA256: `d84465902171ddfbfe2636a819dc3f6d5e91e5702e2cae958d388e720b9469fd`.
+- Result SHA256: `76f5f0552fc5247c2b653ccf14b7b0859ebce2dcc4366489e42024aa9817d56d`.
+- Diagnostic proof SHA256: `2c1dd7692617896a5bb44dd51692e24f94fed175bc3fa133387ae8400287c6ec`.
+- Command history SHA256: `5c1be7a3986a2665982a12d70edbc2b11a1249b170a6190d3df6f8ead20a0c82`.
+
+Actual native outputs:
+
+- Bor: 182,359,592 bytes, SHA256 `6557c1389746b17f2e89f4754d6ede26345988ad970f2e0308dbc2524bde4d92`; version 2.11.0 and commit `3a018e38467594508ca31ebeaf804837fb92834a`.
+- Prysm: 88,097,544 bytes, SHA256 `ce8002f20a6ca2590d8aa6629331da6541c37b0c1db8fe85087cac989600d9c3`; version v7.3.1 and commit `96d418cd964b083e37519a9df274030a1beac7db`.
+- Heimdall: 143,290,184 bytes, SHA256 `8113fd5e33fea7e46414ce8b13115a3ff7b2c6a567c01e971b86daa843d6bfd5`; version 0.13.2 and commit `03090c94e7eaef344cd16efd6c968431c4041847`.
+
+The existing recipes resolved separate module closures, compiled the clients,
+ran version commands in the pinned runtime image and created OCI layouts.
+The helper called the same `native_build` path as final materialized validation
+for all three clients. Bor's actual binary has the expected file-target identity;
+Prysm and Heimdall have ordinary module identities. All three omit recorded
+linker flags, while their authenticated commands and version outputs establish
+the selected source commits. Source, command, binary, version, ELF and OCI checks
+passed. Original prior-operation inputs remained unchanged.
+
+Spec (`/root/source_transport_spec`) and Standards (`/root/aut01_standards`)
+independently accepted this scoped artifact evidence. Spec replayed all three
+`native_build` checks. Standards verified the ordered command/copy/version
+bindings and OCI binary contents. All 208 command records succeeded. Seven
+cleanup records completed; supervisor 22841, worker group 22843 and containers
+with nonce `05415ed461e51ef0c1e64032ee47304e4116dcddefbba1b13bcb78812c02303b`
+are absent. There were no additional recorded candidate groups. No review
+changed source artifacts or performed a native rerun.
+
+This supports PR #119's verifier correction. It deliberately excludes the seven
+other module closures, updater sweep, full preflight and native/NATS runtime
+acceptance. It does not complete PR #107 or issue #11. The prior full operation
+remains failed. A fresh full operation and its final artifact reviews are still
+required before the parent task or downstream gate can advance.

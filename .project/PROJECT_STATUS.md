@@ -1,5 +1,11 @@
 # Состояние проекта
 
+## E01-01.builds — Actual remaining-client diagnostic passed
+
+2026-11-08: Both independent code reviews and CI `42440734067` passed for PR #119 head `b382aae725c7cde4b9561cb2f149cbb0a63d6086`. The reviewed helper then compiled Bor, Prysm and Heimdall, ran their version commands in the pinned runtime image, created OCI outputs and passed the same `native_build` checks used by full materialized validation. Operation `run_D95_remaining_native_1794107042 / 34d6045183932e1cb8fcbf208aac` passed in 1,653.251 seconds; result SHA256 `76f5f0552fc5247c2b653ccf14b7b0859ebce2dcc4366489e42024aa9817d56d`. Both independent artifact reviews passed. All 208 recorded commands succeeded. Supervisor, worker and exact-nonce containers are independently confirmed absent.
+
+The [native provenance evidence](evidence/E01-file-target.md) records exact request, helper, proof, history and binary hashes. Root owns this documentation-only result update after the author and reviewers returned ownership. Documentation validation passed: 114 documents, 1,121 links, 84 catalog tasks, 16 mirrors and original v2 unchanged. Whitespace passed; only this status and the evidence note changed, and code is identical to reviewed `b382aae`. Next: publish these records, confirm the exact final head with both reviewers and CI, then merge PR #119 through protected checks. Synchronize the product branch and perform a fresh full five-client, ten-closure operation. The previous full operation remains failed; issue #11 stays open, PR #107 stays draft and #12 remains gated. Native/NATS runtime acceptance remains NOT_RUN.
+
 ## E01-01.builds — Bind native entry points and source provenance
 
 2026-11-08: Full operation `run_D95_builds_1794102326 / c2d81fad7336b030c629b0661f0f67`, source `0e64930` and product `dc48176`, failed at Bor import validation after actual Geth and BSC builds succeeded. Both updater modes and independent refreshes completed. Bor's exact native file target `./cmd/cli/main.go` yields a Go `command-line-arguments` main package without a Module field. The current verifier rejects that legitimate entry point before compilation. Retained import output has 1,921 rows and exactly one such moduleless nonstandard row. Result SHA256: `2ae14c3b2db98aa42eaa427c6322b4c3571c295adcc8c83fb64feead7256baa4`.
