@@ -1,21 +1,24 @@
 # Состояние проекта
 
-## E01-01.harness — First partial runner implemented; final verification pending
+## E01-01.harness — First partial runner verified; independent review pending
 
-2026-11-08: The local Ethereum import CLI, raw-byte admission, independent oracle,
-offline fixture preparation, bounded owned Docker execution, and portable tests
-are implemented. Initial real preparation/import and negative controls passed
-after retaining a noexec preparation failure. Root then found a process ownership
-gap; its direct regression failed before the unreaped-group cleanup correction
-and passed afterward. Twelve portable tests pass. Harness tests are now included
-in bootstrap CI; actual native controls remain explicit opt-in runs.
+2026-11-08: Implementation commit `e1c7821251d0f347a4c62245e7fa591c2af633c7`
+adds the local Ethereum import CLI, raw-byte admission, independent oracle,
+offline preparation, owned Docker execution, and 12 portable tests. Full local
+CI passed 414 tests (two existing opt-in skips), 54 component negatives, and all
+document/mirror checks. Initial preparation and process-ownership failures remain
+retained with their corrections; none was relabeled as success.
 
-The next step is a clean implementation commit, fresh preparation/native controls
-against its exact bytes, then exact-head CI and both independent review axes.
-All seven public profiles and the full quick suite remain NOT_RUN; issue #12 is
-open. [Evidence and retained failures](evidence/E01-01.harness.md) distinguish
-development diagnostics from the pending final-candidate proof. No other harness
-adapter, collector, Gateway, public network or stage-gate work has started.
+Fresh verification on that clean commit passed: preparation 78.417 seconds,
+measured native import/state/full-chain comparison 9.152 seconds, and all nine
+real/admission/resource controls. All 18 owned command groups and containers were
+confirmed absent. Draft PR #122 is under independent review and hosted CI; root
+owns publication and protected acceptance. This result-record change is docs-only
+and preserves the executed source bytes. All seven public profiles and the full
+quick suite remain NOT_RUN; issue #12 is open.
+[Evidence and retained failures](evidence/E01-01.harness.md) bind the exact
+implementation, proofs, durations and owner nonces. No other adapter, collector,
+Gateway, public network or stage-gate work has started.
 
 ## E01-01.harness — Reproducible local Ethereum import block
 
