@@ -227,10 +227,13 @@ replace the coordinator's complete accepted task and gate graph.
 
 ## Remaining runtime inputs
 
-ProfileManifest contents, actual native/supporting builds, fixture resolution,
-resource/RunPlan artifacts, and actual D87 reader boundary evidence still need
-their assigned implementation and real runs. The D87 schema records those
-observations but does not produce them. The harness must preserve immutable
+The harness now provides [offline RunPlan resolution](../harness/README.md#offline-runplan-resolution)
+and a separate versioned declaration schema. It freezes selected inputs and
+reports blockers with all cases NOT_RUN; it does not change these v3 interfaces
+or establish READY. Complete ProfileManifest verification, native/supporting
+readiness, runtime fixture/resource admission and actual D87 reader boundary
+evidence still need their assigned implementation and real runs. The D87 schema
+records those observations but does not produce them. The harness must preserve immutable
 source, delivery, stream, and terminal-fence evidence through its output hashes.
 The accepted corpus, source locks, and product specification are unchanged.
 

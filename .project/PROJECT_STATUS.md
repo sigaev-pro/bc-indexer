@@ -1,5 +1,67 @@
 # Состояние проекта
 
+## E01-01.harness — Define and validate shared RunPlan admission
+
+Status: READY_FOR_REVIEW. PR #125 re-review of
+`c7b7c51b91f88370dda1b4f0fc61abbe5947b22c` passed Spec but found one
+remaining Standards defect: a regular directory substituted between creation
+and opening could receive snapshots alongside unrelated files. The repair
+rejects detectable initial-directory conflicts before writing and makes
+exclusive ownership of the output parent and directory an explicit prerequisite.
+It does not claim protection from arbitrary concurrent same-user replacements.
+The pending-file and moved-directory final-link probes remain documented limits;
+no runtime evidence or product durability guarantee changes. Two new public-seam
+tests reproduced the conflict and a later identity substitution before the fix;
+all 17 focused methods now pass in 3.984 seconds. Exact-head hosted CI and both
+independent review axes remain required. Issue #12 stays open and every plan
+still has `runtime_admitted: false`.
+
+Historical first repair: PR #125 candidate
+`b85f89768c1e6d54d0ecc876ebb3624617953ade` passed the offline Spec review,
+but Standards reproduced publication defects: a late fsync error left a success
+record; an output-directory replacement redirected writes; a replaced snapshot
+was not rechecked; late durability work could exceed the validation budget; and
+some lexical patterns accepted a trailing newline. The original rejected
+candidate remains in history. The focused repair now uses held no-follow
+directory descriptors, exclusive fd-relative writes, snapshot identity/byte
+checks and final authority/deadline checks before atomic publication. Schema
+lexical endings reject trailing newlines. All five defect classes were red
+before correction and now pass; unrelated replacements are preserved.
+No runtime or broader scope was added. All 15 focused methods passed in
+3.841 seconds, including final-marker collision preservation and both file and
+directory fsync failures. Commit and independent re-review follow; the earlier
+nine-test result below is historical.
+
+The offline RunPlan block has a closed version-1
+schema and `check`/`freeze` CLI. It authenticates plan/registry/input bytes,
+resolves exact v3 case identities, preserves partial coverage as NOT_RUN, and
+checks finite source stops, public-network action boundaries and one standard
+parent measured cap of 1,800 seconds. Matching fence declarations remain
+unverified; missing ProfileManifest/runtime proofs remain explicit blockers.
+Every report has `runtime_admitted: false`; no native work ran in this block.
+
+Nine focused test methods passed in 3.489 seconds, including real-file and
+publication-time mutations, unsupported/duplicate/stale identities, unauthorized
+exclusions, public testnet/mainnet restrictions, budget limits and fence-binding
+mismatches and portable schema references. An external Draft 2020-12
+meta-validator is not installed and was not run. Next: checked commit, hosted CI
+and independent exact-head reviews.
+Issue #12 remains open; no dependency or acceptance gate is unlocked.
+
+The three private native slices are accepted: Ethereum
+PR #122, BSC PR #123 and Bor PR #124. Bor merged as
+`78bb82be366ce66c0e13917717a8887f770acd89` after both independent reviews and
+exact-head CI passed. Its 19-control campaign and fresh Ethereum/BSC compatibility
+runs passed; all 24 command records and 13 exact owner checks confirm cleanup.
+The earlier READY_FOR_REVIEW statements below are historical.
+
+Complete ProfileManifest verification, NATS fence conformance, READY checks,
+runtime scheduling and production capture remain separate unfinished outputs.
+
+Worktree: `e01-harness-run-plan`; branch: `feat/e01-harness-run-plan`.
+Root owns publication and acceptance. Record implementation, focused tests and
+the exact remaining outputs before the next commit and draft PR.
+
 ## E01-01.harness — Build the private Bor server and IPC import slice
 
 Status: READY_FOR_REVIEW. Draft PR #124 now has a complete private Bor result
