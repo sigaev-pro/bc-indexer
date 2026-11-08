@@ -17,6 +17,18 @@ def validate_frontier(binding, before, after):
     The caller must authenticate configuration, process generations, response
     bytes and collection order separately. Synthetic rows cannot prove recovery.
     """
+    return _validate_samples(binding, (before, after), expect_unapplied=False)
+
+
+def validate_unapplied_sample(binding, samples):
+    """Require a complete healthy collection whose only unfinished work is apply.
+
+    This is the delayed-apply counterexample, never a successful frontier proof.
+    """
+    return _validate_samples(binding, (samples,), expect_unapplied=True)
+
+
+def _validate_samples(binding, collections, *, expect_unapplied):
     closed(binding, {"account", "group", "traffic_account", "system_account", "voters"}, "Raft binding")
     for key in ("account", "group", "traffic_account"):
         require(isinstance(binding[key], str) and binding[key] and len(binding[key]) <= 256,
@@ -34,7 +46,8 @@ def validate_frontier(binding, before, after):
         require(identifier == native_id, "Voter ID does not match native server name")
     require(len(set(voters.values())) == 3, "Repeated voting identity")
     common = None
-    for samples in (before, after):
+    unapplied = False
+    for samples in collections:
         require(isinstance(samples, dict) and set(samples) == set(voters), "Missing or extra voter observations")
         leaders = []
         for name, identifier in voters.items():
@@ -66,12 +79,20 @@ def validate_frontier(binding, before, after):
             log_term = integer(row.get("pterm"), "last log term")
             require(log_term <= term, "Last log term exceeds current term")
             index = integer(row.get("pindex"), "last log index")
-            require(integer(row.get("committed"), "commit index") == index and
-                    integer(row.get("applied"), "applied index") == index, "Raft work remains unapplied")
+            committed = integer(row.get("committed"), "commit index")
+            applied = integer(row.get("applied"), "applied index")
+            require(committed == index, "Raft work remains uncommitted")
+            if expect_unapplied:
+                require(applied <= committed, "Applied index exceeds committed index")
+                unapplied = unapplied or applied < committed
+            else:
+                require(applied == index, "Raft work remains unapplied")
             for queue in ("ipq_proposal_len", "ipq_entry_len", "ipq_resp_len", "ipq_apply_len"):
                 require(integer(row.get(queue), queue) == 0, "Raft queue is not empty")
             current = {"leader": leader, "term": term, "last_log_term": log_term, "index": index}
             if common is None: common = current
             require(current == common, "Raft frontier changed during collection")
         require(leaders == [common["leader"]], "Exactly one recovered leader required")
+    if expect_unapplied:
+        require(unapplied, "Delayed apply did not expose the empty-queue counterexample")
     return common

@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 import nats_conformance
 from test_nats_fence import frontier
@@ -47,6 +48,14 @@ class ConformanceTests(unittest.TestCase):
             altered["observations"]["response_frame"] = base64.b64encode(broken).decode()
             with self.subTest(frame=broken), self.assertRaises(ValueError):
                 nats_conformance.validate_case(altered, name)
+        for duplicate in (b'{"stream":"FENCE","seq":2,"seq":1}',
+                          b'{"stream":"OTHER","stream":"FENCE","seq":1}',
+                          b'{"stream":"FENCE","seq":1,"extra":{"key":1,"key":2}}'):
+            altered = copy.deepcopy(report)
+            raw = b"MSG _INBOX.EXTRACTOR 1 " + str(len(duplicate)).encode() + b"\r\n" + duplicate + b"\r\n"
+            altered["observations"]["response_frame"] = base64.b64encode(raw).decode()
+            with self.subTest(duplicate=duplicate), self.assertRaisesRegex(ValueError, "Duplicate JSON key"):
+                nats_conformance.validate_case(altered, name)
 
     def test_delayed_apply_requires_unapplied_empty_queue_then_recovered_progress(self):
         binding, stable = frontier()
@@ -60,6 +69,22 @@ class ConformanceTests(unittest.TestCase):
             changed = copy.deepcopy(report)
             changed["observations"][field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
+                nats_conformance.validate_case(changed, name)
+        for label, mutate in (
+            ("missing voter", lambda sample: sample.pop("fence-3")),
+            ("extra voter", lambda sample: sample.update(foreign=copy.deepcopy(sample["fence-3"]))),
+            ("foreign ID", lambda sample: sample["fence-2"]["$G"]["S-frozen"].update(id="foreign1")),
+            ("boolean applied", lambda sample: sample["fence-1"]["$G"]["S-frozen"].update(applied=False)),
+            ("boolean queue", lambda sample: sample["fence-1"]["$G"]["S-frozen"].update(ipq_apply_len=False)),
+            ("unsafe follower", lambda sample: sample["fence-2"]["$G"]["S-frozen"].update(paused=True)),
+            ("changed term", lambda sample: sample["fence-2"]["$G"]["S-frozen"].update(term=8)),
+            ("uncommitted work", lambda sample: sample["fence-2"]["$G"]["S-frozen"].update(pindex=9)),
+            ("applied exceeds commit", lambda sample: sample["fence-2"]["$G"]["S-frozen"].update(applied=9)),
+            ("response queue", lambda sample: sample["fence-2"]["$G"]["S-frozen"].update(ipq_resp_len=1)),
+        ):
+            changed = copy.deepcopy(report)
+            mutate(changed["observations"]["blocked"])
+            with self.subTest(invalid=label), self.assertRaises(ValueError):
                 nats_conformance.validate_case(changed, name)
 
     def test_leader_change_rejects_crossing_collection_and_requires_new_stability(self):
@@ -107,6 +132,22 @@ class ConformanceTests(unittest.TestCase):
                                       ({"mismatch": True}, "command failed or changed")):
                 with self.subTest(options=options), self.assertRaisesRegex(ValueError, expected):
                     nats_conformance.command_provenance(build_tool(**options), time.monotonic() + 10)
+            tool = build_tool()
+            listing = root / "2.stdout"
+            listing.write_text("NotTheRequiredNativeTests\n")
+            tool["commands"][2]["stdout"] = nats_conformance.reference(listing)
+            original = nats_conformance.artifact
+            replaced = []
+            def replace_after_authentication(ref, *args, **kwargs):
+                result = original(ref, *args, **kwargs)
+                if ref == tool["commands"][2]["stdout"]:
+                    listing.write_text("\n".join(nats_conformance.CASES) + "\n")
+                    replaced.append(True)
+                return result
+            with patch.object(nats_conformance, "artifact", side_effect=replace_after_authentication):
+                with self.assertRaisesRegex(ValueError, "Artifact bytes changed|Compiled native case list differs"):
+                    nats_conformance.command_provenance(tool, time.monotonic() + 10)
+            self.assertEqual(replaced, [True])
 
     def test_zero_exit_without_the_selected_native_case_cannot_pass(self):
         name = "TestExtractorFenceStandalone"

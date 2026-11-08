@@ -14,10 +14,10 @@ import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from artifacts import (artifact, captured_json, check_deadline, closed, copy_artifact, json_artifact,
-                       load, pinned_json, read_bytes, reference, require, source_snapshot, sources_unchanged)
+from artifacts import (artifact, captured_json, check_deadline, closed, copy_artifact, decode_json, json_artifact,
+                       load, pinned_json, read_artifact, read_bytes, reference, require, source_snapshot, sources_unchanged)
 from native import Native, new_output
-from nats_fence import validate_frontier
+from nats_fence import validate_frontier, validate_unapplied_sample
 from nats_inputs import COMPILER_IMAGE, SOURCE, inspect_build
 
 CASES = ("TestExtractorFenceStandalone", "TestExtractorFencePreProposal", "TestExtractorFenceDelayedApply",
@@ -109,10 +109,7 @@ def validate_case(report, name):
                 base64.b64decode(message["data"], validate=True) == PAYLOAD, "Native stored message differs")
     if name == CASES[2]:
         binding, blocked = observations["binding"], observations["blocked"]
-        rows = [raw[binding["account"]][binding["group"]] for raw in blocked.values()]
-        require(any(row["committed"] > row["applied"] and all(row[key] == 0 for key in
-                    ("ipq_proposal_len", "ipq_entry_len", "ipq_apply_len")) for row in rows),
-                "Delayed apply did not expose the empty-queue counterexample")
+        validate_unapplied_sample(binding, blocked)
         try:
             validate_frontier(binding, blocked, blocked)
         except ValueError:
@@ -130,8 +127,8 @@ def validate_case(report, name):
         fields = header.split(b" ")
         require(len(fields) == 4 and fields[:3] == [b"MSG", b"_INBOX.EXTRACTOR", b"1"] and fields[3].isdigit() and
                 len(body) == int(fields[3]) + 2 and body.endswith(b"\r\n"), "Uncorrelated or malformed response frame")
-        ack = json.loads(body[:-2])
-        require(ack.get("stream") == "FENCE" and type(ack.get("seq")) is int and ack["seq"] == 1 and
+        ack = decode_json(body[:-2])
+        require(isinstance(ack, dict) and ack.get("stream") == "FENCE" and type(ack.get("seq")) is int and ack["seq"] == 1 and
                 "error" not in ack and observations.get("ack_forwarded") is False,
                 "Missing actual acknowledgment before reply loss")
     if name == CASES[4]:
@@ -183,7 +180,8 @@ def command_provenance(tool, deadline):
                 "GOTMPDIR=/work/build-temp", "TMPDIR=/work/build-temp")), "Native Go isolation mismatch")
             require(command.count("--workdir") == 1 and command[command.index("--workdir") + 1] == "/source", "Wrong native compile root")
         else:
-            listing = read_bytes(Path(row["stdout"]["path"]), 65536, deadline).decode().splitlines()
+            _, listing_bytes = read_artifact(row["stdout"], 65536, deadline=deadline)
+            listing = listing_bytes.decode().splitlines()
             require(sorted(listing) == sorted(CASES), "Compiled native case list differs")
 
 

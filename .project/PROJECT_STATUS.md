@@ -2,7 +2,19 @@
 
 ## E01-01.harness — Execute native NATS fence conformance
 
-Status: READY_FOR_REVIEW for the source-native conformance checkpoint. Sixteen
+Status: READY_FOR_REVIEW for the three source-review corrections. The 16 focused
+tests pass in 0.120 seconds after reproducing 14 failing regression subcases.
+Delayed-apply observations now require complete typed membership and health,
+ACK JSON rejects duplicate keys, and native test listings use the authenticated
+buffer. Normal frontier acceptance remains strict. Checkpoint
+`32472e0a9442a01c2cca76a7a077fc96e5bb8372` passed hosted CI and source-only Spec
+review, but Standards rejected delayed-apply validation, duplicate ACK keys and
+test-list buffer binding. That rejected checkpoint and review remain in history.
+No native preparation or execution has started. Next: publish the correction,
+obtain independent readiness re-review and exact-head CI, then the separate
+native preparation/execution handoff. Issue #12 remains open.
+
+Historical source checkpoint: sixteen
 focused NATS tests passed in 0.106 seconds. Preparation, native compilation and
 all five native case outcomes are NOT_RUN. The source checkpoint must be
 published and reviewed before its separately authorized execution handoff.
