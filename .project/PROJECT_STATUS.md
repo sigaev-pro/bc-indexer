@@ -2,15 +2,25 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
-Current checkpoint: the corrected 19-control campaign on
-`04d5b908c1e4744ad8b91bdefe7d81c2fb3618fa` passed in 145.041236892 seconds.
-Its proof SHA256 is `fa532333cf5dc98df52990e29336a66191b0f883e2ac3830282622393d0a231c`.
-All 42 command results prove cleanup/group absence, and all 12 owner-label
-container checks are empty. The final campaign guard now also rechecks its
-original authority references before PASS; four mutation subcases reject
-replaced request/build/fixture/tool manifests. A fresh campaign on this final
-guard remains pending. Issue 12 stays open; public profiles, the complete quick
-suite, native capture and NATS remain NOT_RUN.
+Current checkpoint: the partial BSC block is READY_FOR_REVIEW with final native
+evidence. All 19 controls on source
+`dcf1a8ca58f60d5a7abb61fe2a9a5ca086e232df` passed in 164.508446058 seconds,
+within the shared 900-second budget. The proof SHA256 is
+`914c619096e81b74a68673fc43659d10777a948a5ac4f1f806f1c2abebe5b0ae`.
+All 42 command results prove cleanup/group absence, and all 12 exact owner-label
+container checks are empty. The campaign rechecked its original authority
+references before PASS. All 44 portable harness tests passed; both independent
+source reviews and source CI run `42506634925` passed. This final checkpoint only
+updates evidence/status; executed harness bytes are unchanged. Final metadata
+review, exact-head CI and protected merge remain pending.
+
+Preparation 4 and its external observer-tool pin are reused with their original
+source identity. Expected negative executions remain FAIL in their own proofs;
+the campaign PASS means their specified rejection was observed. Earlier failed
+preparations, failed imports and rejected driver revisions remain intact. Issue
+12 stays open; public profiles, the complete quick suite, native capture and NATS
+remain NOT_RUN. See [the evidence record](evidence/E01-01.harness.md) for exact
+artifact identities and remaining scope.
 
 ### Historical BSC checkpoints
 
