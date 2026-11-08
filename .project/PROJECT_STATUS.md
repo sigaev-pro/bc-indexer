@@ -1,5 +1,11 @@
 # Состояние проекта
 
+## E01-01.builds — Actual derivative preflights passed
+
+2026-11-08: Both independent code reviews and exact CI `42449578253` passed for PR #120 head `046d1cb0a45c3592c6cfc07742a6fc454b4381b0`. The separately reviewed diagnostic copied 12,870 referenced files, changed only the derivative cleanup reference, and passed all seven actual product preflights in 36.268–38.399 seconds each. A changed binary hash was rejected. Supervised operation `run_D95_materialized_preflight_1794114608 / 47d65615515dbff21712af3558` passed in 326.506 seconds; result SHA256 `d4a3898618b98fb6810c63a638cee143273c6032945dfec49284eb70039997a5`. Supervisor, worker, all eight candidate groups and exact-nonce containers are independently confirmed absent. Original manifest, command-history and cleanup-journal hashes remain unchanged.
+
+Root owns this documentation-only result checkpoint after author ownership returned. The [preflight evidence](evidence/E01-preflight-budget.md) records the exact helper, request, proof, timings and diagnostic limits. Both independent diagnostic reviews passed, including all eight control records, 12,870 separate file inodes and unchanged original hashes. Documentation checks passed 115 files, 1,123 links, 84 tasks and 16 mirrors; original v2 and executable code remain unchanged. Final exact-head reviews and CI must pass before protected merge. Then synchronize the product branch and run a fresh complete operation. This diagnostic does not establish new native provenance or convert the earlier failed full run to success. Issue #11 stays open, PR #107 stays draft, and #12 remains gated; native/NATS runtime acceptance remains NOT_RUN.
+
 ## E01-01.builds — Bound actual materialized preflight time
 
 2026-11-08: Complete operation `run_D95_builds_1794109506 / c2f5e8372cde4279d846d9f68488`, source `5edbe3e5` and product `8c7f10ea`, compiled all five native clients, verified all ten module closures and reached final product preflights after initial trusted materialized validation. The first real Ethereum preflight exceeded the unconditional 10-second control timeout. Result SHA256: `20fd70567be575280454b300e9720057325a2e958659018f2dac1549de73d5e3`; duration 3,854.763 seconds. Supervisor, worker, all 54 candidate groups and owned containers are absent. Original artifacts and the failed result remain immutable.

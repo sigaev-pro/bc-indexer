@@ -67,3 +67,55 @@ timing evidence. It may invoke
 for each profile under its own original finite deadline. This author does not
 create or run that diagnostic. Such results do not repair the failed operation,
 establish new trusted native provenance, or complete issue #11.
+
+## Actual derivative diagnostic
+
+Both independent code reviews passed on exact head
+`046d1cb0a45c3592c6cfc07742a6fc454b4381b0`; exact-head CI `42449578253`,
+check `128635710293`, app `15368`, passed. Spec independently ran six
+focused methods and a scaled timing control; Standards ran the same six
+methods in a disposable exact-commit copy and a separate descendant/deadline
+control. No review findings remained.
+
+The separately reviewed helper `materialized-preflight-smoke.py`, SHA256
+`19381ae1946f2ab2989ffda26b30a695de6c6b639cd3eb30b04f3705f590a02f`, ran
+against that frozen source and product
+`8c7f10ea83ba6c640a37e787ffeef4aa5f2c64d4`. Supervised operation
+`run_D95_materialized_preflight_1794114608 / 47d65615515dbff21712af3558`
+used a finite 1,800-second outer limit. Request-file SHA256:
+`a1ae2bec231b516984169785b426fb62d0aefd1cf862daa97bf09af988849ced`.
+The supervisor's canonical request digest is
+`4b5216d85161979749fbc47225849281b2d58daf1882e5a12118017f98bc4503`.
+
+The helper copied 12,870 unique references totaling 7,578,016,311 bytes in
+39.880 seconds without hardlinks. It refreshed only the copied cleanup
+reference to the final journal already described above. Seven product
+preflights passed: Ethereum Mainnet 36.438 seconds, Sepolia 37.830, Hoodi
+36.268, BSC Mainnet 36.831, BSC Testnet 36.816, Polygon Mainnet 37.333 and
+Amoy 38.399. A separate manifest with a changed Geth binary hash returned
+exit 2 and `Artifact bytes changed` as required.
+
+The operation exited zero with complete cleanup in 326.506 seconds. Result
+SHA256: `d4a3898618b98fb6810c63a638cee143273c6032945dfec49284eb70039997a5`.
+Diagnostic-proof SHA256:
+`70b58097d64033d911f0c597896e1778f2260cf170472889383882655821dab6`.
+Root independently confirmed supervisor 2831, worker group 2845 and all
+eight recorded candidate groups absent, with no containers bearing nonce
+`33e73af1feaafca4498132d010fe0ee5882b1f21ce3e40fecbf5ffb7fea92302`.
+The original manifest, command history and final cleanup journal retain
+their pinned hashes. No original artifact was repaired or replaced.
+
+This establishes actual product-preflight timing and rejection behavior on
+an explicit derivative copy. It does not replay complete native provenance,
+replace the failed operation, complete parent #11 or establish native/NATS
+runtime acceptance. Independent Spec and Standards diagnostic reviews both
+passed: all eight retained control records bind, all 12,870 copied files
+have separate inodes, original hashes remain unchanged and cleanup records
+are complete. Standards also confirmed current process/container queries
+are empty. No reviewer reran the diagnostic or changed artifacts.
+
+The result checkpoint changes only this evidence and project status.
+Documentation checks passed 115 files, 1,123 links, 84 catalog tasks and
+16 mirrors; original v2 and executable code remain unchanged. Final
+exact-head review and CI, protected repair merge, product synchronization,
+and a fresh full operation remain required.
