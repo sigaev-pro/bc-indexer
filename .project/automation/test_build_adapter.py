@@ -60,7 +60,7 @@ def transport_proof():
                           "labels": build_resources.labels(spec), "running": False, "remove_exit": 0})
     cleanup = {"schema_version": 1, "nonce": spec["nonce"], "complete": True, "resources": resources, "remaining": [],
                "creation_inventory": {"schema_version": 1, "nonce": spec["nonce"], "intents": intents}, "started_at": 1, "finished_at": 2}
-    authentication = {"schema_version": 1, "synthetic": False, "verified": True, "bindings": []}
+    authentication = {"schema_version": 1, "synthetic": False, "verified": True, "bindings": [], "check_report": copy.deepcopy(log)}
     for pin in contract.inputs(SOURCE)[1]["package_indexes"]:
         row = {"index_url": pin["url"], "index_sha256": log["sha256"], "index_size": log["size_bytes"],
                "inrelease_url": pin["url"].split("/main/", 1)[0] + "/InRelease", "command_index": len(commands),

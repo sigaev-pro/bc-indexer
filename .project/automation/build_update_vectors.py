@@ -9,6 +9,7 @@ import urllib.parse
 
 import build_contract as contract
 import build_updates
+import build_source_evidence
 
 
 FIXTURE_TIME = 946684800
@@ -176,6 +177,7 @@ def fixture(root, source):
                              "body": contract.reference(root, path), "observed_at": FIXTURE_TIME})
     transport = root / "transport.json"
     transport.write_bytes(contract.canonical({"schema_version": 1, "synthetic": True, "observations": observations}))
+    observations = [build_source_evidence.fixture_observation(row, root) for row in observations]
     report = {"schema_version": 1, "contract": build_updates.UPDATE_CONTRACT, "mode": "check", "synthetic": True,
               "registry_sha256": registry_hash, "active_lock_before": lock_hash, "active_lock_after": lock_hash,
               "complete": True, "observed_at": FIXTURE_TIME, "components": rows, "observations": observations, "candidate": None,

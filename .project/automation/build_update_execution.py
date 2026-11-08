@@ -11,13 +11,15 @@ import urllib.request
 import build_contract as contract
 import build_materials as materials
 import build_updates
+import build_source_evidence
+import build_source_transport
 
 
 def refresh(runner, invocation, registry, active, registry_hash, lock_hash):
     report = copy.deepcopy(invocation["report"])
     directory = invocation["directory"]
     target = directory / "independent"
-    target.mkdir()
+    target.mkdir(exist_ok=True)
     selected = invocation["validated"]["selected"]
     archive_urls = {artifact["url"] for row in selected.values() for artifact in row.get("artifacts", [])}
     needed = invocation["validated"]["observations"].used
@@ -26,36 +28,19 @@ def refresh(runner, invocation, registry, active, registry_hash, lock_hash):
         url = row["url"]
         if url not in needed or url in archive_urls:
             continue
-        output = target / hashlib.sha256(url.encode()).hexdigest()
         parsed = urllib.parse.urlsplit(url)
-        started = time.time()
-        headers = {}
-        if parsed.hostname == "api.github.com":
-            _, raw, _ = runner.run(["gh", "api", "--include", url], timeout=60)
-            data = raw.read_bytes()
-            separator = b"\r\n\r\n" if b"\r\n\r\n" in data else b"\n\n"
-            header, found, body = data.partition(separator)
-            contract.require(found and re.match(rb"HTTP/\S+ 200(?:\s|$)", header), "independent official GitHub observation did not succeed")
-            for line in header.decode().splitlines()[1:]:
-                key, split, value = line.partition(":")
-                if split and key.lower() in {"link", "etag", "content-type"}:
-                    headers[key.lower()] = value.strip()
-            output.write_bytes(body)
-        else:
-            request_headers = {}
-            if parsed.hostname == "registry-1.docker.io":
-                match = re.match(r"/v2/(library/[^/]+)/", parsed.path)
-                contract.require(match is not None, "independent image observation is outside an official library repository")
-                repository = match.group(1)
-                if repository not in tokens:
-                    endpoint = "https://auth.docker.io/token?service=registry.docker.io&scope=" + urllib.parse.quote("repository:" + repository + ":pull", safe="")
-                    with urllib.request.urlopen(endpoint, timeout=runner.remaining(30)) as response:
-                        tokens[repository] = contract.parse_json(response.read(1024 * 1024))["token"]
-                request_headers = {"Authorization": "Bearer " + tokens[repository],
-                    "Accept": "application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"}
-            runner.fetch(url, output, headers=request_headers, maximum=256 * 1024 * 1024)
-            headers = runner.fetches[-1]["headers"]
-        row.update(status=200, headers=headers, body=contract.reference(directory, output), observed_at=started)
+        request_headers = {}
+        if parsed.hostname == "registry-1.docker.io":
+            match = re.match(r"/v2/(library/[^/]+)/", parsed.path)
+            contract.require(match is not None, "independent image observation is outside an official library repository")
+            repository = match.group(1)
+            if repository not in tokens:
+                endpoint = "https://auth.docker.io/token?service=registry.docker.io&scope=" + urllib.parse.quote("repository:" + repository + ":pull", safe="")
+                with urllib.request.urlopen(endpoint, timeout=runner.remaining(30)) as response:
+                    tokens[repository] = contract.parse_json(response.read(1024 * 1024))["token"]
+            request_headers = {"Authorization": "Bearer " + tokens[repository],
+                "Accept": "application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"}
+        row.update(build_source_transport.fetch(runner, url, directory, request_headers))
     validated = build_updates.validate_report(report, directory, registry, active, registry_hash, lock_hash,
                                                report["mode"], False, time.time())
     contract.require(validated["complete"], "independent live source check is incomplete")
@@ -64,7 +49,7 @@ def refresh(runner, invocation, registry, active, registry_hash, lock_hash):
     return {"report": report, "path": path, "directory": directory, "validated": validated}
 
 
-def authenticate(runner, container, invocation):
+def authenticate(runner, container, invocation, check_report):
     """Use only the authenticated cleartext returned by the image-owned sqv."""
     directory = runner.root / "updater-signatures"
     directory.mkdir()
@@ -85,17 +70,21 @@ def authenticate(runner, container, invocation):
         proofs.append({**binding, "command_index": command_index, "inrelease": contract.reference(runner.root, input_path),
                        "release": contract.reference(runner.root, output), "packages": contract.reference(runner.root, observations.file(binding["index_url"])),
                        "keyring": contract.reference(runner.root, keyring), "verifier": contract.reference(runner.root, verifier)})
-    result = {"schema_version": 1, "synthetic": False, "verified": True, "bindings": proofs}
+    result = {"schema_version": 1, "synthetic": False, "verified": True, "bindings": proofs,
+              "check_report": contract.reference(runner.root, check_report)}
     path = directory / "proof.json"
     path.write_bytes(contract.canonical(result))
     return path
 
 
 def validate_authentication(proof, root, commands, now, retained=False):
-    contract.require(type(proof) is dict and set(proof) == {"schema_version", "synthetic", "verified", "bindings"}
+    contract.require(type(proof) is dict and set(proof) == {"schema_version", "synthetic", "verified", "bindings", "check_report"}
                      and type(proof["schema_version"]) is int and proof["schema_version"] == 1
                      and proof["synthetic"] is False and proof["verified"] is True
                      and type(proof["bindings"]) is list and len(proof["bindings"]) == 6, "updater signature proof is incomplete or synthetic")
+    contract.reference_descriptor(proof["check_report"])
+    if not retained:
+        build_source_evidence.validate_report_journals(contract.verify_reference(root, proof["check_report"]), "check")
     seen, channels = set(), set()
     for row in proof["bindings"]:
         contract.require(set(row) == {"index_url", "index_sha256", "index_size", "inrelease_url", "command_index", "inrelease", "release", "packages", "keyring", "verifier"}
