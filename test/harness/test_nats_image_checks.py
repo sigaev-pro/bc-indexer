@@ -151,6 +151,20 @@ class ImageObservationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 checks.validate_observations(changed)
 
+    def test_overlapping_native_processes_cannot_share_one_pid(self):
+        document = sample()
+        for generation in (0, 1):
+            changed = copy.deepcopy(document)
+            for process in changed["processes"]:
+                if process["generation"] == generation:
+                    process["pid"] = 500
+            with self.subTest(generation=generation), self.assertRaises(ValueError):
+                checks.validate_observations(changed)
+        reused = copy.deepcopy(document)
+        for index in range(3):
+            reused["processes"][index + 3]["pid"] = reused["processes"][index]["pid"]
+        self.assertTrue(checks.validate_observations(reused)["observation_valid"])
+
     def test_cli_authenticates_the_exact_buffer_without_native_dispatch(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

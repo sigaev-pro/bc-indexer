@@ -138,6 +138,7 @@ def validate_processes(topology, processes, boundaries, census):
     fields = {"name", "generation", "pid", "start_ticks", "info_id", "member_id", "argv", "config_bytes", "store",
               "store_device", "store_inode", "started_order", "exited_order", "exit_code", "wait_error", "forced_kill"}
     identities, info_ids, stores, event_orders = set(), set(), {}, set()
+    generation_pids = [set(), set()]
     old_start_ticks = []
     for position, process in enumerate(processes):
         closed(process, fields, "Native process")
@@ -147,6 +148,8 @@ def validate_processes(topology, processes, boundaries, census):
                 process["member_id"] == member_id(name), "Native process/name/member binding changed")
         identity = (number(process["pid"], "native PID", 1), number(process["start_ticks"], "native start time", 1))
         require(identity not in identities, "Repeated native process instance")
+        require(identity[0] not in generation_pids[generation], "Overlapping native processes share one PID")
+        generation_pids[generation].add(identity[0])
         identities.add(identity)
         if generation == 0:
             old_start_ticks.append(identity[1])

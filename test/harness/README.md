@@ -32,11 +32,69 @@ Its `observation_valid` result establishes internal consistency only and always
 retains `runtime_admitted: false` with explicit missing evidence. It does not
 start a native process or authenticate an executable/tool from supplied fields.
 
-The unchanged-image driver and preparation/run interface are unfinished. Actual
-ingress observation, old-process exits, same-store recovery, complete native
-account/group enumeration, bracketed frontier/export and resource cleanup still
-require their implementation and retained native evidence. No public-profile or
-product acceptance follows from this predicate checkpoint; issue #12 stays open.
+The later [nats_image.py](nats_image.py) source checkpoint adds preparation and
+measurement around the unchanged accepted executable. Its static, standard
+library Go coordinator has portable tests; pinned-container compilation and
+actual standalone/R3 runs are still **NOT_RUN**. The independent
+[collection](nats_image_collection.py) and [raw-byte join](nats_image_proof.py)
+checks extend the supplied predicate; they cannot establish native truth alone.
+Issue #12 stays open and `runtime_admitted` remains false.
+
+```sh
+python3 -I test/harness/nats_image.py prepare /absolute/BuildManifest.json \
+  --sha256 ACCEPTED_BUILD_SHA256 \
+  --source-conformance /absolute/accepted-source-conformance.json \
+  --source-sha256 ACCEPTED_SOURCE_PROOF_SHA256 --output /absolute/new-preparation
+python3 -I test/harness/nats_image.py run /absolute/new-preparation/tool.json \
+  --sha256 EXTERNALLY_ACCEPTED_TOOL_SHA256 --plan /absolute/image-plan.json \
+  --plan-sha256 EXTERNALLY_PINNED_PLAN_SHA256 --output /absolute/new-run
+```
+
+The closed plan is `{"schema_version":1,"messages":3,"payload_bytes":32,
+"measured_seconds":900,"topologies":["standalone","R3"]}`. Volumes are bounded
+and configurable; both topologies are required. The externally pinned tool is
+separate from scenario inputs. Preparation authenticates the accepted image,
+native executable, source-native proof and its five cases. It compiles only our
+coordinator with the accepted offline compiler; native NATS is not rebuilt.
+The image run checks its actual executable bytes before starting native children.
+
+The source and image configurations are explicitly different: embedded `NoSigs`
+servers with `$G`/`$SYS` versus CLI processes with `APP`/`SYS`, exact client ACLs,
+names, ports and original-store restart. Both cover ordinary PUB, FileStorage,
+Limits retention and default persistence without batching, consumers, sources,
+mirrors, schedules, transforms or direct reads. Unsupported settings reject.
+Each topology uses one owned network-isolated container; native processes have
+separate PID/start identities, INFO IDs, configurations, store identities and
+Wait/exit records. Simultaneously live voters require distinct PIDs; reuse after
+the old process exited is allowed only with a new start identity.
+
+The socket audit retains actual ingress and replies before the driver suppresses
+one ACK from the application's real timed wait. Its explicit retry is another
+publication and append. There is no hidden reconnect or library retry. The
+selected path rejects unexpected extra protocol frames rather than inventing
+attempt correlation. All original publisher/manager connections close before
+old children are stopped. Every old Wait finishes before restart. Before-store
+snapshots are immutable copies taken only after exit; restart opens the original
+stores, and final store bytes are referenced only after new children exit.
+
+Restart users can publish only exact stream INFO and sequence GET API subjects.
+A real denied data publication checks that restriction. Full health, JSz and
+explicit APP/SYS/$G Raft inventories enumerate metadata and stream groups, with
+all three native member IDs and distinct logical/transport accounts. Inventory
+rows and explicit samples must agree. Complete before/after collections bracket
+the upper sequence selection and each direct sequence read. Raw native API
+frames, stored binary bytes, timestamps and interval identities are joined to
+the census. No consumer is created to read the interval.
+
+One monotonic parent budget covers admission, both topologies, faults, restart,
+comparison, evidence hashing and cleanup; it never exceeds 1,800 seconds.
+Preparation has its own 600-second limit. Native command caps are clipped to
+the parent budget and retain the existing owned-command cleanup reserve. Failed
+attempts remain failed, with commands, partial wire bytes and available native
+artifacts retained. A corrected retry needs `--previous`, its explicit
+`--previous-sha256`, and `--correction`; it uses a fresh output directory and
+authenticates the old build/tool binding. These are private harness artifacts,
+not public profile or product delivery evidence.
 
 ## Source-native NATS conformance
 

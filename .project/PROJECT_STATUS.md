@@ -2,15 +2,19 @@
 
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: IN_PROGRESS with the first supplied-observation checkpoint ready to
-publish. Six new portable methods passed in 0.249 seconds: bounded plan and
-binary byte expectations, full publication/ACK/retry census, exact process/Wait
-ordering, same-store identities and restart ACLs. The bounded offline checker
-authenticates its input buffer but does not establish native truth. Driver,
-preparation, complete group/interval proof and all new native runs are NOT_RUN.
-Next: publish this coherent checkpoint, then continue the driver and runner on
-the same partial PR. Native execution still requires its later runnable source
-checkpoint and handoff.
+Status: IN_PROGRESS. PR #128 now has the complete source checkpoint for the
+unchanged-image coordinator, preparation/run interface and independent complete
+inventory/export checks. Sixteen focused Python methods and seven portable
+Go driver tests pass. Accepted source-native proof bytes were authenticated
+again without native execution. Pinned-container compilation and actual image
+runs remain NOT_RUN. Next: publish the checked source, obtain independent source
+review and the execution handoff, then prepare and measure both topologies.
+
+The first published checkpoint `98120a100b66ca8bbd1f0249d2bc857e1afe94a9`
+had one confirmed review defect: it allowed overlapping voters to share a PID
+with different start ticks. Both generation controls reproduced that failure;
+the new checkpoint requires distinct live PIDs while retaining valid later
+reuse. Earlier checkpoint results remain historical, not final acceptance.
 
 PR #127 is accepted at merge
 `522eebc5155e655a7556bf1163376bedf88ddc42`, with both independent reviews and
