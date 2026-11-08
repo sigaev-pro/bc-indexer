@@ -52,7 +52,7 @@ def runtime_fixture(root):
     write_json(runtime / "server.argv.json", args)
     write_json(runtime / "readiness.json", {"head": 0, "genesis_hash": sample.identities[0],
                "node_info": {"protocols": {"eth": {"network": 15001, "config": admitted["fixture"]["native_config"]}}},
-               "validators": [{"address": sample.expected["validator"]}]})
+               "validators": [{"address": sample.expected["validator"], "voting_power": "10"}]})
     write_json(runtime / "server-cleanup.json", {"wait_completed": True, "unexpected_exit": False,
                                                 "forced_kill": False, "exit_code": 0, "exit": "", "pid": 123})
     (runtime / "full-chain.rlp").write_bytes((root / "full_chain").read_bytes())
@@ -86,7 +86,7 @@ class BorRuntimeEvidenceTests(unittest.TestCase):
                 with self.assertRaises(Rejected): validate_runtime(runtime, admitted, admitted["deadline"])
 
     def test_partial_dump_readiness_and_native_export_are_not_success(self):
-        for mutation in ("continuation", "head", "network", "validator", "export", "launch"):
+        for mutation in ("continuation", "head", "network", "validator", "power", "export", "launch"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
                 admitted, runtime = runtime_fixture(Path(directory).resolve())
                 if mutation == "export": (runtime / "full-chain.rlp").write_bytes(b"valid prefix only")
@@ -98,6 +98,7 @@ class BorRuntimeEvidenceTests(unittest.TestCase):
                     path = runtime / "readiness.json"; value = json.loads(path.read_text())
                     if mutation == "head": value["head"] = 2
                     elif mutation == "network": value["node_info"]["protocols"]["eth"]["network"] = 137
+                    elif mutation == "power": value["validators"][0]["voting_power"] = "0"
                     else: value["validators"][0]["address"] = "0x" + "0" * 40
                     write_json(path, value)
                 with self.assertRaises(Rejected): validate_runtime(runtime, admitted, admitted["deadline"])

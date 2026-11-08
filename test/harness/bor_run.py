@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 import signal
 import sys
@@ -50,6 +51,9 @@ def validate_runtime(directory, admitted, deadline):
             ready["node_info"]["protocols"]["eth"]["network"] == 15001 and isinstance(ready.get("validators"), list) and
             len(ready["validators"]) == 1 and ready["validators"][0]["address"].lower() == admitted["expected"]["validator"],
             "Native private network or genesis validator mismatch")
+    power = ready["validators"][0].get("voting_power")
+    require(isinstance(power, str) and re.fullmatch(r"[1-9][0-9]*", power) and len(power) <= 78,
+            "Invalid native genesis validator power")
     cleanup = load(directory / "server-cleanup.json", deadline=deadline)
     require(cleanup.get("wait_completed") is True and cleanup.get("unexpected_exit") is False and
             cleanup.get("forced_kill") is False and type(cleanup.get("exit_code")) is int and cleanup["exit_code"] == 0 and

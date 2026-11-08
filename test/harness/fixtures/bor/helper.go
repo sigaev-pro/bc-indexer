@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	borabi "github.com/ethereum/go-ethereum/consensus/bor/abi"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -131,10 +132,10 @@ func generate(ctx context.Context, genesisPath, keySource, output string) error 
 	cfg.EnableParallelStatelessImport, cfg.EnablePreconfs, cfg.AcceptPreconfTx = false, false, false
 	backend, err := eth.New(stack, &cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("create native Bor backend: %w", err)
 	}
 	if err = stack.Start(); err != nil {
-		return err
+		return fmt.Errorf("start native preparation backend: %w", err)
 	}
 	engine, ok := backend.Engine().(*bor.Bor)
 	if !ok {
@@ -147,18 +148,13 @@ func generate(ctx context.Context, genesisPath, keySource, output string) error 
 		}
 		return crypto.Sign(crypto.Keccak256(payload), key)
 	})
-	var api *bor.API
-	for _, entry := range engine.APIs(chain) {
-		if candidate, ok := entry.Service.(*bor.API); ok {
-			api = candidate
-		}
+	spanner := engine.GetSpanner()
+	if spanner == nil {
+		return errors.New("missing real native Bor spanner")
 	}
-	if api == nil {
-		return errors.New("missing native Bor API")
-	}
-	validators, err := api.GetCurrentValidators()
+	validators, err := spanner.GetCurrentValidatorsByBlockNrOrHash(ctx, rpc.BlockNumberOrHashWithNumber(0), 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("read actual genesis contract validators: %w", err)
 	}
 	if len(validators) != 1 || validators[0].Address != author {
 		return errors.New("actual genesis contract validator mismatch")
@@ -203,7 +199,7 @@ func generate(ctx context.Context, genesisPath, keySource, output string) error 
 			}
 		}
 		if err = engine.Prepare(chain, header, false); err != nil {
-			return err
+			return fmt.Errorf("prepare native block %d: %w", number, err)
 		}
 		state, err := chain.StateAt(parent.Root)
 		if err != nil {
@@ -216,23 +212,23 @@ func generate(ctx context.Context, genesisPath, keySource, output string) error 
 				big.NewInt(1000000000000000000), 21000, big.NewInt(5000000000), nil)
 			tx, err = types.SignTx(tx, types.LatestSigner(genesis.Config), sender)
 			if err != nil {
-				return err
+				return fmt.Errorf("sign fixture transaction: %w", err)
 			}
 			state.SetTxContext(tx.Hash(), 0)
 			evm := vm.NewEVM(core.NewEVMBlockContext(header, chain, &author), state, genesis.Config, vm.Config{})
 			receipt, err := core.ApplyTransaction(evm, new(core.GasPool).AddGas(header.GasLimit), state, header, tx, &header.GasUsed)
 			if err != nil {
-				return err
+				return fmt.Errorf("execute native block %d transaction: %w", number, err)
 			}
 			body.Transactions, receipts = []*types.Transaction{tx}, []*types.Receipt{receipt}
 		}
 		block, _, _, err := engine.FinalizeAndAssemble(chain, header, state, body, receipts)
 		if err != nil {
-			return err
+			return fmt.Errorf("finalize native block %d: %w", number, err)
 		}
 		sealed := make(chan *consensus.NewSealedBlockEvent, 1)
 		if err = engine.Seal(chain, block, nil, sealed, ctx.Done()); err != nil {
-			return err
+			return fmt.Errorf("seal native block %d: %w", number, err)
 		}
 		select {
 		case <-ctx.Done():
@@ -244,7 +240,7 @@ func generate(ctx context.Context, genesisPath, keySource, output string) error 
 			block = event.Block
 		}
 		if _, err = chain.InsertChain([]*types.Block{block}, false); err != nil {
-			return err
+			return fmt.Errorf("import generated native block %d: %w", number, err)
 		}
 		if chain.CurrentBlock().Hash() != block.Hash() {
 			return errors.New("native preparation import did not advance head")
@@ -462,14 +458,14 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 	defer func() { conn.Close(); client.Close() }()
 	var head hexutil.Uint64
 	if err = client.CallContext(ctx, &head, "eth_blockNumber"); err != nil {
-		return err
+		return fmt.Errorf("read fresh native head: %w", err)
 	}
 	if head != 0 {
 		return errors.New("server did not start at fresh head zero")
 	}
 	var rawGenesis hexutil.Bytes
 	if err = client.CallContext(ctx, &rawGenesis, "debug_getRawBlock", "0x0"); err != nil {
-		return err
+		return fmt.Errorf("read native genesis bytes: %w", err)
 	}
 	var block0 types.Block
 	if err = rlp.DecodeBytes(rawGenesis, &block0); err != nil {
@@ -480,7 +476,7 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 	}
 	var nodeInfo json.RawMessage
 	if err = client.CallContext(ctx, &nodeInfo, "admin_nodeInfo"); err != nil {
-		return err
+		return fmt.Errorf("read native node configuration: %w", err)
 	}
 	var info struct {
 		Protocols struct {
@@ -504,15 +500,24 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 	if info.Protocols.Eth.Network != 15001 || !bytes.Equal(nativeConfig, wantedConfig) {
 		return errors.New("server native config mismatch")
 	}
-	var validators []struct {
-		Address common.Address `json:"address"`
+	validatorABI := borabi.ValidatorSet()
+	validatorCall, err := validatorABI.Pack("getBorValidators", big.NewInt(0))
+	if err != nil {
+		return fmt.Errorf("pack native genesis validator call: %w", err)
 	}
-	if err = client.CallContext(ctx, &validators, "bor_getCurrentValidators"); err != nil {
-		return err
+	var validatorResult hexutil.Bytes
+	if err = client.CallContext(ctx, &validatorResult, "eth_call", map[string]any{
+		"to": genesis.Config.Bor.ValidatorContract, "data": hexutil.Bytes(validatorCall), "gas": borabi.SystemTxGas}, "0x0"); err != nil {
+		return fmt.Errorf("IPC genesis validator contract call: %w", err)
 	}
-	if len(validators) != 1 || validators[0].Address != common.HexToAddress(signerAddress) {
+	addresses, powers := new([]common.Address), new([]*big.Int)
+	if err = validatorABI.UnpackIntoInterface(&[]interface{}{addresses, powers}, "getBorValidators", validatorResult); err != nil {
+		return fmt.Errorf("decode native genesis validators: %w", err)
+	}
+	if len(*addresses) != 1 || len(*powers) != 1 || (*addresses)[0] != common.HexToAddress(signerAddress) || (*powers)[0].Sign() <= 0 {
 		return errors.New("server genesis validator mismatch")
 	}
+	validators := []map[string]any{{"address": lower((*addresses)[0]), "voting_power": (*powers)[0].String()}}
 	if err = saveJSON(filepath.Join(output, "readiness.json"), map[string]any{"head": 0, "genesis_hash": block0.Hash().Hex(), "node_info": nodeInfo, "validators": validators}); err != nil {
 		return err
 	}
@@ -524,7 +529,7 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 		return errors.New("native IPC import returned false")
 	}
 	if err = client.CallContext(ctx, &head, "eth_blockNumber"); err != nil {
-		return err
+		return fmt.Errorf("read imported native head: %w", err)
 	}
 	if head != 2 {
 		return errors.New("native import terminal head is not two")
@@ -542,7 +547,7 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 		arg := hexutil.EncodeUint64(number)
 		var raw hexutil.Bytes
 		if err = client.CallContext(ctx, &raw, "debug_getRawBlock", arg); err != nil {
-			return err
+			return fmt.Errorf("read imported block %d: %w", number, err)
 		}
 		var block types.Block
 		if err = rlp.DecodeBytes(raw, &block); err != nil {
@@ -556,11 +561,11 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 		}
 		var author common.Address
 		if err = client.CallContext(ctx, &author, "bor_getAuthor", arg); err != nil {
-			return err
+			return fmt.Errorf("read native author for block %d: %w", number, err)
 		}
 		var rawReceipts []hexutil.Bytes
 		if err = client.CallContext(ctx, &rawReceipts, "debug_getRawReceipts", arg); err != nil {
-			return err
+			return fmt.Errorf("read native body receipts for block %d: %w", number, err)
 		}
 		if len(rawReceipts) != len(block.Transactions()) {
 			return errors.New("native body receipt count mismatch")
@@ -611,7 +616,7 @@ func observe(ctx context.Context, genesisPath, blocksPath, output string) (retur
 		}
 		var dump json.RawMessage
 		if err = client.CallContext(ctx, &dump, "debug_dumpBlock", arg); err != nil {
-			return err
+			return fmt.Errorf("dump imported state at block %d: %w", number, err)
 		}
 		var state struct {
 			Next     string                     `json:"next"`

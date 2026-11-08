@@ -114,6 +114,7 @@ def prepare(manifest_path, expected_sha, output, previous=None, correction=None)
         proof["observer_tool"] = reference(output / "observer-tool.json", deadline=deadline)
         runner.command(compiler, ["/work/generated/bor-helper", "generate", "/work/genesis.json", "/work/validator-source.go", "/work/generated"],
                        mounts, cap=180, memory="2g")
+        proof["genesis_validators"] = reference(output / "generated/genesis-validators.json", 1024 * 1024, deadline)
         require(reference(output / "expected.json", deadline=deadline) == proof["expected_before_generation"], "Oracle changed")
         generated = load(output / "generated/generated.json", deadline=deadline)
         fixture = {"schema_version": 1, "kind": "bor-private", "identity": {"kind": "private-local", "chain_id": 15001,

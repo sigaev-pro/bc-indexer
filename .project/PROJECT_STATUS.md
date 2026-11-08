@@ -19,12 +19,18 @@ module verification and helper compilation passed; public-key verification
 rejected the source declaration shape. All three command groups and the exact
 owner's containers are absent. No measured Bor import ran on that source.
 
-The narrow correction selects the unique tracked key constant while preserving
-derived-address verification, propagates every native Wait error and requires
-an empty cleanup error before success. The exit-zero copy-error regression was
-red before this correction and now passes. The next action is a fresh linked
-preparation with a new compiled tool pin on this checked source. Earlier
-artifacts are immutable; the original oracle remains frozen.
+Correction `1d078c42cb706431b601ee0c895548f0c32737e9` passed both source
+reviews and hosted CI. Preparation 2 verified modules, compiled the helper and
+passed public-key/IPC shutdown verification, then failed after 305.064519368
+seconds at the genesis snapshot query with `unknown ancestor`. All four command
+groups and the exact owner's containers are absent. No measured import ran.
+
+The next correction uses the real engine spanner at block 0 during preparation
+and the pinned native validator ABI through IPC `eth_call` for server readiness.
+It retains the actual contract result and adds precise error stages. Genuine
+consensus, signing and import are unchanged. The next action is a fresh linked
+preparation with a new helper pin. Earlier artifacts are immutable; the
+independent oracle remains frozen.
 
 No Bor runtime result is claimed yet. All public profiles, the complete quick
 suite, lifecycle, capture, NATS and later gates remain incomplete or NOT_RUN.
