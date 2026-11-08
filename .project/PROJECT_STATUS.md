@@ -2,6 +2,20 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+The second measured BSC run on `ce1f3b2fd004b339c3a3418da80ca752e1a32e2c`
+retained FAIL after 21.783390208 seconds: the lock-file exceptions worked, but
+native freezer opening still requested write access to `headers.meta` despite
+ReadOnly. All seven command groups and exact-owner containers were cleaned.
+Proof SHA256: `829b35f5699c1b147fd0aeed5701490db6cfbbf624f990768a37e84270d9b801`.
+
+The observer is now explicitly limited to this fresh private two-block hot store.
+It uses native readonly KV plus the native no-freezer wrapper, requires complete
+canonical genesis/blocks/receipts, and validates native transaction/receipt roots.
+Only the existing empty hot-store LOCK gets a writable handle; all database data
+stays read-only. Missing or freezer-only records reject. The helper change needs
+a new external tool pin and preparation 4, linked to successful preparation 3
+without changing that result or resetting history. All 38 portable tests pass.
+
 Authentic BSC preparation attempt 3 on `b706987bf80a952ca03f52d6bc37025ea1003d97`
 passed in 242.454577276 seconds. Public-key verification and genuine Parlia
 preparation/assembly/sealing/self-import succeeded. Tool manifest external pin:

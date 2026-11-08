@@ -14,7 +14,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from artifacts import (artifact, check_deadline, copy_artifact, load, read_bytes,
-                       reference, require, source_snapshot, sources_unchanged)
+                       reference, require, source_snapshot, sources_unchanged, captured_json, json_artifact)
 from native import Native, new_output
 from bsc_inputs import build_input, canonical_digest
 
@@ -34,10 +34,15 @@ def prepare(manifest_path, expected_sha, output, previous=None, correction=None)
     manifest, _, _ = build_input(manifest_ref, deadline)
     previous_ref, attempt = None, 1
     if previous is not None:
-        old = load(previous, deadline=deadline)
-        require(old["kind"] == "bsc-fixture-preparation" and old["result"] == "FAIL" and
+        previous_ref, old = captured_json(previous, deadline=deadline)
+        require(old["kind"] == "bsc-fixture-preparation" and old["result"] in ("FAIL", "PASS") and
                 old["build_manifest"] == manifest_ref and correction, "Invalid preparation retry")
-        previous_ref, attempt = reference(previous, deadline=deadline), old["attempt_index"] + 1
+        if old["result"] == "PASS":
+            _, previous_tool = json_artifact(old["observer_tool"], deadline=deadline)
+            current = reference(Path(__file__).with_name("fixtures") / "bsc/helper.go", 1024 * 1024, deadline)
+            require(current["sha256"] != previous_tool["source"]["sha256"],
+                    "A successful preparation can only be followed by an explicitly changed tool")
+        attempt = old["attempt_index"] + 1
     else:
         require(correction is None, "Correction needs an earlier failed preparation")
     require(not output.is_relative_to(manifest_path.parent), "Preparation cannot modify accepted build storage")

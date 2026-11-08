@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 const validator = "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9"
@@ -160,11 +161,16 @@ func observe(datadir, output string) {
 	}
 	check(err)
 	require(rawdb.ReadLegacyOffset(kv) == 0, "Legacy DB layout is not this fresh fixture")
-	db, err := rawdb.Open(kv, rawdb.OpenOptions{Ancient: filepath.Join(path, "ancient"), ReadOnly: true})
-	check(err)
+	// This fresh two-block fixture must have all required data in hot storage.
+	// Do not open the freezer: this client opens its metadata with write flags
+	// even in readonly mode. Native no-freezer accessors still decode hot data.
+	db := rawdb.NewDatabase(kv)
 	defer db.Close()
 	genesisHash := rawdb.ReadCanonicalHash(db, 0)
 	require(genesisHash != (common.Hash{}), "Missing genesis")
+	genesisBlock := rawdb.ReadBlock(db, genesisHash, 0)
+	require(genesisBlock != nil && genesisBlock.Hash() == genesisHash && genesisBlock.NumberU64() == 0,
+		"Missing native genesis block in hot storage")
 	config := rawdb.ReadChainConfig(db, genesisHash)
 	require(config != nil, "Missing chain config")
 	head := rawdb.ReadHeadHeaderHash(db)
@@ -178,6 +184,8 @@ func observe(datadir, output string) {
 		require(len(rawdb.ReadReceiptsRLP(db, hash, number)) > 0, "Missing receipt storage")
 		receipts := rawdb.ReadReceipts(db, hash, number, block.Time(), config)
 		require(receipts != nil && len(receipts) == len(block.Transactions()), "Incomplete native receipts")
+		require(types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil)) == block.TxHash(), "Native body root mismatch")
+		require(types.DeriveSha(receipts, trie.NewStackTrie(nil)) == block.ReceiptHash(), "Native receipt root mismatch")
 		txs := []map[string]interface{}{}
 		rxs := []map[string]interface{}{}
 		for index, tx := range block.Transactions() {

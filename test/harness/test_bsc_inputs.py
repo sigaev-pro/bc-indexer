@@ -15,6 +15,7 @@ from bsc_inputs import canonical_digest
 import bsc_inputs
 import artifacts
 import bsc_run
+import prepare_bsc
 import test_bsc
 from test_harness import ref, write_json
 
@@ -237,24 +238,43 @@ class BscInputTests(unittest.TestCase):
                 if changed_name:
                     self.assertIn("Artifact bytes changed", result["error"])
 
-    def test_observer_mounts_only_two_existing_empty_lock_files_writable(self):
+    def test_observer_mounts_only_existing_empty_hot_store_lock_writable(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             for name in ("inputs", "state", "observations"):
                 (root / name).mkdir()
-            locks = [root / "state/data/geth/chaindata" / name for name in ("LOCK", "ancient/chain/FLOCK")]
+            locks = [root / "state/data/geth/chaindata/LOCK"]
             for path in locks:
                 path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"")
             mounts, refs = bsc_run.observer_mounts(root / "inputs", root / "state", root / "observations", time.monotonic() + 10)
             self.assertIn((root / "state", "/work", True), mounts)
             self.assertEqual([source for source, _, readonly in mounts if not readonly], [root / "observations", *locks])
-            self.assertEqual([row["size_bytes"] for row in refs], [0, 0])
+            self.assertEqual([row["size_bytes"] for row in refs], [0])
             locks[0].write_bytes(b"not a native empty lock")
             with self.assertRaises(artifacts.Rejected):
                 bsc_run.observer_mounts(root / "inputs", root / "state", root / "observations", time.monotonic() + 10)
-            locks[0].unlink(); locks[0].symlink_to(locks[1])
+            target = root / "other-lock"; target.write_bytes(b"")
+            locks[0].unlink(); locks[0].symlink_to(target)
             with self.assertRaises(artifacts.Rejected):
                 bsc_run.observer_mounts(root / "inputs", root / "state", root / "observations", time.monotonic() + 10)
+
+    def test_successful_preparation_requires_changed_tool_for_followup(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as directory:
+                base = Path(directory).resolve(); root = base / "inputs"; root.mkdir()
+                tool, _, _ = fixture(root)
+                if changed:
+                    tool["source"]["sha256"] = "f" * 64
+                    write_json(root / "tool.json", tool)
+                previous = {"kind": "bsc-fixture-preparation", "result": "PASS", "build_manifest": ref(root / "manifest.json"),
+                            "observer_tool": ref(root / "tool.json"), "attempt_index": 3}
+                write_json(root / "previous.json", previous)
+                with patch.object(prepare_bsc, "Native", side_effect=RuntimeError("native dispatch sentinel")) as native:
+                    expected = RuntimeError if changed else artifacts.Rejected
+                    with self.assertRaises(expected):
+                        prepare_bsc.prepare(root / "manifest.json", ref(root / "manifest.json")["sha256"],
+                                            base / "output", root / "previous.json", "explicit changed observer correction")
+                self.assertEqual(native.call_count, 1 if changed else 0)
 
 
 if __name__ == "__main__":

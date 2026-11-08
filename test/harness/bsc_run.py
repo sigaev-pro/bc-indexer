@@ -24,7 +24,7 @@ def observer_mounts(inputs, work, observations, deadline):
     """Readonly native engines still need writable handles for their empty locks."""
     mounts = [(inputs, "/inputs", True), (work, "/work", True), (observations, "/observations", False)]
     refs = []
-    for name in ("data/geth/chaindata/LOCK", "data/geth/chaindata/ancient/chain/FLOCK"):
+    for name in ("data/geth/chaindata/LOCK",):
         path = work / name
         refs.append(reference(path, 0, deadline))
         mounts.append((path, "/work/" + name, False))
