@@ -204,8 +204,8 @@ Terminal trusted acquisition or persistence failure fences the runner against
 later source/native dispatch; owned cleanup remains allowed. Token acquisition
 and native/Docker/build commands are outside this retry mechanism.
 
-For `urllib`, `process` is null. For `gh`, it contains exactly `argv`, `exit_code`,
-`stdout`, and `stderr`; the fixed argv is `gh api --include --method GET <URL>`.
+For `urllib`, `process` is null. For `gh`, use the eight-field process proof
+defined above; its fixed argv is `gh api --include --method GET <URL>`.
 Hash-bound raw process output preserves the actual failure and is independent of
 `manifest.commands`, which still requires successful native commands. No secret
 request headers or credential values belong in evidence. The trusted response

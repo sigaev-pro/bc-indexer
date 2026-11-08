@@ -1,5 +1,11 @@
 # Состояние проекта
 
+## E01-01.builds — PR #118 contract text aligned with the reviewed code
+
+2026-11-08: Both independent reviewers found no remaining code blocker on `e5e34bb1fedbcb4cb483e5d982a5b85250c8ad5c`. Their only remaining finding was a stale four-field process-proof sentence that contradicted the new eight-field definition. Root owns this documentation-only correction after both reviewers returned clean ownership. The old sentence now references the single current definition; no code, tests, schema implementation or retry policy changes.
+
+Documentation checks passed: 113 documents, 1,117 links, 84 catalog entries, 16 mirrors and unchanged original v2. Whitespace passed; the diff contains only this status, the contract and the evidence note, so code and tests are unchanged from the reviewed head. Next: commit and push, obtain exact-head confirmation from both reviewers, then run the bounded actual-source diagnostic. PR #118 and the parent build remain unaccepted until their respective remaining checks pass. Earlier failed reviews and preparations remain preserved.
+
 ## E01-01.builds — PR #118 raw-stream evidence repair
 
 2026-11-08: Candidate `090fdc4a7c12d5c0db12a7f0afda8d5481134706` passed Spec review and fixed both original findings, but Standards found that raw stdout/stderr overflow omitted an available safe prefix without separate raw-byte accounting. The retained review history and reproduction are in [the source transport evidence](evidence/E01-source-transport.md).

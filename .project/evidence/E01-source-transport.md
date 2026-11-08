@@ -182,6 +182,16 @@ No live request, credential lookup, container, or native build was performed.
 
 ## Diagnostic interface
 
+Both independent reviewers confirmed the code and tested boundaries on
+`e5e34bb1fedbcb4cb483e5d982a5b85250c8ad5c`. Spec ran 37 tests and independent
+overflow, credential, partial-read and deadline controls. Standards ran 30
+focused tests, the exact overflow reproduction and independent accounting
+controls. Each rejected 12 mutated proofs. Their only remaining finding was
+the stale four-field process sentence in the contract. Root corrected that
+sentence to reference the eight-field definition. This documentation-only
+change does not alter code, tests, the implemented schema or retry policy.
+Exact-head review confirmation and CI remain required before scoped acceptance.
+
 `build_source_transport.fetch(runner, url, report_directory, headers=None,
 maximum=256 * 1024 * 1024)` returns the six-field observation and writes its
 journal/attempt files below the existing report directory. The runner must
