@@ -525,9 +525,11 @@ def native_builds(runner, source_caches, authenticate_extra=None, package_source
                 compile_env = {**env, "GOPROXY": "off", "GOSUMDB": "off"}
                 if identifier == "prysm":
                     compile_env["CGO_CFLAGS"] = "-O2 -D__BLST_PORTABLE__"
-                _, imports, _ = runner.inside(container, [arguments[0], "list", "-deps", "-json", *arguments[2:arguments.index("-o")], arguments[-1]],
-                                                environment=compile_env)
-                materials.imported_packages(materials.json_stream(imports.read_text()), materials.archive_module(archive), identifier, local)
+                import_arguments = [arguments[0], "list", "-deps", "-json", *arguments[2:arguments.index("-o")], arguments[-1]]
+                _, imports, _ = runner.inside(container, import_arguments, environment=compile_env)
+                materials.imported_packages(materials.json_stream(imports.read_text()), materials.archive_module(archive), identifier, local,
+                                            archive=archive, arguments=import_arguments,
+                                            source_commit=runner.plan["sources"][identifier]["commit"])
                 runner.inside(container, arguments, environment=compile_env)
                 binary = runner.root / "binaries" / identifier / NAMES[identifier]
                 _, info, _ = runner.inside(container, ["/usr/local/go/bin/go", "version", "-m", arguments[arguments.index("-o") + 1]],
@@ -557,20 +559,10 @@ def native_builds(runner, source_caches, authenticate_extra=None, package_source
             binary = contract.verify_reference(runner.root, builds[identifier]["binary"])
             runner.run(["docker", "container", "cp", str(binary), container + ":/usr/local/bin/" + NAMES[identifier]], timeout=30)
             runner.inside(container, ["chmod", "0755", "/usr/local/bin/" + NAMES[identifier]], timeout=30)
-            version_args = ["version", "--long", "--output", "json", "--home", "/tmp/heimdall-version"] if identifier == "heimdall" else ["--version" if identifier == "prysm" else "version"]
+            version_args = materials.version_arguments(identifier)
             _, version, _ = runner.inside(container, ["/usr/local/bin/" + NAMES[identifier], *version_args], timeout=30)
             value = version.read_text()
-            commit = runner.plan["sources"][identifier]["commit"]
-            if identifier == "heimdall":
-                info = contract.parse_json(value)
-                contract.require(info.get("commit") == commit and info.get("version") == runner.plan["sources"][identifier]["version"].removeprefix("v")
-                                 and info.get("name") == "heimdall" and info.get("server_name") == "heimdalld", "Heimdall version smoke did not expose its exact injected metadata")
-            elif identifier != "prysm":
-                contract.require(commit in value, "native version smoke did not expose its exact injected commit")
-            else:
-                contract.require(runner.plan["sources"][identifier]["version"] in value and commit in value
-                                 and "Local build" not in value and "Moments ago" not in value,
-                                 "Prysm version smoke did not expose its exact selected version and commit")
+            materials.native_version(value, identifier, runner.plan["sources"][identifier])
             builds[identifier]["version_output"] = contract.reference(runner.root, version)
             builds[identifier].update(oci_layout(runner, identifier, container, binary, epochs[identifier]))
         finally:

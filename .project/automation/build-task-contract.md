@@ -258,6 +258,47 @@ also binds the existing build row's import-output descriptor and binary path to
 unique successful import and compile commands on the acquisition container,
 with imports preceding compilation. No new manifest fields are added.
 
+Bor's fixed `./cmd/cli/main.go` target produces one moduleless
+`command-line-arguments` package. Accept that root only for Bor, with `Name:
+main`, `Dir: /source/cmd/cli`, `GoFiles: [main.go]`, and
+`Match: [./cmd/cli/main.go]`. It must not be dependency-only, standard,
+incomplete, errored, or accompanied by additional active source-file lists.
+Require the regular entry point in the selected Git archive, regular ancestor
+directories when present, the archive's selected commit and module identity,
+and the approved import command with that exact commit stamp. Reject a missing,
+duplicated, linked, renamed, or substituted entry point. This synthetic root
+does not establish the ordinary selected Main-module proof; that proof and all
+dependency ownership, local replacement, cache, and NATS isolation checks remain
+required. Collection checks its actual import arguments before compilation;
+final materialized validation uses the import arguments already authenticated
+against the existing build row, command output, container, and offline policy.
+All other moduleless nonstandard packages remain invalid. The native recipe,
+public manifest shape, pins, and pre-compilation metadata API remain unchanged.
+
+The accepted Go compiler can omit `-ldflags` from `go version -m` when using
+the fixed trimpath recipe. Absence is not source proof. Both final acceptance
+and scoped native diagnostics use
+`native_build(identifier, build, closure, root, plan, commands)`. That path
+authenticates the selected archive commit/module/timestamp, reconstructs the
+exact selected compile and import arguments, and verifies their component,
+container, environment, offline policy, output references, and ordering.
+Inspection must name the compiled binary on that same compiler container. A
+unique successful copy of the verified binary must precede its exact native
+version command on the runtime container. The version-output artifact must bind
+that command and expose the selected injected commit, plus the existing
+client-specific version fields. Missing, substituted, ambiguous, or reordered
+proof fails. A separate run's version output does not fill a missing output.
+
+Only this authenticated internal context permits omitted `-ldflags`. Reported
+flags must match the selected recipe; compiler, platform, CGO, trimpath, ELF,
+module ownership, NATS isolation, and OCI binary checks remain mandatory. Bor's
+file-target build-info must have exactly one `path: command-line-arguments`, no
+`mod` row, and exactly one selected source dependency at `(devel)`, with no
+replacement or competing development root. Its source-bound import context is
+required first. Other clients retain their ordinary `mod` identity rule. This
+adds no public manifest field and does not accept metadata by itself as native
+execution proof.
+
 The trusted build driver accepts paired `--package-source-report PATH` and
 `--package-source-report-sha256 SHA256` options when pinned Debian indexes have
 already been retained. Both options are required together. The digest names
