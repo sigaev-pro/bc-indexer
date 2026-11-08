@@ -1,5 +1,69 @@
 # Состояние проекта
 
+## E01-01.harness — Execute native NATS fence conformance
+
+Status: READY_FOR_REVIEW for actual source-native conformance. Executed source
+`125439f7a040e491934fdd3960b8f87282624854` prepared successfully in 56.274827659
+seconds. Measured attempt 2 passed all five declared native cases in 9.403554072
+seconds. The author revalidated 292 unique artifact references, every case
+report, the old/new tool pins and the retained first failure. All eight commands
+in preparation 2 and run 2 report cleanup and process-group absence; parent PIDs
+and exact `extractor.harness` container labels are absent. Only documentation
+changes follow the executed source. Next: final exact-head CI, both independent
+reviews and protected acceptance of this partial block.
+
+Coverage is one standalone storage barrier and four R3 cases. Standalone
+acknowledgment loss, unchanged-image native process restart, complete group and
+ingress census, the full terminal fence and public-profile evidence remain
+unfinished. Runtime admission stays false; issue #12 remains open.
+
+Historical attempt 1 remains FAIL with its original hash. Its delayed-apply
+collection was premature; the independent predicate correctly rejected it.
+The corrected native wait preserves that strict predicate, and attempt 2 links
+the failed proof and separately pinned old/new tools against the same accepted
+build/source. No failed result was replaced or relabeled.
+
+Historical source review correction: the 16 focused
+tests pass in 0.120 seconds after reproducing 14 failing regression subcases.
+Delayed-apply observations now require complete typed membership and health,
+ACK JSON rejects duplicate keys, and native test listings use the authenticated
+buffer. Normal frontier acceptance remains strict. Checkpoint
+`32472e0a9442a01c2cca76a7a077fc96e5bb8372` passed hosted CI and source-only Spec
+review, but Standards rejected delayed-apply validation, duplicate ACK keys and
+test-list buffer binding. That rejected checkpoint and review remain in history.
+No native preparation or execution has started. Next: publish the correction,
+obtain independent readiness re-review and exact-head CI, then the separate
+native preparation/execution handoff. Issue #12 remains open.
+
+Historical source checkpoint: sixteen
+focused NATS tests passed in 0.106 seconds. Preparation, native compilation and
+all five native case outcomes are NOT_RUN. The source checkpoint must be
+published and reviewed before its separately authorized execution handoff.
+
+The NATS input-inspection and one-group observation
+predicate are accepted in PR #126, merge
+`d7657376f551f78acad8308b30e4cb0880b72a38`. Both independent reviews and CI
+passed; both reviewers reproduced the read-only 84-reference inspection exactly.
+Earlier READY_FOR_REVIEW entries are historical. No NATS runtime proof exists yet.
+
+The checked source adds a bounded preparation/run CLI and an in-package overlay
+against the accepted NATS commit and offline closure. It covers standalone
+storage and four R3 cases: pre-proposal publication, committed-but-unapplied work,
+lost acknowledgment and leader change. Preparation excludes only the copied
+root server package's upstream test files, records their hashes, and verifies all
+other production inputs remain unchanged. Original trees and production binaries
+remain read-only. Next: independent source review, hosted CI, then actual
+preparation and measured execution with retained failures and cleanup.
+
+The later unchanged-image process restart, complete collection/census and final
+runtime fence and standalone acknowledgment loss remain separate obligations.
+In-process server shutdown is not proof
+of an old native process exiting. Issue #12 remains OPEN; no dependency unlock.
+
+Base: `d7657376f551f78acad8308b30e4cb0880b72a38`.
+Branch/worktree: `feat/e01-harness-nats-conformance` / `e01-harness-nats-conformance`.
+Sole writer: `/root/boot04_preflight`; root owns publication and acceptance.
+
 ## E01-01.harness — Prove the NATS terminal fence
 
 Status: READY_FOR_REVIEW for the first NATS input/comparator checkpoint.

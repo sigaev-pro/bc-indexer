@@ -11,6 +11,64 @@ or any lifecycle acceptance case. All seven public profile results remain
 `NOT_RUN`. Individual local scenario results do not close AC-CAP-01-01, whose
 owner is E01-02.lifecycle_seams.
 
+## Source-native NATS conformance
+
+[nats_conformance.py](nats_conformance.py) prepares an in-package test executable
+from the accepted NATS source and its isolated offline module closure. Its five
+fixed cases are described in the independently fixed
+[oracle](fixtures/nats/ORACLE.md). Standalone coverage is the storage/seal barrier;
+the pre-proposal, delayed-apply, lost-acknowledgment and leader-change cases use
+three voters. This is source-native conformance, not unchanged-image recovery or
+a complete terminal fence. Standalone acknowledgment loss remains a later
+requirement. Issue #12 and all public profile/runtime admission gates stay open.
+
+```sh
+python3 -I test/harness/nats_conformance.py prepare /absolute/BuildManifest.json \
+  --sha256 ACCEPTED_MANIFEST_SHA256 --output /absolute/new-preparation
+python3 -I test/harness/nats_conformance.py run /absolute/new-preparation/tool.json \
+  --sha256 EXTERNALLY_ACCEPTED_TOOL_SHA256 --output /absolute/new-run
+```
+
+The caller pins the accepted BuildManifest, then separately accepts and pins the
+prepared tool manifest. A matching self-declared compiler/source hash is not
+tool approval. Preparation copies the authenticated source archive, records and
+excludes only `server/*_test.go`, and adds this repository's overlay. Every other
+production input, including non-Go assets, `go.mod` and `go.sum`, is hashed before
+and after compilation. The pinned compiler, offline module cache, exact commands,
+excluded inventory, oracle, helper bytes and resulting executable are bound in
+the tool manifest. The original source and module cache remain read-only.
+Removing upstream test files prevents their package initializers from changing
+native election, reconnect and tracing defaults. Native constructors and natural
+metadata election are used; the explicit harness option `NoSigs=true` leaves
+signal ownership with the existing owned test process.
+
+Preparation has a separate 1,800-second budget. The measured run has one shared
+1,800-second budget including comparison and cleanup, with finite child limits.
+Each case runs in an owned offline container, retains its configuration, native
+identities, raw observations, stores, command output and cleanup evidence, and
+must produce the exact selected Go test and checked case report. In-process
+server shutdown is not proof of old native OS-process exit. Raftz records bind
+the actual native group/account mapping; the stream traffic account is retained
+separately. The supplied one-group predicate does not prove a full group census.
+
+Output paths must be new. A corrected attempt uses `--previous` with the prior
+failed preparation or run proof and a nonempty `--correction`; prior evidence is
+preserved. Preparation retries keep the same accepted manifest binding. A changed
+overlay requires fresh preparation and a new externally pinned tool. A corrected
+measured run may link that new tool to a previous failed run only after both tool
+artifacts authenticate the identical accepted build, source archive and module
+closure. Its proof retains the old/new tool pins and increments the old attempt
+ordinal. Missing or modified predecessor artifacts reject. Failures remain
+failures. The source checkpoint's portable tests use
+synthetic reports and temporary files only: native preparation, compilation and
+execution require separate actual evidence. Corrected source `125439f` prepared
+successfully in 56.275 seconds, then passed the five declared cases in 9.404
+seconds. The first measured run remains FAIL because its delayed-apply collection
+was selected too early; attempt 2 preserves that failure and both tool pins.
+See the [retained harness evidence](../../.project/evidence/E01-01.harness.md) for
+exact identities and cleanup. These results do not complete standalone
+acknowledgment-loss coverage, unchanged-image recovery or runtime admission.
+
 ## NATS input inspection and frontier predicate
 
 This first NATS checkpoint is read-only. It prepares no server, invokes no
