@@ -148,6 +148,38 @@ checks passed 113 files, 1,116 links, 84 catalog entries, and 16 normative mirro
 the original v2 bytes remain unchanged. Whitespace checks also passed. New
 exact-head CI and both independent reviews remain required after publication.
 
+## Raw-stream overflow review repair
+
+Candidate `090fdc4a7c12d5c0db12a7f0afda8d5481134706` fixed both original
+findings. The Spec axis passed it, but Standards retained a further
+`REQUEST_CHANGES`: a raw output overflow discarded the safe prefix available in
+the overflowing read without representing the omitted raw bytes. The independent
+reproduction used unchanged header constants, an 8-byte body cap, and 100,019
+produced stdout bytes. It retained 65,536 bytes against a 65,544-byte raw cap.
+The decoded-body fields stayed zero/false/null because parsing never began.
+
+The new actual-process regression reproduced that eight-byte prefix loss before
+the repair. Additional controls exercise first and later overflowing blocks,
+stdout and stderr, exact-bound success, and the newly required accounting fields.
+Raw counts now record bytes actually returned by reads. Each safe available
+prefix is retained before a nonretryable overflow rejection. Four closed
+internal process fields bind stdout/stderr observed counts and truncation flags;
+they do not relabel raw process bytes as decoded body bytes. The validator checks
+types, sizes, and finite bounds, and rejects raw truncation as success or eligible
+recovery. Existing credential checks still run before retention and can discard
+unsafe output. Public BuildManifest fields and allowed retry classes are intact.
+
+All 30 focused methods pass with tracemalloc and ResourceWarnings enabled
+(4.716 seconds), including fresh-hash tamper controls and the previous credential
+and incomplete-read regressions. All 163 affected build tests then passed in
+66.757 seconds (67.167 seconds including the wrapper), with two existing opt-in
+Docker skips and no ResourceWarning. Document checks passed 113 files, 1,117
+links, 84 catalog entries, and 16 normative mirrors; original v2 bytes remain
+unchanged. Whitespace checks passed. New exact-head CI and independent reviews
+remain required. The two earlier review outcomes and their
+passing checks remain recorded above; neither grants acceptance of this repair.
+No live request, credential lookup, container, or native build was performed.
+
 ## Diagnostic interface
 
 `build_source_transport.fetch(runner, url, report_directory, headers=None,

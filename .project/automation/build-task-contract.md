@@ -181,6 +181,22 @@ transport failure. Retain the already read prefix and any available partial
 bytes within the existing body bound, record observed versus retained bytes,
 and persist a terminal attempt. This does not add a retry class or convert an
 incomplete response into a successful source observation.
+
+The closed internal GitHub `process` proof contains `argv`, `exit_code`,
+`stdout`, `stderr`, `stdout_observed_bytes`, `stdout_truncated`,
+`stderr_observed_bytes`, and `stderr_truncated`. Counts are nonnegative integers
+for bytes actually returned by pipe reads, including headers in stdout. Each
+truncation flag is exactly whether that count exceeds its retained artifact
+size. Unread bytes still in a child or pipe are not counted. Retain the safe
+available prefix before rejecting an overflowing block; credential checks still
+run before writes and can discard the owned raw outputs. The raw stdout bound
+is the configured body cap plus 64 KiB of headers (at most 256 MiB plus 64 KiB);
+stderr is bounded to 1 MiB. An observed count may exceed its bound by at most
+one 64 KiB read. Omitted raw bytes forbid success or retry eligibility. These
+fields never substitute for the attempt's decoded-body `observed_bytes`,
+`truncated`, or `body`; those can remain zero, false, and null when body parsing
+never started. This is an internal source-proof extension, not a BuildManifest
+field or a new recovery class.
 Unsupported execution contexts fail closed. GitHub subprocesses remain in the
 supervised driver group; restore the request alarm before bounded child cleanup.
 Persist intent before GET and retain terminal attempt evidence before any retry.

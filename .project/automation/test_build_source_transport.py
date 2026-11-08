@@ -477,6 +477,101 @@ class SourceTransportTests(unittest.TestCase):
                     self.assertEqual(contract.verify_reference(acquisition.root, attempt["process"][field]).read_bytes(), b"")
                 self.assertTrue(all(p.poll() is not None and p.stdout.closed and p.stderr.closed for p in processes))
 
+    def test_gh_overflow_retains_safe_raw_prefix_and_exact_raw_accounting(self):
+        for field in ("stdout", "stderr"):
+            with self.subTest(field=field):
+                acquisition = self.acquisition(github=True, maximum=8)
+                bound = 8 + source_evidence.MAX_HEADERS if field == "stdout" else source_evidence.MAX_STDERR
+                payload = (b"HTTP/2.0 200 OK\r\n\r\n" if field == "stdout" else b"") + b"x" * (100000 if field == "stdout" else bound + 10000)
+                script = "import sys;sys." + field + ".buffer.write(" + repr(payload[:19] if field == "stdout" else b"") + "+b'x'*" + str(len(payload) - (19 if field == "stdout" else 0)) + ");sys." + field + ".flush()"
+                launch, processes = self.gh_process([script])
+                observed = {"stdout": bytearray(), "stderr": bytearray()}
+                read = os.read
+                def observe(fd, count):
+                    block = read(fd, count)
+                    if processes:
+                        for name in observed:
+                            pipe = getattr(processes[-1], name)
+                            if not pipe.closed and fd == pipe.fileno():
+                                observed[name].extend(block)
+                    return block
+                with patch.object(transport.subprocess, "Popen", side_effect=launch), patch.object(transport.os, "read", side_effect=observe):
+                    with self.assertRaisesRegex(ValueError, "exceeds its bound"):
+                        acquisition.fetch()
+                journal = json.loads(acquisition.path.read_text())
+                attempt = journal["attempts"][0]
+                proof = attempt["process"]
+                self.assertEqual(attempt["state"], "FAILED")
+                self.assertFalse(attempt["error"]["retryable"])
+                self.assertEqual((attempt["observed_bytes"], attempt["truncated"], attempt["body"]), (0, False, None))
+                self.assertEqual(contract.verify_reference(acquisition.root, proof[field]).read_bytes(), bytes(observed[field][:bound]))
+                self.assertEqual(proof[field]["size_bytes"], bound)
+                for name in observed:
+                    self.assertEqual(proof[name + "_observed_bytes"], len(observed[name]))
+                    self.assertEqual(proof[name + "_truncated"], len(observed[name]) > proof[name]["size_bytes"])
+                source_evidence.validate_process(proof, attempt, journal, acquisition.root)
+                self.assertEqual(len(processes), 1)
+                self.assertTrue(all(p.poll() is not None and p.stdout.closed and p.stderr.closed for p in processes))
+
+    def test_gh_raw_prefix_bound_on_first_and_later_overflow_blocks(self):
+        for field in ("stdout", "stderr"):
+            for prefix in (b"", b"abc"):
+                with self.subTest(field=field, prefix=prefix):
+                    acquisition = self.acquisition(github=True)
+                    acquisition.current = {"process": {field + "_observed_bytes": 0, field + "_truncated": False}}
+                    path = acquisition.root / "raw-output"
+                    with path.open("wb") as output:
+                        state = (output, 8, bytearray(), field)
+                        if prefix:
+                            acquisition.gh_output(state, prefix)
+                        with self.assertRaisesRegex(ValueError, "exceeds its bound"):
+                            acquisition.gh_output(state, b"123456789012")
+                    self.assertEqual(path.read_bytes(), (prefix + b"123456789012")[:8])
+                    self.assertEqual(acquisition.current["process"][field + "_observed_bytes"], len(prefix) + 12)
+                    self.assertTrue(acquisition.current["process"][field + "_truncated"])
+
+    def test_gh_raw_accounting_is_closed_bounded_and_required_for_success(self):
+        launch, processes = self.gh_process(["import sys;sys.stdout.write('HTTP/2.0 200 OK\\r\\n\\r\\n[]')"])
+        acquisition = self.acquisition(github=True)
+        with patch.object(transport.subprocess, "Popen", side_effect=launch):
+            row = acquisition.fetch()
+        journal = source_evidence.validate_observation(row, acquisition.root, False)
+        attempt = journal["attempts"][0]
+        proof = attempt["process"]
+        for field in ("stdout", "stderr"):
+            self.assertEqual(proof[field + "_observed_bytes"], proof[field]["size_bytes"])
+            self.assertFalse(proof[field + "_truncated"])
+            mutations = [lambda p: p.pop(field + "_observed_bytes"),
+                         lambda p: p.update({field + "_observed_bytes": True}),
+                         lambda p: p.update({field + "_observed_bytes": -1}),
+                         lambda p: p.update({field + "_observed_bytes": 1 << 63, field + "_truncated": True}),
+                         lambda p: p.update({field + "_truncated": True}),
+                         lambda p: p.update({field + "_observed_bytes": p[field]["size_bytes"] + 1, field + "_truncated": True})]
+            for change in mutations:
+                altered = copy.deepcopy(journal)
+                change(altered["attempts"][0]["process"])
+                acquisition.path.write_bytes(contract.canonical(altered))
+                changed_row = {**row, "acquisition": contract.reference(acquisition.root, acquisition.path)}
+                with self.subTest(field=field, mutation=change), self.assertRaises(ValueError):
+                    source_evidence.validate_observation(changed_row, acquisition.root, False)
+        self.assertTrue(all(p.poll() is not None for p in processes))
+
+    def test_gh_raw_exact_bound_does_not_mark_omission(self):
+        for field in ("stdout", "stderr"):
+            with self.subTest(field=field):
+                acquisition = self.acquisition(github=True)
+                acquisition.secrets = [b"invented-boundary-credential"]
+                acquisition.current = {"process": {field + "_observed_bytes": 0, field + "_truncated": False}}
+                path = acquisition.root / "raw-exact-bound"
+                with path.open("wb") as output:
+                    state = (output, 8, bytearray(), field)
+                    acquisition.gh_output(state, b"123")
+                    acquisition.gh_output(state, b"45678")
+                    acquisition.gh_output(state, b"", final=True)
+                self.assertEqual(path.read_bytes(), b"12345678")
+                self.assertEqual(acquisition.current["process"][field + "_observed_bytes"], 8)
+                self.assertFalse(acquisition.current["process"][field + "_truncated"])
+
     def test_gh_private_helper_failure_is_bounded_clean_and_terminal(self):
         for script, seconds in (("print('x'*100000)", 10), ("import time;time.sleep(10)", 0.1), ("raise SystemExit(1)", 10)):
             with self.subTest(script=script):
@@ -549,6 +644,7 @@ class SourceTransportTests(unittest.TestCase):
         original = copy.deepcopy(journal)
         for mutation in (lambda j: j["attempts"][0]["process"].update(exit_code=0),
                          lambda j: j["attempts"][0]["process"]["argv"].__setitem__(-1, URL + "&page=2"),
+                          lambda j: j["attempts"][0]["process"].update(stdout_observed_bytes=1, stdout_truncated=True),
                          lambda j: j["attempts"][1]["body"].update(sha256="0" * 64)):
             changed = copy.deepcopy(original)
             mutation(changed)

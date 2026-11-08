@@ -11,6 +11,8 @@ import build_contract as contract
 
 MAX_JOURNAL = 1024 * 1024
 MAX_BODY = 1024 ** 3
+MAX_GH_BODY = 256 * 1024 * 1024
+MAX_PROCESS_CHUNK = 64 * 1024
 MAX_HEADERS = 64 * 1024
 MAX_STDERR = 1024 * 1024
 OBSERVATION_KEYS = {"url", "status", "headers", "body", "observed_at", "acquisition"}
@@ -78,11 +80,20 @@ def validate_process(process, attempt, journal, root):
     if journal["transport"] == "urllib":
         contract.require(process is None, "urllib evidence contains another transport's process")
         return
-    contract.require(type(process) is dict and set(process) == {"argv", "exit_code", "stdout", "stderr"}
+    contract.require(type(process) is dict and set(process) == {"argv", "exit_code", "stdout", "stderr",
+                                                              "stdout_observed_bytes", "stdout_truncated",
+                                                              "stderr_observed_bytes", "stderr_truncated"}
                      and process["argv"] == ["gh", "api", "--include", "--method", "GET", journal["url"]]
                      and type(process["exit_code"]) is int, "source subprocess has another command or no terminal result")
-    stdout = verify_body(root, process["stdout"], MAX_BODY + MAX_HEADERS)
+    stdout = verify_body(root, process["stdout"], MAX_GH_BODY + MAX_HEADERS)
     stderr = verify_body(root, process["stderr"], MAX_STDERR)
+    for field, path, bound in (("stdout", stdout, MAX_GH_BODY + MAX_HEADERS), ("stderr", stderr, MAX_STDERR)):
+        observed, truncated = process[field + "_observed_bytes"], process[field + "_truncated"]
+        contract.require(type(observed) is int and path.stat().st_size <= observed <= bound + MAX_PROCESS_CHUNK
+                         and type(truncated) is bool and truncated is (observed > path.stat().st_size),
+                         "source raw process byte accounting differs or exceeds its bound")
+        contract.require(not truncated or attempt["state"] == "FAILED" and attempt["error"] is not None
+                         and not attempt["error"]["retryable"], "truncated raw source output cannot prove success or recovery")
     if attempt["error"] is not None and attempt["error"]["code"] == "GH_EOF":
         expected = ('Get "' + journal["url"] + '": EOF\n').encode()
         contract.require(process["exit_code"] == 1 and stderr.read_bytes() == expected,

@@ -23,7 +23,7 @@ import evidence
 
 REQUEST_SECONDS = 60
 SOCKET_SECONDS = 30
-MAX_BODY = 256 * 1024 * 1024
+MAX_BODY = source_evidence.MAX_GH_BODY
 
 
 class RequestDeadline(TimeoutError):
@@ -275,12 +275,19 @@ class Acquisition:
 
     def gh_output(self, state, block, final=False):
         """Keep enough lookbehind in memory to scan encoded cross-read echoes."""
-        output, bound, pending = state
+        output, bound, pending, field = state
+        proof = self.current["process"]
+        proof[field + "_observed_bytes"] += len(block)
         value = bytes(pending) + block
         if credential_echo(value, self.secrets):
             self.gh_unsafe_output = True
             raise ValueError("official GitHub source exposed credential data")
-        contract.require(output.tell() + len(value) <= bound, "GitHub source output exceeds its bound")
+        available = max(0, bound - output.tell())
+        if len(value) > available:
+            output.write(value[:available])
+            pending.clear()
+            proof[field + "_truncated"] = True
+            raise ValueError("GitHub source output exceeds its bound")
         overlap = max((len(secret) * 27 for secret in self.secrets), default=0)
         count = len(value) if final else max(0, len(value) - overlap)
         output.write(value[:count])
@@ -292,7 +299,9 @@ class Acquisition:
         stdout_path = self.directory / (self.key + "." + str(ordinal) + ".stdout")
         stderr_path = self.directory / (self.key + "." + str(ordinal) + ".stderr")
         argv = ["gh", "api", "--include", "--method", "GET", self.url]
-        process_row = {"argv": argv, "exit_code": None, "stdout": None, "stderr": None}
+        process_row = {"argv": argv, "exit_code": None, "stdout": None, "stderr": None,
+                       "stdout_observed_bytes": 0, "stdout_truncated": False,
+                       "stderr_observed_bytes": 0, "stderr_truncated": False}
         self.current["process"] = process_row
         self.persist()
         self.remaining()
@@ -305,15 +314,15 @@ class Acquisition:
                         # Stay in the already supervised driver group; no detached child.
                         process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                                    env=environment)
-                        for pipe, output, bound in ((process.stdout, stdout, self.maximum + source_evidence.MAX_HEADERS),
-                                                    (process.stderr, stderr, source_evidence.MAX_STDERR)):
-                            state = (output, bound, bytearray())
+                        for field, pipe, output, bound in (("stdout", process.stdout, stdout, self.maximum + source_evidence.MAX_HEADERS),
+                                                           ("stderr", process.stderr, stderr, source_evidence.MAX_STDERR)):
+                            state = (output, bound, bytearray(), field)
                             states.append(state)
                             selector.register(pipe, selectors.EVENT_READ, state)
                         while selector.get_map():
                             self.remaining()
                             for key, _ in selector.select(min(0.05, self.remaining())):
-                                block = os.read(key.fileobj.fileno(), 64 * 1024)
+                                block = os.read(key.fileobj.fileno(), source_evidence.MAX_PROCESS_CHUNK)
                                 if not block:
                                     self.gh_output(key.data, b"", final=True)
                                     selector.unregister(key.fileobj)
@@ -344,6 +353,7 @@ class Acquisition:
             for field, path in (("stdout", stdout_path), ("stderr", stderr_path)):
                 if path.is_file():
                     process_row[field] = contract.reference(self.root, path)
+                    process_row[field + "_truncated"] = process_row[field + "_observed_bytes"] > process_row[field]["size_bytes"]
         status, headers, offset = source_evidence.gh_header(stdout_path)
         self.current.update(status=status, headers=headers)
         with stdout_path.open("rb") as stream, body.open("xb") as target:

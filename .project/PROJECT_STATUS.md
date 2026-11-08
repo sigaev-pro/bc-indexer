@@ -1,5 +1,11 @@
 # Состояние проекта
 
+## E01-01.builds — PR #118 raw-stream evidence repair
+
+2026-11-08: Candidate `090fdc4a7c12d5c0db12a7f0afda8d5481134706` passed Spec review and fixed both original findings, but Standards found that raw stdout/stderr overflow omitted an available safe prefix without separate raw-byte accounting. The retained review history and reproduction are in [the source transport evidence](evidence/E01-source-transport.md).
+
+The scoped repair retains the bounded safe prefix and adds closed internal stdout/stderr observed counts and truncation flags. Decoded-body fields stay separate; public BuildManifest fields and retry classes are unchanged. All 30 focused methods and 163 affected build tests pass, with two existing opt-in Docker skips and no ResourceWarning. Document and whitespace checks pass. Remote CI and independent reviews of the new commit remain required. Parent issue #11 stays open; this block claims no live-source or native execution result.
+
 ## E01-01.builds — PR #118 repair ready for fresh independent review
 
 2026-11-08: Both independent axes requested changes on trusted source-recovery candidate `8560c00cc3d62d50b4a04bd4d0ab0089e2a0c7c3`, despite its exact-head CI passing 377 tests and 54 component negatives. The two findings are retained in [the evidence](evidence/E01-source-transport.md): effective GitHub credentials were not protected in raw outputs, and an incomplete HTTP read could leave a started attempt without its available partial bytes.
