@@ -1,22 +1,85 @@
 """Bounded official-source transport and stable version selection."""
 
 import datetime
+from contextlib import contextmanager
 import functools
 import hashlib
+import http.client
 import math
 import os
 from pathlib import Path
 import re
+import signal
+import ssl
 import subprocess
+import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
-from core import closed, decode, describe, hex_string, need, ref, sha
+from core import closed, decode, describe, encode, hex_string, need, ref, sha
 
 HOSTS = {"api.github.com", "raw.githubusercontent.com", "go.dev", "dl.google.com",
          "registry-1.docker.io", "deb.debian.org", "security.debian.org"}
+REQUEST_SECONDS = 60
+BODY_LIMIT = 1024 ** 3
+
+
+class RequestDeadline(ValueError):
+    pass
+
+
+class CredentialExposure(ValueError):
+    pass
+
+
+class DeadlineGuardUnavailable(ValueError):
+    pass
+
+
+@contextmanager
+def request_timer(deadline):
+    """Bound one synchronous GET, including body reads, on supported CLI hosts."""
+    if threading.current_thread() is not threading.main_thread() or not hasattr(signal, "setitimer"):
+        raise DeadlineGuardUnavailable("Official-source request deadline guard is unavailable")
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise RequestDeadline("Official-source request deadline exceeded")
+    previous = signal.getsignal(signal.SIGALRM)
+    prior_delay, prior_interval = signal.getitimer(signal.ITIMER_REAL)
+    prior_due = time.monotonic() + prior_delay if prior_delay else None
+    guard = {"interrupted": False}
+
+    def alarm(signum, frame):
+        guard["interrupted"] = True
+        if prior_due is not None and time.monotonic() >= prior_due:
+            if callable(previous):
+                previous(signum, frame)
+            elif previous == signal.SIG_DFL:
+                signal.signal(signal.SIGALRM, previous)
+                signal.raise_signal(signal.SIGALRM)
+        raise RequestDeadline("Official-source request deadline exceeded")
+
+    installed = False
+    try:
+        try:
+            signal.signal(signal.SIGALRM, alarm)
+            installed = True
+            signal.setitimer(signal.ITIMER_REAL, min(remaining, prior_delay) if prior_delay else remaining)
+        except (OSError, ValueError):
+            raise DeadlineGuardUnavailable("Official-source request deadline guard installation failed") from None
+        yield guard
+    finally:
+        if installed:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+            if prior_due is not None:
+                left = prior_due - time.monotonic()
+                if left <= 0 and prior_interval:
+                    left = prior_interval - ((-left) % prior_interval)
+                signal.setitimer(signal.ITIMER_REAL, max(0, left), prior_interval)
 
 
 def origin(url):
@@ -106,6 +169,9 @@ class Transport:
         self.rows = {}
         self.used = set()
         self.deadline = time.monotonic() + deadline_seconds
+        self.request_deadline = self.deadline
+        self.network_error = None
+        self.persistence_failed = False
         self.tokens = {}
         self.github_checked = False
         self.github_token = None
@@ -127,11 +193,68 @@ class Transport:
                 self.fixture[row["url"]] = (path.parent, row)
 
     def timeout(self):
-        remaining = self.deadline - time.monotonic()
-        need(remaining > 0, "Official-source discovery deadline exceeded")
+        remaining = min(self.deadline, self.request_deadline) - time.monotonic()
+        if remaining <= 0:
+            raise RequestDeadline("Official-source discovery or request deadline exceeded")
         return min(30, remaining)
 
+    def write_journal(self, path, value, previous):
+        if previous is not None:
+            ref(self.root, previous)
+        else:
+            need(not path.exists(), "Source acquisition journal already exists")
+        payload = encode(value)
+        need(len(payload) <= 1024 * 1024, "Source acquisition journal exceeds its bound")
+        descriptor, temporary = tempfile.mkstemp(prefix=".acquisition-", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                need(stream.write(payload) == len(payload), "Incomplete acquisition journal write")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+        result = describe(self.root, path)
+        need(result["sha256"] == hashlib.sha256(payload).hexdigest(), "Source acquisition journal changed during persistence")
+        return result
+
+    def persist(self, path, value, previous):
+        try:
+            return self.write_journal(path, value, previous)
+        except BaseException:
+            self.persistence_failed = True
+            raise
+
+    def failure(self, error, status):
+        cause = error.reason if type(error) is urllib.error.URLError else error
+        network = error is self.network_error and status in (None, 200)
+        code = "REJECTED"
+        if network and type(cause) is TimeoutError:
+            code = "NETWORK_TIMEOUT"
+        elif network and type(cause) is ssl.SSLEOFError and getattr(cause, "reason", None) == "UNEXPECTED_EOF_WHILE_READING":
+            code = "SSL_EOF"
+        elif isinstance(error, RequestDeadline):
+            code = "REQUEST_DEADLINE"
+        elif network:
+            code = "UNKNOWN_TRANSPORT"
+        elif isinstance(error, OSError):
+            code = "LOCAL_IO"
+        def name(value):
+            value = type(value).__name__
+            return value if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,127}", value) and not self.contains_secret(value) else "Error"
+        number = getattr(cause, "errno", None)
+        return dict(type=name(error), reason_type=name(cause) if cause is not error else None,
+                    code=code, errno=number if type(number) is int and -4096 <= number <= 4096 else None,
+                    retryable=code in {"NETWORK_TIMEOUT", "SSL_EOF"})
+
     def fetch(self, url):
+        need(not self.persistence_failed, "Source evidence persistence failed; further requests are blocked")
+        self.request_deadline = min(self.deadline, time.monotonic() + REQUEST_SECONDS)
         parsed = official(url)
         if not self.synthetic and origin(url) == ("https", "api.github.com", 443) and not self.github_checked:
             self.github_token = github_credential(self.timeout())
@@ -141,51 +264,108 @@ class Transport:
         if url in self.rows:
             return ref(self.root, self.rows[url]["body"])
         need(len(self.rows) < 4096, "Official-source observation limit exceeded")
-        destination = self.directory / (hashlib.sha256(url.encode()).hexdigest() + ".body")
-        status, headers, observed = 0, {}, time.time()
+        directory = self.directory / (hashlib.sha256(url.encode()).hexdigest() + ".acquisition")
+        directory.mkdir()
+        # Retain both new directory entries before the first request intent.
         try:
-            if self.synthetic:
-                need(url in self.fixture, "Synthetic transport has no response for " + url)
-                fixture_root, row = self.fixture[url]
-                source = ref(fixture_root, row["body"])
-                status, headers, observed = row["status"], {k.lower(): v for k, v in row["headers"].items()}, row["observed_at"]
-                with source.open("rb") as stream, destination.open("xb") as output:
-                    self.copy(stream, output)
-            else:
-                request_headers = {"User-Agent": "extractor-component-updater/1", "Accept": "application/json"}
-                if origin(url) == ("https", "api.github.com", 443) and self.github_token is not None:
-                    request_headers["Authorization"] = "Bearer " + self.github_token
-                if parsed.hostname == "registry-1.docker.io":
-                    repository = parsed.path.split("/v2/", 1)[1].rsplit("/", 2)[0]
-                    token = self.tokens.get(repository)
-                    if token is None:
-                        query = urllib.parse.urlencode(dict(service="registry.docker.io", scope="repository:" + repository + ":pull"))
-                        with urllib.request.urlopen("https://auth.docker.io/token?" + query, timeout=self.timeout()) as response:
-                            token = decode(response.read(1024 * 1024))["token"]
-                        self.tokens[repository] = token
-                    request_headers.update(Authorization="Bearer " + token, Accept="application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json")
-                request = urllib.request.Request(url, headers=request_headers)
+            for parent in (self.directory, self.root):
+                descriptor = os.open(parent, os.O_RDONLY)
                 try:
-                    response = self.opener.open(request, timeout=self.timeout())
-                except urllib.error.HTTPError as error:
-                    response = error
-                with response, destination.open("xb") as output:
-                    status = response.status
-                    headers = {k.lower(): v for k, v in response.headers.items()}
-                    need(not any(self.contains_secret(k) or self.contains_secret(v) for k, v in headers.items()),
-                         "Official response exposed credential data")
-                    headers = {k: v for k, v in headers.items() if k not in {"authorization", "proxy-authorization", "set-cookie"}}
-                    self.copy(response, output)
-        except (ValueError, OSError, urllib.error.URLError) as error:
-            if destination.exists():
-                destination.unlink()
-            detail = str(error) if self.synthetic else type(error).__name__
-            destination.write_bytes(("Source acquisition failed: " + detail).encode())
-            headers = {}
-            status = 0
-        self.rows[url] = dict(url=url, status=status, headers=headers, body=describe(self.root, destination), observed_at=observed)
-        need(status == 200, "Official source unavailable (status " + str(status) + "): " + url)
-        return destination
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+        except BaseException:
+            self.persistence_failed = True
+            raise
+        journal = dict(schema_version=1, url=url, synthetic=self.synthetic, transport="urllib",
+                       outcome="IN_PROGRESS", attempts=[])
+        journal_path, journal_ref = directory / "journal.json", None
+        for ordinal in (1, 2):
+            self.timeout()
+            observed = time.time()
+            attempt = dict(ordinal=ordinal, state="STARTED", started_at=observed, finished_at=None,
+                           observed_at=observed, status=None, headers={}, body=None, error=None,
+                           observed_bytes=0, truncated=False, process=None)
+            journal["attempts"].append(attempt)
+            journal["outcome"] = "IN_PROGRESS"
+            journal_ref = self.persist(journal_path, journal, journal_ref)
+            destination = directory / (str(ordinal) + ".body")
+            self.network_error = None
+            failure = None
+            guard = {"interrupted": False}
+            try:
+                # Admission is checked again after the intent has reached disk.
+                self.timeout()
+                with request_timer(self.request_deadline) as guard:
+                    if self.synthetic:
+                        need(url in self.fixture, "Synthetic transport has no response for " + url)
+                        fixture_root, row = self.fixture[url]
+                        source = ref(fixture_root, row["body"])
+                        attempt.update(status=row["status"], headers={k.lower(): v for k, v in row["headers"].items()},
+                                       observed_at=row["observed_at"])
+                        with source.open("rb") as stream, destination.open("xb") as output:
+                            self.copy(stream, output, attempt)
+                    else:
+                        request_headers = {"User-Agent": "extractor-component-updater/1", "Accept": "application/json"}
+                        if origin(url) == ("https", "api.github.com", 443) and self.github_token is not None:
+                            request_headers["Authorization"] = "Bearer " + self.github_token
+                        if parsed.hostname == "registry-1.docker.io":
+                            repository = parsed.path.split("/v2/", 1)[1].rsplit("/", 2)[0]
+                            token = self.tokens.get(repository)
+                            if token is None:
+                                query = urllib.parse.urlencode(dict(service="registry.docker.io", scope="repository:" + repository + ":pull"))
+                                with urllib.request.urlopen("https://auth.docker.io/token?" + query, timeout=self.timeout()) as response:
+                                    token = decode(response.read(1024 * 1024))["token"]
+                                self.tokens[repository] = token
+                            request_headers.update(Authorization="Bearer " + token, Accept="application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json")
+                        request = urllib.request.Request(url, headers=request_headers)
+                        try:
+                            response = self.opener.open(request, timeout=self.timeout())
+                        except urllib.error.HTTPError as error:
+                            response = error
+                        except Exception as error:
+                            self.network_error = error
+                            raise
+                        with response, destination.open("xb") as output:
+                            attempt["status"] = response.status
+                            headers = {k.lower(): v for k, v in response.headers.items()}
+                            if any(self.contains_secret(k) or self.contains_secret(v) for k, v in headers.items()):
+                                raise CredentialExposure("Official response exposed credential data")
+                            attempt["headers"] = {k: v for k, v in headers.items()
+                                                  if k not in {"authorization", "proxy-authorization", "set-cookie"}}
+                            self.copy(response, output, attempt, network=True)
+                need(type(attempt["status"]) is int and attempt["status"] == 200,
+                     "Official source did not return HTTP 200")
+            except (ValueError, OSError, http.client.HTTPException) as error:
+                failure = self.failure(error, attempt["status"])
+                if guard["interrupted"]:
+                    failure.update(code="REQUEST_DEADLINE", retryable=False)
+                if isinstance(error, CredentialExposure):
+                    destination.unlink(missing_ok=True)
+                    attempt["truncated"] = attempt["observed_bytes"] > 0
+            # File persistence errors are outside network classification. Never
+            # send another request when its preceding evidence cannot be kept.
+            try:
+                if destination.exists():
+                    with destination.open("rb") as stream:
+                        os.fsync(stream.fileno())
+                    attempt["body"] = describe(self.root, destination)
+            except BaseException:
+                self.persistence_failed = True
+                raise
+            attempt.update(state="FAILED" if failure else "SUCCEEDED", error=failure, finished_at=time.time())
+            journal["outcome"] = "FAILED" if failure else ("FIRST_ATTEMPT_SUCCESS" if ordinal == 1 else "RECOVERED_TRANSPORT")
+            journal_ref = self.persist(journal_path, journal, journal_ref)
+            if failure and failure["retryable"] and ordinal == 1:
+                continue
+            if failure:
+                destination = directory / "failure.body"
+                destination.write_bytes(("Source acquisition failed: " + failure["type"]).encode())
+            self.rows[url] = dict(url=url, status=0 if failure else attempt["status"],
+                                 headers={} if failure else attempt["headers"], body=describe(self.root, destination),
+                                 observed_at=attempt["observed_at"], acquisition=journal_ref)
+            need(failure is None, "Official source unavailable (status 0): " + url)
+            return destination
 
     def secret_values(self):
         return [value for value in [self.github_token, *self.tokens.values()] if isinstance(value, str) and value]
@@ -193,22 +373,39 @@ class Transport:
     def contains_secret(self, value):
         return credential_echo(value, self.secret_values())
 
-    def copy(self, source, target):
+    def copy(self, source, target, attempt, network=False):
         total = 0
         secrets = [value.encode() for value in self.secret_values()]
         overlap = max((len(value) - 1 for value in secrets), default=0)
         tail = b""
+        def retain(block):
+            nonlocal total, tail
+            attempt["observed_bytes"] += len(block)
+            scan = tail + block
+            if any(secret in scan for secret in secrets):
+                raise CredentialExposure("Official response exposed credential data")
+            tail = scan[-overlap:] if overlap else b""
+            kept = block[:max(0, BODY_LIMIT - total)]
+            target.write(kept)
+            total += len(kept)
+            attempt["truncated"] = len(kept) != len(block)
+            need(not attempt["truncated"], "Official artifact exceeds the 1 GiB acquisition limit")
         while True:
             self.timeout()
-            block = source.read(1024 * 1024)
+            try:
+                block = source.read(64 * 1024)
+            except Exception as error:
+                if network:
+                    self.network_error = error
+                partial = getattr(error, "partial", None)
+                if not isinstance(partial, bytes) and type(error) is urllib.error.URLError:
+                    partial = getattr(error.reason, "partial", None)
+                if isinstance(partial, bytes):
+                    retain(partial)
+                raise
             if not block:
                 return
-            total += len(block)
-            need(total <= 1024**3, "Official artifact exceeds the 1 GiB acquisition limit")
-            scan = tail + block
-            need(not any(secret in scan for secret in secrets), "Official response exposed credential data")
-            tail = scan[-overlap:] if overlap else b""
-            target.write(block)
+            retain(block)
 
     def data(self, url):
         path = self.fetch(url)

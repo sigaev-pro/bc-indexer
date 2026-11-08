@@ -89,11 +89,53 @@ HTTPS requests are restricted to registered official hosts. Transport follows
 validated redirects, bounds pagination, rejects duplicate JSON keys and
 nonfinite numbers, and retains response status, headers, acquisition time and
 body references. Docker Hub public tokens are held only in memory and are not
-written to reports. Each request has a maximum 30-second timeout, discovery
-has an 1800-second deadline, and retained responses have a 1 GiB byte limit.
+written to reports. Each socket operation has a maximum 30-second timeout.
+A logical GET has one 60-second monotonic deadline covering setup, both
+attempts and body reads, within the 1800-second discovery deadline. Retained
+responses have a 1 GiB byte limit per attempt.
 JSON metadata is limited to 64 MiB. Failure observations are retained beside
 the report in its uniquely named source directory; the caller owns that
 directory and may archive it with the report. There are no background workers.
+
+An official-source GET may restart from byte zero once after an exact typed
+`TimeoutError`, or an exact `ssl.SSLEOFError` whose reason is
+`UNEXPECTED_EOF_WHILE_READING`. The same types may be the explicit `reason`
+of a `urllib.error.URLError`. A failed exception must come from the network
+open/read stage, before HTTP status or with status 200. Unknown wrapper causes,
+generic TLS errors, certificate failures, HTTP errors, credentials, redirects,
+parsing, size/hash checks, file I/O, cancellation and expired deadlines never
+permit a retry. OCI credential setup is outside this retry classification.
+Parsing and authenticated artifact checks still run after acquisition.
+
+Every output observation adds an `acquisition` artifact reference to its own
+closed version-1 journal. It has `schema_version`, `url`, `synthetic`,
+`transport` (`urllib`), `outcome` and `attempts`. Outcomes distinguish
+`FIRST_ATTEMPT_SUCCESS`, `RECOVERED_TRANSPORT`, `FAILED` and unfinished
+`IN_PROGRESS`. Each of at most two attempts records `ordinal`, `state`,
+`started_at`, `finished_at`, `observed_at`, `status`, `headers`, `body`, `error`,
+`observed_bytes`, `truncated` and `process` (null for urllib). Error objects
+contain only sanitized `type`, `reason_type`, `code`, `errno` and `retryable`.
+No raw exception message, authorization header, token or credential helper
+output is serialized. Wall timestamps record observations, not elapsed-time
+proof; the actual deadline uses the monotonic clock.
+
+The journal is limited to 1 MiB and its intent is flushed and synchronized
+before each dispatch. Admission is checked again after persistence. Each
+attempt has a separate bounded body file. Available read or exception partial
+bytes remain as evidence, including a bounded prefix and truncation count for
+oversized responses; inaccessible TLS buffers are not claimed. Failed bytes
+are never prepended to a successful retry. An earlier journal is verified
+against its captured reference before replacement. A persistence failure
+blocks all further requests in that transport. Interruption leaves the durable
+unfinished intent and cannot silently retry.
+
+A successful observation exactly binds the final attempt's status, headers,
+body and observation time. A failed observation retains status 0 and a safe
+diagnostic body; its journal separately retains any available response bytes.
+The main-thread POSIX deadline guard restores signal handlers and the remaining
+outer timer on exit; an earlier outer timer is never extended or classified as
+a retryable network timeout. SIGTERM and SIGINT handlers are unchanged. An
+unavailable guard fails explicitly before dispatch.
 
 Live GitHub API requests reuse existing credentials in this order: nonempty
 `GH_TOKEN`, then nonempty `GITHUB_TOKEN`, then the existing `github.com`
@@ -145,6 +187,11 @@ transport file's directory. Every descriptor is checked before discovery.
 Exact URL lookup includes pagination. Missing URLs fail; there is no network
 fallback. Bodies are copied into the output evidence directory and rehashed.
 Reports and candidates remain explicitly synthetic regardless of timestamps.
+Generated synthetic observations also have acquisition journals marked
+`synthetic: true`, with the fixture's original observation time. This records
+local fixture replay, not a real network request. Fixture inputs keep the
+five-field observation shape described above. Old retained reports remain
+historical evidence; this change does not invent acquisition journals for them.
 
 Independent fixtures in `test/builds/fixtures.py` invent small source responses
 and artifacts. They do not use oracle answers, real compiled binaries, or
