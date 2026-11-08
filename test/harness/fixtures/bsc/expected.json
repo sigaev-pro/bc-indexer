@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "chain_id": 714,
+  "validator": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+  "user_transaction": {
+    "from": "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+    "to": "0x1000000000000000000000000000000000000000",
+    "nonce": 0,
+    "gas": "21000",
+    "gas_price": "5000000000",
+    "value": "1000000000000000000",
+    "input": "0x"
+  },
+  "system_transactions": [
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001000",
+      "nonce": 0,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "0",
+      "input": "0xe1c7392a"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001001",
+      "nonce": 1,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "0",
+      "input": "0xe1c7392a"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001003",
+      "nonce": 2,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "0",
+      "input": "0xe1c7392a"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001006",
+      "nonce": 3,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "0",
+      "input": "0xe1c7392a"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001004",
+      "nonce": 4,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "0",
+      "input": "0xe1c7392a"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001005",
+      "nonce": 5,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "0",
+      "input": "0xe1c7392a"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000002000",
+      "nonce": 6,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "0",
+      "input": "0xe1c7392a"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001002",
+      "nonce": 7,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "6562500000000",
+      "input": "0x"
+    },
+    {
+      "from": "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9",
+      "to": "0x0000000000000000000000000000000000001000",
+      "nonce": 8,
+      "gas": "9223372036854775807",
+      "gas_price": "0",
+      "value": "98437500000000",
+      "input": "0xf340fa0100000000000000000000000003735c2ed70a56cd221e0024eb4bf90243c9d6e9"
+    }
+  ],
+  "accounts": {
+    "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+      "balance": "8999895000000000000",
+      "nonce": 1
+    },
+    "0x1000000000000000000000000000000000000000": {
+      "balance": "1000000000000000000",
+      "nonce": 0
+    },
+    "0x03735c2ed70a56cd221e0024eb4bf90243c9d6e9": {
+      "nonce": 9
+    },
+    "0xfffffffffffffffffffffffffffffffffffffffe": {
+      "balance": "0",
+      "nonce": 0
+    }
+  },
+  "user_receipt": {
+    "status": 1,
+    "gas_used": 21000
+  },
+  "unchecked": [
+    "system-contract-storage",
+    "system-contract-log-semantics",
+    "system-transaction-gas",
+    "validator-and-system-contract-balances",
+    "public-profile-runtime",
+    "capture",
+    "NATS"
+  ]
+}

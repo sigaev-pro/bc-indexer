@@ -1,5 +1,43 @@
 # Состояние проекта
 
+## E01-01.harness — Build the private BSC Parlia import slice
+
+The first checked BSC checkpoint fixes the independent monetary/system-call
+oracle and the native observation comparison boundary. Four new portable tests
+exercise the positive shape and independent negative controls; all 26 harness
+tests pass. The initial stub failed all four test methods before implementation.
+BSC key verification, fixture preparation, CLI import and observer execution are
+still NOT_RUN. The observer will use a separate caller-pinned tool manifest;
+scenario edits cannot nominate an executable. No BSC runtime claim is made by
+this checkpoint.
+
+2026-11-08: The first local Ethereum harness block is accepted in PR #122,
+merge `0a43d21b0a3877ff7b0c1f06f43a952b3a9c9142`. Both independent final
+reviews and exact-head CI passed. The repaired native run passed 13 controls;
+its index digest is `c3ddb69138cd795af6e7800ff52298de87050bc6679bcf291b5cc0e5e9038d28`.
+All three review findings were corrected. The acceptance comment is
+https://github.com/sigaev-pro/bc-indexer/issues/12#issuecomment-6723822587.
+
+The next separate block stays within issue #12: explicit private BSC genesis,
+test-only validator provenance, authentic Parlia preparation/sealing/import,
+independent expected results and bounded owned execution. Use accepted BSC
+build/source artifacts and preserve the Ethereum runner's accepted behavior.
+The sole writer is `/root/boot04_preflight`, in worktree
+`.project/worktrees/e01-harness-bsc-parlia` on branch
+`feat/e01-harness-bsc-parlia`, based on the accepted merge above. Allowed paths
+are `test/harness/**`, this status file and the existing harness evidence record.
+Root owns publication, independent review and protected acceptance.
+
+Start with a narrow feasibility check of the pinned public test keystore,
+genesis/system contracts and native Parlia generation seam. Record the oracle
+before measuring native execution. Preparation and measured execution remain
+separate; measured runs have one deadline of at most 1800 seconds. Preserve
+failed attempts, actual resource ownership and exact source/input bindings.
+Run focused checks locally, publish checked commits promptly, and use mandatory
+exact-head hosted CI for the full suite. Do not unlock dependent tasks from a
+partial block. Issue #12 remains open; all seven public profiles, the full quick
+suite, lifecycle, capture, NATS and later gates remain incomplete or NOT_RUN.
+
 ## E01-01.harness — Repaired source verified; final acceptance pending
 
 2026-11-08: Both independent review axes requested changes to PR #122 at
