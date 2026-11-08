@@ -1,6 +1,6 @@
 # Состояние проекта
 
-## E01-01.harness — Repair the rejected first candidate
+## E01-01.harness — Repaired source verified; final acceptance pending
 
 2026-11-08: Both independent review axes requested changes to PR #122 at
 `b9f9328d7052b412f795df4f58ab155f69ea2c87`. The earlier checks and native
@@ -13,11 +13,20 @@ and retained failed-candidate history. Root owns publication and acceptance.
 Issue #12 remains open; all public profiles, full quick coverage, capture, NATS,
 and later stage gates remain NOT_RUN.
 
-The three repairs now pass 22 focused portable tests, including the original
-counterexamples. Native identity uses pinned JSON header observations at 0/1/2
-with canonical decimal-string heights. Source is ready for full CI and a fresh
-committed native verification; previous native successes remain rejected-candidate
-history. No new adapter or acceptance gate has been opened.
+Repaired implementation `13d1a37c648bca25b7b3b65a3fda36890e7cab11` passed 22
+focused portable tests, source/document checks, and fresh actual verification on
+a clean unchanged checkout. Preparation took 67.080 seconds; the measured positive
+native import/state/header/full-chain comparison took 7.236 seconds. All 13
+controls passed, including separately reauthorized false genesis/block hashes and
+real parent-group SIGTERM/SIGKILL. All 34 command groups and containers were
+confirmed absent. Native identity uses exact JSON header observations at 0/1/2
+with canonical decimal-string heights. The result-record update is docs-only.
+
+Root owns final publication, mandatory hosted CI, both independent review axes,
+and protected acceptance. The full suite was not duplicated locally before
+publication. [The evidence record](evidence/E01-01.harness.md) retains the rejected
+candidate, repairs, exact executed source and fresh proof hashes. No new adapter
+or acceptance gate has been opened.
 
 ## E01-01.harness — First partial runner verified; independent review pending
 
