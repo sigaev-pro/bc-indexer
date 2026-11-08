@@ -243,6 +243,81 @@ Before reporting PASS, the campaign rechecks the original request, build,
 fixture, observer authority and their required bytes under its remaining total
 budget. Individual native runs retain their own shorter deadlines.
 
+## Offline RunPlan resolution
+
+The versioned [RunPlan schema](run-plan.schema.json) freezes declarations before
+execution. It is a test-only input contract, not a production YAML extension or
+a scheduler. The public commands are:
+
+```sh
+python3 -I test/harness/run_plan.py check /absolute/plan.json \
+  --registry-bundle /absolute/registry.json --registry-sha256 TRUSTED_RAW_SHA256
+python3 -I test/harness/run_plan.py freeze /absolute/plan.json \
+  --registry-bundle /absolute/registry.json --registry-sha256 TRUSTED_RAW_SHA256 \
+  --output /absolute/new-output-directory
+```
+
+The caller supplies the trusted raw-byte digest of an existing v3
+`evidence-artifacts-v1` / `CaseRegistry` validation bundle. Its document and
+context use the accepted [evidence interface](../evidence/README.md); this block
+does not create a second case registry or trust a digest inside the plan itself.
+Accepted applicability rules belong to that independently selected bundle.
+Synthetic bundles remain suitable for schema tests, not runtime credit.
+
+The closed plan selects profiles, exact case identities, suite, fixture kind,
+standard/extended mode and seed. Fixture bindings fix profile/fork/version,
+actual chain/genesis/config identity, prepared inputs and independent expected
+artifact references. Private identity and public correspondence are separate.
+Unknown or duplicate cases, unsupported fixture/fork bindings, missing quotas
+and unapproved exclusions reject. `PARTIAL` preserves every omitted applicable
+cell as NOT_RUN. `COMPLETE` means every applicable cell in the selected registry,
+profiles, suite and fixture kind was selected; it does not mean execution passed.
+
+Source start conditions, finite AND/OR stop triggers, action inputs/outcomes,
+quotas, allowed faults, resources and volumes are fixed before execution.
+Local stop requires both declared actions and native decisions. Public stop uses
+duration and/or native decisions with its explicit operator; all controlled
+transaction outcomes remain mandatory regardless of that operator. Public
+mainnet allows observation only. Each selected public testnet needs controlled
+transactions with declared inclusion/execution outcomes and a signer chain ID
+matching the actual fixture identity. The validator does not acquire a signer.
+
+One standard parent measured cap is at most 1,800 seconds. Event, comparison,
+restart, fault, drain, fence and reader work all belong inside it; per-event and
+comparison caps are ceilings inside that budget, not additional time afterward.
+Preparation/startup happen before READY; teardown has a separate finite cap.
+Extended duration requires an explicit soak suite and never becomes a standard
+30-minute claim. Resources/volumes are declarations, not measured availability.
+
+Local-e2e and public plans need an exact implementation/source/build/configuration/
+topology fence declaration and prior conformance binding. Missing declarations
+remain explicit blockers; inconsistent bindings reject. Even a matching supplied
+artifact is opaque and unverified here. Native-seam diagnostics do not require
+NATS. Full ProfileManifest verification, native/supporting readiness, isolated
+runtime ownership, fixture/build equivalence, independent oracle review, actual
+resource checks and terminal-fence conformance remain separate work.
+
+Exit 0 means offline resolution succeeded. The report always has
+`runtime_admitted: false`; every case remains NOT_RUN. It never emits a READY
+state, CaseResult or RunManifest. Exit 2 means invalid declarations, changed
+artifacts or another validation failure. `check` creates no output.
+
+`freeze` copies the exact authenticated plan, registry and schema buffers and
+writes `resolution.json` last. Original authority and referenced bytes are
+rechecked before that final record. A failure during publication may retain
+incomplete snapshots, without a resolution record; those are not a frozen plan.
+Relative artifact paths resolve against the original plan directory recorded in
+the report, not the snapshot directory. Absolute paths are allowed; traversal,
+symlinks and nonregular files reject. External large payloads are not copied.
+Later execution must revalidate every original reference and obtain the missing
+readiness proofs; a frozen hash alone does not verify their semantics.
+
+Resolution checks a 30-second validation budget, 16 MiB per JSON authority and
+1 GiB per referenced artifact using bounded reads. These are initial offline
+validator limits, not product payload or runtime throughput limits. All authored
+numeric fields use the accepted exact JSON parsing boundary; fractional values
+cannot silently round into integer seeds, counts or deadlines.
+
 ## Remaining work in issue 12
 
 The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)
@@ -292,7 +367,7 @@ positives also passed using accepted prepared inputs. Exact final-head review,
 CI and protected acceptance remain separate from these measured results.
 
 Complete BSC fixture/fork coverage, the Bor native adapter, all other required
-fixture families, shared ProfileManifest/RunPlan resolution,
+fixture families, complete ProfileManifest verification and runtime RunPlan admission,
 supporting services, public mainnet/testnet smoke, and integration with future
 capture and Gateway components remain unimplemented here. The collector and NATS
 are absent by design at this first native seam. E03 delivery and later composed

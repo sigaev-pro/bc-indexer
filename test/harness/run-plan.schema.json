@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-plan.schema.json",
+  "title": "Offline test-only RunPlan declarations, version 1",
+  "description": "Valid declarations do not establish READY, runtime admission or a case verdict.",
+  "type": "object",
+  "required": ["schema_version", "plan_id", "fixture_kind", "suite", "mode", "coverage", "seed", "profiles", "case_identities", "build_manifest", "profile_manifests", "fixtures", "resources", "volumes", "deadlines", "sources", "stop", "actions", "quotas", "faults", "terminal_fence"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "plan_id": {"$ref": "#/$defs/name"},
+    "fixture_kind": {"enum": ["native-seam", "local-e2e", "public"]},
+    "suite": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/suite"},
+    "mode": {"enum": ["standard", "extended"]},
+    "coverage": {"enum": ["PARTIAL", "COMPLETE"]},
+    "seed": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "profiles": {"type": "array", "minItems": 1, "maxItems": 7, "uniqueItems": true, "items": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}},
+    "case_identities": {"type": "array", "minItems": 1, "maxItems": 100000, "uniqueItems": true, "items": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/identity"}},
+    "build_manifest": {"$ref": "#/$defs/artifact"},
+    "profile_manifests": {"type": "array", "maxItems": 7, "items": {
+      "type": "object", "required": ["profile", "profile_manifest_digest", "artifact"], "additionalProperties": false,
+      "properties": {"profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}, "profile_manifest_digest": {"$ref": "#/$defs/digest"}, "artifact": {"$ref": "#/$defs/artifact"}}
+    }},
+    "fixtures": {"type": "array", "minItems": 1, "maxItems": 10000, "items": {"$ref": "#/$defs/fixture"}},
+    "resources": {
+      "type": "object", "required": ["architecture", "cpus", "ram_bytes", "disk_bytes", "parallelism"], "additionalProperties": false,
+      "properties": {"architecture": {"enum": ["amd64", "arm64"]}, "cpus": {"$ref": "#/$defs/positive"}, "ram_bytes": {"$ref": "#/$defs/positive"}, "disk_bytes": {"$ref": "#/$defs/positive"}, "parallelism": {"$ref": "#/$defs/positive"}}
+    },
+    "volumes": {
+      "type": "object", "required": ["blocks", "transactions", "operations", "payload_bytes", "record_bytes", "outage_seconds", "soak_seconds"], "additionalProperties": false,
+      "properties": {"blocks": {"$ref": "#/$defs/count"}, "transactions": {"$ref": "#/$defs/count"}, "operations": {"$ref": "#/$defs/count"}, "payload_bytes": {"$ref": "#/$defs/count"}, "record_bytes": {"$ref": "#/$defs/count"}, "outage_seconds": {"$ref": "#/$defs/count"}, "soak_seconds": {"$ref": "#/$defs/count"}}
+    },
+    "deadlines": {
+      "type": "object", "required": ["preparation_seconds", "startup_seconds", "event_seconds", "measured_seconds", "comparison_seconds", "teardown_seconds"], "additionalProperties": false,
+      "properties": {"preparation_seconds": {"$ref": "#/$defs/positive"}, "startup_seconds": {"$ref": "#/$defs/positive"}, "event_seconds": {"$ref": "#/$defs/positive"}, "measured_seconds": {"$ref": "#/$defs/positive"}, "comparison_seconds": {"$ref": "#/$defs/positive"}, "teardown_seconds": {"$ref": "#/$defs/positive"}}
+    },
+    "sources": {"type": "array", "minItems": 1, "maxItems": 10000, "items": {
+      "type": "object", "required": ["profile", "fixture_id", "fixture_version", "fork_variant", "start"], "additionalProperties": false,
+      "properties": {
+        "profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}, "fixture_id": {"$ref": "#/$defs/name"}, "fixture_version": {"$ref": "#/$defs/name"}, "fork_variant": {"$ref": "#/$defs/name"},
+        "start": {"type": "object", "required": ["kind", "height", "block_hash"], "additionalProperties": false,
+          "properties": {"kind": {"enum": ["prepared-genesis", "prepared-head", "synced-head"]}, "height": {"$ref": "#/$defs/count"}, "block_hash": {"$ref": "#/$defs/hash"}}}
+      }
+    }},
+    "stop": {
+      "type": "object", "required": ["operator", "duration_seconds", "native_decisions", "driver_actions", "require_action_outcomes"], "additionalProperties": false,
+      "properties": {"operator": {"enum": ["AND", "OR"]}, "duration_seconds": {"$ref": "#/$defs/optionalPositive"}, "native_decisions": {"$ref": "#/$defs/optionalPositive"}, "driver_actions": {"$ref": "#/$defs/optionalPositive"}, "require_action_outcomes": {"type": "boolean", "const": true}}
+    },
+    "actions": {"type": "array", "maxItems": 100000, "items": {
+      "type": "object", "required": ["action_id", "profile", "kind", "count", "input", "expected", "outcome", "fault_id"], "additionalProperties": false,
+      "properties": {"action_id": {"$ref": "#/$defs/name"}, "profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}, "kind": {"enum": ["native-import", "controlled-transaction", "fault", "observe"]}, "count": {"$ref": "#/$defs/positive"}, "input": {"$ref": "#/$defs/optionalArtifact"}, "expected": {"$ref": "#/$defs/artifact"}, "outcome": {"enum": ["applied", "included-success", "included-revert", "rejected-before-inclusion", "fault-observed", "observed"]}, "fault_id": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/name"}]}, "signer_chain_id": {"type": "string", "pattern": "^[1-9][0-9]{0,77}$"}}
+    }},
+    "quotas": {"type": "array", "minItems": 1, "maxItems": 100000, "items": {
+      "type": "object", "required": ["case_identity", "minimum"], "additionalProperties": false,
+      "properties": {"case_identity": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/identity"}, "minimum": {"$ref": "#/$defs/positive"}}
+    }},
+    "faults": {"type": "array", "maxItems": 1000, "items": {
+      "type": "object", "required": ["fault_id", "kind", "maximum_duration_seconds"], "additionalProperties": false,
+      "properties": {"fault_id": {"$ref": "#/$defs/name"}, "kind": {"enum": ["process-crash", "lost-volatile-state", "network-outage", "disk-error"]}, "maximum_duration_seconds": {"$ref": "#/$defs/positive"}}
+    }},
+    "terminal_fence": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/fence"}]}
+  },
+  "$defs": {
+    "name": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "hash": {"type": "string", "pattern": "^0x[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "positive": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+    "optionalPositive": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/positive"}]},
+    "artifact": {"type": "object", "required": ["path", "sha256", "size_bytes"], "additionalProperties": false,
+      "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 4096}, "sha256": {"$ref": "#/$defs/digest"}, "size_bytes": {"$ref": "#/$defs/count"}}},
+    "optionalArtifact": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/artifact"}]},
+    "fixture": {
+      "type": "object", "required": ["fixture_id", "fixture_version", "profile", "fork_variant", "identity", "inputs", "oracle", "preparation", "public_correspondence"], "additionalProperties": false,
+      "properties": {"fixture_id": {"$ref": "#/$defs/name"}, "fixture_version": {"$ref": "#/$defs/name"}, "profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"}, "fork_variant": {"$ref": "#/$defs/name"},
+        "identity": {"type": "object", "required": ["kind", "chain_id", "genesis_hash", "native_config"], "additionalProperties": false,
+          "properties": {"kind": {"enum": ["test-only", "public"]}, "chain_id": {"type": "string", "pattern": "^[1-9][0-9]{0,77}$"}, "genesis_hash": {"$ref": "#/$defs/hash"}, "native_config": {"$ref": "#/$defs/artifact"}}},
+        "inputs": {"type": "array", "minItems": 1, "maxItems": 10000, "uniqueItems": true, "items": {"$ref": "#/$defs/artifact"}},
+        "oracle": {"$ref": "#/$defs/artifact"}, "preparation": {"$ref": "#/$defs/artifact"}, "public_correspondence": {"$ref": "#/$defs/optionalArtifact"}
+      }
+    },
+    "fence": {
+      "type": "object", "required": ["implementation", "source_commit", "build", "configuration", "topology", "prior_conformance"], "additionalProperties": false,
+      "properties": {"implementation": {"$ref": "#/$defs/artifact"}, "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "build": {"$ref": "#/$defs/artifact"}, "configuration": {"$ref": "#/$defs/artifact"},
+        "topology": {"type": "object", "required": ["kind", "replicas"], "additionalProperties": false,
+          "properties": {"kind": {"enum": ["standalone", "cluster"]}, "replicas": {"$ref": "#/$defs/positive"}}},
+        "prior_conformance": {"type": "object", "required": ["artifact", "implementation_sha256", "source_commit", "build_sha256", "configuration_sha256", "topology_digest"], "additionalProperties": false,
+          "properties": {"artifact": {"$ref": "#/$defs/artifact"}, "implementation_sha256": {"$ref": "#/$defs/digest"}, "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "build_sha256": {"$ref": "#/$defs/digest"}, "configuration_sha256": {"$ref": "#/$defs/digest"}, "topology_digest": {"$ref": "#/$defs/digest"}}}
+      }
+    }
+  }
+}
