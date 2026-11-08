@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "oracle": "Independent integer arithmetic documented in ORACLE.md; never derived from a native run",
+  "blocks": [
+    {
+      "number": 1,
+      "gas_used": 21000,
+      "transactions": 1,
+      "base_fee": "875000000",
+      "accounts": {
+        "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {"balance": "8999958000000000000", "nonce": 1},
+        "1000000000000000000000000000000000000000": {"balance": "1000000000000000000", "nonce": 0},
+        "2000000000000000000000000000000000000000": {"balance": "2000023625000000000", "nonce": 0}
+      }
+    },
+    {
+      "number": 2,
+      "gas_used": 0,
+      "transactions": 0,
+      "base_fee": "766084375",
+      "accounts": {
+        "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {"balance": "8999958000000000000", "nonce": 1},
+        "1000000000000000000000000000000000000000": {"balance": "1000000000000000000", "nonce": 0},
+        "2000000000000000000000000000000000000000": {"balance": "4000023625000000000", "nonce": 0}
+      }
+    }
+  ]
+}
