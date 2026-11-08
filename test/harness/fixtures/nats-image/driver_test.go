@@ -5,12 +5,93 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestProtocolOneConsumesAndBindsConnectInfo(t *testing.T) {
+	initial := map[string]any{"server_id": "NATIVE-ID", "server_name": "image-S-1", "version": "2.15.2", "git_commit": "5a815f1",
+		"go": "go1.27.3", "host": "127.0.0.1", "port": 19001, "proto": 1, "max_payload": 8192, "headers": true,
+		"auth_required": true, "jetstream": true, "client_id": 7, "client_ip": "127.0.0.1", "api_lvl": 5, "xkey": "PUBLIC-KEY"}
+	for _, mode := range []string{"valid", "server", "account", "system", "flag", "duplicate", "missing", "extra"} {
+		t.Run(mode, func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				conn, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+				conn.SetDeadline(time.Now().Add(time.Second))
+				first, _ := json.Marshal(initial)
+				fmt.Fprintf(conn, "INFO %s \r\n", first)
+				reader := bufio.NewReader(conn)
+				for index := 0; index < 3; index++ {
+					if _, err = reader.ReadString('\n'); err != nil {
+						return
+					}
+				}
+				fmt.Fprint(conn, "PONG\r\n")
+				connected := map[string]any{}
+				for key, value := range initial {
+					connected[key] = value
+				}
+				connected["connect_info"], connected["remote_account"] = true, "APP"
+				switch mode {
+				case "server":
+					connected["server_id"] = "OTHER"
+				case "account":
+					connected["remote_account"] = "SYS"
+				case "system":
+					connected["acc_is_sys"] = true
+				case "flag":
+					connected["connect_info"] = 1
+				case "missing":
+					return
+				case "extra":
+					fmt.Fprint(conn, "PONG\r\n")
+				}
+				second, _ := json.Marshal(connected)
+				if mode == "duplicate" {
+					second = append(second[:len(second)-1], []byte(",\"remote_account\":\"APP\"}")...)
+				}
+				fmt.Fprintf(conn, "INFO %s \r\n", second)
+				if mode == "valid" {
+					fmt.Fprint(conn, "MSG _INBOX.NEXT 1 2\r\n{}\r\n")
+				}
+			}()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			w, err := connect(ctx, listener.Addr().String(), "manager", filepath.Join(t.TempDir(), "wire"))
+			if mode == "valid" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, body, responseErr := w.response("_INBOX.NEXT")
+				if responseErr != nil || string(body) != "{}" {
+					t.Errorf("connect INFO leaked into API response: %v", responseErr)
+				}
+			} else if err == nil {
+				t.Error("accepted invalid or missing connect INFO")
+			}
+			if w != nil {
+				w.conn.Close()
+			}
+			listener.Close()
+			<-done
+		})
+	}
+}
 
 func TestStrictNativeJSON(t *testing.T) {
 	for _, data := range []string{`{"stream":"FENCE","seq":1,"seq":2}`, `{"x":{"a":1,"a":2}}`, `{} {}`, `[NaN]`} {
@@ -97,15 +178,24 @@ func TestSnapshotRejectsLinksAndExpiredBudget(t *testing.T) {
 	source := filepath.Join(root, "source")
 	os.Mkdir(source, 0700)
 	os.WriteFile(filepath.Join(source, "data"), []byte("native"), 0600)
+	files, err := snapshotStore(context.Background(), source, filepath.Join(root, "valid"))
+	if err != nil || len(files) != 1 || files[0].Path != "data" || files[0].Size != 6 || len(files[0].SHA256) != 64 {
+		t.Fatal("snapshot inventory is incomplete", files, err)
+	}
+	os.WriteFile(filepath.Join(source, "data"), []byte("later source change"), 0600)
+	retained, err := os.ReadFile(filepath.Join(root, "valid", "data"))
+	if err != nil || string(retained) != "native" {
+		t.Fatal("snapshot did not preserve original bytes", err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if snapshotStore(ctx, source, filepath.Join(root, "expired")) == nil {
+	if _, err := snapshotStore(ctx, source, filepath.Join(root, "expired")); err == nil {
 		t.Fatal("expired snapshot accepted")
 	}
 	if err := os.Symlink("data", filepath.Join(source, "alias")); err != nil {
 		t.Fatal(err)
 	}
-	if snapshotStore(context.Background(), source, filepath.Join(root, "linked")) == nil {
+	if _, err := snapshotStore(context.Background(), source, filepath.Join(root, "linked")); err == nil {
 		t.Fatal("store symlink accepted")
 	}
 }

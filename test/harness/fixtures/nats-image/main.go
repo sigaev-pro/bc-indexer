@@ -71,21 +71,22 @@ type exported struct {
 	Response []byte `json:"response"`
 }
 type report struct {
-	Schema           int            `json:"schema_version"`
-	Kind             string         `json:"kind"`
-	Status           string         `json:"status"`
-	Error            string         `json:"error"`
-	Basic            basic          `json:"basic"`
-	RPC              []rpcRecord    `json:"rpc"`
-	InitialInventory []observation  `json:"initial_inventory"`
-	Initial          map[string]any `json:"initial"`
-	Sealed           map[string]any `json:"sealed"`
-	Group            *string        `json:"stream_group"`
-	Before           collection     `json:"before"`
-	After            collection     `json:"after"`
-	Exports          []exported     `json:"exports"`
-	Denial           []byte         `json:"restart_publication_denial"`
-	Cleanup          bool           `json:"cleanup_complete"`
+	Schema           int             `json:"schema_version"`
+	Kind             string          `json:"kind"`
+	Status           string          `json:"status"`
+	Error            string          `json:"error"`
+	Basic            basic           `json:"basic"`
+	RPC              []rpcRecord     `json:"rpc"`
+	InitialInventory []observation   `json:"initial_inventory"`
+	Initial          map[string]any  `json:"initial"`
+	Sealed           map[string]any  `json:"sealed"`
+	Group            *string         `json:"stream_group"`
+	Before           collection      `json:"before"`
+	After            collection      `json:"after"`
+	Exports          []exported      `json:"exports"`
+	Denial           []byte          `json:"restart_publication_denial"`
+	Cleanup          bool            `json:"cleanup_complete"`
+	StoreSnapshots   []storeSnapshot `json:"store_snapshots"`
 }
 
 func payload(logical, size int) []byte {
@@ -341,7 +342,11 @@ func execute(r *runtimeState, in input, out *report) (err error) {
 	}
 	for i := 0; i < count; i++ {
 		name := fmt.Sprintf("image-S-%d", i+1)
-		if err = snapshotStore(r.ctx, filepath.Join(r.dir, "stores", name), filepath.Join(r.dir, "before-stores", name)); err != nil {
+		snapshot := storeSnapshot{Name: name, Started: r.order.Add(1)}
+		snapshot.Files, err = snapshotStore(r.ctx, filepath.Join(r.dir, "stores", name), filepath.Join(r.dir, "before-stores", name))
+		snapshot.Finished = r.order.Add(1)
+		out.StoreSnapshots = append(out.StoreSnapshots, snapshot)
+		if err != nil {
 			return err
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -101,25 +102,61 @@ func connect(ctx context.Context, address, user, logBase string) (*wire, error) 
 			return nil, err
 		}
 	}
-	for {
-		line, err = w.line()
-		if err != nil {
-			return nil, err
-		}
-		if bytes.Equal(line, []byte("PONG\r\n")) {
-			break
-		}
-		if bytes.Equal(line, []byte("PING\r\n")) {
-			// Native pings are not data publications, but remain wire frames.
-			if err = w.send([]byte("PONG\r\n")); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		return nil, fmt.Errorf("unexpected connection response: %q", line)
+	// Pinned protocol 1 queues PONG followed by one CONNECT INFO in
+	// server/client.go. Finish that exact handshake before any API request.
+	line, err = w.line()
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(line, []byte("PONG\r\n")) {
+		return nil, fmt.Errorf("unexpected handshake response: %q", line)
+	}
+	line, err = w.line()
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.HasPrefix(line, []byte("INFO ")) {
+		return nil, errors.New("post-CONNECT native INFO missing")
+	}
+	var connected map[string]any
+	if err = strictJSON(bytes.TrimSpace(line[5:]), &connected); err != nil {
+		return nil, err
+	}
+	if err = connectInfo(w.info, connected); err != nil {
+		return nil, err
 	}
 	ok = true
 	return w, nil
+}
+
+func connectInfo(initial, connected map[string]any) error {
+	if connected["connect_info"] != true || connected["remote_account"] != "APP" {
+		return errors.New("native post-CONNECT account binding changed")
+	}
+	if system, present := connected["acc_is_sys"]; present && system != false {
+		return errors.New("native client unexpectedly bound to the system account")
+	}
+	if _, present := initial["connect_info"]; present {
+		return errors.New("initial INFO is a CONNECT response")
+	}
+	for _, field := range []string{"server_id", "server_name", "version", "git_commit", "go", "host", "client_ip", "xkey"} {
+		text, ok := initial[field].(string)
+		if !ok || text == "" || !reflect.DeepEqual(initial[field], connected[field]) {
+			return fmt.Errorf("native INFO identity changed: %s", field)
+		}
+	}
+	for _, field := range []string{"proto", "port", "max_payload", "client_id", "api_lvl"} {
+		value, ok := number(initial[field])
+		if !ok || value < 1 || !reflect.DeepEqual(initial[field], connected[field]) {
+			return fmt.Errorf("native INFO numeric identity changed: %s", field)
+		}
+	}
+	for _, field := range []string{"headers", "auth_required", "jetstream"} {
+		if initial[field] != true || connected[field] != true {
+			return fmt.Errorf("native INFO capability changed: %s", field)
+		}
+	}
+	return nil
 }
 
 func (w *wire) deadline() error {

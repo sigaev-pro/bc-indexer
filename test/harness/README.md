@@ -34,8 +34,11 @@ start a native process or authenticate an executable/tool from supplied fields.
 
 The later [nats_image.py](nats_image.py) source checkpoint adds preparation and
 measurement around the unchanged accepted executable. Its static, standard
-library Go coordinator has portable tests; pinned-container compilation and
-actual standalone/R3 runs are still **NOT_RUN**. The independent
+library Go coordinator has portable tests. The first source prepared successfully
+with the pinned compiler, then failed before standalone publication on the
+protocol 1 handshake; R3 stayed NOT_RUN. That failed attempt remains retained.
+The corrected coordinator requires fresh preparation and a new pinned tool;
+corrected standalone/R3 execution is still **NOT_RUN**. The independent
 [collection](nats_image_collection.py) and [raw-byte join](nats_image_proof.py)
 checks extend the supplied predicate; they cannot establish native truth alone.
 Issue #12 stays open and `runtime_admitted` remains false.
@@ -72,10 +75,16 @@ The socket audit retains actual ingress and replies before the driver suppresses
 one ACK from the application's real timed wait. Its explicit retry is another
 publication and append. There is no hidden reconnect or library retry. The
 selected path rejects unexpected extra protocol frames rather than inventing
-attempt correlation. All original publisher/manager connections close before
-old children are stopped. Every old Wait finishes before restart. Before-store
+attempt correlation. It consumes the pinned protocol 1 handshake exactly:
+initial INFO, PONG, then `connect_info: true` INFO bound to the same typed server
+identity and the APP account. It does not discard arbitrary INFO frames while
+waiting for a publication response. All original publisher/manager connections
+close before old children are stopped. Every old Wait finishes before restart. Before-store
 snapshots are immutable copies taken only after exit; restart opens the original
 stores, and final store bytes are referenced only after new children exit.
+The driver captures each snapshot's complete relative file inventory, exact
+sizes and SHA256 values before restart. Final validation checks the same complete
+path set and bytes; a directory's continued existence is insufficient.
 
 Restart users can publish only exact stream INFO and sequence GET API subjects.
 A real denied data publication checks that restriction. Full health, JSz and
@@ -84,7 +93,10 @@ all three native member IDs and distinct logical/transport accounts. Inventory
 rows and explicit samples must agree. Complete before/after collections bracket
 the upper sequence selection and each direct sequence read. Raw native API
 frames, stored binary bytes, timestamps and interval identities are joined to
-the census. No consumer is created to read the interval.
+the census. Every retained attempt request/response must match its census row;
+all HTTP request orders are unique, including records outside the final selected
+brackets. Initial and fenced configuration joins preserve JSON types. No consumer
+is created to read the interval.
 
 One monotonic parent budget covers admission, both topologies, faults, restart,
 comparison, evidence hashing and cleanup; it never exceeds 1,800 seconds.
@@ -93,7 +105,9 @@ the parent budget and retain the existing owned-command cleanup reserve. Failed
 attempts remain failed, with commands, partial wire bytes and available native
 artifacts retained. A corrected retry needs `--previous`, its explicit
 `--previous-sha256`, and `--correction`; it uses a fresh output directory and
-authenticates the old build/tool binding. These are private harness artifacts,
+authenticates the old build/tool binding. The predecessor attempt index must be
+an integer in `1 <= attempt_index < 2**63`; this is a representation bound, not
+a repair-cycle ceiling. These are private harness artifacts,
 not public profile or product delivery evidence.
 
 ## Source-native NATS conformance

@@ -95,7 +95,8 @@ def prior(path, pin, correction, kind, build_ref, deadline):
     require(type(correction) is str and 10 <= len(correction) <= 2000 and type(pin) is str, "Explicit pinned failure and correction are required")
     ref, proof = pinned_json(path, pin, 8 * 1024 * 1024, deadline)
     require(proof.get("kind") == kind and proof.get("result") == "FAIL" and proof.get("build_manifest") == build_ref and
-            proof.get("cleanup_complete") is True and type(proof.get("attempt_index")) is int, "Invalid or unresolved failed predecessor")
+            proof.get("cleanup_complete") is True and type(proof.get("attempt_index")) is int and
+            1 <= proof["attempt_index"] < 2**63, "Invalid or unresolved failed predecessor")
     if kind == "nats-image-run":
         _, old_tool = json_artifact(proof.get("tool"), deadline=deadline)
         require(old_tool.get("kind") == "nats-image-coordinator-tool" and old_tool.get("build_manifest") == build_ref and

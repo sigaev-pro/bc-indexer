@@ -20,9 +20,11 @@ def native_document(directory, topology="R3"):
     basic = source["basic"]
     count = 1 if topology == "standalone" else 3
     basic["boundaries"]["seal_ack"] = 45
+    basic["boundaries"]["restart_started"] = 80
     for index, process in enumerate(basic["processes"][:count]): process["exited_order"] = 46 + index
+    for process in basic["processes"][count:]: process["started_order"] += 30
     result = {"schema_version": 1, "kind": "nats-unchanged-image-native-observations", "status": "PASS", "error": "",
-              **source, "rpc": [], "initial_inventory": [], "cleanup_complete": True,
+              **source, "rpc": [], "initial_inventory": [], "store_snapshots": [], "cleanup_complete": True,
               "restart_publication_denial": encoded(b'-ERR \'Permissions Violation for Publish to "fence.input"\'\r\n')}
     def call(name, subject, request_body, response, order):
         index = len(result["rpc"]) + 1
@@ -56,10 +58,17 @@ def native_document(directory, topology="R3"):
     connect = json.dumps({"user": "publisher", "pass": "fixture-only", "verbose": False, "pedantic": True, "protocol": 1},
                          sort_keys=True, separators=(",", ":")).encode()
     sent = b"CONNECT " + connect + b"\r\nSUB _INBOX.IMAGE.> 1\r\nPING\r\n"
-    received = b"INFO " + json.dumps({"server_id": basic["processes"][0]["info_id"]}).encode() + b"\r\nPONG\r\n"
+    info = {"server_id": basic["processes"][0]["info_id"], "server_name": "image-S-1", "version": "2.15.2", "git_commit": "5a815f1",
+            "go": "go1.27.3", "host": "127.0.0.1", "port": 19001, "proto": 1, "max_payload": 8192, "headers": True,
+            "auth_required": True, "jetstream": True, "client_id": 7, "client_ip": "127.0.0.1", "api_lvl": 5, "xkey": "PUBLIC-KEY"}
+    received = b"INFO " + json.dumps(info).encode() + b"\r\nPONG\r\nINFO "
+    received += json.dumps({**info, "connect_info": True, "remote_account": "APP"}).encode() + b"\r\n"
+    (directory / "attempts").mkdir()
     for attempt in basic["census"]["attempts"]:
         sent += base64.b64decode(attempt["request"])
         received += base64.b64decode(attempt["response"])
+        for field in ("request", "response"):
+            (directory / "attempts" / f"{attempt['ordinal']:03d}.{field}").write_bytes(base64.b64decode(attempt[field]))
     (wire / "004-publisher.sent").write_bytes(sent)
     (wire / "004-publisher.received").write_bytes(received)
     (directory / "rpc").mkdir()
@@ -79,12 +88,84 @@ def native_document(directory, topology="R3"):
         store = directory / "stores" / process["name"]
         store.mkdir(exist_ok=True)
         (directory / "before-stores" / process["name"]).mkdir(exist_ok=True)
+        (directory / "before-stores" / process["name"] / "native.blk").write_bytes(b"immutable native bytes")
+        if process["generation"] == 0:
+            index = len(result["store_snapshots"])
+            result["store_snapshots"].append({"name": process["name"], "started_order": 49 + index * 2,
+                "finished_order": 50 + index * 2, "files": [{"path": "native.blk", "sha256": hashlib.sha256(b"immutable native bytes").hexdigest(),
+                                                         "size_bytes": len(b"immutable native bytes")}]})
         identity = store.stat()
         process.update(store_device=identity.st_dev, store_inode=identity.st_ino)
     return result
 
 
 class NativeProofTests(unittest.TestCase):
+    def test_every_retained_attempt_http_record_and_snapshot_byte_is_bound(self):
+        def duplicate_http(root):
+            row = json.loads((root / "http/0000.json").read_text())
+            row["body"] = encoded(b"{\"contradiction\":true}")
+            (root / "http/9999.json").write_text(json.dumps(row))
+        for mutate in (
+            duplicate_http,
+            lambda root: (root / "attempts/001.request").write_bytes(b"PUB unrelated 0\r\n\r\n"),
+            lambda root: (root / "attempts/001.response").write_bytes(b"unrelated acknowledgment"),
+            lambda root: (root / "before-stores/image-S-1/native.blk").write_bytes(b"changed"),
+            lambda root: (root / "before-stores/image-S-1/native.blk").unlink(),
+            lambda root: (root / "before-stores/image-S-1/extra.blk").write_bytes(b"extra"),
+        ):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = native_document(root)
+                self.assertEqual(validate_report(value, root)["upper_sequence"], 4)
+                mutate(root)
+                with self.subTest(mutate=mutate), self.assertRaises(ValueError): validate_report(value, root)
+
+    def test_native_config_joins_preserve_boolean_and_integer_types(self):
+        import base64
+        for site in ("fenced", "initial"):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = native_document(root, "standalone")
+                if site == "fenced":
+                    row = value["rpc"][2]
+                    payload = json.loads(base64.b64decode(row["body"]))
+                    payload["config"].update(num_replicas=True, max_age=False)
+                    data = json.dumps(payload).encode()
+                    row["body"] = encoded(data)
+                    row["response"] = encoded(b"MSG _INBOX.IMAGE.R3 1 " + str(len(data)).encode() + b"\r\n" + data + b"\r\n")
+                    (root / "rpc/003.response").write_bytes(base64.b64decode(row["response"]))
+                else:
+                    change_body(value["initial_inventory"][0], lambda j: j["account_details"][0]["stream_detail"][0]["config"].update(num_replicas=True, max_age=False))
+                    (root / "http/0000.json").write_text(json.dumps({**value["initial_inventory"][0], "error": ""}))
+                with self.subTest(site=site), self.assertRaises(ValueError): validate_report(value, root)
+
+    def test_raw_connect_info_cannot_change_account_identity_or_types(self):
+        for update in ({"server_id": "OTHER"}, {"remote_account": "SYS"}, {"connect_info": 1},
+                       {"acc_is_sys": True}, {"port": 19001.0}):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = native_document(root, "standalone")
+                path = root / "wire/004-publisher.received"
+                initial, pong, connected, rest = path.read_bytes().split(b"\r\n", 3)
+                info = json.loads(connected[5:])
+                info.update(update)
+                path.write_bytes(b"\r\n".join([initial, pong, b"INFO " + json.dumps(info).encode(), rest]))
+                with self.subTest(update=update), self.assertRaises(ValueError): validate_report(value, root)
+
+    def test_snapshot_inventory_requires_safe_unique_paths_and_pre_restart_capture(self):
+        for mutate in (
+            lambda row: row["files"].append(copy.deepcopy(row["files"][0])),
+            lambda row: row["files"][0].update(path="../native.blk"),
+            lambda row: row["files"][0].update(path="/native.blk"),
+            lambda row: row["files"][0].update(size_bytes=True),
+            lambda row: row.update(started_order=1),
+            lambda row: row.update(finished_order=81),
+        ):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = native_document(root, "standalone")
+                mutate(value["store_snapshots"][0])
+                with self.subTest(mutate=mutate), self.assertRaises(ValueError): validate_report(value, root)
     def test_actual_byte_joins_are_required_on_both_topologies(self):
         for topology in ("standalone", "R3"):
             with tempfile.TemporaryDirectory() as temp:
@@ -129,7 +210,8 @@ class NativeProofTests(unittest.TestCase):
             path.write_text(json.dumps(value))
             pin = hashlib.sha256(path.read_bytes()).hexdigest()
             self.assertEqual(nats_image.prior(path, pin, "Corrected driver logic", "nats-image-preparation", build, time.monotonic()+10)[1], 2)
-            for change in ({"result": "PASS"}, {"cleanup_complete": False}, {"build_manifest": {}}, {"attempt_index": True}):
+            for change in ({"result": "PASS"}, {"cleanup_complete": False}, {"build_manifest": {}}, {"attempt_index": True},
+                           {"attempt_index": -1}, {"attempt_index": 0}, {"attempt_index": 2**63}):
                 path.write_text(json.dumps({**value, **change}))
                 current_pin = hashlib.sha256(path.read_bytes()).hexdigest()
                 with self.subTest(change=change), self.assertRaises(ValueError):

@@ -275,9 +275,23 @@ func (r *runtimeState) alive(generation int) error {
 	return r.ctx.Err()
 }
 
-func snapshotStore(ctx context.Context, source, destination string) error {
+type snapshotFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size_bytes"`
+}
+
+type storeSnapshot struct {
+	Name     string         `json:"name"`
+	Started  int64          `json:"started_order"`
+	Finished int64          `json:"finished_order"`
+	Files    []snapshotFile `json:"files"`
+}
+
+func snapshotStore(ctx context.Context, source, destination string) ([]snapshotFile, error) {
 	var total int64
-	return filepath.WalkDir(source, func(path string, entry os.DirEntry, visitErr error) error {
+	files := []snapshotFile{}
+	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, visitErr error) error {
 		if visitErr != nil {
 			return visitErr
 		}
@@ -295,6 +309,9 @@ func snapshotStore(ctx context.Context, source, destination string) error {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return errors.New("native store contains a symlink")
 		}
+		if len(files) >= 8192 {
+			return errors.New("store snapshot file count exceeded")
+		}
 		data, err := regularBytes(path, 64*1024*1024)
 		if err != nil {
 			return err
@@ -303,8 +320,14 @@ func snapshotStore(ctx context.Context, source, destination string) error {
 		if total > 128*1024*1024 {
 			return errors.New("store snapshot exceeds bound")
 		}
-		return ownedWrite(target, data)
+		if err = ownedWrite(target, data); err != nil {
+			return err
+		}
+		digest := sha256.Sum256(data)
+		files = append(files, snapshotFile{Path: filepath.ToSlash(relative), SHA256: hex.EncodeToString(digest[:]), Size: int64(len(data))})
+		return nil
 	})
+	return files, err
 }
 
 func verifyNative() error {

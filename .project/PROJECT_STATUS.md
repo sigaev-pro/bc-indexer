@@ -2,13 +2,20 @@
 
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: IN_PROGRESS. PR #128 now has the complete source checkpoint for the
-unchanged-image coordinator, preparation/run interface and independent complete
-inventory/export checks. Sixteen focused Python methods and seven portable
-Go driver tests pass. Accepted source-native proof bytes were authenticated
-again without native execution. Pinned-container compilation and actual image
-runs remain NOT_RUN. Next: publish the checked source, obtain independent source
-review and the execution handoff, then prepare and measure both topologies.
+Status: IN_PROGRESS, repairing the first actual image attempt and confirmed
+review findings. Published source `4645131abfd20a799ea74bb672cc0ded09f88a3f`
+prepared successfully with the pinned compiler in 58.348 seconds. Measured
+attempt 01 failed in 1.656 seconds before standalone publication because the
+driver returned at PONG without consuming the native post-CONNECT INFO. R3
+remained NOT_RUN. The original proof, tool and source are retained unchanged;
+native processes, owned process group and exact-label containers are absent.
+
+The checked repair now closes retained artifact joins, immutable snapshot byte
+bindings, strict configuration types and the positive bounded retry counter.
+The affected suite passes 37 Python methods and eight host Go tests, including
+eight handshake subcases. Next: publish this corrected source checkpoint, then
+prepare a new externally pinned tool before a corrected measured attempt.
+No successful unchanged-image fence or public runtime admission is claimed.
 
 The first published checkpoint `98120a100b66ca8bbd1f0249d2bc857e1afe94a9`
 had one confirmed review defect: it allowed overlapping voters to share a PID
