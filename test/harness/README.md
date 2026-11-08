@@ -248,8 +248,28 @@ budget. Individual native runs retain their own shorter deadlines.
 The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)
 and portable comparison seam in `bor.py`. It distinguishes header coinbase from
 native author, base-fee routing from tip routing, and the two exact Bor logs.
-It does not yet start the accepted `bor server`, prepare blocks or import over
-IPC. Those native operations and controls remain NOT_RUN.
+The implementation now includes `prepare_bor.py --build-manifest PATH --sha256
+SHA --output NEW` and `bor_run.py check|run REQUEST --observer-tool TOOL
+--observer-tool-sha256 TRUSTED_SHA --output NEW`. Preparation has a separate
+1,800-second bound and uses only the accepted isolated Bor graph. Its helper
+verifies the tracked public signer and bounded native IPC shutdown before
+genuine Prepare/Authorize/Seal/InsertChain generation. The external tool pin is
+supplied by the trusted caller, outside mutable scenario input.
+
+The measured path owns one container containing the accepted `bor server` and
+its local IPC helper. It requires fresh genesis/head 0, exact node chain config
+and contract validator identity before `admin_importChain`, then full raw chain,
+native body receipts, authors and complete small-fixture state dumps. Raw IPC
+bytes and server logs have fixed limits; the operation deadline also stops an
+import that outlives its RPC call. Normal success requires an actual server exit
+of zero without forced cleanup. Kill remains a bounded failure-cleanup fallback.
+`dumpconfig` proves parsed execution flags using explicit `=false` values; its
+intentional chain/datadir neutralization is covered by actual launch arguments,
+genesis/head 0 and `admin_nodeInfo`, not treated as the launched path values.
+
+All new admission/configuration/cleanup checks have portable synthetic controls.
+Actual Bor helper compilation, preparation, server import and native negative
+controls remain NOT_RUN until their separate retained executions complete.
 
 Complete BSC fixture/fork coverage, the Bor native adapter, all other required
 fixture families, shared ProfileManifest/RunPlan resolution,

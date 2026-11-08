@@ -10,15 +10,16 @@ campaign passed in 164.508 seconds, with all 42 command cleanup records and
 12 owner-label absence checks. Issue #12 remains open. Earlier BSC pending
 statements below are historical and do not override this accepted result.
 
-The first Bor source checkpoint freezes the private two-block oracle before
-generation. Five portable comparison tests first exposed 31 missing-rejection
-subcases, then passed after implementation. They cover native header/config
-identity, signer versus header coinbase, base-fee/tip/burn accounting, both exact
-Bor logs, joined receipts, selected balances/nonces and unchanged empty-block
-state. The next step is a separately pinned Bor-only preparation/IPC helper,
-using the accepted CLI binary in one owned finite container. Actual genesis
-contract validators and effective disabled execution flags still require native
-verification. Preserve genuine Bor consensus and all first-profile restrictions.
+The Bor oracle/comparison checkpoint is committed as
+`b921d435a0670d7ad60c1891a4c07bc3eba179b7` and published in draft PR #124.
+Its independent source review and hosted CI passed. The next checked source
+block adds caller-pinned tool admission, offline native preparation and the
+finite server/IPC runner. All 57 portable tests pass in 11.238 seconds. Strict
+shutdown requires exit 0 without a forced kill; effective execution flags,
+fresh readiness and final original artifact references are checked. Native
+helper compilation and the first actual preparation/import remain NOT_RUN.
+Run one bounded preparation on this committed source next, retaining every
+failure and linking any corrected attempt. The original oracle remains frozen.
 
 No Bor runtime result is claimed yet. All public profiles, the complete quick
 suite, lifecycle, capture, NATS and later gates remain incomplete or NOT_RUN.
