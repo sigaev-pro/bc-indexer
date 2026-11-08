@@ -2,6 +2,19 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+The first offline BSC preparation on `212810725e69978fd160e65034a7b1843a70d45e`
+failed after 138.149319096 seconds. Native module verification passed, but the
+larger BSC/CGO helper compilation exhausted the unchanged 256 MiB container
+`/tmp`. No key verification, generation or import ran. Proof SHA256:
+`8cc1b14f7dab76dccedac44b32f44aeb846c70d0ca221a839df53aa59037316f`.
+Both owned process groups and the exact-nonce containers were absent after
+cleanup. The failure remains immutable. The scoped correction assigns compiler
+temporary files to owned `/work/build-temp`, with explicit `GOTMPDIR` and
+`TMPDIR`; global native limits remain unchanged. Native dump address casing is
+also normalized with duplicate/incomplete-address rejection. Its two new test
+methods first failed, then all 32 harness tests passed in 8.917 seconds. The
+next action is a new linked preparation attempt on the corrected source.
+
 The first checked BSC checkpoint fixes the independent monetary/system-call
 oracle and the native observation comparison boundary. Four new portable tests
 exercise the positive shape and independent negative controls; all 26 harness

@@ -39,7 +39,8 @@ def fixture(root):
         argv = ["/docker", "run", "--network", "none", "--platform", "linux/amd64", "--pull", "never", "--read-only"]
         if index < 2:
             for value in ("CGO_ENABLED=1", "GOOS=linux", "GOARCH=amd64", "GOPROXY=off", "GOSUMDB=off",
-                          "GOFLAGS=-mod=readonly -modfile=/work/metadata/go.mod", "GOMODCACHE=/modules"):
+                          "GOFLAGS=-mod=readonly -modfile=/work/metadata/go.mod", "GOMODCACHE=/modules",
+                          "GOTMPDIR=/work/build-temp", "TMPDIR=/work/build-temp"):
                 argv += ["--env", value]
             argv += ["--workdir", "/source"]
         argv += [compiler, *tail]

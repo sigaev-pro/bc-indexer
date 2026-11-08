@@ -193,8 +193,12 @@ The independent oracle checks user balances/nonces/gas, system-call order and
 values, validator nonce, and the empty block's unchanged state. Contract-internal
 storage/log semantics and exact system gas remain unchecked.
 
-At this source checkpoint, portable controls pass but BSC preparation and native
-runtime are NOT_RUN. No complete quick-suite or public-profile result is claimed.
+The first BSC preparation retained a FAIL when helper compilation filled the
+container's small `/tmp`. The corrected BSC-only command uses an owned
+`/work/build-temp` through `GOTMPDIR` and `TMPDIR`; global command limits are
+unchanged. Preparation accepts `--previous-attempt FAILED_PROOF --correction
+DESCRIPTION` to retain that history under a new identity. Native BSC import is
+still NOT_RUN. No complete quick-suite or public-profile result is claimed.
 
 ## Remaining work in issue 12
 

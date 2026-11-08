@@ -86,6 +86,20 @@ class BscObservationTests(unittest.TestCase):
         self.prepared[0]["hash"] = "0x" + "0" * 64
         with self.assertRaises(Rejected):
             self.compare()
+
+    def test_native_address_casing_and_root_prefix(self):
+        for state in self.states:
+            state["root"] = "0x" + state["root"]
+            state["accounts"] = {address.upper().replace("0X", "0x"): values for address, values in state["accounts"].items()}
+        self.compare()
+
+    def test_duplicate_or_incomplete_native_account_addresses_reject(self):
+        for key in (self.expected["validator"].upper().replace("0X", "0x"), "pre(0x1234)"):
+            with self.subTest(key=key):
+                self.setUp()
+                self.states[0]["accounts"][key] = {"balance": "0", "nonce": 0}
+                with self.assertRaises(Rejected):
+                    self.compare()
         self.setUp()
         self.observation["blocks"][0]["receipts"][0]["status"] = True
         with self.assertRaises(Rejected):

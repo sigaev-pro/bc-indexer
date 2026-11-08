@@ -81,15 +81,16 @@ def prepare(manifest_path, expected_sha, output, previous=None, correction=None)
         genesis["alloc"][sender] = {"balance": "10000000000000000000"}
         save(output / "genesis.json", genesis)
         copy_artifact(source / KEY, output / "validator-keystore.json", reference(source / KEY, deadline=deadline), deadline=deadline)
-        for directory in ("metadata", "generated", "build-cache", "gopath"):
+        for directory in ("metadata", "generated", "build-cache", "build-temp", "gopath"):
             (output / directory).mkdir()
         for name in ("go.mod", "go.sum"):
             copy_artifact(source / name, output / "metadata" / name, reference(source / name, deadline=deadline), deadline=deadline)
         compiler = manifest["image_inputs"]["golang-build-image"]["reference"]
         mounts = [(source, "/source", True), (manifest_path.parent / "cache/bsc/mod", "/modules", True), (output, "/work", True)]
-        mounts += [(output / name, "/work/" + name, False) for name in ("metadata", "generated", "build-cache", "gopath")]
+        mounts += [(output / name, "/work/" + name, False) for name in ("metadata", "generated", "build-cache", "build-temp", "gopath")]
         environment = {"CGO_ENABLED": "1", "GOENV": "off", "GOOS": "linux", "GOARCH": "amd64",
                        "GOCACHE": "/work/build-cache", "GOMODCACHE": "/modules", "GOPATH": "/work/gopath",
+                       "GOTMPDIR": "/work/build-temp", "TMPDIR": "/work/build-temp",
                        "GOFLAGS": "-mod=readonly -modfile=/work/metadata/go.mod", "GOPROXY": "off", "GOSUMDB": "off",
                        "GOTOOLCHAIN": "local", "GOWORK": "off"}
         runner.command(compiler, ["/usr/local/go/bin/go", "mod", "verify"], mounts, cap=240, memory="4g", cwd="/source", environment=environment)

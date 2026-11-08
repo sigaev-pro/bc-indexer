@@ -80,7 +80,8 @@ def admit(request_path, tool_path, tool_sha, started=None, deadline=None):
             names = [value.split("=", 1)[0] for value in environment]
             require(len(names) == len(set(names)) and all(value in environment for value in (
                 "CGO_ENABLED=1", "GOOS=linux", "GOARCH=amd64", "GOPROXY=off", "GOSUMDB=off",
-                "GOFLAGS=-mod=readonly -modfile=/work/metadata/go.mod", "GOMODCACHE=/modules")), "Observer Go isolation mismatch")
+                "GOFLAGS=-mod=readonly -modfile=/work/metadata/go.mod", "GOMODCACHE=/modules",
+                "GOTMPDIR=/work/build-temp", "TMPDIR=/work/build-temp")), "Observer Go isolation mismatch")
             require(command.count("--workdir") == 1 and command[command.index("--workdir") + 1] == "/source", "Wrong BSC compile root")
         else:
             require(read_bytes(paths["stdout"], 1024, deadline).decode().strip() == tool["public_validator"], "Native public key verification mismatch")

@@ -90,9 +90,16 @@ def compare_native(expected, observation, states, identities, prepared):
                 block["base_fee"] is None and type(block["withdrawals"]) is int and block["withdrawals"] == 0,
                 "Expected private pre-London in-turn Parlia block")
         require(isinstance(block["state_root"], str) and re.fullmatch(HASH, block["state_root"]) and
-                isinstance(state, dict) and state.get("root") == block["state_root"][2:], "State root mismatch")
-        accounts = state.get("accounts")
-        require(isinstance(accounts, dict), "Missing complete account dump")
+                isinstance(state, dict) and isinstance(state.get("root"), str) and
+                state["root"].removeprefix("0x").lower() == block["state_root"][2:], "State root mismatch")
+        raw_accounts = state.get("accounts")
+        require(isinstance(raw_accounts, dict), "Missing complete account dump")
+        accounts = {}
+        for address, values in raw_accounts.items():
+            normalized = "0x" + address.removeprefix("0x").lower()
+            require(re.fullmatch(ADDRESS, normalized) and normalized not in accounts,
+                    "Native dump has an incomplete or duplicate address")
+            accounts[normalized] = values
         for address, values in expected["accounts"].items():
             actual = accounts.get(address)
             if actual is None and address == SYSTEM_ADDRESS:
