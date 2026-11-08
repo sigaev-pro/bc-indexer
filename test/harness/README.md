@@ -267,9 +267,23 @@ of zero without forced cleanup. Kill remains a bounded failure-cleanup fallback.
 intentional chain/datadir neutralization is covered by actual launch arguments,
 genesis/head 0 and `admin_nodeInfo`, not treated as the launched path values.
 
-All new admission/configuration/cleanup checks have portable synthetic controls.
-Actual Bor helper compilation, preparation, server import and native negative
-controls remain NOT_RUN until their separate retained executions complete.
+The corrected native preparation and one measured server/IPC import passed on
+source commit `6a5fc4996374bc3cc10597a0b5edd8c6741536eb`; earlier failed
+preparations remain recorded in the task evidence. This is a private native seam,
+not a complete quick suite or a public-profile result.
+
+`bor_exercise.py REQUEST --observer-tool TOOL --observer-tool-sha256 TRUSTED_SHA
+--output NEW` runs the explicit 19-control campaign within one 900-second bound.
+It retains reauthorized corrupt/prefix inputs, altered oracle/identity failures,
+admission tampering, and three clearly labeled retained-observation comparisons.
+Corrupt/prefix success requires exact IPC request/response identity and the
+intended native failure stage. Five resource controls start the real accepted
+Bor server in a fresh private data directory, retain its exact owned IPC-ready
+event, confirm it is still running, then test deadline or parent/process-group
+termination. Each dispatch reserves execution and cleanup time under the same
+campaign deadline. Final success revalidates the original authority artifacts.
+The helper and its caller-pinned preparation can be reused when only this Python
+campaign changes. The new campaign is NOT_RUN until its retained execution.
 
 Complete BSC fixture/fork coverage, the Bor native adapter, all other required
 fixture families, shared ProfileManifest/RunPlan resolution,

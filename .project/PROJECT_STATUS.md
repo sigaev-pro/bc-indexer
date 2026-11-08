@@ -32,8 +32,17 @@ consensus, signing and import are unchanged. The next action is a fresh linked
 preparation with a new helper pin. Earlier artifacts are immutable; the
 independent oracle remains frozen.
 
-No Bor runtime result is claimed yet. All public profiles, the complete quick
-suite, lifecycle, capture, NATS and later gates remain incomplete or NOT_RUN.
+Preparation 3 on `6a5fc4996374bc3cc10597a0b5edd8c6741536eb` passed in
+235.444298286 seconds. The first measured fresh-server IPC import passed in
+5.241974693 seconds, including actual contract identity, complete chain,
+body receipts, both Bor logs and independent state/fee comparisons. All five
+command groups and both exact owners' containers are absent. The earlier
+preparation failures above are historical and remain immutable.
+
+The next checked source block adds the explicit 19-control campaign. Its native
+execution is still NOT_RUN; the accepted helper bytes and preparation pin stay
+unchanged. All public profiles, the complete quick suite, lifecycle, capture,
+NATS and later gates remain incomplete or NOT_RUN.
 One author owns this worktree; root owns publication, review and acceptance.
 
 ## E01-01.harness — Build the private BSC Parlia import slice
