@@ -78,10 +78,14 @@ def compare_native(expected, observation, states, identities, prepared):
             "Complete two-block observations are required")
     seen = set()
     for number, (block, state) in enumerate(zip(observation["blocks"], states), 1):
-        closed(block, {"number", "hash", "parent_hash", "state_root", "coinbase", "difficulty", "gas_used",
+        closed(block, {"number", "hash", "timestamp", "parent_hash", "state_root", "coinbase", "difficulty", "gas_used",
                        "base_fee", "withdrawals", "transactions", "receipts"}, "observed block")
         require(type(block["number"]) is int and block["number"] == number and block["hash"] == identities[number]
                 and block["parent_hash"] == identities[number - 1], "Observed block order/identity mismatch")
+        require(type(block["timestamp"]) is int and block["timestamp"] >= 0, "Invalid native timestamp")
+        for key in ("state_root", "timestamp", "gas_used"):
+            if key in prepared[number - 1]:
+                require(block[key] == prepared[number - 1][key], "Prepared block metadata mismatch")
         require(block["coinbase"] == expected["validator"] and block["difficulty"] == "2" and
                 block["base_fee"] is None and type(block["withdrawals"]) is int and block["withdrawals"] == 0,
                 "Expected private pre-London in-turn Parlia block")
@@ -101,6 +105,8 @@ def compare_native(expected, observation, states, identities, prepared):
         txs, receipts = block["transactions"], block["receipts"]
         require(isinstance(txs, list) and isinstance(receipts, list) and len(txs) == len(receipts) == len(wanted),
                 "Native transaction/receipt count mismatch")
+        if "transactions" in prepared[number - 1]:
+            require(len(txs) == prepared[number - 1]["transactions"], "Prepared transaction count mismatch")
         cumulative = 0
         for index, (tx, receipt, wanted_tx) in enumerate(zip(txs, receipts, wanted)):
             transaction(tx, observed=True)

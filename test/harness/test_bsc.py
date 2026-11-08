@@ -30,11 +30,11 @@ class BscObservationTests(unittest.TestCase):
                              "logs": []})
         self.observation = {"schema_version": 1, "chain_id": 714, "genesis_hash": self.identities[0],
                             "head_number": 2, "head_hash": self.identities[2], "blocks": [
-            {"number": 1, "hash": self.identities[1], "parent_hash": self.identities[0],
+            {"number": 1, "hash": self.identities[1], "timestamp": 100, "parent_hash": self.identities[0],
              "state_root": "0x" + "d" * 64, "coinbase": self.expected["validator"], "difficulty": "2",
              "gas_used": cumulative, "base_fee": None, "withdrawals": 0,
              "transactions": transactions, "receipts": receipts},
-            {"number": 2, "hash": self.identities[2], "parent_hash": self.identities[1],
+            {"number": 2, "hash": self.identities[2], "timestamp": 103, "parent_hash": self.identities[1],
              "state_root": "0x" + "d" * 64, "coinbase": self.expected["validator"], "difficulty": "2",
              "gas_used": 0, "base_fee": None, "withdrawals": 0, "transactions": [], "receipts": []}]}
         accounts = {address: dict(values) for address, values in self.expected["accounts"].items()}

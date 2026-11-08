@@ -11,6 +11,14 @@ still NOT_RUN. The observer will use a separate caller-pinned tool manifest;
 scenario edits cannot nominate an executable. No BSC runtime claim is made by
 this checkpoint.
 
+The next source checkpoint adds the separate caller-pinned observer tool,
+offline BSC preparation and bounded import entry points. Four additional CLI
+tests cover executable substitution and raw-byte/provenance rejection. Two
+command-provenance counterexamples failed red before the fix; all 30 portable
+harness tests then passed in 9.547 seconds. Actual BSC key verification, helper
+compilation, Parlia generation and CLI import are still NOT_RUN. The next action
+is one owned, finite offline preparation with retained failure evidence.
+
 2026-11-08: The first local Ethereum harness block is accepted in PR #122,
 merge `0a43d21b0a3877ff7b0c1f06f43a952b3a9c9142`. Both independent final
 reviews and exact-head CI passed. The repaired native run passed 13 controls;
