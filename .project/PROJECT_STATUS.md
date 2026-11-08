@@ -2,7 +2,21 @@
 
 ## E01-01.harness — Define and validate shared RunPlan admission
 
-Status: READY_FOR_REVIEW. PR #125 candidate
+Status: READY_FOR_REVIEW. PR #125 re-review of
+`c7b7c51b91f88370dda1b4f0fc61abbe5947b22c` passed Spec but found one
+remaining Standards defect: a regular directory substituted between creation
+and opening could receive snapshots alongside unrelated files. The repair
+rejects detectable initial-directory conflicts before writing and makes
+exclusive ownership of the output parent and directory an explicit prerequisite.
+It does not claim protection from arbitrary concurrent same-user replacements.
+The pending-file and moved-directory final-link probes remain documented limits;
+no runtime evidence or product durability guarantee changes. Two new public-seam
+tests reproduced the conflict and a later identity substitution before the fix;
+all 17 focused methods now pass in 3.984 seconds. Exact-head hosted CI and both
+independent review axes remain required. Issue #12 stays open and every plan
+still has `runtime_admitted: false`.
+
+Historical first repair: PR #125 candidate
 `b85f89768c1e6d54d0ecc876ebb3624617953ade` passed the offline Spec review,
 but Standards reproduced publication defects: a late fsync error left a success
 record; an output-directory replacement redirected writes; a replaced snapshot

@@ -117,7 +117,51 @@ class RunPlanTests(unittest.TestCase):
                 run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
             self.assertEqual((output / "resolution.json").read_bytes(), b"unrelated marker")
 
-    def test_replaced_output_directory_never_receives_snapshot_writes(self):
+    def test_nonempty_regular_directory_replacement_is_rejected_before_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            _, _, pin = setup(root)
+            output, moved, unrelated = root / "frozen", root / "moved", root / "unrelated"
+            unrelated.mkdir()
+            (unrelated / "keep.txt").write_bytes(b"unrelated bytes")
+            original_mkdir = os.mkdir
+            changed = []
+            def replace_after_creation(path, *args, **kwargs):
+                result = original_mkdir(path, *args, **kwargs)
+                if Path(path).name == "frozen":
+                    output.rename(moved)
+                    unrelated.rename(output)
+                    changed.append(True)
+                return result
+            with patch.object(os, "mkdir", side_effect=replace_after_creation):
+                with self.assertRaisesRegex(ValueError, "Freeze output must be empty"):
+                    run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
+            self.assertEqual(changed, [True])
+            self.assertEqual(sorted(path.name for path in output.iterdir()), ["keep.txt"])
+            self.assertEqual((output / "keep.txt").read_bytes(), b"unrelated bytes")
+            self.assertEqual(list(moved.iterdir()), [])
+
+    def test_directory_identity_change_before_open_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            _, _, pin = setup(root)
+            output, moved = root / "frozen", root / "moved"
+            original_open = os.open
+            changed = []
+            def replace_before_open(path, flags, *args, **kwargs):
+                if path == "frozen" and not changed:
+                    output.rename(moved)
+                    output.mkdir()
+                    changed.append(True)
+                return original_open(path, flags, *args, **kwargs)
+            with patch.object(os, "open", side_effect=replace_before_open):
+                with self.assertRaisesRegex(ValueError, "Freeze output changed before opening"):
+                    run_plan.resolve(root / "plan.json", root / "registry.json", pin, output)
+            self.assertEqual(changed, [True])
+            self.assertEqual(list(output.iterdir()), [])
+            self.assertEqual(list(moved.iterdir()), [])
+
+    def test_symlink_directory_replacements_are_rejected(self):
         for stage in ("creation", "first-fsync"):
             with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()

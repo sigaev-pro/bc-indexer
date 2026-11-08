@@ -88,7 +88,11 @@ def verify_snapshot(directory, expected, deadline):
 
 
 def publish(output, snapshots, resolution, verify_authority, deadline):
-    """The exclusive final link is the commit point, not a crash-durability protocol."""
+    """Publish under exclusive caller ownership of the output parent and directory.
+
+    Identity checks detect mutations; they do not isolate a concurrent writer.
+    The final link is the commit point, not a crash-durability protocol.
+    """
     require(output.is_absolute() and output.name not in ("", ".", ".."),
             "Freeze output must be a new absolute directory")
     parent = open_directory(output.parent)
@@ -96,8 +100,15 @@ def publish(output, snapshots, resolution, verify_authority, deadline):
     published = False
     try:
         os.mkdir(output.name, 0o700, dir_fd=parent)
+        created = os.stat(output.name, dir_fd=parent, follow_symlinks=False)
         directory = os.open(output.name, DIRECTORY_FLAGS, dir_fd=parent)
+        opened = os.fstat(directory)
+        require(stat.S_ISDIR(created.st_mode) and
+                (created.st_dev, created.st_ino) == (opened.st_dev, opened.st_ino),
+                "Freeze output changed before opening")
         directory_matches(output, directory)
+        with os.scandir(directory) as entries:
+            require(next(entries, None) is None, "Freeze output must be empty")
         records = []
         for name, data in snapshots.items():
             check_deadline(deadline)

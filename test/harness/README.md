@@ -302,7 +302,17 @@ Exit 0 means offline resolution succeeded. The report always has
 state, CaseResult or RunManifest. Exit 2 means invalid declarations, changed
 artifacts or another validation failure. `check` creates no output.
 
-`freeze` copies the exact authenticated plan, registry and schema buffers through
+`freeze` requires the caller to have exclusive writer ownership of the output
+parent and directory through publication and later consumption/revalidation.
+This is a precondition, not a lock that the tool acquires. Do not run another
+writer or allow a same-user process to replace these paths while using the
+result. The descriptor, inode and hash checks detect mutations under that
+precondition; they do not isolate an adversarial concurrent writer.
+
+The tool checks the newly created directory's captured identity and rejects
+nonempty contents before writing. This preserves an unrelated regular directory
+substituted with existing files, as well as detectable identity substitutions.
+It copies the exact authenticated plan, registry and schema buffers through
 exclusive writes relative to a held, no-follow directory descriptor. It checks
 the directory identity, snapshot inodes and bytes, original authority references
 and remaining validation time before publishing `resolution.json`. The resolution
@@ -312,6 +322,16 @@ may retain snapshots and one private `.pending` file, but it does not publish a
 new resolution marker. Unrelated replacement files/directories are preserved.
 Only `resolution.json` is the publication marker; private prepared files are not
 a completed freeze.
+
+The ownership precondition matters even when every check passes. An empty
+directory substituted before the initial identity capture is indistinguishable
+from the created directory. Controlled review probes also replaced the pending
+pathname immediately before the final link, publishing replacement bytes, or
+moved the output at that boundary, publishing only into the held moved directory.
+These are demonstrated limits when ownership is violated, not prevented attacks.
+Later consumers must revalidate the marker and all referenced bytes at the
+expected paths under the same ownership precondition; a prior success does not
+establish their current integrity.
 
 The final link is the publication boundary. No fallible cleanup afterward can
 turn published success into a reported failure. This offline artifact is not a

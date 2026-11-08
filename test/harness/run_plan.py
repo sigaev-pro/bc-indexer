@@ -218,7 +218,8 @@ def main():
     parser.add_argument("plan", type=Path)
     parser.add_argument("--registry-bundle", type=Path, required=True)
     parser.add_argument("--registry-sha256", required=True)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=Path,
+                        help="new absolute directory; caller must exclusively own it and its parent through publication and later consumption")
     args = parser.parse_args()
     try:
         require(args.plan.is_absolute() and args.registry_bundle.is_absolute(), "Plan and registry paths must be absolute")
