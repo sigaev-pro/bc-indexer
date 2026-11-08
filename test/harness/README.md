@@ -286,7 +286,10 @@ The helper and its caller-pinned preparation can be reused when only this Python
 campaign changes. Its first execution retained 14 successful controls before a
 readiness-log buffering failure. The corrected owner flushes bounded writes;
 the live poll permits appends while final artifact hashing remains strict.
-The complete corrected campaign remains pending its retained execution.
+The corrected campaign passed all 19 controls in 60.287 seconds on source
+`b25215c7c0152a984ad7157af598a3e37c4cce3c`. Fresh Ethereum/BSC compatibility
+positives also passed using accepted prepared inputs. Exact final-head review,
+CI and protected acceptance remain separate from these measured results.
 
 Complete BSC fixture/fork coverage, the Bor native adapter, all other required
 fixture families, shared ProfileManifest/RunPlan resolution,

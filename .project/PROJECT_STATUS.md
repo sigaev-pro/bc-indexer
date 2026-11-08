@@ -2,56 +2,36 @@
 
 ## E01-01.harness — Build the private Bor server and IPC import slice
 
-Status: IN_PROGRESS. The private BSC block is accepted in PR #123, merge
-`8ebbf9b02b3825428623c50afef5b98173f895d2`. Its final head
-`c78b19bce76af41613ff7af49e093acc9e150c9f` passed both independent reviews
-and exact-head CI run 42507020616/check 128811736118. The final 19-control
-campaign passed in 164.508 seconds, with all 42 command cleanup records and
-12 owner-label absence checks. Issue #12 remains open. Earlier BSC pending
-statements below are historical and do not override this accepted result.
+Status: READY_FOR_REVIEW. Draft PR #124 now has a complete private Bor result
+on executed source `b25215c7c0152a984ad7157af598a3e37c4cce3c`: all 19
+controls passed in 60.287208683 seconds. The actual server used the accepted
+Bor binary, fresh genesis, genuine validator contract and local IPC import.
+Corruption/prefix failures, oracle/identity checks, bounded state/receipt/log
+comparisons, deadline and parent/process-group interruption controls passed.
+All 11 command groups and exact-owner container queries are clean. The final
+source passed 61 portable harness tests; source/document/whitespace checks pass.
 
-The Bor oracle/comparison checkpoint `b921d435a0670d7ad60c1891a4c07bc3eba179b7`
-is published in draft PR #124. Executable checkpoint
-`eabd92a9152e915b996ddc3b91b1c7f2b9560b5a` passed hosted CI, but independent
-review rejected its key selector and exit-zero stream-copy error handling.
-Its first preparation is retained as FAIL after 318.166995272 seconds:
-module verification and helper compilation passed; public-key verification
-rejected the source declaration shape. All three command groups and the exact
-owner's containers are absent. No measured Bor import ran on that source.
-
-Correction `1d078c42cb706431b601ee0c895548f0c32737e9` passed both source
-reviews and hosted CI. Preparation 2 verified modules, compiled the helper and
-passed public-key/IPC shutdown verification, then failed after 305.064519368
-seconds at the genesis snapshot query with `unknown ancestor`. All four command
-groups and the exact owner's containers are absent. No measured import ran.
-
-The next correction uses the real engine spanner at block 0 during preparation
-and the pinned native validator ABI through IPC `eth_call` for server readiness.
-It retains the actual contract result and adds precise error stages. Genuine
-consensus, signing and import are unchanged. The next action is a fresh linked
-preparation with a new helper pin. Earlier artifacts are immutable; the
-independent oracle remains frozen.
+Because the shared owner now flushes its bounded live output, compatibility
+positives reused accepted Ethereum and BSC preparation: PASS in 4.534311259 and
+22.616163411 seconds. All 13 additional command groups and both exact owners
+are clean. No helper or native-client rebuild was needed for this correction.
+The result checkpoint changes documentation only; executed source bytes stay
+unchanged. Exact final-head CI, independent reviews and protected acceptance
+remain the coordinator's next steps. Issue #12 remains open.
 
 Preparation 3 on `6a5fc4996374bc3cc10597a0b5edd8c6741536eb` passed in
-235.444298286 seconds. The first measured fresh-server IPC import passed in
-5.241974693 seconds, including actual contract identity, complete chain,
-body receipts, both Bor logs and independent state/fee comparisons. All five
-command groups and both exact owners' containers are absent. The earlier
-preparation failures above are historical and remain immutable.
+235.444298286 seconds; its external tool pin remains unchanged. The first
+measured import passed in 5.241974693 seconds. Two failed preparations and the
+first campaign's 14-control partial FAIL remain immutable in
+[task evidence](evidence/E01-01.harness.md), with their causes and cleanup.
+No earlier failure is relabeled. The independent oracle was fixed before
+generation and has not changed.
 
-The first 19-control campaign on `cbc38f59ecb4f28544bcdfe82c7411b1214fc14e`
-retained 14 successful controls, then failed after 49.616517846 seconds because
-the owned log writer buffered the real IPC-ready event until process exit.
-All seven command groups and exact-owner containers are absent. The correction
-flushes each bounded output write and polls a bounded live prefix that permits
-normal append growth; immutable artifact readers stay strict. Its regression
-reproduced zero visible bytes before the fix. A fresh campaign and Ethereum/BSC
-compatibility positives are pending on the corrected shared owner. Native helper
-bytes and the preparation pin remain unchanged.
-
-All public profiles, the complete quick suite, lifecycle, capture,
-NATS and later gates remain incomplete or NOT_RUN.
-One author owns this worktree; root owns publication, review and acceptance.
+The preceding private BSC block remains accepted in PR #123, merge
+`8ebbf9b02b3825428623c50afef5b98173f895d2`. Earlier BSC pending statements
+below are historical. All public profiles, the complete quick suite, lifecycle,
+capture, NATS and later gates remain incomplete or NOT_RUN. Root owns publication,
+review and acceptance; this block does not close the parent task.
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
