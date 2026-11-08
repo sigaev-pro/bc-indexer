@@ -128,6 +128,8 @@ are never prepended to a successful retry. An earlier journal is verified
 against its captured reference before replacement. A persistence failure
 blocks all further requests in that transport. Interruption leaves the durable
 unfinished intent and cannot silently retry.
+This guard also covers creation, synchronization and reference construction
+for the final diagnostic body, after the failed attempt journal is retained.
 
 A successful observation exactly binds the final attempt's status, headers,
 body and observation time. A failed observation retains status 0 and a safe
@@ -136,6 +138,9 @@ The main-thread POSIX deadline guard restores signal handlers and the remaining
 outer timer on exit; an earlier outer timer is never extended or classified as
 a retryable network timeout. SIGTERM and SIGINT handlers are unchanged. An
 unavailable guard fails explicitly before dispatch.
+An expired inherited timer latches the whole transport closed, including when
+its one-shot handler raises a normal exception. No later URL may dispatch
+after that outer deadline; the latch is distinct from a single GET deadline.
 
 Live GitHub API requests reuse existing credentials in this order: nonempty
 `GH_TOKEN`, then nonempty `GITHUB_TOKEN`, then the existing `github.com`

@@ -248,6 +248,65 @@ class SourceTransportTests(unittest.TestCase):
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, old)
 
+    def test_expired_outer_alarm_blocks_later_url_dispatch(self):
+        previous = signal.getsignal(signal.SIGALRM)
+        calls = []
+        def outer(*args):
+            calls.append("expired")
+            raise TimeoutError("outer operation deadline")
+        def opened(request, **kwargs):
+            if request.full_url == URL:
+                time.sleep(0.2)
+            return Response(b"[]")
+        signal.signal(signal.SIGALRM, outer)
+        signal.setitimer(signal.ITIMER_REAL, 0.03)
+        try:
+            with mock.patch.object(self.transport.opener, "open", side_effect=opened) as network:
+                with self.assertRaises(ValueError):
+                    self.transport.fetch(URL)
+                self.assertEqual(calls, ["expired"])
+                self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0, 0))
+                self.assertIs(signal.getsignal(signal.SIGALRM), outer)
+                with self.assertRaisesRegex(ValueError, "outer.*deadline"):
+                    self.transport.fetch(URL + "&page=2")
+                self.assertEqual(network.call_count, 1)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+        self.assertEqual(self.journal()["attempts"][0]["error"]["code"], "REQUEST_DEADLINE")
+
+    def test_terminal_diagnostic_write_or_reference_failure_blocks_later_url(self):
+        for phase in ("write", "reference"):
+            with self.subTest(phase=phase):
+                self.transport = sources.Transport(self.root / ("terminal-" + phase))
+                write, describe = Path.write_bytes, sources.describe
+                def fail_write(path, payload):
+                    if path.name == "failure.body":
+                        raise OSError("terminal diagnostic write failed")
+                    return write(path, payload)
+                def fail_reference(root, path):
+                    if Path(path).name == "failure.body":
+                        raise OSError("terminal diagnostic reference failed")
+                    return describe(root, path)
+                def opened(request, **kwargs):
+                    response = Response(b"temporarily unavailable" if request.full_url == URL else b"[]")
+                    response.status = 503 if request.full_url == URL else 200
+                    return response
+                with mock.patch.object(self.transport.opener, "open", side_effect=opened) as network, \
+                     mock.patch.object(Path, "write_bytes", fail_write if phase == "write" else write), \
+                     mock.patch.object(sources, "describe", fail_reference if phase == "reference" else describe):
+                    with self.assertRaises(OSError):
+                        self.transport.fetch(URL)
+                    with self.assertRaisesRegex(ValueError, "persistence failed"):
+                        self.transport.fetch(URL + "&page=2")
+                    self.assertTrue(self.transport.persistence_failed)
+                self.assertEqual(network.call_count, 1)
+                self.assertNotIn(URL, self.transport.rows)
+                journal = json.loads(next(self.transport.directory.rglob("journal.json")).read_bytes())
+                self.assertEqual(journal["outcome"], "FAILED")
+                self.assertEqual(journal["attempts"][0]["status"], 503)
+                self.assertEqual(ref(self.root, journal["attempts"][0]["body"]).read_bytes(), b"temporarily unavailable")
+
     def test_normal_and_exception_exit_restore_remaining_outer_timer(self):
         old = signal.getsignal(signal.SIGALRM)
         def outer(*args):

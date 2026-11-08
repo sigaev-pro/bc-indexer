@@ -40,7 +40,7 @@ class DeadlineGuardUnavailable(ValueError):
 
 
 @contextmanager
-def request_timer(deadline):
+def request_timer(deadline, guard=None):
     """Bound one synchronous GET, including body reads, on supported CLI hosts."""
     if threading.current_thread() is not threading.main_thread() or not hasattr(signal, "setitimer"):
         raise DeadlineGuardUnavailable("Official-source request deadline guard is unavailable")
@@ -50,11 +50,13 @@ def request_timer(deadline):
     previous = signal.getsignal(signal.SIGALRM)
     prior_delay, prior_interval = signal.getitimer(signal.ITIMER_REAL)
     prior_due = time.monotonic() + prior_delay if prior_delay else None
-    guard = {"interrupted": False}
+    if guard is None:
+        guard = {"interrupted": False, "outer_expired": False}
 
     def alarm(signum, frame):
         guard["interrupted"] = True
         if prior_due is not None and time.monotonic() >= prior_due:
+            guard["outer_expired"] = True
             if callable(previous):
                 previous(signum, frame)
             elif previous == signal.SIG_DFL:
@@ -77,6 +79,8 @@ def request_timer(deadline):
             signal.signal(signal.SIGALRM, previous)
             if prior_due is not None:
                 left = prior_due - time.monotonic()
+                if left <= 0:
+                    guard["outer_expired"] = True
                 if left <= 0 and prior_interval:
                     left = prior_interval - ((-left) % prior_interval)
                 signal.setitimer(signal.ITIMER_REAL, max(0, left), prior_interval)
@@ -172,6 +176,7 @@ class Transport:
         self.request_deadline = self.deadline
         self.network_error = None
         self.persistence_failed = False
+        self.outer_expired = False
         self.tokens = {}
         self.github_checked = False
         self.github_token = None
@@ -193,6 +198,8 @@ class Transport:
                 self.fixture[row["url"]] = (path.parent, row)
 
     def timeout(self):
+        if self.outer_expired:
+            raise RequestDeadline("Official-source outer operation deadline expired")
         remaining = min(self.deadline, self.request_deadline) - time.monotonic()
         if remaining <= 0:
             raise RequestDeadline("Official-source discovery or request deadline exceeded")
@@ -255,6 +262,7 @@ class Transport:
     def fetch(self, url):
         need(not self.persistence_failed, "Source evidence persistence failed; further requests are blocked")
         self.request_deadline = min(self.deadline, time.monotonic() + REQUEST_SECONDS)
+        self.timeout()
         parsed = official(url)
         if not self.synthetic and origin(url) == ("https", "api.github.com", 443) and not self.github_checked:
             self.github_token = github_credential(self.timeout())
@@ -292,11 +300,11 @@ class Transport:
             destination = directory / (str(ordinal) + ".body")
             self.network_error = None
             failure = None
-            guard = {"interrupted": False}
+            guard = {"interrupted": False, "outer_expired": False}
             try:
                 # Admission is checked again after the intent has reached disk.
                 self.timeout()
-                with request_timer(self.request_deadline) as guard:
+                with request_timer(self.request_deadline, guard):
                     if self.synthetic:
                         need(url in self.fixture, "Synthetic transport has no response for " + url)
                         fixture_root, row = self.fixture[url]
@@ -334,6 +342,8 @@ class Transport:
                             attempt["headers"] = {k: v for k, v in headers.items()
                                                   if k not in {"authorization", "proxy-authorization", "set-cookie"}}
                             self.copy(response, output, attempt, network=True)
+                if guard["outer_expired"]:
+                    raise RequestDeadline("Official-source outer operation deadline expired")
                 need(type(attempt["status"]) is int and attempt["status"] == 200,
                      "Official source did not return HTTP 200")
             except (ValueError, OSError, http.client.HTTPException) as error:
@@ -343,6 +353,9 @@ class Transport:
                 if isinstance(error, CredentialExposure):
                     destination.unlink(missing_ok=True)
                     attempt["truncated"] = attempt["observed_bytes"] > 0
+            finally:
+                if guard["outer_expired"]:
+                    self.outer_expired = True
             # File persistence errors are outside network classification. Never
             # send another request when its preceding evidence cannot be kept.
             try:
@@ -358,11 +371,18 @@ class Transport:
             journal_ref = self.persist(journal_path, journal, journal_ref)
             if failure and failure["retryable"] and ordinal == 1:
                 continue
-            if failure:
-                destination = directory / "failure.body"
-                destination.write_bytes(("Source acquisition failed: " + failure["type"]).encode())
+            try:
+                if failure:
+                    destination = directory / "failure.body"
+                    destination.write_bytes(("Source acquisition failed: " + failure["type"]).encode())
+                    with destination.open("rb") as stream:
+                        os.fsync(stream.fileno())
+                body_ref = describe(self.root, destination)
+            except BaseException:
+                self.persistence_failed = True
+                raise
             self.rows[url] = dict(url=url, status=0 if failure else attempt["status"],
-                                 headers={} if failure else attempt["headers"], body=describe(self.root, destination),
+                                 headers={} if failure else attempt["headers"], body=body_ref,
                                  observed_at=attempt["observed_at"], acquisition=journal_ref)
             need(failure is None, "Official source unavailable (status 0): " + url)
             return destination
