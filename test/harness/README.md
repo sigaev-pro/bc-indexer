@@ -53,9 +53,18 @@ separately. The supplied one-group predicate does not prove a full group census.
 
 Output paths must be new. A corrected attempt uses `--previous` with the prior
 failed preparation or run proof and a nonempty `--correction`; prior evidence is
-preserved. Failures remain failures. The source checkpoint's portable tests use
+preserved. Preparation retries keep the same accepted manifest binding. A changed
+overlay requires fresh preparation and a new externally pinned tool. A corrected
+measured run may link that new tool to a previous failed run only after both tool
+artifacts authenticate the identical accepted build, source archive and module
+closure. Its proof retains the old/new tool pins and increments the old attempt
+ordinal. Missing or modified predecessor artifacts reject. Failures remain
+failures. The source checkpoint's portable tests use
 synthetic reports and temporary files only: native preparation, compilation and
-execution are explicitly NOT_RUN until separate actual evidence is recorded.
+execution require separate actual evidence. The first preparation passed; its
+first measured run remains FAIL because the delayed-apply collection was selected
+too early. See the [retained harness evidence](../../.project/evidence/E01-01.harness.md)
+for exact identities, cleanup and the correction awaiting fresh execution.
 
 ## NATS input inspection and frontier predicate
 

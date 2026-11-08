@@ -25,7 +25,9 @@ and direct sequence reads do not create consumers.
 - `TestExtractorFenceDelayedApply` runs three voters. A real StoreRawMsg call is
   held after dequeue and before native Applied progress. Retain a raw sample with
   committed greater than applied even though proposal/entry/apply queues are
-  empty. The independent frontier predicate must reject it. After release, both
+  empty. Before selecting it, every expected voter must have the declared
+  accounts, membership, healthy state and common committed frontier; only apply
+  may lag. The independent frontier predicate must reject it. After release, both
   complete per-voter samples must meet the declared common frontier.
 - `TestExtractorFenceLostAck` runs three voters. Record the exact raw PUB frame,
   reply subject and actual MSG acknowledgment frame before deliberately withholding

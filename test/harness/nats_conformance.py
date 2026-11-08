@@ -155,6 +155,36 @@ def retry(previous, correction, kind, binding, deadline):
     return ref, old["attempt_index"] + 1
 
 
+def run_retry(previous, correction, tool_ref, deadline):
+    """Link a corrected helper to its failed run without replacing old evidence."""
+    if previous is None:
+        ref, attempt = retry(None, correction, "nats-source-conformance-run", tool_ref, deadline)
+        return ref, attempt, None
+    ref, old = captured_json(previous, deadline=deadline)
+    require(old.get("kind") == "nats-source-conformance-run" and old.get("result") == "FAIL" and
+            type(old.get("attempt_index")) is int and 1 <= old["attempt_index"] < 2**63 and
+            isinstance(correction, str) and correction.strip(), "Invalid retry lineage")
+    old_tool_ref = old.get("binding")
+    _, old_tool = json_artifact(old_tool_ref, 1024 * 1024, deadline=deadline)
+    _, current_tool = json_artifact(tool_ref, 1024 * 1024, deadline=deadline)
+    require(old_tool.get("build_manifest") == current_tool.get("build_manifest"), "Retry accepted build changed")
+    for tool in (old_tool, current_tool):
+        require(type(tool.get("schema_version")) is int and tool["schema_version"] == 1 and
+                tool.get("kind") == "nats-source-conformance-tool" and tool.get("source_commit") == SOURCE and
+                tool.get("compiler") == COMPILER_IMAGE, "Retry native tool identity changed")
+        _, manifest = json_artifact(tool["build_manifest"], deadline=deadline)
+        require(manifest.get("evidence_kind") == "actual-build" and manifest.get("task_id") == "E01-01.builds",
+                "Retry requires the accepted actual build")
+        closure = manifest["module_closures"]["nats-server"]
+        require(closure["source_commit"] == SOURCE and tool.get("module_closure_sha256") == digest(closure) and
+                all(tool["source_archive"][key] == closure["source_archive"][key] for key in ("sha256", "size_bytes")),
+                "Retry native source binding changed")
+        artifact(tool["source_archive"], 128 * 1024 * 1024, deadline=deadline)
+    transition = {"old_tool": old_tool_ref, "new_tool": tool_ref, "build_manifest": current_tool["build_manifest"],
+                  "source_commit": SOURCE, "old_source_archive": old_tool["source_archive"]}
+    return ref, old["attempt_index"] + 1, transition
+
+
 def command_provenance(tool, deadline):
     require(isinstance(tool["commands"], list) and len(tool["commands"]) == 3, "Incomplete native preparation commands")
     for index, row in enumerate(tool["commands"]):
@@ -281,14 +311,14 @@ def run(tool_path, pin, output, previous=None, correction=None):
     require(isinstance(tool["metadata"], list) and len(tool["metadata"]) == 2, "Native Go metadata missing")
     for ref in tool["metadata"]: artifact(ref, deadline=deadline)
     command_provenance(tool, deadline)
-    previous_ref, attempt = retry(previous, correction, "nats-source-conformance-run", tool_ref, deadline)
+    previous_ref, attempt, transition = run_retry(previous, correction, tool_ref, deadline)
     require(not output.is_relative_to(tool_path.parent) and not output.is_relative_to(Path(tool["build_manifest"]["path"]).parent),
             "Measured run cannot modify preparation or accepted storage")
     output = new_output(output)
     runner = Native(output, deadline)
     proof = {"schema_version": 1, "kind": "nats-source-conformance-run", "result": "FAIL", "binding": tool_ref,
              "run_id": uuid.uuid4().hex, "native_owner_nonce": runner.nonce, "attempt_index": attempt,
-             "previous_attempt": previous_ref, "correction": correction, "runtime_admitted": False,
+             "previous_attempt": previous_ref, "correction": correction, "tool_transition": transition, "runtime_admitted": False,
              "unchanged_image_restart": "NOT_RUN", "standalone_ack_loss": "NOT_RUN", "complete_terminal_fence": "NOT_RUN",
              "case_topologies": CASE_TOPOLOGIES, "cases": {name: {"result": "NOT_RUN"} for name in CASES}}
     origins, proof["harness_sources"] = source_snapshot(output, SOURCES, deadline)
@@ -326,6 +356,10 @@ def run(tool_path, pin, output, previous=None, correction=None):
         command_provenance(tool, deadline)
         for case in proof["cases"].values():
             for ref in case["artifacts"]: artifact(ref, 128 * 1024 * 1024, deadline=deadline)
+        if previous_ref is not None:
+            artifact(previous_ref, deadline=deadline)
+            artifact(transition["old_tool"], 1024 * 1024, deadline=deadline)
+            artifact(transition["old_source_archive"], 128 * 1024 * 1024, deadline=deadline)
         check_deadline(deadline)
         proof["result"] = "PASS"
     except Exception as error:

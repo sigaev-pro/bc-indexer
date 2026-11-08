@@ -21,6 +21,61 @@ def native_report(name, event_names, observations):
 
 
 class ConformanceTests(unittest.TestCase):
+    def test_corrected_helper_retry_authenticates_old_and_new_source_bindings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            def write(name, value):
+                path = root / name
+                path.write_text(json.dumps(value))
+                return nats_conformance.reference(path)
+            archive = root / "source.tar"
+            archive.write_bytes(b"fixed accepted source archive")
+            source_ref = nats_conformance.reference(archive)
+            closure = {"source_commit": nats_conformance.SOURCE,
+                       "source_archive": {**source_ref, "path": "source.tar"}}
+            build = write("manifest.json", {"evidence_kind": "actual-build", "task_id": "E01-01.builds",
+                                           "module_closures": {"nats-server": closure}})
+            original = {"schema_version": 1, "kind": "nats-source-conformance-tool", "build_manifest": build,
+                        "source_commit": nats_conformance.SOURCE, "source_archive": source_ref,
+                        "module_closure_sha256": nats_conformance.digest(closure),
+                        "compiler": nats_conformance.COMPILER_IMAGE, "overlay": "original helper identity"}
+            old_ref = write("old-tool.json", original)
+            new_ref = write("new-tool.json", {**original, "overlay": "corrected helper identity"})
+            failed = {"kind": "nats-source-conformance-run", "result": "FAIL", "binding": old_ref, "attempt_index": 1}
+            previous = write("failure.json", failed)
+            previous_path = Path(previous["path"])
+            retained, attempt, transition = nats_conformance.run_retry(previous_path, "Correct native collection wait", new_ref, time.monotonic() + 10)
+            self.assertEqual((retained, attempt), (previous, 2))
+            self.assertEqual(transition["old_tool"], old_ref)
+            self.assertEqual(transition["new_tool"], new_ref)
+            for label, old_change, tool_change, correction in (
+                ("non-failure", {"result": "PASS"}, {}, "correction"),
+                ("boolean ordinal", {"attempt_index": True}, {}, "correction"),
+                ("missing old tool", {"binding": {**old_ref, "path": str(root / "absent")}}, {}, "correction"),
+                ("wrong old pin", {"binding": {**old_ref, "sha256": "0" * 64}}, {}, "correction"),
+                ("source changed", {}, {"source_commit": "0" * 40}, "correction"),
+                ("closure changed", {}, {"module_closure_sha256": "0" * 64}, "correction"),
+                ("archive changed", {}, {"source_archive": {**source_ref, "sha256": "0" * 64}}, "correction"),
+                ("build changed", {}, {"build_manifest": {**build, "path": str(root / "other-manifest.json")}}, "correction"),
+                ("silent substitution", {}, {}, None),
+            ):
+                (root / "other-manifest.json").write_bytes((root / "manifest.json").read_bytes())
+                write("failure.json", {**failed, **old_change})
+                changed_ref = write("new-tool.json", {**original, "overlay": "corrected helper identity", **tool_change})
+                with self.subTest(invalid=label), self.assertRaises((ValueError, OSError)):
+                    nats_conformance.run_retry(previous_path, correction, changed_ref, time.monotonic() + 10)
+            write("failure.json", failed)
+            for field, value in (("source_commit", "0" * 40), ("module_closure_sha256", "0" * 64)):
+                altered_old = write("old-tool.json", {**original, field: value})
+                write("failure.json", {**failed, "binding": altered_old})
+                current_ref = write("new-tool.json", {**original, "overlay": "corrected helper identity"})
+                with self.subTest(old_tool=field), self.assertRaises(ValueError):
+                    nats_conformance.run_retry(previous_path, "correction", current_ref, time.monotonic() + 10)
+            write("old-tool.json", original)
+            write("failure.json", failed)
+            with self.assertRaisesRegex(ValueError, "Invalid retry lineage"):
+                nats_conformance.retry(previous_path, "correction", "nats-source-preparation", build, time.monotonic() + 10)
+
     def test_production_inventory_also_binds_non_go_compiler_inputs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

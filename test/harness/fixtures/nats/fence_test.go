@@ -439,7 +439,124 @@ func TestExtractorFencePreProposal(t *testing.T) {
 	f.message(js)
 }
 
+// Select the complete native counterexample, not merely any lagged replica.
+func delayedFenceRows(rows map[string]*RaftzStatus, binding map[string]any) bool {
+	account, group := binding["account"].(string), binding["group"].(string)
+	voters := binding["voters"].(map[string]string)
+	if len(rows) != 3 || len(voters) != 3 {
+		return false
+	}
+	var leader string
+	var term, index, pterm uint64
+	leaders, pending := 0, false
+	for name, id := range voters {
+		raw := rows[name]
+		if raw == nil || len(*raw) != 1 || len((*raw)[account]) != 1 || id != getHash(name) {
+			return false
+		}
+		row, ok := (*raw)[account][group]
+		if !ok || row.ID != id || row.Size != 3 || row.QuorumNeeded != 2 ||
+			row.SystemAcc != binding["system_account"].(bool) || row.TrafficAcc != binding["traffic_account"].(string) ||
+			row.Observer || row.Paused || row.Overrun || row.CatchingUp || row.WALError != nil || !row.EverHadLeader ||
+			row.Term == 0 || row.PTerm > row.Term || row.PIndex != row.Committed || row.Applied > row.Committed ||
+			row.IPQPropLen != 0 || row.IPQEntryLen != 0 || row.IPQRespLen != 0 || row.IPQApplyLen != 0 || len(row.Peers) != 2 {
+			return false
+		}
+		knownLeader := false
+		for peerName, peerID := range voters {
+			if peerID == row.Leader {
+				knownLeader = true
+			}
+			if peerID == id {
+				continue
+			}
+			peer, present := row.Peers[peerID]
+			if !present || !peer.Known || peer.Name != peerName {
+				return false
+			}
+		}
+		if !knownLeader {
+			return false
+		}
+		if row.ID == row.Leader {
+			if row.State != "LEADER" {
+				return false
+			}
+			leaders++
+		} else if row.State != "FOLLOWER" {
+			return false
+		}
+		if leader == "" {
+			leader, term, index, pterm = row.Leader, row.Term, row.PIndex, row.PTerm
+		}
+		if row.Leader != leader || row.Term != term || row.PIndex != index || row.PTerm != pterm {
+			return false
+		}
+		pending = pending || row.Applied < row.Committed
+	}
+	return leaders == 1 && pending
+}
+
+func checkDelayedSelection(t *testing.T) {
+	names := []string{"fence-S-1", "fence-S-2", "fence-S-3"}
+	voters := map[string]string{}
+	for _, name := range names {
+		voters[name] = getHash(name)
+	}
+	binding := map[string]any{"account": "$G", "group": "sample", "traffic_account": "$SYS", "system_account": true, "voters": voters}
+	fresh := func() map[string]*RaftzStatus {
+		rows := map[string]*RaftzStatus{}
+		for i, name := range names {
+			row := RaftzGroup{ID: voters[name], Size: 3, QuorumNeeded: 2, SystemAcc: true, TrafficAcc: "$SYS", EverHadLeader: true,
+				Term: 1, PTerm: 1, PIndex: 2, Committed: 2, Applied: 2, Leader: voters[names[0]], State: "FOLLOWER", Peers: map[string]RaftzGroupPeer{}}
+			if i == 0 {
+				row.State = "LEADER"
+				row.Applied = 1
+			}
+			for peerName, id := range voters {
+				if peerName != name {
+					row.Peers[id] = RaftzGroupPeer{Name: peerName, Known: true}
+				}
+			}
+			raw := RaftzStatus{"$G": {"sample": row}}
+			rows[name] = &raw
+		}
+		return rows
+	}
+	if !delayedFenceRows(fresh(), binding) {
+		t.Fatal("complete apply-lag selection rejected")
+	}
+	for _, mutate := range []func(*RaftzGroup){
+		func(r *RaftzGroup) { r.Committed = 1 },
+		func(r *RaftzGroup) { r.Leader = ""; r.PIndex = 0; r.Committed = 0; r.Applied = 0; r.PTerm = 0 },
+		func(r *RaftzGroup) { r.ID = "foreign" }, func(r *RaftzGroup) { r.Paused = true },
+		func(r *RaftzGroup) { r.TrafficAcc = "foreign" }, func(r *RaftzGroup) { r.Term = 2 },
+		func(r *RaftzGroup) { r.IPQRespLen = 1 }, func(r *RaftzGroup) { r.Peers = nil },
+	} {
+		rows := fresh()
+		row := (*rows[names[1]])["$G"]["sample"]
+		mutate(&row)
+		(*rows[names[1]])["$G"]["sample"] = row
+		if delayedFenceRows(rows, binding) {
+			t.Fatal("incomplete or unhealthy apply-lag collection accepted")
+		}
+	}
+	rows := fresh()
+	delete(rows, names[2])
+	if delayedFenceRows(rows, binding) {
+		t.Fatal("missing voter accepted")
+	}
+	rows = fresh()
+	row := (*rows[names[0]])["$G"]["sample"]
+	row.Applied = row.Committed
+	(*rows[names[0]])["$G"]["sample"] = row
+	if delayedFenceRows(rows, binding) {
+		t.Fatal("fully applied collection accepted as lag")
+	}
+}
+
 func TestExtractorFenceDelayedApply(t *testing.T) {
+	checkDelayedSelection(t)
 	f := newFenceCase(t, 3)
 	js, mset := f.stream(3)
 	gate := f.gate("apply_entered")
@@ -456,22 +573,14 @@ func TestExtractorFenceDelayedApply(t *testing.T) {
 			mset.store = original
 		}
 	})
-	f.obs["binding"] = f.binding(node)
+	binding := f.binding(node)
+	f.obs["binding"] = binding
 	published := fencePublish(js)
 	gate.await()
 	var blocked map[string]*RaftzStatus
-	f.wait("dequeued committed native entry", 10*time.Second, func() bool {
+	f.wait("complete healthy dequeued committed collection", 10*time.Second, func() bool {
 		blocked = f.collect(node.Group())
-		for _, raw := range blocked {
-			if raw == nil {
-				continue
-			}
-			row := (*raw)[f.groups[node.Group()]][node.Group()]
-			if row.Committed > row.Applied && row.IPQApplyLen == 0 && row.IPQPropLen == 0 && row.IPQEntryLen == 0 {
-				return true
-			}
-		}
-		return false
+		return delayedFenceRows(blocked, binding)
 	})
 	f.obs["blocked"] = blocked
 	f.event("blocked_sample")

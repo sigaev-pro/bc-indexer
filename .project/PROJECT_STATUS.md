@@ -2,7 +2,20 @@
 
 ## E01-01.harness — Execute native NATS fence conformance
 
-Status: READY_FOR_REVIEW for the three source-review corrections. The 16 focused
+Status: READY_FOR_REVIEW for the native collection and retry-lineage correction.
+The 17 focused tests pass; the strict Python frontier predicates are unchanged.
+The corrected Go overlay and its new selector controls still require fresh
+compilation and actual execution after publication. Preparation on
+`6f5145d1f1752cba7315bbd2485d3ac13fecadfb` passed in 55.490422044 seconds.
+Measured attempt 1 failed in 4.587200176 seconds: standalone and pre-proposal
+passed, but delayed apply captured a premature collection before every voter
+was healthy and committed. The strict independent predicate correctly rejected
+it. Lost acknowledgment and leader change remain NOT_RUN. All owned processes
+and containers are absent; the failed proof is preserved. Next: publish and
+review the correction, then use fresh preparation and a measured retry linked
+to the retained FAIL with explicit old/new tool pins. Issue #12 stays open.
+
+Historical source review correction: the 16 focused
 tests pass in 0.120 seconds after reproducing 14 failing regression subcases.
 Delayed-apply observations now require complete typed membership and health,
 ACK JSON rejects duplicate keys, and native test listings use the authenticated
