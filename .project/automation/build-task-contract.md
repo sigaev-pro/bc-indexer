@@ -84,6 +84,20 @@ Return exactly `{"valid": true, "reason": "..."}` with exit 0 for valid input, o
 
 Synthetic mode permits an explicitly synthetic manifest for protocol controls. It does not relax hashes, coverage, identity, profile, or cleanup requirements. Actual mode rejects synthetic evidence. Actual acceptance also requires the trusted driver's independent ELF, Go graph, signed package, OCI, command, source, and cleanup checks; a product preflight pass alone is insufficient.
 
+The trusted command adapter uses `SMALL_PREFLIGHT_SECONDS = 10` for small
+preflight controls; plan controls also retain 10 seconds. Final actual artifact
+checks explicitly select `ACTUAL_MATERIALIZED_PREFLIGHT_SECONDS = 300` through
+the internal keyword `Commands.preflight(..., materialized=True)`. This choice
+belongs to trusted orchestration and adds no public request field. Manifest
+size, kind, synthetic/actual labels, or candidate time declarations cannot
+select or extend it. In particular, the small `synthetic-cannot-be-actual`
+negative control retains 10 seconds even though its request uses actual mode.
+The selected cap is still clipped to the original outer deadline and enforced
+by the existing monotonic command guard and owned-process cleanup. Malformed
+responses, artifact hashes, protected inputs, and final trusted materialized
+revalidation retain their existing checks. A larger cap does not make stale
+references valid or turn a derivative timing diagnostic into acceptance.
+
 ## Updater CLI and source transport
 
 Run `python3 -I scripts/refresh-versions check|update --registry PATH --active-lock PATH --expected-lock-sha256 HASH --report PATH`. Update mode additionally requires `--output PATH` for a separate candidate. Exit 0 only for complete successful discovery; exit 1 with an incomplete report for unavailable, malformed, or unresolved sources; exit 2 for invalid arguments, a stale expected active-lock hash, or an output that could overwrite an active input. Check mode and all failed modes create no candidate. Never modify active inputs or separately governed external locks, including rewriting identical bytes.
