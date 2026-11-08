@@ -1,5 +1,36 @@
 # Состояние проекта
 
+## E01-01.harness — Execute native NATS fence conformance
+
+Status: READY_FOR_REVIEW for the source-native conformance checkpoint. Sixteen
+focused NATS tests passed in 0.106 seconds. Preparation, native compilation and
+all five native case outcomes are NOT_RUN. The source checkpoint must be
+published and reviewed before its separately authorized execution handoff.
+
+The NATS input-inspection and one-group observation
+predicate are accepted in PR #126, merge
+`d7657376f551f78acad8308b30e4cb0880b72a38`. Both independent reviews and CI
+passed; both reviewers reproduced the read-only 84-reference inspection exactly.
+Earlier READY_FOR_REVIEW entries are historical. No NATS runtime proof exists yet.
+
+The checked source adds a bounded preparation/run CLI and an in-package overlay
+against the accepted NATS commit and offline closure. It covers standalone
+storage and four R3 cases: pre-proposal publication, committed-but-unapplied work,
+lost acknowledgment and leader change. Preparation excludes only the copied
+root server package's upstream test files, records their hashes, and verifies all
+other production inputs remain unchanged. Original trees and production binaries
+remain read-only. Next: independent source review, hosted CI, then actual
+preparation and measured execution with retained failures and cleanup.
+
+The later unchanged-image process restart, complete collection/census and final
+runtime fence and standalone acknowledgment loss remain separate obligations.
+In-process server shutdown is not proof
+of an old native process exiting. Issue #12 remains OPEN; no dependency unlock.
+
+Base: `d7657376f551f78acad8308b30e4cb0880b72a38`.
+Branch/worktree: `feat/e01-harness-nats-conformance` / `e01-harness-nats-conformance`.
+Sole writer: `/root/boot04_preflight`; root owns publication and acceptance.
+
 ## E01-01.harness — Prove the NATS terminal fence
 
 Status: READY_FOR_REVIEW for the first NATS input/comparator checkpoint.
