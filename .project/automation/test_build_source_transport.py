@@ -1,6 +1,7 @@
 """Bounded source acquisition and independent retained-attempt controls."""
 
 import copy
+import http.client
 import io
 import json
 import os
@@ -13,6 +14,7 @@ import tempfile
 import time
 import unittest
 import urllib.error
+import urllib.parse
 from unittest.mock import patch
 
 import build_contract as contract
@@ -147,6 +149,9 @@ class SourceTransportTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.runner = FakeRunner()
+        environment = patch.dict(os.environ, {"GH_TOKEN": "invented_default_source_test_token", "GITHUB_TOKEN": ""})
+        environment.start()
+        self.addCleanup(environment.stop)
 
     def acquisition(self, github=False, maximum=transport.MAX_BODY, runner=None):
         self.runner = runner or FakeRunner()
@@ -400,6 +405,132 @@ class SourceTransportTests(unittest.TestCase):
             processes.append(process)
             return process
         return launch, processes
+
+    def test_gh_environment_credentials_never_enter_retained_outputs(self):
+        token = "invented_gh_source_secret_928"
+        encoded = "".join("%%%02x" % value for value in token.encode())
+        for source in ("GH_TOKEN", "GITHUB_TOKEN"):
+            for location, echo in (("body", token), ("body", encoded), ("header", token), ("stderr", encoded)):
+                with self.subTest(source=source, location=location):
+                    output = "HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n"
+                    output += "X-Trace: " + echo + "\r\n" if location == "header" else ""
+                    output += "\r\n" + (echo if location == "body" else "[]")
+                    error = echo if location == "stderr" else ""
+                    launch, processes = self.gh_process(["import sys;sys.stdout.write(" + repr(output) + ");sys.stderr.write(" + repr(error) + ")"])
+                    acquisition = self.acquisition(github=True)
+                    with patch.dict(os.environ, {"GH_TOKEN": "", "GITHUB_TOKEN": "", source: token}), patch.object(transport.subprocess, "Popen", side_effect=launch):
+                        with self.assertRaisesRegex(ValueError, "credential"):
+                            acquisition.fetch()
+                    journal = json.loads(acquisition.path.read_text())
+                    self.assertEqual(journal["outcome"], "FAILED")
+                    self.assertFalse(journal["attempts"][0]["error"]["retryable"])
+                    self.assertTrue(self.runner.source_acquisition_blocked)
+                    self.assertEqual(len(processes), 1)
+                    self.assertTrue(all(p.poll() is not None and p.stdout.closed and p.stderr.closed for p in processes))
+                    for path in acquisition.root.rglob("*"):
+                        if path.is_file():
+                            self.assertFalse(transport.credential_echo(path.read_bytes(), [token.encode()]), str(path))
+
+    def test_gh_helper_credential_is_private_and_pinned_for_the_request(self):
+        token = "invented_helper_source_secret_745"
+        for echo in (False, True):
+            with self.subTest(echo=echo):
+                output = "HTTP/2.0 200 OK\r\n\r\n" + (token if echo else "[]")
+                launch, processes = self.gh_process(["print(" + repr(token) + ")", "import sys;sys.stdout.write(" + repr(output) + ")"])
+                calls = []
+                def record(argv, **kwargs):
+                    calls.append((argv, kwargs.get("env")))
+                    return launch(argv, **kwargs)
+                acquisition = self.acquisition(github=True)
+                with patch.dict(os.environ, {"GH_TOKEN": "", "GITHUB_TOKEN": ""}), patch.object(transport.subprocess, "Popen", side_effect=record):
+                    if echo:
+                        with self.assertRaisesRegex(ValueError, "credential"):
+                            acquisition.fetch()
+                    else:
+                        row = acquisition.fetch()
+                        source_evidence.validate_observation(row, acquisition.root, False)
+                self.assertEqual(calls[0][0], ["gh", "auth", "token", "--hostname", "github.com"])
+                self.assertEqual(calls[1][1]["GH_TOKEN"], token)
+                self.assertEqual(len(processes), 2)
+                self.assertTrue(all(p.poll() is not None and p.stdout.closed and p.stderr.closed for p in processes))
+                for path in acquisition.root.rglob("*"):
+                    if path.is_file():
+                        self.assertNotIn(token.encode(), path.read_bytes())
+
+    def test_gh_encoded_split_reads_cannot_write_credentials(self):
+        token = "invented_split_gh_credential_134"
+        encoded = "".join("%%%02x" % value for value in token.encode())
+        encoded = urllib.parse.quote(urllib.parse.quote(encoded, safe=""), safe="")
+        for stream in ("stdout", "stderr"):
+            with self.subTest(stream=stream):
+                output = "HTTP/2.0 200 OK\r\n\r\n" + "x" * 1000 + encoded
+                launch, processes = self.gh_process(["import sys;sys." + stream + ".write(" + repr(output) + ")"])
+                acquisition = self.acquisition(github=True)
+                read = os.read
+                with patch.dict(os.environ, {"GH_TOKEN": token}), patch.object(transport.subprocess, "Popen", side_effect=launch), patch.object(transport.os, "read", side_effect=lambda fd, count: read(fd, min(count, 7))):
+                    with self.assertRaisesRegex(ValueError, "credential"):
+                        acquisition.fetch()
+                attempt = json.loads(acquisition.path.read_text())["attempts"][0]
+                self.assertEqual(attempt["state"], "FAILED")
+                self.assertEqual(attempt["error"]["code"], "REJECTED")
+                for field in ("stdout", "stderr"):
+                    self.assertEqual(contract.verify_reference(acquisition.root, attempt["process"][field]).read_bytes(), b"")
+                self.assertTrue(all(p.poll() is not None and p.stdout.closed and p.stderr.closed for p in processes))
+
+    def test_gh_private_helper_failure_is_bounded_clean_and_terminal(self):
+        for script, seconds in (("print('x'*100000)", 10), ("import time;time.sleep(10)", 0.1), ("raise SystemExit(1)", 10)):
+            with self.subTest(script=script):
+                with patch.object(transport, "REQUEST_SECONDS", seconds):
+                    acquisition = self.acquisition(github=True)
+                launch, processes = self.gh_process([script])
+                with patch.dict(os.environ, {"GH_TOKEN": "", "GITHUB_TOKEN": ""}), patch.object(transport.subprocess, "Popen", side_effect=launch):
+                    with self.assertRaises((ValueError, transport.RequestDeadline, subprocess.TimeoutExpired)):
+                        acquisition.fetch()
+                self.assertEqual(len(processes), 1)
+                self.assertTrue(all(p.poll() is not None and p.stdout.closed and p.stderr.closed for p in processes))
+                journal = json.loads(acquisition.path.read_text())
+                self.assertEqual(journal["outcome"], "FAILED")
+                self.assertFalse(journal["attempts"][0]["error"]["retryable"])
+                self.assertTrue(self.runner.source_acquisition_blocked)
+                self.assertEqual(list(acquisition.directory.glob("*.stdout")), [])
+                self.assertEqual(list(acquisition.directory.glob("*.stderr")), [])
+
+    def test_incomplete_http_read_preserves_prefix_and_partial_without_retry(self):
+        for partial, maximum in ((b"available-tail", 100), (b"x" * 100, 12)):
+            with self.subTest(maximum=maximum):
+                acquisition = self.acquisition(maximum=maximum)
+                response = Response()
+                with patch.object(response, "read", side_effect=[b"prefix", http.client.IncompleteRead(partial, 1000)]), patch.object(acquisition.opener, "open", return_value=response) as opened:
+                    with self.assertRaises((http.client.IncompleteRead, ValueError)):
+                        acquisition.fetch()
+                journal = json.loads(acquisition.path.read_text())
+                attempt = journal["attempts"][0]
+                self.assertEqual(journal["outcome"], "FAILED")
+                self.assertEqual(attempt["state"], "FAILED")
+                self.assertEqual(attempt["observed_bytes"], 6 + len(partial))
+                self.assertEqual(attempt["truncated"], 6 + len(partial) > maximum)
+                self.assertFalse(attempt["error"]["retryable"])
+                self.assertEqual(contract.verify_reference(acquisition.root, attempt["body"]).read_bytes(), (b"prefix" + partial)[:maximum])
+                self.assertEqual(opened.call_count, 1)
+                self.assertTrue(self.runner.source_acquisition_blocked)
+                self.assertTrue(response.closed)
+
+    def test_incomplete_http_read_cannot_continue_after_terminal_persistence_failure(self):
+        acquisition = self.acquisition()
+        response = Response()
+        persist = acquisition.persist
+        def fail_terminal():
+            if acquisition.journal["outcome"] == "FAILED":
+                raise OSError("injected terminal journal failure")
+            persist()
+        with patch.object(response, "read", side_effect=[b"prefix", http.client.IncompleteRead(b"partial", 10)]), patch.object(acquisition.opener, "open", return_value=response) as opened, patch.object(acquisition, "persist", side_effect=fail_terminal):
+            with self.assertRaisesRegex(OSError, "terminal journal"):
+                acquisition.fetch()
+        self.assertEqual(opened.call_count, 1)
+        self.assertTrue(response.closed)
+        self.assertTrue(self.runner.source_acquisition_blocked)
+        with self.assertRaisesRegex(ValueError, "fenced"):
+            transport.Acquisition(self.runner, URL, acquisition.root)
 
     def test_exact_gh_eof_recovers_with_raw_process_evidence(self):
         error = 'Get "' + URL + '": EOF\n'

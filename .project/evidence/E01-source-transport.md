@@ -110,6 +110,44 @@ with tracemalloc and ResourceWarnings enabled in 2.176 seconds. The earlier CI
 result is retained rather than represented as proof of this later correction;
 the frozen candidate requires its own cumulative CI result.
 
+## Independent review repair
+
+The published initial candidate was `8560c00cc3d62d50b4a04bd4d0ab0089e2a0c7c3`
+in draft PR #118. Exact-head portable CI passed 377 tests and all 54 component
+negatives in 184.784 seconds, with two existing opt-in Docker skips. The tree
+was clean. Both independent review axes still returned `REQUEST_CHANGES`:
+
+- An invented effective GitHub credential echoed by a mocked response could
+  enter raw stdout and the body artifact. The original header-only secret list
+  did not include environment or credential-helper authentication.
+- `http.client.IncompleteRead` after a retained prefix escaped terminal attempt
+  handling. Its available partial bytes were lost and the journal stayed
+  `STARTED`, although later runner work was fenced.
+
+The first three regression methods reproduced 11 failing subcases and one
+helper-path error against that candidate. These failures and the initial CI
+result remain historical evidence; passing tests did not override the reviews.
+
+The repair privately resolves and pins effective GitHub authentication within
+the original request budget. A helper's bounded stdout/stderr never becomes an
+artifact. Raw request streams use bounded lookbehind before writes, including
+encoded values split across reads. An echo rejects the request without retry
+and clears unsafe owned output. HTTP framing exceptions now retain the bounded
+prefix plus available partial bytes and finish the attempt as a nonretryable
+failure. The journal fields and allowed recovery classes are unchanged.
+
+All 26 focused methods pass with tracemalloc and ResourceWarnings enabled
+(3.814 seconds). Controls cover both environment variables, helper credentials,
+raw and encoded body/header/stderr echoes, split reads, helper failure/size/time
+bounds, process and pipe cleanup, partial-byte truncation, and terminal journal
+persistence failure. All credentials and responses in these controls are
+invented; no live credential or network lookup occurred. The affected build
+suite then passed all 159 tests in 65.789 seconds (66.144 seconds including the
+wrapper), with two existing opt-in Docker skips and no ResourceWarning. Document
+checks passed 113 files, 1,116 links, 84 catalog entries, and 16 normative mirrors;
+the original v2 bytes remain unchanged. Whitespace checks also passed. New
+exact-head CI and both independent reviews remain required after publication.
+
 ## Diagnostic interface
 
 `build_source_transport.fetch(runner, url, report_directory, headers=None,

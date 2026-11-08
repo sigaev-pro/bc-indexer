@@ -1,5 +1,11 @@
 # Состояние проекта
 
+## E01-01.builds — PR #118 repair ready for fresh independent review
+
+2026-11-08: Both independent axes requested changes on trusted source-recovery candidate `8560c00cc3d62d50b4a04bd4d0ab0089e2a0c7c3`, despite its exact-head CI passing 377 tests and 54 component negatives. The two findings are retained in [the evidence](evidence/E01-source-transport.md): effective GitHub credentials were not protected in raw outputs, and an incomplete HTTP read could leave a started attempt without its available partial bytes.
+
+The scoped repair privately binds effective GitHub authentication, scans raw outputs before retention, and records incomplete HTTP reads as terminal nonretryable failures with bounded partial bytes. All 26 focused methods and 159 affected build tests pass, with two existing opt-in Docker skips and no ResourceWarning. Document and whitespace checks pass. The new commit requires remote CI and both independent reviews. Parent issue #11 remains open. Native compilation, actual-source diagnostics, and runtime acceptance are not claimed by this repair.
+
 ## E01-01.builds — Trusted source recovery ready for cumulative checks
 
 2026-11-08: Root transferred sole writer ownership of `build/source-transport` to `/root/boot04_preflight` from accepted `23eb96dffd3019bb4c6b1c345ab29707a5ec1751`. The two failed preparation operations remain failed and unchanged. This scoped block adds bounded same-URL GET recovery, explicitly bound source-attempt evidence, an internal reference to the first independent refresh report, and final nested-evidence checks. Native command success, dependency pins, product BuildManifest fields, D83, and parent issue #11 gates remain intact.

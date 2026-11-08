@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 import hashlib
+import http.client
 import os
 from pathlib import Path
 import selectors
@@ -170,7 +171,7 @@ class Acquisition:
         if credential_echo(scan, self.secrets):
             self.current["truncated"] = True
             raise ValueError("official source exposed credential data")
-        overlap = max((len(value) * 9 for value in self.secrets), default=0)
+        overlap = max((len(value) * 27 for value in self.secrets), default=0)
         self.tail = scan[-overlap:] if overlap else b""
         available = max(0, self.maximum - stream.tell())
         stream.write(block[:available])
@@ -183,7 +184,7 @@ class Acquisition:
             response = self.opener.open(request, timeout=self.remaining())
         except urllib.error.HTTPError as error:
             response = error
-        except (OSError, urllib.error.URLError) as error:
+        except (OSError, urllib.error.URLError, http.client.HTTPException) as error:
             self.network_error = error
             raise
         with response, body.open("xb") as stream:
@@ -200,7 +201,7 @@ class Acquisition:
                     self.remaining()
                     try:
                         block = response.read(64 * 1024)
-                    except (OSError, urllib.error.URLError) as error:
+                    except (OSError, urllib.error.URLError, http.client.HTTPException) as error:
                         self.network_error = error
                         reason = error.reason if type(error) is urllib.error.URLError else error
                         partial = getattr(error, "partial", None)
@@ -217,7 +218,76 @@ class Acquisition:
                 stream.flush()
                 os.fsync(stream.fileno())
 
+    def gh_environment(self):
+        """Resolve effective auth privately, then pin it for this acquisition."""
+        if hasattr(self, "gh_environment_value"):
+            return self.gh_environment_value
+        environment = os.environ.copy()
+        tokens = [environment.get(key, "") for key in ("GH_TOKEN", "GITHUB_TOKEN")]
+        token = next((value for value in tokens if value), None)
+        if token is None:
+            # Credential output stays in bounded memory; it is never an artifact.
+            process = None
+            values = [bytearray(), bytearray()]
+            try:
+                with selectors.DefaultSelector() as selector:
+                    with request_alarm(self.until):
+                        self.remaining()
+                        process = subprocess.Popen(["gh", "auth", "token", "--hostname", "github.com"],
+                                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                                   env=environment)
+                        for pipe, value in zip((process.stdout, process.stderr), values):
+                            selector.register(pipe, selectors.EVENT_READ, value)
+                        while selector.get_map():
+                            for key, _ in selector.select(min(0.05, self.remaining())):
+                                block = os.read(key.fileobj.fileno(), 4096)
+                                if not block:
+                                    selector.unregister(key.fileobj)
+                                    continue
+                                contract.require(len(key.data) + len(block) <= source_evidence.MAX_HEADERS,
+                                                 "private GitHub credential output exceeds its bound")
+                                key.data.extend(block)
+                        process.wait(timeout=self.remaining())
+                        contract.require(process.returncode == 0, "private GitHub credential lookup failed")
+                        token = bytes(values[0]).strip().decode("ascii")
+            finally:
+                if process is not None:
+                    try:
+                        if process.poll() is None:
+                            process.kill()
+                        process.wait(timeout=5)
+                    finally:
+                        process.stdout.close()
+                        process.stderr.close()
+                for value in values:
+                    value.clear()
+        contract.require(isinstance(token, str) and 0 < len(token) <= source_evidence.MAX_HEADERS
+                         and all(33 <= ord(char) <= 126 for char in token), "private GitHub credential is invalid")
+        for value in [*tokens, token]:
+            if value:
+                encoded = value.encode()
+                contract.require(len(encoded) <= source_evidence.MAX_HEADERS, "source credential exceeds its bound")
+                if encoded not in self.secrets:
+                    self.secrets.append(encoded)
+        environment["GH_TOKEN"] = token
+        self.gh_environment_value = environment
+        return environment
+
+    def gh_output(self, state, block, final=False):
+        """Keep enough lookbehind in memory to scan encoded cross-read echoes."""
+        output, bound, pending = state
+        value = bytes(pending) + block
+        if credential_echo(value, self.secrets):
+            self.gh_unsafe_output = True
+            raise ValueError("official GitHub source exposed credential data")
+        contract.require(output.tell() + len(value) <= bound, "GitHub source output exceeds its bound")
+        overlap = max((len(secret) * 27 for secret in self.secrets), default=0)
+        count = len(value) if final else max(0, len(value) - overlap)
+        output.write(value[:count])
+        pending[:] = value[count:]
+
     def gh_get(self, body):
+        environment = self.gh_environment()
         ordinal = self.current["ordinal"]
         stdout_path = self.directory / (self.key + "." + str(ordinal) + ".stdout")
         stderr_path = self.directory / (self.key + "." + str(ordinal) + ".stderr")
@@ -227,26 +297,28 @@ class Acquisition:
         self.persist()
         self.remaining()
         process = None
+        states = []
         try:
             with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr, selectors.DefaultSelector() as selector:
                 try:
                     with request_alarm(self.until):
                         # Stay in the already supervised driver group; no detached child.
-                        process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                                   env=environment)
                         for pipe, output, bound in ((process.stdout, stdout, self.maximum + source_evidence.MAX_HEADERS),
                                                     (process.stderr, stderr, source_evidence.MAX_STDERR)):
-                            selector.register(pipe, selectors.EVENT_READ, (output, bound))
+                            state = (output, bound, bytearray())
+                            states.append(state)
+                            selector.register(pipe, selectors.EVENT_READ, state)
                         while selector.get_map():
                             self.remaining()
                             for key, _ in selector.select(min(0.05, self.remaining())):
                                 block = os.read(key.fileobj.fileno(), 64 * 1024)
                                 if not block:
+                                    self.gh_output(key.data, b"", final=True)
                                     selector.unregister(key.fileobj)
                                     continue
-                                output, bound = key.data
-                                available = max(0, bound - output.tell())
-                                output.write(block[:available])
-                                contract.require(len(block) <= available, "GitHub source output exceeds its bound")
+                                self.gh_output(key.data, block)
                         process.wait(timeout=self.remaining())
                 finally:
                     if process is not None:
@@ -258,6 +330,13 @@ class Acquisition:
                         finally:
                             process.stdout.close()
                             process.stderr.close()
+                    for state in states:
+                        if getattr(self, "gh_unsafe_output", False):
+                            state[2].clear()
+                            state[0].seek(0)
+                            state[0].truncate()
+                        else:
+                            self.gh_output(state, b"", final=True)
                     for stream in (stdout, stderr):
                         stream.flush()
                         os.fsync(stream.fileno())
@@ -281,7 +360,7 @@ class Acquisition:
     def classify(self, error):
         cause = error.reason if type(error) is urllib.error.URLError else error
         code = "REJECTED"
-        if isinstance(error, (RequestDeadline, CallerInterrupted)):
+        if isinstance(error, (RequestDeadline, CallerInterrupted, subprocess.TimeoutExpired)):
             code = "REQUEST_DEADLINE"
         elif error is self.network_error and type(cause) is TimeoutError:
             code = "NETWORK_TIMEOUT"
@@ -332,7 +411,8 @@ class Acquisition:
                     with request_alarm(self.until):
                         self.urllib_get(body)
                 self.remaining()
-            except (ValueError, OSError, urllib.error.URLError, CallerInterrupted) as error:
+            except (ValueError, OSError, urllib.error.URLError, http.client.HTTPException,
+                    subprocess.TimeoutExpired, CallerInterrupted) as error:
                 failure = error
                 self.current.update(state="FAILED", error=self.classify(error))
             else:

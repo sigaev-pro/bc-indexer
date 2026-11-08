@@ -165,6 +165,22 @@ Keep the earliest observed inherited monotonic deadline on the runner, including
 after its one-shot alarm is consumed or rearmed. Subsequent source and native
 command admission cannot extend that bound. A request-local deadline remains a
 different cause; a terminal trusted GET still fails its independent pass.
+
+For GitHub CLI acquisition, privately resolve the effective `GH_TOKEN`,
+`GITHUB_TOKEN`, or existing `gh auth token --hostname github.com` credential
+within that same request deadline. Pin it in the request process environment.
+Credential helper output stays in bounded memory and never becomes a retained
+command or artifact. Scan raw stdout and stderr before retaining them, including
+encoded values split across reads; this also covers headers and body bytes.
+Reject a credential echo without retry, discard the unsafe owned output, and
+retain a terminal failure journal. Failed or oversized helper output cannot
+dispatch a source GET. All helper and request processes must be reaped.
+
+An `IncompleteRead` or other HTTP framing exception is a terminal, nonretryable
+transport failure. Retain the already read prefix and any available partial
+bytes within the existing body bound, record observed versus retained bytes,
+and persist a terminal attempt. This does not add a retry class or convert an
+incomplete response into a successful source observation.
 Unsupported execution contexts fail closed. GitHub subprocesses remain in the
 supervised driver group; restore the request alarm before bounded child cleanup.
 Persist intent before GET and retain terminal attempt evidence before any retry.
