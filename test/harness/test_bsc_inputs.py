@@ -7,9 +7,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bsc_inputs import canonical_digest
+import bsc_inputs
+import artifacts
 from test_harness import ref, write_json
 
 HERE = Path(__file__).resolve().parent
@@ -124,6 +127,66 @@ class BscInputTests(unittest.TestCase):
                 result = self.cli(root, ref(root / "tool.json")["sha256"])
                 self.assertEqual(result.returncode, 2, result.stdout)
                 self.assertFalse((root / "output").exists())
+
+    def test_tool_replacement_after_pinning_cannot_change_parsed_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve(); tool, _, _ = fixture(root)
+            pin = ref(root / "tool.json")["sha256"]
+            replacement = copy.deepcopy(tool)
+            (root / "fake-observer").write_bytes(b"fake observer")
+            replacement["binary"] = ref(root / "fake-observer")
+            original = artifacts.reference
+            def swap_after_reference(path, *args, **kwargs):
+                result = original(path, *args, **kwargs)
+                if Path(path) == root / "tool.json":
+                    write_json(path, replacement)
+                return result
+            with patch.object(bsc_inputs, "reference", side_effect=swap_after_reference):
+                admitted = bsc_inputs.admit(root / "request.json", root / "tool.json", pin)
+            self.assertEqual(admitted["tool"]["binary"], tool["binary"])
+
+    def test_tool_replacement_after_buffer_verification_parses_original_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve(); tool, _, _ = fixture(root)
+            pin = ref(root / "tool.json")["sha256"]
+            replacement = copy.deepcopy(tool)
+            (root / "fake-observer").write_bytes(b"fake observer")
+            replacement["binary"] = ref(root / "fake-observer")
+            decode = artifacts.decode_json
+            swaps = []
+            def replace_before_parse(data, deadline=None):
+                if b'"bsc-native-observer"' in data:
+                    write_json(root / "tool.json", replacement)
+                    swaps.append(True)
+                return decode(data, deadline)
+            with patch.object(artifacts, "decode_json", side_effect=replace_before_parse):
+                admitted = bsc_inputs.admit(root / "request.json", root / "tool.json", pin)
+            self.assertEqual(swaps, [True])
+            self.assertEqual(admitted["tool"]["binary"], tool["binary"])
+            self.assertNotEqual(ref(root / "tool.json")["sha256"], pin)
+
+    def test_verified_json_rejects_replacements_and_malformed_json(self):
+        for body in (b'{"value":1,"value":2}', b'{"value":NaN}'):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory).resolve() / "input.json"
+                path.write_bytes(body)
+                with self.assertRaises(artifacts.Rejected):
+                    artifacts.json_artifact(ref(path))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory).resolve() / "input.json"
+            path.write_bytes(b'{"value":1}')
+            original = ref(path)
+            path.write_bytes(b'{"value":2}')
+            with self.assertRaises(artifacts.Rejected):
+                artifacts.json_artifact(original)
+            path.write_bytes(b'{"value":1}')
+            decode = artifacts.decode_json
+            def replace_before_parse(data, deadline=None):
+                path.write_bytes(b'{"value":2}')
+                return decode(data, deadline)
+            with patch.object(artifacts, "decode_json", side_effect=replace_before_parse):
+                _, result = artifacts.json_artifact(original)
+            self.assertEqual(result, {"value": 1})
 
 
 if __name__ == "__main__":

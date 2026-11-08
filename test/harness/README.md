@@ -175,6 +175,11 @@ trusted compilation. Scenario authors cannot select a different executable by
 rehashing their fixture. The runtime does not derive or accept the external tool
 pin from scenario data.
 
+Authenticated JSON is parsed from the exact bounded byte buffer whose size and
+digest were verified. Replacing a file between checking and parsing cannot
+change the admitted tool, build, fixture or oracle. This same primitive protects
+the existing Ethereum JSON admission path without changing its public schema.
+
 Use `python3 -B test/harness/bsc_run.py check REQUEST --observer-tool TOOL
 --observer-tool-sha256 TRUSTED_SHA` for read-only admission. Add `run` instead of
 `check` and `--output NEW` for the bounded measured run. Admission, raw input

@@ -2,6 +2,16 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+Independent source review rejected the earlier observer authority boundary:
+the tool manifest was hashed and reopened for JSON parsing, allowing a file
+replacement between those steps. The exact replacement was reproduced before
+the fix. Shared bounded JSON primitives now authenticate and parse the same
+immutable buffer. BSC tool/build/fixture/oracle/command admission and the
+corresponding Ethereum JSON inputs use that boundary. Deterministic replacement
+and malformed-JSON controls pass; all 35 harness tests pass in 9.207 seconds.
+The review failure is retained. No second preparation or BSC import has run;
+the next preparation will include both the compiler scratch and JSON fixes.
+
 The first offline BSC preparation on `212810725e69978fd160e65034a7b1843a70d45e`
 failed after 138.149319096 seconds. Native module verification passed, but the
 larger BSC/CGO helper compilation exhausted the unchanged 256 MiB container
