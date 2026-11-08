@@ -11,6 +11,57 @@ or any lifecycle acceptance case. All seven public profile results remain
 `NOT_RUN`. Individual local scenario results do not close AC-CAP-01-01, whose
 owner is E01-02.lifecycle_seams.
 
+## NATS input inspection and frontier predicate
+
+This first NATS checkpoint is read-only. It prepares no server, invokes no
+container and grants no runtime admission:
+
+```sh
+python3 -I test/harness/nats_inputs.py /absolute/accepted/manifest.json \
+  --manifest-sha256 CALLER_PINNED_ACCEPTED_BUILD_SHA256
+```
+
+The caller must supply an already accepted actual BuildManifest. A caller pin
+authenticates bytes; it does not replace build acceptance. Inspection checks the
+supported NATS source archive and native module closure, including its own
+nats.go v1.53.1 test client, plus the exact Go compiler and NATS image artifacts.
+It authenticates the selected linux/amd64 image index, manifest and config, every
+ordered uncompressed archive layer, and the effective NATS executable. Later
+replacement, whiteout or a linked/special executable ancestor rejects. This is
+a limited image check, not a general image filesystem implementation.
+
+The supported lock is NATS v2.15.2 at source
+`5a815f11a911efa2c88fd1dbfb18ed89a449bfc1`, Go1.27.3 and the accepted exact
+image/executable hashes in [nats_inputs.py](nats_inputs.py). Inline Go metadata
+must bind that source revision, unmodified source, module, compiler and platform.
+Changing the lock requires a reviewed update and new conformance evidence.
+Original source trees are not used as writable preparation directories.
+The inspector rechecks authenticated references before returning; later
+preparation must revalidate them again. Reads have a 120-second aggregate limit,
+128 MiB per in-memory archive and 1 GiB for streamed compiler-artifact hashing.
+Exit 0 means these input checks succeeded; exit 2 means rejection. The report
+always records `runtime_admitted: false`, `source_conformance: NOT_RUN` and
+`process_fence: NOT_RUN`.
+
+`nats_fence.validate_frontier(binding, before, after)` is only a predicate over
+supplied raw filtered Raftz responses for one expected three-voter group. It
+checks independently derived server-name/member-ID bindings, exact account/
+group/voter coverage, peer membership, native roles, leader/term/log term,
+`pindex == committed == applied`, health and empty queues in both brackets.
+Legitimately omitted false health flags follow the pinned native source;
+required progress/queue fields cannot be omitted or invented. Diagnostic
+timestamps and WAL retention counts are not the Raft frontier.
+
+Neither synthetic rows nor this predicate establish recovery or a complete
+fence. A later authenticated collector must freeze the complete relevant
+metadata/stream-group set, retain all raw responses and bracket the full
+collection, U and direct sequence export. It must bind actual process exits,
+fresh process generations with stable names/stores/membership, exact operating
+to sealed/restricted configurations, and an exhaustive framed ingress census
+with responses observed before reply loss. Every source-native barrier and
+unchanged-image standalone/R3 restart test remains NOT_RUN. The offline RunPlan
+does not treat this inspection as verified conformance. Issue #12 remains open.
+
 ## Public seam and trust boundary
 
 `python3 -I test/harness/run.py check REQUEST.json` validates inputs without
