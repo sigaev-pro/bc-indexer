@@ -1,6 +1,7 @@
 """Inspect materialized build inputs without trusting their reported verdicts."""
 
 import email.utils
+from dataclasses import dataclass
 import gzip
 import hashlib
 import json
@@ -273,10 +274,38 @@ def modules(value, downloads, source_module, local=None):
     return acquired
 
 
-def imported_packages(rows, source_module, identifier, local=None):
+def bor_file_target(archive, source_module, source_commit, arguments):
+    """Bind Go's synthetic file-target package to the selected Bor source."""
+    contract.require(archive is not None and source_module == "github.com/ethereum/go-ethereum"
+                     and isinstance(source_commit, str) and re.fullmatch(r"[a-f0-9]{40}", source_commit),
+                     "Bor file target lacks its selected source identity")
+    contract.require(type(arguments) is list and arguments and arguments[0] == "/usr/local/go/bin/go"
+                     and all(isinstance(value, str) for value in arguments)
+                     and native_go_phase(arguments, "bor") == "imports",
+                     "Bor file target lacks its fixed native import command")
+    contract.require(arguments[arguments.index("-ldflags") + 1]
+                     == "-X github.com/ethereum/go-ethereum/params.GitCommit=" + source_commit,
+                     "Bor import command stamps another source commit")
+    contract.require(archive_module(archive) == source_module, "Bor file target uses another archived module")
+    found = set()
+    with tarfile.open(archive, "r:") as source:
+        contract.require(source.pax_headers.get("comment") == source_commit, "Bor archive records another source commit")
+        for member in source:
+            if member.name not in {"cmd", "cmd/cli", "cmd/cli/main.go"}:
+                continue
+            contract.require(member.name not in found
+                             and (member.isfile() if member.name == "cmd/cli/main.go" else member.isdir()),
+                             "Bor file target is duplicated, linked, or outside regular source directories")
+            found.add(member.name)
+    contract.require("cmd/cli/main.go" in found, "Bor file target is missing from its selected source archive")
+
+
+def imported_packages(rows, source_module, identifier, local=None, *, archive=None, arguments=None, source_commit=None):
     contract.require(rows, "compiled package graph is empty")
     local = local or {}
-    seen, main = set(), False
+    seen, main, file_roots = set(), False, 0
+    if identifier == "bor":
+        bor_file_target(archive, source_module, source_commit, arguments)
     cache = "/proof/cache/" + identifier + "/"
     for row in rows:
         name = row.get("ImportPath")
@@ -284,6 +313,17 @@ def imported_packages(rows, source_module, identifier, local=None):
                          and not row.get("Error") and not row.get("DepsErrors"), "compiled package graph is incomplete or duplicated")
         seen.add(name)
         module = row.get("Module")
+        if name == "command-line-arguments":
+            other_files = ("CgoFiles", "CompiledGoFiles", "CFiles", "CXXFiles", "MFiles", "HFiles", "FFiles",
+                           "SFiles", "SwigFiles", "SwigCXXFiles", "SysoFiles", "EmbedFiles", "TestGoFiles", "XTestGoFiles")
+            contract.require(identifier == "bor" and module is None and row.get("Standard", False) is False
+                             and row.get("DepOnly", False) is False and row.get("Name") == "main"
+                             and row.get("Dir") == "/source/cmd/cli" and row.get("GoFiles") == ["main.go"]
+                             and row.get("Match") == ["./cmd/cli/main.go"]
+                             and not any(row.get(field) for field in other_files),
+                             "synthetic file-target package differs from the fixed Bor source entry point")
+            file_roots += 1
+            continue
         if module is None:
             contract.require(row.get("Standard") is True, "nonstandard package has no module identity")
             continue
@@ -311,6 +351,7 @@ def imported_packages(rows, source_module, identifier, local=None):
             contract.require(isinstance(owner.get("Dir"), str) and owner["Dir"].startswith(cache),
                              "native package graph shares another component's cache")
     contract.require(main, "compiled package graph does not contain the selected native root")
+    contract.require(identifier != "bor" or file_roots == 1, "Bor import graph lacks its unique file-target root")
 
 
 def elf(path, platform):
@@ -321,12 +362,49 @@ def elf(path, platform):
                      "materialized native binary has another architecture or is not a 64-bit ELF")
 
 
-def build_info(value, compiler, source_module, commit, platform):
+@dataclass(frozen=True)
+class _NativeBuildProof:
+    identifier: str
+    source_module: str
+    commit: str
+    compiler: str
+    platform: str
+    build_info_sha256: str
+    binary_path: str
+    target: str
+    ldflags: str
+
+
+def build_info(value, compiler, source_module, commit, platform, *, proof=None):
     lines = value.splitlines()
     contract.require(lines and lines[0].endswith(": " + compiler), "binary was built by another Go compiler")
     entries = [line.strip().split("\t") for line in lines[1:]]
     main = [row for row in entries if row[0] == "mod"]
-    contract.require(len(main) == 1 and main[0][1] == source_module, "binary has another native module identity")
+    if proof is not None:
+        contract.require(type(proof) is _NativeBuildProof
+                         and (proof.source_module, proof.commit, proof.compiler, proof.platform)
+                         == (source_module, commit, compiler, platform)
+                         and hashlib.sha256(value.encode()).hexdigest() == proof.build_info_sha256
+                         and lines[0] == proof.binary_path + ": " + compiler,
+                         "native binary metadata lacks its authenticated source and command proof")
+        paths = [row for row in entries if row[0] == "path"]
+        expected_path = "command-line-arguments" if proof.identifier == "bor" else source_module + "/" + proof.target.removeprefix("./")
+        contract.require(paths == [["path", expected_path]], "binary has another or ambiguous native entry point")
+    if proof is not None and proof.identifier == "bor":
+        roots = [row for row in entries if row[0] == "dep" and len(row) > 1 and row[1] == source_module]
+        development = [row for row in entries if row[0] == "dep" and len(row) > 2 and row[2] == "(devel)"]
+        contract.require(not main and roots == [["dep", source_module, "(devel)"]] and development == roots,
+                         "Bor file-target binary lacks its unique selected source dependency")
+        owner = None
+        for row in entries:
+            if row[0] in {"dep", "mod"} and len(row) > 1:
+                owner = row[1]
+            if row[0] == "=>":
+                contract.require(len(row) > 1 and owner != source_module and row[1] != source_module,
+                                 "Bor file-target source dependency is replaced or ambiguous")
+    else:
+        contract.require(len(main) == 1 and len(main[0]) > 1 and main[0][1] == source_module,
+                         "binary has another native module identity")
     settings = {}
     for row in entries:
         if row[0] == "build":
@@ -335,10 +413,15 @@ def build_info(value, compiler, source_module, commit, platform):
             contract.require(key not in settings, "duplicate Go build setting")
             settings[key] = value
         if row[0] in {"dep", "=>"}:
-            contract.require(not row[1].startswith("github.com/nats-io/"), "native binary links the NATS SDK")
+            contract.require(len(row) > 1 and not row[1].startswith("github.com/nats-io/"), "native binary links the NATS SDK or has malformed dependency metadata")
     contract.require(settings.get("GOOS") == "linux" and settings.get("GOARCH") == platform.split("/")[1]
-                     and settings.get("CGO_ENABLED") == "1" and settings.get("-trimpath") == "true"
-                     and commit in settings.get("-ldflags", ""), "native binary lacks its exact source or build settings")
+                     and settings.get("CGO_ENABLED") == "1" and settings.get("-trimpath") == "true",
+                     "native binary lacks its exact platform or build settings")
+    if proof is None:
+        contract.require(commit in settings.get("-ldflags", ""), "native binary lacks its exact source or build settings")
+    elif "-ldflags" in settings:
+        contract.require(settings["-ldflags"] in {proof.ldflags, json.dumps(proof.ldflags)},
+                         "binary metadata reports other injected source flags")
 
 
 def source_archive(path, dependency_inputs):
@@ -439,25 +522,27 @@ def native_go_phase(arguments, identifier):
     return phase
 
 
+def native_invocation(command):
+    argv = command["argv"]
+    if argv[:3] != ["docker", "container", "exec"]:
+        return None
+    offset, environment = 3, {}
+    while offset < len(argv) and argv[offset] == "--env":
+        contract.require(offset + 1 < len(argv) and "=" in argv[offset + 1], "invalid native Go environment")
+        key, value = argv[offset + 1].split("=", 1)
+        contract.require(key not in environment, "native Go environment repeats a variable")
+        environment[key] = value
+        offset += 2
+    contract.require(offset + 1 < len(argv), "native command has no container or executable")
+    return argv[offset], environment, argv[offset + 1:]
+
+
 def module_metadata(identifier, row, root, commands, build=None):
     """Bind alternate metadata to native Go commands, not an offline sumdb replay."""
     contract.require(identifier in contract.MODULES, "unknown native module metadata owner")
     directory = "sources/" + identifier + "/metadata/"
     originals = archived_module_metadata(contract.verify_reference(root, row["source_archive"]))
-
-    def invocation(command):
-        argv = command["argv"]
-        if argv[:3] != ["docker", "container", "exec"]:
-            return None
-        offset, environment = 3, {}
-        while offset < len(argv) and argv[offset] == "--env":
-            contract.require(offset + 1 < len(argv) and "=" in argv[offset + 1], "invalid native Go environment")
-            key, value = argv[offset + 1].split("=", 1)
-            contract.require(key not in environment, "native Go environment repeats a variable")
-            environment[key] = value
-            offset += 2
-        contract.require(offset + 1 < len(argv), "native command has no container or executable")
-        return argv[offset], environment, argv[offset + 1:]
+    invocation = native_invocation
 
     owner, authenticated, positions = None, None, []
     for field, tail in (("downloads", ["mod", "download", "-json", "all"]),
@@ -537,6 +622,90 @@ def module_metadata(identifier, row, root, commands, build=None):
         contract.require(arguments[arguments.index("-o") + 1] == "/proof/" + build["binary"]["path"],
                          "final binary differs from its accepted compile output")
         contract.verify_reference(root, build["binary"])
+        return {"imports": imports[0][1], "compile": compiled[0][1]}
+
+
+def version_arguments(identifier):
+    return ["version", "--long", "--output", "json", "--home", "/tmp/heimdall-version"] if identifier == "heimdall" else ["--version" if identifier == "prysm" else "version"]
+
+
+def native_version(value, identifier, pin):
+    commit = pin["commit"]
+    if identifier == "heimdall":
+        info = contract.parse_json(value)
+        contract.require(info.get("commit") == commit and info.get("version") == pin["version"].removeprefix("v")
+                         and info.get("name") == "heimdall" and info.get("server_name") == "heimdalld",
+                         "Heimdall version smoke did not expose its exact injected metadata")
+    elif identifier == "prysm":
+        contract.require(pin["version"] in value and commit in value and "Local build" not in value and "Moments ago" not in value,
+                         "Prysm version smoke did not expose its exact selected version and commit")
+    else:
+        contract.require(commit in value, "native version smoke did not expose its exact injected commit")
+
+
+def native_build(identifier, build, closure, root, plan, commands):
+    """Validate one actual native binary through the same path used at final acceptance."""
+    import build_execution as execution
+    contract.require(identifier in contract.NATIVE, "unknown native binary owner")
+    contract.require(all(key in build for key in ("source_commit", "binary", "imports", "build_info", "version_output")),
+                     "native binary lacks its source, import, inspection, or version proof")
+    pin = plan["sources"][identifier]
+    commit = pin["commit"]
+    contract.require(build["source_commit"] == closure["source_commit"] == commit, "native source commit differs from its selected pin")
+    archive = contract.verify_reference(root, closure["source_archive"])
+    source_archive(archive, pin["dependency_inputs"])
+    source_module = archive_module(archive)
+    with tarfile.open(archive, "r:") as source:
+        epoch = source.getmember("go.mod").mtime
+        contract.require(source.pax_headers.get("comment") == commit and type(epoch) is int and epoch > 0,
+                         "native source archive lacks its selected commit and timestamp")
+    graph = json_stream(contract.verify_reference(root, closure["modules"]).read_text())
+    local = local_modules(graph, archive)
+    contract.require(contract.parse_json(contract.verify_reference(root, closure["local_modules"]).read_bytes()) == local,
+                     "native local modules differ from the selected source archive")
+    accepted = module_metadata(identifier, closure, root, commands, build)
+    owner, compile_env, compile_args = native_invocation(accepted["compile"])
+    import_owner, import_env, import_args = native_invocation(accepted["imports"])
+    expected = execution.build_arguments(identifier, pin, epoch, graph, plan["limits"]["cpus"])
+    expected_imports = [expected[0], "list", "-deps", "-json", *expected[2:expected.index("-o")], expected[-1]]
+    authenticated = execution.go_environment(identifier, plan["platform"], epoch)
+    offline = {**authenticated, "GOPROXY": "off", "GOSUMDB": "off"}
+    if identifier == "prysm":
+        offline["CGO_CFLAGS"] = "-O2 -D__BLST_PORTABLE__"
+    contract.require(compile_args == expected and import_args == expected_imports and import_owner == owner
+                     and compile_env == import_env == offline, "native compile or import command differs from its selected recipe")
+    imported_packages(json_stream(contract.verify_reference(root, build["imports"]).read_text()), source_module, identifier, local,
+                      archive=archive, arguments=import_args, source_commit=commit)
+    binary = contract.verify_reference(root, build["binary"])
+    info_path = contract.verify_reference(root, build["build_info"])
+    version_path = contract.verify_reference(root, build["version_output"])
+    binary_path = expected[expected.index("-o") + 1]
+    inspection = [(index, command) for index, command in enumerate(commands)
+                  if command.get("stdout") == build["build_info"]]
+    versions = [(index, command) for index, command in enumerate(commands)
+                if command.get("stdout") == build["version_output"]]
+    contract.require(len(inspection) == len(versions) == 1, "native build lacks unique inspection and version output commands")
+    inspection_index, inspected = inspection[0]
+    version_index, versioned = versions[0]
+    contract.require(native_invocation(inspected) == (owner, authenticated, ["/usr/local/go/bin/go", "version", "-m", binary_path]),
+                     "native build-info output belongs to another binary or container")
+    runtime = native_invocation(versioned)
+    runtime_binary = "/usr/local/bin/" + execution.NAMES[identifier]
+    contract.require(runtime is not None and runtime[1] == {} and runtime[2] == [runtime_binary, *version_arguments(identifier)],
+                     "native version output belongs to another command")
+    copies = [(index, command) for index, command in enumerate(commands)
+              if command["argv"] == ["docker", "container", "cp", str(binary), runtime[0] + ":" + runtime_binary]]
+    contract.require(len(copies) == 1 and commands.index(accepted["compile"]) < inspection_index < copies[0][0] < version_index,
+                     "native version command is not bound to its compiled binary copy and order")
+    for command in (inspected, copies[0][1], versioned):
+        contract.command_record(command, root)
+    native_version(version_path.read_text(), identifier, pin)
+    value = info_path.read_bytes().decode()
+    proof = _NativeBuildProof(identifier, source_module, commit, plan["compiler"]["version"], plan["platform"],
+                              build["build_info"]["sha256"], binary_path, expected[-1], expected[expected.index("-ldflags") + 1])
+    elf(binary, plan["platform"])
+    build_info(value, plan["compiler"]["version"], source_module, commit, plan["platform"], proof=proof)
+    oci(build, root, plan, identifier)
 
 
 def fields(lines):
@@ -747,7 +916,8 @@ def validate_materialized(manifest, root, source, now):
         contract.require(contract.parse_json(contract.verify_reference(root, row["local_modules"]).read_bytes()) == local,
                          "retained local modules differ from their selected source archive")
         acquired = modules(graph, json_stream(contract.verify_reference(root, row["downloads"]).read_text()), source_module, local)
-        module_metadata(identifier, row, root, manifest["commands"], manifest["builds"].get(identifier))
+        if identifier not in contract.NATIVE:
+            module_metadata(identifier, row, root, manifest["commands"])
         artifacts = {(item["module"], item["version"]): item for item in row["artifacts"]}
         contract.require(len(artifacts) == len(row["artifacts"]) and set(artifacts) == set(acquired),
                          "retained module archives differ from the complete resolved closure")
@@ -760,12 +930,7 @@ def validate_materialized(manifest, root, source, now):
         contract.require(contract.verify_reference(root, row["verification"]).read_text().strip() == "all modules verified",
                          "resolved module content was not verified by Go")
         if identifier in contract.NATIVE:
-            build = manifest["builds"][identifier]
-            elf(contract.verify_reference(root, build["binary"]), plan["platform"])
-            build_info(contract.verify_reference(root, build["build_info"]).read_text(), plan["compiler"]["version"],
-                       source_module, row["source_commit"], plan["platform"])
-            imported_packages(json_stream(contract.verify_reference(root, build["imports"]).read_text()), source_module, identifier, local)
-            oci(build, root, plan, identifier)
+            native_build(identifier, manifest["builds"][identifier], row, root, plan, manifest["commands"])
     for identifier, row in manifest["os_closures"].items():
         complete = os_closure(row, root, plan, now, manifest["commands"])
         if identifier == "golang-build-image":

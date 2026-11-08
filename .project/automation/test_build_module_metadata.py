@@ -266,7 +266,11 @@ class ModuleMetadataTests(unittest.TestCase):
         env = execution.go_environment("geth", "linux/amd64", 1)
         env.update(GOPROXY="off", GOSUMDB="off")
         self.command(["/usr/local/go/bin/go", "version", "-m", "/proof/binaries/geth/geth"], b"synthetic inspection\n", env)
-        materials.module_metadata("geth", row, self.root, self.runner.commands, build)
+        accepted = materials.module_metadata("geth", row, self.root, self.runner.commands, build)
+        imports = materials.native_invocation(accepted["imports"])[2]
+        self.assertEqual(imports[0], "/usr/local/go/bin/go")
+        self.assertEqual(imports[-1], "./cmd/geth")
+        self.assertEqual(materials.native_go_phase(imports, "geth"), "imports")
         changed = {**build, "imports": row["modules"]}
         with self.assertRaises(ValueError):
             materials.module_metadata("geth", row, self.root, self.runner.commands, changed)
