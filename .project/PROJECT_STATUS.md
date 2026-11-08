@@ -1,5 +1,181 @@
 # Состояние проекта
 
+## E01-01.harness — Build the private BSC Parlia import slice
+
+Current checkpoint: the partial BSC block is READY_FOR_REVIEW with final native
+evidence. All 19 controls on source
+`dcf1a8ca58f60d5a7abb61fe2a9a5ca086e232df` passed in 164.508446058 seconds,
+within the shared 900-second budget. The proof SHA256 is
+`914c619096e81b74a68673fc43659d10777a948a5ac4f1f806f1c2abebe5b0ae`.
+All 42 command results prove cleanup/group absence, and all 12 exact owner-label
+container checks are empty. The campaign rechecked its original authority
+references before PASS. All 44 portable harness tests passed; both independent
+source reviews and source CI run `42506634925` passed. This final checkpoint only
+updates evidence/status; executed harness bytes are unchanged. Final metadata
+review, exact-head CI and protected merge remain pending.
+
+Preparation 4 and its external observer-tool pin are reused with their original
+source identity. Expected negative executions remain FAIL in their own proofs;
+the campaign PASS means their specified rejection was observed. Earlier failed
+preparations, failed imports and rejected driver revisions remain intact. Issue
+12 stays open; public profiles, the complete quick suite, native capture and NATS
+remain NOT_RUN. See [the evidence record](evidence/E01-01.harness.md) for exact
+artifact identities and remaining scope.
+
+### Historical BSC checkpoints
+
+The following entries preserve the status at each earlier source checkpoint;
+their pending statements do not override the current checkpoint above.
+
+The first real 19-control campaign on `3e1e4cb5c3dbf112ca23c2b8635e8c56a820df13`
+completed PASS in 138.263239408 seconds. Its SHA256 is
+`f48040cb71637053a839269c1759acde9b3b77e091f7722c3455a5ab548cdbdd`.
+All 42 command results recorded cleanup/group absence; independent exact-label
+checks found no containers for any of its 12 owners. This remains historical
+evidence because review found two driver defects: generic native-exit matching
+could accept the wrong stage, and resource subchecks did not inherit/check the
+shared campaign deadline at every dispatch.
+
+The corrected driver verifies exact native command stage, exit and diagnostic.
+A bounded virtual-clock regression reproduces the old late dispatch; each new
+resource now requires execution/cleanup reserve and inherits a deadline clipped
+to the campaign. Cleanup still finishes after interruption, with no subsequent
+dispatch. Budget metadata is retained. All 43 harness tests pass in 9.309 seconds;
+the final five focused controls pass in 0.229 seconds. One fresh 19-control
+campaign is required on the corrected source. Helper, preparation and native
+runtime behavior are unchanged; all earlier results remain intact.
+
+The hot-store correction now has actual positive evidence on
+`b6da76388f1e9da481437de769a68061a8b79056`. Preparation 4 passed in
+229.347142061 seconds, preserving preparation 3 and its earlier results.
+The new external observer-tool pin is
+`4b515f3709cbff42c29e458fcd9ebbd734dc8d8d212d8709f70c65d1d6e16c4a`.
+The measured BSC positive passed all seven native commands and the independent
+comparison in 33.054069097 seconds; proof SHA256
+`2457a84ff77753456ab9e6a95d9ee6cc896018dfb2a20a70553e0f6e9d908fc5`.
+All owned groups/containers were absent. The explicit 19-control driver is now
+implemented; its real campaign is pending. All 40 portable tests pass in 9.477
+seconds. Helper/preparation/runtime bytes are unchanged by this control-driver
+checkpoint. Public profiles, full quick, capture/NATS and issue 12 stay open.
+
+The second measured BSC run on `ce1f3b2fd004b339c3a3418da80ca752e1a32e2c`
+retained FAIL after 21.783390208 seconds: the lock-file exceptions worked, but
+native freezer opening still requested write access to `headers.meta` despite
+ReadOnly. All seven command groups and exact-owner containers were cleaned.
+Proof SHA256: `829b35f5699c1b147fd0aeed5701490db6cfbbf624f990768a37e84270d9b801`.
+
+The observer is now explicitly limited to this fresh private two-block hot store.
+It uses native readonly KV plus the native no-freezer wrapper, requires complete
+canonical genesis/blocks/receipts, and validates native transaction/receipt roots.
+Only the existing empty hot-store LOCK gets a writable handle; all database data
+stays read-only. Missing or freezer-only records reject. The helper change needs
+a new external tool pin and preparation 4, linked to successful preparation 3
+without changing that result or resetting history. All 38 portable tests pass.
+
+Authentic BSC preparation attempt 3 on `b706987bf80a952ca03f52d6bc37025ea1003d97`
+passed in 242.454577276 seconds. Public-key verification and genuine Parlia
+preparation/assembly/sealing/self-import succeeded. Tool manifest external pin:
+`c9a2779abd2c6facf25ab12ffb1256f9dc358107d8fa2b018feb6ee9f0a180fe`.
+All four command groups/containers were absent. A fresh real Ethereum positive
+compatibility run passed in 9.823902191 seconds with six commands and clean
+resources. The first measured BSC run then passed its six native CLI commands,
+but its read-only observer could not open Pebble's LOCK handle. It retained FAIL
+after 27.900825399 seconds, with all seven groups/containers cleaned.
+
+The runtime-only correction keeps DB data and native DB options read-only while
+allowing writable handles for exactly the two existing zero-byte LOCK/FLOCK
+files. Their bytes are checked before and after observation. The helper,
+preparation and external tool pin are unchanged. The new boundary test failed
+before implementation; all 37 harness tests now pass in 9.645 seconds. A new
+measured BSC run is required. No full quick/public-profile/NATS result is claimed.
+
+Follow-up review confirmed the immutable-buffer fix, then found that a manifest
+replaced after capture could still leave an invalid reference in a PASS proof.
+Four complete seven-command simulations reproduced this for tool, build, fixture
+and request JSON. Both native runners now retain the request's authenticated
+buffer identity and revalidate all required original authority/scenario/tool
+references before PASS. Replacements produce retained FAIL results; unchanged
+inputs still pass. All 36 portable harness tests pass in 10.554 seconds. This
+repair and the pinned BSC header-number API fix precede the third preparation.
+The earlier source-review failures and both preparation failures remain retained.
+
+The second linked preparation on `be248e8bd6cb1f6ef3c4744636c753f921aca9ef`
+passed module verification and the corrected scratch boundary, then compilation
+identified the pinned BSC API's `(uint64, bool)` return from `ReadHeaderNumber`.
+The helper incorrectly expected a pointer. Preparation recorded FAIL after
+197.309844342 seconds; cleanup was complete and the exact owner had no remaining
+containers. Proof SHA256:
+`8f44fe640675ecb1b7dc13a2dcf6cf82b17c1c8462311426e168b4da18d858bd`.
+The source-confirmed three-line fix retains the explicit missing-header rejection.
+A new linked preparation is required; no key/generation/import success is claimed.
+
+Independent source review rejected the earlier observer authority boundary:
+the tool manifest was hashed and reopened for JSON parsing, allowing a file
+replacement between those steps. The exact replacement was reproduced before
+the fix. Shared bounded JSON primitives now authenticate and parse the same
+immutable buffer. BSC tool/build/fixture/oracle/command admission and the
+corresponding Ethereum JSON inputs use that boundary. Deterministic replacement
+and malformed-JSON controls pass; all 35 harness tests pass in 9.207 seconds.
+The review failure is retained. No second preparation or BSC import has run;
+the next preparation will include both the compiler scratch and JSON fixes.
+
+The first offline BSC preparation on `212810725e69978fd160e65034a7b1843a70d45e`
+failed after 138.149319096 seconds. Native module verification passed, but the
+larger BSC/CGO helper compilation exhausted the unchanged 256 MiB container
+`/tmp`. No key verification, generation or import ran. Proof SHA256:
+`8cc1b14f7dab76dccedac44b32f44aeb846c70d0ca221a839df53aa59037316f`.
+Both owned process groups and the exact-nonce containers were absent after
+cleanup. The failure remains immutable. The scoped correction assigns compiler
+temporary files to owned `/work/build-temp`, with explicit `GOTMPDIR` and
+`TMPDIR`; global native limits remain unchanged. Native dump address casing is
+also normalized with duplicate/incomplete-address rejection. Its two new test
+methods first failed, then all 32 harness tests passed in 8.917 seconds. The
+next action is a new linked preparation attempt on the corrected source.
+
+The first checked BSC checkpoint fixes the independent monetary/system-call
+oracle and the native observation comparison boundary. Four new portable tests
+exercise the positive shape and independent negative controls; all 26 harness
+tests pass. The initial stub failed all four test methods before implementation.
+BSC key verification, fixture preparation, CLI import and observer execution are
+still NOT_RUN. The observer will use a separate caller-pinned tool manifest;
+scenario edits cannot nominate an executable. No BSC runtime claim is made by
+this checkpoint.
+
+The next source checkpoint adds the separate caller-pinned observer tool,
+offline BSC preparation and bounded import entry points. Four additional CLI
+tests cover executable substitution and raw-byte/provenance rejection. Two
+command-provenance counterexamples failed red before the fix; all 30 portable
+harness tests then passed in 9.547 seconds. Actual BSC key verification, helper
+compilation, Parlia generation and CLI import are still NOT_RUN. The next action
+is one owned, finite offline preparation with retained failure evidence.
+
+2026-11-08: The first local Ethereum harness block is accepted in PR #122,
+merge `0a43d21b0a3877ff7b0c1f06f43a952b3a9c9142`. Both independent final
+reviews and exact-head CI passed. The repaired native run passed 13 controls;
+its index digest is `c3ddb69138cd795af6e7800ff52298de87050bc6679bcf291b5cc0e5e9038d28`.
+All three review findings were corrected. The acceptance comment is
+https://github.com/sigaev-pro/bc-indexer/issues/12#issuecomment-6723822587.
+
+The next separate block stays within issue #12: explicit private BSC genesis,
+test-only validator provenance, authentic Parlia preparation/sealing/import,
+independent expected results and bounded owned execution. Use accepted BSC
+build/source artifacts and preserve the Ethereum runner's accepted behavior.
+The sole writer is `/root/boot04_preflight`, in worktree
+`.project/worktrees/e01-harness-bsc-parlia` on branch
+`feat/e01-harness-bsc-parlia`, based on the accepted merge above. Allowed paths
+are `test/harness/**`, this status file and the existing harness evidence record.
+Root owns publication, independent review and protected acceptance.
+
+Start with a narrow feasibility check of the pinned public test keystore,
+genesis/system contracts and native Parlia generation seam. Record the oracle
+before measuring native execution. Preparation and measured execution remain
+separate; measured runs have one deadline of at most 1800 seconds. Preserve
+failed attempts, actual resource ownership and exact source/input bindings.
+Run focused checks locally, publish checked commits promptly, and use mandatory
+exact-head hosted CI for the full suite. Do not unlock dependent tasks from a
+partial block. Issue #12 remains open; all seven public profiles, the full quick
+suite, lifecycle, capture, NATS and later gates remain incomplete or NOT_RUN.
+
 ## E01-01.harness — Repaired source verified; final acceptance pending
 
 2026-11-08: Both independent review axes requested changes to PR #122 at

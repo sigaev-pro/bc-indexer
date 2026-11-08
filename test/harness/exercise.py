@@ -11,6 +11,7 @@ import time
 import signal
 import shutil
 import os
+import math
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from artifacts import admit, load, reference, require
@@ -164,8 +165,14 @@ def exercise(request_path, output):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--owned-sleep":
-        Native(Path(sys.argv[2]), time.monotonic() + 90).command(sys.argv[3], ["/bin/sleep", "30"], [], cap=90)
+    if len(sys.argv) in (4, 5) and sys.argv[1] == "--owned-sleep":
+        deadline = time.monotonic() + 90
+        if len(sys.argv) == 5:
+            inherited = float(sys.argv[4])
+            require(math.isfinite(inherited), "Invalid inherited resource deadline")
+            deadline = min(deadline, inherited)
+        require(time.monotonic() + 35 < deadline, "Insufficient inherited resource cleanup budget")
+        Native(Path(sys.argv[2]), deadline).command(sys.argv[3], ["/bin/sleep", "30"], [], cap=90)
         raise SystemExit(0)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path)

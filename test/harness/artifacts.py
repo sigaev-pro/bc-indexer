@@ -125,7 +125,7 @@ def sources_unchanged(origins, deadline=None):
             "Harness source changed during run")
 
 
-def artifact(value, maximum=64 * 1024 * 1024, root=None, deadline=None):
+def artifact_path(value, maximum=64 * 1024 * 1024, root=None):
     closed(value, {"path", "sha256", "size_bytes"}, "artifact")
     require(type(value["path"]) is str, "Invalid artifact path")
     require(type(value["size_bytes"]) is int and 0 <= value["size_bytes"] <= maximum,
@@ -136,6 +136,11 @@ def artifact(value, maximum=64 * 1024 * 1024, root=None, deadline=None):
     if root is not None:
         require(not path.is_absolute() and ".." not in path.parts, "Unsafe build artifact path")
         path = root / path
+    return path
+
+
+def artifact(value, maximum=64 * 1024 * 1024, root=None, deadline=None):
+    path = artifact_path(value, maximum, root)
     actual = digest(path, value["size_bytes"], value["size_bytes"], deadline)
     require(actual == (value["sha256"], value["size_bytes"]), "Artifact bytes changed")
     return path
@@ -146,8 +151,7 @@ def read_bytes(path, maximum, deadline=None):
         return b"".join(chunks(descriptor, size, deadline))
 
 
-def load(path, maximum=64 * 1024 * 1024, deadline=None):
-
+def decode_json(data, deadline=None):
     def pairs(rows):
         result = {}
         for key, value in rows:
@@ -155,15 +159,68 @@ def load(path, maximum=64 * 1024 * 1024, deadline=None):
             result[key] = value
         return result
 
-    result = json.loads(read_bytes(path, maximum, deadline).decode("utf-8"), object_pairs_hook=pairs,
+    result = json.loads(data.decode("utf-8"), object_pairs_hook=pairs,
                         parse_constant=lambda _: (_ for _ in ()).throw(Rejected("Nonfinite JSON")))
     check_deadline(deadline)
     return result
 
 
+def load(path, maximum=64 * 1024 * 1024, deadline=None):
+    return decode_json(read_bytes(path, maximum, deadline), deadline)
+
+
+def read_artifact(value, maximum=64 * 1024 * 1024, root=None, deadline=None):
+    """Authenticate the same bounded immutable buffer returned to the caller."""
+    path = artifact_path(value, maximum, root)
+    with opened(path, maximum, value["size_bytes"], deadline) as (descriptor, size):
+        data = b"".join(chunks(descriptor, size, deadline))
+    require(hashlib.sha256(data).hexdigest() == value["sha256"], "Artifact bytes changed")
+    return path, data
+
+
+def json_artifact(value, maximum=64 * 1024 * 1024, root=None, deadline=None):
+    path, data = read_artifact(value, maximum, root, deadline)
+    return path, decode_json(data, deadline)
+
+
+def pinned_json(path, expected_sha256, maximum=64 * 1024 * 1024, deadline=None):
+    require(type(expected_sha256) is str and re.fullmatch(r"[0-9a-f]{64}", expected_sha256), "Invalid external JSON pin")
+    data = read_bytes(path, maximum, deadline)
+    require(hashlib.sha256(data).hexdigest() == expected_sha256, "JSON does not match the external trusted pin")
+    return {"path": str(path), "sha256": expected_sha256, "size_bytes": len(data)}, decode_json(data, deadline)
+
+
+def captured_json(path, maximum=64 * 1024 * 1024, deadline=None):
+    data = read_bytes(path, maximum, deadline)
+    ref = {"path": str(path), "sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
+    return ref, decode_json(data, deadline)
+
+
+def revalidate_authority(admitted):
+    """A PASS must still resolve every original authority/input reference."""
+    deadline = admitted["deadline"]
+    request = admitted["request"]
+    for ref in (admitted["request_ref"], request["build_manifest"], request["fixture"]):
+        artifact(ref, deadline=deadline)
+    for name in admitted["paths"]:
+        artifact(admitted["fixture"][name], 16 * 1024 * 1024, deadline=deadline)
+    component = "bsc" if "tool" in admitted else "geth"
+    build_root = Path(request["build_manifest"]["path"]).parent
+    artifact(admitted["manifest"]["builds"][component]["binary"], 256 * 1024 * 1024, build_root, deadline)
+    if "tool" in admitted:
+        artifact(admitted["tool_ref"], 1024 * 1024, deadline=deadline)
+        tool = admitted["tool"]
+        for name in ("source_archive", "source", "binary"):
+            artifact(tool[name], 256 * 1024 * 1024, deadline=deadline)
+        for ref in tool["metadata"]:
+            artifact(ref, 1024 * 1024, deadline=deadline)
+        for row in tool["commands"]:
+            for ref in row.values():
+                artifact(ref, 8 * 1024 * 1024, deadline=deadline)
+
+
 def build_input(value, profile, deadline=None):
-    path = artifact(value, deadline=deadline)
-    manifest = load(path, deadline=deadline)
+    path, manifest = json_artifact(value, deadline=deadline)
     require(manifest.get("evidence_kind") == "actual-build" and
             manifest.get("task_id") == "E01-01.builds", "An accepted actual build is required")
     build = manifest["builds"]["geth"]
@@ -183,7 +240,7 @@ def build_input(value, profile, deadline=None):
 def admit(path, started=None, deadline=None):
     started = time.monotonic() if started is None else started
     deadline = min(started + 1800, deadline) if deadline is not None else started + 1800
-    request = load(path, 1024 * 1024, deadline)
+    request_ref, request = captured_json(path, 1024 * 1024, deadline)
     closed(request, {"schema_version", "build_manifest", "profile_association", "fixture",
                      "deadline_seconds"}, "request")
     require(type(request["schema_version"]) is int and request["schema_version"] == 1,
@@ -193,15 +250,14 @@ def admit(path, started=None, deadline=None):
     deadline = min(deadline, started + request["deadline_seconds"])
     check_deadline(deadline)
     build_path, manifest, binary, image = build_input(request["build_manifest"], request["profile_association"], deadline)
-    fixture_path = artifact(request["fixture"], 1024 * 1024, deadline=deadline)
-    fixture = load(fixture_path, deadline=deadline)
+    fixture_path, fixture = json_artifact(request["fixture"], 1024 * 1024, deadline=deadline)
     closed(fixture, {"schema_version", "identity", "genesis", "blocks", "full_chain", "expected",
                      "prepared_blocks", "generator"}, "fixture")
     require(type(fixture["schema_version"]) is int and fixture["schema_version"] == 1,
             "Unsupported fixture version")
     paths = {key: artifact(fixture[key], 16 * 1024 * 1024, deadline=deadline) for key in
              ("genesis", "blocks", "full_chain", "expected", "generator")}
-    genesis = load(paths["genesis"], deadline=deadline)
+    _, genesis = json_artifact(fixture["genesis"], 16 * 1024 * 1024, deadline=deadline)
     config = genesis["config"]
     identity = fixture["identity"]
     closed(identity, {"kind", "chain_id", "genesis_hash", "config_sha256"}, "fixture identity")
@@ -210,11 +266,11 @@ def admit(path, started=None, deadline=None):
             identity["chain_id"] == config["chainId"] == 31337 and
             identity["config_sha256"] == config_sha and
             re.fullmatch(r"0x[0-9a-f]{64}", identity["genesis_hash"]), "Fixture identity mismatch")
-    expected = load(paths["expected"], deadline=deadline)
+    _, expected = json_artifact(fixture["expected"], 16 * 1024 * 1024, deadline=deadline)
     require(fixture["prepared_blocks"] and len(fixture["prepared_blocks"]) == 2,
             "Exactly two prepared blocks are required")
     from compare import validate_oracle
     validate_oracle(expected, fixture["prepared_blocks"])
-    return {"request": request, "manifest": manifest, "build_path": build_path,
+    return {"request": request, "request_ref": request_ref, "manifest": manifest, "build_path": build_path,
             "binary": binary, "image": image, "fixture": fixture, "paths": paths,
             "expected": expected, "deadline": deadline}

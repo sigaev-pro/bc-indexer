@@ -11,7 +11,7 @@ import uuid
 import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from artifacts import admit, reference, require, load, source_snapshot, sources_unchanged
+from artifacts import admit, reference, require, load, source_snapshot, sources_unchanged, revalidate_authority
 from compare import compare
 from native import Native, copy_verified, new_output
 
@@ -36,7 +36,7 @@ def measured(request_path, output, start):
              "profile_results": {profile: "NOT_RUN" for profile in PROFILES},
              "case_results": [], "remaining_cases": "All public profile/case cells are NOT_RUN",
              "profile_association": admitted["request"]["profile_association"],
-             "fixture_identity": admitted["fixture"]["identity"], "request": reference(request_path, deadline=deadline),
+             "fixture_identity": admitted["fixture"]["identity"], "request": admitted["request_ref"],
              "build_manifest": admitted["request"]["build_manifest"], "fixture": admitted["request"]["fixture"],
              "deadline_seconds": admitted["request"]["deadline_seconds"], "scenarios": [], "cleanup_complete": False}
     proof["harness_sources"] = source_refs
@@ -72,6 +72,7 @@ def measured(request_path, output, start):
         proof["scenarios"] = compare(admitted, dumps, work / "export.rlp")
         require(time.monotonic() < deadline, "Run deadline expired during comparison")
         sources_unchanged(origins, deadline)
+        revalidate_authority(admitted)
         proof["result"] = "PASS"
     except (ValueError, OSError, KeyError, TypeError, InterruptedError, subprocess.SubprocessError) as error:
         proof["error"] = str(error)
