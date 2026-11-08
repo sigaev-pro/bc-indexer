@@ -2,6 +2,23 @@
 
 ## E01-01.harness — Build the private BSC Parlia import slice
 
+Authentic BSC preparation attempt 3 on `b706987bf80a952ca03f52d6bc37025ea1003d97`
+passed in 242.454577276 seconds. Public-key verification and genuine Parlia
+preparation/assembly/sealing/self-import succeeded. Tool manifest external pin:
+`c9a2779abd2c6facf25ab12ffb1256f9dc358107d8fa2b018feb6ee9f0a180fe`.
+All four command groups/containers were absent. A fresh real Ethereum positive
+compatibility run passed in 9.823902191 seconds with six commands and clean
+resources. The first measured BSC run then passed its six native CLI commands,
+but its read-only observer could not open Pebble's LOCK handle. It retained FAIL
+after 27.900825399 seconds, with all seven groups/containers cleaned.
+
+The runtime-only correction keeps DB data and native DB options read-only while
+allowing writable handles for exactly the two existing zero-byte LOCK/FLOCK
+files. Their bytes are checked before and after observation. The helper,
+preparation and external tool pin are unchanged. The new boundary test failed
+before implementation; all 37 harness tests now pass in 9.645 seconds. A new
+measured BSC run is required. No full quick/public-profile/NATS result is claimed.
+
 Follow-up review confirmed the immutable-buffer fix, then found that a manifest
 replaced after capture could still leave an invalid reference in a PASS proof.
 Four complete seven-command simulations reproduced this for tool, build, fixture

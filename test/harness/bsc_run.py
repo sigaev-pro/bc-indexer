@@ -20,6 +20,17 @@ from native import Native, new_output
 from run import PROFILES
 
 
+def observer_mounts(inputs, work, observations, deadline):
+    """Readonly native engines still need writable handles for their empty locks."""
+    mounts = [(inputs, "/inputs", True), (work, "/work", True), (observations, "/observations", False)]
+    refs = []
+    for name in ("data/geth/chaindata/LOCK", "data/geth/chaindata/ancient/chain/FLOCK"):
+        path = work / name
+        refs.append(reference(path, 0, deadline))
+        mounts.append((path, "/work/" + name, False))
+    return mounts, refs
+
+
 def measured(request_path, tool_path, tool_sha, output, started):
     admitted = admit(request_path, tool_path, tool_sha, started)
     deadline = admitted["deadline"]
@@ -60,8 +71,10 @@ def measured(request_path, tool_path, tool_sha, output, started):
             if number:
                 dumps.append(path)
         runner.command(admitted["image"], flags + ["export", "/work/export.rlp"], mounts)
-        runner.command(admitted["tool"]["compiler"], ["/inputs/observer", "observe", "/work/data", "/observations"],
-                       [(inputs, "/inputs", True), (work, "/work", True), (observations, "/observations", False)], memory="1g")
+        observer_binds, proof["observer_locks"] = observer_mounts(inputs, work, observations, deadline)
+        runner.command(admitted["tool"]["compiler"], ["/inputs/observer", "observe", "/work/data", "/observations"], observer_binds, memory="1g")
+        for lock in proof["observer_locks"]:
+            artifact(lock, 0, deadline=deadline)
         admitted["header_observations"] = headers
         compare_headers(admitted)
         export = reference(work / "export.rlp", 16 * 1024 * 1024, deadline)

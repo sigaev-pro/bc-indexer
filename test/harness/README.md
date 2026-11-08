@@ -194,7 +194,10 @@ output state or native dispatch. Accepted Ethereum interfaces remain unchanged.
 
 The BSC runtime uses the same owned command guardian and six native CLI commands
 as the Ethereum slice, followed by the pinned helper opening the imported BSC
-database read-only. It does not start a node service. Native JSON dump headers at
+database read-only. Two existing empty native lock files have writable bind
+exceptions because Pebble/freezer require writable lock handles; their contents
+are verified before and after observation. All DB data remains mounted read-only,
+and both native ReadOnly options stay enabled. It does not start a node service. Native JSON dump headers at
 heights 0, 1 and 2 bind the private genesis and both blocks; the complete native
 export must match the admitted chain. The observer reads native canonical blocks
 and derived receipts from that actual database. Its block/config/transaction/
@@ -207,8 +210,10 @@ The first BSC preparation retained a FAIL when helper compilation filled the
 container's small `/tmp`. The corrected BSC-only command uses an owned
 `/work/build-temp` through `GOTMPDIR` and `TMPDIR`; global command limits are
 unchanged. Preparation accepts `--previous-attempt FAILED_PROOF --correction
-DESCRIPTION` to retain that history under a new identity. Native BSC import is
-still NOT_RUN. No complete quick-suite or public-profile result is claimed.
+DESCRIPTION` to retain that history under a new identity. Authentic preparation
+has now passed. The first measured BSC run retained FAIL at observer locking after
+six successful native CLI commands; a corrected measured run remains required.
+No complete quick-suite or public-profile result is claimed.
 
 ## Remaining work in issue 12
 

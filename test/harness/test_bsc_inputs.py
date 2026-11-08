@@ -212,6 +212,11 @@ class BscInputTests(unittest.TestCase):
                         stdout = self.output / "logs" / f"{index:03d}.stdout"
                         stderr = stdout.with_suffix(".stderr")
                         stdout.write_text(""); stderr.write_text("")
+                        if "init" in argv:
+                            for name in ("LOCK", "ancient/chain/FLOCK"):
+                                lock = self.output / "state/data/geth/chaindata" / name
+                                lock.parent.mkdir(parents=True, exist_ok=True)
+                                lock.write_bytes(b"")
                         if "dump" in argv:
                             number = int(argv[-1])
                             write_json(stdout, shape.states[max(0, number - 1)])
@@ -231,6 +236,25 @@ class BscInputTests(unittest.TestCase):
                 self.assertEqual(result["result"], "PASS" if changed_name is None else "FAIL", result)
                 if changed_name:
                     self.assertIn("Artifact bytes changed", result["error"])
+
+    def test_observer_mounts_only_two_existing_empty_lock_files_writable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            for name in ("inputs", "state", "observations"):
+                (root / name).mkdir()
+            locks = [root / "state/data/geth/chaindata" / name for name in ("LOCK", "ancient/chain/FLOCK")]
+            for path in locks:
+                path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"")
+            mounts, refs = bsc_run.observer_mounts(root / "inputs", root / "state", root / "observations", time.monotonic() + 10)
+            self.assertIn((root / "state", "/work", True), mounts)
+            self.assertEqual([source for source, _, readonly in mounts if not readonly], [root / "observations", *locks])
+            self.assertEqual([row["size_bytes"] for row in refs], [0, 0])
+            locks[0].write_bytes(b"not a native empty lock")
+            with self.assertRaises(artifacts.Rejected):
+                bsc_run.observer_mounts(root / "inputs", root / "state", root / "observations", time.monotonic() + 10)
+            locks[0].unlink(); locks[0].symlink_to(locks[1])
+            with self.assertRaises(artifacts.Rejected):
+                bsc_run.observer_mounts(root / "inputs", root / "state", root / "observations", time.monotonic() + 10)
 
 
 if __name__ == "__main__":
