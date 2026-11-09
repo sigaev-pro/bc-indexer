@@ -1,5 +1,19 @@
 # Дерево решений и журнал интервью
 
+## D96 — Close E01-01.harness on local private profiles (2026-11-09)
+
+The owner chose the closure boundary for issue #12, E01-01.harness. The task closes on reproducible private local native-seam fixtures for the three families: Ethereum (Geth import), BSC (Parlia import) and Polygon (Bor import). Its remaining output is one test-only runner that consumes a frozen RunPlan, verifies a test-only local ProfileManifest per profile, checks resources and phase deadlines, dispatches the accepted family slices through their native seams, records runtime admission for local native-seam plans, and retains harness evidence with phase timing. This meets the #12 artifact criterion in TASK_DECOMPOSITION (passport with real inputs, commands and independent expected; runner calls the native seam and keeps evidence).
+
+Public profile environments for all seven profiles stay with E06, as TESTING_CONTRACT already assigns them. Public sync, testnet funds, public smoke and the complete public ProfileManifest fields stay outside #12. Private local evidence earns no public-profile credit, and every public profile slot remains NOT_RUN until E06 and E07 provide it. Mainnet and testnet evidence still cannot replace one another.
+
+After independent review of the first runner block, the owner confirmed three further boundaries on 2026-11-09:
+
+- Polygon local supporting services, their test credentials and the dedicated Polygon own-L1 fixture inputs (Heimdall and the L1 execution/consensus pair) move from E01-01.harness to E05-01.polygon_observer, the task that consumes them. E05-01.polygon_observer prepares and verifies them before using them. Existing ISSUE_CATALOG, IMPLEMENTATION_GATES and TASK_DECOMPOSITION text that names E01-01.harness as the source of these local inputs is read through this decision. Recorded technical decision, not an owner answer: Ethereum and BSC native-seam fixtures need no supporting service; a later local-e2e plan that needs one (for example an Ethereum consensus client) records its owner when that plan is introduced.
+- The harness owns no AC verdict and writes no RunManifest. A v3 RunManifest records PASS or FAIL outcomes that only the owning task may issue, so AC verdicts and their RunManifests, including AC-CAP-01-01 (owner E01-02.lifecycle_seams), stay with their owning tasks. Every CaseResult the harness writes stays NOT_RUN.
+- For native-seam plans the harness writes a D87 ReaderBoundaryManifest with `run_started: false` and all six conditions NOT_RUN, because no capture, Gateway or NATS delivery exists at E01. The first `run_started: true` boundary from real delivery belongs to E03-11.block_lifecycle, which already owns early NATS integration and reader smoke.
+
+This decision changes where #12 stops and which task produces these inputs and records. It does not change product guarantees, acceptance cases, gates, or the rule that partial blocks do not unlock dependent tasks. Dependent E01 tasks start after #12 is accepted under this boundary. The open Go `settled()` raftz field-name follow-up from PR #128 remains part of #12.
+
 ## D95 — Issue-driven delivery and the remaining approved stages (2026-11-07)
 
 After confirming publication was complete and discussing step 2, the owner instructed to do everything. Continue the remaining agreed stages in order: establish a simpler issue-driven workflow; complete actual reproducible client builds; then deliver the first complete Ethereum-to-NATS flow and its checks before extending network coverage. This resumes implementation and supersedes D94's publication-only stopping point.

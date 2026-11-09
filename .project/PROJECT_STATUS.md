@@ -1,8 +1,41 @@
 # Состояние проекта
 
+## E01-01.harness — Unified local runner and runtime admission (D96)
+
+Status: READY_FOR_REVIEW for the repaired local runner. Review 001 (head
+`36b1550`) returned REQUEST_CHANGES from Spec and Standards. The owner confirmed
+the D96 boundaries: local supporting services and Polygon own-L1 inputs move to
+E05-01, the harness writes no RunManifest, and the first `run_started: true`
+reader boundary belongs to E03-11. Executed source `b338c60` makes the runner
+fail closed (lock, signals, always teardown and record), scopes cleanup to its
+own containers, takes phase deadlines from the plan and adds negative controls.
+Review 002 found a run record that could be skipped and untested repair paths;
+executed source `b04ff76` always records the run, blocks signals while stopping a
+child, fails cleanup on foreign harness containers and adds the missing controls.
+Review 003 found a FAIL record written into a pre-existing output and a late
+signal that could escape the final write; executed source `f2b351e` writes the
+partial record only into an output this admission created, restores handlers
+before unblocking signals, and adds the missing controls. Measured run 04 passed
+all three families in 33.011 seconds of execution with clean teardown. Remaining #12 items after this block: the Go `settled()` raftz
+field-name follow-up from PR #128. Next: exact-head CI, fresh Spec and Standards
+reviews, protected acceptance.
+
+D96 sets the #12 closure boundary on private local native-seam fixtures; public
+profile environments stay with E06 and all seven public slots remain NOT_RUN.
+
+Accepted prior block: PR #128 (unchanged-image NATS fence) is accepted at merge
+`e2113d7356000b689240e8a0005b80357867ee36` from reviewed head `a00c7b5`, after
+exact-head CI and final Spec and Standards PASS. Executed source `599521b`;
+passing attempt 06 proof `e7442a9b42e6922e319c19d0e628d95cdf17f7829444e0ac63953c0fc216e301`.
+The Go `settled()` raftz field-name follow-up remains open inside #12. Issue #12
+remains open; no dependent task is unlocked.
+
+Base: `e2113d7356000b689240e8a0005b80357867ee36`.
+Branch/worktree: `feat/e01-harness-local-runner` / `e01-harness-local-runner`.
+
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: READY_FOR_REVIEW for the actual unchanged-image fence. Executed source
+Status: ACCEPTED in PR #128 (see the section above). Executed source
 `599521b3de0ba8a4fe87644c2527bbe17d4b5892` prepared successfully in 48.913
 seconds; driver tests run with the pinned Linux compiler passed (14 methods,
 eight handshake subcases). Measured attempt 06, linked to FAIL05, passed both
