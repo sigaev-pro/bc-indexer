@@ -17,6 +17,30 @@ portable tests in `test/harness`, task evidence and status documents. Not
 touched: `core/capture` (E01-02.owned_capture) and the harness tooling files of
 the parallel tooling session.
 
+Reviews: head `9a842ec` has final Spec PASS and Standards PASS (round 3),
+with P3 notes only (a missing-profile-result control, a `source_commit` value
+check in a run test, the `FreezeLimit` comment for a zero limit, and the
+preparation `attempt_index`, which counts attempts per build manifest, not
+TESTING_CONTRACT retries). Retained records under
+`.project/automation/runs/d95-20261107/`: `e01-02-pins-preparation-01-7d6507a`
+(FAIL: files edited during the run, cleanup complete, 1,569.7 s),
+`e01-02-pins-admission-refused-01-1017878.*` (lock held by another session, no
+output), and `e01-02-pins-go-mutants-01-1017878` (INCOMPLETE, stopped because
+it ran outside the single-writer lock; see its STOPPED.md).
+
+Resume point (paused 2026-11-10 by coordinator request): preparation
+`e01-02-pins-preparation-02-9a842ec` was compiling from the clean detached
+worktree `scratchpad/exec-9a842ec`; the orchestration script
+(`scratchpad/measure.sh`) was stopped so no later step starts. If the
+shutdown cut preparation 02 off, keep its directory as an interrupted attempt
+(D83) and do not delete it. Next step after restart: remove only leftover
+containers labeled with this task's nonces or `extractor.pins.dev`; check
+`preparation.json` of preparation 02; if it is not a PASS, start
+`e01-02-pins-preparation-03-9a842ec` linked to it with `--previous-attempt`,
+`--previous-sha256` and a correction; then rerun `measure.sh` steps for run
+`e01-02-pins-run-01-9a842ec` and `e01-02-pins-go-mutants-02-9a842ec` (each under
+the lock), record the evidence, and post the PR review summary.
+
 BLOCKED_DECISION (owner): the closure boundary for #13. Its ACs list all seven
 public profiles in `local-e2e` and `harness` modes, while D96 keeps public
 profile environments with E06. D96 settled this only for #12. Until the owner
