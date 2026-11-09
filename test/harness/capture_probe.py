@@ -15,6 +15,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -23,8 +24,8 @@ import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from artifacts import (Rejected, artifact, check_deadline, copy_artifact, json_artifact, load, read_bytes,
-                       reference, require)
+from artifacts import (Rejected, artifact, check_deadline, copy_artifact, json_artifact, load, pinned_json,
+                       read_bytes, reference, require)
 from native import Native, new_output
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,26 +56,48 @@ def stop(signum, frame):
 
 @contextlib.contextmanager
 def single_writer():
-    """Hold the host-wide harness lock and refuse to start beside foreign harness containers."""
+    """Hold the host-wide harness lock and refuse to start beside foreign harness containers.
+
+    Stop signals raise Interrupted inside the block. On exit, signals stay blocked
+    until the handlers are restored and the lock is released, so a late signal
+    cannot cut the record write short.
+    """
+    original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
     descriptor = os.open(LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     handle = os.fdopen(descriptor, "r+")
+    handlers = {}
     try:
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise Rejected("Another local runner holds the single-writer lock") from None
-        listed = subprocess.run(["docker", "ps", "-aq", "--filter", "label=extractor.harness"],
-                                capture_output=True, text=True, timeout=60)
+        try:
+            listed = subprocess.run(["docker", "ps", "-aq", "--filter", "label=extractor.harness"],
+                                    capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError) as error:
+            raise Rejected(f"Docker cannot list harness containers: {error}") from None
         require(listed.returncode == 0, "Docker cannot list harness containers")
         require(not listed.stdout.strip(), "Foreign harness containers exist; refusing to start")
         handlers = {number: signal.signal(number, stop) for number in STOP_SIGNALS}
-        try:
-            yield
-        finally:
-            for number, handler in handlers.items():
-                signal.signal(number, handler)
+        yield
     finally:
+        signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+        for number, handler in handlers.items():
+            signal.signal(number, handler)
         handle.close()
+        signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
+
+
+def write_record(path, record):
+    """Write the record with stop signals blocked; single_writer unblocks them later."""
+    signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+    path.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
+
+
+def refuse_inside(output, roots):
+    require(output.is_absolute(), "Output must be an absolute path")
+    for root in roots:
+        require(not output.is_relative_to(root), f"Output cannot be inside {root}")
 
 
 def source_state():
@@ -120,26 +143,25 @@ def prepare(manifest_path, expected_sha, output):
     started = time.monotonic()
     deadline = started + PREPARATION_SECONDS
     require(manifest_path.is_absolute(), "BuildManifest path must be absolute")
-    manifest_ref = reference(manifest_path, 64 * 1024 * 1024, deadline)
-    require(manifest_ref["sha256"] == expected_sha, "BuildManifest digest mismatch")
-    _, manifest = json_artifact(manifest_ref, deadline=deadline)
+    manifest_ref, manifest = pinned_json(manifest_path, expected_sha, 64 * 1024 * 1024, deadline)
     require(manifest.get("evidence_kind") == "actual-build" and manifest.get("task_id") == "E01-01.builds",
             "An accepted actual build is required")
     root = manifest_path.parent
-    require(not output.is_relative_to(root) and not output.is_relative_to(ROOT / "core"),
-            "Preparation cannot write inside accepted inputs")
+    refuse_inside(output, (root, ROOT))
+    state = source_state()
     with single_writer():
         output = new_output(output)
-        native = Native(output, deadline)
+        native = None
         record = {"schema_version": 1, "kind": "owned-capture-probe-preparation", "result": "FAIL",
-                  "run_id": uuid.uuid4().hex, "source": source_state(), "build_manifest": manifest_ref,
-                  "native_owner_nonce": native.nonce, "families": {}}
+                  "run_id": uuid.uuid4().hex, "source": state, "build_manifest": manifest_ref, "families": {}}
         try:
+            native = Native(output, deadline)
+            record["native_owner_nonce"] = native.nonce
             record["fixture"] = copy_sources(FIXTURE_FILES, FIXTURE, output / "fixture", deadline)
             record["harness_code"] = copy_sources(("capture_probe.py", "native.py", "owned.py", "artifacts.py"),
                                                   Path(__file__).parent, output / "harness-code", deadline)
             compiler = manifest["image_inputs"]["golang-build-image"]["reference"]
-            require(compiler.startswith("docker.io/library/golang@sha256:"), "Unpinned compiler")
+            require(re.fullmatch(r"docker.io/library/golang@sha256:[0-9a-f]{64}", compiler), "Unpinned compiler")
             record["compiler_image"] = compiler
             for family in FAMILIES:
                 record["families"][family] = prepare_family(family, manifest, root, output, native, compiler, deadline)
@@ -150,22 +172,24 @@ def prepare(manifest_path, expected_sha, output):
             # Unit tests with the race detector use the accepted compiler and only the module itself.
             stdout = native.command(compiler, ["/usr/local/go/bin/go", "test", "-race", "-count=1", "-cover", "-v", "."],
                                     [(output / "geth/capture", "/capture", True), (unit / "build-cache", "/cache", False),
-                                     (unit / "gopath", "/gopath", False), (unit / "gotmp", "/gotmp", False)], cap=300, memory="2g", cwd="/capture",
-                                    environment={"CGO_ENABLED": "1", "GOCACHE": "/cache", "GOPATH": "/gopath", "GOTMPDIR": "/gotmp",
-                                                 "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off",
-                                                 "GOTOOLCHAIN": "local", "GOWORK": "off", "GOENV": "off"})
+                                     (unit / "gopath", "/gopath", False), (unit / "gotmp", "/gotmp", False)],
+                                    cap=300, memory="2g", cwd="/capture",
+                                    environment={"CGO_ENABLED": "1", "GOCACHE": "/cache", "GOPATH": "/gopath",
+                                                 "GOTMPDIR": "/gotmp", "GOFLAGS": "-mod=readonly", "GOPROXY": "off",
+                                                 "GOSUMDB": "off", "GOTOOLCHAIN": "local", "GOWORK": "off", "GOENV": "off"})
             record["unit_tests"] = reference(stdout)
             require(b"\nok  \tgithub.com/sigaev-pro/bc-indexer/core/capture" in b"\n" + stdout.read_bytes(),
                     "Unit tests did not pass")
             record["result"] = "PASS"
-        except Interrupted as error:
-            record["error"] = str(error)
-        except (Rejected, OSError, KeyError, ValueError, TypeError, subprocess.SubprocessError) as error:
-            record["error"] = str(error)
+        except (Interrupted, Exception) as error:
+            record["error"] = f"{type(error).__name__}: {error}"
         finally:
-            record.update(commands=native.commands, cleanup_complete=native.cleanup_complete,
+            record.update(commands=native.commands if native else [],
+                          cleanup_complete=native.cleanup_complete if native else True,
                           elapsed_seconds=time.monotonic() - started)
-            (output / "preparation.json").write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
+            if not record["cleanup_complete"]:
+                record["result"] = "FAIL"
+            write_record(output / "preparation.json", record)
     return output, record
 
 
@@ -193,6 +217,7 @@ def prepare_family(family, manifest, root, output, native, compiler, deadline):
     del data
     row["patch"] = patch_interpreter(source)
     probe = source / "cmd/extractor-capture-probe"
+    probe.parent.mkdir(exist_ok=True)
     row["probe_sources"] = copy_sources(PROBE_FILES, FIXTURE, probe, deadline)
     row["capture_sources"] = copy_sources(CAPTURE_FILES, ROOT / "core/capture", directory / "capture", deadline)
     version = go_directive((source / "go.mod").read_text())
@@ -278,9 +303,11 @@ def compare(observation, oracle, family):
             if row.get("callback_wait_rejected") is not True:
                 fail("a wait inside the opcode callback was not rejected")
         else:
-            if len(fields) != want["block_fields"] or not all(
-                    field.get("tag") == 3 and field.get("length", 0) > 0 and
-                    field.get("chunks") == -(-field["length"] // want["chunk_bytes"]) for field in fields):
+            blocks = observation.get("block_rlp_sha256") or []
+            if len(fields) != want["block_fields"] or len(blocks) != want["block_fields"] or not all(
+                    field.get("tag") == 3 and field.get("length", 0) > 0 and field.get("sha256") == block and
+                    field.get("chunks") == -(-field["length"] // want["chunk_bytes"])
+                    for field, block in zip(fields, blocks)):
                 fail("block fields differ from the oracle")
         pause = row.get("pause")
         if want["pause"] is None:
@@ -298,61 +325,71 @@ def compare(observation, oracle, family):
     return failures
 
 
+def checked_compare(observation, oracle, family):
+    """Compare, turning a malformed observation into a failure instead of an exception."""
+    try:
+        return compare(observation, oracle, family)
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        return [f"malformed observation: {type(error).__name__}: {error}"]
+
+
 def run(preparation_path, expected_sha, output):
     started = time.monotonic()
     deadline = started + RUN_SECONDS
     require(preparation_path.is_absolute(), "Preparation path must be absolute")
-    preparation_ref = reference(preparation_path, 16 * 1024 * 1024, deadline)
-    require(preparation_ref["sha256"] == expected_sha, "Preparation digest mismatch")
-    preparation = load(preparation_path, deadline=deadline)
+    preparation_ref, preparation = pinned_json(preparation_path, expected_sha, 16 * 1024 * 1024, deadline)
     require(preparation.get("kind") == "owned-capture-probe-preparation" and preparation.get("result") == "PASS" and
             preparation.get("cleanup_complete") is True, "A passing preparation is required")
-    require(not output.is_relative_to(preparation_path.parent), "Run output cannot be inside the preparation")
+    manifest_root = Path(preparation["build_manifest"]["path"]).parent
+    refuse_inside(output, (preparation_path.parent, manifest_root, ROOT))
+    state = source_state()
     with single_writer():
         output = new_output(output)
-        native = Native(output, deadline)
+        native = None
         record = {"schema_version": 1, "kind": "owned-capture-probe-run", "result": "FAIL",
-                  "run_id": uuid.uuid4().hex, "source": source_state(), "preparation": preparation_ref,
-                  "native_owner_nonce": native.nonce, "families": {}, "phases": {"admission_started": time.time()}}
+                  "run_id": uuid.uuid4().hex, "source": state, "preparation": preparation_ref,
+                  "families": {}, "phases": {"admission_started": time.time()}}
         try:
-            oracle_ref = next(row["copy"] for row in preparation["fixture"] if row["copy"]["path"].endswith("/expected.json"))
-            oracle_path = artifact(oracle_ref, 1024 * 1024, deadline=deadline)
-            oracle = load(oracle_path, deadline=deadline)
-            record["oracle"] = oracle_ref
-            runtime = load(Path(preparation["build_manifest"]["path"]), deadline=deadline)["image_inputs"]["debian-runtime-image"]["reference"]
-            require(runtime.startswith("docker.io/library/debian@sha256:"), "Unpinned runtime image")
+            native = Native(output, deadline)
+            record["native_owner_nonce"] = native.nonce
+            oracles = [row["copy"] for row in preparation["fixture"] if row["copy"]["path"].endswith("/expected.json")]
+            require(len(oracles) == 1, "The preparation must retain exactly one oracle")
+            oracle = load(artifact(oracles[0], 1024 * 1024, deadline=deadline), deadline=deadline)
+            record["oracle"] = oracles[0]
+            _, manifest = json_artifact(preparation["build_manifest"], 64 * 1024 * 1024, deadline=deadline)
+            runtime = manifest["image_inputs"]["debian-runtime-image"]["reference"]
+            require(re.fullmatch(r"docker.io/library/debian@sha256:[0-9a-f]{64}", runtime), "Unpinned runtime image")
             binaries = {}
             for family in FAMILIES:
                 row = preparation["families"][family]
-                binaries[family] = (artifact(row["binary"], 512 * 1024 * 1024, deadline=deadline),
-                                    artifact(row["genesis"], 1024 * 1024, deadline=deadline))
+                binaries[family] = artifact(row["binary"], 512 * 1024 * 1024, deadline=deadline)
+                artifact(row["genesis"], 1024 * 1024, deadline=deadline)
             record["phases"]["execution_started"] = time.time()
             for family in FAMILIES:
                 directory = output / family
                 directory.mkdir()
-                binary, _ = binaries[family]
                 family_started = time.monotonic()
                 native.command(runtime, ["/probe/probe", family, "/probe/genesis.json", "/out/probe.json"],
-                               [(binary.parent, "/probe", True), (directory, "/out", False)], cap=300, memory="1g")
+                               [(binaries[family].parent, "/probe", True), (directory, "/out", False)],
+                               cap=300, memory="1g")
                 observation_ref = reference(directory / "probe.json", 16 * 1024 * 1024, deadline)
-                failures = compare(load(directory / "probe.json", deadline=deadline), oracle, family)
+                failures = checked_compare(load(directory / "probe.json", deadline=deadline), oracle, family)
                 record["families"][family] = {"observation": observation_ref, "failures": failures,
                                               "elapsed_seconds": time.monotonic() - family_started,
                                               "result": "PASS" if not failures else "FAIL"}
             record["phases"]["execution_finished"] = time.time()
-            if all(row["result"] == "PASS" for row in record["families"].values()) and \
-                    len(record["families"]) == len(FAMILIES):
+            if len(record["families"]) == len(FAMILIES) and \
+                    all(row["result"] == "PASS" for row in record["families"].values()):
                 record["result"] = "PASS"
-        except Interrupted as error:
-            record["error"] = str(error)
-        except (Rejected, OSError, KeyError, ValueError, TypeError, StopIteration, subprocess.SubprocessError) as error:
-            record["error"] = str(error)
+        except (Interrupted, Exception) as error:
+            record["error"] = f"{type(error).__name__}: {error}"
         finally:
-            if not native.cleanup_complete:
-                record["result"] = "FAIL"
-            record.update(commands=native.commands, cleanup_complete=native.cleanup_complete,
+            record.update(commands=native.commands if native else [],
+                          cleanup_complete=native.cleanup_complete if native else True,
                           elapsed_seconds=time.monotonic() - started)
-            (output / "run-record.json").write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
+            if not record["cleanup_complete"]:
+                record["result"] = "FAIL"
+            write_record(output / "run-record.json", record)
     return output, record
 
 
@@ -373,8 +410,8 @@ def main(argv=None):
             path, record = prepare(args.build_manifest, args.sha256, args.output)
         else:
             path, record = run(args.preparation, args.sha256, args.output)
-    except (Rejected, OSError, KeyError, ValueError, TypeError) as error:
-        print(json.dumps({"valid": False, "error": str(error)}))
+    except Exception as error:
+        print(json.dumps({"valid": False, "error": f"{type(error).__name__}: {error}"}))
         return 2
     print(json.dumps({"result": record["result"], "output": str(path), "error": record.get("error")}))
     return 0 if record["result"] == "PASS" else 1

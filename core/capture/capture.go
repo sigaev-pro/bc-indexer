@@ -168,14 +168,22 @@ type Capturer struct {
 	stats      Stats
 }
 
-// New validates cfg and preallocates the bounded frame ring.
-func New(cfg Config) (*Capturer, error) {
+// validate checks cfg without allocating anything.
+func validate(cfg Config) error {
 	if cfg.ChunkBytes < 1 || cfg.ChunkBytes > MaxChunkBytes {
-		return nil, fmt.Errorf("%w: ChunkBytes %d is outside 1..%d", ErrConfig, cfg.ChunkBytes, MaxChunkBytes)
+		return fmt.Errorf("%w: ChunkBytes %d is outside 1..%d", ErrConfig, cfg.ChunkBytes, MaxChunkBytes)
 	}
 	least := int64(FrameOverhead + max(cfg.ChunkBytes, MaxNoteBytes))
 	if cfg.BufferBytes < least || cfg.BufferBytes > MaxBufferBytes {
-		return nil, fmt.Errorf("%w: BufferBytes %d is outside %d..%d", ErrConfig, cfg.BufferBytes, least, int64(MaxBufferBytes))
+		return fmt.Errorf("%w: BufferBytes %d is outside %d..%d", ErrConfig, cfg.BufferBytes, least, int64(MaxBufferBytes))
+	}
+	return nil
+}
+
+// New validates cfg and preallocates the bounded frame ring.
+func New(cfg Config) (*Capturer, error) {
+	if err := validate(cfg); err != nil {
+		return nil, err
 	}
 	return &Capturer{
 		chunkBytes:  cfg.ChunkBytes,
@@ -418,7 +426,7 @@ func (c *Capturer) CaptureField(ctx context.Context, tag uint32, length uint64, 
 		// The native view is stable at a safe point, so the copy and the
 		// digests run without the lock. The string copy makes the chunk owned.
 		c.mu.Unlock()
-		err := read(offset, dst)
+		err := safeRead(read, offset, dst)
 		chunk := Frame{Kind: Chunk, Tag: tag, Field: field, Offset: offset, Length: size}
 		if err == nil {
 			chunk.data = string(dst)
@@ -442,6 +450,17 @@ func (c *Capturer) CaptureField(ctx context.Context, tag uint32, length uint64, 
 	whole.Sum(end.Digest[:0])
 	c.push(end)
 	return nil
+}
+
+// safeRead calls read and turns a panic into an error, so the capture stops
+// closed and its lock state stays consistent.
+func safeRead(read ReadFunc, offset uint64, dst []byte) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("capture: ReadFunc panicked: %v", recovered)
+		}
+	}()
+	return read(offset, dst)
 }
 
 // Next waits for the next frame. It returns io.EOF after Close and the last

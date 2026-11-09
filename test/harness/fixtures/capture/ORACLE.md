@@ -36,15 +36,25 @@ is a 1-wei value transfer. Every scenario must import all three blocks.
   least 300 ms. After the worker starts, the import finishes (AC-CAP-06-02,
   `vm_safe_backpressure`).
 - `import_backpressure`: the budget fits exactly the frames of block 1. The
-  producer must stop at the import boundary before block 2 is imported
-  (head 1), with the same hold rules, then finish. Three block fields exist
-  (AC-CAP-06-02, `import_backpressure`).
-- In both call scenarios, a waiting call made inside the real opcode callback
-  must fail at once with `ErrInCallback`.
+  producer must stop at the caller-side import boundary, between two
+  `InsertChain` calls, before block 2 is imported (head 1), with the same hold
+  rules, then finish. Three block fields exist, and each one's digest equals
+  the RLP digest of the generated block (AC-CAP-06-02, `import_backpressure`).
+  A wait inside the client's own block loop belongs to the product adapter.
+- In both call scenarios, a waiting call made on the native goroutine during
+  the opcode hook must fail with `ErrInCallback` within 100 ms. The probe uses
+  a separate capture for this check because the refusal stops a capture closed;
+  it shows the package rule on the real callback path, not a native property.
 - Every scenario head equals the generated head and the baseline import head
   without capture, so capture and the pauses did not change the native result.
   Native import also checks each block's state root, receipts and gas.
 - Peak held bytes never exceed the configured budget, and no probe error exists.
 
-Block hashes and block RLP digests are native outputs that the oracle compares
-for equality across runs; it does not claim them as independent values.
+Block hashes and block RLP digests are native outputs. The comparison checks
+them for equality between the generated chain, the baseline import and each
+captured import; it does not claim them as independent values.
+
+All three families use this one Ethereum-style genesis and the ethash faker, so
+the probe runs each client's own `core/vm` interpreter and
+`core.BlockChain.InsertChain`, but not Parlia, Bor consensus, system
+transactions or StateSync. It earns no BSC or Polygon profile credit.

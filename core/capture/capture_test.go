@@ -654,3 +654,107 @@ func TestStoppedAndBlockedFrames(t *testing.T) {
 		}
 	}
 }
+
+// TestExactAccounting pins the budget numbers that the memory bound relies on.
+func TestExactAccounting(t *testing.T) {
+	ctx := context.Background()
+	if err := validate(Config{ChunkBytes: 64, BufferBytes: MaxBufferBytes}); err != nil {
+		t.Fatalf("the largest budget must be accepted: %v", err)
+	}
+	c := newCapturer(t, 64, 1<<12)
+	if err := c.CaptureBytes(ctx, 1, pattern(10, 1)); err != nil {
+		t.Fatal(err)
+	}
+	want := int64(3*FrameOverhead + 10)
+	if s := c.Stats(); s.Held != want || s.PeakHeld != want || s.Queued != 3 || s.Delivered != 0 || s.Frames != 3 {
+		t.Fatalf("after one field: %+v", s)
+	}
+	f, _ := c.Next(ctx)
+	if s := c.Stats(); s.Queued != 2 || s.Delivered != 1 {
+		t.Fatalf("after one delivery: %+v", s)
+	}
+	c.Release(f)
+	if c.ring[0] != (Frame{}) {
+		t.Fatal("a released slot must drop its payload")
+	}
+	if s := c.Stats(); s.Held != want-FrameOverhead || s.PeakHeld != want {
+		t.Fatalf("after one release: %+v", s)
+	}
+
+	// A budget-sized reservation and a note that spends exactly its credit both fit.
+	c = newCapturer(t, 64, FrameOverhead+MaxNoteBytes)
+	if err := c.Reserve(ctx, FrameOverhead+MaxNoteBytes); err != nil {
+		t.Fatalf("a reservation equal to the budget: %v", err)
+	}
+	c.EnterCallback()
+	if err := c.Note(5, make([]byte, MaxNoteBytes)); err != nil {
+		t.Fatalf("a maximum note that spends exactly its credit: %v", err)
+	}
+	if s := c.Stats(); s.Credit != 0 || s.Held != FrameOverhead+MaxNoteBytes {
+		t.Fatalf("exact credit accounting: %+v", s)
+	}
+
+	// A stop returns all credit and clears every slot.
+	c = newCapturer(t, 64, 1<<12)
+	c.Reserve(ctx, 100)
+	c.CaptureBytes(ctx, 1, []byte{1})
+	c.Abort(errors.New("stop"))
+	if s := c.Stats(); s.Credit != 0 || s.Held != 0 {
+		t.Fatalf("after a stop: %+v", s)
+	}
+	for i, slot := range c.ring {
+		if slot != (Frame{}) {
+			t.Fatalf("slot %d kept a frame after a stop", i)
+		}
+	}
+}
+
+func TestReadPanicStopsCapture(t *testing.T) {
+	c := newCapturer(t, 64, 1<<12)
+	err := c.CaptureField(context.Background(), 1, 10, func(uint64, []byte) error { panic("native view moved") })
+	if err == nil || !errors.Is(c.Err(), err) {
+		t.Fatalf("got %v", err)
+	}
+	if err := c.Close(); err == nil {
+		t.Fatal("a stopped capture cannot close cleanly")
+	}
+}
+
+// TestWakeupsAndCounts covers a worker woken by Close, one wait that sees
+// several releases, and the smallest reservation.
+func TestWakeupsAndCounts(t *testing.T) {
+	ctx := context.Background()
+	c := newCapturer(t, 64, 1<<12)
+	next := make(chan error, 1)
+	go func() {
+		_, err := c.Next(ctx)
+		next <- err
+	}()
+	time.Sleep(10 * time.Millisecond)
+	c.Close()
+	if err := <-next; !errors.Is(err, io.EOF) {
+		t.Fatalf("a waiting worker must see the close: %v", err)
+	}
+
+	c = newCapturer(t, 64, FrameOverhead+MaxNoteBytes)
+	if err := c.Reserve(ctx, 1); err != nil {
+		t.Fatalf("a one-byte reservation: %v", err)
+	}
+	c = newCapturer(t, 64, FrameOverhead+MaxNoteBytes)
+	c.CaptureBytes(ctx, 1, nil)   // BEGIN and END hold 256 bytes
+	c.Reserve(ctx, FrameOverhead) // the budget is full
+	done := make(chan error, 1)
+	go func() { done <- c.Reserve(ctx, 2*FrameOverhead) }()
+	waitUntil(t, "the reservation waits", func() bool { return c.Stats().ProducerWaiting })
+	begin, _ := c.Next(ctx)
+	end, _ := c.Next(ctx)
+	c.Release(begin) // not enough yet: the wait continues
+	waitUntil(t, "the reservation waits again", func() bool { return c.Stats().ProducerWaiting })
+	c.Release(end)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if s := c.Stats(); s.Waits != 1 || s.Credit != 3*FrameOverhead {
+		t.Fatalf("one waiting call must count once: %+v", s)
+	}
+}

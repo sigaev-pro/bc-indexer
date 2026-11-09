@@ -280,11 +280,21 @@ func (p *probe) callHooks(c *capture.Capturer, safePoints *atomic.Int64, guard *
 		if err := c.ExitCallback(); err != nil {
 			p.fail("exit callback: %v", err)
 		}
-		// A separate capture checks that a wait inside this real callback fails at once.
+		// A separate capture, opened on this native callback goroutine during the
+		// opcode hook, checks that a waiting call there fails at once. The real
+		// capture is not used because the refusal stops it closed.
 		if !guard.Load() {
-			probeCapture, _ := capture.New(capture.Config{ChunkBytes: 64, BufferBytes: 4096})
-			probeCapture.EnterCallback()
-			guard.Store(errors.Is(probeCapture.Reserve(ctx, 1), capture.ErrInCallback))
+			probeCapture, err := capture.New(capture.Config{ChunkBytes: 64, BufferBytes: 4096})
+			if err == nil {
+				err = probeCapture.EnterCallback()
+			}
+			if err != nil {
+				p.fail("callback guard setup: %v", err)
+			} else {
+				refused := time.Now()
+				rejected := errors.Is(probeCapture.Reserve(ctx, 1), capture.ErrInCallback)
+				guard.Store(rejected && time.Since(refused) < 100*time.Millisecond)
+			}
 		}
 		if elapsed := time.Since(started); elapsed > time.Second {
 			p.fail("callback took %v", elapsed)
@@ -475,7 +485,15 @@ func main() {
 	baseline := p.chain(nil)
 	_, err := insertChain(baseline, p.blocks)
 	check(err)
+	var blockDigests []string
+	for _, block := range p.blocks {
+		encoded, err := rlp.EncodeToBytes(block)
+		check(err)
+		sum := sha256.Sum256(encoded)
+		blockDigests = append(blockDigests, hex.EncodeToString(sum[:]))
+	}
 	output := map[string]any{
+		"block_rlp_sha256":    blockDigests,
 		"family":              os.Args[1],
 		"generated_head_hash": p.blocks[len(p.blocks)-1].Hash().Hex(),
 		"baseline_head_hash":  baseline.CurrentBlock().Hash().Hex(),
