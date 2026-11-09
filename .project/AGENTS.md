@@ -26,9 +26,9 @@ For planning, read [DECISIONS](docs/DECISIONS.md). For implementation, read the 
 
 Before a substantial task, record its ID and status in PROJECT_STATUS.md. Record accepted user decisions in DECISIONS.md as soon as they arrive. After the task, record the result, checks, and next action. Distinguish proposals from accepted decisions.
 
-## Parallel agents
+## Parallel model sessions
 
-D97 requires independent work to run in parallel agents. Split tasks that need no result from each other, change different files, and need not land together into separate sessions and worktrees, each with its own branch, reviews and PR. Keep dependent tasks in order. Choose the agents and their roles yourself only when you are fully certain the split is right (preferred); otherwise agree it with the owner first. Parallel work does not relax gates: measured runs still execute one at a time under the single-writer lock, and every PR keeps its own CI, independent reviews and merge permission.
+D97 requires independent work to run in parallel model sessions wherever possible. Writer tasks are independent when neither needs the other's result, the task graph has no edge between them, and their allowed product and test paths do not overlap; shared status records do not count. Each gets its own implementer session, worktree, branch, reviews, and PR. Run at most three implementer sessions at a time besides the coordinator; read-only reviewers and investigators may run in parallel inside a block. Prefer to choose the sessions and roles yourself when you are fully certain the split is right; otherwise agree on it with the owner first. Parallel work does not relax gates: measured runs follow the host-wide single-writer and resource rules and execute one at a time, and every PR keeps its own exact-head CI and independent reviews, with merges serialized under D95.
 
 ## Changes, verification, and commits
 
