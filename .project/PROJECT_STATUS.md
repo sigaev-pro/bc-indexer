@@ -19,8 +19,11 @@ and a flaky controller test. Outputs:
   with a 0.5-second start delay: "supervisor never reached the spawn
   boundary", about 10 ms past the spin deadline). The signal test failed when
   Darwin returned a transient EPERM from `killpg` while the group leader was
-  exiting, which `terminate_group` treated as a final denial (2 of 100 direct
-  calls before the fix, 0 of 300 after). `session_runner.py` now reports
+  exiting, which `terminate_group` treated as a final denial. Retained probe
+  `review-tooling-eperm-01-fc3a1ac` killed 300 sleeping children with each
+  version: the `f8d3e67` code reported `cleanup-denied` once although the
+  group exit was then confirmed; the fixed code reported `graceful` 300 times.
+  `session_runner.py` now reports
   `cleanup-denied` only when EPERM persists to the grace deadline with live
   members.
 
