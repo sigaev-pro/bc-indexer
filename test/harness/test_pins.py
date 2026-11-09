@@ -49,8 +49,13 @@ def report(family="geth", same_root=False):
             "unguarded_verify": "pinned native data is unavailable: pin obs-rewind header 1"}),
         ("TestNativeStorePreflight", "preflight", preflight),
         ("TestNativeEffectiveProfile", "profile", {"cases": cases, "results": {
-            name: {"accepted": name in pins.ACCEPTED_PROFILE_CASES, "detail": {}} for name in cases}}),
+            name: {"accepted": True, "reason": "", "detail": {}} if name in pins.ACCEPTED_PROFILE_CASES else
+            {"accepted": False, "reason": "gcmode archive",
+             "detail": {"layer": "profile", "error": 'native profile violates: gcmode archive, "x"'}}
+            for name in cases}}),
     ]
+    if family in ("bsc", "bor"):
+        rows.append(("TestNativeLegacyPruneOffset", "legacy_offset", "forbidden pruning profile: legacy pruned-block offset"))
     return [{"family": family, "test": test, "name": name, "value": value} for test, name, value in rows]
 
 
@@ -114,8 +119,23 @@ class ReportTests(unittest.TestCase):
             "converted": ("TestNativeStorePreflight", "preflight", lambda v: v.update(native_hash_override_on_path_store="<nil>")),
             "profile flipped": ("TestNativeEffectiveProfile", "profile", lambda v: v["results"]["allowed_config"].update(accepted=False)),
             "forbidden accepted": ("TestNativeEffectiveProfile", "profile",
-                                   lambda v: v["results"]["forbidden_pruning_archive_flag"].update(accepted=True)),
+                                   lambda v: v["results"]["wrong_gc_profile_archive_flag"].update(accepted=True)),
             "case missing": ("TestNativeEffectiveProfile", "profile", lambda v: v["cases"].pop()),
+            "other reason": ("TestNativeEffectiveProfile", "profile",
+                             lambda v: v["results"]["wrong_hash_profile_flag"]["detail"].update(error="unknown flag")),
+            "accepted with reason": ("TestNativeEffectiveProfile", "profile",
+                                     lambda v: v["results"]["allowed_config"].update(reason="x")),
+            "rejected without reason": ("TestNativeEffectiveProfile", "profile",
+                                        lambda v: v["results"]["wrong_hash_profile_flag"].update(reason="")),
+            "pinned root missing": ("TestNativeVolatileTrieLost", "pinned", lambda v: v.update(block1_root_on_disk=False)),
+            "empty walk": ("TestNativeVolatileTrieLost", "pinned", lambda v: v["walk"].update(accounts=0)),
+            "control pin": ("TestNativeVolatileTrieLost", "control", lambda v: v.update(preflight_pins=["x"])),
+            "control flushed": ("TestNativeVolatileTrieLost", "control",
+                                lambda v: v["child"].update(block1_root_on_disk_after=True)),
+            "no slots": ("TestNativePinnedStatePruning", "pruning", lambda v: v["pinned_side_walk"].update(slots=0)),
+            "block mismatch": ("TestNativePinnedStatePruning", "pruning", lambda v: v.update(block1_root=ROOT2)),
+            "empty head": ("TestNativePinnedStatePruning", "pruning", lambda v: v["head_walk"].update(accounts=0)),
+            "unbound rejected": ("TestNativeStorePreflight", "preflight", lambda v: v.update(unbound_fresh_store="mismatch")),
         }
         for label, (test, name, change) in mutations.items():
             rows = copy.deepcopy(report())
@@ -128,13 +148,26 @@ class ReportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pins.evaluate_report("geth", rows + [rows[0]], blocks())
         with self.assertRaises(ValueError):
-            pins.evaluate_report("bsc", rows, blocks())
+            pins.evaluate_report("geth", [dict(row, family="bsc") for row in rows], blocks())
         with self.assertRaises(KeyError):
             pins.evaluate_report("geth", rows[1:], blocks())
 
+    def test_bsc_needs_the_legacy_offset_rejection(self):
+        rows = report("bsc")
+        find(rows, "TestNativeLegacyPruneOffset", "legacy_offset")
+        rows[-1]["value"] = "<nil>"
+        with self.assertRaises(ValueError):
+            pins.evaluate_report("bsc", rows, blocks())
+        with self.assertRaises(KeyError):
+            pins.evaluate_report("bsc", rows[:-1], blocks())
+
     def test_bsc_needs_its_extra_profile_cases(self):
         with self.assertRaises(ValueError):
-            pins.evaluate_report("bsc", [dict(row, family="bsc") for row in report("geth")], blocks())
+            rows = report("bsc")
+            profile = find(rows, "TestNativeEffectiveProfile", "profile")
+            profile["cases"].remove("forbidden_pruning_ancient_flag")
+            del profile["results"]["forbidden_pruning_ancient_flag"]
+            pins.evaluate_report("bsc", rows, blocks())
 
     def test_read_report_rejects_malformed_rows(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -211,8 +244,10 @@ class AttemptTests(unittest.TestCase):
     def setUp(self):
         FakeNative.created, FakeNative.fail = [], False
         self.lock = FakeLock()
+        self.commits = ["c"]
         self.patches = [patch.object(pins, "Native", FakeNative),
-                        patch.object(pins, "admit_docker", lambda: self.lock)]
+                        patch.object(pins, "admit_docker", lambda: self.lock),
+                        patch.object(pins, "source_commit", lambda: self.commits[-1])]
         for item in self.patches:
             item.start()
 
@@ -221,7 +256,7 @@ class AttemptTests(unittest.TestCase):
             item.stop()
 
     def attempt(self, output, body):
-        proof = {"result": "FAIL", "error": None}
+        proof = {"result": "FAIL", "error": None, "source_commit": "c"}
         return pins.owned_attempt(output, 0, None, proof, "run.json", body)
 
     def test_pass_fail_and_dirty_cleanup_are_recorded(self):
@@ -244,6 +279,55 @@ class AttemptTests(unittest.TestCase):
                 self.assertEqual((proof["result"], record["result"]), (result, result))
                 self.assertEqual(record["native_owner_nonce"], "nonce")
                 self.assertTrue(self.lock.closed)
+
+    def test_source_change_and_unexpected_errors_record_fail(self):
+        def moved(output, runner):
+            self.commits.append("d")
+
+        def broken_shape(output, runner):
+            raise AttributeError("report shape")
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw).resolve() / "moved"
+            self.assertEqual(self.attempt(output, moved)["result"], "FAIL")
+            self.assertIn("Source changed", json.loads((output / "run.json").read_text())["error"])
+            self.commits = ["c"]
+            self.lock = FakeLock()
+            output = Path(raw).resolve() / "shape"
+            with self.assertRaises(AttributeError):
+                self.attempt(output, broken_shape)
+            record = json.loads((output / "run.json").read_text())
+            self.assertEqual(record["result"], "FAIL")
+            self.assertIn("AttributeError", record["error"])
+            self.assertTrue(self.lock.closed)
+
+    def test_prepare_body_checks(self):
+        entry = {"adapter": []}
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw).resolve()
+            (directory / "build").mkdir()
+            manifest = directory / "build" / "manifest.json"
+            manifest.write_text("{}")
+            digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            common = [patch.object(pins, "prepare_family", lambda *args: entry),
+                      patch.object(pins, "check_shared_sources", lambda: None),
+                      patch.object(pins, "source_snapshot", lambda output, names, deadline: ([], []))]
+            for item in common:
+                item.start()
+            try:
+                proof = pins.prepare(manifest, digest, directory / "ok")
+                self.assertEqual(proof["result"], "PASS")
+                self.assertTrue((directory / "ok" / "tool.json").is_file())
+                with patch.object(pins, "sources_unchanged", side_effect=ValueError("Harness source changed")):
+                    self.assertEqual(pins.prepare(manifest, digest, directory / "harness")["result"], "FAIL")
+                source = directory / "adapter.go"
+                source.write_text("package stateprovider\n")
+                entry["adapter"] = [{"source": {"path": str(source), "sha256": "0" * 64, "size_bytes": 22}}]
+                proof = pins.prepare(manifest, digest, directory / "adapter")
+                self.assertEqual(proof["result"], "FAIL")
+                self.assertIn("Adapter source changed", proof["error"])
+            finally:
+                for item in common:
+                    item.stop()
 
     def test_native_setup_failure_still_records(self):
         FakeNative.fail = True
@@ -271,13 +355,12 @@ class AttemptTests(unittest.TestCase):
         def save(path, value):
             seen["mask"] = signal.pthread_sigmask(signal.SIG_BLOCK, [])
             raise OSError("disk full")
-        lock = FakeLock()
         with tempfile.TemporaryDirectory() as raw, patch.object(pins, "save", save):
             directory = Path(raw).resolve()
             with self.assertRaises(OSError):
-                pins.save_final(Path(directory) / "run.json", {}, lock)
+                self.attempt(directory / "new", lambda output, runner: None)
         self.assertTrue(set(pins.STOP_SIGNALS) <= set(seen["mask"]))
-        self.assertTrue(lock.closed)
+        self.assertTrue(self.lock.closed)
         self.assertFalse(set(pins.STOP_SIGNALS) & set(signal.pthread_sigmask(signal.SIG_BLOCK, [])))
 
 
@@ -294,6 +377,60 @@ class AdmissionTests(unittest.TestCase):
                 patch.object(pins, "foreign_harness_containers", lambda: []):
             self.assertIs(pins.admit_docker(), lock)
         self.assertFalse(lock.closed)
+
+    def test_prepare_retry_linkage(self):
+        with tempfile.TemporaryDirectory() as raw, patch.object(pins, "source_commit", lambda: "c"):
+            directory = Path(raw).resolve()
+            manifest = directory / "manifest.json"
+            manifest.write_text("{}")
+            digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            ref = {"path": str(manifest), "sha256": digest, "size_bytes": 2}
+            old = {"kind": "pins-preparation", "result": "FAIL", "build_manifest": ref, "attempt_index": 1}
+            for label, change, correction in (("pass", {"result": "PASS"}, "fix"), ("build", {"build_manifest": {}}, "fix"),
+                                              ("kind", {"kind": "pins-run"}, "fix"), ("no correction", {}, None)):
+                previous = directory / (label + ".json")
+                previous.write_text(json.dumps(dict(old, **change)))
+                pin = hashlib.sha256(previous.read_bytes()).hexdigest()
+                with self.subTest(label), self.assertRaises(ValueError):
+                    pins.prepare(manifest, digest, directory / "out", previous, pin, correction)
+            with self.assertRaises(ValueError):
+                pins.prepare(manifest, digest, directory / "out", previous, "0" * 64, "fix")
+            self.assertFalse((directory / "out").exists())
+
+    def test_run_refuses_mismatched_builds_and_bad_retries(self):
+        with tempfile.TemporaryDirectory() as raw, patch.object(pins, "source_commit", lambda: "c"):
+            directory = Path(raw).resolve()
+            tool = directory / "tool.json"
+            tool.write_text(json.dumps({"kind": "pins-native-tool", "build_manifest": {"sha256": "a"},
+                                        "families": {name: {} for name in pins.FAMILIES}}))
+            pin = hashlib.sha256(tool.read_bytes()).hexdigest()
+            tool_ref = {"path": str(tool), "sha256": pin, "size_bytes": tool.stat().st_size}
+            manifests = [(directory / name, "0" * 64) for name in pins.FAMILIES]
+
+            def fixture(build):
+                names = iter(pins.FAMILIES)
+                return lambda path, sha, deadline: (next(names), {"build_manifest": {"sha256": build}})
+            with patch.object(pins, "load_fixture", fixture("b")), self.assertRaises(ValueError):
+                pins.run(tool, pin, manifests, directory / "out")
+            old = {"kind": "pins-run", "result": "FAIL", "tool": tool_ref, "attempt_index": 1}
+            for label, change in (("pass", {"result": "PASS"}), ("tool", {"tool": {}}), ("kind", {"kind": "pins-preparation"})):
+                previous = directory / (label + ".json")
+                previous.write_text(json.dumps(dict(old, **change)))
+                previous_pin = hashlib.sha256(previous.read_bytes()).hexdigest()
+                with self.subTest(label), patch.object(pins, "load_fixture", fixture("a")), self.assertRaises(ValueError):
+                    pins.run(tool, pin, manifests, directory / "out", previous, previous_pin, "fix")
+            self.assertFalse((directory / "out").exists())
+
+    def test_prepare_refuses_drifted_shared_sources(self):
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw).resolve()
+            manifest = directory / "manifest.json"
+            manifest.write_text("{}")
+            digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            with patch.object(pins, "check_shared_sources", side_effect=ValueError("drift")), \
+                    patch.object(pins, "source_commit", lambda: "c"), self.assertRaises(ValueError):
+                pins.prepare(manifest, digest, directory / "out")
+            self.assertFalse((directory / "out").exists())
 
     def test_prepare_refuses_before_creating_output(self):
         with tempfile.TemporaryDirectory() as raw:

@@ -43,17 +43,19 @@ COMMON_TESTS = (
     "TestUnitPinFailureLeavesNoRecord", "TestUnitReleaseAndDeletionGuards", "TestUnitMalformedLedgerFailsClosed",
     "TestUnitMisfiledLedgerRecordFailsClosed", "TestUnitLedgerKeysAreNotNativeStateKeys", "TestUnitStoreChecks",
     "TestUnitCheckProfileFields", "TestNativeVolatileTrieLost", "TestNativePinnedStatePruning",
-    "TestNativeRewindDeletesPinnedHeader", "TestNativeStorePreflight", "TestNativeEffectiveProfile")
+    "TestNativeRewindDeletesPinnedHeader", "TestNativeStorePreflight", "TestNativeEffectiveProfile",
+    "TestUnitLedgerPinOfAnotherStoreRejects", "TestUnitGuardedPrunerPaths", "TestUnitFreezeLimit")
+FAMILY_TESTS = {"geth": (), "bsc": ("TestNativeLegacyPruneOffset",), "bor": ("TestNativeLegacyPruneOffset",)}
 # Each family must report these profile cases; the Go test fixes accept or reject.
 PROFILE_CASES = {
     "geth": {"baseline_flags", "allowed_native_args", "allowed_environment", "allowed_config",
              "wrong_hash_profile_default", "wrong_hash_profile_flag", "wrong_hash_profile_environment",
              "wrong_hash_profile_config", "environment_over_config_cannot_bypass", "flag_over_config_cannot_bypass",
-             "forbidden_pruning_archive_flag", "forbidden_pruning_archive_environment",
-             "forbidden_pruning_archive_config"},
+             "wrong_gc_profile_archive_flag", "wrong_gc_profile_archive_environment",
+             "wrong_gc_profile_archive_config"},
     "bor": {"baseline_config", "allowed_config", "allowed_native_args", "environment_is_not_a_config_source",
             "wrong_hash_profile_default", "wrong_hash_profile_config", "wrong_hash_profile_flag",
-            "forbidden_pruning_archive_flag", "forbidden_pruning_archive_config", "wrong_syncmode_flag",
+            "wrong_gc_profile_archive_flag", "wrong_gc_profile_archive_config", "wrong_syncmode_flag",
             "bor_pipelined_import", "bor_parallel_stateless", "bor_witness_sync", "bor_preconfirmation_relay",
             "bor_preconfirmation_rpc", "bor_blockstm_enable", "bor_blockstm_enforce", "bor_blockstm_config",
             "bor_sequencer"},
@@ -84,16 +86,24 @@ def save(path, value):
 
 
 def save_final(path, value, lock):
-    """Write the final record and release the lock with stop signals blocked, so a
-    late signal cannot skip either step; it is delivered after both."""
-    blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+    """Write the final record, then release the lock even if the write fails."""
     try:
-        try:
-            save(path, value)
-        finally:
-            lock.close()
+        save(path, value)
     finally:
-        signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+        lock.close()
+
+
+def source_commit():
+    """Return HEAD of the checkout that holds this driver; the tracked adapter
+    and harness files must equal it, so evidence names the exact executed source."""
+    def git(*args):
+        result = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True, timeout=60)
+        require(result.returncode == 0, "git failed: " + " ".join(args))
+        return result.stdout
+    head = git("rev-parse", "HEAD").strip()
+    require(not git("status", "--porcelain", "--untracked-files=all", "--", "adapters", "test/harness"),
+            "Adapters or harness differ from the committed source")
+    return head
 
 
 def admit_docker():
@@ -205,25 +215,37 @@ def owned_attempt(output, started, deadline, proof, record_name, body):
     except BaseException:
         lock.close()
         raise
-    runner = None
+    runner, unexpected = None, None
     try:
         runner = Native(output, deadline)
         proof["native_owner_nonce"] = runner.nonce
         body(output, runner)
+        require(source_commit() == proof["source_commit"], "Source changed during the attempt")
         proof["result"] = "PASS"
-    except FAILURES as error:
+    except Exception as error:
         proof["result"] = "FAIL"
         proof["error"] = f"{type(error).__name__}: {str(error)[:400]}"
+        if not isinstance(error, FAILURES):
+            unexpected = error
     finally:
-        proof.update(commands=runner.commands if runner else [], elapsed_seconds=round(time.monotonic() - started, 3),
-                     cleanup_complete=runner.cleanup_complete if runner else True)
-        if proof["cleanup_complete"] is not True:
-            proof["result"] = "FAIL"
-        save_final(output / record_name, proof, lock)
+        # Stop signals stay blocked from here until the record is written and
+        # the lock is released; a pending signal is delivered afterward.
+        blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+        try:
+            proof.update(commands=runner.commands if runner else [],
+                         elapsed_seconds=round(time.monotonic() - started, 3),
+                         cleanup_complete=runner.cleanup_complete if runner else True)
+            if proof["cleanup_complete"] is not True:
+                proof["result"] = "FAIL"
+            save_final(output / record_name, proof, lock)
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+    if unexpected is not None:
+        raise unexpected
     return proof
 
 
-def prepare(manifest_path, expected_sha, output, previous=None, correction=None):
+def prepare(manifest_path, expected_sha, output, previous=None, previous_sha=None, correction=None):
     started = time.monotonic()
     deadline = started + PREPARATION_SECONDS
     require(manifest_path.is_absolute() and output.is_absolute(), "Paths must be absolute")
@@ -231,10 +253,10 @@ def prepare(manifest_path, expected_sha, output, previous=None, correction=None)
     require(manifest_ref["sha256"] == expected_sha, "BuildManifest digest mismatch")
     manifest = load(manifest_path, 64 * 1024 * 1024, deadline)
     check_shared_sources()
+    commit = source_commit()
     previous_ref, attempt = None, 1
     if previous is not None:
-        previous_ref = reference(previous, 1024 * 1024, deadline)
-        old = load(previous, 1024 * 1024, deadline)
+        previous_ref, old = pinned_json(previous, previous_sha, deadline=deadline)
         require(old.get("kind") == "pins-preparation" and old.get("result") == "FAIL" and
                 old.get("build_manifest") == manifest_ref and correction, "Invalid preparation retry")
         attempt = old["attempt_index"] + 1
@@ -242,6 +264,7 @@ def prepare(manifest_path, expected_sha, output, previous=None, correction=None)
         require(correction is None, "Correction needs an earlier failed preparation")
     require(not output.is_relative_to(manifest_path.parent), "Preparation cannot write into accepted build storage")
     proof = {"schema_version": 1, "kind": "pins-preparation", "result": "FAIL", "build_manifest": manifest_ref,
+             "source_commit": commit,
              "run_id": uuid.uuid4().hex, "native_owner_nonce": None, "attempt_index": attempt,
              "previous_attempt": previous_ref, "correction": correction, "deadline_seconds": PREPARATION_SECONDS,
              "runtime": "NOT_RUN", "error": None}
@@ -288,6 +311,17 @@ def read_report(path, deadline):
     return rows
 
 
+def strings(value):
+    """Every string inside a JSON value, so a reason can be found in nested detail."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [item for child in value.values() for item in strings(child)]
+    if isinstance(value, list):
+        return [item for child in value for item in strings(child)]
+    return []
+
+
 def evaluate_report(family, rows, blocks):
     """Independently check the retained observations against the accepted fixture block roots."""
     require(all(row["family"] == family for row in rows), "Report rows name another family")
@@ -314,6 +348,9 @@ def evaluate_report(family, rows, blocks):
             pruning["unguarded_preflight"].startswith("pinned native data is unavailable") and
             pruning["released_side_deleted"] is True and pruning["head_walk"]["accounts"] > 0,
             "Pruning observation failed")
+    if family in ("bsc", "bor"):
+        require(named[("TestNativeLegacyPruneOffset", "legacy_offset")].startswith("forbidden pruning profile"),
+                "Legacy prune offset was not rejected")
     rewind = named[("TestNativeRewindDeletesPinnedHeader", "rewind")]
     require(rewind["refused"].startswith("live pins forbid this native deletion: rewind to 0") and
             rewind["unguarded_verify"].startswith("pinned native data is unavailable"), "Rewind observation failed")
@@ -326,7 +363,11 @@ def evaluate_report(family, rows, blocks):
     profile = named[("TestNativeEffectiveProfile", "profile")]
     require(set(profile["cases"]) == PROFILE_CASES[family], "Profile cases differ from the declared set")
     for case, result in profile["results"].items():
-        require(result["accepted"] is (case in ACCEPTED_PROFILE_CASES), f"Profile case {case} has the wrong outcome")
+        accepted = case in ACCEPTED_PROFILE_CASES
+        require(result["accepted"] is accepted and (result["reason"] == "") is accepted,
+                f"Profile case {case} has the wrong outcome")
+        require(accepted or result["reason"] in " ".join(strings(result["detail"])),
+                f"Profile case {case} was rejected for another reason")
     return {"recovered_head": pinned["recovered_head"], "pinned_walk": pinned["walk"], "pruning_refused": pruning["refused"],
             "native_default_scheme_for_empty_store": preflight["native_default_scheme_for_empty_store"],
             "profile_cases": len(profile["cases"])}
@@ -360,7 +401,7 @@ def run_family(family, entry, fixture, output, runner, deadline):
                                                 "-test.timeout", f"{TEST_CAP - 60}s"],
                             mounts, cap=TEST_CAP, memory="2g", cwd="/scratch", environment=env)
     elapsed = round(time.monotonic() - started, 3)
-    passed = parse_go_test(read_bytes(stdout, 8 * 1024 * 1024, deadline).decode(), COMMON_TESTS)
+    passed = parse_go_test(read_bytes(stdout, 8 * 1024 * 1024, deadline).decode(), COMMON_TESTS + FAMILY_TESTS[family])
     report = root / "work/report.jsonl"
     summary = evaluate_report(family, read_report(report, deadline), fixture["blocks"])
     return {"inputs": inputs, "passed": passed, "elapsed_seconds": elapsed, "report": reference(report, deadline=deadline),
@@ -398,6 +439,7 @@ def run(tool_path, tool_sha, manifests, output, previous=None, previous_sha=None
         require(fixture["build_manifest"] == tool["build_manifest"], "Fixture and tool use different builds")
         fixtures[family] = fixture
     require(set(fixtures) == set(FAMILIES), "One ProfileManifest per family is required")
+    commit = source_commit()
     previous_ref, attempt = None, 1
     if previous is not None:
         previous_ref, old = pinned_json(previous, previous_sha, deadline=deadline)
@@ -406,7 +448,7 @@ def run(tool_path, tool_sha, manifests, output, previous=None, previous_sha=None
         attempt = old["attempt_index"] + 1
     else:
         require(correction is None, "Correction needs an earlier failed run")
-    proof = {"schema_version": 1, "kind": "pins-run", "result": "FAIL", "tool": tool_ref,
+    proof = {"schema_version": 1, "kind": "pins-run", "result": "FAIL", "tool": tool_ref, "source_commit": commit,
              "run_id": uuid.uuid4().hex, "native_owner_nonce": None, "attempt_index": attempt,
              "previous_attempt": previous_ref, "correction": correction, "deadline_seconds": RUN_SECONDS,
              "public_profile_credit": False, "families": {}, "error": None,
@@ -434,6 +476,7 @@ def main():
     prep.add_argument("--sha256", required=True)
     prep.add_argument("--output", type=Path, required=True)
     prep.add_argument("--previous-attempt", type=Path)
+    prep.add_argument("--previous-sha256")
     prep.add_argument("--correction")
     measured = commands.add_parser("run")
     measured.add_argument("tool", type=Path)
@@ -451,7 +494,8 @@ def main():
         signal.signal(number, interrupt)
     try:
         if args.command == "prepare":
-            proof = prepare(args.build_manifest, args.sha256, args.output, args.previous_attempt, args.correction)
+            proof = prepare(args.build_manifest, args.sha256, args.output, args.previous_attempt, args.previous_sha256,
+                            args.correction)
         else:
             proof = run(args.tool, args.sha256, [(Path(path), sha) for path, sha in args.profile_manifest], args.output,
                         args.previous_run, args.previous_sha256, args.correction)

@@ -229,8 +229,10 @@ func runDump(t *testing.T, name string, args []string, env []string, config stri
 	return stdout.Bytes(), tail, err
 }
 
-func dumpCase(name string, accept bool, args, env []string, config string, reflect func(*ethconfigView) bool) profileCase {
-	return profileCase{name: name, accept: accept, run: func(t *testing.T) (bool, any) {
+// dumpCase is accepted when reason is empty; otherwise the rejection text
+// (native stderr or the profile error) must contain reason.
+func dumpCase(name, reason string, args, env []string, config string, reflect func(*ethconfigView) bool) profileCase {
+	return profileCase{name: name, reason: reason, run: func(t *testing.T) (bool, any) {
 		out, stderr, err := runDump(t, name, args, env, config)
 		if err != nil {
 			return false, map[string]any{"layer": "native", "error": err.Error(), "stderr": stderr}
@@ -260,23 +262,23 @@ func profileCases(t testing.TB) []profileCase {
 		return func(view *ethconfigView) bool { return view.TransactionHistory == value }
 	}
 	return []profileCase{
-		dumpCase("baseline_flags", true, baseArgs, nil, "", nil),
-		dumpCase("allowed_native_args", true, append(baseArgs, "--history.transactions=12345"), nil, "", history(12345)),
-		dumpCase("allowed_environment", true, baseArgs, []string{"GETH_HISTORY_TRANSACTIONS=23456"}, "", history(23456)),
-		dumpCase("allowed_config", true, nil, nil, baseConfig+"TransactionHistory = 34567\n", history(34567)),
-		dumpCase("wrong_hash_profile_default", false, nil, nil, "", nil),
-		dumpCase("wrong_hash_profile_flag", false, []string{"--state.scheme=path"}, nil, "", nil),
-		dumpCase("wrong_hash_profile_environment", false, nil, []string{"GETH_STATE_SCHEME=path"}, "", nil),
-		dumpCase("wrong_hash_profile_config", false, nil, nil, "[Eth]\nStateScheme = \"path\"\n", nil),
-		dumpCase("environment_over_config_cannot_bypass", false, nil, []string{"GETH_STATE_SCHEME=path"}, baseConfig, nil),
-		dumpCase("flag_over_config_cannot_bypass", false, []string{"--gcmode=archive"}, nil, baseConfig, nil),
-		dumpCase("forbidden_pruning_archive_flag", false, []string{"--state.scheme=hash", "--gcmode=archive"}, nil, "", nil),
-		dumpCase("forbidden_pruning_archive_environment", false, []string{"--state.scheme=hash"}, []string{"GETH_GCMODE=archive"}, "", nil),
-		dumpCase("forbidden_pruning_archive_config", false, nil, nil, "[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", nil),
-		dumpCase("forbidden_pruning_ancient_flag", false, append(baseArgs, "--pruneancient"), nil, "", nil),
-		dumpCase("forbidden_pruning_block_history_flag", false, append(baseArgs, "--history.blocks=90000"), nil, "", nil),
-		dumpCase("forbidden_pruning_block_history_environment", false, baseArgs, []string{"GETH_HISTORY_BLOCKS=90000"}, "", nil),
-		dumpCase("forbidden_pruning_block_history_config", false, nil, nil, baseConfig+"BlockHistory = 90000\n", nil),
+		dumpCase("baseline_flags", "", baseArgs, nil, "", nil),
+		dumpCase("allowed_native_args", "", append(baseArgs, "--history.transactions=12345"), nil, "", history(12345)),
+		dumpCase("allowed_environment", "", baseArgs, []string{"GETH_HISTORY_TRANSACTIONS=23456"}, "", history(23456)),
+		dumpCase("allowed_config", "", nil, nil, baseConfig+"TransactionHistory = 34567\n", history(34567)),
+		dumpCase("wrong_hash_profile_default", `state scheme ""`, nil, nil, "", nil),
+		dumpCase("wrong_hash_profile_flag", `state scheme "path"`, []string{"--state.scheme=path"}, nil, "", nil),
+		dumpCase("wrong_hash_profile_environment", `state scheme "path"`, nil, []string{"GETH_STATE_SCHEME=path"}, "", nil),
+		dumpCase("wrong_hash_profile_config", `state scheme "path"`, nil, nil, "[Eth]\nStateScheme = \"path\"\n", nil),
+		dumpCase("environment_over_config_cannot_bypass", "incompatible state scheme", nil, []string{"GETH_STATE_SCHEME=path"}, baseConfig, nil),
+		dumpCase("flag_over_config_cannot_bypass", "gcmode archive", []string{"--gcmode=archive"}, nil, baseConfig, nil),
+		dumpCase("wrong_gc_profile_archive_flag", "gcmode archive", []string{"--state.scheme=hash", "--gcmode=archive"}, nil, "", nil),
+		dumpCase("wrong_gc_profile_archive_environment", "gcmode archive", []string{"--state.scheme=hash"}, []string{"GETH_GCMODE=archive"}, "", nil),
+		dumpCase("wrong_gc_profile_archive_config", "gcmode archive", nil, nil, "[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", nil),
+		dumpCase("forbidden_pruning_ancient_flag", "pruneancient deletes block data", append(baseArgs, "--pruneancient"), nil, "", nil),
+		dumpCase("forbidden_pruning_block_history_flag", "history.blocks", append(baseArgs, "--history.blocks=90000"), nil, "", nil),
+		dumpCase("forbidden_pruning_block_history_environment", "history.blocks", baseArgs, []string{"GETH_HISTORY_BLOCKS=90000"}, "", nil),
+		dumpCase("forbidden_pruning_block_history_config", "history.blocks", nil, nil, baseConfig+"BlockHistory = 90000\n", nil),
 	}
 }
 
@@ -331,4 +333,28 @@ NoPruning = false
 	if _, err := CheckProfile(nil); err == nil {
 		t.Fatal("missing config accepted")
 	}
+}
+
+// TestNativeLegacyPruneOffset covers the BSC prune-block marker: native Open
+// would rewrite the freezer metadata, so preflight rejects the home first and
+// leaves it unchanged. The marker is written by the test, not by a real
+// prune-block run.
+func TestNativeLegacyPruneOffset(t *testing.T) {
+	genesis := familyGenesis(t)
+	dir := workDir(t, "legacy-offset")
+	initStore(t, dir, genesis, false)
+	db, closeDB := openStore(t, dir)
+	if err := db.Put([]byte("offSetOfCurrentAncientFreezer"), big.NewInt(5).Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	closeDB()
+	unbound := StoreIdentity{ChainID: genesis.Config.ChainID.String(), GenesisHash: genesis.ToBlock().Hash(),
+		StateScheme: rawdb.HashScheme}
+	before := inventory(t, dir)
+	_, err := Preflight(dir, unbound)
+	if !sameInventory(before, inventory(t, dir)) {
+		t.Fatal("preflight changed the home")
+	}
+	mustErr(t, err, ErrForbiddenPruning)
+	record(t, "legacy_offset", err.Error())
 }

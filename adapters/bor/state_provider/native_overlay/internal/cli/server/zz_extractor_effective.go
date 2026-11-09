@@ -5,8 +5,6 @@ package server
 // effective configuration that `bor server` uses.
 
 import (
-	"bytes"
-	"fmt"
 	"io"
 	"strings"
 
@@ -17,10 +15,9 @@ import (
 // (defaults, then the --config file, then explicit flags) to args and returns
 // the configuration that Run would pass to NewServer, without starting it.
 func ExtractorEffectiveConfig(args []string) (*Config, error) {
-	var stderr bytes.Buffer
-	command := &Command{UI: &cli.BasicUi{Reader: strings.NewReader(""), Writer: io.Discard, ErrorWriter: &stderr}}
+	command := &Command{UI: &cli.BasicUi{Reader: strings.NewReader(""), Writer: io.Discard, ErrorWriter: io.Discard}}
 	if err := command.extractFlags(args); err != nil {
-		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+		return nil, err
 	}
 	return command.config, nil
 }

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"regexp"
 	"sort"
@@ -174,9 +175,17 @@ func New(db ethdb.Database, tdb *triedb.Database, expected StoreIdentity) (*Prov
 // the native-capture protocol: commit the root from the trie cache, sync the
 // key-value store, write the ledger record, and sync again. A RAM reference
 // alone is never a pin. On error no ledger record is written.
+//
+// Precondition: the caller holds the native observation guard, so the native
+// import cannot dereference the parent root from the trie cache between the
+// admission decision and this call (protocol step 2). A root that is neither
+// in the trie cache nor on disk fails with ErrPinUnavailable.
 func (p *Provider) Pin(pin Pin) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if pin.Codes == nil {
+		pin.Codes = []common.Hash{}
+	}
 	if err := validPin(pin); err != nil {
 		return err
 	}
@@ -296,6 +305,35 @@ func RequireRewindAllowed(db ethdb.Database, newHead uint64) error {
 		}
 	}
 	return nil
+}
+
+// FreezeLimit returns the highest exclusive block number up to which the
+// native chain freezer may freeze, given its own limit. The freezer deletes
+// every side-chain block at a frozen number and their dangling descendants,
+// so it must stay at or below the fork point of every pinned side-branch
+// header. Canonical pinned headers move to the freezer and stay readable, so
+// they impose no limit. A pinned header whose ancestry cannot be read fails.
+func FreezeLimit(db ethdb.Database, limit uint64) (uint64, error) {
+	pins, err := Pins(db)
+	if err != nil {
+		return 0, err
+	}
+	for _, pin := range pins {
+		for _, ref := range pin.Headers {
+			hash, number := ref.Hash, ref.Number
+			for rawdb.ReadCanonicalHash(db, number) != hash {
+				header := rawdb.ReadHeader(db, hash, number)
+				if header == nil || number == 0 {
+					return 0, fmt.Errorf("%w: pin %s header %d %s", ErrPinUnavailable, pin.ID, number, hash)
+				}
+				hash, number = header.ParentHash, number-1
+			}
+			if number != ref.Number && number+1 < limit {
+				limit = number + 1
+			}
+		}
+	}
+	return limit, nil
 }
 
 // StoreReport is the read-only preflight result.
@@ -425,7 +463,7 @@ func strictDecode(data []byte, value any) error {
 	if err := decoder.Decode(value); err != nil {
 		return err
 	}
-	if decoder.More() {
+	if _, err := decoder.Token(); err != io.EOF {
 		return errors.New("trailing data")
 	}
 	return nil

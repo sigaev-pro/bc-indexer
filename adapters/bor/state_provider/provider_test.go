@@ -255,6 +255,9 @@ func TestUnitPinCommitsDirtyRootBeforeRecording(t *testing.T) {
 	if err := provider.Pin(pin); err != nil {
 		t.Fatalf("repeated identical pin: %v", err)
 	}
+	// A repeated pin re-verifies its references: lose the pinned code.
+	rawdb.DeleteCode(db, code)
+	mustErr(t, provider.Pin(pin), ErrPinUnavailable)
 	changed := pin
 	changed.Profile = strings.Repeat("2", 64)
 	mustErr(t, provider.Pin(changed), ErrPinConflict)
@@ -294,12 +297,41 @@ func TestUnitPinFailureLeavesNoRecord(t *testing.T) {
 		{func() Pin { p := pinFor("empty-root", identity, side); p.ParentRoot = common.Hash{}; return p }(), ErrInvalidPin},
 		{func() Pin { p := pinFor("empty-header", identity, side); p.Headers[0].Hash = common.Hash{}; return p }(), ErrInvalidPin},
 		{pinFor("empty-code", identity, side, common.Hash{}), ErrInvalidPin},
+		{func() Pin { p := pinFor("bad-store", identity, side); p.Store.StoreID = "x"; return p }(), ErrInvalidPin},
+		{func() Pin {
+			p := pinFor("padded-chain", identity, side)
+			p.Store.ChainID = "0" + identity.ChainID
+			return p
+		}(), ErrInvalidPin},
+		{func() Pin { p := pinFor("zero-chain", identity, side); p.Store.ChainID = "0"; return p }(), ErrInvalidPin},
+		{func() Pin { p := pinFor("no-genesis", identity, side); p.Store.GenesisHash = common.Hash{}; return p }(), ErrInvalidPin},
+		{func() Pin {
+			p := pinFor("path-store", identity, side)
+			p.Store.StateScheme = rawdb.PathScheme
+			return p
+		}(), ErrInvalidPin},
 	}
 	for _, item := range cases {
 		mustErr(t, provider.Pin(item.pin), item.want)
 	}
 	if pins, err := Pins(db); err != nil || len(pins) != 0 {
 		t.Fatalf("failed pins left records %v %v", pins, err)
+	}
+	// A pin may also name ancestor headers; only the first must carry the root.
+	ancestors := pinFor("with-ancestor", identity, side, code)
+	ancestors.Headers = append(ancestors.Headers, HeaderRef{Hash: genesis.Hash(), Number: 0})
+	if err := provider.Pin(ancestors); err != nil {
+		t.Fatal(err)
+	}
+	// Nil and empty code lists are the same pin.
+	empty := pinFor("no-codes", identity, side)
+	empty.Codes = nil
+	if err := provider.Pin(empty); err != nil {
+		t.Fatal(err)
+	}
+	empty.Codes = []common.Hash{}
+	if err := provider.Pin(empty); err != nil {
+		t.Fatalf("empty codes conflict with nil codes: %v", err)
 	}
 }
 
@@ -345,6 +377,26 @@ func TestUnitMalformedLedgerFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	side, code := commitSideState(t, db, tdb, rawdb.ReadHeader(db, identity.GenesisHash, 0), 5)
+	valid, err := json.Marshal(pinFor("trailing", identity, side, code))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown := append(append([]byte{}, valid[:len(valid)-1]...), []byte(`,"extra":1}`)...)
+	for _, bad := range [][]byte{append(append([]byte{}, valid...), []byte(" {}")...),
+		append(append([]byte{}, valid...), '}'), unknown} {
+		if err := db.Put(pinKey("trailing"), bad); err != nil {
+			t.Fatal(err)
+		}
+		_, err = Pins(db)
+		mustErr(t, err, ErrInvalidPin)
+	}
+	if err := db.Put(pinKey("trailing"), valid); err != nil {
+		t.Fatal(err)
+	}
+	if pins, err := Pins(db); err != nil || len(pins) != 1 {
+		t.Fatalf("valid record %v %v", pins, err)
+	}
 	if err := db.Put(pinKey("broken"), []byte(`{"id":"broken"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -385,6 +437,109 @@ func TestUnitMisfiledLedgerRecordFailsClosed(t *testing.T) {
 	_, err = Pins(db)
 	mustErr(t, err, ErrInvalidPin)
 	mustErr(t, provider.Release("obs-5"), ErrInvalidPin)
+}
+
+func TestUnitLedgerPinOfAnotherStoreRejects(t *testing.T) {
+	db, tdb, genesis := newMemoryStore(t)
+	identity, err := Bind(db, testStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, code := commitSideState(t, db, tdb, genesis, 6)
+	if err := tdb.Commit(side.Root, false); err != nil {
+		t.Fatal(err)
+	}
+	foreign := pinFor("foreign", identity, side, code)
+	foreign.Store.StoreID = otherStore
+	data, err := json.Marshal(foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Put(pinKey("foreign"), data); err != nil {
+		t.Fatal(err)
+	}
+	_, err = checkStore(db, identity)
+	mustErr(t, err, ErrWrongStore)
+	_, err = New(db, tdb, identity)
+	mustErr(t, err, ErrWrongStore)
+	// A ledger pin without a binding is not an unbound fresh store either.
+	if err := db.Delete([]byte(storeKey)); err != nil {
+		t.Fatal(err)
+	}
+	unbound := identity
+	unbound.StoreID = ""
+	_, err = checkStore(db, unbound)
+	mustErr(t, err, ErrWrongStore)
+}
+
+// TestUnitFreezeLimit covers the chain freezer path: it deletes side-chain
+// blocks at frozen numbers, so a pinned side header caps the freeze limit at
+// its fork point, while a canonical pinned header does not.
+func TestUnitFreezeLimit(t *testing.T) {
+	db, tdb, genesis := newMemoryStore(t)
+	identity, err := Bind(db, testStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := New(db, tdb, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limit, err := FreezeLimit(db, 100); err != nil || limit != 100 {
+		t.Fatalf("no pins: %d %v", limit, err)
+	}
+	side, code := commitSideState(t, db, tdb, genesis, 8)
+	child, childCode := commitSideState(t, db, tdb, side, 9)
+	if err := provider.Pin(pinFor("obs-side-child", identity, child, childCode)); err != nil {
+		t.Fatal(err)
+	}
+	if limit, err := FreezeLimit(db, 100); err != nil || limit != 1 {
+		t.Fatalf("side pin above genesis fork: %d %v", limit, err)
+	}
+	if limit, err := FreezeLimit(db, 1); err != nil || limit != 1 {
+		t.Fatalf("lower native limit: %d %v", limit, err)
+	}
+	rawdb.WriteCanonicalHash(db, side.Hash(), 1)
+	if limit, err := FreezeLimit(db, 100); err != nil || limit != 2 {
+		t.Fatalf("side pin above block 1 fork: %d %v", limit, err)
+	}
+	if limit, err := FreezeLimit(db, 1); err != nil || limit != 1 {
+		t.Fatalf("native limit below the fork: %d %v", limit, err)
+	}
+	rawdb.WriteCanonicalHash(db, child.Hash(), 2)
+	if limit, err := FreezeLimit(db, 100); err != nil || limit != 100 {
+		t.Fatalf("canonical pin: %d %v", limit, err)
+	}
+	if err := provider.Pin(pinFor("obs-side", identity, side, code)); err != nil {
+		t.Fatal(err)
+	}
+	rawdb.DeleteCanonicalHash(db, 2)
+	rawdb.DeleteCanonicalHash(db, 1)
+	rawdb.DeleteHeader(db, side.Hash(), 1)
+	_, err = FreezeLimit(db, 100)
+	mustErr(t, err, ErrPinUnavailable)
+}
+
+func TestUnitGuardedPrunerPaths(t *testing.T) {
+	db, tdb, genesis := newMemoryStore(t)
+	identity, err := Bind(db, testStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := New(db, tdb, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := workDir(t, "datadir")
+	if err := RecoverPruning(db, dir); err != nil {
+		t.Fatalf("recovery without pins or bloom: %v", err)
+	}
+	side, code := commitSideState(t, db, tdb, genesis, 7)
+	if err := provider.Pin(pinFor("obs-7", identity, side, code)); err != nil {
+		t.Fatal(err)
+	}
+	mustErr(t, RecoverPruning(db, dir), ErrLivePins)
+	mustErr(t, PruneState(db, dir, 256, genesis.Root), ErrLivePins)
 }
 
 func TestUnitLedgerKeysAreNotNativeStateKeys(t *testing.T) {
@@ -802,18 +957,22 @@ func TestNativeEffectiveProfile(t *testing.T) {
 	names := []string{}
 	for _, item := range profileCases(t) {
 		accepted, detail := item.run(t)
-		if accepted != item.accept {
-			t.Fatalf("%s: accepted %v, want %v: %v", item.name, accepted, item.accept, detail)
+		if accepted != (item.reason == "") {
+			t.Fatalf("%s: accepted %v, want rejection reason %q: %v", item.name, accepted, item.reason, detail)
 		}
-		results[item.name] = map[string]any{"accepted": accepted, "detail": detail}
+		if !accepted && !strings.Contains(fmt.Sprint(detail), item.reason) {
+			t.Fatalf("%s: rejected for another reason, want %q: %v", item.name, item.reason, detail)
+		}
+		results[item.name] = map[string]any{"accepted": accepted, "reason": item.reason, "detail": detail}
 		names = append(names, item.name)
 	}
 	sort.Strings(names)
 	record(t, "profile", map[string]any{"cases": names, "results": results})
 }
 
+// profileCase is accepted when reason is empty; a rejection must name reason.
 type profileCase struct {
 	name   string
-	accept bool
+	reason string
 	run    func(t *testing.T) (bool, any)
 }

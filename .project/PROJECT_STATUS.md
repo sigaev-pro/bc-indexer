@@ -24,18 +24,22 @@ decides whether #13 may close on private local native-seam evidence, this block
 gives no public-profile credit, every public AC cell stays NOT_RUN, and #13 stays
 open after this block. Independent work continues.
 
-BLOCKED_DECISION (owner): who wires the deletion guards into a shipped native
-binary. In the hash scheme the native store deletes committed state, code or
-headers only through the offline prune command, its startup resume, and head
-rewinds (`SetHead`, crash repair). This block adds ledger guards for each path
-(`PruneState`, `RecoverPruning`, `RequireRewindAllowed`) and proves them
-in-process against the native code, but calling them from the native command
-and startup paths needs a patched native build. E01-01.builds produced
-unpatched builds and no task in the catalog owns a patched-build pipeline. The
-candidates are E01-02.admission (which first wires the seam into the real
-import path) or a new build task. Until decided, the shipped native binaries do
-not call the guards, so the native `snapshot prune-state` command and a manual
-`debug_setHead` remain operator hazards outside the capture profile.
+BLOCKED_DECISION (owner): who adds the native retention patch. The accepted
+native sources delete committed state, code or pinned headers through the
+offline prune command and its startup resume, head rewinds (`SetHead`, crash
+repair) and the chain freezer's side-chain wipe. This block adds a ledger
+guard for each path (`PruneState`, `RecoverPruning`, `RequireRewindAllowed`,
+`FreezeLimit`) and proves them against the native code in-process (the
+freezer guard by unit test). Calling them from the shipped binaries needs a
+native patch. E01-01.builds defines a source/patch identity, but its accepted
+builds carry no patch, and spec v3 says the hash scheme without retention
+patches is insufficient. Either E01-01.builds reopens to build patched
+clients, or E01-02.admission (which first wires the seam into the real import
+path) adds the patch set; this changes accepted-task sequencing, so it is the
+owner's call. Until then AC-CAP-03-01 `pinned_state_pruning_attempt` is proven
+in-process only, and the unpatched native `snapshot prune-state`, a manual
+`debug_setHead` and side-branch pins older than the freezer threshold remain
+hazards outside this block's evidence.
 
 ## E01-01.harness — NATS settle check uses pinned raftz names
 

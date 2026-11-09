@@ -263,11 +263,13 @@ accept-preconf-tx = false
 enabled = false
 `
 
-// effectiveCase checks one `bor server` argument set. The config body, when
-// present, is written to a file and passed with --config like a deployment.
-func effectiveCase(name string, accept bool, config string, args []string, env map[string]string,
+// effectiveCase checks one `bor server` argument set. It is accepted when
+// reason is empty; otherwise the rejection text must contain reason. The
+// config body, when present, is written to a file and passed with --config
+// like a deployment.
+func effectiveCase(name, reason string, config string, args []string, env map[string]string,
 	reflect func(*server.Config) bool) profileCase {
-	return profileCase{name: name, accept: accept, run: func(t *testing.T) (bool, any) {
+	return profileCase{name: name, reason: reason, run: func(t *testing.T) (bool, any) {
 		for key, value := range env {
 			t.Setenv(key, value)
 		}
@@ -303,29 +305,29 @@ func profileCases(t testing.TB) []profileCase {
 	}
 	on := func(flag string) []string { return []string{"--" + flag + "=true"} }
 	return []profileCase{
-		effectiveCase("baseline_config", true, baseConfig, nil, nil, nil),
-		effectiveCase("allowed_config", true, baseConfig+"\n[cache]\ncache = 1234\n", nil, nil, cache(1234)),
-		effectiveCase("allowed_native_args", true, baseConfig+"\n[cache]\ncache = 1234\n", []string{"--cache=2345"}, nil, cache(2345)),
+		effectiveCase("baseline_config", "", baseConfig, nil, nil, nil),
+		effectiveCase("allowed_config", "", baseConfig+"\n[cache]\ncache = 1234\n", nil, nil, cache(1234)),
+		effectiveCase("allowed_native_args", "", baseConfig+"\n[cache]\ncache = 1234\n", []string{"--cache=2345"}, nil, cache(2345)),
 		// The `bor server` parser reads no configuration environment
 		// variables at this commit (only BOR_GRPC_TOKEN), so environment
 		// cannot select a forbidden value.
-		effectiveCase("environment_is_not_a_config_source", true, baseConfig, nil,
+		effectiveCase("environment_is_not_a_config_source", "", baseConfig, nil,
 			map[string]string{"BOR_STATE_SCHEME": "path", "BOR_GCMODE": "archive", "BOR_PARALLELEVM_ENABLE": "true"}, nil),
-		effectiveCase("wrong_hash_profile_default", false, strings.Replace(baseConfig, `"state.scheme" = "hash"`+"\n", "", 1), nil, nil, nil),
-		effectiveCase("wrong_hash_profile_config", false, strings.Replace(baseConfig, `= "hash"`, `= "path"`, 1), nil, nil, nil),
-		effectiveCase("wrong_hash_profile_flag", false, baseConfig, []string{"--state.scheme=path"}, nil, nil),
-		effectiveCase("forbidden_pruning_archive_flag", false, baseConfig, []string{"--gcmode=archive"}, nil, nil),
-		effectiveCase("forbidden_pruning_archive_config", false, strings.Replace(baseConfig, `gcmode = "full"`, `gcmode = "archive"`, 1), nil, nil, nil),
-		effectiveCase("wrong_syncmode_flag", false, baseConfig, []string{"--syncmode=snap"}, nil, nil),
-		effectiveCase("bor_pipelined_import", false, baseConfig, on("pipeline.enable-import-src"), nil, nil),
-		effectiveCase("bor_parallel_stateless", false, baseConfig, on("witness.parallelstatelessimport"), nil, nil),
-		effectiveCase("bor_witness_sync", false, baseConfig, on("witness.syncwithwitnesses"), nil, nil),
-		effectiveCase("bor_preconfirmation_relay", false, baseConfig, on("relay.enable-preconfs"), nil, nil),
-		effectiveCase("bor_preconfirmation_rpc", false, baseConfig, on("accept-preconf-tx"), nil, nil),
-		effectiveCase("bor_blockstm_enable", false, baseConfig, on("parallelevm.enable"), nil, nil),
-		effectiveCase("bor_blockstm_enforce", false, baseConfig, on("parallelevm.enforce"), nil, nil),
-		effectiveCase("bor_blockstm_config", false, strings.Replace(baseConfig, "enable = false\nenforce", "enable = true\nenforce", 1), nil, nil, nil),
-		effectiveCase("bor_sequencer", false, baseConfig, on("sequencer.enabled"), nil, nil),
+		effectiveCase("wrong_hash_profile_default", `state.scheme "path"`, strings.Replace(baseConfig, `"state.scheme" = "hash"`+"\n", "", 1), nil, nil, nil),
+		effectiveCase("wrong_hash_profile_config", `state.scheme "path"`, strings.Replace(baseConfig, `= "hash"`, `= "path"`, 1), nil, nil, nil),
+		effectiveCase("wrong_hash_profile_flag", `state.scheme "path"`, baseConfig, []string{"--state.scheme=path"}, nil, nil),
+		effectiveCase("wrong_gc_profile_archive_flag", `gcmode "archive"`, baseConfig, []string{"--gcmode=archive"}, nil, nil),
+		effectiveCase("wrong_gc_profile_archive_config", `gcmode "archive"`, strings.Replace(baseConfig, `gcmode = "full"`, `gcmode = "archive"`, 1), nil, nil, nil),
+		effectiveCase("wrong_syncmode_flag", `syncmode "snap"`, baseConfig, []string{"--syncmode=snap"}, nil, nil),
+		effectiveCase("bor_pipelined_import", "pipeline.enable-import-src", baseConfig, on("pipeline.enable-import-src"), nil, nil),
+		effectiveCase("bor_parallel_stateless", "witness.parallelstatelessimport", baseConfig, on("witness.parallelstatelessimport"), nil, nil),
+		effectiveCase("bor_witness_sync", "witness.syncwithwitnesses", baseConfig, on("witness.syncwithwitnesses"), nil, nil),
+		effectiveCase("bor_preconfirmation_relay", "relay.enable-preconfs", baseConfig, on("relay.enable-preconfs"), nil, nil),
+		effectiveCase("bor_preconfirmation_rpc", "accept-preconf-tx", baseConfig, on("accept-preconf-tx"), nil, nil),
+		effectiveCase("bor_blockstm_enable", "parallelevm.enable", baseConfig, on("parallelevm.enable"), nil, nil),
+		effectiveCase("bor_blockstm_enforce", "parallelevm.enforce", baseConfig, on("parallelevm.enforce"), nil, nil),
+		effectiveCase("bor_blockstm_config", "parallelevm.enable", strings.Replace(baseConfig, "enable = false\nenforce", "enable = true\nenforce", 1), nil, nil, nil),
+		effectiveCase("bor_sequencer", "sequencer.enabled", baseConfig, on("sequencer.enabled"), nil, nil),
 	}
 }
 
@@ -371,4 +373,28 @@ func TestUnitCheckProfileFields(t *testing.T) {
 	if _, err := CheckProfile(nil); err == nil {
 		t.Fatal("missing config accepted")
 	}
+}
+
+// TestNativeLegacyPruneOffset covers the marker that the native
+// `bor snapshot prune-block` command leaves after deleting old block data:
+// preflight rejects the home and leaves it unchanged. The marker is written
+// by the test, not by a real prune-block run.
+func TestNativeLegacyPruneOffset(t *testing.T) {
+	genesis := familyGenesis(t)
+	dir := workDir(t, "legacy-offset")
+	initStore(t, dir, genesis, false)
+	db, closeDB := openStore(t, dir)
+	if err := db.Put([]byte("offsetOfCurrentAncientFreezer"), big.NewInt(5).Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	closeDB()
+	unbound := StoreIdentity{ChainID: genesis.Config.ChainID.String(), GenesisHash: genesis.ToBlock().Hash(),
+		StateScheme: rawdb.HashScheme}
+	before := inventory(t, dir)
+	_, err := Preflight(dir, unbound)
+	if !sameInventory(before, inventory(t, dir)) {
+		t.Fatal("preflight changed the home")
+	}
+	mustErr(t, err, ErrForbiddenPruning)
+	record(t, "legacy_offset", err.Error())
 }

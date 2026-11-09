@@ -48,8 +48,9 @@ func Preflight(instanceDir string, expected StoreIdentity) (StoreReport, error) 
 const nativeTriesInMemory = 128
 
 // PruneState runs the native offline state pruner only when no pin is live.
-// The check and the prune share one exclusively opened store, so a running
-// node cannot add a pin in between.
+// The caller must pass the store opened exclusively by this process (the
+// native node stopped), so no pin can be added between the check and the
+// prune.
 func PruneState(db ethdb.Database, instanceDir string, bloomSize uint64, root common.Hash) error {
 	if err := RequireNoLivePins(db); err != nil {
 		return err
