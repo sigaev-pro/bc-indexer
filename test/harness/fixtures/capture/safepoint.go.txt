@@ -8,5 +8,6 @@ var extractorSafePoint func(OpCode, *ScopeContext)
 
 // SetExtractorSafePoint installs f. The interpreter calls it on the native
 // goroutine between VM steps, before the opcode hook and before the opcode
-// changes memory or state. It is never called inside a tracing hook.
+// changes memory or state. It is never called inside a tracing hook, and only
+// traced execution calls it: prefetchers that clear the tracer never do.
 func SetExtractorSafePoint(f func(OpCode, *ScopeContext)) { extractorSafePoint = f }

@@ -32,7 +32,9 @@ FIXTURE = Path(__file__).with_name("fixtures") / "capture"
 FAMILIES = ("geth", "bsc", "bor")
 LOCK = Path("/tmp/extractor-harness-runner.lock")
 ANCHOR = "\t\t// Do tracing before potential memory expansion\n"
-SAFE_POINT_CALL = ("\t\tif extractorSafePoint != nil {\n"
+# Only traced execution reaches the safe point: the native prefetchers run the same loop
+# on other goroutines with the tracer cleared, and that speculative work is never captured.
+SAFE_POINT_CALL = ("\t\tif debug && extractorSafePoint != nil {\n"
                    "\t\t\textractorSafePoint(op, callContext)\n"
                    "\t\t}\n")
 PROBE_FILES = ("probe.go", "insert.go", "insert_bor.go")
