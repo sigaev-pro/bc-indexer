@@ -58,6 +58,15 @@ Allowed paths: `test/mutate.py`, `test/test_mutate.py`, `test/mutate.mutants.jso
 `.project/docs/DEVELOPMENT_WORKFLOW.md` and this status file. No adapter,
 capture, NATS or runner production logic changes; no Docker or native run.
 
+Resume point (paused for a host shutdown on 2026-11-10): round 2 Spec and
+Standards reviews of head `fd5b64f` and its exact-head `bootstrap/ci` run were
+in progress; the shutdown may cut off both reviewer sessions. This resume-point
+commit changes only PROJECT_STATUS.md after `fd5b64f`. Next step after restart:
+rerun Spec and Standards round 2 on the current head (code is unchanged since
+`076e74f`; retained record `review-tooling-02-076e74f` is current), confirm
+exact-head CI, fix any findings, then post the review summary comment. Do not
+merge: the owner has not authorized merging this PR.
+
 Base: `f8d3e67`. Branch/worktree: `feat/review-tooling` / `harness-review-tooling-288aea`.
 Next: exact-head CI, Spec and Standards reviews, draft PR. Merge needs the
 owner's permission for this PR.
