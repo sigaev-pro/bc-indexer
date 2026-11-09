@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import nats_image
-from nats_image_proof import config_join, initial_rounds, validate_report
+from nats_image_proof import config_join, initial_rounds, initial_sample, validate_report
 from test_nats_image_checks import encoded
 from test_nats_image_collection import document, change_body
 
@@ -362,6 +362,87 @@ class NativeProofTests(unittest.TestCase):
         for name, (retained, orders) in cases.items():
             with self.subTest(case=name), self.assertRaises(ValueError):
                 initial_rounds(select(retained, *orders), retained, calls)
+
+    def test_initial_sample_rejects_every_changed_field(self):
+        for topology in ("standalone", "R3"):
+            with tempfile.TemporaryDirectory() as temp:
+                value = native_document(Path(temp).resolve(), topology)
+            process = value["basic"]["processes"][0]
+            ready = value["initial_inventory"][0]
+            pending = copy.deepcopy(ready)
+            change_body(pending, lambda j: (j.update(streams=0), j["account_details"][0].pop("stream_detail")))
+            self.assertTrue(initial_sample(copy.deepcopy(ready), process, value, set()))
+            self.assertFalse(initial_sample(copy.deepcopy(pending), process, value, set()))
+            account = lambda j: j["account_details"][0]
+            stream = lambda j: account(j)["stream_detail"][0]
+            cases = {
+                "ready": {
+                    "stream count above one": lambda j: j.update(streams=2),
+                    "stream count type": lambda j: j.update(streams=True),
+                    "account total": lambda j: j.update(total=2),
+                    "consumers": lambda j: j.update(consumers=1),
+                    "messages": lambda j: j.update(messages=1),
+                    "bytes": lambda j: j.update(bytes=1),
+                    "server identity": lambda j: j.update(server_id="OTHER"),
+                    "extra account": lambda j: j["account_details"].append(copy.deepcopy(account(j))),
+                    "account id": lambda j: account(j).update(id="SYS"),
+                    "account name": lambda j: account(j).update(name="SYS"),
+                    "extra stream": lambda j: account(j)["stream_detail"].append(copy.deepcopy(stream(j))),
+                    "missing stream detail": lambda j: account(j).pop("stream_detail"),
+                    "stream name": lambda j: stream(j).update(name="OTHER"),
+                    "created": lambda j: stream(j).update(created="2000-01-01T00:00:00Z"),
+                    "config": lambda j: stream(j)["config"].update(max_msgs=1),
+                    "nonempty state": lambda j: stream(j)["state"].update(messages=1, last_seq=1, first_seq=1, bytes=1),
+                    "missing state": lambda j: stream(j).pop("state"),
+                    "group": lambda j: stream(j).update(stream_raft_group="S-R3F-other"),
+                },
+                "pending": {
+                    "negative stream count": lambda j: j.update(streams=-1),
+                    "bytes": lambda j: j.update(bytes=1),
+                    "account name": lambda j: account(j).update(name="SYS"),
+                    "account id": lambda j: account(j).update(id="SYS"),
+                    "null detail": lambda j: account(j).update(stream_detail=None),
+                },
+            }
+            for kind, mutations in cases.items():
+                for name, mutate in mutations.items():
+                    sample = copy.deepcopy(ready if kind == "ready" else pending)
+                    change_body(sample, mutate)
+                    with self.subTest(topology=topology, kind=kind, case=name), self.assertRaises(ValueError):
+                        initial_sample(sample, process, value, set())
+            # The standalone stream must not report a Raft group.
+            if topology == "standalone":
+                sample = copy.deepcopy(ready)
+                change_body(sample, lambda j: stream(j).update(stream_raft_group=value["stream_group"] or "S-R3F-x"))
+                with self.assertRaises(ValueError): initial_sample(sample, process, value, set())
+
+    def test_initial_rounds_require_aligned_and_bounded_windows(self):
+        with tempfile.TemporaryDirectory() as temp:
+            value = native_document(Path(temp).resolve())
+        value["basic"]["census"]["attempts"][0]["forwarded_order"] = 4000
+        calls = [{"order": 8}]
+        ready = value["initial_inventory"]
+        pending = copy.deepcopy(ready[0])
+        change_body(pending, lambda j: (j.update(streams=0), j["account_details"][0].pop("stream_detail")))
+
+        def window(rows):
+            return {order: {**copy.deepcopy(row), "order": order, "error": ""} for order, row in enumerate(rows, 9)}
+
+        def select(retained, orders):
+            selected = copy.deepcopy(value)
+            selected["initial_inventory"] = [{k: v for k, v in retained[o].items() if k != "error"} for o in orders]
+            return selected
+
+        # Without round alignment, S-2/S-3/S-1 could pass as the final round.
+        misaligned = window([pending, ready[1], ready[2], ready[0]])
+        with self.assertRaisesRegex(ValueError, "Incomplete or unbounded initial readiness rounds"):
+            initial_rounds(select(misaligned, [10, 11, 12]), misaligned, calls)
+        bounded = window([pending, ready[1], ready[2]] * 600 + list(ready))
+        orders = sorted(bounded)[-3:]
+        with self.assertRaisesRegex(ValueError, "Incomplete or unbounded initial readiness rounds"):
+            initial_rounds(select(bounded, orders), bounded, calls)
+        allowed = window([pending, ready[1], ready[2]] * 599 + list(ready))
+        initial_rounds(select(allowed, sorted(allowed)[-3:]), allowed, calls)
 
     def test_original_stream_group_is_bound_before_restart(self):
         with tempfile.TemporaryDirectory() as temp:

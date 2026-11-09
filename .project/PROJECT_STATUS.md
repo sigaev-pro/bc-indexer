@@ -13,7 +13,14 @@ voters reported leader `image-S-2` for both groups at term 2. Both owned
 commands exited zero with complete cleanup and absent process groups; no
 exact-label container or native process remained. The author revalidated 545
 unique absolute artifact references (14,558,731 bytes). Only documentation
-changes follow the executed source. Runtime admission stays false; public
+and Python test changes follow the executed source; Python tests are not part of
+the prepared tool. Review 006 returned Spec PASS and Standards REQUEST_CHANGES
+for test coverage only. New Python controls kill 34 of 36 reviewer mutants of
+the readiness, round and configuration checks; the two survivors are equivalent.
+Follow-up outside this block: Go `settled()` reads raftz `catchup` and
+`write_error`, which pinned NATS names `catching_up` and `wal_error`, and several
+Go agreement/precheck lines lack direct controls. The independent Python
+frontier check enforces those properties; a Go fix needs a new preparation and run. Runtime admission stays false; public
 profiles and the remaining issue #12 criteria stay open. Next: exact-head CI,
 fresh independent Spec and Standards reviews, and protected acceptance.
 

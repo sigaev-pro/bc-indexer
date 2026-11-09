@@ -166,6 +166,15 @@ class CollectionTests(unittest.TestCase):
                         lambda j: j["account_details"][0]["stream_detail"][0]["config"].update(max_msg_size=7))
             with self.subTest(bracket=bracket), self.assertRaisesRegex(ValueError, "Recovered stream identity or full configuration"):
                 collection.validate_collections(**value)
+        # A recovered boolean cannot stand in for the sealed integer value.
+        value = document()
+        value["initial"]["config"]["max_consumers"] = 1
+        value["sealed"]["config"]["max_consumers"] = 1
+        for snap in (value["before"], value["after"]):
+            for node in snap["nodes"].values():
+                change_body(node["jsz"], lambda j: j["account_details"][0]["stream_detail"][0]["config"].update(max_consumers=True))
+        with self.assertRaisesRegex(ValueError, "Recovered stream identity or full configuration"):
+            collection.validate_collections(**value)
         # Integer 1 and boolean true are equal in Python but are different native values.
         value = document()
         value["initial"]["config"]["max_consumers"] = 1
