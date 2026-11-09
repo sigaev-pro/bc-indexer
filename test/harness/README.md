@@ -112,6 +112,11 @@ The driver captures each snapshot's complete relative file inventory, exact
 sizes and SHA256 values before restart. Final validation checks the same complete
 path set and bytes; a directory's continued existence is insufficient.
 
+Before the fenced API request, the driver waits until every voter reports the
+same nonempty metadata and stream leader, exactly one voter is LEADER and the
+others are FOLLOWER. Healthy restarted voters can briefly report no stream
+leader, and a stream API request in that window has no responder.
+
 Restart users can publish only exact stream INFO and sequence GET API subjects.
 A real denied data publication checks that restriction. Full health, JSz and
 explicit APP/SYS/$G Raft inventories enumerate metadata and stream groups, with
@@ -244,8 +249,10 @@ to sealed/restricted configurations, and an exhaustive framed ingress census
 with responses observed before reply loss. This input predicate's own
 source-conformance fields remain NOT_RUN; it does not execute those cases.
 The separate five-case source-native proof was accepted in PR #127. Unchanged-image
-standalone/R3 fence attempt 04 passed after three retained failed attempts;
-its acceptance is pending review. The offline RunPlan does not treat this inspection as
+standalone/R3 fence attempt 04 passed after three retained failed attempts.
+Run 05 of the review repair failed because the driver did not wait for a
+restarted stream leader; that repair is pending fresh execution. The offline
+RunPlan does not treat this inspection as
 verified conformance. Issue #12 remains open.
 
 ## Public seam and trust boundary

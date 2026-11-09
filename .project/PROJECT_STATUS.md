@@ -2,19 +2,37 @@
 
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: source checkpoint for review-005 repairs. Preparation 05 and measured
-attempt 05 are NOT_RUN at this checkpoint. Review 005 returned Spec PASS and
-Standards REQUEST_CHANGES with three P2 findings. The independent Python checker
-now validates every retained readiness sample between CREATE and the first
+Status: source checkpoint for the restart leader-readiness repair. Preparation
+06 and measured attempt 06 are NOT_RUN at this checkpoint.
+
+Measured run 05 at `1d933c3d05e8ba683e2c5d2df3f228fb739eac08` FAILED. Preparation
+05 passed in 53.885 seconds. Standalone passed; R3 restarted all three voters
+and returned the exact publication denial, but the fenced STREAM.INFO request on
+`image-S-1` received no reply and the driver stopped with a read timeout. The
+retained "before" collection shows the restarted stream group with no leader on
+all three voters (term 1), while the metadata group already had leader
+`image-S-2`. The server logs show the stream leader elected at 14:40:56.244 UTC,
+just after the request was sent. The driver's settled predicate compared the
+leader field for equality only, so three empty leaders passed. Cleanup was
+complete and no native process or owned container remained.
+
+The repair requires a nonempty Raft leader that every voter reports, exactly one
+voter in LEADER state with that identity, and FOLLOWER state on the others,
+for both the metadata and stream groups, before the fenced API request. The
+independent Python frontier predicate already required exactly one recovered
+leader. A new Go control rejects the empty, unknown, disagreeing and wrong-role
+leader cases; five of its six cases passed the old predicate. Next: prepare a
+new tool and run attempt 06 linked to FAIL05.
+
+Historical review-005 checkpoint `1d933c3`: the independent Python checker now
+validates every retained readiness sample between CREATE and the first
 publication, requires complete voter-ordered polling rounds, rejects an earlier
 complete round and freezes only the final complete round. New Go and Python
 negative controls kill every single-check mutation of the readiness and
 recovered/sealed configuration checks except one redundant round-size check.
 Read-only replay of the retained attempt-03 and attempt-04 native reports passes
-the repaired checker without changing either proof. Changed harness and driver
-sources require fresh preparation 05 and measured run 05. The runner links only
-failed predecessors, so run 05 starts a new lineage (`attempt_index` 1); the
-evidence record binds it to PASS04 explicitly.
+the repaired checker without changing either proof. The runner links only
+failed predecessors, so run 05 started a new lineage (`attempt_index` 1).
 
 Historical attempt 04: executed source
 `e2f92111262a59f6096f515b1a73785dab4af630` prepared successfully in 70.450

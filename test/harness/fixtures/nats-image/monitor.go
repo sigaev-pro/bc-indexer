@@ -363,6 +363,7 @@ func settled(result collection, count int, group string) bool {
 		return false
 	}
 	common := map[string]string{}
+	leaders := map[string]int{}
 	for name, node := range result.Nodes {
 		health, err := object(node.Health.Body)
 		if err != nil || node.Health.Status != 200 || health["status"] != "ok" {
@@ -409,14 +410,39 @@ func settled(result collection, count int, group string) bool {
 					return false
 				}
 			}
-			fingerprint := fmt.Sprintf("%v/%v/%v/%d", row["leader"], row["term"], row["pterm"], progress)
+			// Healthy voters can report an empty leader right after restart.
+			// A stream API request in that window has no responder.
+			leader, ok := row["leader"].(string)
+			if !ok || leader == "" {
+				return false
+			}
+			role := "FOLLOWER"
+			if row["id"] == leader {
+				role = "LEADER"
+				leaders[key]++
+			}
+			if row["state"] != role {
+				return false
+			}
+			fingerprint := fmt.Sprintf("%v/%v/%v/%d", leader, row["term"], row["pterm"], progress)
 			if previous, exists := common[key]; exists && previous != fingerprint {
 				return false
 			}
 			common[key] = fingerprint
 		}
 	}
-	return count == 1 || len(common) == 2
+	if count == 1 {
+		return true
+	}
+	if len(common) != 2 {
+		return false
+	}
+	for key := range common {
+		if leaders[key] != 1 {
+			return false
+		}
+	}
+	return true
 }
 func (r *runtimeState) settledCollection(count int, group string) (collection, error) {
 	for {

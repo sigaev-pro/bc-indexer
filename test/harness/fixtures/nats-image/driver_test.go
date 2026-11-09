@@ -326,6 +326,79 @@ func TestInitialMaterializationRejectsEveryChangedField(t *testing.T) {
 	}
 }
 
+func TestSettledCollectionRequiresOneAgreedRaftLeader(t *testing.T) {
+	names := []string{"image-S-1", "image-S-2", "image-S-3"}
+	group := "S-R3F-known"
+	build := func(mutate func(name, key string, row map[string]any)) collection {
+		result := collection{Nodes: map[string]nodeCollection{}}
+		leader := nativeMember("image-S-2")
+		for _, name := range names {
+			stream := map[string]any{"name": "FENCE", "config": map[string]any{"sealed": true}}
+			jsz, _ := json.Marshal(map[string]any{"account_details": []any{map[string]any{"name": "APP", "id": "APP", "stream_detail": []any{stream}}}})
+			node := nodeCollection{Health: observation{Status: 200, Body: []byte(`{"status":"ok"}`)}, JSZ: observation{Status: 200, Body: jsz}, Groups: map[string]observation{}}
+			for key, path := range map[string][2]string{"SYS/_meta_": {"SYS", "_meta_"}, "APP/" + group: {"APP", group}} {
+				state := "FOLLOWER"
+				if name == "image-S-2" {
+					state = "LEADER"
+				}
+				row := map[string]any{"id": nativeMember(name), "leader": leader, "state": state, "term": 2, "pterm": 2, "pindex": 6, "committed": 6, "applied": 6,
+					"ipq_proposal_len": 0, "ipq_entry_len": 0, "ipq_resp_len": 0, "ipq_apply_len": 0}
+				if mutate != nil {
+					mutate(name, key, row)
+				}
+				body, _ := json.Marshal(map[string]any{path[0]: map[string]any{path[1]: row}})
+				node.Groups[key] = observation{Status: 200, Body: body}
+			}
+			result.Nodes[name] = node
+		}
+		return result
+	}
+	if !settled(build(nil), 3, group) {
+		t.Fatal("agreed leader rejected")
+	}
+	stream := "APP/" + group
+	for name, mutate := range map[string]func(string, string, map[string]any){
+		"no stream leader": func(_, key string, row map[string]any) {
+			if key == stream {
+				row["leader"] = nil
+				row["state"] = "FOLLOWER"
+			}
+		},
+		"empty meta leader": func(_, key string, row map[string]any) {
+			if key == "SYS/_meta_" {
+				row["leader"] = ""
+				row["state"] = "FOLLOWER"
+			}
+		},
+		"leader without leader role": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-2" {
+				row["state"] = "FOLLOWER"
+			}
+		},
+		"follower claims leader role": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row["state"] = "LEADER"
+			}
+		},
+		"unknown leader": func(_, key string, row map[string]any) {
+			if key == stream {
+				row["leader"] = "Foreign1"
+				row["state"] = "FOLLOWER"
+			}
+		},
+		"leader disagreement": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row["leader"] = nativeMember("image-S-3")
+				row["state"] = "LEADER"
+			}
+		},
+	} {
+		if settled(build(mutate), 3, group) {
+			t.Errorf("%s settled", name)
+		}
+	}
+}
+
 func TestInfoMustMatchSelectedProcessConfiguration(t *testing.T) {
 	process := &processRecord{Name: "image-S-1", InfoID: "native-id", Config: []byte(`{"server_name":"image-S-1","listen":"127.0.0.1:19001","max_payload":8192}`)}
 	baseline := map[string]any{"server_name": "image-S-1", "server_id": "native-id", "host": "127.0.0.1", "port": json.Number("19001"), "proto": json.Number("1"), "max_payload": json.Number("8192")}
