@@ -1,5 +1,22 @@
 # Состояние проекта
 
+## E01-02.owned_capture — Owned capture seam with bounded memory (issue #15)
+
+Status: IN_PROGRESS. Block outcome: the dependency-free Go module `core/capture`
+(immutable owned frames, BEGIN_FIELD/CHUNK/END_FIELD with sequence, length and
+SHA-256 digest, a fixed byte budget, safe-point waits that a callback can never
+enter, and callback notes that spend credit reserved at a safe point), plus a
+private native probe that runs the module inside the accepted Geth, BSC and Bor
+block-import paths. Allowed paths: `core/capture`, the probe under
+`test/harness`, and status documents. `adapters/<client>/state_provider` and the
+harness tooling files stay untouched. Required checks: Go unit tests with the
+race detector in the accepted compiler image, compiling single-check mutants,
+one measured private probe run per family, independent Spec and Standards review.
+Runtime results stay NOT_RUN until that evidence exists.
+
+Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93`.
+Branch/worktree: `feat/e01-02-owned-capture` / `e01-02-owned-capture-157133`.
+
 ## E01-01.harness — NATS settle check uses pinned raftz names
 
 Status: READY_FOR_REVIEW. This is the last open #12 item: the PR #128 follow-up
