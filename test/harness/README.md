@@ -652,9 +652,12 @@ SIGTERM, SIGINT or SIGHUP. Dispatch stops after the first child FAIL. A child
 passes only with a bounded, duplicate-key-free proof object of the matching
 kind, PASS, complete cleanup, the admitted request, exit zero and an absent
 process group. Teardown always runs, even after an error or signal. It removes
-only `extractor.harness` containers whose mounts are inside this run's output
-and records any foreign harness container without touching it. `run-record.json`
-is always written; it keeps phase timestamps and plan deadlines for
+only `extractor.harness` containers whose mounts are inside this run's output or
+that carry a recorded child nonce label. Any other harness container, or one
+Docker cannot describe, is left in place and fails cleanup, so the run fails.
+Once this run has created its output, `run-record.json` is always written; a
+refusal before that, including an output that already exists, leaves no record.
+The record keeps phase timestamps and plan deadlines for
 `preparation` (admission), `execution` (all child imports and their comparisons)
 and `teardown`, the child commands, proofs, output tails and results, any error,
 and the D83 attempt. A diagnostic retry must link a pinned first FAIL of the
