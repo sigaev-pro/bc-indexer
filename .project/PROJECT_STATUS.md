@@ -12,8 +12,11 @@ own containers, takes phase deadlines from the plan and adds negative controls.
 Review 002 found a run record that could be skipped and untested repair paths;
 executed source `b04ff76` always records the run, blocks signals while stopping a
 child, fails cleanup on foreign harness containers and adds the missing controls.
-Measured run 03 passed all three families in 32.479 seconds of execution with
-clean teardown. Remaining #12 items after this block: the Go `settled()` raftz
+Review 003 found a FAIL record written into a pre-existing output and a late
+signal that could escape the final write; executed source `f2b351e` writes the
+partial record only into an output this admission created, restores handlers
+before unblocking signals, and adds the missing controls. Measured run 04 passed
+all three families in 33.011 seconds of execution with clean teardown. Remaining #12 items after this block: the Go `settled()` raftz
 field-name follow-up from PR #128. Next: exact-head CI, fresh Spec and Standards
 reviews, protected acceptance.
 
