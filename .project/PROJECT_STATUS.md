@@ -27,18 +27,28 @@ and a flaky controller test. Outputs:
   `cleanup-denied` only when EPERM persists to the grace deadline with live
   members.
 
-Retained record `.project/automation/runs/d95-20261107/review-tooling-01-fda48e1`
-(source `fda48e1`, extracted with `git archive`; Python 3.13.5, go1.27.1
-darwin/amd64): `evidence_summary.py` verified all 32 retained NATS image,
-NATS source, local runner and family preparation runs (exit 0 each) and its
-20 tests passed, including the four opt-in checks that reproduce the figures of
-attempt 08, preparation 08, attempt 06 and runner run 04; `test_mutate` passed
-17 tests. Mutation reports: NATS driver 38 killed and 2 pre-labeled
-equivalents (matches record 09); `evidence_summary.py` 17 and 2;
-`mutate.py` 16 and 2; `session_runner.py` 6 and 0; no build failure or
-unlabeled survivor. The watchdog, signal and five EPERM tests passed 25 of 25
-repeats under 16 busy CPU processes. Local `.project/automation/ci.py` passed
-610 tests in 52 files.
+Review 001 (head `2b76a0b`) returned REQUEST_CHANGES from Spec and Standards.
+Fixed in `076e74f`: the NATS sequence range now reads 1–5 (the lower bound is
+an exclusive frontier), `mutate.py` records a Git head only for a tracked table
+(record 01 reported the enclosing checkout's head for an extracted copy), a
+timed-out command is stopped with its whole process tree including children
+in their own session (a survivor is CLEANUP_FAILED), the false inside-root
+equivalence label is removed, and the remaining P3 items (Go toolchain check,
+colored output, untested branches, scope wording) have controls or fixes.
+
+Retained record `.project/automation/runs/d95-20261107/review-tooling-02-076e74f`
+(source `076e74f` extracted with `git archive`, its `record.sh` script, Python
+3.13.5, go1.27.1 darwin/amd64): `evidence_summary.py` verified all 32 retained
+NATS image, NATS source, local runner and family preparation runs (exit 0
+each); its 24 tests passed with none skipped, including the four opt-in checks
+that reproduce the figures of attempt 08, preparation 08, attempt 06 and runner
+run 04; `test_mutate` passed 26 tests. Mutation reports (killed, pre-labeled
+equivalent): NATS driver 38 and 2 (matches record 09); `evidence_summary.py`
+26 and 2; `mutate.py` 36 and 1; `session_runner.py` 6 and 0; no build failure,
+unlabeled survivor or cleanup failure. The watchdog, signal and five EPERM
+tests passed 25 of 25 verbose repeats beside 16 busy `yes` processes. Record
+01 (`review-tooling-01-fda48e1`) is retained and superseded. Local
+`.project/automation/ci.py` passed 623 tests in 52 files.
 
 Allowed paths: `test/mutate.py`, `test/test_mutate.py`, `test/mutate.mutants.json`,
 `test/harness/evidence_summary*`, `test/harness/test_evidence_summary.py`,
