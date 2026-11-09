@@ -538,9 +538,11 @@ Local-e2e and public plans need an exact implementation/source/build/configurati
 topology fence declaration and prior conformance binding. Missing declarations
 remain explicit blockers; inconsistent bindings reject. Even a matching supplied
 artifact is opaque and unverified here. Native-seam diagnostics do not require
-NATS. Full ProfileManifest verification, native/supporting readiness, isolated
-runtime ownership, fixture/build equivalence, independent oracle review, actual
-resource checks and terminal-fence conformance remain separate work.
+NATS. Offline resolution itself checks none of the runtime facts. For local
+native-seam plans the [local runner](#local-native-seam-runner-d96) adds test-only
+ProfileManifest verification, resource checks and owned execution. Independent
+oracle review, public ProfileManifests and terminal-fence conformance for
+local-e2e plans remain separate work.
 
 Exit 0 means offline resolution succeeded. The report always has
 `runtime_admitted: false`; every case remains NOT_RUN. It never emits a READY
@@ -604,8 +606,9 @@ cannot silently round into integer seeds, counts or deadlines.
 
 ## Local native-seam runner (D96)
 
-D96 closes issue #12 on private local fixtures for the three families. The test-only
-[runner](runner.py) is the single entry point for a frozen local native-seam plan:
+D96 closes issue #12 on private local native-seam fixtures for the three
+families. The test-only [runner](runner.py) is the single entry point for a
+frozen local native-seam plan:
 
 ```sh
 python3 -I test/harness/profile_manifest.py /abs/manifest.json --sha256 PIN
@@ -621,38 +624,56 @@ test-only chain ID, genesis hash and native config digest, build, preparation
 proof, runner slice, request, observer tool, genesis and block inputs, and the
 independent oracle. [profile_manifest.py](profile_manifest.py) re-hashes every
 reference and checks each binding against the preparation, request and fixture
-files. Its identity is always `test-only`, it names no supporting services, and
-it never gives public-profile credit. It is not an E06 public ProfileManifest.
+files. BSC and Bor preparations must record complete cleanup; the accepted Geth
+preparation predates that field. The identity is always `test-only`, the manifest
+names no supporting services, and it never gives public-profile credit. It is not
+an E06 public ProfileManifest: fork ranges, native type sets, finality and GC
+parameters, state backend and ENV_READY identity stay with the public manifests.
+Under D96, local supporting services, their test credentials and the Polygon
+own-L1 fixture inputs belong to E05-01.polygon_observer.
 
 Admission re-authenticates the frozen plan, registry, schema, resolution and
-every artifact. It accepts only a standard native-seam plan without a fence or
-faults. Every selected profile needs one verified manifest, one matching
-test-only fixture and one native-import action bound to its request and oracle.
-Case identities must use the verified manifest digest. Host and Docker
-architecture, CPUs, memory and free disk must meet the plan; parallelism is 1;
-no other `extractor.harness` container may exist. Child request deadlines plus a
-30-second grace each must fit the parent measured budget of at most 1,800 seconds.
-Admission writes `admission.json` with `runtime_admitted: true` for this private
-scope only and clears the offline resolution blockers it verified.
+every artifact within the plan's preparation deadline. It accepts only a standard
+native-seam plan without a fence or faults. Every selected profile needs one
+verified manifest, one matching test-only fixture and one native-import action
+bound to its request and oracle; case identities must use the verified manifest
+digest. Host and Docker architecture, CPUs, memory and free disk must meet the
+plan, parallelism is 1, and no `extractor.harness` container may exist. Child
+request deadlines plus a 30-second grace each must fit the parent measured
+budget of at most 1,800 seconds. `admission.json` records `runtime_admitted: true`
+for this private scope only. Native readiness is shown by each child PASS, not
+by admission.
 
-`run` dispatches the existing family CLIs (`run.py`, `bsc_run.py`, `bor_run.py`)
-serially, each in its own process group. The parent kills a child group at the
-parent deadline and records process-group absence. Dispatch stops after the first
-child FAIL. Each child passes only with a matching proof kind, PASS, complete
-cleanup, the admitted request and exit zero. Teardown removes any remaining
-`extractor.harness` container and records that removal. `run-record.json` keeps
-phase timestamps for `preparation` (admission), `execution` (all child imports
-and their comparisons) and `teardown`, the child commands, proofs and results,
-and the D83 attempt: a single diagnostic retry must link a pinned first FAIL of
-the same frozen plan.
+`run` holds a host-wide single-writer lock for the whole run. It dispatches the
+existing family CLIs (`run.py`, `bsc_run.py`, `bor_run.py`) serially, each in its
+own process group with stdin closed and stdout/stderr written to files. The
+parent kills a child group at the parent deadline or when the runner receives
+SIGTERM, SIGINT or SIGHUP. Dispatch stops after the first child FAIL. A child
+passes only with a bounded, duplicate-key-free proof object of the matching
+kind, PASS, complete cleanup, the admitted request, exit zero and an absent
+process group. Teardown always runs, even after an error or signal. It removes
+only `extractor.harness` containers whose mounts are inside this run's output
+and records any foreign harness container without touching it. `run-record.json`
+is always written; it keeps phase timestamps and plan deadlines for
+`preparation` (admission), `execution` (all child imports and their comparisons)
+and `teardown`, the child commands, proofs, output tails and results, any error,
+and the D83 attempt. A diagnostic retry must link a pinned first FAIL of the
+same frozen plan; the runner does not record whether that first FAIL was already
+retried, so the operator keeps that single-use rule.
 
-The harness owns no AC verdict. Each selected case gets a CaseResult with
-`APPLICABLE` and `NOT_RUN`, validated against the frozen registry and its owners.
-The runner writes no RunManifest. Each profile gets a D87 ReaderBoundaryManifest
-with `run_started: false`, the plan and oracle references, and all six conditions
-`NOT_RUN`, because no capture, Gateway or NATS delivery exists at E01. Remaining
-blockers always include `private_identity_has_no_public_profile_credit` and
-`harness_owns_no_ac_verdict`.
+The harness owns no AC verdict and writes no RunManifest (D96). Each selected
+case gets a CaseResult with `APPLICABLE` and `NOT_RUN`, validated against the
+frozen registry and its owners. Each profile gets a D87 ReaderBoundaryManifest
+with `run_started: false`, the pinned plan and oracle bytes, and all six
+conditions `NOT_RUN`, because no capture, Gateway or NATS delivery exists at E01.
+The first `run_started: true` boundary belongs to E03-11.block_lifecycle.
+Private fixtures use the public profile name whose fork rules they follow, with
+a test-only manifest digest; a later owning task must not turn such a cell into
+public-profile credit. Remaining blockers always include
+`private_identity_has_no_public_profile_credit`, `harness_owns_no_ac_verdict`
+and `case_oracle_acceptance_belongs_to_ac_owner`. Oracle independence for the
+three accepted fixtures was reviewed with their family slices (PRs #122–#124);
+accepting an oracle for a case verdict stays with that AC's owner.
 
 ## Remaining work in issue 12
 

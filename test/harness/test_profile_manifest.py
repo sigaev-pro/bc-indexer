@@ -43,6 +43,7 @@ def family_tree(root, slice_name, hooks=None):
     request = write(root / "request.json", hook("request", request_value))
     tool = write(root / "tool.json", hook("tool", {"kind": tool_kind, "build_manifest": build})) if tool_kind else None
     proof = {"schema_version": 1, "kind": preparation_kind, "result": "PASS", "request": request, "fixture": fixture}
+    if family != "ETH": proof["cleanup_complete"] = True
     if tool: proof["observer_tool"] = tool
     preparation = write(root / "preparation.json", hook("preparation", proof))
     return {"schema_version": 1, "kind": "test-only-profile-manifest", "profile": profile, "family": family, "fixture_kind": "native-seam",
@@ -122,6 +123,37 @@ class ProfileManifestTests(unittest.TestCase):
             manifest = family_tree(Path(temp).resolve(), "bsc-parlia-import")
             manifest["runner"]["observer_tool"] = None
             with self.assertRaisesRegex(ValueError, "Observer tool differs"):
+                profile_manifest.verify(manifest, self.deadline())
+
+    def test_changed_bytes_on_disk_reject_even_when_references_still_match(self):
+        for name in ("build.json", "expected.json", "genesis.bin", "blocks.bin", "full_chain.bin"):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                manifest = family_tree(root, "bor-import")
+                (root / name).write_bytes((root / name).read_bytes() + b"x")
+                with self.subTest(file=name), self.assertRaises(ValueError):
+                    profile_manifest.verify(manifest, self.deadline())
+
+    def test_missing_cleanup_field_rejects_outside_the_legacy_geth_preparation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = family_tree(Path(temp).resolve(), "bsc-parlia-import", {"preparation": lambda v: v.pop("cleanup_complete")})
+            with self.assertRaisesRegex(ValueError, "accepted passing proof"):
+                profile_manifest.verify(manifest, self.deadline())
+        with tempfile.TemporaryDirectory() as temp:
+            profile_manifest.verify(family_tree(Path(temp).resolve(), "geth-import"), self.deadline())
+
+    def test_profile_family_must_match_the_slice_even_when_the_request_agrees(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = family_tree(Path(temp).resolve(), "geth-import", {"request": lambda v: v.update(profile_association="bsc-mainnet")})
+            manifest["profile"] = "bsc-mainnet"
+            with self.assertRaisesRegex(ValueError, "Family, profile and runner slice"):
+                profile_manifest.verify(manifest, self.deadline())
+
+    def test_manifest_family_must_match_the_runner_slice(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = family_tree(Path(temp).resolve(), "geth-import", {"request": lambda v: v.update(profile_association="bsc-mainnet")})
+            manifest.update(profile="bsc-mainnet", family="BSC")
+            with self.assertRaisesRegex(ValueError, "Family, profile and runner slice"):
                 profile_manifest.verify(manifest, self.deadline())
 
     def test_cli_requires_external_pin_and_never_grants_public_credit(self):

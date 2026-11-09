@@ -55,8 +55,10 @@ def verify(manifest, deadline):
     for ref in (manifest["build_manifest"], manifest["oracle"], *manifest["inputs"]):
         artifact(ref, ARTIFACT_LIMIT, deadline=deadline)
     _, preparation = json_artifact(manifest["preparation"], JSON_LIMIT, deadline=deadline)
+    # The accepted Geth preparation predates the cleanup field; BSC and Bor proofs must record it.
+    cleanup = preparation.get("cleanup_complete", True) if slice_rules["family"] == "ETH" else preparation.get("cleanup_complete")
     require(preparation.get("kind") == slice_rules["preparation"] and preparation.get("result") == "PASS" and
-            preparation.get("cleanup_complete", True) is True, "Preparation is not an accepted passing proof for this slice")
+            cleanup is True, "Preparation is not an accepted passing proof for this slice")
     require(preparation.get("request") == manifest["runner"]["request"], "Runner request is not the one the preparation produced")
     _, request = json_artifact(manifest["runner"]["request"], JSON_LIMIT, deadline=deadline)
     require(request.get("kind") == slice_rules["request"] and request.get("profile_association") == manifest["profile"],

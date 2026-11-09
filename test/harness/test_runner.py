@@ -26,10 +26,13 @@ if behavior == "SLEEP":
 os.mkdir(output)
 data = open(request, "rb").read()
 proof = {{"kind": "{kind}", "result": "FAIL" if behavior == "FAIL" else "PASS", "cleanup_complete": behavior != "DIRTY",
-         "request": {{"path": request, "sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}}}}
-open(os.path.join(output, "proof.json"), "w").write(json.dumps(proof))
+         "native_owner_nonce": "fake", "request": {{"path": request, "sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}}}}
+if behavior == "OTHERKIND": proof["kind"] = "other"
+if behavior == "OTHERREQUEST": proof["request"]["sha256"] = "0" * 64
+text = {{"LIST": "[]", "BADJSON": "{{not json", "DUPKEY": '{{"kind": "a", "kind": "b"}}'}}.get(behavior, json.dumps(proof))
+open(os.path.join(output, "proof.json"), "w").write(text)
 print(json.dumps({{"result": proof["result"]}}))
-sys.exit(0 if proof["result"] == "PASS" else 2)
+sys.exit(3 if behavior == "EXIT" else 0 if proof["result"] == "PASS" else 2)
 '''
 
 
@@ -52,7 +55,7 @@ def build_plan(root, mutate_plan=None, slices=tuple(SLICES)):
         profiles.append(profile)
         case = {"schema_version": 3, "ac_id": "AC-CAP-01-01", "network": manifest["family"], "profile": profile,
                 "profile_manifest_digest": digest, "fork_variant": "private-genesis", "fixture_kind": "native-seam", "suite": "quick",
-                "variant_id": "transfer-then-empty", "task_id": "E01-01.harness", "fixture_id": manifest["fixture"]["fixture_id"],
+                "variant_id": "transfer-then-empty", "task_id": "E01-02.lifecycle_seams", "fixture_id": manifest["fixture"]["fixture_id"],
                 "fixture_version": "1", "applicability": "APPLICABLE"}
         cases.append(case)
         identity = {key: case[key] for key in AXES}
@@ -70,7 +73,7 @@ def build_plan(root, mutate_plan=None, slices=tuple(SLICES)):
         build = manifest["build_manifest"]
     bundle = {"contract": "evidence-artifacts-v1", "kind": "CaseRegistry", "synthetic": True,
               "document": {"schema_version": 3, "version": "synthetic-runner-1", "cases": cases},
-              "context": {"task_ids": ["E01-01.harness"], "case_owners": {"AC-CAP-01-01": "E01-01.harness"}, "rules": {}}}
+              "context": {"task_ids": ["E01-02.lifecycle_seams"], "case_owners": {"AC-CAP-01-01": "E01-02.lifecycle_seams"}, "rules": {}}}
     registry = write(root / "registry.json", bundle)
     plan = {"schema_version": 1, "plan_id": "synthetic-local-runner", "fixture_kind": "native-seam", "suite": "quick", "mode": "standard",
             "coverage": "PARTIAL", "seed": 1, "profiles": profiles, "case_identities": [row["case_identity"] for row in quotas],
@@ -108,9 +111,13 @@ class RunnerBase(unittest.TestCase):
             path.write_text(FAKE.format(kind=kind))
             fakes[slice_name] = {**runner.CHILDREN[slice_name], "script": str(path)}
         self.patches = [patch.dict(runner.CHILDREN, fakes), patch.object(runner, "host_resources", lambda _: observed()),
-                        patch.object(runner, "teardown", lambda: {"forced_container_removal": False,
-                                                                  "remaining_harness_containers": [], "cleanup_complete": True})]
+                        patch.object(runner, "teardown", self.fake_teardown), patch.object(runner, "LOCK", self.root / "runner.lock")]
         for item in self.patches: item.start()
+
+    def fake_teardown(self, output):
+        self.teardowns = getattr(self, "teardowns", 0) + 1
+        return {"forced_container_removal": False, "remaining_owned_containers": [], "foreign_harness_containers": [],
+                "cleanup_complete": True}
 
     def tearDown(self):
         for item in reversed(self.patches): item.stop()
@@ -213,7 +220,8 @@ class RunnerTests(RunnerBase):
             plan, bundle, admitted = runner.admit(frozen, pin, root / "out", time.monotonic() + 30)
             row = admitted["fixtures"][0]
             started = time.monotonic()
-            record = runner.run_child(row, root / "out" / "child", time.monotonic() + 2)
+            (root / "logs").mkdir()
+            record = runner.run_child(row, root / "out" / "child", time.monotonic() + 2, root / "logs")
         self.assertLess(time.monotonic() - started, 20)
         self.assertEqual((record["reason"], record["result"], record["process_group_absent"]), ("PARENT_DEADLINE", "FAIL", True))
 
@@ -288,9 +296,10 @@ class RunnerDefenseTests(RunnerBase):
             unsigned = {key: value for key, value in report.items() if key != "resolution_digest"}
             report["resolution_digest"] = runner.evidence.digest(unsigned)
             return report
-        report = resign({**original, "runtime_admitted": True})
-        with self.assertRaisesRegex(ValueError, "Not a valid offline"):
-            runner.frozen_plan(frozen, self.repin(frozen, report), deadline)
+        for change in ({"runtime_admitted": True}, {"kind": "other"}, {"plan_valid": False}):
+            report = resign({**original, **change})
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "Not a valid offline"):
+                runner.frozen_plan(frozen, self.repin(frozen, report), deadline)
         with self.assertRaisesRegex(ValueError, "Resolution digest changed"):
             runner.frozen_plan(frozen, self.repin(frozen, {**original, "coverage": {}}), deadline)
         bundle = json.loads((frozen / "registry.json").read_text())
@@ -317,7 +326,7 @@ class RunnerDefenseTests(RunnerBase):
                 runner.admit(frozen, pin, output, time.monotonic() + 30)
         _, _, admitted = runner.admit(frozen, pin, root / "out", time.monotonic() + 30)
         with self.assertRaisesRegex(ValueError, "expired before dispatch"):
-            runner.run_child(admitted["fixtures"][0], root / "late", time.monotonic() - 1)
+            runner.run_child(admitted["fixtures"][0], root / "late", time.monotonic() - 1, root)
 
     def test_cli_rejects_retry_metadata_for_admission(self):
         root, frozen, pin, plan = self.frozen("cli")
@@ -327,6 +336,157 @@ class RunnerDefenseTests(RunnerBase):
             self.assertEqual(runner.main(), 2)
         self.assertIn("Only run accepts retry metadata", printed.call_args[0][0])
         self.assertFalse((root / "out").exists())
+
+
+class RunnerRobustnessTests(RunnerBase):
+    def plan(self, name, slices=tuple(SLICES)):
+        root = self.root / name
+        root.mkdir()
+        return (root, *build_plan(root, slices=slices))
+
+    def test_bad_child_proofs_fail_after_full_teardown(self):
+        for behavior in ("LIST", "BADJSON", "DUPKEY", "OTHERKIND", "OTHERREQUEST", "EXIT"):
+            root, frozen, pin = self.plan("proof-" + behavior.lower(), ("geth-import",))
+            self.teardowns = 0
+            with patch.dict("os.environ", {"FAKE_SLICE": json.dumps({"local-native-import": behavior})}):
+                record = runner.run(frozen, pin, root / "out")
+            with self.subTest(behavior=behavior):
+                self.assertEqual((record["result"], record["children"][0]["result"], self.teardowns), ("FAIL", "FAIL", 1))
+                self.assertTrue((root / "out" / "run-record.json").is_file())
+
+    def test_incomplete_teardown_fails_an_otherwise_passing_run(self):
+        root, frozen, pin = self.plan("dirty-teardown", ("geth-import",))
+        dirty = lambda output: {"forced_container_removal": True, "remaining_owned_containers": ["left"],
+                                "foreign_harness_containers": [], "cleanup_complete": False}
+        with patch.object(runner, "teardown", dirty):
+            record = runner.run(frozen, pin, root / "out")
+        self.assertEqual((record["result"], record["children"][0]["result"]), ("FAIL", "PASS"))
+
+    def test_child_pass_requires_every_condition(self):
+        row = {"slice": "bsc-parlia-import", "request": {"path": "/r", "sha256": "1" * 64, "size_bytes": 1}}
+        proof = {"kind": "bsc-local-native-import", "result": "PASS", "cleanup_complete": True, "request": dict(row["request"])}
+        self.assertTrue(runner.child_passed(row, proof, 0, True))
+        for name, (changed, code, absent) in {
+            "kind": ({**proof, "kind": "bor-local-native-import"}, 0, True), "result": ({**proof, "result": "FAIL"}, 0, True),
+            "cleanup": ({**proof, "cleanup_complete": False}, 0, True), "request": ({**proof, "request": {**row["request"], "sha256": "2" * 64}}, 0, True),
+            "exit": (proof, 1, True), "group": (proof, 0, False), "not object": ([proof], 0, True),
+        }.items():
+            with self.subTest(case=name):
+                self.assertFalse(runner.child_passed(row, changed, code, absent))
+
+    def test_child_command_passes_the_pinned_observer_tool_only_where_needed(self):
+        request = {"path": "/req.json"}
+        tool = {"path": "/tool.json", "sha256": "3" * 64}
+        geth = runner.child_command({"slice": "geth-import", "request": request, "observer_tool": None}, Path("/o"))
+        self.assertNotIn("--observer-tool", geth)
+        for slice_name in ("bsc-parlia-import", "bor-import"):
+            command = runner.child_command({"slice": slice_name, "request": request, "observer_tool": tool}, Path("/o"))
+            self.assertEqual(command[command.index("--observer-tool") + 1:command.index("--observer-tool") + 4],
+                             ["/tool.json", "--observer-tool-sha256", "3" * 64])
+            self.assertEqual(command[-2:], ["--output", "/o"])
+
+    def test_signal_kills_the_child_group_and_still_tears_down(self):
+        import os, signal, threading
+        root, frozen, pin = self.plan("signal", ("geth-import",))
+        self.teardowns = 0
+        timer = threading.Timer(1.5, os.kill, (os.getpid(), signal.SIGTERM))
+        started = time.monotonic()
+        with patch.dict("os.environ", {"FAKE_SLICE": json.dumps({"local-native-import": "SLEEP"})}):
+            timer.start()
+            record = runner.run(frozen, pin, root / "out")
+        self.assertLess(time.monotonic() - started, 20)
+        self.assertEqual((record["result"], self.teardowns), ("FAIL", 1))
+        self.assertIn("Interrupted", record["error"])
+        self.assertIsNot(signal.getsignal(signal.SIGTERM), runner.raise_interrupted)
+
+    def test_single_writer_lock_rejects_a_second_runner(self):
+        import fcntl
+        root, frozen, pin = self.plan("lock", ("geth-import",))
+        with open(runner.LOCK, "a") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            with self.assertRaisesRegex(ValueError, "single-writer lock"):
+                runner.run(frozen, pin, root / "out")
+        self.assertFalse((root / "out").exists())
+
+    def test_teardown_removes_only_containers_mounted_from_this_run(self):
+        output = self.root / "scoped"
+        output.mkdir()
+        mounts = {"mine": [{"Source": str(output / "children" / "x")}], "foreign": [{"Source": "/elsewhere"}]}
+        state = {"live": ["mine", "foreign"], "removed": []}
+        class Result:
+            def __init__(self, code, stdout=""): self.returncode, self.stdout = code, stdout
+        def fake_run(command, **_):
+            if command[:2] == ["docker", "inspect"]:
+                return Result(0, json.dumps(mounts[command[-1]])) if command[-1] in state["live"] else Result(1)
+            if command[:3] == ["docker", "rm", "-f"]:
+                state["removed"] += command[3:]
+                state["live"] = [item for item in state["live"] if item not in command[3:]]
+                return Result(0)
+            raise AssertionError(command)
+        for item in self.patches[2:3]: item.stop()
+        try:
+            with patch.object(runner.subprocess, "run", fake_run), \
+                 patch.object(runner, "docker_state", lambda: {"harness_containers": list(state["live"])}):
+                cleanup = runner.teardown(output)
+        finally:
+            self.patches[2].start()
+        self.assertEqual(state["removed"], ["mine"])
+        self.assertEqual((cleanup["cleanup_complete"], cleanup["foreign_harness_containers"]), (True, ["foreign"]))
+
+    def test_retry_rules_reject_each_invalid_first_run(self):
+        root = self.root / "retry-rules"
+        root.mkdir()
+        good = {"kind": "local-native-seam-run", "result": "FAIL", "attempt": {"attempt_index": 1}, "resolution_sha256": "a" * 64, "run_id": "r1"}
+        def pinned(name, value):
+            path = root / (name + ".json")
+            path.write_text(json.dumps(value))
+            return path, hashlib.sha256(path.read_bytes()).hexdigest()
+        path, sha = pinned("good", good)
+        self.assertEqual(runner.retry_attempt(path, sha, "diagnostic correction", "a" * 64, time.monotonic() + 30)["attempt_index"], 2)
+        for name, change in {"pass": {"result": "PASS"}, "second": {"attempt": {"attempt_index": 2}},
+                             "kind": {"kind": "other"}, "plan": {"resolution_sha256": "b" * 64}}.items():
+            bad, bad_sha = pinned(name, {**good, **change})
+            with self.subTest(case=name), self.assertRaisesRegex(ValueError, "retried once"):
+                runner.retry_attempt(bad, bad_sha, "diagnostic correction", "a" * 64, time.monotonic() + 30)
+        with self.assertRaisesRegex(ValueError, "without a previous run"):
+            runner.retry_attempt(None, None, "diagnostic correction", "a" * 64, time.monotonic() + 30)
+
+    def test_binding_rejects_remaining_single_conditions(self):
+        root, frozen, pin = self.plan("bind-more")
+        plan = json.loads((frozen / "plan.json").read_text())
+        manifests = plan["profile_manifests"]
+        changed = copy.deepcopy(plan)
+        changed["profile_manifests"][0].update(artifact=manifests[1]["artifact"], profile_manifest_digest=manifests[1]["profile_manifest_digest"])
+        with self.assertRaisesRegex(ValueError, "digest or profile"):
+            runner.bind_fixtures(changed, None, time.monotonic() + 30)
+        changed = copy.deepcopy(plan)
+        changed["actions"][0]["count"] = 2
+        with self.assertRaisesRegex(ValueError, "one native-import action"):
+            runner.bind_fixtures(changed, None, time.monotonic() + 30)
+        cases = {
+            "fixture version": lambda p: p["fixtures"][0].update(fixture_version="2"),
+            "fork variant": lambda p: p["fixtures"][0].update(fork_variant="other"),
+            "genesis hash": lambda p: p["fixtures"][0]["identity"].update(genesis_hash="0x" + "9" * 64),
+            "second action": lambda p: p["actions"].append({**p["actions"][0], "action_id": "again"}),
+            "observe action": lambda p: p["actions"][0].update(kind="observe"),
+            "action expected": lambda p: p["actions"][0].update(expected=p["actions"][1]["expected"]),
+            "no case": lambda p: p.update(case_identities=[c for c in p["case_identities"] if c["profile"] != p["fixtures"][0]["profile"]]),
+            "fence": lambda p: p.update(terminal_fence={"declared": True}),
+        }
+        for name, mutate in cases.items():
+            changed = copy.deepcopy(plan)
+            mutate(changed)
+            with self.subTest(case=name), self.assertRaises(ValueError):
+                runner.bind_fixtures(changed, None, time.monotonic() + 30)
+
+    def test_frozen_plan_reauthenticates_every_artifact(self):
+        root, frozen, pin = self.plan("artifacts", ("geth-import",))
+        runner.frozen_plan(frozen, pin, time.monotonic() + 30)
+        report = json.loads((frozen / "resolution.json").read_text())
+        target = Path(next(ref["path"] for ref in report["artifacts"] if ref["path"].endswith("expected.json")))
+        target.write_bytes(target.read_bytes() + b" ")
+        with self.assertRaises(ValueError):
+            runner.frozen_plan(frozen, pin, time.monotonic() + 30)
 
 
 if __name__ == "__main__": unittest.main()

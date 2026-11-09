@@ -7,8 +7,8 @@ credit or an AC verdict; every CaseResult it writes stays NOT_RUN.
 
 import argparse
 import datetime
+import fcntl
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -22,7 +22,7 @@ import uuid
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from artifacts import artifact, check_deadline, json_artifact, read_bytes, reference, require
+from artifacts import artifact, captured_json, check_deadline, json_artifact, read_bytes, read_artifact, reference, require
 from owned import group_absent
 import profile_manifest
 import run_plan
@@ -32,12 +32,16 @@ JSON_LIMIT = 16 * 1024 * 1024
 ARTIFACT_LIMIT = 1024 * 1024 * 1024
 LABEL = "extractor.harness"
 CHILD_GRACE_SECONDS = 30
+OUTPUT_TAIL = 4096
+LOCK = Path("/tmp/extractor-harness-runner.lock")
 CHILDREN = {
     "geth-import": {"script": "run.py", "proof": "local-native-import", "tool": False},
     "bsc-parlia-import": {"script": "bsc_run.py", "proof": "bsc-local-native-import", "tool": True},
     "bor-import": {"script": "bor_run.py", "proof": "bor-local-native-import", "tool": True},
 }
-REMAINING_BLOCKERS = ["private_identity_has_no_public_profile_credit", "independent_oracle_review_required",
+# Oracle independence for the accepted fixtures was reviewed with their family
+# slices; accepting an oracle for a case verdict stays with that AC's owner.
+REMAINING_BLOCKERS = ["private_identity_has_no_public_profile_credit", "case_oracle_acceptance_belongs_to_ac_owner",
                       "harness_owns_no_ac_verdict", "delivery_reader_boundary_not_run_for_native_seam"]
 
 
@@ -153,23 +157,33 @@ def bind_fixtures(plan, registry, deadline):
     return bound
 
 
+class Interrupted(RuntimeError):
+    """A signal stopped the runner; the current child group is killed and teardown still runs."""
+
+
 def admit(directory, resolution_sha256, output, deadline):
     started = now()
+    begin = time.monotonic()
     plan, bundle, report = frozen_plan(directory, resolution_sha256, deadline)
+    deadline = min(deadline, begin + plan["deadlines"]["preparation_seconds"])
     bound = bind_fixtures(plan, bundle["document"], deadline)
     require(output.is_absolute() and not output.exists() and output.parent.is_dir(), "Output must be a new absolute directory")
     observed = host_resources(output.parent)
     check_resources(plan, observed)
+    check_deadline(deadline)
     os.mkdir(output, 0o700)
-    blockers = [item for item in report["blockers"] if item not in (
-        "runtime_execution_unimplemented", "profile_manifest_verification_unimplemented",
-        "native_and_supporting_readiness_unverified", "resource_availability_unverified",
-        "build_fixture_compatibility_unverified", "profile_manifest_missing")]
+    # Admission verifies manifests, bindings, resources and budgets. Native
+    # readiness is shown only by each child PASS; public manifest fields stay E06.
+    verified = ("runtime_execution_unimplemented", "profile_manifest_verification_unimplemented", "profile_manifest_missing",
+                "resource_availability_unverified", "build_fixture_compatibility_unverified", "independent_oracle_review_required")
+    blockers = [item for item in report["blockers"] if item not in verified]
     record = {"schema_version": 1, "kind": "local-native-seam-admission", "admission_id": uuid.uuid4().hex,
               "runtime_admitted": True, "scope": "private-local-native-seam", "public_profile_credit": False,
               "plan": report["plan"], "resolution_digest": report["resolution_digest"], "registry_digest": report["registry_digest"],
               "fixtures": bound, "resources": {"declared": plan["resources"], "observed": observed},
               "deadlines": plan["deadlines"], "started_at": started, "finished_at": now(),
+              "verified": ["test_only_profile_manifests", "fixture_and_action_bindings", "case_manifest_digests",
+                           "host_and_docker_resources", "single_writer", "measured_budget"],
               "blockers": sorted(set(blockers) | set(REMAINING_BLOCKERS))}
     record["admission_digest"] = evidence.digest(record)
     canonical_ref(output / "admission.json", record)
@@ -185,51 +199,94 @@ def child_command(row, out):
     return command + ["--output", str(out)]
 
 
-def run_child(row, out, parent_deadline):
-    """Run one family slice in its own process group; kill the group at the parent deadline."""
+def stop_group(process):
+    """Terminate, then kill, the child's process group and reap the leader."""
+    for number in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(process.pid, number)
+        except (ProcessLookupError, PermissionError):
+            # macOS reports EPERM for a group whose only member is an unreaped zombie.
+            pass
+        try:
+            process.wait(timeout=10)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+    process.wait()
+
+
+def tail(path):
+    with open(path, "rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        handle.seek(max(0, size - OUTPUT_TAIL))
+        return {"bytes": size, "tail": handle.read().decode("utf-8", "replace")}
+
+
+def child_passed(row, proof, returncode, absent):
+    return (type(proof) is dict and proof.get("kind") == CHILDREN[row["slice"]]["proof"] and proof.get("result") == "PASS" and
+            proof.get("cleanup_complete") is True and proof.get("request") == row["request"] and returncode == 0 and absent)
+
+
+def run_child(row, out, parent_deadline, logs):
+    """Run one family slice in its own process group; kill the group at the parent deadline or on a signal."""
     command = child_command(row, out)
     limit = min(row["deadline_seconds"] + CHILD_GRACE_SECONDS, parent_deadline - time.monotonic())
     require(limit > 0, "Parent measured budget expired before dispatch")
     started, start = now(), time.monotonic()
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    stdout_path, stderr_path = logs / (row["fixture_id"] + ".stdout"), logs / (row["fixture_id"] + ".stderr")
+    with open(stdout_path, "xb") as stdout, open(stderr_path, "xb") as stderr:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True)
     reason = None
     try:
-        stdout, stderr = process.communicate(timeout=limit)
+        process.wait(timeout=limit)
     except subprocess.TimeoutExpired:
         reason = "PARENT_DEADLINE"
-        for number in (signal.SIGTERM, signal.SIGKILL):
-            try:
-                os.killpg(process.pid, number)
-            except ProcessLookupError:
-                pass
-            try:
-                stdout, stderr = process.communicate(timeout=10)
-                break
-            except subprocess.TimeoutExpired:
-                continue
+        stop_group(process)
+    except BaseException:
+        stop_group(process)
+        raise
     absent = group_absent(process.pid)
     record = {"profile": row["profile"], "slice": row["slice"], "command": command, "started_at": started, "finished_at": now(),
               "elapsed_seconds": time.monotonic() - start, "exit_code": process.returncode, "reason": reason,
-              "process_group_absent": absent, "stdout": stdout.decode("utf-8", "replace")[-4096:],
-              "stderr": stderr.decode("utf-8", "replace")[-4096:], "result": "FAIL", "proof": None}
+              "process_group_absent": absent, "stdout": tail(stdout_path), "stderr": tail(stderr_path),
+              "result": "FAIL", "proof": None, "native_owner_nonce": None}
     proof_path = out / "proof.json"
     if reason is None and proof_path.is_file():
-        record["proof"] = reference(proof_path, JSON_LIMIT)
-        proof = json.loads(proof_path.read_bytes())
-        passed = (proof.get("kind") == CHILDREN[row["slice"]]["proof"] and proof.get("result") == "PASS" and
-                  proof.get("cleanup_complete") is True and proof.get("request") == row["request"] and process.returncode == 0)
-        record["result"] = "PASS" if passed and absent else "FAIL"
+        try:
+            record["proof"], proof = captured_json(proof_path, JSON_LIMIT)
+        except (OSError, ValueError) as error:
+            record["proof_error"] = str(error)[:400]
+            return record
+        if type(proof) is dict and type(proof.get("native_owner_nonce")) is str:
+            record["native_owner_nonce"] = proof["native_owner_nonce"]
+        record["result"] = "PASS" if child_passed(row, proof, process.returncode, absent) else "FAIL"
     return record
 
 
-def teardown():
-    owned = docker_state()["harness_containers"]
-    forced = False
-    if owned:
-        forced = True
-        subprocess.run(["docker", "rm", "-f", *owned], capture_output=True, timeout=60)
-        owned = docker_state()["harness_containers"]
-    return {"forced_container_removal": forced, "remaining_harness_containers": owned, "cleanup_complete": owned == []}
+def owned_containers(output):
+    """Harness containers whose mounts are inside this run's output; other runs' containers are left alone."""
+    roots = {str(output), str(output.resolve())}
+    ids = docker_state()["harness_containers"]
+    mine, foreign = [], []
+    for container in ids:
+        inspected = subprocess.run(["docker", "inspect", "--format", "{{json .Mounts}}", container],
+                                   capture_output=True, text=True, timeout=20)
+        if inspected.returncode != 0:
+            continue  # the container exited and was removed between the list and the inspection
+        sources = [mount.get("Source", "") for mount in json.loads(inspected.stdout or "[]")]
+        (mine if any(source == root or source.startswith(root + os.sep) for source in sources for root in roots) else foreign).append(container)
+    return mine, foreign
+
+
+def teardown(output):
+    mine, foreign = owned_containers(output)
+    forced = bool(mine)
+    if mine:
+        subprocess.run(["docker", "rm", "-f", *mine], capture_output=True, timeout=60)
+        mine, foreign = owned_containers(output)
+    return {"forced_container_removal": forced, "remaining_owned_containers": mine,
+            "foreign_harness_containers": foreign, "cleanup_complete": mine == []}
 
 
 def self_check(kind, document, bundle, artifacts=None):
@@ -253,16 +310,16 @@ def case_results(plan, bundle, output):
     return rows
 
 
-def text_ref(path):
-    data = Path(path).read_bytes()
-    text = data.decode("utf-8")
-    return {"path": str(path), "sha256": hashlib.sha256(data).hexdigest()}, text
+def text_ref(value):
+    """Read a pinned text artifact once; the boundary cites exactly these bytes."""
+    _, data = read_artifact(value, JSON_LIMIT)
+    return {"path": value["path"], "sha256": value["sha256"]}, data.decode("utf-8")
 
 
-def reader_boundaries(plan, bundle, frozen, output):
+def reader_boundaries(plan, bundle, frozen, plan_pin, output):
     """Write one D87 boundary per profile. A native-seam run has no delivery, so run_started is false."""
     os.mkdir(output / "reader-boundaries", 0o700)
-    plan_ref, plan_text = text_ref(frozen / "plan.json")
+    plan_ref, plan_text = text_ref({**plan_pin, "path": str(frozen / "plan.json")})
     deadlines = plan["deadlines"]
     caps = {"startup": deadlines["startup_seconds"], "observation": deadlines["event_seconds"],
             "shutdown_drain": deadlines["teardown_seconds"], "stream_closure": deadlines["teardown_seconds"],
@@ -272,7 +329,7 @@ def reader_boundaries(plan, bundle, frozen, output):
     for profile in sorted(set(plan["profiles"])):
         cases = [case for case in plan["case_identities"] if case["profile"] == profile]
         oracle = next(row["oracle"] for row in plan["fixtures"] if row["profile"] == profile)
-        oracle_ref, oracle_text = text_ref(oracle["path"])
+        oracle_ref, oracle_text = text_ref(oracle)
         path = output / "reader-boundaries" / f"{profile}.json"
         boundary = {"schema_version": 1, "boundary_id": f"{plan['plan_id']}-{profile}", "artifact_path": str(path),
                     **{field: cases[0][field] for field in ("network", "profile", "profile_manifest_digest", "fork_variant", "fixture_kind", "suite")},
@@ -306,41 +363,77 @@ def retry_attempt(previous, previous_sha256, reason, resolution_sha256, deadline
     return {"attempt_index": 2, "first_run_id": prior["run_id"], "first_run_sha256": previous_sha256, "retry_reason": reason}
 
 
+def single_writer():
+    """Hold one host-wide lock for the whole run so two runners never share Docker cleanup."""
+    handle = open(LOCK, "a")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        raise ValueError("Another local runner holds the single-writer lock")
+    return handle
+
+
+def raise_interrupted(number, _frame):
+    raise Interrupted("Runner received signal " + signal.Signals(number).name)
+
+
 def run(directory, resolution_sha256, output, previous=None, previous_sha256=None, retry_reason=None):
-    """Admit, dispatch every fixture serially, then write the parent record and NOT_RUN CaseResults."""
+    """Admit, dispatch every fixture serially, then always tear down and write the parent record."""
     attempt = retry_attempt(previous, previous_sha256, retry_reason, resolution_sha256, time.monotonic() + 30)
-    preparation_start = now()
-    admission_deadline = time.monotonic() + 120
-    plan, bundle, admission = admit(directory, resolution_sha256, output, admission_deadline)
-    preparation_end = now()
-    execution_start = now()
-    parent_deadline = time.monotonic() + plan["deadlines"]["measured_seconds"]
-    os.mkdir(output / "children", 0o700)
-    children = []
-    for row in admission["fixtures"]:
-        children.append(run_child(row, output / "children" / row["fixture_id"], parent_deadline))
-        if children[-1]["result"] != "PASS":
-            break
-    execution_end = now()
-    teardown_start = now()
-    cleanup = teardown()
-    teardown_end = now()
-    dispatched = {row["profile"] for row in children}
-    complete = len(children) == len(admission["fixtures"])
-    passed = complete and all(row["result"] == "PASS" for row in children) and cleanup["cleanup_complete"]
-    record = {"schema_version": 1, "kind": "local-native-seam-run", "run_id": uuid.uuid4().hex,
-              "admission": reference(output / "admission.json", JSON_LIMIT), "admission_digest": admission["admission_digest"],
-              "result": "PASS" if passed else "FAIL", "public_profile_credit": False,
-              "children": children, "not_dispatched": sorted({row["profile"] for row in admission["fixtures"]} - dispatched),
-              "teardown": cleanup, "attempt": attempt, "resolution_sha256": resolution_sha256,
-              "phases": {"preparation": {"started_at": preparation_start, "finished_at": preparation_end},
-                         "execution": {"started_at": execution_start, "finished_at": execution_end},
-                         "teardown": {"started_at": teardown_start, "finished_at": teardown_end}},
-              "measured_seconds_limit": plan["deadlines"]["measured_seconds"], "blockers": admission["blockers"]}
-    record["case_results"] = case_results(plan, bundle, output)
-    record["reader_boundaries"] = reader_boundaries(plan, bundle, directory, output)
-    canonical_ref(output / "run-record.json", record)
-    return record
+    lock = single_writer()
+    handlers = {number: signal.signal(number, raise_interrupted) for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+    try:
+        preparation_start = now()
+        plan, bundle, admission = admit(directory, resolution_sha256, output, time.monotonic() + 1800)
+        preparation_end = now()
+        deadlines = plan["deadlines"]
+        children, error = [], None
+        os.mkdir(output / "children", 0o700)
+        os.mkdir(output / "logs", 0o700)
+        execution_start = now()
+        parent_deadline = time.monotonic() + deadlines["measured_seconds"]
+        try:
+            for row in admission["fixtures"]:
+                children.append(run_child(row, output / "children" / row["fixture_id"], parent_deadline, output / "logs"))
+                if children[-1]["result"] != "PASS":
+                    break
+        except Exception as failure:
+            error = type(failure).__name__ + ": " + str(failure)[:400]
+        execution_end = now()
+        teardown_start, teardown_begin = now(), time.monotonic()
+        try:
+            cleanup = teardown(output)
+        except Exception as failure:
+            cleanup = {"cleanup_complete": False, "error": type(failure).__name__ + ": " + str(failure)[:400]}
+        cleanup["deadline_exceeded"] = time.monotonic() - teardown_begin > deadlines["teardown_seconds"]
+        cleanup["cleanup_complete"] = cleanup["cleanup_complete"] and not cleanup["deadline_exceeded"]
+        teardown_end = now()
+        dispatched = {row["profile"] for row in children}
+        complete = len(children) == len(admission["fixtures"])
+        passed = error is None and complete and all(row["result"] == "PASS" for row in children) and cleanup["cleanup_complete"]
+        record = {"schema_version": 1, "kind": "local-native-seam-run", "run_id": uuid.uuid4().hex,
+                  "admission": reference(output / "admission.json", JSON_LIMIT), "admission_digest": admission["admission_digest"],
+                  "result": "PASS" if passed else "FAIL", "error": error, "public_profile_credit": False,
+                  "children": children, "not_dispatched": sorted({row["profile"] for row in admission["fixtures"]} - dispatched),
+                  "teardown": cleanup, "attempt": attempt, "resolution_sha256": resolution_sha256,
+                  "phases": {"preparation": {"started_at": preparation_start, "finished_at": preparation_end,
+                                             "deadline_seconds": deadlines["preparation_seconds"]},
+                             "execution": {"started_at": execution_start, "finished_at": execution_end,
+                                           "deadline_seconds": deadlines["measured_seconds"]},
+                             "teardown": {"started_at": teardown_start, "finished_at": teardown_end,
+                                          "deadline_seconds": deadlines["teardown_seconds"]}},
+                  "blockers": admission["blockers"]}
+        if error is None:
+            record["case_results"] = case_results(plan, bundle, output)
+            report = json.loads((directory / "resolution.json").read_text())
+            record["reader_boundaries"] = reader_boundaries(plan, bundle, directory, report["plan"], output)
+        canonical_ref(output / "run-record.json", record)
+        return record
+    finally:
+        for number, handler in handlers.items():
+            signal.signal(number, handler)
+        lock.close()
 
 
 def main():
@@ -362,7 +455,7 @@ def main():
         record = run(args.frozen_plan, args.resolution_sha256, args.output, args.previous_run, args.previous_sha256, args.retry_reason)
         print(json.dumps({"result": record["result"], "public_profile_credit": False, "record": str(args.output / "run-record.json")}))
         return 0 if record["result"] == "PASS" else 2
-    except (OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, subprocess.SubprocessError, Interrupted) as error:
         print(json.dumps({"runtime_admitted": False, "public_profile_credit": False, "error": str(error)}))
         return 2
 
