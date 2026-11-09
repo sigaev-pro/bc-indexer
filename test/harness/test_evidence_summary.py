@@ -136,7 +136,7 @@ class EvidenceSummaryTests(unittest.TestCase):
         for expected in (f"SHA256 `{proof_sha}`", f"`{report_sha}`", "Elapsed 9.064 seconds",
                          "new lineage (no previous attempt)", "| 000 | 0 | 1.350 | true | true | none |",
                          "| 001 | 0 | 6.904 |", "Go methods 2 PASS, 1 SKIP; Go subtests 1 FAIL, 1 PASS; Go packages 1 ok",
-                         "exit 0", "| R3 | PASS |", "| 5 | 0–5 | `APP/S`, `SYS/_meta_` |",
+                         "exit 0", "| R3 | PASS |", "| 5 | 1–5 | `APP/S`, `SYS/_meta_` |",
                          "Public profiles: NOT_RUN", "Runtime admitted: false", "| `tool` |"):
             self.assertIn(expected, output)
 
@@ -312,6 +312,73 @@ class EvidenceSummaryTests(unittest.TestCase):
         write_json(broken / "preparation.json", {"result": "PASS"})
         self.assertEqual(run_tool(broken)[0], 2)
 
+    def test_malformed_proof_structures_are_errors(self):
+        def edit(proof, run):
+            return proof
+
+        def commands_not_list(proof, run):
+            proof["commands"] = {}
+
+        def command_without_result(proof, run):
+            del proof["commands"][0]["result"]
+
+        def result_not_object(proof, run):
+            path = run / "logs" / "000.result.json"
+            write_json(path, [1])
+            proof["commands"][0]["result"] = reference(path)
+
+        def phases_not_object(proof, run):
+            proof["phases"] = []
+
+        def phase_without_finish(proof, run):
+            proof["phases"] = {"execution": {"started_at": "2026-11-09T18:58:58Z"}}
+
+        def child_not_object(proof, run):
+            proof["children"] = ["child"]
+
+        def previous_not_object(proof, run):
+            path = write_json(self.fixture.root / "previous.json", ["not", "an", "object"])
+            proof["previous_attempt"] = reference(path)
+
+        for damage in (commands_not_list, command_without_result, result_not_object, phases_not_object,
+                       phase_without_finish, child_not_object, previous_not_object):
+            with self.subTest(damage.__name__), tempfile.TemporaryDirectory() as temporary:
+                self.fixture = Fixture(temporary)
+                run = self.fixture.nats_run()
+                path = run / "image-fence.json"
+                proof = json.loads(path.read_text())
+                damage(proof, run)
+                write_json(path, proof)
+                code, output, errors = run_tool(run)
+                self.assertEqual((code, output), (2, ""), errors)
+                self.assertTrue(errors.startswith("ERROR: "), errors)
+        self.assertEqual(run_tool(self.fixture.root / "image-fence.json")[0], 2)
+
+    def test_large_nested_documents_are_not_listed(self):
+        run = self.fixture.nats_run()
+        large = write_json(self.fixture.root / "large.json", {"inner": reference(self.fixture.root / "tool.json"),
+                                                              "padding": "x" * (1 << 20)})
+        path = run / "image-fence.json"
+        proof = json.loads(path.read_text())
+        proof["large"] = reference(large)
+        write_json(path, proof)
+        code, output, _ = run_tool(run)
+        self.assertEqual(code, 0)
+        self.assertIn("| `large` |", output)
+        self.assertNotIn("`large.inner`", output)
+        self.assertIn("| `tool` |", output)
+
+    def test_unreadable_exit_record_is_an_error(self):
+        run = self.fixture.nats_run()
+        record = self.fixture.root / (run.name + ".exit")
+        record.chmod(0)
+        self.addCleanup(record.chmod, 0o600)
+        if os.access(record, os.R_OK):
+            self.skipTest("this user can read files without read permission")
+        code, output, errors = run_tool(run)
+        self.assertEqual((code, output), (2, ""))
+        self.assertIn("ERROR:", errors)
+
     def test_exit_records_accept_plain_and_prefixed_integers_only(self):
         for text, expected in (("0\n", 0), ("EXIT=2\n", 2), ("-15", -15)):
             with self.subTest(text=text):
@@ -341,6 +408,12 @@ class EvidenceSummaryTests(unittest.TestCase):
                       "Python 12 tests OK (skipped=2) in 1.250 s.", output)
         self.assertEqual(run_tool(run, "--test-log", self.fixture.root / "absent.log")[0], 2)
 
+    def test_sequence_range_uses_the_exclusive_lower_frontier(self):
+        for lower, upper, expected in ((0, 5, "1–5"), (3, 5, "4–5"), (5, 5, "none"), (None, 5, "n/a")):
+            with self.subTest(lower=lower, upper=upper):
+                self.assertEqual(evidence_summary.sequence_range({"lower_sequence": lower, "upper_sequence": upper}),
+                                 expected)
+
     def test_test_count_parser(self):
         counts = evidence_summary.test_counts(GO_LOG + "Ran 3 tests in 0.5s\n\nFAILED (failures=1)\n")
         self.assertEqual(counts["go"]["methods"], {"PASS": 2, "SKIP": 1})
@@ -349,6 +422,8 @@ class EvidenceSummaryTests(unittest.TestCase):
         self.assertEqual(counts["python"], [{"tests": 3, "seconds": 0.5, "status": "FAILED", "detail": "failures=1"}])
         later = evidence_summary.test_counts("Ran 2 tests in 0.1s\n\nOK\nFAILED (errors=1)\n")
         self.assertEqual((later["python"][0]["status"], later["python"][0]["detail"]), ("OK", None))
+        colored = evidence_summary.test_counts("\x1b[1mRan 4 tests in 0.2s\x1b[0m\n\n\x1b[32mOK\x1b[0m\n")
+        self.assertEqual(colored["python"], [{"tests": 4, "seconds": 0.2, "status": "OK", "detail": None}])
         self.assertIsNone(evidence_summary.test_counts("no tests here\n"))
         self.assertEqual(evidence_summary.describe_tests(evidence_summary.test_counts("Ran 1 test in 0.1s\n")),
                          "Python 1 tests NO_STATUS in 0.100 s")
@@ -376,7 +451,7 @@ class RetainedRunTests(unittest.TestCase):
                          "Elapsed 9.064 seconds", "Attempt index 1; new lineage",
                          "409 unique absolute (14,201,441 bytes), 0 mismatches",
                          "| 000 | 0 | 1.350 | true | true |", "| 001 | 0 | 6.904 | true | true |",
-                         "`APP/S-R3F-TSDwT5SB`, `SYS/_meta_`"):
+                         "| 5 | 1–5 | `APP/S-R3F-TSDwT5SB`, `SYS/_meta_` |", "| standalone | PASS |"):
             self.assertIn(expected, output)
 
     def test_preparation_08_matches_the_evidence_section(self):

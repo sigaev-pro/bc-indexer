@@ -11,7 +11,8 @@ mutant that does not compile is BUILD_FAILED and fails the tool: a build
 failure is never a kill. The tool then runs the table's test command. A mutant
 is KILLED only when the tests fail and the output names at least one failing
 test or control; that evidence (every `*_test.go:` line, every failing test
-name and every assertion line) is kept in the report. A survivor passes only
+name and every single-line assertion or error line) is kept in the report, and
+the full output is kept in the run's `logs` directory. A survivor passes only
 when the table labeled it equivalent, with a reason, before the run.
 
 Before the mutants, the unmutated copy must compile and pass its tests.
@@ -25,13 +26,17 @@ Table fields:
   language        "go" or "python"
   root            directory to copy, relative to the table (default ".")
   copy            glob patterns relative to root (default: every file)
-  test            test command argv run in the copy; "{python}" is the
-                  current interpreter; runs in "test_cwd" (default root)
+  test            test command argv run in the copy root; "{python}" is the
+                  current interpreter
   go_module       for Go: module name for `go mod init` when the copy has no go.mod
   import          for Python: module names to import after compiling
                   (default: the mutated file's module name)
-  env             extra environment variables for compile and test commands
   timeout_seconds per command (default 300)
+
+A command that exceeds its timeout is stopped with its whole process tree,
+including children that started their own session; a mutant whose tree cannot
+be removed is CLEANUP_FAILED and fails the tool. A process that detaches and
+is orphaned before its command ends normally is outside this tracking.
   mutants         list of {name, file, original, replacement, equivalent?};
                   an empty replacement deletes the fragment
 """
@@ -65,9 +70,10 @@ KILL_LINE = re.compile(
 GO_FAILED_TEST = re.compile(r"^\s*--- FAIL: (\S+)")
 PY_FAILED_TEST = re.compile(r"^(?:FAIL|ERROR): (\S+) \(([^)]*)\)")
 REQUIRED = {"schema_version", "language", "test", "mutants"}
-OPTIONAL = {"root", "copy", "go_module", "import", "env", "timeout_seconds", "test_cwd", "description"}
+OPTIONAL = {"root", "copy", "go_module", "import", "timeout_seconds", "description"}
 MUTANT_FIELDS = {"name", "file", "original", "replacement"}
-FAILING = ("BUILD_FAILED", "NOT_APPLIED", "SURVIVED", "UNNAMED_FAILURE")
+FAILING = ("BUILD_FAILED", "NOT_APPLIED", "SURVIVED", "UNNAMED_FAILURE", "CLEANUP_FAILED")
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 class TableError(ValueError):
@@ -98,6 +104,9 @@ def load_table(path):
         raise TableError("timeout_seconds must be in (0, 3600]")
     if type(table["mutants"]) is not list or not table["mutants"]:
         raise TableError("mutants must be a nonempty list")
+    if "import" in table and (type(table["import"]) is not list or not table["import"]
+                              or not all(type(item) is str and item for item in table["import"])):
+        raise TableError("import must be a nonempty list of module names")
     root = (path.parent / table.get("root", ".")).resolve()
     if not root.is_dir():
         raise TableError(f"root is not a directory: {root}")
@@ -132,26 +141,89 @@ def copied_files(root, patterns):
     return files
 
 
-def run(argv, cwd, environment, timeout):
-    """Run one command in its own process group; a timeout kills the whole group."""
-    started = time.monotonic()
-    process = subprocess.Popen(argv, cwd=cwd, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               start_new_session=True)
-    timed_out = False
-    try:
-        output, _ = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(process.pid, signal.SIGKILL)
-        output, _ = process.communicate()
-    finally:
-        if process.poll() is None:
+def process_tree(root_pid):
+    """Return (pid, pgid) for every live descendant of root_pid."""
+    rows = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid=,stat="], capture_output=True, text=True, timeout=10)
+    children = {}
+    for line in rows.stdout.splitlines():
+        values = line.split()
+        if len(values) == 4 and all(value.isdigit() for value in values[:3]) and not values[3].startswith("Z"):
+            pid, parent, group = map(int, values[:3])
+            children.setdefault(parent, []).append((pid, group))
+    found, queue = [], [root_pid]
+    while queue:
+        for pid, group in children.get(queue.pop(), []):
+            found.append((pid, group))
+            queue.append(pid)
+    return found
+
+
+def exited_unreaped(process):
+    """Report whether the child exited without reaping it."""
+    event = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    return event is not None and event.si_pid == process.pid and event.si_code in (
+        os.CLD_EXITED, os.CLD_KILLED, os.CLD_DUMPED)
+
+
+def alive(pid):
+    row = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, timeout=10)
+    return row.returncode == 0 and bool(row.stdout.strip()) and not row.stdout.strip().startswith("Z")
+
+
+def stop_tree(process):
+    """Stop, then kill, the command's group and every descendant; return survivors."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, signal.SIGSTOP)
+    tree = {}
+    for _ in range(2):
+        for pid, group in process_tree(process.pid):
+            tree[pid] = group
             with contextlib.suppress(ProcessLookupError, PermissionError):
-                os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
-    return {"exit_code": None if timed_out else process.returncode, "output": output.decode(errors="replace"),
-            "seconds": round(time.monotonic() - started, 3), "timed_out": timed_out}
+                os.kill(pid, signal.SIGSTOP)
+    groups = {process.pid} | {group for group in tree.values() if group in tree}
+    for group in groups:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(group, signal.SIGKILL)
+    for pid in tree:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
+    process.wait()
+    deadline = time.monotonic() + 5
+    remaining = sorted(tree)
+    while remaining and time.monotonic() < deadline:
+        remaining = [pid for pid in remaining if alive(pid)]
+        if remaining:
+            time.sleep(0.05)
+    return remaining
+
+
+def run(argv, cwd, environment, timeout):
+    """Run one command in its own process group with output in a file, never a pipe."""
+    started = time.monotonic()
+    timed_out, survivors = False, []
+    with tempfile.TemporaryFile() as sink:
+        process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL, stdout=sink,
+                                   stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            deadline = time.monotonic() + timeout
+            while not exited_unreaped(process):
+                if time.monotonic() >= deadline:
+                    timed_out = True
+                    break
+                time.sleep(0.02)
+            if not timed_out:
+                # The unreaped leader still reserves its group ID, so this
+                # reaches only same-group leftovers of a command that ended.
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+        finally:
+            if process.returncode is None:
+                survivors = stop_tree(process)
+        sink.seek(0)
+        output = ANSI.sub("", sink.read().decode(errors="replace"))
+    return {"exit_code": None if timed_out else process.returncode, "output": output,
+            "seconds": round(time.monotonic() - started, 3), "timed_out": timed_out, "survivors": survivors}
 
 
 class Session:
@@ -161,9 +233,12 @@ class Session:
         self.table_path, self.root, self.table = table_path, root, table
         self.timeout = table.get("timeout_seconds", 300)
         self.files = copied_files(root, table.get("copy"))
-        environment = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
+        environment = {key: value for key, value in os.environ.items()
+                       if key not in ("PYTHONPATH", "PYTHONHOME", "FORCE_COLOR")}
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        environment.update(table.get("env", {}))
+        # Colored unittest or Go output would hide the failing test names.
+        environment["NO_COLOR"] = "1"
+        environment["PYTHON_COLORS"] = "0"
         self.environment = environment
 
     def prepare(self, work, mutant=None):
@@ -200,7 +275,7 @@ class Session:
 
     def test(self, work):
         argv = [sys.executable if item == "{python}" else item for item in self.table["test"]]
-        return run(argv, work / self.table.get("test_cwd", "."), self.environment, self.timeout)
+        return run(argv, work, self.environment, self.timeout)
 
     def baseline(self):
         mutated = self.table["mutants"][0]["file"]
@@ -211,6 +286,8 @@ class Session:
             if build["exit_code"] != 0:
                 return {"status": "BASELINE_BUILD_FAILED", "evidence": evidence_lines(build["output"])}
             tested = self.test(work)
+            if tested["survivors"]:
+                return {"status": "BASELINE_CLEANUP_FAILED", "survivors": tested["survivors"]}
             if tested["exit_code"] != 0:
                 return {"status": "BASELINE_FAILED", "evidence": evidence_lines(tested["output"])}
             return {"status": "PASS", "seconds": tested["seconds"], "summary": tail(tested["output"])}
@@ -235,7 +312,9 @@ class Session:
         (logs / f"{index:03d}.test.log").write_text(tested["output"])
         row["seconds"] = tested["seconds"]
         killers = failing_tests(tested["output"])
-        if tested["timed_out"]:
+        if tested["survivors"]:
+            row.update(status="CLEANUP_FAILED", survivors=tested["survivors"])
+        elif tested["timed_out"]:
             row.update(status="KILLED", killed_by=[f"timeout after {self.timeout} s"],
                        evidence=evidence_lines(tested["output"]))
         elif tested["exit_code"] == 0:
@@ -277,12 +356,24 @@ def toolchain(language):
     return f"Python {platform.python_version()} ({sys.executable})"
 
 
-def git_head(directory):
-    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=directory, capture_output=True, text=True)
-    state = subprocess.run(["git", "status", "--porcelain", "--", "."], cwd=directory, capture_output=True, text=True)
-    if result.returncode:
+def git_source(root, table_path):
+    """Return the Git head only when the table file is tracked in that checkout.
+
+    A copy extracted with `git archive` inside an ignored directory of another
+    checkout would otherwise report that checkout's head. Without tracked
+    sources the report records null and relies on the per-file SHA256 list.
+    """
+    def git(*arguments):
+        return subprocess.run(["git", *arguments], cwd=root, capture_output=True, text=True)
+
+    head = git("rev-parse", "HEAD")
+    if head.returncode:
         return None
-    return {"head": result.stdout.strip(), "clean": state.returncode == 0 and not state.stdout.strip()}
+    tracked = git("ls-files", "--error-unmatch", "--", str(table_path))
+    if tracked.returncode:
+        return None
+    state = git("status", "--porcelain", "--untracked-files=all", "--", ".", str(table_path))
+    return {"head": head.stdout.strip(), "clean": state.returncode == 0 and not state.stdout.strip()}
 
 
 def verdict(rows, baseline):
@@ -305,6 +396,8 @@ def main(argv=None):
             raise TableError(f"unknown mutant names: {unknown}")
         if not 1 <= arguments.jobs <= 32:
             raise TableError("--jobs must be between 1 and 32")
+        if table["language"] == "go" and shutil.which("go") is None:
+            raise TableError("the Go toolchain (`go`) is not on PATH")
         session = Session(table_path, root, table)
         uncopied = sorted({mutant["file"] for mutant in table["mutants"]} - {str(path) for path in session.files})
         if uncopied:
@@ -331,7 +424,7 @@ def main(argv=None):
         "schema_version": 1, "kind": "single-check-mutants", "language": table["language"],
         "table": {"path": str(table_path), "sha256": sha256(table_path)},
         "tool": {"path": str(Path(__file__).resolve()), "sha256": sha256(__file__)},
-        "root": str(root), "source": git_head(root),
+        "root": str(root), "source": git_source(root, table_path),
         "sources": [{"path": str(relative), "sha256": sha256(root / relative)} for relative in session.files],
         "toolchain": toolchain(table["language"]), "test": table["test"],
         "selected": "all" if not arguments.only else sorted(arguments.only),

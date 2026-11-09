@@ -684,8 +684,10 @@ accepting an oracle for a case verdict stays with that AC's owner.
 `preparation.json` or `run/run-record.json`) and prints a Markdown block with
 the proof, tool and native-report SHA256 values, timings, exit codes, cleanup
 and process-group flags, Go and Python test counts, unique absolute references
-with total bytes, and the attempt lineage. It only reads, verifies every
-absolute reference first and prints no summary on a mismatch (exit 1). Add
+with total bytes, and the attempt lineage. It only reads. Before printing, it
+verifies the absolute references in the proof, in each previous attempt, among
+the top-level references of directly cited JSON files up to 1 MiB, and in
+child proofs; on any mismatch it prints no summary (exit 1). Add
 `--test-log PATH` for a test log kept outside the run. Set
 `EVIDENCE_SUMMARY_RUNS` to the retained `d95-20261107` directory to run the
 opt-in checks against figures quoted in `.project/evidence/E01-01.harness.md`.

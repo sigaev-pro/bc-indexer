@@ -130,6 +130,60 @@
       "file": "evidence_summary.py",
       "original": "        print(f\"ERROR: {error}\", file=sys.stderr)\n        return 2",
       "replacement": "        print(f\"ERROR: {error}\", file=sys.stderr)\n        return 1"
+    },
+    {
+      "name": "exclusive lower frontier",
+      "file": "evidence_summary.py",
+      "original": "    return f\"{lower + 1}\u2013{upper}\"",
+      "replacement": "    return f\"{lower}\u2013{upper}\""
+    },
+    {
+      "name": "empty range",
+      "file": "evidence_summary.py",
+      "original": "    if upper <= lower:\n        return \"none\"",
+      "replacement": "    if False:\n        return \"none\""
+    },
+    {
+      "name": "non-object result",
+      "file": "evidence_summary.py",
+      "original": "        if type(result) is not dict:\n            raise FormatError",
+      "replacement": "        if False:\n            raise FormatError"
+    },
+    {
+      "name": "non-object previous attempt",
+      "file": "evidence_summary.py",
+      "original": "        if type(document) is not dict:\n            raise FormatError(f\"previous attempt",
+      "replacement": "        if False:\n            raise FormatError(f\"previous attempt"
+    },
+    {
+      "name": "nested size limit",
+      "file": "evidence_summary.py",
+      "original": "value[\"size_bytes\"] <= NESTED_LIMIT",
+      "replacement": "True"
+    },
+    {
+      "name": "commands must be a list",
+      "file": "evidence_summary.py",
+      "original": "    if type(commands) is not list:\n        raise FormatError",
+      "replacement": "    if False:\n        raise FormatError"
+    },
+    {
+      "name": "phases must be an object",
+      "file": "evidence_summary.py",
+      "original": "    if type(phases) is not dict:\n        raise FormatError",
+      "replacement": "    if False:\n        raise FormatError"
+    },
+    {
+      "name": "child must be an object",
+      "file": "evidence_summary.py",
+      "original": "        if type(child) is not dict:\n            raise FormatError",
+      "replacement": "        if False:\n            raise FormatError"
+    },
+    {
+      "name": "strip color codes",
+      "file": "evidence_summary.py",
+      "original": "    for line in ANSI.sub(\"\", text).splitlines():",
+      "replacement": "    for line in text.splitlines():"
     }
   ]
 }

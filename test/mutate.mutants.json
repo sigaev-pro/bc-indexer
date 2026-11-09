@@ -60,14 +60,8 @@
     {
       "name": "timeout is a kill",
       "file": "mutate.py",
-      "original": "        if tested[\"timed_out\"]:",
-      "replacement": "        if False:"
-    },
-    {
-      "name": "timeout kills the group",
-      "file": "mutate.py",
-      "original": "            os.killpg(process.pid, signal.SIGKILL)\n        output, _ = process.communicate()",
-      "replacement": "            process.kill()\n        output, _ = process.communicate()"
+      "original": "        elif tested[\"timed_out\"]:",
+      "replacement": "        elif False:"
     },
     {
       "name": "go assertion lines",
@@ -85,8 +79,7 @@
       "name": "inside root",
       "file": "mutate.py",
       "original": "        if not target.is_relative_to(root) or not target.is_file():",
-      "replacement": "        if not target.is_file():",
-      "equivalent": "A file outside root is never among the copied files, so the uncopied-file check still rejects the table with exit 2 before any copy is written."
+      "replacement": "        if not target.is_file():"
     },
     {
       "name": "no-op mutant",
@@ -124,6 +117,126 @@
       "file": "mutate.py",
       "original": "    return baseline[\"status\"] == \"PASS\" and not failures",
       "replacement": "    return not failures"
+    },
+    {
+      "name": "tracked table only",
+      "file": "mutate.py",
+      "original": "    if tracked.returncode:\n        return None",
+      "replacement": "    if False:\n        return None"
+    },
+    {
+      "name": "source cleanliness",
+      "file": "mutate.py",
+      "original": "    return {\"head\": head.stdout.strip(), \"clean\": state.returncode == 0 and not state.stdout.strip()}",
+      "replacement": "    return {\"head\": head.stdout.strip(), \"clean\": True}"
+    },
+    {
+      "name": "tree cleanup failure",
+      "file": "mutate.py",
+      "original": "        if tested[\"survivors\"]:\n            row.update(status=\"CLEANUP_FAILED\"",
+      "replacement": "        if False:\n            row.update(status=\"CLEANUP_FAILED\""
+    },
+    {
+      "name": "baseline cleanup failure",
+      "file": "mutate.py",
+      "original": "            if tested[\"survivors\"]:\n                return {\"status\": \"BASELINE_CLEANUP_FAILED\"",
+      "replacement": "            if False:\n                return {\"status\": \"BASELINE_CLEANUP_FAILED\""
+    },
+    {
+      "name": "detached descendants",
+      "file": "mutate.py",
+      "original": "        for pid, group in process_tree(process.pid):\n            tree[pid] = group",
+      "replacement": "        for pid, group in []:\n            tree[pid] = group"
+    },
+    {
+      "name": "survivor check",
+      "file": "mutate.py",
+      "original": "        remaining = [pid for pid in remaining if alive(pid)]",
+      "replacement": "        remaining = []"
+    },
+    {
+      "name": "finished-command leftovers",
+      "file": "mutate.py",
+      "original": "                with contextlib.suppress(ProcessLookupError, PermissionError):\n                    os.killpg(process.pid, signal.SIGKILL)\n                process.wait()",
+      "replacement": "                process.wait()"
+    },
+    {
+      "name": "strip color codes",
+      "file": "mutate.py",
+      "original": "        output = ANSI.sub(\"\", sink.read().decode(errors=\"replace\"))",
+      "replacement": "        output = sink.read().decode(errors=\"replace\")"
+    },
+    {
+      "name": "drop FORCE_COLOR",
+      "file": "mutate.py",
+      "original": "if key not in (\"PYTHONPATH\", \"PYTHONHOME\", \"FORCE_COLOR\")}",
+      "replacement": "if key not in (\"PYTHONPATH\", \"PYTHONHOME\")}"
+    },
+    {
+      "name": "drop PYTHONPATH",
+      "file": "mutate.py",
+      "original": "if key not in (\"PYTHONPATH\", \"PYTHONHOME\", \"FORCE_COLOR\")}",
+      "replacement": "if key not in (\"PYTHONHOME\", \"FORCE_COLOR\")}"
+    },
+    {
+      "name": "disable colors",
+      "file": "mutate.py",
+      "original": "        environment[\"NO_COLOR\"] = \"1\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "go toolchain check",
+      "file": "mutate.py",
+      "original": "        if table[\"language\"] == \"go\" and shutil.which(\"go\") is None:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "import validation",
+      "file": "mutate.py",
+      "original": "    if \"import\" in table and (type(table[\"import\"]) is not list or not table[\"import\"]",
+      "replacement": "    if False and (type(table[\"import\"]) is not list or not table[\"import\"]"
+    },
+    {
+      "name": "import option",
+      "file": "mutate.py",
+      "original": "        modules = self.table.get(\"import\") or [target.stem]",
+      "replacement": "        modules = [target.stem]"
+    },
+    {
+      "name": "baseline build check",
+      "file": "mutate.py",
+      "original": "                return {\"status\": \"BASELINE_BUILD_FAILED\"",
+      "replacement": "                return {\"status\": \"PASS\""
+    },
+    {
+      "name": "existing go.mod",
+      "file": "mutate.py",
+      "original": "            if \"go_module\" in self.table and not (work / \"go.mod\").exists():",
+      "replacement": "            if \"go_module\" in self.table:"
+    },
+    {
+      "name": "skip git and bytecode",
+      "file": "mutate.py",
+      "original": "if any(part in (\".git\", \"__pycache__\") for part in relative.parts) or not path.is_file():",
+      "replacement": "if not path.is_file():"
+    },
+    {
+      "name": "jobs upper bound",
+      "file": "mutate.py",
+      "original": "        if not 1 <= arguments.jobs <= 32:",
+      "replacement": "        if not 1 <= arguments.jobs:"
+    },
+    {
+      "name": "timeout upper bound",
+      "file": "mutate.py",
+      "original": "    if type(timeout) not in (int, float) or not 0 < timeout <= 3600:",
+      "replacement": "    if type(timeout) not in (int, float) or not 0 < timeout:"
+    },
+    {
+      "name": "table object",
+      "file": "mutate.py",
+      "original": "    if type(table) is not dict:\n        raise TableError",
+      "replacement": "    if False:\n        raise TableError"
     }
   ]
 }

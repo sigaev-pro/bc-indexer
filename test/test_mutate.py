@@ -6,10 +6,12 @@ import io
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mutate  # noqa: E402
@@ -206,6 +208,108 @@ class MutateTests(unittest.TestCase):
         self.assertEqual(code, 0, report)
         self.assertEqual(self.row(report, "hang")["killed_by"], ["timeout after 2 s"])
 
+    def test_timeout_removes_children_in_their_own_session(self):
+        marker = self.base / "detached.pid"
+        holder = self.code / "holder.py"
+        holder.write_text("import subprocess, sys\n"
+                          "from pathlib import Path\n"
+                          "import calc\n"
+                          "if calc.clamp(5, 0, 10) != 5:\n"
+                          "    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],\n"
+                          "                             start_new_session=True)\n"
+                          f"    Path({str(marker)!r}).write_text(str(child.pid))\n"
+                          "    while True:\n"
+                          "        pass\n")
+        hang = {"name": "hang", "file": "calc.py", "original": "    return value\n", "replacement": "    return value + 1\n"}
+        started = time.monotonic()
+        code, report, _, _ = self.run_table([hang], test=["{python}", "holder.py"], timeout_seconds=2)
+        self.assertLess(time.monotonic() - started, 20, "a detached child kept the run open after the timeout")
+        self.assertEqual(code, 0, report)
+        self.assertEqual(self.row(report, "hang")["killed_by"], ["timeout after 2 s"])
+        self.assertFalse(mutate.alive(int(marker.read_text())), "the detached child survived the timeout")
+
+    def test_same_group_leftovers_of_a_finished_command_are_removed(self):
+        marker = self.base / "leftover.pid"
+        leaver = ["{python}", "-c", "import subprocess, sys\n"
+                  "from pathlib import Path\n"
+                  "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                  f"Path({str(marker)!r}).write_text(str(child.pid))\n"]
+        result = mutate.run([sys.executable if item == "{python}" else item for item in leaver], self.code,
+                            mutate.Session(*mutate.load_table(self.table([LOW]))).environment, 30)
+        self.assertEqual((result["exit_code"], result["timed_out"]), (0, False))
+        deadline = time.monotonic() + 5
+        while mutate.alive(int(marker.read_text())) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertFalse(mutate.alive(int(marker.read_text())), "a same-group child outlived its finished command")
+
+    def test_surviving_processes_fail_the_mutant_and_the_baseline(self):
+        spawner = ["{python}", "-c", "import calc, subprocess, sys, time\n"
+                   "if calc.clamp(5, 0, 10) != 5:\n"
+                   "    subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+                   "    time.sleep(30)\n"]
+        hang = {"name": "hang", "file": "calc.py", "original": "    return value\n", "replacement": "    return value + 1\n"}
+        with patch.object(mutate, "alive", return_value=True):
+            code, report, _, _ = self.run_table([hang], test=spawner, timeout_seconds=2)
+        self.assertEqual(code, 1)
+        self.assertEqual(report["baseline"]["status"], "PASS")
+        row = self.row(report, "hang")
+        self.assertEqual(row["status"], "CLEANUP_FAILED")
+        self.assertTrue(row["survivors"])
+        always = ["{python}", "-c", "import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', "
+                  "'import time; time.sleep(30)']); time.sleep(30)"]
+        with patch.object(mutate, "alive", return_value=True):
+            code, report, _, _ = self.run_table([LOW], test=always, timeout_seconds=2)
+        self.assertEqual((code, report["baseline"]["status"], report["mutants"]), (1, "BASELINE_CLEANUP_FAILED", []))
+
+    def test_colored_output_keeps_test_names(self):
+        colored = ["{python}", "-c", "import calc, sys\n"
+                   "if calc.clamp(-1, 0, 10) != 0:\n"
+                   "    print('\\x1b[31mFAIL\\x1b[0m: test_low (test_calc.CalcTests.test_low)')\n"
+                   "    sys.exit(1)\n"]
+        code, report, _, _ = self.run_table([LOW], test=colored)
+        self.assertEqual(code, 0, report)
+        self.assertEqual(self.row(report, "low bound")["killed_by"], ["test_calc.CalcTests.test_low"])
+        with patch.dict(mutate.os.environ, {"PYTHONPATH": "/shadow", "PYTHONHOME": "/home", "FORCE_COLOR": "1"}):
+            for name in ("NO_COLOR", "PYTHON_COLORS"):
+                mutate.os.environ.pop(name, None)
+            environment = mutate.Session(*mutate.load_table(self.table([LOW]))).environment
+        self.assertFalse({"PYTHONPATH", "PYTHONHOME", "FORCE_COLOR"} & set(environment))
+        self.assertEqual((environment["NO_COLOR"], environment["PYTHON_COLORS"]), ("1", "0"))
+
+    def test_import_option_and_baseline_build_failure(self):
+        code, report, _, _ = self.run_table([LOW], **{"import": ["calc", "test_calc"]})
+        self.assertEqual(code, 0, report)
+        code, report, _, _ = self.run_table([LOW], **{"import": ["calc", "missing_module"]})
+        self.assertEqual((code, report["baseline"]["status"]), (1, "BASELINE_BUILD_FAILED"))
+        self.assertTrue(any("missing_module" in line for line in report["baseline"]["evidence"]))
+        self.assertEqual(report["mutants"], [])
+
+    def test_symlink_outside_root_is_rejected(self):
+        outside = self.base / "outside"
+        outside.mkdir()
+        (outside / "calc.py").write_text(CALC)
+        (self.code / "calc.py").unlink()
+        (self.code / "calc.py").symlink_to(outside / "calc.py")
+        code, report, _, stderr = self.run_table([LOW])
+        self.assertEqual((code, report), (2, None))
+        self.assertIn("not inside root", stderr)
+
+    def test_missing_go_toolchain_is_a_usage_error(self):
+        table = self.table([LOW], language="go", test=["go", "test", "."])
+        with patch.object(mutate.shutil, "which", return_value=None):
+            code, _, stderr = run_tool(table, "--output", self.base / "no-go")
+        self.assertEqual(code, 2)
+        self.assertIn("Go toolchain", stderr)
+        self.assertFalse((self.base / "no-go").exists())
+
+    def test_git_and_bytecode_directories_are_not_copied(self):
+        for name in (".git/config", "__pycache__/calc.cpython.pyc", "nested/__pycache__/x.pyc"):
+            (self.code / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.code / name).write_text("ignored\n")
+        code, report, _, _ = self.run_table([LOW], copy=None)
+        self.assertEqual(code, 0, report)
+        self.assertEqual({row["path"] for row in report["sources"]}, {"calc.py", "test_calc.py", "calc.mutants.json"})
+
     def test_failing_baseline_runs_no_mutant(self):
         (self.code / "test_calc.py").write_text(TEST_CALC.replace("calc.clamp(5, 0, 10), 5", "calc.clamp(5, 0, 10), 6"))
         code, report, _, _ = self.run_table([LOW])
@@ -221,6 +325,30 @@ class MutateTests(unittest.TestCase):
         self.assertEqual(run_tool(table, "--output", self.base / "isolated")[0], 1)
         self.assertEqual(tree_state(self.code), before)
         self.assertFalse((self.code / "__pycache__").exists())
+
+    def test_source_head_is_recorded_only_for_tracked_tables(self):
+        def git(*arguments):
+            subprocess.run(["git", *arguments], cwd=self.base, check=True, capture_output=True)
+
+        git("init", "-q")
+        git("config", "user.email", "test@example.invalid")
+        git("config", "user.name", "Test")
+        (self.base / ".gitignore").write_text("run-*\nextracted/\n")
+        table = self.table([LOW])
+        git("add", ".gitignore", "code")
+        git("commit", "-q", "-m", "fixture")
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.base, capture_output=True, text=True).stdout.strip()
+        code, report, _, _ = self.run_table([LOW])
+        self.assertEqual(code, 0)
+        self.assertEqual(report["source"], {"head": head, "clean": True})
+        (self.code / "calc.py").write_text(CALC + "\n")
+        code, report, _, _ = self.run_table([LOW])
+        self.assertEqual(report["source"], {"head": head, "clean": False})
+        extracted = self.base / "extracted"
+        shutil.copytree(self.code, extracted)
+        output = self.base / "run-extracted"
+        self.assertEqual(run_tool(extracted / table.name, "--output", output)[0], 0)
+        self.assertIsNone(json.loads((output / "mutants.json").read_text())["source"])
 
     def test_existing_output_is_refused_and_left_unchanged(self):
         output = self.base / "existing"
@@ -257,6 +385,12 @@ class MutateTests(unittest.TestCase):
             "timeout": {"timeout_seconds": 0},
             "no mutants": {"mutants": []},
             "extra mutant field": {"mutants": [dict(LOW, note="x")]},
+            "test item": {"test": ["{python}", 1]},
+            "mutants not list": {"mutants": {"name": "x"}},
+            "equivalent not string": {"mutants": [dict(LOW, equivalent=True)]},
+            "long timeout": {"timeout_seconds": 3601},
+            "import not list": {"import": "calc"},
+            "removed option": {"env": {"A": "1"}},
         }
         for name, change in cases.items():
             with self.subTest(name):
@@ -271,6 +405,11 @@ class MutateTests(unittest.TestCase):
         (self.code / "bad.json").write_text("{")
         self.assertEqual(run_tool(self.code / "bad.json", "--output", self.base / "bad-json")[0], 2)
         self.assertEqual(run_tool(self.table([LOW]), "--output", self.base / "jobs", "--jobs", "0")[0], 2)
+        self.assertEqual(run_tool(self.table([LOW]), "--output", self.base / "jobs", "--jobs", "33")[0], 2)
+        for text in ("[]", "1"):
+            (self.code / "bad.json").write_text(text)
+            self.assertEqual(run_tool(self.code / "bad.json", "--output", self.base / "bad-list")[0], 2)
+        self.assertFalse((self.base / "jobs").exists())
 
     def test_parallel_jobs_match_serial_results(self):
         _, serial, _, _ = self.run_table([LOW, EQUIVALENT])
@@ -305,7 +444,7 @@ class GoMutateTests(unittest.TestCase):
             code.mkdir()
             (code / "calc.go").write_text(GO_CODE)
             (code / "calc_test.go").write_text(GO_TEST)
-            table = {"schema_version": 1, "language": "go", "go_module": "calc", "copy": ["*.go"],
+            table = {"schema_version": 1, "language": "go", "go_module": "calc", "copy": ["*.go", "go.mod"],
                      "test": ["go", "test", "-count=1", "-v", "."], "timeout_seconds": 300, "mutants": [
                          {"name": "low", "file": "calc.go", "original": "if value < low {",
                           "replacement": "if value < low && false {"},
@@ -326,6 +465,10 @@ class GoMutateTests(unittest.TestCase):
             self.assertTrue(any("declared and not used" in line for line in rows["unused"]["evidence"]), rows["unused"])
             self.assertEqual(rows["high inclusive"]["status"], "EQUIVALENT")
             self.assertFalse((code / "go.mod").exists())
+            (code / "go.mod").write_text("module calc\n\ngo 1.21\n")
+            result, _, _ = run_tool(path, "--output", base / "with-module", "--only", "low")
+            report = json.loads((base / "with-module" / "mutants.json").read_text())
+            self.assertEqual((result, report["baseline"]["status"]), (0, "PASS"))
 
 
 if __name__ == "__main__":

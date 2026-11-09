@@ -9,8 +9,9 @@ through #130.
 ## 1. Every number is backed by a file
 
 - Generate run figures with `test/harness/evidence_summary.py RUN_DIR`; do not
-  copy hashes, timings, counts or byte totals by hand. It verifies every
-  absolute reference and prints nothing on a mismatch.
+  copy hashes, timings, counts or byte totals by hand. It verifies the run's
+  absolute references (its help states the exact scope) and prints nothing on
+  a mismatch.
 - A figure the tool does not print (for example a test count from a local
   command) cites a retained log; pass that log with `--test-log`.
 - Quote counts from the retained record, not from memory or an earlier run.
