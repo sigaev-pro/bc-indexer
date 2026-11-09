@@ -1,5 +1,13 @@
 # Дерево решений и журнал интервью
 
+## D97 — Run independent work in parallel agents (2026-11-10)
+
+The owner requires work to be split across parallel agents wherever tasks are independent. Two tasks are independent when neither needs the other's result, they change different files, and neither must land in the same change as the other. Run each independent task in its own session and worktree, with its own branch, independent reviews and PR. Keep dependent tasks in order, as DEVELOPMENT_PLAN and TASK_DECOMPOSITION define it.
+
+Choose the agents (sessions, subagents, reviewers) and their roles yourself only when you are fully certain that the split and the choice are right; this is the preferred path. Otherwise agree the split and the agents with the owner first.
+
+Parallel work never relaxes a gate. Measured runtime work still follows the host-wide single-writer and resource rules, so measured runs from parallel sessions execute one at a time. Each PR still needs its own exact-head CI, independent Spec and Standards reviews, and the owner's merge permission for that PR.
+
 ## D96 — Close E01-01.harness on local private profiles (2026-11-09)
 
 The owner chose the closure boundary for issue #12, E01-01.harness. The task closes on reproducible private local native-seam fixtures for the three families: Ethereum (Geth import), BSC (Parlia import) and Polygon (Bor import). Its remaining output is one test-only runner that consumes a frozen RunPlan, verifies a test-only local ProfileManifest per profile, checks resources and phase deadlines, dispatches the accepted family slices through their native seams, records runtime admission for local native-seam plans, and retains harness evidence with phase timing. This meets the #12 artifact criterion in TASK_DECOMPOSITION (passport with real inputs, commands and independent expected; runner calls the native seam and keeps evidence).

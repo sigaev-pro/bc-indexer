@@ -26,6 +26,10 @@ For planning, read [DECISIONS](docs/DECISIONS.md). For implementation, read the 
 
 Before a substantial task, record its ID and status in PROJECT_STATUS.md. Record accepted user decisions in DECISIONS.md as soon as they arrive. After the task, record the result, checks, and next action. Distinguish proposals from accepted decisions.
 
+## Parallel agents
+
+D97 requires independent work to run in parallel agents. Split tasks that need no result from each other, change different files, and need not land together into separate sessions and worktrees, each with its own branch, reviews and PR. Keep dependent tasks in order. Choose the agents and their roles yourself only when you are fully certain the split is right (preferred); otherwise agree it with the owner first. Parallel work does not relax gates: measured runs still execute one at a time under the single-writer lock, and every PR keeps its own CI, independent reviews and merge permission.
+
 ## Changes, verification, and commits
 
 After completing a block, update the status documents, run its checks, commit all related changes, and push the working branch. D95 authorizes this publication and protected merges within the accepted development scope. Keep incomplete work in a draft PR; CI and review gate merging, not publication. Move to the next block only after its commit and push succeed. This rule also applies to documentation-only changes. Check `git status` and report the commit hash. Resolve a publication failure before advancing. Partial blocks do not close the parent issue or unlock dependent tasks.
