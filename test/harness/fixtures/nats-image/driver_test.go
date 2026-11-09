@@ -149,6 +149,78 @@ func TestConnectionSubscriptionsHaveSeparateRoleAndConnectionScopes(t *testing.T
 	}
 }
 
+func TestInitialInventoryWaitsForEveryReplica(t *testing.T) {
+	processes := []*processRecord{{Name: "image-S-1", InfoID: "A"}, {Name: "image-S-2", InfoID: "B"}, {Name: "image-S-3", InfoID: "C"}}
+	initial := map[string]any{"created": "2026-11-09T00:00:00Z", "config": map[string]any{"name": "FENCE", "metadata": map[string]any{"_nats.req.level": "0", "_nats.level": "5", "_nats.ver": "2.15.2"}}}
+	makeObservation := func(index int, ready bool) observation {
+		account := map[string]any{"name": "APP", "id": "APP"}
+		streams := 0
+		if ready {
+			streams = 1
+			account["stream_detail"] = []any{map[string]any{"name": "FENCE", "created": initial["created"], "config": map[string]any{"name": "FENCE", "metadata": map[string]any{"_nats.req.level": "0"}}, "stream_raft_group": "S-R3F-known", "state": map[string]any{"messages": 0, "bytes": 0, "first_seq": 0, "last_seq": 0, "consumer_count": 0}}}
+		}
+		body, _ := json.Marshal(map[string]any{"server_id": processes[index].InfoID, "total": 1, "streams": streams, "consumers": 0, "messages": 0, "bytes": 0, "account_details": []any{account}})
+		return observation{Node: processes[index].Name, Path: jszPath, Status: 200, Body: body}
+	}
+	calls := 0
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	rows, group, err := waitInitial(ctx, processes, initial, func(_ context.Context, index int) (observation, error) {
+		calls++
+		v := makeObservation(index, index != 2 || calls > 3)
+		v.Order = int64(calls)
+		return v, nil
+	})
+	if err != nil || calls != 6 || len(rows) != 3 || rows[0].Order != 4 || group == nil || *group != "S-R3F-known" {
+		t.Fatalf("incomplete collection admitted or valid delay failed: %d %v %v", calls, group, err)
+	}
+	for _, mode := range []string{"status", "foreign", "drift", "type", "group", "malformed", "nonempty-pending"} {
+		calls = 0
+		_, _, err = waitInitial(ctx, processes, initial, func(_ context.Context, index int) (observation, error) {
+			calls++
+			v := makeObservation(index, true)
+			switch mode {
+			case "status":
+				v.Status = 503
+			case "foreign":
+				v.Body = bytes.ReplaceAll(v.Body, []byte(`"server_id":"A"`), []byte(`"server_id":"foreign"`))
+			case "drift":
+				v.Body = bytes.ReplaceAll(v.Body, []byte(`"_nats.req.level":"0"`), []byte(`"_nats.req.level":"1"`))
+			case "type":
+				v.Body = bytes.ReplaceAll(v.Body, []byte(`"streams":1`), []byte(`"streams":true`))
+			case "group":
+				v.Body = bytes.ReplaceAll(v.Body, []byte(`"S-R3F-known"`), []byte(`"foreign"`))
+			case "malformed":
+				v.Body = []byte(`{`)
+			case "nonempty-pending":
+				v = makeObservation(index, false)
+				v.Body = bytes.ReplaceAll(v.Body, []byte(`"messages":0`), []byte(`"messages":1`))
+			}
+			return v, nil
+		})
+		if err == nil || calls != 1 {
+			t.Errorf("%s retried or admitted invalid evidence: calls=%d err=%v", mode, calls, err)
+		}
+	}
+	short, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer stop()
+	calls = 0
+	_, _, err = waitInitial(short, processes, initial, func(_ context.Context, index int) (observation, error) {
+		calls++
+		return makeObservation(index, false), nil
+	})
+	if err == nil || calls != 3 {
+		t.Fatalf("pending inventory exceeded its shared deadline: %d %v", calls, err)
+	}
+	_, _, err = waitInitial(short, processes, initial, func(_ context.Context, index int) (observation, error) {
+		t.Error("dispatch after deadline")
+		return makeObservation(index, true), nil
+	})
+	if err == nil {
+		t.Fatal("expired parent budget accepted")
+	}
+}
+
 func TestInfoMustMatchSelectedProcessConfiguration(t *testing.T) {
 	process := &processRecord{Name: "image-S-1", InfoID: "native-id", Config: []byte(`{"server_name":"image-S-1","listen":"127.0.0.1:19001","max_payload":8192}`)}
 	baseline := map[string]any{"server_name": "image-S-1", "server_id": "native-id", "host": "127.0.0.1", "port": json.Number("19001"), "proto": json.Number("1"), "max_payload": json.Number("8192")}

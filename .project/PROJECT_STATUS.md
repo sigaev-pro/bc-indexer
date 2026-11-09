@@ -2,14 +2,27 @@
 
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: READY_FOR_REVIEW for the scoped attempt-02 repair. Forty affected
+Status: READY_FOR_REVIEW for the source-confirmed API/JSz metadata correction
+after measured attempt 03. Preparation 03 passed in 65.534 seconds. Standalone
+native execution completed, but independent configuration comparison rejected
+API-only version/level metadata absent from JSz. The full measured proof remains
+FAIL; R3 was NOT_RUN. All resources were cleaned, and no new native work is active.
+The correction validates exact metadata per surface and preserves every other
+configuration field. It also bounds initial all-voter materialization polling
+before publication; that startup race was found in source, not an actual R3 run.
+Forty-one affected Python methods and 12 Go methods plus eight handshake subcases
+pass. Read-only replay accepts the retained standalone bytes without changing
+the failed proof. Next: publish, prepare a new tool, then run attempt 04 linked
+to FAIL03. Driver/oracle changes require fresh preparation.
+
+Historical attempt-02 repair checkpoint: forty affected
 Python methods and 11 host Go methods, including eight handshake subcases,
 pass. Every connection now has its own role-scoped inbox; retained wire bytes
 bind all requests, replies and INFO fields to the selected process/config.
 The exact pinned standalone no-Raft response is recognized without accepting
-generic 404 responses or missing R3 groups. Next: publish this source checkpoint,
-prepare a fresh pinned driver, then run attempt 03 linked to failed attempt 02.
-No new native operation is active; no successful unchanged-image fence is claimed.
+generic 404 responses or missing R3 groups. That checkpoint was published before
+preparation 03 and measured attempt 03. No successful unchanged-image fence or
+public-profile runtime admission is claimed.
 
 Historical attempt 01: source `4645131abfd20a799ea74bb672cc0ded09f88a3f`
 prepared successfully with the pinned compiler in 58.348 seconds. Measured

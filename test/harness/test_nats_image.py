@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import nats_image
-from nats_image_proof import validate_report
+from nats_image_proof import config_join, validate_report
 from test_nats_image_checks import encoded
 from test_nats_image_collection import document, change_body
 
@@ -37,7 +37,7 @@ def native_document(directory, topology="R3"):
                "body": encoded(payload), "order": order}
         result["rpc"].append(row)
         return row
-    call("create", "$JS.API.STREAM.CREATE.FENCE", source["initial"]["config"], source["initial"], 8)
+    call("create", "$JS.API.STREAM.CREATE.FENCE", {k: v for k, v in source["initial"]["config"].items() if k != "metadata"}, source["initial"], 8)
     call("seal", "$JS.API.STREAM.UPDATE.FENCE", source["sealed"]["config"], source["sealed"], 41)
     call("fenced-info", "$JS.API.STREAM.INFO.FENCE", {}, source["sealed"], 410)
     import base64
@@ -52,6 +52,7 @@ def native_document(directory, topology="R3"):
         def mutate(value):
             value["server_id"] = process["info_id"]
             value["account_details"][0]["stream_detail"][0].update(source["initial"])
+            value["account_details"][0]["stream_detail"][0]["config"] = {**source["initial"]["config"], "metadata": {"_nats.req.level": "0"}}
         change_body(row, mutate)
         result["initial_inventory"].append(row)
     wire = directory / "wire"
@@ -110,6 +111,26 @@ def native_document(directory, topology="R3"):
 
 
 class NativeProofTests(unittest.TestCase):
+    def test_actual_api_and_jsz_metadata_have_exact_distinct_shapes(self):
+        fixture = json.loads((Path(__file__).parent / "fixtures/nats-image/metadata-observations.json").read_text())
+        self.assertEqual(fixture["source_report_sha256"], "4f7cdee2155195540cb2be280e6ad2a8e02a6dba07512082c579944d9b11313a")
+        config_join(fixture["jsz"], fixture["api"], fixture["plan"], fixture["topology"], True)
+        for surface in ("api", "jsz"):
+            for mutation in ("missing", "missing-key", "unknown", "wrong-required", "required-type", "wrong-version", "level-type", "nonmetadata", "nonmetadata-type"):
+                value = copy.deepcopy(fixture)
+                config = value[surface]
+                if mutation == "missing": config.pop("metadata")
+                elif mutation == "missing-key": config["metadata"].pop("_nats.req.level")
+                elif mutation == "unknown": config["metadata"]["user-field"] = "unexpected"
+                elif mutation == "wrong-required": config["metadata"]["_nats.req.level"] = "1"
+                elif mutation == "required-type": config["metadata"]["_nats.req.level"] = 0
+                elif mutation == "wrong-version": config["metadata"]["_nats.ver"] = "2.15.1"
+                elif mutation == "level-type": config["metadata"]["_nats.level"] = 5
+                elif mutation == "nonmetadata": config["duplicate_window"] += 1
+                else: config["duplicate_window"] = float(config["duplicate_window"])
+                with self.subTest(surface=surface, mutation=mutation), self.assertRaises(ValueError):
+                    config_join(value["jsz"], value["api"], value["plan"], value["topology"], True)
+
     def test_every_connection_scope_and_selected_process_is_bound(self):
         for mutation in ("manager-ack", "reader-prefix", "reader-identity", "missing", "extra"):
             with tempfile.TemporaryDirectory() as temp:

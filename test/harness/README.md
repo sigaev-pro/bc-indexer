@@ -34,11 +34,14 @@ start a native process or authenticate an executable/tool from supplied fields.
 
 The later [nats_image.py](nats_image.py) source checkpoint adds preparation and
 measurement around the unchanged accepted executable. Its static, standard
-library Go coordinator has portable tests. Two preparations passed, but both
+library Go coordinator has portable tests. Three preparations passed, but all three
 measured attempts remain FAIL: the first stopped at the protocol 1 handshake;
 the second captured all five publication ACKs, then rejected a publisher ACK
 on the manager connection because both subscribed to the same wildcard inbox.
-Neither attempt completed standalone recovery; R3 stayed NOT_RUN. The repaired
+The third completed standalone native recovery/export, but independent comparison
+rejected API-only metadata absent from JSz. Its overall proof remains FAIL;
+R3 stayed NOT_RUN. Read-only replay after the scoped comparison repair is a
+diagnostic, not a replacement result. The repaired
 coordinator requires fresh preparation and a new pinned tool. Corrected
 standalone/R3 execution is still **NOT_RUN**. The independent
 [collection](nats_image_collection.py) and [raw-byte join](nats_image_proof.py)
@@ -53,6 +56,17 @@ discarded. Every raw connection is joined to its own process/configuration,
 including typed INFO server name, port, protocol and payload limit. Standalone
 Raft absence accepts only the pinned native 404 body `No Raft nodes registered`;
 generic errors and absent R3 groups reject.
+
+Native API configurations require exactly `_nats.req.level: "0"`,
+`_nats.level: "5"` and `_nats.ver: "2.15.2"`; JSz requires only the first field.
+The checker validates these exact metadata shapes/types before comparing all
+remaining fields without coercion. Raw API and monitoring responses stay intact.
+Before publication, a 60-second sub-budget of the measured parent deadline
+waits for the expected empty stream/configuration/group on every local voter.
+Only a valid zero-stream APP inventory is pending; malformed, foreign or changed
+evidence fails immediately. Every sample remains in the HTTP log, and only the
+final complete collection becomes `initial_inventory`. This readiness control
+does not weaken the later full fence or represent an observed R3 failure.
 
 ```sh
 python3 -I test/harness/nats_image.py prepare /absolute/BuildManifest.json \
@@ -226,9 +240,12 @@ metadata/stream-group set, retain all raw responses and bracket the full
 collection, U and direct sequence export. It must bind actual process exits,
 fresh process generations with stable names/stores/membership, exact operating
 to sealed/restricted configurations, and an exhaustive framed ingress census
-with responses observed before reply loss. Every source-native barrier and
-unchanged-image standalone/R3 restart test remains NOT_RUN. The offline RunPlan
-does not treat this inspection as verified conformance. Issue #12 remains open.
+with responses observed before reply loss. This input predicate's own
+source-conformance fields remain NOT_RUN; it does not execute those cases.
+The separate five-case source-native proof was accepted in PR #127. Unchanged-image
+full standalone/R3 fence acceptance is still incomplete after three retained
+failed measured attempts. The offline RunPlan does not treat this inspection as
+verified conformance. Issue #12 remains open.
 
 ## Public seam and trust boundary
 

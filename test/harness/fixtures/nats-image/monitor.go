@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"time"
 )
 
@@ -35,7 +37,14 @@ type collection struct {
 	Nodes  map[string]nodeCollection `json:"nodes"`
 }
 
-func (r *runtimeState) observe(index int, path string) (value observation, err error) {
+func (r *runtimeState) observe(index int, path string) (observation, error) {
+	return r.observeContext(r.ctx, index, path)
+}
+
+func (r *runtimeState) observeContext(parent context.Context, index int, path string) (value observation, err error) {
+	if err = parent.Err(); err != nil {
+		return value, err
+	}
 	if r.fatal != nil {
 		return value, r.fatal
 	}
@@ -65,7 +74,7 @@ func (r *runtimeState) observe(index int, path string) (value observation, err e
 		}
 		err = errors.Join(err, persistence)
 	}()
-	ctx, cancel := context.WithTimeout(r.ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d%s", 19101+index, path), nil)
 	if err != nil {
@@ -86,6 +95,167 @@ func (r *runtimeState) observe(index int, path string) (value observation, err e
 		err = errors.Join(err, r.fatal)
 	}
 	return value, err
+}
+
+func storedConfig(value any, api bool) ([]byte, error) {
+	config, ok := value.(map[string]any)
+	if !ok {
+		return nil, errors.New("native configuration missing")
+	}
+	metadata, ok := config["metadata"].(map[string]any)
+	expected := map[string]any{"_nats.req.level": "0"}
+	if api {
+		expected["_nats.level"] = "5"
+		expected["_nats.ver"] = "2.15.2"
+	}
+	if !ok || len(metadata) != len(expected) {
+		return nil, errors.New("native metadata shape changed")
+	}
+	for key, value := range expected {
+		if metadata[key] != value {
+			return nil, errors.New("native metadata value or type changed")
+		}
+	}
+	copy := make(map[string]any, len(config))
+	for key, value := range config {
+		copy[key] = value
+	}
+	copy["metadata"] = map[string]any{"_nats.req.level": "0"}
+	return json.Marshal(copy)
+}
+
+var initialGroup = regexp.MustCompile(`^S-R3F-[A-Za-z0-9_-]{1,64}$`)
+
+// Only the explicit zero-stream local state is pending. Bad identities,
+// configuration drift, protocol errors and malformed inventories fail at once.
+func initialMaterialization(observed observation, process *processRecord, initial map[string]any, count int) (string, bool, error) {
+	if observed.Node != process.Name || observed.Path != jszPath || observed.Status != 200 {
+		return "", false, errors.New("initial native monitoring identity or status changed")
+	}
+	value, err := object(observed.Body)
+	if err != nil {
+		return "", false, err
+	}
+	streams, validStreams := number(value["streams"])
+	total, validTotal := number(value["total"])
+	consumers, validConsumers := number(value["consumers"])
+	if value["server_id"] != process.InfoID || !validStreams || streams < 0 || streams > 1 || !validTotal || total != 1 || !validConsumers || consumers != 0 {
+		return "", false, errors.New("initial native inventory changed")
+	}
+	for _, key := range []string{"messages", "bytes"} {
+		countValue, ok := number(value[key])
+		if !ok || countValue != 0 {
+			return "", false, errors.New("initial native inventory is not empty")
+		}
+	}
+	accounts, ok := value["account_details"].([]any)
+	if !ok || len(accounts) != 1 {
+		return "", false, errors.New("initial APP inventory missing")
+	}
+	account, ok := accounts[0].(map[string]any)
+	if !ok || account["name"] != "APP" || account["id"] != "APP" {
+		return "", false, errors.New("initial APP identity changed")
+	}
+	detail, present := account["stream_detail"]
+	rows, validRows := detail.([]any)
+	if streams == 0 {
+		if present && (!validRows || len(rows) != 0) {
+			return "", false, errors.New("contradictory pending stream inventory")
+		}
+		return "", false, nil
+	}
+	if !validRows || len(rows) != 1 {
+		return "", false, errors.New("initial stream inventory missing")
+	}
+	stream, ok := rows[0].(map[string]any)
+	if !ok || stream["name"] != "FENCE" || stream["created"] != initial["created"] {
+		return "", false, errors.New("initial stream identity changed")
+	}
+	actual, err := storedConfig(stream["config"], false)
+	if err != nil {
+		return "", false, err
+	}
+	expected, err := storedConfig(initial["config"], true)
+	if err != nil {
+		return "", false, err
+	}
+	if !bytes.Equal(actual, expected) {
+		return "", false, errors.New("initial stream configuration changed")
+	}
+	state, ok := stream["state"].(map[string]any)
+	if !ok {
+		return "", false, errors.New("initial stream state missing")
+	}
+	for _, key := range []string{"messages", "bytes", "first_seq", "last_seq", "consumer_count"} {
+		n, ok := number(state[key])
+		if !ok || n != 0 {
+			return "", false, errors.New("initial stream is not empty")
+		}
+	}
+	if count == 1 {
+		if _, exists := stream["stream_raft_group"]; exists {
+			return "", false, errors.New("standalone has a stream Raft group")
+		}
+		return "", true, nil
+	}
+	group, ok := stream["stream_raft_group"].(string)
+	if !ok || !initialGroup.MatchString(group) {
+		return "", false, errors.New("initial stream Raft group missing or invalid")
+	}
+	return group, true, nil
+}
+
+func waitInitial(ctx context.Context, processes []*processRecord, initial map[string]any, observe func(context.Context, int) (observation, error)) ([]observation, *string, error) {
+	count := len(processes)
+	if count != 1 && count != 3 {
+		return nil, nil, errors.New("unsupported initial topology")
+	}
+	if created, ok := initial["created"].(string); !ok || created == "" {
+		return nil, nil, errors.New("initial creation identity missing")
+	}
+	if _, err := storedConfig(initial["config"], true); err != nil {
+		return nil, nil, err
+	}
+	var group *string
+	for {
+		rows := make([]observation, 0, count)
+		complete := true
+		for index, process := range processes {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+			observed, err := observe(ctx, index)
+			if err != nil {
+				return nil, nil, err
+			}
+			if err = ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+			found, ready, err := initialMaterialization(observed, process, initial, count)
+			if err != nil {
+				return nil, nil, err
+			}
+			if ready && count == 3 {
+				if group != nil && *group != found {
+					return nil, nil, errors.New("initial stream group changed across voters or polls")
+				}
+				copy := found
+				group = &copy
+			}
+			complete = complete && ready
+			rows = append(rows, observed)
+		}
+		if complete {
+			return rows, group, nil
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func object(data []byte) (map[string]any, error) {

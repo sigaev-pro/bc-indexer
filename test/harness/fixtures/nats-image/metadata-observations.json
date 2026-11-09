@@ -1,0 +1,77 @@
+{
+  "api": {
+    "allow_direct": false,
+    "allow_msg_ttl": false,
+    "allow_rollup_hdrs": false,
+    "compression": "none",
+    "consumer_limits": {},
+    "deny_delete": true,
+    "deny_purge": true,
+    "discard": "new",
+    "duplicate_window": 120000000000,
+    "max_age": 0,
+    "max_bytes": 8388608,
+    "max_consumers": -1,
+    "max_msg_size": -1,
+    "max_msgs": 21,
+    "max_msgs_per_subject": -1,
+    "metadata": {
+      "_nats.level": "5",
+      "_nats.req.level": "0",
+      "_nats.ver": "2.15.2"
+    },
+    "mirror_direct": false,
+    "name": "FENCE",
+    "num_replicas": 1,
+    "retention": "limits",
+    "sealed": true,
+    "storage": "file",
+    "subjects": [
+      "fence.input"
+    ]
+  },
+  "api_selector": "sealed.config",
+  "jsz": {
+    "allow_direct": false,
+    "allow_msg_ttl": false,
+    "allow_rollup_hdrs": false,
+    "compression": "none",
+    "consumer_limits": {},
+    "deny_delete": true,
+    "deny_purge": true,
+    "discard": "new",
+    "duplicate_window": 120000000000,
+    "max_age": 0,
+    "max_bytes": 8388608,
+    "max_consumers": -1,
+    "max_msg_size": -1,
+    "max_msgs": 21,
+    "max_msgs_per_subject": -1,
+    "metadata": {
+      "_nats.req.level": "0"
+    },
+    "mirror_direct": false,
+    "name": "FENCE",
+    "num_replicas": 1,
+    "retention": "limits",
+    "sealed": true,
+    "storage": "file",
+    "subjects": [
+      "fence.input"
+    ]
+  },
+  "jsz_selector": "before.nodes.image-S-1.jsz.body/account_details/0/stream_detail/0/config",
+  "plan": {
+    "measured_seconds": 600,
+    "messages": 4,
+    "payload_bytes": 128,
+    "schema_version": 1,
+    "topologies": [
+      "standalone",
+      "R3"
+    ]
+  },
+  "source_case": "nats-image-fence-03-2607c8c/standalone",
+  "source_report_sha256": "4f7cdee2155195540cb2be280e6ad2a8e02a6dba07512082c579944d9b11313a",
+  "topology": "standalone"
+}

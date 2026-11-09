@@ -19,7 +19,8 @@ def document(topology="R3"):
     count = 1 if topology == "standalone" else 3
     config = {"name": "FENCE", "subjects": ["fence.input"], "retention": "limits", "storage": "file",
               "num_replicas": count, "max_msgs": 20, "max_bytes": 8388608, "max_age": 0, "discard": "new",
-              "deny_delete": True, "deny_purge": True, "allow_rollup_hdrs": False, "sealed": False}
+              "deny_delete": True, "deny_purge": True, "allow_rollup_hdrs": False, "sealed": False,
+              "metadata": {"_nats.level": "5", "_nats.req.level": "0", "_nats.ver": "2.15.2"}}
     empty = {"messages": 0, "bytes": 0, "first_seq": 0, "last_seq": 0, "consumer_count": 0,
              "first_ts": "0001-01-01T00:00:00Z", "last_ts": "0001-01-01T00:00:00Z"}
     state = {**empty, "messages": 4, "bytes": 228, "first_seq": 1, "last_seq": 4,
@@ -40,6 +41,7 @@ def document(topology="R3"):
         for process in basic["processes"][count:]:
             name = process["name"]
             stream = {"name": "FENCE", **sealed}
+            stream["config"] = {**sealed["config"], "metadata": {"_nats.req.level": "0"}}
             if count == 3: stream["stream_raft_group"] = stream_group
             jsz = {"server_id": process["info_id"], "total": 1, "streams": 1, "consumers": 0,
                    "account_details": [{"name": "APP", "id": "APP", "stream_detail": [stream]}]}

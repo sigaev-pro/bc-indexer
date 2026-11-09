@@ -3,8 +3,8 @@
 These expectations are fixed before driver compilation or native execution.
 They describe a limited private standalone/R3 fixture. The offline predicate
 alone establishes supplied-observation consistency. A successful image proof
-also requires authenticated preparation and actual native execution; neither
-of the two retained failed measured attempts proves the terminal fence.
+also requires authenticated preparation and actual native execution; none
+of the three retained failed measured attempts proves the terminal fence.
 
 The accepted production executable remains unchanged, from
 `nats@sha256:afae2fdbe2e326c65e1246cb83b9d05d319188734f3bd577ac8072daae78a10f`,
@@ -50,6 +50,26 @@ The supported standalone has never registered a Raft node. Its account inventory
 requests may return native HTTP 404 with exactly `No Raft nodes registered`,
 without a newline. Empty, generic or filter-miss 404 bodies are not evidence of
 that condition; R3 requires successful complete inventories and group samples.
+
+API configuration responses include exactly three metadata strings:
+`_nats.req.level=0`, `_nats.level=5`, and `_nats.ver=2.15.2`. Stored/JSz
+configuration includes only `_nats.req.level=0`. These are different native
+surfaces, not configuration drift: pinned `jetstream_versioning.go:45–50` removes
+dynamic fields before storage, and lines 94–107 add them to a response copy.
+API call sites are `jetstream_api.go:1644,1749,2193`; monitoring returns the
+stored/target configuration at `monitor.go:3190–3202`. Validate exact metadata
+keys, string types and values before projecting to the stored form; compare all
+other fields exactly. Unknown, changed or missing metadata must reject. Retain
+the complete original API and JSz responses.
+
+CREATE completion is not an all-voter materialization barrier. Before publishing,
+wait for one complete collection containing the same expected empty stream,
+creation identity, stored configuration and Raft group on every voter. Polling
+has a 60-second cap nested in the original measured deadline; each HTTP request
+is clipped to that cap. Only an explicitly valid zero-stream APP inventory may
+wait. Invalid status, identity, configuration, type or group fails immediately.
+Retain every sample and freeze only the final complete initial inventory. This
+does not replace any terminal recovery/frontier requirement.
 
 Each topology uses explicit `image-S-N` names and their native member IDs, APP
 and SYS accounts, loopback endpoints and distinct `/proof/stores/image-S-N`

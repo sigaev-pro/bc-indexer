@@ -62,10 +62,10 @@ def snapshots(value, directory, deadline):
         require(set(actual) == expected, "Extra or missing snapshot files")
 
 
-def config_join(left, right, plan, topology, sealed):
-    stream_config(plan, topology, left, sealed)
-    stream_config(plan, topology, right, sealed)
-    require(json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True), "Native configuration join changed bytes or types")
+def config_join(left, right, plan, topology, sealed, left_surface="jsz"):
+    stored_left = stream_config(plan, topology, left, sealed, left_surface)
+    stored_right = stream_config(plan, topology, right, sealed, "api")
+    require(json.dumps(stored_left, sort_keys=True) == json.dumps(stored_right, sort_keys=True), "Native configuration join changed bytes or types")
 
 
 def handshake(initial, connected, process):
@@ -209,7 +209,7 @@ def validate_report(value, directory, deadline=None):
     require(rpc(calls[1], 2, "seal", "$JS.API.STREAM.UPDATE.FENCE", {**value["initial"]["config"], "sealed": True}, manager) == value["sealed"],
             "Seal API response substituted")
     info = rpc(calls[2], 3, "fenced-info", "$JS.API.STREAM.INFO.FENCE", {}, reader)
-    config_join(info.get("config"), value["sealed"]["config"], plan, basic["topology"], True)
+    config_join(info.get("config"), value["sealed"]["config"], plan, basic["topology"], True, "api")
     require(info.get("created") == value["sealed"]["created"] and
             state(info.get("state"), plan["messages"] + 1) == state(value["sealed"]["state"], plan["messages"] + 1),
             "Fenced interval or identity differs from the sealed stream")

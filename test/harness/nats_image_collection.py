@@ -32,7 +32,19 @@ def monitor(observation, node, path, orders, *, absent=False):
     return value
 
 
-def stream_config(plan, topology, config, sealed):
+def metadata_projection(config, surface):
+    """Validate the pinned native surface before comparing stored settings."""
+    require(surface in ("api", "jsz") and type(config) is dict, "Unknown native configuration surface")
+    expected = {"_nats.req.level": "0"}
+    if surface == "api": expected.update({"_nats.level": "5", "_nats.ver": "2.15.2"})
+    metadata = config.get("metadata")
+    require(type(metadata) is dict and set(metadata) == set(expected) and
+            all(type(metadata[key]) is str and metadata[key] == value for key, value in expected.items()),
+            "Unexpected native " + surface + " metadata")
+    return {**config, "metadata": {"_nats.req.level": "0"}}
+
+
+def stream_config(plan, topology, config, sealed, surface="api"):
     require(type(config) is dict, "Missing native stream configuration")
     require(set(config) <= CONFIG_FIELDS, "Unknown native stream configuration field")
     require(config.get("compression", "none") == "none" and config.get("persist_mode", "default") == "default" and
@@ -51,6 +63,7 @@ def stream_config(plan, topology, config, sealed):
     for key in ("subject_delete_marker_ttl", "inactive_threshold"):
         require(number(config.get(key, 0), key) == 0, "Unsupported expiration or deletion")
     require(number(config.get("first_seq", 0), "configured first sequence") == 0, "Non-default initial sequence")
+    return metadata_projection(config, surface)
 
 
 def state(value, messages):
@@ -77,8 +90,9 @@ def stream_identity(basic, initial, sealed):
     state(sealed["state"], basic["plan"]["messages"] + 1)
     require(initial["created"] == sealed["created"], "Stream was recreated while sealing")
     allowed = {"sealed", "max_age", "discard", "deny_delete", "deny_purge", "allow_rollup_hdrs"}
-    require({key: value for key, value in initial["config"].items() if key not in allowed} ==
-            {key: value for key, value in sealed["config"].items() if key not in allowed}, "Unplanned seal configuration change")
+    require(json.dumps({key: value for key, value in initial["config"].items() if key not in allowed}, sort_keys=True) ==
+            json.dumps({key: value for key, value in sealed["config"].items() if key not in allowed}, sort_keys=True),
+            "Unplanned seal configuration change")
     return {"created": initial["created"], "config": sealed["config"]}
 
 
@@ -111,8 +125,10 @@ def collection(basic, snapshot, identity, expected_group):
         streams = accounts[0].get("stream_detail")
         require(type(streams) is list and len(streams) == 1, "Incomplete stream inventory")
         stream = streams[0]
+        stored = stream_config(basic["plan"], basic["topology"], stream.get("config"), True, "jsz")
+        expected = metadata_projection(identity["config"], "api")
         require(stream.get("name") == "FENCE" and stream.get("created") == identity["created"] and
-                json.dumps(stream.get("config"), sort_keys=True) == json.dumps(identity["config"], sort_keys=True),
+                json.dumps(stored, sort_keys=True) == json.dumps(expected, sort_keys=True),
                 "Recovered stream identity or full configuration changed")
         for key in ("consumer_detail", "direct_consumer_detail", "consumer_raft_groups", "sources"):
             require(stream.get(key) in (None, []), "Unexpected consumer or source group")

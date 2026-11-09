@@ -313,26 +313,20 @@ func execute(r *runtimeState, in input, out *report) (err error) {
 	if out.Initial, err = r.rpc(manager, out, "create", "$JS.API.STREAM.CREATE.FENCE", data); err != nil {
 		return err
 	}
+	initialCtx, cancelInitial := context.WithTimeout(r.ctx, 60*time.Second)
+	processes := make([]*processRecord, count)
 	for i := 0; i < count; i++ {
-		observed, e := r.observe(i, jszPath)
-		out.InitialInventory = append(out.InitialInventory, observed)
-		if e != nil {
-			return e
+		processes[i] = r.children[i].record
+	}
+	out.InitialInventory, out.Group, err = waitInitial(initialCtx, processes, out.Initial, func(ctx context.Context, index int) (observation, error) {
+		if e := r.alive(0); e != nil {
+			return observation{}, e
 		}
-		stream, e := nativeStream(observed.Body)
-		if e != nil {
-			return e
-		}
-		if count == 3 {
-			group, ok := stream["stream_raft_group"].(string)
-			if !ok || group == "" {
-				return errors.New("initial stream Raft group missing")
-			}
-			if out.Group != nil && *out.Group != group {
-				return errors.New("initial stream group differs across voters")
-			}
-			out.Group = &group
-		}
+		return r.observeContext(ctx, index, jszPath)
+	})
+	cancelInitial()
+	if err != nil {
+		return err
 	}
 	if err = r.publications(out, in.Plan); err != nil {
 		return err
