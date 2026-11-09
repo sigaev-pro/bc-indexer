@@ -194,19 +194,19 @@ def prepare_family(family, manifest, root, output, native, compiler, deadline):
     row["probe_sources"] = copy_sources(PROBE_FILES, FIXTURE, probe, deadline)
     row["capture_sources"] = copy_sources(CAPTURE_FILES, ROOT / "core/capture", directory / "capture", deadline)
     version = go_directive((source / "go.mod").read_text())
-    for name in ("bin", "build-cache", "gopath", "workspace"):
+    for name in ("bin", "build-cache", "gopath", "gotmp", "workspace"):
         (directory / name).mkdir()
     # Workspace mode may record checksums of the verified offline cache in go.work.sum,
     # so the workspace file lives in its own writable directory.
     (directory / "workspace/go.work").write_text(f"go {version}\n\nuse (\n\t../source\n\t../capture\n)\n")
     row["go_work"] = reference(directory / "workspace/go.work")
     mounts = [(directory, "/work", True), (root / "cache" / family / "mod", "/modules", True)]
-    for name in ("bin", "build-cache", "gopath", "workspace"):
+    for name in ("bin", "build-cache", "gopath", "gotmp", "workspace"):
         mounts.append((directory / name, f"/work/{name}", False))
     environment = {"CGO_ENABLED": "0", "GOENV": "off", "GOOS": "linux", "GOARCH": "amd64",
                    "GOCACHE": "/work/build-cache", "GOMODCACHE": "/modules", "GOPATH": "/work/gopath",
                    "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local",
-                   "GOWORK": "off"}
+                   "GOTMPDIR": "/work/gotmp", "GOWORK": "off"}
     native.command(compiler, ["/usr/local/go/bin/go", "mod", "verify"], mounts, cap=300, memory="4g",
                    cwd="/work/source", environment=environment)
     build = ["/usr/local/go/bin/go", "build", "-p", "2", "-trimpath"]
