@@ -2,25 +2,40 @@
 
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
-Status: IN_PROGRESS. Owner-approved process improvements 1-3, run in parallel
-with E01-02.pins and E01-02.owned_capture under D97 (draft PR #131). Most extra
-review rounds in PRs #128-#130 came from hand-copied evidence numbers, hand-made
-mutation checks (one counted 10 compile failures as kills) and a flaky
-controller test. Outputs:
+Status: READY_FOR_REVIEW. Owner-approved process improvements 1-3, run in
+parallel with E01-02.pins and E01-02.owned_capture under D97 (draft PR #131).
+Most extra review rounds in PRs #128-#130 came from hand-copied evidence
+numbers, hand-made mutation checks (one counted 10 compile failures as kills)
+and a flaky controller test. Outputs:
 
 - `test/harness/evidence_summary.py`: prints the figures an evidence section
   quotes from one retained run and fails closed on any reference mismatch.
-  It reproduces the figures of attempt 08, preparation 08, attempt 06 and
-  runner run 04 and verifies all 41 retained NATS, runner and family runs.
 - `test/mutate.py`: shared single-check mutation tool for Python and Go with
   tables next to the code (`*.mutants.json`). Mutants must compile first; a
-  build failure is BUILD_FAILED and fails the tool. The ported NATS driver
-  table reproduces record 09 (38 killed, two pre-labeled equivalents).
+  build failure is BUILD_FAILED and fails the tool.
 - `.project/docs/REVIEW_CHECKLIST.md`, linked from DEVELOPMENT_WORKFLOW.
-- Deterministic controller tests: the watchdog spawn test failed when the
-  supervisor started after its own 0.3-second dispatch deadline; the signal
-  test failed when Darwin returned a transient EPERM from `killpg` that
-  `terminate_group` treated as a final denial (fixed in `session_runner.py`).
+- Deterministic controller tests. The watchdog spawn test failed when the
+  supervisor started after its own 0.3-second dispatch deadline (reproduced
+  with a 0.5-second start delay: "supervisor never reached the spawn
+  boundary", about 10 ms past the spin deadline). The signal test failed when
+  Darwin returned a transient EPERM from `killpg` while the group leader was
+  exiting, which `terminate_group` treated as a final denial (2 of 100 direct
+  calls before the fix, 0 of 300 after). `session_runner.py` now reports
+  `cleanup-denied` only when EPERM persists to the grace deadline with live
+  members.
+
+Retained record `.project/automation/runs/d95-20261107/review-tooling-01-fda48e1`
+(source `fda48e1`, extracted with `git archive`; Python 3.13.5, go1.27.1
+darwin/amd64): `evidence_summary.py` verified all 32 retained NATS image,
+NATS source, local runner and family preparation runs (exit 0 each) and its
+20 tests passed, including the four opt-in checks that reproduce the figures of
+attempt 08, preparation 08, attempt 06 and runner run 04; `test_mutate` passed
+17 tests. Mutation reports: NATS driver 38 killed and 2 pre-labeled
+equivalents (matches record 09); `evidence_summary.py` 17 and 2;
+`mutate.py` 16 and 2; `session_runner.py` 6 and 0; no build failure or
+unlabeled survivor. The watchdog, signal and five EPERM tests passed 25 of 25
+repeats under 16 busy CPU processes. Local `.project/automation/ci.py` passed
+610 tests in 52 files.
 
 Allowed paths: `test/mutate.py`, `test/test_mutate.py`, `test/mutate.mutants.json`,
 `test/harness/evidence_summary*`, `test/harness/test_evidence_summary.py`,
@@ -31,7 +46,7 @@ Allowed paths: `test/mutate.py`, `test/test_mutate.py`, `test/mutate.mutants.jso
 capture, NATS or runner production logic changes; no Docker or native run.
 
 Base: `f8d3e67`. Branch/worktree: `feat/review-tooling` / `harness-review-tooling-288aea`.
-Next: self-check, CI, Spec and Standards reviews, draft PR. Merge needs the
+Next: exact-head CI, Spec and Standards reviews, draft PR. Merge needs the
 owner's permission for this PR.
 
 ## E01-01.harness — NATS settle check uses pinned raftz names
