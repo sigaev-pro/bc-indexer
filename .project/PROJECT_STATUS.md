@@ -2,14 +2,24 @@
 
 ## E01-01.harness — Unified local runner and runtime admission (D96)
 
-Status: PLANNING. The owner set the #12 closure boundary in D96: the task closes
-on private local fixtures for Ethereum (Geth), BSC (Parlia) and Polygon (Bor).
-Public profile environments stay with E06; all seven public profile slots remain
-NOT_RUN. This block adds one test-only runner that consumes a frozen RunPlan,
-verifies test-only fixture passports, checks resources and phase budgets,
-dispatches the accepted family slices, records local runtime admission, and
-writes evidence v3. A design note is under independent Spec feasibility review
-before implementation. No code or native run has started in this block.
+Status: READY_FOR_REVIEW for the local runner. Executed source
+`a086116b65b785d3509fb62a5a7559d8e42c92ea` admitted and ran one frozen
+native-seam plan for Ethereum (Geth), BSC (Parlia) and Polygon (Bor) through
+their accepted preparations. Admission verified three test-only ProfileManifests
+and host/Docker resources in 0.328 seconds. Execution took 29.230 seconds:
+BSC 20.156, Ethereum 5.049 and Bor 4.023 seconds, all PASS with exit zero and
+absent process groups. Teardown found no `extractor.harness` container. The run
+wrote three CaseResults with verdict NOT_RUN and three D87 reader boundaries with
+`run_started: false`; it wrote no RunManifest and gives no public-profile credit.
+
+D96 sets the #12 closure boundary: private local fixtures for the three families;
+public profile environments stay with E06 and all seven public slots remain
+NOT_RUN. A Spec feasibility review returned FEASIBLE_WITH_CHANGES; the design
+adopted its changes. Focused checks: 4 ProfileManifest tests and 11 runner tests;
+every `require` in the verifier and runner is killed by single-check mutation
+except one equivalent relative-path check. Remaining #12 items after this block:
+the Go `settled()` raftz field-name follow-up from PR #128 and independent review
+of this block. Next: draft PR, exact-head CI, Spec and Standards reviews.
 
 Accepted prior block: PR #128 (unchanged-image NATS fence) is accepted at merge
 `e2113d7356000b689240e8a0005b80357867ee36` from reviewed head `a00c7b5`, after
