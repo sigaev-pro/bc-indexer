@@ -734,7 +734,7 @@ ProfileManifests, environments and mainnet/testnet smoke belong to E06 and E07;
 the first real-delivery reader boundary belongs to E03-11.block_lifecycle; capture
 and Gateway integration belong to their E02–E05 tasks. The last #12 item, the
 PR #128 follow-up in which the Go `settled()` filter read old raftz flag names,
-is fixed at `803d468` (preparation and attempt 07). The collector and NATS
+is fixed at `ed723a4` (preparation and attempt 08). The collector and NATS
 are absent by design at this first native seam. E03 delivery and later composed
 gates will add their assigned runtime requirements. The accepted corpus and
 product contracts are unchanged.

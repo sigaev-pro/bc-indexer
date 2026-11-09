@@ -4,16 +4,18 @@
 
 Status: READY_FOR_REVIEW. This is the last open #12 item: the PR #128 follow-up
 in which the Go `settled()` polling filter read raftz `catchup` and
-`write_error`, while pinned NATS names them `catching_up` and `wal_error`.
-Executed source `803d4681b8633231841503e8e093ddcb94d45344` reads the pinned
-names and adds direct Go controls for each unsafe flag, the agreement
-fingerprint, commit, apply and queue lag, member identity, missing groups or
-voters, node health, the sealed configuration and the `waitInitial` input
-prechecks. Preparation 07 passed in 55.951 seconds (15 Go test methods, eight
-handshake subcases). Measured attempt 07 (a new lineage, `attempt_index` 1,
-after PASS06) passed both topologies in 9.068 seconds with complete cleanup.
-Next: exact-head CI, independent Spec and Standards reviews, protected
-acceptance; after that, close #12 under D96 and start E01-02.
+`write_error`, while pinned NATS (`server/monitor.go` `RaftzGroup`) names them
+`catching_up` and `wal_error`. Executed source `803d468` read the pinned names
+and added direct Go controls; preparation and attempt 07 passed. Reviews of head
+`07c46d5` returned Spec and Standards PASS with P3 notes. Executed source
+`ed723a4` closes the Go notes (all queue fields, a follower naming another
+leader, agreed non-numeric or missing indexes, JSZ status, the native WAL error
+shape, the source path). A retained 40-mutant record kills 38, with two
+pre-labeled equivalent survivors. Preparation 08 passed in 56.826 seconds and
+measured attempt 08 (new lineage, `attempt_index` 1) passed both topologies in
+9.064 seconds with complete cleanup. Next: exact-head CI, fresh Spec and
+Standards reviews, protected acceptance; after that, close #12 under D96 and
+start E01-02.
 
 Base: `c60591bba17fce65e02af4f577146e2374b938bf`.
 Branch/worktree: `feat/e01-harness-raftz-fields` / `e01-harness-raftz-fields`.
