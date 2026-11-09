@@ -540,9 +540,9 @@ remain explicit blockers; inconsistent bindings reject. Even a matching supplied
 artifact is opaque and unverified here. Native-seam diagnostics do not require
 NATS. Offline resolution itself checks none of the runtime facts. For local
 native-seam plans the [local runner](#local-native-seam-runner-d96) adds test-only
-ProfileManifest verification, resource checks and owned execution. Independent
-oracle review, public ProfileManifests and terminal-fence conformance for
-local-e2e plans remain separate work.
+ProfileManifest verification, resource checks and owned execution. Case-level
+oracle acceptance by each AC owner, public ProfileManifests and terminal-fence
+conformance for local-e2e plans remain separate work.
 
 Exit 0 means offline resolution succeeded. The report always has
 `runtime_admitted: false`; every case remains NOT_RUN. It never emits a READY
@@ -675,7 +675,7 @@ and `case_oracle_acceptance_belongs_to_ac_owner`. Oracle independence for the
 three accepted fixtures was reviewed with their family slices (PRs #122–#124);
 accepting an oracle for a case verdict stays with that AC's owner.
 
-## Remaining work in issue 12
+## Issue 12 boundary and earlier slice notes
 
 The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)
 and portable comparison seam in `bor.py`. It distinguishes header coinbase from
@@ -723,9 +723,14 @@ The corrected campaign passed all 19 controls in 60.287 seconds on source
 positives also passed using accepted prepared inputs. Exact final-head review,
 CI and protected acceptance remain separate from these measured results.
 
-Complete BSC fixture/fork coverage, all other required fixture families,
-public ProfileManifests (E06), supporting services, public mainnet/testnet smoke, and integration with future
-capture and Gateway components remain unimplemented here. The collector and NATS
+Under D96 the remaining items have other owners and are not #12 work:
+broader BSC/Bor/Ethereum fixture, fork and corpus coverage belongs to the D90
+corpus owners and E01-03.smoke_corpus; Polygon local supporting services, their
+test credentials and own-L1 inputs belong to E05-01.polygon_observer; public
+ProfileManifests, environments and mainnet/testnet smoke belong to E06 and E07;
+the first real-delivery reader boundary belongs to E03-11.block_lifecycle; capture
+and Gateway integration belong to their E02–E05 tasks. Within #12 only the Go
+`settled()` raftz field-name follow-up from PR #128 remains. The collector and NATS
 are absent by design at this first native seam. E03 delivery and later composed
 gates will add their assigned runtime requirements. The accepted corpus and
 product contracts are unchanged.

@@ -33,6 +33,7 @@ ARTIFACT_LIMIT = 1024 * 1024 * 1024
 LABEL = "extractor.harness"
 CHILD_GRACE_SECONDS = 30
 OUTPUT_TAIL = 4096
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 LOCK = Path("/tmp/extractor-harness-runner.lock")
 CHILDREN = {
     "geth-import": {"script": "run.py", "proof": "local-native-import", "tool": False},
@@ -200,7 +201,18 @@ def child_command(row, out):
 
 
 def stop_group(process):
-    """Terminate, then kill, the child's process group and reap the leader."""
+    """Terminate, then kill, the child's process group and reap the leader.
+
+    Runner signals stay blocked here so a second signal cannot skip SIGKILL;
+    a pending signal is delivered after the group is gone."""
+    blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+    try:
+        stop_group_unmasked(process)
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+
+
+def stop_group_unmasked(process):
     for number in (signal.SIGTERM, signal.SIGKILL):
         try:
             os.killpg(process.pid, number)
@@ -264,29 +276,40 @@ def run_child(row, out, parent_deadline, logs):
     return record
 
 
-def owned_containers(output):
-    """Harness containers whose mounts are inside this run's output; other runs' containers are left alone."""
+def inspect(container):
+    result = subprocess.run(["docker", "inspect", "--format", "{{json .Mounts}}|{{index .Config.Labels \"" + LABEL + "\"}}", container],
+                            capture_output=True, text=True, timeout=20)
+    if result.returncode != 0:
+        return None
+    mounts, _, label = result.stdout.strip().rpartition("|")
+    return [mount.get("Source", "") for mount in json.loads(mounts or "[]")], label
+
+
+def owned_containers(output, nonces):
+    """Split harness containers into this run's (mounted from its output or labeled with a child nonce) and others."""
     roots = {str(output), str(output.resolve())}
-    ids = docker_state()["harness_containers"]
-    mine, foreign = [], []
-    for container in ids:
-        inspected = subprocess.run(["docker", "inspect", "--format", "{{json .Mounts}}", container],
-                                   capture_output=True, text=True, timeout=20)
-        if inspected.returncode != 0:
-            continue  # the container exited and was removed between the list and the inspection
-        sources = [mount.get("Source", "") for mount in json.loads(inspected.stdout or "[]")]
-        (mine if any(source == root or source.startswith(root + os.sep) for source in sources for root in roots) else foreign).append(container)
-    return mine, foreign
+    mine, foreign, unknown = [], [], []
+    for container in docker_state()["harness_containers"]:
+        seen = inspect(container)
+        if seen is None:
+            unknown.append(container)  # removed after listing, or Docker could not describe it
+            continue
+        sources, label = seen
+        inside = any(source == root or source.startswith(root + os.sep) for source in sources for root in roots)
+        (mine if inside or label in nonces else foreign).append(container)
+    still = set(docker_state()["harness_containers"]) if unknown else set()
+    return mine, foreign, [item for item in unknown if item in still]
 
 
-def teardown(output):
-    mine, foreign = owned_containers(output)
+def teardown(output, nonces=()):
+    """Remove this run's containers. Any other harness container breaks the one-writer rule and fails cleanup."""
+    mine, foreign, unknown = owned_containers(output, set(nonces))
     forced = bool(mine)
     if mine:
         subprocess.run(["docker", "rm", "-f", *mine], capture_output=True, timeout=60)
-        mine, foreign = owned_containers(output)
-    return {"forced_container_removal": forced, "remaining_owned_containers": mine,
-            "foreign_harness_containers": foreign, "cleanup_complete": mine == []}
+        mine, foreign, unknown = owned_containers(output, set(nonces))
+    return {"forced_container_removal": forced, "remaining_owned_containers": mine, "foreign_harness_containers": foreign,
+            "uninspected_containers": unknown, "cleanup_complete": not (mine or foreign or unknown)}
 
 
 def self_check(kind, document, bundle, artifacts=None):
@@ -365,7 +388,8 @@ def retry_attempt(previous, previous_sha256, reason, resolution_sha256, deadline
 
 def single_writer():
     """Hold one host-wide lock for the whole run so two runners never share Docker cleanup."""
-    handle = open(LOCK, "a")
+    descriptor = os.open(LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    handle = os.fdopen(descriptor, "r+")
     try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -378,43 +402,54 @@ def raise_interrupted(number, _frame):
     raise Interrupted("Runner received signal " + signal.Signals(number).name)
 
 
+def describe(failure):
+    return type(failure).__name__ + ": " + str(failure)[:400]
+
+
 def run(directory, resolution_sha256, output, previous=None, previous_sha256=None, retry_reason=None):
     """Admit, dispatch every fixture serially, then always tear down and write the parent record."""
     attempt = retry_attempt(previous, previous_sha256, retry_reason, resolution_sha256, time.monotonic() + 30)
     lock = single_writer()
-    handlers = {number: signal.signal(number, raise_interrupted) for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+    handlers = {number: signal.signal(number, raise_interrupted) for number in STOP_SIGNALS}
+    record = None
     try:
         preparation_start = now()
-        plan, bundle, admission = admit(directory, resolution_sha256, output, time.monotonic() + 1800)
+        try:
+            plan, bundle, admission = admit(directory, resolution_sha256, output, time.monotonic() + 1800)
+        except Exception as failure:
+            if output.is_dir():
+                # Admission created the output but did not finish; leave a FAIL record, never a bare directory.
+                record = {"schema_version": 1, "kind": "local-native-seam-run", "run_id": uuid.uuid4().hex, "result": "FAIL",
+                          "error": describe(failure), "public_profile_credit": False, "attempt": attempt,
+                          "resolution_sha256": resolution_sha256, "children": []}
+            raise
         preparation_end = now()
         deadlines = plan["deadlines"]
         children, error = [], None
-        os.mkdir(output / "children", 0o700)
-        os.mkdir(output / "logs", 0o700)
         execution_start = now()
         parent_deadline = time.monotonic() + deadlines["measured_seconds"]
         try:
+            os.mkdir(output / "children", 0o700)
+            os.mkdir(output / "logs", 0o700)
             for row in admission["fixtures"]:
                 children.append(run_child(row, output / "children" / row["fixture_id"], parent_deadline, output / "logs"))
                 if children[-1]["result"] != "PASS":
                     break
         except Exception as failure:
-            error = type(failure).__name__ + ": " + str(failure)[:400]
+            error = describe(failure)
         execution_end = now()
         teardown_start, teardown_begin = now(), time.monotonic()
         try:
-            cleanup = teardown(output)
+            cleanup = teardown(output, [row["native_owner_nonce"] for row in children if row.get("native_owner_nonce")])
         except Exception as failure:
-            cleanup = {"cleanup_complete": False, "error": type(failure).__name__ + ": " + str(failure)[:400]}
+            cleanup = {"cleanup_complete": False, "error": describe(failure)}
         cleanup["deadline_exceeded"] = time.monotonic() - teardown_begin > deadlines["teardown_seconds"]
         cleanup["cleanup_complete"] = cleanup["cleanup_complete"] and not cleanup["deadline_exceeded"]
         teardown_end = now()
         dispatched = {row["profile"] for row in children}
-        complete = len(children) == len(admission["fixtures"])
-        passed = error is None and complete and all(row["result"] == "PASS" for row in children) and cleanup["cleanup_complete"]
         record = {"schema_version": 1, "kind": "local-native-seam-run", "run_id": uuid.uuid4().hex,
                   "admission": reference(output / "admission.json", JSON_LIMIT), "admission_digest": admission["admission_digest"],
-                  "result": "PASS" if passed else "FAIL", "error": error, "public_profile_credit": False,
+                  "result": "FAIL", "error": error, "public_profile_credit": False,
                   "children": children, "not_dispatched": sorted({row["profile"] for row in admission["fixtures"]} - dispatched),
                   "teardown": cleanup, "attempt": attempt, "resolution_sha256": resolution_sha256,
                   "phases": {"preparation": {"started_at": preparation_start, "finished_at": preparation_end,
@@ -425,12 +460,30 @@ def run(directory, resolution_sha256, output, previous=None, previous_sha256=Non
                                           "deadline_seconds": deadlines["teardown_seconds"]}},
                   "blockers": admission["blockers"]}
         if error is None:
-            record["case_results"] = case_results(plan, bundle, output)
-            report = json.loads((directory / "resolution.json").read_text())
-            record["reader_boundaries"] = reader_boundaries(plan, bundle, directory, report["plan"], output)
-        canonical_ref(output / "run-record.json", record)
+            try:
+                record["case_results"] = case_results(plan, bundle, output)
+                record["reader_boundaries"] = reader_boundaries(plan, bundle, directory, admission["plan"], output)
+            except Exception as failure:
+                error = record["error"] = "evidence: " + describe(failure)
+        complete = len(children) == len(admission["fixtures"])
+        if error is None and complete and all(row["result"] == "PASS" for row in children) and cleanup["cleanup_complete"]:
+            record["result"] = "PASS"
         return record
+    except Interrupted as failure:
+        if record is not None and record.get("error") is None:
+            record["error"] = describe(failure)
+        if record is not None:
+            record["result"] = "FAIL"
+            return record
+        raise
     finally:
+        if record is not None:
+            # Signals are blocked while the final record is written.
+            blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+            try:
+                canonical_ref(output / "run-record.json", record)
+            finally:
+                signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
         for number, handler in handlers.items():
             signal.signal(number, handler)
         lock.close()
@@ -449,7 +502,7 @@ def main():
     try:
         require(args.command == "run" or args.previous_run is None, "Only run accepts retry metadata")
         if args.command == "admit":
-            _, _, record = admit(args.frozen_plan, args.resolution_sha256, args.output, time.monotonic() + 120)
+            _, _, record = admit(args.frozen_plan, args.resolution_sha256, args.output, time.monotonic() + 1800)
             print(json.dumps({"runtime_admitted": True, "public_profile_credit": False, "admission": str(args.output / "admission.json")}))
             return 0
         record = run(args.frozen_plan, args.resolution_sha256, args.output, args.previous_run, args.previous_sha256, args.retry_reason)
