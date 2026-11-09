@@ -191,7 +191,6 @@ def prepare_family(family, manifest, root, output, native, compiler, deadline):
     del data
     row["patch"] = patch_interpreter(source)
     probe = source / "cmd/extractor-capture-probe"
-    probe.mkdir()
     row["probe_sources"] = copy_sources(PROBE_FILES, FIXTURE, probe, deadline)
     row["capture_sources"] = copy_sources(CAPTURE_FILES, ROOT / "core/capture", directory / "capture", deadline)
     version = go_directive((source / "go.mod").read_text())
