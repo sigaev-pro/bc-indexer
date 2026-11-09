@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "profile-manifest.schema.json",
+  "title": "Test-only local ProfileManifest, version 1",
+  "description": "Binds one private native-seam fixture to its family runner. It never gives public-profile credit and is not an E06 public ProfileManifest.",
+  "type": "object",
+  "required": ["schema_version", "kind", "profile", "family", "fixture_kind", "fixture", "identity", "build_manifest", "preparation", "runner", "inputs", "oracle", "state_format", "supporting_services", "public_correspondence"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"const": "test-only-profile-manifest"},
+    "profile": {"$ref": "../evidence/evidence-definitions.schema.json#/$defs/runtimeProfile"},
+    "family": {"enum": ["ETH", "BSC", "POLY"]},
+    "fixture_kind": {"const": "native-seam"},
+    "fixture": {
+      "type": "object", "required": ["fixture_id", "fixture_version", "fork_variant"], "additionalProperties": false,
+      "properties": {"fixture_id": {"$ref": "run-plan.schema.json#/$defs/name"}, "fixture_version": {"$ref": "run-plan.schema.json#/$defs/name"}, "fork_variant": {"$ref": "run-plan.schema.json#/$defs/name"}}
+    },
+    "identity": {
+      "type": "object", "required": ["kind", "chain_id", "genesis_hash", "native_config_sha256"], "additionalProperties": false,
+      "properties": {"kind": {"const": "test-only"}, "chain_id": {"type": "string", "pattern": "^[1-9][0-9]{0,77}$(?![\\s\\S])"}, "genesis_hash": {"$ref": "run-plan.schema.json#/$defs/hash"}, "native_config_sha256": {"$ref": "run-plan.schema.json#/$defs/digest"}}
+    },
+    "build_manifest": {"$ref": "run-plan.schema.json#/$defs/artifact"},
+    "preparation": {"$ref": "run-plan.schema.json#/$defs/artifact"},
+    "runner": {
+      "type": "object", "required": ["slice", "request", "observer_tool"], "additionalProperties": false,
+      "properties": {"slice": {"enum": ["geth-import", "bsc-parlia-import", "bor-import"]}, "request": {"$ref": "run-plan.schema.json#/$defs/artifact"}, "observer_tool": {"$ref": "run-plan.schema.json#/$defs/optionalArtifact"}}
+    },
+    "inputs": {"type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": {"$ref": "run-plan.schema.json#/$defs/artifact"}},
+    "oracle": {"$ref": "run-plan.schema.json#/$defs/artifact"},
+    "state_format": {"enum": ["prepared-genesis-plus-rlp-blocks"]},
+    "supporting_services": {"type": "array", "maxItems": 0},
+    "public_correspondence": {"type": "null"}
+  }
+}
