@@ -38,7 +38,7 @@ SAFE_POINT_CALL = ("\t\tif extractorSafePoint != nil {\n"
 PROBE_FILES = ("probe.go", "insert.go", "insert_bor.go")
 CAPTURE_FILES = ("go.mod", "capture.go", "capture_test.go")
 FIXTURE_FILES = ("genesis.json", "expected.json", "ORACLE.md", "safepoint.go.txt", *PROBE_FILES)
-PREPARATION_SECONDS = 1800
+PREPARATION_SECONDS = 3600
 RUN_SECONDS = 900
 STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
@@ -203,7 +203,8 @@ def prepare_family(family, manifest, root, output, native, compiler, deadline):
     mounts = [(directory, "/work", True), (root / "cache" / family / "mod", "/modules", True)]
     for name in ("bin", "build-cache", "gopath", "gotmp", "workspace"):
         mounts.append((directory / name, f"/work/{name}", False))
-    environment = {"CGO_ENABLED": "0", "GOENV": "off", "GOOS": "linux", "GOARCH": "amd64",
+    # BSC and Bor link C BLS libraries, as in their accepted preparations.
+    environment = {"CGO_ENABLED": "1", "GOENV": "off", "GOOS": "linux", "GOARCH": "amd64",
                    "GOCACHE": "/work/build-cache", "GOMODCACHE": "/modules", "GOPATH": "/work/gopath",
                    "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local",
                    "GOTMPDIR": "/work/gotmp", "GOWORK": "off"}
@@ -213,7 +214,7 @@ def prepare_family(family, manifest, root, output, native, compiler, deadline):
     if family == "bor":
         build += ["-tags", "extractor_bor"]
     build += ["-o", "/work/bin/probe", "./cmd/extractor-capture-probe"]
-    native.command(compiler, build, mounts, cap=900, memory="4g", cwd="/work/source",
+    native.command(compiler, build, mounts, cap=1200, memory="4g", cwd="/work/source",
                    environment={**environment, "GOWORK": "/work/workspace/go.work"})
     workspace_sum = directory / "workspace/go.work.sum"
     row["go_work_sum"] = reference(workspace_sum) if workspace_sum.exists() else None
