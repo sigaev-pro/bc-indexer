@@ -1,8 +1,29 @@
 # Состояние проекта
 
+## E01-01.harness — Unified local runner and runtime admission (D96)
+
+Status: PLANNING. The owner set the #12 closure boundary in D96: the task closes
+on private local fixtures for Ethereum (Geth), BSC (Parlia) and Polygon (Bor).
+Public profile environments stay with E06; all seven public profile slots remain
+NOT_RUN. This block adds one test-only runner that consumes a frozen RunPlan,
+verifies test-only fixture passports, checks resources and phase budgets,
+dispatches the accepted family slices, records local runtime admission, and
+writes evidence v3. A design note is under independent Spec feasibility review
+before implementation. No code or native run has started in this block.
+
+Accepted prior block: PR #128 (unchanged-image NATS fence) is accepted at merge
+`e2113d7356000b689240e8a0005b80357867ee36` from reviewed head `a00c7b5`, after
+exact-head CI and final Spec and Standards PASS. Executed source `599521b`;
+passing attempt 06 proof `e7442a9b42e6922e319c19d0e628d95cdf17f7829444e0ac63953c0fc216e301`.
+The Go `settled()` raftz field-name follow-up remains open inside #12. Issue #12
+remains open; no dependent task is unlocked.
+
+Base: `e2113d7356000b689240e8a0005b80357867ee36`.
+Branch/worktree: `feat/e01-harness-local-runner` / `e01-harness-local-runner`.
+
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: READY_FOR_REVIEW for the actual unchanged-image fence. Executed source
+Status: ACCEPTED in PR #128 (see the section above). Executed source
 `599521b3de0ba8a4fe87644c2527bbe17d4b5892` prepared successfully in 48.913
 seconds; driver tests run with the pinned Linux compiler passed (14 methods,
 eight handshake subcases). Measured attempt 06, linked to FAIL05, passed both

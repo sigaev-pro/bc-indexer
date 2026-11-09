@@ -1,5 +1,13 @@
 # Дерево решений и журнал интервью
 
+## D96 — Close E01-01.harness on local private profiles (2026-11-09)
+
+The owner chose the closure boundary for issue #12, E01-01.harness. The task closes on reproducible private local fixtures for the three families: Ethereum (Geth import), BSC (Parlia import) and Polygon (Bor import). Its remaining output is one test-only runner that consumes a frozen RunPlan, verifies test-only local ProfileManifests, checks resources and phase budgets, dispatches the accepted family slices, records runtime admission for local cases, and writes CaseResult and RunManifest evidence with phase timing. The harness side of the D87 ReaderBoundaryManifest belongs to this closure.
+
+Public profile environments for all seven profiles stay with E06, as TESTING_CONTRACT already assigns them. Public sync, testnet funds and public smoke are not #12 obligations. Private local evidence still earns no public-profile credit, and every public profile slot remains NOT_RUN until E06 and E07 provide it. Mainnet and testnet evidence still cannot replace one another.
+
+This decision changes only where #12 stops. It does not change product guarantees, acceptance cases, gates, or the rule that partial blocks do not unlock dependent tasks. Dependent E01 tasks start after #12 is accepted under this boundary. The open Go `settled()` raftz field-name follow-up from PR #128 remains part of #12.
+
 ## D95 — Issue-driven delivery and the remaining approved stages (2026-11-07)
 
 After confirming publication was complete and discussing step 2, the owner instructed to do everything. Continue the remaining agreed stages in order: establish a simpler issue-driven workflow; complete actual reproducible client builds; then deliver the first complete Ethereum-to-NATS flow and its checks before extending network coverage. This resumes implementation and supersedes D94's publication-only stopping point.
