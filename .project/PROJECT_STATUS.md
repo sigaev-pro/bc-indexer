@@ -2,24 +2,20 @@
 
 ## E01-01.harness — Unified local runner and runtime admission (D96)
 
-Status: READY_FOR_REVIEW for the local runner. Executed source
-`a086116b65b785d3509fb62a5a7559d8e42c92ea` admitted and ran one frozen
-native-seam plan for Ethereum (Geth), BSC (Parlia) and Polygon (Bor) through
-their accepted preparations. Admission verified three test-only ProfileManifests
-and host/Docker resources in 0.328 seconds. Execution took 29.230 seconds:
-BSC 20.156, Ethereum 5.049 and Bor 4.023 seconds, all PASS with exit zero and
-absent process groups. Teardown found no `extractor.harness` container. The run
-wrote three CaseResults with verdict NOT_RUN and three D87 reader boundaries with
-`run_started: false`; it wrote no RunManifest and gives no public-profile credit.
+Status: READY_FOR_REVIEW for the repaired local runner. Review 001 (head
+`36b1550`) returned REQUEST_CHANGES from Spec and Standards. The owner confirmed
+the D96 boundaries: local supporting services and Polygon own-L1 inputs move to
+E05-01, the harness writes no RunManifest, and the first `run_started: true`
+reader boundary belongs to E03-11. Executed source `b338c60` makes the runner
+fail closed (lock, signals, always teardown and record), scopes cleanup to its
+own containers, takes phase deadlines from the plan and adds negative controls.
+Measured run 02 passed all three families in 28.988 seconds of execution with
+clean teardown. Remaining #12 items after this block: the Go `settled()` raftz
+field-name follow-up from PR #128. Next: exact-head CI, fresh Spec and Standards
+reviews, protected acceptance.
 
-D96 sets the #12 closure boundary: private local fixtures for the three families;
-public profile environments stay with E06 and all seven public slots remain
-NOT_RUN. A Spec feasibility review returned FEASIBLE_WITH_CHANGES; the design
-adopted its changes. Focused checks: 4 ProfileManifest tests and 11 runner tests;
-every `require` in the verifier and runner is killed by single-check mutation
-except one equivalent relative-path check. Remaining #12 items after this block:
-the Go `settled()` raftz field-name follow-up from PR #128 and independent review
-of this block. Next: draft PR, exact-head CI, Spec and Standards reviews.
+D96 sets the #12 closure boundary on private local native-seam fixtures; public
+profile environments stay with E06 and all seven public slots remain NOT_RUN.
 
 Accepted prior block: PR #128 (unchanged-image NATS fence) is accepted at merge
 `e2113d7356000b689240e8a0005b80357867ee36` from reviewed head `a00c7b5`, after
