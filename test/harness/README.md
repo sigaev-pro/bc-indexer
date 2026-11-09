@@ -11,6 +11,136 @@ or any lifecycle acceptance case. All seven public profile results remain
 `NOT_RUN`. Individual local scenario results do not close AC-CAP-01-01, whose
 owner is E01-02.lifecycle_seams.
 
+## Unchanged-image observation predicates
+
+[nats_image_checks.py](nats_image_checks.py) is an early offline predicate over
+supplied observations. It validates a closed plan, exact binary publication and
+ACK bytes, one declared lost-ACK/retry pair, process generation/Wait ordering,
+original store identities and fixed restart permissions. Its
+[expectations](fixtures/nats-image/ORACLE.md) are fixed before native execution.
+
+```sh
+python3 -I test/harness/nats_image_checks.py /absolute/observations.json \
+  --sha256 EXTERNALLY_PINNED_OBSERVATION_SHA256
+```
+
+The input document contains exactly `schema_version: 1`,
+`kind: nats-image-supplied-observations`, `plan`, `topology`, `census`,
+`boundaries` and `processes`; the portable tests provide complete synthetic
+examples. The checker reads and hashes one bounded buffer and creates no files.
+Its `observation_valid` result establishes internal consistency only and always
+retains `runtime_admitted: false` with explicit missing evidence. It does not
+start a native process or authenticate an executable/tool from supplied fields.
+
+The later [nats_image.py](nats_image.py) source checkpoint adds preparation and
+measurement around the unchanged accepted executable. Its static, standard
+library Go coordinator has portable tests. The first three measured attempts
+remain FAIL: the first stopped at the protocol 1 handshake;
+the second captured all five publication ACKs, then rejected a publisher ACK
+on the manager connection because both subscribed to the same wildcard inbox.
+The third completed standalone native recovery/export, but independent comparison
+rejected API-only metadata absent from JSz. Its overall proof remains FAIL;
+R3 stayed NOT_RUN. Read-only replay after the scoped comparison repair is a
+diagnostic, not a replacement result. Fresh preparation 04 of the repaired
+coordinator passed, and measured attempt 04, linked to FAIL03, passed both
+standalone and R3 with five stored and exported messages each. That result
+covers only this private fence block, not runtime admission. The independent
+[collection](nats_image_collection.py) and [raw-byte join](nats_image_proof.py)
+checks extend the supplied predicate; they cannot establish native truth alone.
+Issue #12 stays open and `runtime_admitted` remains false.
+
+Subscriptions use `_INBOX.IMAGE.<role>.C<ordinal>.>` for each connection;
+each role's ACL permits only its own inbox namespace. The census records the
+publisher inbox explicitly. Management, publication, reader and denied-publish
+replies retain exact correlation; an unexpected message fails instead of being
+discarded. Every raw connection is joined to its own process/configuration,
+including typed INFO server name, port, protocol and payload limit. Standalone
+Raft absence accepts only the pinned native 404 body `No Raft nodes registered`;
+generic errors and absent R3 groups reject.
+
+Native API configurations require exactly `_nats.req.level: "0"`,
+`_nats.level: "5"` and `_nats.ver: "2.15.2"`; JSz requires only the first field.
+The checker validates these exact metadata shapes/types before comparing all
+remaining fields without coercion. Raw API and monitoring responses stay intact.
+Before publication, a 60-second sub-budget of the measured parent deadline
+waits for the expected empty stream/configuration/group on every local voter.
+Only a valid zero-stream APP inventory is pending; malformed, foreign or changed
+evidence fails immediately. Every sample remains in the HTTP log, and only the
+final complete collection becomes `initial_inventory`. This readiness control
+does not weaken the later full fence or represent an observed R3 failure.
+
+```sh
+python3 -I test/harness/nats_image.py prepare /absolute/BuildManifest.json \
+  --sha256 ACCEPTED_BUILD_SHA256 \
+  --source-conformance /absolute/accepted-source-conformance.json \
+  --source-sha256 ACCEPTED_SOURCE_PROOF_SHA256 --output /absolute/new-preparation
+python3 -I test/harness/nats_image.py run /absolute/new-preparation/tool.json \
+  --sha256 EXTERNALLY_ACCEPTED_TOOL_SHA256 --plan /absolute/image-plan.json \
+  --plan-sha256 EXTERNALLY_PINNED_PLAN_SHA256 --output /absolute/new-run
+```
+
+The closed plan is `{"schema_version":1,"messages":3,"payload_bytes":32,
+"measured_seconds":900,"topologies":["standalone","R3"]}`. Volumes are bounded
+and configurable; both topologies are required. The externally pinned tool is
+separate from scenario inputs. Preparation authenticates the accepted image,
+native executable, source-native proof and its five cases. It compiles only our
+coordinator with the accepted offline compiler; native NATS is not rebuilt.
+The image run checks its actual executable bytes before starting native children.
+
+The source and image configurations are explicitly different: embedded `NoSigs`
+servers with `$G`/`$SYS` versus CLI processes with `APP`/`SYS`, exact client ACLs,
+names, ports and original-store restart. Both cover ordinary PUB, FileStorage,
+Limits retention and default persistence without batching, consumers, sources,
+mirrors, schedules, transforms or direct reads. Unsupported settings reject.
+Each topology uses one owned network-isolated container; native processes have
+separate PID/start identities, INFO IDs, configurations, store identities and
+Wait/exit records. Simultaneously live voters require distinct PIDs; reuse after
+the old process exited is allowed only with a new start identity.
+
+The socket audit retains actual ingress and replies before the driver suppresses
+one ACK from the application's real timed wait. Its explicit retry is another
+publication and append. There is no hidden reconnect or library retry. The
+selected path rejects unexpected extra protocol frames rather than inventing
+attempt correlation. It consumes the pinned protocol 1 handshake exactly:
+initial INFO, PONG, then `connect_info: true` INFO bound to the same typed server
+identity and the APP account. It does not discard arbitrary INFO frames while
+waiting for a publication response. All original publisher/manager connections
+close before old children are stopped. Every old Wait finishes before restart. Before-store
+snapshots are immutable copies taken only after exit; restart opens the original
+stores, and final store bytes are referenced only after new children exit.
+The driver captures each snapshot's complete relative file inventory, exact
+sizes and SHA256 values before restart. Final validation checks the same complete
+path set and bytes; a directory's continued existence is insufficient.
+
+Before the fenced API request, the driver waits until every voter reports the
+same nonempty metadata and stream leader, exactly one voter is LEADER and the
+others are FOLLOWER. Healthy restarted voters can briefly report no stream
+leader, and a stream API request in that window has no responder.
+
+Restart users can publish only exact stream INFO and sequence GET API subjects.
+A real denied data publication checks that restriction. Full health, JSz and
+explicit APP/SYS/$G Raft inventories enumerate metadata and stream groups, with
+all three native member IDs and distinct logical/transport accounts. Inventory
+rows and explicit samples must agree. Complete before/after collections bracket
+the upper sequence selection and each direct sequence read. Raw native API
+frames, stored binary bytes, timestamps and interval identities are joined to
+the census. Every retained attempt request/response must match its census row;
+all HTTP request orders are unique, including records outside the final selected
+brackets. Initial and fenced configuration joins preserve JSON types. No consumer
+is created to read the interval.
+
+One monotonic parent budget covers admission, both topologies, faults, restart,
+comparison, evidence hashing and cleanup; it never exceeds 1,800 seconds.
+Preparation has its own 600-second limit. Native command caps are clipped to
+the parent budget and retain the existing owned-command cleanup reserve. Failed
+attempts remain failed, with commands, partial wire bytes and available native
+artifacts retained. A corrected retry needs `--previous`, its explicit
+`--previous-sha256`, and `--correction`; it uses a fresh output directory and
+authenticates the old build/tool binding. The predecessor attempt index must be
+an integer in `1 <= attempt_index < 2**63`; this is a representation bound, not
+a repair-cycle ceiling. These are private harness artifacts,
+not public profile or product delivery evidence.
+
 ## Source-native NATS conformance
 
 [nats_conformance.py](nats_conformance.py) prepares an in-package test executable
@@ -116,9 +246,15 @@ metadata/stream-group set, retain all raw responses and bracket the full
 collection, U and direct sequence export. It must bind actual process exits,
 fresh process generations with stable names/stores/membership, exact operating
 to sealed/restricted configurations, and an exhaustive framed ingress census
-with responses observed before reply loss. Every source-native barrier and
-unchanged-image standalone/R3 restart test remains NOT_RUN. The offline RunPlan
-does not treat this inspection as verified conformance. Issue #12 remains open.
+with responses observed before reply loss. This input predicate's own
+source-conformance fields remain NOT_RUN; it does not execute those cases.
+The separate five-case source-native proof was accepted in PR #127. Unchanged-image
+standalone/R3 fence attempt 04 passed after three retained failed attempts.
+Run 05 of the review repair failed because the driver did not wait for a
+restarted stream leader. Attempt 06 with that repair passed both topologies;
+its acceptance is pending review. The offline
+RunPlan does not treat this inspection as
+verified conformance. Issue #12 remains open.
 
 ## Public seam and trust boundary
 

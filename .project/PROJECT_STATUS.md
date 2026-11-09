@@ -1,5 +1,136 @@
 # Состояние проекта
 
+## E01-01.harness — Prove the unchanged-image NATS fence
+
+Status: READY_FOR_REVIEW for the actual unchanged-image fence. Executed source
+`599521b3de0ba8a4fe87644c2527bbe17d4b5892` prepared successfully in 48.913
+seconds; driver tests run with the pinned Linux compiler passed (14 methods,
+eight handshake subcases). Measured attempt 06, linked to FAIL05, passed both
+declared topologies in 10.350 seconds: standalone and R3 each stored and
+exported five messages (sequences 1–5), and R3 covered groups
+`APP/S-R3F-c1Dvc0Km` and `SYS/_meta_`. Before the fenced request, all three
+voters reported leader `image-S-2` for both groups at term 2. Both owned
+commands exited zero with complete cleanup and absent process groups; no
+exact-label container or native process remained. The author revalidated 545
+unique absolute artifact references (14,558,731 bytes). Only documentation
+and Python test changes follow the executed source; Python tests are not part of
+the prepared tool. Review 006 returned Spec PASS and Standards REQUEST_CHANGES
+for test coverage only. New Python controls kill 34 of 36 reviewer mutants of
+the readiness, round and configuration checks; the two survivors are equivalent.
+Follow-up outside this block: Go `settled()` reads raftz `catchup` and
+`write_error`, which pinned NATS names `catching_up` and `wal_error`, and several
+Go agreement/precheck lines lack direct controls. The independent Python
+frontier check enforces those properties; a Go fix needs a new preparation and run. Runtime admission stays false; public
+profiles and the remaining issue #12 criteria stay open. Next: exact-head CI,
+fresh independent Spec and Standards reviews, and protected acceptance.
+
+Historical leader-readiness checkpoint `599521b`:
+Measured run 05 at `1d933c3d05e8ba683e2c5d2df3f228fb739eac08` FAILED. Preparation
+05 passed in 53.885 seconds. Standalone passed; R3 restarted all three voters
+and returned the exact publication denial, but the fenced STREAM.INFO request on
+`image-S-1` received no reply and the driver stopped with a read timeout. The
+retained "before" collection shows the restarted stream group with no leader on
+all three voters (term 1), while the metadata group already had leader
+`image-S-2`. The server logs show the stream leader elected at 14:40:56.244 UTC,
+just after the request was sent. The driver's settled predicate compared the
+leader field for equality only, so three empty leaders passed. Cleanup was
+complete and no native process or owned container remained.
+
+The repair requires a nonempty Raft leader that every voter reports, exactly one
+voter in LEADER state with that identity, and FOLLOWER state on the others,
+for both the metadata and stream groups, before the fenced API request. The
+independent Python frontier predicate already required exactly one recovered
+leader. A new Go control rejects the empty, unknown, disagreeing and wrong-role
+leader cases; five of its six cases passed the old predicate.
+
+Historical review-005 checkpoint `1d933c3`: the independent Python checker now
+validates every retained readiness sample between CREATE and the first
+publication, requires complete voter-ordered polling rounds, rejects an earlier
+complete round and freezes only the final complete round. New Go and Python
+negative controls kill every single-check mutation of the readiness and
+recovered/sealed configuration checks except one redundant round-size check.
+Read-only replay of the retained attempt-03 and attempt-04 native reports passes
+the repaired checker without changing either proof. The runner links only
+failed predecessors, so run 05 started a new lineage (`attempt_index` 1).
+
+Historical attempt 04: executed source
+`e2f92111262a59f6096f515b1a73785dab4af630` prepared successfully in 70.450
+seconds; driver tests run with the pinned Linux compiler passed (12 methods,
+eight handshake subcases). Measured attempt 04, linked to FAIL03, passed both
+declared topologies in 10.562 seconds: standalone and R3 each stored and
+exported five messages (sequences 1–5), and R3 covered groups
+`APP/S-R3F-xXZsijp4` and `SYS/_meta_`. Both owned commands exited zero with
+complete cleanup and absent process groups. The author revalidated 533 unique
+absolute artifact references (14,444,100 bytes). Attempt 04 has no outer launch
+record next to its run directory; its inner proof retains the command records.
+That proof remains retained unchanged.
+
+Historical attempt-03 repair checkpoint (superseded): the
+source-confirmed API/JSz metadata correction after measured attempt 03.
+Preparation 03 passed in 65.534 seconds. Standalone
+native execution completed, but independent configuration comparison rejected
+API-only version/level metadata absent from JSz. The full measured proof remains
+FAIL; R3 was NOT_RUN. All resources were cleaned, and no new native work is active.
+The correction validates exact metadata per surface and preserves every other
+configuration field. It also bounds initial all-voter materialization polling
+before publication; that startup race was found in source, not an actual R3 run.
+Forty-one affected Python methods and 12 Go methods plus eight handshake subcases
+pass. Read-only replay accepts the retained standalone bytes without changing
+the failed proof. Next: publish, prepare a new tool, then run attempt 04 linked
+to FAIL03. Driver/oracle changes require fresh preparation.
+
+Historical attempt-02 repair checkpoint: forty affected
+Python methods and 11 host Go methods, including eight handshake subcases,
+pass. Every connection now has its own role-scoped inbox; retained wire bytes
+bind all requests, replies and INFO fields to the selected process/config.
+The exact pinned standalone no-Raft response is recognized without accepting
+generic 404 responses or missing R3 groups. That checkpoint was published before
+preparation 03 and measured attempt 03. No successful unchanged-image fence or
+public-profile runtime admission is claimed.
+
+Historical attempt 01: source `4645131abfd20a799ea74bb672cc0ded09f88a3f`
+prepared successfully with the pinned compiler in 58.348 seconds. Measured
+attempt 01 failed in 1.656 seconds before standalone publication because the
+driver returned at PONG without consuming the native post-CONNECT INFO. R3
+remained NOT_RUN. The original proof, tool and source are retained unchanged;
+native processes, owned process group and exact-label containers are absent.
+
+The first checked repair closed retained artifact joins, immutable snapshot byte
+bindings, strict configuration types and the positive bounded retry counter.
+That checkpoint passed 37 Python methods and eight host Go tests, including
+eight handshake subcases. Those results remain historical evidence.
+
+Historical attempt 02: published `181a91c73597596b9e924208ee9e5daced3547a2`
+prepared successfully in 63.897 seconds. Measured attempt 02 passed the handshake
+and received all five publication ACKs, then failed at seal because the manager
+and publisher shared a wildcard inbox subscription. R3 remained NOT_RUN; cleanup
+completed. Both preparations, tools, failures and the unchanged plan are retained.
+Fresh driver preparation is required before another measured attempt.
+
+The first published checkpoint `98120a100b66ca8bbd1f0249d2bc857e1afe94a9`
+had one confirmed review defect: it allowed overlapping voters to share a PID
+with different start ticks. Both generation controls reproduced that failure;
+the new checkpoint requires distinct live PIDs while retaining valid later
+reuse. Earlier checkpoint results remain historical, not final acceptance.
+
+PR #127 is accepted at merge
+`522eebc5155e655a7556bf1163376bedf88ddc42`, with both independent reviews and
+exact-head CI passed. Its five source-native cases and retained failed attempt
+are accepted partial evidence. Earlier readiness statements below are historical.
+Issue #12 remains open; no product or public-profile gate is unlocked.
+
+Scope retained from the original handoff: implement the bounded standalone/R3 slice using the unchanged pinned NATS
+image and executable. Bind every framed publication/ACK, old child exit,
+same-store restart with publishing disabled, complete native group collection
+and exact interval export. Use a separately pinned driver and accepted offline
+inputs. Commit the checked source checkpoint before native preparation or runs.
+The repaired image-fence outcomes are NOT_RUN. Root owns publication and acceptance;
+the assigned author owns this worktree. No generic controller or public work.
+
+Base: `522eebc5155e655a7556bf1163376bedf88ddc42`.
+Branch/worktree: `feat/e01-harness-nats-image-fence` /
+`e01-harness-nats-image-fence`. Sole writer: `/root/boot04_preflight`.
+
 ## E01-01.harness — Execute native NATS fence conformance
 
 Status: READY_FOR_REVIEW for actual source-native conformance. Executed source
