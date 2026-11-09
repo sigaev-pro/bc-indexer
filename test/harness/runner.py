@@ -162,7 +162,8 @@ class Interrupted(RuntimeError):
     """A signal stopped the runner; the current child group is killed and teardown still runs."""
 
 
-def admit(directory, resolution_sha256, output, deadline):
+def admit(directory, resolution_sha256, output, deadline, created=None):
+    """Check everything, then create the output. `created` records that this call made it."""
     started = now()
     begin = time.monotonic()
     plan, bundle, report = frozen_plan(directory, resolution_sha256, deadline)
@@ -173,6 +174,8 @@ def admit(directory, resolution_sha256, output, deadline):
     check_resources(plan, observed)
     check_deadline(deadline)
     os.mkdir(output, 0o700)
+    if created is not None:
+        created.append(output)
     # Admission verifies manifests, bindings, resources and budgets. Native
     # readiness is shown only by each child PASS; public manifest fields stay E06.
     verified = ("runtime_execution_unimplemented", "profile_manifest_verification_unimplemented", "profile_manifest_missing",
@@ -411,14 +414,15 @@ def run(directory, resolution_sha256, output, previous=None, previous_sha256=Non
     attempt = retry_attempt(previous, previous_sha256, retry_reason, resolution_sha256, time.monotonic() + 30)
     lock = single_writer()
     handlers = {number: signal.signal(number, raise_interrupted) for number in STOP_SIGNALS}
-    record = None
+    record, created = None, []
     try:
         preparation_start = now()
         try:
-            plan, bundle, admission = admit(directory, resolution_sha256, output, time.monotonic() + 1800)
+            plan, bundle, admission = admit(directory, resolution_sha256, output, time.monotonic() + 1800, created)
         except Exception as failure:
-            if output.is_dir():
-                # Admission created the output but did not finish; leave a FAIL record, never a bare directory.
+            if created:
+                # This admission created the output but did not finish; leave a FAIL record, never a bare directory.
+                # An output that existed before is never written: the run does not own it.
                 record = {"schema_version": 1, "kind": "local-native-seam-run", "run_id": uuid.uuid4().hex, "result": "FAIL",
                           "error": describe(failure), "public_profile_credit": False, "attempt": attempt,
                           "resolution_sha256": resolution_sha256, "children": []}
@@ -477,16 +481,17 @@ def run(directory, resolution_sha256, output, previous=None, previous_sha256=Non
             return record
         raise
     finally:
-        if record is not None:
-            # Signals are blocked while the final record is written.
-            blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
-            try:
+        # Signals stay blocked until the record is written, the original handlers are back and the lock is released.
+        # A signal that arrived meanwhile then goes to the caller's handler, not to raise_interrupted.
+        blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+        try:
+            if record is not None:
                 canonical_ref(output / "run-record.json", record)
-            finally:
-                signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
-        for number, handler in handlers.items():
-            signal.signal(number, handler)
-        lock.close()
+        finally:
+            for number, handler in handlers.items():
+                signal.signal(number, handler)
+            lock.close()
+            signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
 
 
 def main():

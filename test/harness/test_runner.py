@@ -531,6 +531,129 @@ class RunnerRobustnessTests(RunnerBase):
         self.assertEqual((cleanup["cleanup_complete"], sorted(cleanup["foreign_harness_containers"])), (False, ["foreign", "sibling"]))
         self.assertTrue(clean["cleanup_complete"])
 
+    def test_existing_output_is_never_written(self):
+        root, frozen, pin = self.plan("existing", ("geth-import",))
+        output = root / "out"
+        output.mkdir()
+        (output / "keep.txt").write_text("keep")
+        for _ in range(2):
+            with self.assertRaisesRegex(ValueError, "new absolute directory"):
+                runner.run(frozen, pin, output)
+            self.assertEqual(sorted(item.name for item in output.iterdir()), ["keep.txt"])
+
+    def test_admission_failure_after_creating_the_output_leaves_a_fail_record(self):
+        root, frozen, pin = self.plan("partial", ("geth-import",))
+        original = runner.canonical_ref
+        def fail_admission(path, value):
+            if path.name == "admission.json":
+                raise OSError("disk full")
+            return original(path, value)
+        with patch.object(runner, "canonical_ref", fail_admission), self.assertRaisesRegex(OSError, "disk full"):
+            runner.run(frozen, pin, root / "out")
+        record = json.loads((root / "out" / "run-record.json").read_text())
+        self.assertEqual((record["result"], record["children"]), ("FAIL", []))
+        self.assertIn("disk full", record["error"])
+
+    def test_stop_group_keeps_runner_signals_blocked_until_the_group_is_gone(self):
+        import os, signal, subprocess, sys
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+        original = runner.stop_group_unmasked
+        def signal_first(process):
+            os.kill(os.getpid(), signal.SIGTERM)
+            original(process)
+        previous = signal.signal(signal.SIGTERM, runner.raise_interrupted)
+        try:
+            with patch.object(runner, "stop_group_unmasked", signal_first), self.assertRaises(runner.Interrupted):
+                runner.stop_group(child)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+            if child.returncode is None:
+                child.kill()
+                child.wait()
+                self.fail("The signal interrupted stop_group before the child was reaped")
+        self.assertTrue(runner.group_absent(child.pid))
+
+    def test_signal_during_the_final_record_goes_to_the_caller_handler(self):
+        import os, signal
+        root, frozen, pin = self.plan("final-signal", ("geth-import",))
+        seen = []
+        original = runner.canonical_ref
+        def signal_while_writing(path, value):
+            if path.name == "run-record.json":
+                os.kill(os.getpid(), signal.SIGTERM)
+            return original(path, value)
+        previous = signal.signal(signal.SIGTERM, lambda number, _frame: seen.append(number))
+        try:
+            with patch.object(runner, "canonical_ref", signal_while_writing):
+                record = runner.run(frozen, pin, root / "out")
+            handler = signal.getsignal(signal.SIGTERM)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        self.assertEqual(record["result"], "PASS")
+        self.assertEqual(json.loads((root / "out" / "run-record.json").read_text())["result"], "PASS")
+        self.assertEqual(seen, [signal.SIGTERM])
+        self.assertIsNot(handler, runner.raise_interrupted)
+        runner.single_writer().close()
+
+    def test_teardown_fails_for_kept_or_unknown_containers(self):
+        output = self.root / "kept"
+        class Result:
+            def __init__(self, code, stdout=""): self.returncode, self.stdout = code, stdout
+        def check(live, inspectable, removable):
+            state = {"live": list(live), "removed": []}
+            def fake_run(command, **_):
+                if command[:2] == ["docker", "inspect"]:
+                    name = command[-1]
+                    if name in state["live"] and name in inspectable:
+                        return Result(0, json.dumps([{"Source": str(output / name)}]) + "|<no value>")
+                    return Result(1)
+                if command[:3] == ["docker", "rm", "-f"]:
+                    state["removed"] += command[3:]
+                    state["live"] = [item for item in state["live"] if item not in command[3:] or item not in removable]
+                    return Result(0)
+                raise AssertionError(command)
+            listings = []
+            def docker_state():
+                listings.append(list(state["live"]))
+                return {"harness_containers": list(state["live"])}
+            self.patches[2].stop()
+            try:
+                with patch.object(runner.subprocess, "run", fake_run), patch.object(runner, "docker_state", docker_state):
+                    return runner.teardown(output), state, listings
+            finally:
+                self.patches[2].start()
+        kept, state, _ = check(["a"], {"a"}, set())
+        self.assertEqual((kept["cleanup_complete"], kept["remaining_owned_containers"], state["removed"]), (False, ["a"], ["a"]))
+        gone, state, _ = check(["a"], {"a"}, {"a"})
+        self.assertEqual((gone["cleanup_complete"], gone["forced_container_removal"]), (True, True))
+        unknown, _, listings = check(["u"], set(), set())
+        self.assertEqual((unknown["cleanup_complete"], unknown["uninspected_containers"]), (False, ["u"]))
+        self.assertEqual(len(listings), 2)
+        vanished = {"live": ["v"]}
+        def vanishing_state():
+            current = list(vanished["live"])
+            vanished["live"] = []
+            return {"harness_containers": current}
+        self.patches[2].stop()
+        try:
+            with patch.object(runner, "inspect", lambda _: None), patch.object(runner, "docker_state", vanishing_state):
+                vanished_cleanup = runner.teardown(output)
+        finally:
+            self.patches[2].start()
+        self.assertEqual((vanished_cleanup["cleanup_complete"], vanished_cleanup["uninspected_containers"]), (True, []))
+
+    def test_single_writer_lock_is_private_and_refuses_a_symlink(self):
+        import os, stat
+        handle = runner.single_writer()
+        handle.close()
+        self.assertEqual(stat.S_IMODE(os.stat(runner.LOCK).st_mode), 0o600)
+        os.unlink(runner.LOCK)
+        target = self.root / "lock-target"
+        target.write_text("")
+        os.symlink(target, runner.LOCK)
+        with self.assertRaises(OSError):
+            runner.single_writer()
+
     def test_retry_rules_reject_each_invalid_first_run(self):
         root = self.root / "retry-rules"
         root.mkdir()
