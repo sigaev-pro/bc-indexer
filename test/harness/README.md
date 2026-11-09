@@ -251,7 +251,8 @@ source-conformance fields remain NOT_RUN; it does not execute those cases.
 The separate five-case source-native proof was accepted in PR #127. Unchanged-image
 standalone/R3 fence attempt 04 passed after three retained failed attempts.
 Run 05 of the review repair failed because the driver did not wait for a
-restarted stream leader; that repair is pending fresh execution. The offline
+restarted stream leader. Attempt 06 with that repair passed both topologies;
+its acceptance is pending review. The offline
 RunPlan does not treat this inspection as
 verified conformance. Issue #12 remains open.
 

@@ -2,9 +2,22 @@
 
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: source checkpoint for the restart leader-readiness repair. Preparation
-06 and measured attempt 06 are NOT_RUN at this checkpoint.
+Status: READY_FOR_REVIEW for the actual unchanged-image fence. Executed source
+`599521b3de0ba8a4fe87644c2527bbe17d4b5892` prepared successfully in 48.913
+seconds; driver tests run with the pinned Linux compiler passed (14 methods,
+eight handshake subcases). Measured attempt 06, linked to FAIL05, passed both
+declared topologies in 10.350 seconds: standalone and R3 each stored and
+exported five messages (sequences 1–5), and R3 covered groups
+`APP/S-R3F-c1Dvc0Km` and `SYS/_meta_`. Before the fenced request, all three
+voters reported leader `image-S-2` for both groups at term 2. Both owned
+commands exited zero with complete cleanup and absent process groups; no
+exact-label container or native process remained. The author revalidated 545
+unique absolute artifact references (14,558,731 bytes). Only documentation
+changes follow the executed source. Runtime admission stays false; public
+profiles and the remaining issue #12 criteria stay open. Next: exact-head CI,
+fresh independent Spec and Standards reviews, and protected acceptance.
 
+Historical leader-readiness checkpoint `599521b`:
 Measured run 05 at `1d933c3d05e8ba683e2c5d2df3f228fb739eac08` FAILED. Preparation
 05 passed in 53.885 seconds. Standalone passed; R3 restarted all three voters
 and returned the exact publication denial, but the fenced STREAM.INFO request on
@@ -21,8 +34,7 @@ voter in LEADER state with that identity, and FOLLOWER state on the others,
 for both the metadata and stream groups, before the fenced API request. The
 independent Python frontier predicate already required exactly one recovered
 leader. A new Go control rejects the empty, unknown, disagreeing and wrong-role
-leader cases; five of its six cases passed the old predicate. Next: prepare a
-new tool and run attempt 06 linked to FAIL05.
+leader cases; five of its six cases passed the old predicate.
 
 Historical review-005 checkpoint `1d933c3`: the independent Python checker now
 validates every retained readiness sample between CREATE and the first
