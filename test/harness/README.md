@@ -732,8 +732,9 @@ corpus owners and E01-03.smoke_corpus; Polygon local supporting services, their
 test credentials and own-L1 inputs belong to E05-01.polygon_observer; public
 ProfileManifests, environments and mainnet/testnet smoke belong to E06 and E07;
 the first real-delivery reader boundary belongs to E03-11.block_lifecycle; capture
-and Gateway integration belong to their E02–E05 tasks. Within #12 only the Go
-`settled()` raftz field-name follow-up from PR #128 remains. The collector and NATS
+and Gateway integration belong to their E02–E05 tasks. The last #12 item, the
+PR #128 follow-up in which the Go `settled()` filter read old raftz flag names,
+is fixed at `ed723a4` (preparation and attempt 08). The collector and NATS
 are absent by design at this first native seam. E03 delivery and later composed
 gates will add their assigned runtime requirements. The accepted corpus and
 product contracts are unchanged.

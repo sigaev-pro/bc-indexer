@@ -1,8 +1,35 @@
 # Состояние проекта
 
+## E01-01.harness — NATS settle check uses pinned raftz names
+
+Status: READY_FOR_REVIEW. This is the last open #12 item: the PR #128 follow-up
+in which the Go `settled()` polling filter read raftz `catchup` and
+`write_error`, while pinned NATS (`server/monitor.go` `RaftzGroup`) names them
+`catching_up` and `wal_error`. Executed source `803d468` read the pinned names
+and added direct Go controls; preparation and attempt 07 passed. Reviews of head
+`07c46d5` returned Spec and Standards PASS with P3 notes. Executed source
+`ed723a4` closes the Go notes (all queue fields, a follower naming another
+leader, agreed non-numeric or missing indexes, JSZ status, the native WAL error
+shape, the source path). Retained mutation record 09 compiles all 40
+mutants first (`go vet`) and the tests kill 38, with two pre-labeled equivalent
+survivors; record 08 counted 10 compile failures as kills and is superseded. Preparation 08 passed in 56.826 seconds and
+measured attempt 08 (new lineage, `attempt_index` 1) passed both topologies in
+9.064 seconds with complete cleanup. Next: exact-head CI, fresh Spec and
+Standards reviews, protected acceptance; after that, close #12 under D96 and
+start E01-02.
+
+Base: `c60591bba17fce65e02af4f577146e2374b938bf`.
+Branch/worktree: `feat/e01-harness-raftz-fields` / `e01-harness-raftz-fields`.
+
+Accepted prior block: PR #129 (local native-seam runner, D96) is accepted at
+merge `c60591bba17fce65e02af4f577146e2374b938bf` from reviewed head `b07e424`,
+after exact-head CI run 42688111514 and final Spec and Standards PASS. Executed
+source `f2b351e`; measured run 04 record
+`d60abc8f86dea93b675730d7c00808f2d51894de4fc51094a1170e65e6ddd919`.
+
 ## E01-01.harness — Unified local runner and runtime admission (D96)
 
-Status: READY_FOR_REVIEW for the repaired local runner. Review 001 (head
+Status: ACCEPTED in PR #129 (see the section above). Review 001 (head
 `36b1550`) returned REQUEST_CHANGES from Spec and Standards. The owner confirmed
 the D96 boundaries: local supporting services and Polygon own-L1 inputs move to
 E05-01, the harness writes no RunManifest, and the first `run_started: true`

@@ -392,9 +392,145 @@ func TestSettledCollectionRequiresOneAgreedRaftLeader(t *testing.T) {
 				row["state"] = "LEADER"
 			}
 		},
+		"term disagreement": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row["term"] = 3
+			}
+		},
+		"log term disagreement": func(n, key string, row map[string]any) {
+			if key == "SYS/_meta_" && n == "image-S-1" {
+				row["pterm"] = 1
+			}
+		},
+		"index disagreement": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["pindex"], row["committed"], row["applied"] = 7, 7, 7
+			}
+		},
+		"uncommitted entry": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["committed"] = 5
+			}
+		},
+		"unapplied entry": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["applied"] = 5
+			}
+		},
+		"follower names other leader": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row["leader"] = nativeMember("image-S-1")
+			}
+		},
+		"non-numeric index": func(_, key string, row map[string]any) {
+			// Every voter agrees, so only the type check can reject it.
+			if key == stream {
+				row["pindex"], row["committed"], row["applied"] = "x", 0, 0
+			}
+		},
+		"missing commit index": func(_, key string, row map[string]any) {
+			// Every voter agrees, so only the type check can reject it.
+			if key == stream {
+				row["pindex"], row["applied"] = 0, 0
+				delete(row, "committed")
+			}
+		},
+		"other member id": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["id"] = "Foreign1"
+			}
+		},
 	} {
 		if settled(build(mutate), 3, group) {
 			t.Errorf("%s settled", name)
+		}
+	}
+	for _, field := range []string{"ipq_proposal_len", "ipq_entry_len", "ipq_resp_len", "ipq_apply_len"} {
+		for name, change := range map[string]func(map[string]any){
+			"queued":  func(row map[string]any) { row[field] = 1 },
+			"missing": func(row map[string]any) { delete(row, field) },
+		} {
+			if settled(build(func(n, key string, row map[string]any) {
+				if key == stream && n == "image-S-1" {
+					change(row)
+				}
+			}), 3, group) {
+				t.Errorf("%s %s settled", name, field)
+			}
+		}
+	}
+	// Pinned raftz names; each flag is omitted while false or empty. A WAL
+	// error is a Go error value, which encoding/json writes as an object.
+	for _, flag := range []struct {
+		field string
+		value any
+	}{{"paused", true}, {"catching_up", true}, {"observer", true}, {"overrun", true},
+		{"wal_error", map[string]any{}}, {"wal_error", "disk failure"}} {
+		if settled(build(func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row[flag.field] = flag.value
+			}
+		}), 3, group) {
+			t.Errorf("%s=%v settled", flag.field, flag.value)
+		}
+	}
+	for field, value := range map[string]any{"paused": false, "catching_up": false, "observer": false, "overrun": false, "wal_error": ""} {
+		if !settled(build(func(_, _ string, row map[string]any) { row[field] = value }), 3, group) {
+			t.Errorf("explicit healthy %s=%v rejected", field, value)
+		}
+	}
+	missing := build(nil)
+	for name, node := range missing.Nodes {
+		delete(node.Groups, "SYS/_meta_")
+		missing.Nodes[name] = node
+	}
+	if settled(missing, 3, group) {
+		t.Error("collection without the meta group settled")
+	}
+	fewer := build(nil)
+	delete(fewer.Nodes, "image-S-3")
+	if settled(fewer, 3, group) {
+		t.Error("collection from two voters settled")
+	}
+	for name, change := range map[string]func(*nodeCollection){
+		"unhealthy":     func(node *nodeCollection) { node.Health.Body = []byte(`{"status":"unavailable"}`) },
+		"health status": func(node *nodeCollection) { node.Health.Status = 503 },
+		"unsealed": func(node *nodeCollection) {
+			node.JSZ.Body = bytes.ReplaceAll(node.JSZ.Body, []byte(`"sealed":true`), []byte(`"sealed":false`))
+		},
+		"group status": func(node *nodeCollection) { g := node.Groups[stream]; g.Status = 503; node.Groups[stream] = g },
+		"jsz status":   func(node *nodeCollection) { node.JSZ.Status = 503 },
+	} {
+		value := build(nil)
+		node := value.Nodes["image-S-1"]
+		change(&node)
+		value.Nodes["image-S-1"] = node
+		if settled(value, 3, group) {
+			t.Errorf("%s node settled", name)
+		}
+	}
+}
+
+func TestInitialPrechecksRejectInvalidInputsBeforeObserving(t *testing.T) {
+	processes := []*processRecord{{Name: "image-S-1", InfoID: "A"}, {Name: "image-S-2", InfoID: "B"}, {Name: "image-S-3", InfoID: "C"}}
+	config := map[string]any{"name": "FENCE", "metadata": map[string]any{"_nats.req.level": "0", "_nats.level": "5", "_nats.ver": "2.15.2"}}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for name, input := range map[string]struct {
+		processes []*processRecord
+		initial   map[string]any
+	}{
+		"two voters":      {processes[:2], map[string]any{"created": "2026-11-09T00:00:00Z", "config": config}},
+		"missing created": {processes, map[string]any{"config": config}},
+		"empty created":   {processes, map[string]any{"created": "", "config": config}},
+		"invalid config":  {processes, map[string]any{"created": "2026-11-09T00:00:00Z", "config": "FENCE"}},
+	} {
+		_, _, err := waitInitial(ctx, input.processes, input.initial, func(context.Context, int) (observation, error) {
+			t.Errorf("%s observed a node", name)
+			return observation{}, nil
+		})
+		if err == nil {
+			t.Errorf("%s accepted", name)
 		}
 	}
 }
