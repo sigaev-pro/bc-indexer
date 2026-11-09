@@ -602,6 +602,58 @@ validator limits, not product payload or runtime throughput limits. All authored
 numeric fields use the accepted exact JSON parsing boundary; fractional values
 cannot silently round into integer seeds, counts or deadlines.
 
+## Local native-seam runner (D96)
+
+D96 closes issue #12 on private local fixtures for the three families. The test-only
+[runner](runner.py) is the single entry point for a frozen local native-seam plan:
+
+```sh
+python3 -I test/harness/profile_manifest.py /abs/manifest.json --sha256 PIN
+python3 -I test/harness/run_plan.py freeze /abs/plan.json --registry-bundle /abs/registry.json \
+  --registry-sha256 PIN --output /abs/frozen
+python3 -I test/harness/runner.py admit|run /abs/frozen --resolution-sha256 PIN --output /abs/new-run \
+  [--previous-run /abs/first/run-record.json --previous-sha256 PIN --retry-reason TEXT]
+```
+
+A [test-only ProfileManifest](profile-manifest.schema.json) binds one private
+fixture to its accepted family preparation: profile and family, fixture identity,
+test-only chain ID, genesis hash and native config digest, build, preparation
+proof, runner slice, request, observer tool, genesis and block inputs, and the
+independent oracle. [profile_manifest.py](profile_manifest.py) re-hashes every
+reference and checks each binding against the preparation, request and fixture
+files. Its identity is always `test-only`, it names no supporting services, and
+it never gives public-profile credit. It is not an E06 public ProfileManifest.
+
+Admission re-authenticates the frozen plan, registry, schema, resolution and
+every artifact. It accepts only a standard native-seam plan without a fence or
+faults. Every selected profile needs one verified manifest, one matching
+test-only fixture and one native-import action bound to its request and oracle.
+Case identities must use the verified manifest digest. Host and Docker
+architecture, CPUs, memory and free disk must meet the plan; parallelism is 1;
+no other `extractor.harness` container may exist. Child request deadlines plus a
+30-second grace each must fit the parent measured budget of at most 1,800 seconds.
+Admission writes `admission.json` with `runtime_admitted: true` for this private
+scope only and clears the offline resolution blockers it verified.
+
+`run` dispatches the existing family CLIs (`run.py`, `bsc_run.py`, `bor_run.py`)
+serially, each in its own process group. The parent kills a child group at the
+parent deadline and records process-group absence. Dispatch stops after the first
+child FAIL. Each child passes only with a matching proof kind, PASS, complete
+cleanup, the admitted request and exit zero. Teardown removes any remaining
+`extractor.harness` container and records that removal. `run-record.json` keeps
+phase timestamps for `preparation` (admission), `execution` (all child imports
+and their comparisons) and `teardown`, the child commands, proofs and results,
+and the D83 attempt: a single diagnostic retry must link a pinned first FAIL of
+the same frozen plan.
+
+The harness owns no AC verdict. Each selected case gets a CaseResult with
+`APPLICABLE` and `NOT_RUN`, validated against the frozen registry and its owners.
+The runner writes no RunManifest. Each profile gets a D87 ReaderBoundaryManifest
+with `run_started: false`, the plan and oracle references, and all six conditions
+`NOT_RUN`, because no capture, Gateway or NATS delivery exists at E01. Remaining
+blockers always include `private_identity_has_no_public_profile_credit` and
+`harness_owns_no_ac_verdict`.
+
 ## Remaining work in issue 12
 
 The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)
@@ -650,9 +702,8 @@ The corrected campaign passed all 19 controls in 60.287 seconds on source
 positives also passed using accepted prepared inputs. Exact final-head review,
 CI and protected acceptance remain separate from these measured results.
 
-Complete BSC fixture/fork coverage, the Bor native adapter, all other required
-fixture families, complete ProfileManifest verification and runtime RunPlan admission,
-supporting services, public mainnet/testnet smoke, and integration with future
+Complete BSC fixture/fork coverage, all other required fixture families,
+public ProfileManifests (E06), supporting services, public mainnet/testnet smoke, and integration with future
 capture and Gateway components remain unimplemented here. The collector and NATS
 are absent by design at this first native seam. E03 delivery and later composed
 gates will add their assigned runtime requirements. The accepted corpus and
