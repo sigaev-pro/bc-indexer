@@ -2,15 +2,15 @@
 
 ## D97 — Run independent work in parallel model sessions (2026-11-10)
 
-Owner answer, translated from Russian: "Parallelize tasks between agents wherever possible. Choose the needed agents either by agreeing with me or, if you are 100% sure, yourself; the second is better." In a follow-up answer the same day, the owner raised the D93 and DEVELOPMENT_WORKFLOW limit of three active model sessions, and kept merges as D95 governs them.
+Owner answer, translated from Russian: "Parallelize tasks between agents wherever possible. Choose the needed agents either by agreeing with me or, if you are 100% sure, yourself; the second is better." In follow-up answers the same day, the owner approved the proposal to raise the D93 and DEVELOPMENT_WORKFLOW limit to three implementer sessions besides the coordinator, each with its own reviewers ("Поднять лимит", "raise the limit"), and answered on merges: "Как в D95, по разрешению на PR" ("As in D95, with permission per PR"). D95's checks and branch protection still apply, and each merge also needs the owner's permission for that PR.
 
 Recorded technical decisions, not owner answers:
 
-- Two writer tasks are independent when neither needs the other's result, DEVELOPMENT_PLAN and TASK_DECOMPOSITION give no dependency edge between them, and their allowed product and test paths do not overlap. Shared status records (PROJECT_STATUS.md and DECISIONS.md) do not count as overlap; their conflicts are resolved when merges are serialized.
+- Two writer tasks are independent when neither needs the other's result, DEVELOPMENT_PLAN and TASK_DECOMPOSITION give no dependency edge between them, and their allowed paths, as recorded in PROJECT_STATUS, do not overlap, except the shared status records PROJECT_STATUS.md and DECISIONS.md. Conflicts in those shared records are resolved when merges are serialized.
 - Each independent writer task runs in its own implementer model session, worktree and branch, with one writer, its own independent Spec and Standards reviews, and its own PR. Dependent tasks keep the order that DEVELOPMENT_PLAN and TASK_DECOMPOSITION define. Read-only agents, such as reviewers and investigators, may also run in parallel inside one block.
 - Session limit: at most three implementer sessions at a time besides the coordinator, each with its own read-only reviewers. This replaces the earlier limit of three active model sessions including the coordinator.
 - Prefer to choose the sessions and their roles yourself when you are fully certain that the split is right. If you are not fully certain, agree on the split with the owner first.
-- Parallel work never relaxes a gate. Measured runtime work still follows the host-wide single-writer and resource rules, so measured runs from parallel sessions execute one at a time. Each PR still needs its own exact-head CI and independent Spec and Standards reviews, and merges stay serialized under D95 and DEVELOPMENT_WORKFLOW.
+- Parallel work never relaxes a gate. Measured runtime work still follows the host-wide single-writer and resource rules, so measured runs from parallel sessions execute one at a time. Each PR still needs its own exact-head CI and independent Spec and Standards reviews, and merges stay serialized under D95 and DEVELOPMENT_WORKFLOW, each with the owner's permission for that PR.
 
 ## D96 — Close E01-01.harness on local private profiles (2026-11-09)
 
