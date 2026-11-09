@@ -1,5 +1,42 @@
 # Состояние проекта
 
+## E01-02.pins — Native state retention and release (issue #13)
+
+Status: IN_PROGRESS. Block outcome: a hash-provider pin seam in
+`adapters/{geth,bsc,bor}/state_provider`, compiled inside each accepted native
+module, with a durable pin ledger in the native key-value store, a pin-aware
+guard on the native offline state pruner, and a read-only store and
+effective-profile preflight. Runtime evidence uses the accepted private local
+fixtures of the three families (D96 pattern) through the test driver
+`test/harness/pins.py`. Assigned ACs: AC-CAP-03-01, AC-CAP-03-02, AC-OPS-01-02,
+AC-OPS-01-03, AC-OPS-03-02.
+
+Base: `f8d3e676` (main). Branch/worktree: `feat/e01-02-pins` / `e01-02-pins-a2f23f`.
+Allowed paths: `adapters/<client>/state_provider`, the new pins driver and its
+portable tests in `test/harness`, task evidence and status documents. Not
+touched: `core/capture` (E01-02.owned_capture) and the harness tooling files of
+the parallel tooling session.
+
+BLOCKED_DECISION (owner): the closure boundary for #13. Its ACs list all seven
+public profiles in `local-e2e` and `harness` modes, while D96 keeps public
+profile environments with E06. D96 settled this only for #12. Until the owner
+decides whether #13 may close on private local native-seam evidence, this block
+gives no public-profile credit, every public AC cell stays NOT_RUN, and #13 stays
+open after this block. Independent work continues.
+
+BLOCKED_DECISION (owner): who wires the deletion guards into a shipped native
+binary. In the hash scheme the native store deletes committed state, code or
+headers only through the offline prune command, its startup resume, and head
+rewinds (`SetHead`, crash repair). This block adds ledger guards for each path
+(`PruneState`, `RecoverPruning`, `RequireRewindAllowed`) and proves them
+in-process against the native code, but calling them from the native command
+and startup paths needs a patched native build. E01-01.builds produced
+unpatched builds and no task in the catalog owns a patched-build pipeline. The
+candidates are E01-02.admission (which first wires the seam into the real
+import path) or a new build task. Until decided, the shipped native binaries do
+not call the guards, so the native `snapshot prune-state` command and a manual
+`debug_setHead` remain operator hazards outside the capture profile.
+
 ## E01-01.harness — NATS settle check uses pinned raftz names
 
 Status: READY_FOR_REVIEW. This is the last open #12 item: the PR #128 follow-up
