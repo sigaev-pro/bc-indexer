@@ -41,9 +41,10 @@ on the manager connection because both subscribed to the same wildcard inbox.
 The third completed standalone native recovery/export, but independent comparison
 rejected API-only metadata absent from JSz. Its overall proof remains FAIL;
 R3 stayed NOT_RUN. Read-only replay after the scoped comparison repair is a
-diagnostic, not a replacement result. The repaired
-coordinator requires fresh preparation and a new pinned tool. Corrected
-standalone/R3 execution is still **NOT_RUN**. The independent
+diagnostic, not a replacement result. Fresh preparation 04 of the repaired
+coordinator passed, and measured attempt 04, linked to FAIL03, passed both
+standalone and R3 with five stored and exported messages each. That result
+covers only this private fence block, not runtime admission. The independent
 [collection](nats_image_collection.py) and [raw-byte join](nats_image_proof.py)
 checks extend the supplied predicate; they cannot establish native truth alone.
 Issue #12 stays open and `runtime_admitted` remains false.
