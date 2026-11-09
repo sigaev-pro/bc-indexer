@@ -405,7 +405,8 @@ func settled(result collection, count int, group string) bool {
 					return false
 				}
 			}
-			for _, field := range []string{"paused", "catchup", "observer", "overrun", "write_error"} {
+			// Pinned raftz omits these when they are false or empty (server/raft.go RaftzGroup).
+			for _, field := range []string{"paused", "catching_up", "observer", "overrun", "wal_error"} {
 				if value, present := row[field]; present && value != false && value != "" {
 					return false
 				}

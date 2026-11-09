@@ -392,9 +392,113 @@ func TestSettledCollectionRequiresOneAgreedRaftLeader(t *testing.T) {
 				row["state"] = "LEADER"
 			}
 		},
+		"term disagreement": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row["term"] = 3
+			}
+		},
+		"log term disagreement": func(n, key string, row map[string]any) {
+			if key == "SYS/_meta_" && n == "image-S-1" {
+				row["pterm"] = 1
+			}
+		},
+		"index disagreement": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["pindex"], row["committed"], row["applied"] = 7, 7, 7
+			}
+		},
+		"uncommitted entry": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["committed"] = 5
+			}
+		},
+		"unapplied entry": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["applied"] = 5
+			}
+		},
+		"queued proposal": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["ipq_apply_len"] = 1
+			}
+		},
+		"other member id": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-1" {
+				row["id"] = "Foreign1"
+			}
+		},
 	} {
 		if settled(build(mutate), 3, group) {
 			t.Errorf("%s settled", name)
+		}
+	}
+	// Pinned raftz names; each flag is omitted while false or empty.
+	for field, value := range map[string]any{"paused": true, "catching_up": true, "observer": true, "overrun": true,
+		"wal_error": "disk failure"} {
+		if settled(build(func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row[field] = value
+			}
+		}), 3, group) {
+			t.Errorf("%s=%v settled", field, value)
+		}
+	}
+	for field, value := range map[string]any{"paused": false, "catching_up": false, "observer": false, "overrun": false, "wal_error": ""} {
+		if !settled(build(func(_, _ string, row map[string]any) { row[field] = value }), 3, group) {
+			t.Errorf("explicit healthy %s=%v rejected", field, value)
+		}
+	}
+	missing := build(nil)
+	for name, node := range missing.Nodes {
+		delete(node.Groups, "SYS/_meta_")
+		missing.Nodes[name] = node
+	}
+	if settled(missing, 3, group) {
+		t.Error("collection without the meta group settled")
+	}
+	fewer := build(nil)
+	delete(fewer.Nodes, "image-S-3")
+	if settled(fewer, 3, group) {
+		t.Error("collection from two voters settled")
+	}
+	for name, change := range map[string]func(*nodeCollection){
+		"unhealthy":     func(node *nodeCollection) { node.Health.Body = []byte(`{"status":"unavailable"}`) },
+		"health status": func(node *nodeCollection) { node.Health.Status = 503 },
+		"unsealed": func(node *nodeCollection) {
+			node.JSZ.Body = bytes.ReplaceAll(node.JSZ.Body, []byte(`"sealed":true`), []byte(`"sealed":false`))
+		},
+		"group status": func(node *nodeCollection) { g := node.Groups[stream]; g.Status = 503; node.Groups[stream] = g },
+	} {
+		value := build(nil)
+		node := value.Nodes["image-S-1"]
+		change(&node)
+		value.Nodes["image-S-1"] = node
+		if settled(value, 3, group) {
+			t.Errorf("%s node settled", name)
+		}
+	}
+}
+
+func TestInitialPrechecksRejectInvalidInputsBeforeObserving(t *testing.T) {
+	processes := []*processRecord{{Name: "image-S-1", InfoID: "A"}, {Name: "image-S-2", InfoID: "B"}, {Name: "image-S-3", InfoID: "C"}}
+	config := map[string]any{"name": "FENCE", "metadata": map[string]any{"_nats.req.level": "0", "_nats.level": "5", "_nats.ver": "2.15.2"}}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for name, input := range map[string]struct {
+		processes []*processRecord
+		initial   map[string]any
+	}{
+		"two voters":      {processes[:2], map[string]any{"created": "2026-11-09T00:00:00Z", "config": config}},
+		"missing created": {processes, map[string]any{"config": config}},
+		"empty created":   {processes, map[string]any{"created": "", "config": config}},
+		"invalid config":  {processes, map[string]any{"created": "2026-11-09T00:00:00Z", "config": "FENCE"}},
+	} {
+		_, _, err := waitInitial(ctx, input.processes, input.initial, func(context.Context, int) (observation, error) {
+			t.Errorf("%s observed a node", name)
+			return observation{}, nil
+		})
+		if err == nil {
+			t.Errorf("%s accepted", name)
 		}
 	}
 }
