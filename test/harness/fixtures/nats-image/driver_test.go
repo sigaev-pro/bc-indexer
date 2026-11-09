@@ -417,9 +417,22 @@ func TestSettledCollectionRequiresOneAgreedRaftLeader(t *testing.T) {
 				row["applied"] = 5
 			}
 		},
-		"queued proposal": func(n, key string, row map[string]any) {
-			if key == stream && n == "image-S-1" {
-				row["ipq_apply_len"] = 1
+		"follower names other leader": func(n, key string, row map[string]any) {
+			if key == stream && n == "image-S-3" {
+				row["leader"] = nativeMember("image-S-1")
+			}
+		},
+		"non-numeric index": func(_, key string, row map[string]any) {
+			// Every voter agrees, so only the type check can reject it.
+			if key == stream {
+				row["pindex"], row["committed"], row["applied"] = "x", 0, 0
+			}
+		},
+		"missing commit index": func(_, key string, row map[string]any) {
+			// Every voter agrees, so only the type check can reject it.
+			if key == stream {
+				row["pindex"], row["applied"] = 0, 0
+				delete(row, "committed")
 			}
 		},
 		"other member id": func(n, key string, row map[string]any) {
@@ -432,15 +445,33 @@ func TestSettledCollectionRequiresOneAgreedRaftLeader(t *testing.T) {
 			t.Errorf("%s settled", name)
 		}
 	}
-	// Pinned raftz names; each flag is omitted while false or empty.
-	for field, value := range map[string]any{"paused": true, "catching_up": true, "observer": true, "overrun": true,
-		"wal_error": "disk failure"} {
+	for _, field := range []string{"ipq_proposal_len", "ipq_entry_len", "ipq_resp_len", "ipq_apply_len"} {
+		for name, change := range map[string]func(map[string]any){
+			"queued":  func(row map[string]any) { row[field] = 1 },
+			"missing": func(row map[string]any) { delete(row, field) },
+		} {
+			if settled(build(func(n, key string, row map[string]any) {
+				if key == stream && n == "image-S-1" {
+					change(row)
+				}
+			}), 3, group) {
+				t.Errorf("%s %s settled", name, field)
+			}
+		}
+	}
+	// Pinned raftz names; each flag is omitted while false or empty. A WAL
+	// error is a Go error value, which encoding/json writes as an object.
+	for _, flag := range []struct {
+		field string
+		value any
+	}{{"paused", true}, {"catching_up", true}, {"observer", true}, {"overrun", true},
+		{"wal_error", map[string]any{}}, {"wal_error", "disk failure"}} {
 		if settled(build(func(n, key string, row map[string]any) {
 			if key == stream && n == "image-S-3" {
-				row[field] = value
+				row[flag.field] = flag.value
 			}
 		}), 3, group) {
-			t.Errorf("%s=%v settled", field, value)
+			t.Errorf("%s=%v settled", flag.field, flag.value)
 		}
 	}
 	for field, value := range map[string]any{"paused": false, "catching_up": false, "observer": false, "overrun": false, "wal_error": ""} {
@@ -468,6 +499,7 @@ func TestSettledCollectionRequiresOneAgreedRaftLeader(t *testing.T) {
 			node.JSZ.Body = bytes.ReplaceAll(node.JSZ.Body, []byte(`"sealed":true`), []byte(`"sealed":false`))
 		},
 		"group status": func(node *nodeCollection) { g := node.Groups[stream]; g.Status = 503; node.Groups[stream] = g },
+		"jsz status":   func(node *nodeCollection) { node.JSZ.Status = 503 },
 	} {
 		value := build(nil)
 		node := value.Nodes["image-S-1"]
