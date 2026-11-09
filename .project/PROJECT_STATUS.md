@@ -10,8 +10,9 @@ and added direct Go controls; preparation and attempt 07 passed. Reviews of head
 `07c46d5` returned Spec and Standards PASS with P3 notes. Executed source
 `ed723a4` closes the Go notes (all queue fields, a follower naming another
 leader, agreed non-numeric or missing indexes, JSZ status, the native WAL error
-shape, the source path). A retained 40-mutant record kills 38, with two
-pre-labeled equivalent survivors. Preparation 08 passed in 56.826 seconds and
+shape, the source path). Retained mutation record 09 compiles all 40
+mutants first (`go vet`) and the tests kill 38, with two pre-labeled equivalent
+survivors; record 08 counted 10 compile failures as kills and is superseded. Preparation 08 passed in 56.826 seconds and
 measured attempt 08 (new lineage, `attempt_index` 1) passed both topologies in
 9.064 seconds with complete cleanup. Next: exact-head CI, fresh Spec and
 Standards reviews, protected acceptance; after that, close #12 under D96 and
