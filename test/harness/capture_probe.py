@@ -143,13 +143,13 @@ def prepare(manifest_path, expected_sha, output):
                 record["families"][family] = prepare_family(family, manifest, root, output, native, compiler, deadline)
             unit = output / "unit"
             unit.mkdir()
-            for directory in ("build-cache", "gopath"):
+            for directory in ("build-cache", "gopath", "gotmp"):
                 (unit / directory).mkdir()
             # Unit tests with the race detector use the accepted compiler and only the module itself.
             stdout = native.command(compiler, ["/usr/local/go/bin/go", "test", "-race", "-count=1", "-cover", "-v", "."],
                                     [(output / "geth/capture", "/capture", True), (unit / "build-cache", "/cache", False),
-                                     (unit / "gopath", "/gopath", False)], cap=300, memory="2g", cwd="/capture",
-                                    environment={"CGO_ENABLED": "1", "GOCACHE": "/cache", "GOPATH": "/gopath",
+                                     (unit / "gopath", "/gopath", False), (unit / "gotmp", "/gotmp", False)], cap=300, memory="2g", cwd="/capture",
+                                    environment={"CGO_ENABLED": "1", "GOCACHE": "/cache", "GOPATH": "/gopath", "GOTMPDIR": "/gotmp",
                                                  "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off",
                                                  "GOTOOLCHAIN": "local", "GOWORK": "off", "GOENV": "off"})
             record["unit_tests"] = reference(stdout)
