@@ -2,21 +2,35 @@
 
 ## E01-01.harness — Prove the unchanged-image NATS fence
 
-Status: READY_FOR_REVIEW for the actual unchanged-image fence. Executed source
-`e2f92111262a59f6096f515b1a73785dab4af630` prepared successfully in 70.450
-seconds; the pinned Linux compiler passed 12 driver methods and eight handshake
-subcases. Measured attempt 04, linked to FAIL03, passed both declared topologies
-in 10.562 seconds: standalone and R3 each stored and exported five messages
-(sequences 0–5), and R3 covered groups `APP/S-R3F-xXZsijp4` and `SYS/_meta_`.
-Both owned commands exited zero with complete cleanup and absent process groups;
-exact-label containers and native processes were absent afterward. The author
-revalidated 533 unique absolute artifact references (14,444,100 bytes).
-Only documentation changes follow the executed source. Runtime admission stays
-false; public profiles and the remaining issue #12 criteria stay open. Next:
-exact-head CI, both independent reviews and protected acceptance of this block.
+Status: source checkpoint for review-005 repairs. Preparation 05 and measured
+attempt 05 are NOT_RUN at this checkpoint. Review 005 returned Spec PASS and
+Standards REQUEST_CHANGES with three P2 findings. The independent Python checker
+now validates every retained readiness sample between CREATE and the first
+publication, requires complete voter-ordered polling rounds, rejects an earlier
+complete round and freezes only the final complete round. New Go and Python
+negative controls kill every single-check mutation of the readiness and
+recovered/sealed configuration checks except one redundant round-size check.
+Read-only replay of the retained attempt-03 and attempt-04 native reports passes
+the repaired checker without changing either proof. Changed harness and driver
+sources require fresh preparation 05 and measured run 05. The runner links only
+failed predecessors, so run 05 starts a new lineage (`attempt_index` 1); the
+evidence record binds it to PASS04 explicitly.
 
-Historical attempt-03 repair checkpoint: READY_FOR_REVIEW for the
-source-confirmed API/JSz metadata correction after measured attempt 03. Preparation 03 passed in 65.534 seconds. Standalone
+Historical attempt 04: executed source
+`e2f92111262a59f6096f515b1a73785dab4af630` prepared successfully in 70.450
+seconds; driver tests run with the pinned Linux compiler passed (12 methods,
+eight handshake subcases). Measured attempt 04, linked to FAIL03, passed both
+declared topologies in 10.562 seconds: standalone and R3 each stored and
+exported five messages (sequences 1–5), and R3 covered groups
+`APP/S-R3F-xXZsijp4` and `SYS/_meta_`. Both owned commands exited zero with
+complete cleanup and absent process groups. The author revalidated 533 unique
+absolute artifact references (14,444,100 bytes). Attempt 04 has no outer launch
+record next to its run directory; its inner proof retains the command records.
+That proof remains retained unchanged.
+
+Historical attempt-03 repair checkpoint (superseded): the
+source-confirmed API/JSz metadata correction after measured attempt 03.
+Preparation 03 passed in 65.534 seconds. Standalone
 native execution completed, but independent configuration comparison rejected
 API-only version/level metadata absent from JSz. The full measured proof remains
 FAIL; R3 was NOT_RUN. All resources were cleaned, and no new native work is active.

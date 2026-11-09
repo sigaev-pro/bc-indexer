@@ -34,8 +34,8 @@ start a native process or authenticate an executable/tool from supplied fields.
 
 The later [nats_image.py](nats_image.py) source checkpoint adds preparation and
 measurement around the unchanged accepted executable. Its static, standard
-library Go coordinator has portable tests. Three preparations passed, but all three
-measured attempts remain FAIL: the first stopped at the protocol 1 handshake;
+library Go coordinator has portable tests. The first three measured attempts
+remain FAIL: the first stopped at the protocol 1 handshake;
 the second captured all five publication ACKs, then rejected a publisher ACK
 on the manager connection because both subscribed to the same wildcard inbox.
 The third completed standalone native recovery/export, but independent comparison
@@ -244,8 +244,8 @@ to sealed/restricted configurations, and an exhaustive framed ingress census
 with responses observed before reply loss. This input predicate's own
 source-conformance fields remain NOT_RUN; it does not execute those cases.
 The separate five-case source-native proof was accepted in PR #127. Unchanged-image
-full standalone/R3 fence acceptance is still incomplete after three retained
-failed measured attempts. The offline RunPlan does not treat this inspection as
+standalone/R3 fence attempt 04 passed after three retained failed attempts;
+its acceptance is pending review. The offline RunPlan does not treat this inspection as
 verified conformance. Issue #12 remains open.
 
 ## Public seam and trust boundary

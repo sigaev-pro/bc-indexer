@@ -159,6 +159,23 @@ class CollectionTests(unittest.TestCase):
                         lambda d: d["APP"]["S-R3F-original"].update({field: replacement}))
             with self.subTest(field=field), self.assertRaises(ValueError): collection.validate_collections(**value)
 
+    def test_recovered_and_sealed_configurations_compare_exact_values_and_types(self):
+        for bracket in ("before", "after"):
+            value = document()
+            change_body(value[bracket]["nodes"]["image-S-2"]["jsz"],
+                        lambda j: j["account_details"][0]["stream_detail"][0]["config"].update(max_msg_size=7))
+            with self.subTest(bracket=bracket), self.assertRaisesRegex(ValueError, "Recovered stream identity or full configuration"):
+                collection.validate_collections(**value)
+        # Integer 1 and boolean true are equal in Python but are different native values.
+        value = document()
+        value["initial"]["config"]["max_consumers"] = 1
+        value["sealed"]["config"]["max_consumers"] = True
+        for snap in (value["before"], value["after"]):
+            for node in snap["nodes"].values():
+                change_body(node["jsz"], lambda j: j["account_details"][0]["stream_detail"][0]["config"].update(max_consumers=True))
+        with self.assertRaisesRegex(ValueError, "Unplanned seal configuration change"):
+            collection.validate_collections(**value)
+
     def test_unknown_or_nonordinary_stream_configuration_is_not_implicitly_covered(self):
         for field, replacement in (("future_write_mode", True), ("persist_mode", "memory"),
                                    ("compression", "s2"), ("placement", {"cluster": "foreign"})):

@@ -221,6 +221,111 @@ func TestInitialInventoryWaitsForEveryReplica(t *testing.T) {
 	}
 }
 
+func TestInitialMaterializationRejectsEveryChangedField(t *testing.T) {
+	process := &processRecord{Name: "image-S-1", InfoID: "A"}
+	initial := map[string]any{"created": "2026-11-09T00:00:00Z", "config": map[string]any{"name": "FENCE", "max_msgs": 21, "metadata": map[string]any{"_nats.req.level": "0", "_nats.level": "5", "_nats.ver": "2.15.2"}}}
+	build := func(ready, standalone bool, mutate func(body, account, stream, state map[string]any)) observation {
+		state := map[string]any{"messages": 0, "bytes": 0, "first_seq": 0, "last_seq": 0, "consumer_count": 0}
+		stream := map[string]any{"name": "FENCE", "created": initial["created"], "config": map[string]any{"name": "FENCE", "max_msgs": 21, "metadata": map[string]any{"_nats.req.level": "0"}}, "state": state}
+		if !standalone {
+			stream["stream_raft_group"] = "S-R3F-known"
+		}
+		account := map[string]any{"name": "APP", "id": "APP"}
+		streams := 0
+		if ready {
+			streams = 1
+			account["stream_detail"] = []any{stream}
+		}
+		body := map[string]any{"server_id": "A", "total": 1, "streams": streams, "consumers": 0, "messages": 0, "bytes": 0, "account_details": []any{account}}
+		if mutate != nil {
+			mutate(body, account, stream, state)
+		}
+		data, _ := json.Marshal(body)
+		return observation{Node: process.Name, Path: jszPath, Status: 200, Body: data}
+	}
+	for _, standalone := range []bool{false, true} {
+		count := 3
+		if standalone {
+			count = 1
+		}
+		if _, ready, err := initialMaterialization(build(true, standalone, nil), process, initial, count); err != nil || !ready {
+			t.Fatalf("valid ready inventory rejected (standalone=%v): %v", standalone, err)
+		}
+		if _, ready, err := initialMaterialization(build(false, standalone, nil), process, initial, count); err != nil || ready {
+			t.Fatalf("valid pending inventory rejected (standalone=%v): %v", standalone, err)
+		}
+	}
+	type change struct {
+		name  string
+		ready bool
+		apply func(body, account, stream, state map[string]any)
+	}
+	changes := []change{
+		{"node", true, nil},
+		{"streams range", true, func(b, _, _, _ map[string]any) { b["streams"] = 2 }},
+		{"negative streams", false, func(b, _, _, _ map[string]any) { b["streams"] = -1 }},
+		{"total", true, func(b, _, _, _ map[string]any) { b["total"] = 2 }},
+		{"consumers", true, func(b, _, _, _ map[string]any) { b["consumers"] = 1 }},
+		{"bytes", false, func(b, _, _, _ map[string]any) { b["bytes"] = 1 }},
+		{"account id", true, func(_, a, _, _ map[string]any) { a["id"] = "SYS" }},
+		{"account name", false, func(_, a, _, _ map[string]any) { a["name"] = "SYS" }},
+		{"extra account", true, func(b, a, _, _ map[string]any) { b["account_details"] = []any{a, a} }},
+		{"pending detail", false, func(_, a, s, _ map[string]any) { a["stream_detail"] = []any{s} }},
+		{"null pending detail", false, func(_, a, _, _ map[string]any) { a["stream_detail"] = nil }},
+		{"missing ready detail", true, func(_, a, _, _ map[string]any) { delete(a, "stream_detail") }},
+		{"stream name", true, func(_, _, s, _ map[string]any) { s["name"] = "OTHER" }},
+		{"created", true, func(_, _, s, _ map[string]any) { s["created"] = "2026-11-09T00:00:01Z" }},
+		{"config bytes", true, func(_, _, s, _ map[string]any) { s["config"].(map[string]any)["max_msgs"] = 22 }},
+		{"config type", true, func(_, _, s, _ map[string]any) { s["config"].(map[string]any)["max_msgs"] = "21" }},
+		{"extra metadata key", true, func(_, _, s, _ map[string]any) {
+			s["config"].(map[string]any)["metadata"] = map[string]any{"_nats.req.level": "0", "_nats.ver": "2.15.2"}
+		}},
+		{"missing state", true, func(_, _, s, _ map[string]any) { delete(s, "state") }},
+		{"nonempty state", true, func(_, _, _, st map[string]any) { st["last_seq"] = 1 }},
+		{"state type", true, func(_, _, _, st map[string]any) { st["consumer_count"] = false }},
+	}
+	for _, standalone := range []bool{false, true} {
+		count := 3
+		if standalone {
+			count = 1
+		}
+		for _, c := range changes {
+			v := build(c.ready, standalone, c.apply)
+			if c.name == "node" {
+				v.Node = "image-S-2"
+			}
+			if _, _, err := initialMaterialization(v, process, initial, count); err == nil {
+				t.Errorf("%s admitted (standalone=%v)", c.name, standalone)
+			}
+		}
+	}
+	grouped := build(true, false, nil)
+	if _, _, err := initialMaterialization(grouped, process, initial, 1); err == nil {
+		t.Error("standalone stream Raft group admitted")
+	}
+	if _, _, err := initialMaterialization(build(true, true, nil), process, initial, 3); err == nil {
+		t.Error("missing R3 stream Raft group admitted")
+	}
+	processes := []*processRecord{{Name: "image-S-1", InfoID: "A"}, {Name: "image-S-2", InfoID: "B"}, {Name: "image-S-3", InfoID: "C"}}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	calls := 0
+	_, _, err := waitInitial(ctx, processes, initial, func(_ context.Context, index int) (observation, error) {
+		calls++
+		v := build(true, false, func(b, _, s, _ map[string]any) {
+			b["server_id"] = processes[index].InfoID
+			if index == 2 {
+				s["stream_raft_group"] = "S-R3F-other"
+			}
+		})
+		v.Node = processes[index].Name
+		return v, nil
+	})
+	if err == nil || calls != 3 {
+		t.Errorf("stream group changed across voters was admitted: calls=%d err=%v", calls, err)
+	}
+}
+
 func TestInfoMustMatchSelectedProcessConfiguration(t *testing.T) {
 	process := &processRecord{Name: "image-S-1", InfoID: "native-id", Config: []byte(`{"server_name":"image-S-1","listen":"127.0.0.1:19001","max_payload":8192}`)}
 	baseline := map[string]any{"server_name": "image-S-1", "server_id": "native-id", "host": "127.0.0.1", "port": json.Number("19001"), "proto": json.Number("1"), "max_payload": json.Number("8192")}

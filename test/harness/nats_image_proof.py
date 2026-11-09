@@ -146,6 +146,61 @@ def wire_sessions(value, directory, deadline):
     require(set(files) == expected_paths, "Extra connection wire evidence")
 
 
+def initial_sample(observation, process, value, orders):
+    """Classify one readiness sample as pending (False) or ready (True)."""
+    basic, plan, topology = value["basic"], value["basic"]["plan"], value["basic"]["topology"]
+    jsz = monitor(observation, process["name"], JSZ, orders)
+    streams = number(jsz.get("streams"), "initial stream count", 0, 1)
+    require(jsz.get("server_id") == process["info_id"] and number(jsz.get("total"), "initial account total") == 1 and
+            number(jsz.get("consumers"), "initial consumer count") == 0 and number(jsz.get("messages"), "initial message count") == 0 and
+            number(jsz.get("bytes"), "initial byte count") == 0, "Initial server identity or inventory changed")
+    accounts = jsz.get("account_details")
+    require(type(accounts) is list and len(accounts) == 1 and type(accounts[0]) is dict and
+            accounts[0].get("id") == "APP" and accounts[0].get("name") == "APP", "Initial account inventory changed")
+    streams_detail = accounts[0].get("stream_detail")
+    if streams == 0:
+        # Pinned clustered CREATE can answer before every voter materializes
+        # the stream. Only an explicit empty APP inventory may stay pending.
+        require("stream_detail" not in accounts[0] or (type(streams_detail) is list and not streams_detail),
+                "Contradictory pending stream inventory")
+        return False
+    require(type(streams_detail) is list and len(streams_detail) == 1 and type(streams_detail[0]) is dict, "Initial stream inventory changed")
+    stream = streams_detail[0]
+    config_join(stream.get("config"), value["initial"]["config"], plan, topology, False)
+    if topology == "standalone":
+        require("stream_raft_group" not in stream, "Standalone has a stream Raft group")
+    else:
+        require(stream.get("stream_raft_group") == value["stream_group"], "Original stream group changed")
+    require(stream.get("name") == "FENCE" and stream.get("created") == value["initial"]["created"],
+            "Original stream/group/configuration identity changed")
+    state(stream.get("state"), 0)
+    return True
+
+
+def initial_rounds(value, retained, calls):
+    """Join every retained readiness sample and freeze only the final complete round."""
+    basic = value["basic"]
+    count = 1 if basic["topology"] == "standalone" else 3
+    start, end = calls[0]["order"], basic["census"]["attempts"][0]["forwarded_order"]
+    window = [retained[order] for order in sorted(retained) if start < order < end]
+    require(window and len(window) % count == 0 and len(window) <= 600 * count, "Incomplete or unbounded initial readiness rounds")
+    inventories = value["initial_inventory"]
+    require(type(inventories) is list and len(inventories) == count, "Pre-restart group identity inventory missing")
+    final = window[-count:]
+    require([row["order"] for row in final] == [row.get("order") for row in inventories],
+            "Initial inventory is not the final complete readiness round")
+    orders = set()
+    for first in range(0, len(window), count):
+        ready = []
+        for process, row in zip(basic["processes"][:count], window[first:first + count]):
+            require(row["error"] == "", "Initial readiness request failed")
+            ready.append(initial_sample({key: item for key, item in row.items() if key != "error"}, process, value, orders))
+        if first + count == len(window):
+            require(all(ready), "Final initial readiness round is incomplete")
+        else:
+            require(not all(ready), "Complete initial readiness round was not frozen")
+
+
 def validate_report(value, directory, deadline=None):
     closed(value, {"schema_version", "kind", "status", "error", "basic", "rpc", "initial_inventory", "initial", "sealed",
                    "stream_group", "before", "after", "exports", "restart_publication_denial", "cleanup_complete", "store_snapshots"}, "Native image report")
@@ -168,7 +223,7 @@ def validate_report(value, directory, deadline=None):
     pending = {row["order"]: row for row in selected_http}
     require(len(pending) == len(selected_http), "Reused native HTTP observation")
     files = regular_files(directory / "http", 2000, deadline)
-    seen = set()
+    seen, retained = set(), {}
     for name, file in sorted(files.items()):
         require(re.fullmatch(r"[0-9]{4}\.json", name), "Unexpected native monitoring file")
         row = decode_json(read_bytes(file, 2 * 1024 * 1024, deadline))
@@ -176,6 +231,7 @@ def validate_report(value, directory, deadline=None):
         order = number(row["order"], "HTTP record order", 1)
         require(order not in seen, "Duplicate or contradictory native HTTP order")
         seen.add(order)
+        retained[order] = row
         if order in pending:
             require(row.get("error") == "" and {key: v for key, v in row.items() if key != "error"} == pending.pop(row["order"]),
                     "Retained monitoring bytes disagree with the selected sample")
@@ -222,24 +278,7 @@ def validate_report(value, directory, deadline=None):
         require(exported["response"] == call["body"] and exported["order"] == call["order"], "Export body or order substituted")
     require(raw(value["restart_publication_denial"], 1024, "publish denial") ==
             b'-ERR \'Permissions Violation for Publish to "fence.input"\'\r\n', "Restart data publish was not rejected")
-    inventories = value["initial_inventory"]
-    require(type(inventories) is list and len(inventories) == count, "Pre-restart group identity inventory missing")
-    orders = set()
-    for process, observation in zip(basic["processes"][:count], inventories):
-        jsz = monitor(observation, process["name"], JSZ, orders)
-        require(jsz.get("server_id") == process["info_id"] and number(jsz.get("total"), "initial account total") == 1,
-                "Initial server identity changed")
-        accounts = jsz.get("account_details")
-        require(type(accounts) is list and len(accounts) == 1 and accounts[0].get("id") == "APP", "Initial account inventory changed")
-        streams = accounts[0].get("stream_detail")
-        require(type(streams) is list and len(streams) == 1, "Initial stream inventory changed")
-        stream = streams[0]
-        config_join(stream.get("config"), value["initial"]["config"], plan, basic["topology"], False)
-        require(stream.get("name") == "FENCE" and stream.get("created") == value["initial"]["created"] and
-                stream.get("stream_raft_group") == value["stream_group"],
-                "Original stream/group/configuration identity changed")
-        state(stream.get("state"), 0)
-        require(calls[0]["order"] < observation["order"] < basic["census"]["attempts"][0]["forwarded_order"], "Initial inventory occurred after publication")
+    initial_rounds(value, retained, calls)
     # Socket audits are independent of summary row serialization.
     wire_sessions(value, directory, deadline)
     return {**result, "ordinary_path": "PUB/FileStorage/Limits/default-persist/no-batching/no-consumers", "runtime_admitted": False}

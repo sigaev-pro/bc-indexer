@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import nats_image
-from nats_image_proof import config_join, validate_report
+from nats_image_proof import config_join, initial_rounds, validate_report
 from test_nats_image_checks import encoded
 from test_nats_image_collection import document, change_body
 
@@ -51,6 +51,7 @@ def native_document(directory, topology="R3"):
         row["order"] = 9 + index
         def mutate(value):
             value["server_id"] = process["info_id"]
+            value.update(streams=1, consumers=0, messages=0, bytes=0)
             value["account_details"][0]["stream_detail"][0].update(source["initial"])
             value["account_details"][0]["stream_detail"][0]["config"] = {**source["initial"]["config"], "metadata": {"_nats.req.level": "0"}}
         change_body(row, mutate)
@@ -251,6 +252,116 @@ class NativeProofTests(unittest.TestCase):
                 position = 2 if topology == "standalone" else 4
                 (root / "wire" / f"{position:03d}-publisher.sent").write_bytes(b"unaccounted publication")
                 with self.assertRaisesRegex(ValueError, "requests or subscription"): validate_report(value, root)
+
+    def test_every_retained_readiness_sample_is_validated_and_only_the_final_round_is_frozen(self):
+        def pending(row, **changes):
+            sample = copy.deepcopy(row)
+            def mutate(value):
+                value.update(streams=0)
+                value["account_details"][0]["stream_detail"] = []
+                value.update(changes.pop("body", {}))
+            change_body(sample, mutate)
+            sample.update(changes)
+            return sample
+
+        def write(root, order, row, error=""):
+            (root / "http" / f"{9000 + order:04d}.json").write_text(json.dumps({**row, "order": order, "error": error}))
+
+        def standalone(root, extra):
+            # Move the selected sample to order 12 and retain earlier polls at 9-11.
+            value = native_document(root, "standalone")
+            selected = value["initial_inventory"][0]
+            (root / "http/0000.json").unlink()
+            selected["order"] = 12
+            (root / "http/0000.json").write_text(json.dumps({**selected, "error": ""}))
+            extra(root, selected)
+            return value
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            value = standalone(root, lambda r, s: [write(r, order, pending(s)) for order in (9, 10, 11)])
+            self.assertEqual(validate_report(value, root)["upper_sequence"], 4)
+        rejected = {
+            "failed request": lambda r, s: write(r, 11, pending(s), "boom"),
+            "server error": lambda r, s: write(r, 11, pending(s, status=500)),
+            "malformed body": lambda r, s: write(r, 11, {**pending(s), "body": encoded(b"{")}),
+            "foreign node": lambda r, s: write(r, 11, pending(s, node="foreign-node")),
+            "other path": lambda r, s: write(r, 11, pending(s, path="/varz")),
+            "foreign server": lambda r, s: write(r, 11, pending(s, body={"server_id": "OTHER"})),
+            "nonempty pending": lambda r, s: write(r, 11, pending(s, body={"messages": 1})),
+            "pending consumers": lambda r, s: write(r, 11, pending(s, body={"consumers": 1})),
+            "null pending detail": lambda r, s: write(r, 11, pending(s, body={"account_details": [{"name": "APP", "id": "APP", "stream_detail": None}]})),
+            "contradictory pending detail": lambda r, s: write(r, 11, pending(s, body={"account_details": s_body(s)["account_details"]})),
+            "earlier complete round": lambda r, s: write(r, 11, s),
+            "standalone stream group": lambda r, s: (change_body(s, lambda j: j["account_details"][0]["stream_detail"][0].update(stream_raft_group="S-R3F-x")),
+                                                     (r / "http/0000.json").write_text(json.dumps({**s, "error": ""}))),
+        }
+        def s_body(selected):
+            import base64
+            return json.loads(base64.b64decode(selected["body"]))
+        for name, extra in rejected.items():
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = standalone(root, extra)
+                with self.subTest(case=name), self.assertRaises(ValueError): validate_report(value, root)
+        for name, extra in {
+            "R3 server error": lambda r, v: write(r, 12, pending(v["initial_inventory"][2], status=500)),
+            "R3 foreign node": lambda r, v: write(r, 12, pending(v["initial_inventory"][2], node="foreign-node", path="/varz")),
+            "R3 mixed polls": lambda r, v: write(r, 12, v["initial_inventory"][2]),
+        }.items():
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                value = native_document(root)
+                if name == "R3 mixed polls":
+                    # Select S-3 from a later poll than S-1/S-2, with a pending S-3 between.
+                    third = value["initial_inventory"][2]
+                    write(root, 11, pending(third))
+                    (root / "http/0002.json").unlink()
+                    third["order"] = 12
+                extra(root, value)
+                with self.subTest(case=name), self.assertRaises(ValueError): validate_report(value, root)
+
+    def test_initial_rounds_accept_a_delayed_voter_and_freeze_only_the_final_round(self):
+        with tempfile.TemporaryDirectory() as temp:
+            value = native_document(Path(temp).resolve())
+        value["basic"]["census"]["attempts"][0]["forwarded_order"] = 30
+        calls = [{"order": 8}]
+        ready = value["initial_inventory"]
+
+        def empty(row):
+            sample = copy.deepcopy(row)
+            change_body(sample, lambda j: (j.update(streams=0), j["account_details"][0].pop("stream_detail")))
+            return sample
+
+        def regroup(row):
+            sample = copy.deepcopy(row)
+            change_body(sample, lambda j: j["account_details"][0]["stream_detail"][0].update(stream_raft_group="S-R3F-recreated"))
+            return sample
+
+        def window(*rows):
+            retained = {}
+            for order, row in enumerate(rows, 9):
+                retained[order] = {**copy.deepcopy(row), "order": order, "error": ""}
+            return retained
+
+        def select(retained, *orders):
+            bad = copy.deepcopy(value)
+            bad["initial_inventory"] = [{k: v for k, v in retained[o].items() if k != "error"} for o in orders]
+            return bad
+
+        delayed = window(ready[0], ready[1], empty(ready[2]), *ready)
+        initial_rounds(select(delayed, 12, 13, 14), delayed, calls)
+        cases = {
+            "mixed polls": (delayed, (9, 10, 14)),
+            "earlier partial round": (delayed, (9, 10, 11)),
+            "final round incomplete": (window(ready[0], ready[1], empty(ready[2]), ready[0], ready[1], empty(ready[2])), (12, 13, 14)),
+            "voter group changed": (window(ready[0], regroup(ready[1]), ready[2]), (9, 10, 11)),
+            "misaligned round": (window(empty(ready[0]), *ready), (10, 11, 12)),
+            "voter order changed": (window(ready[1], ready[0], ready[2]), (9, 10, 11)),
+        }
+        for name, (retained, orders) in cases.items():
+            with self.subTest(case=name), self.assertRaises(ValueError):
+                initial_rounds(select(retained, *orders), retained, calls)
 
     def test_original_stream_group_is_bound_before_restart(self):
         with tempfile.TemporaryDirectory() as temp:
