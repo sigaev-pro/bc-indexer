@@ -313,6 +313,8 @@ func RequireRewindAllowed(db ethdb.Database, newHead uint64) error {
 // so it must stay at or below the fork point of every pinned side-branch
 // header. Canonical pinned headers move to the freezer and stay readable, so
 // they impose no limit. A pinned header whose ancestry cannot be read fails.
+// Both limit and the result are exclusive; the native freezer threshold is
+// inclusive, so a patched freezer uses min(threshold, result-1).
 func FreezeLimit(db ethdb.Database, limit uint64) (uint64, error) {
 	pins, err := Pins(db)
 	if err != nil {

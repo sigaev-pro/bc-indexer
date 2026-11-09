@@ -46,25 +46,36 @@ COMMON_TESTS = (
     "TestNativeRewindDeletesPinnedHeader", "TestNativeStorePreflight", "TestNativeEffectiveProfile",
     "TestUnitLedgerPinOfAnotherStoreRejects", "TestUnitGuardedPrunerPaths", "TestUnitFreezeLimit")
 FAMILY_TESTS = {"geth": (), "bsc": ("TestNativeLegacyPruneOffset",), "bor": ("TestNativeLegacyPruneOffset",)}
-# Each family must report these profile cases; the Go test fixes accept or reject.
-PROFILE_CASES = {
-    "geth": {"baseline_flags", "allowed_native_args", "allowed_environment", "allowed_config",
-             "wrong_hash_profile_default", "wrong_hash_profile_flag", "wrong_hash_profile_environment",
-             "wrong_hash_profile_config", "environment_over_config_cannot_bypass", "flag_over_config_cannot_bypass",
-             "wrong_gc_profile_archive_flag", "wrong_gc_profile_archive_environment",
-             "wrong_gc_profile_archive_config"},
-    "bor": {"baseline_config", "allowed_config", "allowed_native_args", "environment_is_not_a_config_source",
-            "wrong_hash_profile_default", "wrong_hash_profile_config", "wrong_hash_profile_flag",
-            "wrong_gc_profile_archive_flag", "wrong_gc_profile_archive_config", "wrong_syncmode_flag",
-            "bor_pipelined_import", "bor_parallel_stateless", "bor_witness_sync", "bor_preconfirmation_relay",
-            "bor_preconfirmation_rpc", "bor_blockstm_enable", "bor_blockstm_enforce", "bor_blockstm_config",
-            "bor_sequencer"},
+# Expected outcome of every profile case, fixed here independently of the Go
+# report: accepted cases map to None, rejected cases to the text their
+# rejection must contain.
+_ETH_PROFILE = {
+    "baseline_flags": None, "allowed_native_args": None, "allowed_environment": None, "allowed_config": None,
+    "wrong_hash_profile_default": 'state scheme ""', "wrong_hash_profile_flag": 'state scheme "path"',
+    "wrong_hash_profile_environment": 'state scheme "path"', "wrong_hash_profile_config": 'state scheme "path"',
+    "environment_over_config_cannot_bypass": 'state scheme "path"', "flag_over_config_cannot_bypass": "gcmode archive",
+    "wrong_gc_profile_archive_flag": "gcmode archive", "wrong_gc_profile_archive_environment": "gcmode archive",
+    "wrong_gc_profile_archive_config": "gcmode archive"}
+PROFILE_EXPECTED = {
+    "geth": _ETH_PROFILE,
+    "bsc": dict(_ETH_PROFILE, **{
+        # BSC's own parser refuses a CLI or environment scheme that conflicts with the config file.
+        "environment_over_config_cannot_bypass": "incompatible state scheme",
+        "forbidden_pruning_ancient_flag": "pruneancient deletes block data",
+        "forbidden_pruning_block_history_flag": "history.blocks",
+        "forbidden_pruning_block_history_environment": "history.blocks",
+        "forbidden_pruning_block_history_config": "history.blocks"}),
+    "bor": {
+        "baseline_config": None, "allowed_config": None, "allowed_native_args": None,
+        "environment_is_not_a_config_source": None, "wrong_hash_profile_default": 'state.scheme "path"',
+        "wrong_hash_profile_config": 'state.scheme "path"', "wrong_hash_profile_flag": 'state.scheme "path"',
+        "wrong_gc_profile_archive_flag": 'gcmode "archive"', "wrong_gc_profile_archive_config": 'gcmode "archive"',
+        "wrong_syncmode_flag": 'syncmode "snap"', "bor_pipelined_import": "pipeline.enable-import-src",
+        "bor_parallel_stateless": "witness.parallelstatelessimport", "bor_witness_sync": "witness.syncwithwitnesses",
+        "bor_preconfirmation_relay": "relay.enable-preconfs", "bor_preconfirmation_rpc": "accept-preconf-tx",
+        "bor_blockstm_enable": "parallelevm.enable", "bor_blockstm_enforce": "parallelevm.enforce",
+        "bor_blockstm_config": "parallelevm.enable", "bor_sequencer": "sequencer.enabled"},
 }
-PROFILE_CASES["bsc"] = PROFILE_CASES["geth"] | {
-    "forbidden_pruning_ancient_flag", "forbidden_pruning_block_history_flag",
-    "forbidden_pruning_block_history_environment", "forbidden_pruning_block_history_config"}
-ACCEPTED_PROFILE_CASES = {"baseline_flags", "baseline_config", "allowed_native_args", "allowed_environment",
-                          "allowed_config", "environment_is_not_a_config_source"}
 PREFLIGHT_REJECTIONS = {
     "foreign_identity": "native store identity mismatch", "unbound_start_on_bound_store": "native store identity mismatch",
     "bound_expectation_on_unbound_store": "native store identity mismatch",
@@ -101,8 +112,8 @@ def source_commit():
         require(result.returncode == 0, "git failed: " + " ".join(args))
         return result.stdout
     head = git("rev-parse", "HEAD").strip()
-    require(not git("status", "--porcelain", "--untracked-files=all", "--", "adapters", "test/harness"),
-            "Adapters or harness differ from the committed source")
+    require(not git("status", "--porcelain", "--untracked-files=all", "--", "adapters", "test"),
+            "Adapters or tests differ from the committed source")
     return head
 
 
@@ -361,12 +372,13 @@ def evaluate_report(family, rows, blocks):
     require(preflight["native_hash_override_on_path_store"].startswith("incompatible state scheme"),
             "Native parser converted a path store")
     profile = named[("TestNativeEffectiveProfile", "profile")]
-    require(set(profile["cases"]) == PROFILE_CASES[family], "Profile cases differ from the declared set")
+    expected = PROFILE_EXPECTED[family]
+    require(set(profile["cases"]) == set(expected) == set(profile["results"]), "Profile cases differ from the declared set")
     for case, result in profile["results"].items():
-        accepted = case in ACCEPTED_PROFILE_CASES
-        require(result["accepted"] is accepted and (result["reason"] == "") is accepted,
+        reason = expected[case]
+        require(result["accepted"] is (reason is None) and result["reason"] == (reason or ""),
                 f"Profile case {case} has the wrong outcome")
-        require(accepted or result["reason"] in " ".join(strings(result["detail"])),
+        require(reason is None or reason in " ".join(strings(result["detail"])),
                 f"Profile case {case} was rejected for another reason")
     return {"recovered_head": pinned["recovered_head"], "pinned_walk": pinned["walk"], "pruning_refused": pruning["refused"],
             "native_default_scheme_for_empty_store": preflight["native_default_scheme_for_empty_store"],

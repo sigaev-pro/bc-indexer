@@ -69,7 +69,7 @@ a source review of the three accepted clients. Each has a ledger guard:
 | Head rewind (`BlockChain.SetHead`, crash repair) | Every header above the new head | `RequireRewindAllowed(db, newHead)` refuses a rewind below a pinned header |
 | Chain freezer (`chain_freezer.go` side-chain wipe) | Side-chain blocks at every frozen number and their dangling descendants | `FreezeLimit(db, limit)` keeps freezing at or below the fork point of every pinned side-branch header; frozen canonical headers stay readable |
 | BSC `--pruneancient`, `--history.blocks` | Old block data, headers included | Rejected by `CheckProfile` |
-| BSC `prune-block`, Bor `snapshot prune-block` (offline) | Old block data, headers included | `Preflight` rejects the offset these commands leave behind |
+| Bor `snapshot prune-block` (offline), or a home pruned by an older BSC `prune-block` (the accepted BSC commit has no such command) | Old block data, headers included | `Preflight` rejects the offset these commands leave behind |
 
 Geth has no online setting at this commit that deletes pinned state or
 headers; for Ethereum, `forbidden_pruning` is the offline prune-state path,
