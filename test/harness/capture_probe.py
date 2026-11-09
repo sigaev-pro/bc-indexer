@@ -194,13 +194,15 @@ def prepare_family(family, manifest, root, output, native, compiler, deadline):
     row["probe_sources"] = copy_sources(PROBE_FILES, FIXTURE, probe, deadline)
     row["capture_sources"] = copy_sources(CAPTURE_FILES, ROOT / "core/capture", directory / "capture", deadline)
     version = go_directive((source / "go.mod").read_text())
-    (directory / "go.work").write_text(f"go {version}\n\nuse (\n\t./source\n\t./capture\n)\n")
-    row["go_work"] = reference(directory / "go.work")
-    for name in ("bin", "build-cache", "gopath"):
+    for name in ("bin", "build-cache", "gopath", "workspace"):
         (directory / name).mkdir()
-    mounts = [(directory, "/work", True), (root / "cache" / family / "mod", "/modules", True),
-              (directory / "bin", "/work/bin", False), (directory / "build-cache", "/work/build-cache", False),
-              (directory / "gopath", "/work/gopath", False)]
+    # Workspace mode may record checksums of the verified offline cache in go.work.sum,
+    # so the workspace file lives in its own writable directory.
+    (directory / "workspace/go.work").write_text(f"go {version}\n\nuse (\n\t../source\n\t../capture\n)\n")
+    row["go_work"] = reference(directory / "workspace/go.work")
+    mounts = [(directory, "/work", True), (root / "cache" / family / "mod", "/modules", True)]
+    for name in ("bin", "build-cache", "gopath", "workspace"):
+        mounts.append((directory / name, f"/work/{name}", False))
     environment = {"CGO_ENABLED": "0", "GOENV": "off", "GOOS": "linux", "GOARCH": "amd64",
                    "GOCACHE": "/work/build-cache", "GOMODCACHE": "/modules", "GOPATH": "/work/gopath",
                    "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local",
@@ -212,7 +214,9 @@ def prepare_family(family, manifest, root, output, native, compiler, deadline):
         build += ["-tags", "extractor_bor"]
     build += ["-o", "/work/bin/probe", "./cmd/extractor-capture-probe"]
     native.command(compiler, build, mounts, cap=900, memory="4g", cwd="/work/source",
-                   environment={**environment, "GOWORK": "/work/go.work"})
+                   environment={**environment, "GOWORK": "/work/workspace/go.work"})
+    workspace_sum = directory / "workspace/go.work.sum"
+    row["go_work_sum"] = reference(workspace_sum) if workspace_sum.exists() else None
     copy_artifact(FIXTURE / "genesis.json", directory / "bin/genesis.json", reference(FIXTURE / "genesis.json"),
                   deadline=deadline)
     row["binary"] = reference(directory / "bin/probe", deadline=deadline)
