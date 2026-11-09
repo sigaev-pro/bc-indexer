@@ -9,7 +9,10 @@ E05-01, the harness writes no RunManifest, and the first `run_started: true`
 reader boundary belongs to E03-11. Executed source `b338c60` makes the runner
 fail closed (lock, signals, always teardown and record), scopes cleanup to its
 own containers, takes phase deadlines from the plan and adds negative controls.
-Measured run 02 passed all three families in 28.988 seconds of execution with
+Review 002 found a run record that could be skipped and untested repair paths;
+executed source `b04ff76` always records the run, blocks signals while stopping a
+child, fails cleanup on foreign harness containers and adds the missing controls.
+Measured run 03 passed all three families in 32.479 seconds of execution with
 clean teardown. Remaining #12 items after this block: the Go `settled()` raftz
 field-name follow-up from PR #128. Next: exact-head CI, fresh Spec and Standards
 reviews, protected acceptance.
