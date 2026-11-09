@@ -203,6 +203,16 @@ class EvidenceSummaryTests(unittest.TestCase):
                 self.assertIn(message, errors)
                 self.assertIn("no summary printed", errors)
 
+    def test_non_regular_reference_fails_closed(self):
+        run = self.fixture.nats_run()
+        path = run / "image-fence.json"
+        proof = json.loads(path.read_text())
+        proof["device"] = {"path": os.devnull, "sha256": hashlib.sha256(b"").hexdigest(), "size_bytes": 0}
+        write_json(path, proof)
+        code, output, errors = run_tool(run)
+        self.assertEqual((code, output), (1, ""))
+        self.assertIn("not a regular file", errors)
+
     def test_lineage_follows_previous_attempts_and_verifies_them(self):
         first = self.fixture.nats_run("nats-image-fence-01-abc")
         first_proof = first / "image-fence.json"
@@ -219,6 +229,21 @@ class EvidenceSummaryTests(unittest.TestCase):
         code, output, errors = run_tool(second)
         self.assertEqual((code, output), (1, ""))
         self.assertIn("image-fence.json", errors)
+
+    def test_lineage_verifies_attempts_beyond_the_directly_cited_one(self):
+        previous = None
+        for attempt in range(1, 5):
+            run = self.fixture.nats_run(f"nats-image-fence-0{attempt}-abc", previous=previous, attempt=attempt)
+            previous = reference(run / "image-fence.json")
+        code, output, _ = run_tool(run)
+        self.assertEqual(code, 0)
+        self.assertIn("Attempt index 4; previous attempts, newest first: `nats-image-fence-03-abc`", output)
+        self.assertIn("`nats-image-fence-01-abc` PASS attempt 1", output)
+        oldest = self.fixture.root / "nats-image-fence-01-abc" / "image-fence.json"
+        oldest.write_text(oldest.read_text().replace('"run_id": "r1"', '"run_id": "r9"'))
+        code, output, errors = run_tool(run)
+        self.assertEqual((code, output), (1, ""))
+        self.assertIn("nats-image-fence-01-abc/image-fence.json", errors)
 
     def test_lineage_loops_and_non_references_are_malformed(self):
         run = self.fixture.nats_run()
@@ -322,6 +347,8 @@ class EvidenceSummaryTests(unittest.TestCase):
         self.assertEqual(counts["go"]["subtests"], {"PASS": 1, "FAIL": 1})
         self.assertEqual(counts["go"]["packages"], {"ok": 1})
         self.assertEqual(counts["python"], [{"tests": 3, "seconds": 0.5, "status": "FAILED", "detail": "failures=1"}])
+        later = evidence_summary.test_counts("Ran 2 tests in 0.1s\n\nOK\nFAILED (errors=1)\n")
+        self.assertEqual((later["python"][0]["status"], later["python"][0]["detail"]), ("OK", None))
         self.assertIsNone(evidence_summary.test_counts("no tests here\n"))
         self.assertEqual(evidence_summary.describe_tests(evidence_summary.test_counts("Ran 1 test in 0.1s\n")),
                          "Python 1 tests NO_STATUS in 0.100 s")

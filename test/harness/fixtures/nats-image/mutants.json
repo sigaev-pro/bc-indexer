@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the Go settle filter settled() and the waitInitial prechecks; ported from retained record nats-go-mutants-09-ed723a4.",
+  "language": "go",
+  "root": ".",
+  "copy": [
+    "*.go"
+  ],
+  "go_module": "natsimage",
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "-v",
+    "."
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "old flag names",
+      "file": "monitor.go",
+      "original": "\"paused\", \"catching_up\", \"observer\", \"overrun\", \"wal_error\"",
+      "replacement": "\"paused\", \"catchup\", \"observer\", \"overrun\", \"write_error\""
+    },
+    {
+      "name": "drop paused",
+      "file": "monitor.go",
+      "original": "\"paused\", \"catching_up\", \"observer\", \"overrun\", \"wal_error\"",
+      "replacement": "\"catching_up\", \"observer\", \"overrun\", \"wal_error\""
+    },
+    {
+      "name": "drop catching_up",
+      "file": "monitor.go",
+      "original": "\"paused\", \"catching_up\", \"observer\", \"overrun\", \"wal_error\"",
+      "replacement": "\"paused\", \"observer\", \"overrun\", \"wal_error\""
+    },
+    {
+      "name": "drop observer",
+      "file": "monitor.go",
+      "original": "\"paused\", \"catching_up\", \"observer\", \"overrun\", \"wal_error\"",
+      "replacement": "\"paused\", \"catching_up\", \"overrun\", \"wal_error\""
+    },
+    {
+      "name": "drop overrun",
+      "file": "monitor.go",
+      "original": "\"paused\", \"catching_up\", \"observer\", \"overrun\", \"wal_error\"",
+      "replacement": "\"paused\", \"catching_up\", \"observer\", \"wal_error\""
+    },
+    {
+      "name": "drop wal_error",
+      "file": "monitor.go",
+      "original": "\"paused\", \"catching_up\", \"observer\", \"overrun\", \"wal_error\"",
+      "replacement": "\"paused\", \"catching_up\", \"observer\", \"overrun\""
+    },
+    {
+      "name": "flag accepts only true",
+      "file": "monitor.go",
+      "original": "present && value != false && value != \"\"",
+      "replacement": "present && value == true"
+    },
+    {
+      "name": "flag rejects false",
+      "file": "monitor.go",
+      "original": "present && value != false && value != \"\"",
+      "replacement": "present && value != \"\""
+    },
+    {
+      "name": "node count",
+      "file": "monitor.go",
+      "original": "if len(result.Nodes) != count {",
+      "replacement": "if len(result.Nodes) < 1 {"
+    },
+    {
+      "name": "health status",
+      "file": "monitor.go",
+      "original": "node.Health.Status != 200 || health[\"status\"] != \"ok\"",
+      "replacement": "health[\"status\"] != \"ok\""
+    },
+    {
+      "name": "health body",
+      "file": "monitor.go",
+      "original": "node.Health.Status != 200 || health[\"status\"] != \"ok\"",
+      "replacement": "node.Health.Status != 200 || (health[\"status\"] != \"ok\" && false)"
+    },
+    {
+      "name": "jsz status",
+      "file": "monitor.go",
+      "original": "if err != nil || node.JSZ.Status != 200 {",
+      "replacement": "if err != nil {"
+    },
+    {
+      "name": "sealed",
+      "file": "monitor.go",
+      "original": "if !ok || config[\"sealed\"] != true {",
+      "replacement": "if !ok || (config[\"sealed\"] != true && false) {"
+    },
+    {
+      "name": "group status",
+      "file": "monitor.go",
+      "original": "observation.Status != 200 || row[\"id\"] != nativeMember(name)",
+      "replacement": "row[\"id\"] != nativeMember(name)"
+    },
+    {
+      "name": "member id",
+      "file": "monitor.go",
+      "original": "observation.Status != 200 || row[\"id\"] != nativeMember(name)",
+      "replacement": "observation.Status != 200 || (row[\"id\"] != nativeMember(name) && false)"
+    },
+    {
+      "name": "pindex type",
+      "file": "monitor.go",
+      "original": "progress, ok := number(row[\"pindex\"])\n\t\t\tif !ok {",
+      "replacement": "progress, ok := number(row[\"pindex\"])\n\t\t\tif !ok && false {"
+    },
+    {
+      "name": "commit or apply lag",
+      "file": "monitor.go",
+      "original": "if !valid || value != progress {",
+      "replacement": "if !valid || (value != progress && false) {"
+    },
+    {
+      "name": "commit or apply type",
+      "file": "monitor.go",
+      "original": "if !valid || value != progress {",
+      "replacement": "if (!valid && false) || value != progress {"
+    },
+    {
+      "name": "only committed",
+      "file": "monitor.go",
+      "original": "[]string{\"committed\", \"applied\"}",
+      "replacement": "[]string{\"committed\"}"
+    },
+    {
+      "name": "only applied",
+      "file": "monitor.go",
+      "original": "[]string{\"committed\", \"applied\"}",
+      "replacement": "[]string{\"applied\"}"
+    },
+    {
+      "name": "queue nonzero",
+      "file": "monitor.go",
+      "original": "if !valid || value != 0 {",
+      "replacement": "if !valid || (value != 0 && false) {"
+    },
+    {
+      "name": "queue type",
+      "file": "monitor.go",
+      "original": "if !valid || value != 0 {",
+      "replacement": "if (!valid && false) || value != 0 {"
+    },
+    {
+      "name": "drop ipq_proposal_len",
+      "file": "monitor.go",
+      "original": "\"ipq_proposal_len\", \"ipq_entry_len\", \"ipq_resp_len\", \"ipq_apply_len\"",
+      "replacement": "\"ipq_entry_len\", \"ipq_resp_len\", \"ipq_apply_len\""
+    },
+    {
+      "name": "drop ipq_entry_len",
+      "file": "monitor.go",
+      "original": "\"ipq_proposal_len\", \"ipq_entry_len\", \"ipq_resp_len\", \"ipq_apply_len\"",
+      "replacement": "\"ipq_proposal_len\", \"ipq_resp_len\", \"ipq_apply_len\""
+    },
+    {
+      "name": "drop ipq_resp_len",
+      "file": "monitor.go",
+      "original": "\"ipq_proposal_len\", \"ipq_entry_len\", \"ipq_resp_len\", \"ipq_apply_len\"",
+      "replacement": "\"ipq_proposal_len\", \"ipq_entry_len\", \"ipq_apply_len\""
+    },
+    {
+      "name": "drop ipq_apply_len",
+      "file": "monitor.go",
+      "original": "\"ipq_proposal_len\", \"ipq_entry_len\", \"ipq_resp_len\", \"ipq_apply_len\"",
+      "replacement": "\"ipq_proposal_len\", \"ipq_entry_len\", \"ipq_resp_len\""
+    },
+    {
+      "name": "empty leader",
+      "file": "monitor.go",
+      "original": "if !ok || leader == \"\" {",
+      "replacement": "if !ok {",
+      "equivalent": "An empty leader cannot match any member ID, so the leader count already rejects it."
+    },
+    {
+      "name": "role",
+      "file": "monitor.go",
+      "original": "if row[\"state\"] != role {",
+      "replacement": "if row[\"state\"] != role && false {"
+    },
+    {
+      "name": "fingerprint leader",
+      "file": "monitor.go",
+      "original": "fmt.Sprintf(\"%v/%v/%v/%d\", leader, row[\"term\"], row[\"pterm\"], progress)",
+      "replacement": "fmt.Sprintf(\"%v/%v/%d\", row[\"term\"], row[\"pterm\"], progress)"
+    },
+    {
+      "name": "fingerprint term",
+      "file": "monitor.go",
+      "original": "fmt.Sprintf(\"%v/%v/%v/%d\", leader, row[\"term\"], row[\"pterm\"], progress)",
+      "replacement": "fmt.Sprintf(\"%v/%v/%d\", leader, row[\"pterm\"], progress)"
+    },
+    {
+      "name": "fingerprint log term",
+      "file": "monitor.go",
+      "original": "fmt.Sprintf(\"%v/%v/%v/%d\", leader, row[\"term\"], row[\"pterm\"], progress)",
+      "replacement": "fmt.Sprintf(\"%v/%v/%d\", leader, row[\"term\"], progress)"
+    },
+    {
+      "name": "fingerprint index",
+      "file": "monitor.go",
+      "original": "fmt.Sprintf(\"%v/%v/%v/%d\", leader, row[\"term\"], row[\"pterm\"], progress)",
+      "replacement": "fmt.Sprintf(\"%v/%v/%v\", leader, row[\"term\"], row[\"pterm\"])"
+    },
+    {
+      "name": "fingerprint comparison",
+      "file": "monitor.go",
+      "original": "exists && previous != fingerprint",
+      "replacement": "exists && previous == \"never\""
+    },
+    {
+      "name": "group count",
+      "file": "monitor.go",
+      "original": "if len(common) != 2 {",
+      "replacement": "if len(common) < 1 {"
+    },
+    {
+      "name": "leader count",
+      "file": "monitor.go",
+      "original": "if leaders[key] != 1 {",
+      "replacement": "if leaders[key] < 1 {",
+      "equivalent": "Distinct member IDs allow at most one matching leader, so `< 1` rejects every count that `!= 1` rejects."
+    },
+    {
+      "name": "leader count disabled",
+      "file": "monitor.go",
+      "original": "if leaders[key] != 1 {",
+      "replacement": "if leaders[key] != 1 && false {"
+    },
+    {
+      "name": "initial topology",
+      "file": "monitor.go",
+      "original": "if count != 1 && count != 3 {",
+      "replacement": "if count < 1 {"
+    },
+    {
+      "name": "initial created",
+      "file": "monitor.go",
+      "original": "!ok || created == \"\"",
+      "replacement": "!ok || (created == \"\" && false)"
+    },
+    {
+      "name": "initial config",
+      "file": "monitor.go",
+      "original": "if _, err := storedConfig(initial[\"config\"], true); err != nil {",
+      "replacement": "if _, err := storedConfig(initial[\"config\"], true); err != nil && false {"
+    },
+    {
+      "name": "initial group drift",
+      "file": "monitor.go",
+      "original": "if group != nil && *group != found {",
+      "replacement": "if group != nil && *group != found && false {"
+    }
+  ]
+}

@@ -1,5 +1,39 @@
 # Состояние проекта
 
+## Review tooling that cuts review rounds (D97 process improvements 1-3)
+
+Status: IN_PROGRESS. Owner-approved process improvements 1-3, run in parallel
+with E01-02.pins and E01-02.owned_capture under D97 (draft PR #131). Most extra
+review rounds in PRs #128-#130 came from hand-copied evidence numbers, hand-made
+mutation checks (one counted 10 compile failures as kills) and a flaky
+controller test. Outputs:
+
+- `test/harness/evidence_summary.py`: prints the figures an evidence section
+  quotes from one retained run and fails closed on any reference mismatch.
+  It reproduces the figures of attempt 08, preparation 08, attempt 06 and
+  runner run 04 and verifies all 41 retained NATS, runner and family runs.
+- `test/mutate.py`: shared single-check mutation tool for Python and Go with
+  tables next to the code (`*.mutants.json`). Mutants must compile first; a
+  build failure is BUILD_FAILED and fails the tool. The ported NATS driver
+  table reproduces record 09 (38 killed, two pre-labeled equivalents).
+- `.project/docs/REVIEW_CHECKLIST.md`, linked from DEVELOPMENT_WORKFLOW.
+- Deterministic controller tests: the watchdog spawn test failed when the
+  supervisor started after its own 0.3-second dispatch deadline; the signal
+  test failed when Darwin returned a transient EPERM from `killpg` that
+  `terminate_group` treated as a final denial (fixed in `session_runner.py`).
+
+Allowed paths: `test/mutate.py`, `test/test_mutate.py`, `test/mutate.mutants.json`,
+`test/harness/evidence_summary*`, `test/harness/test_evidence_summary.py`,
+`test/harness/fixtures/nats-image/mutants.json`, `.project/automation/ci.py`,
+`.project/automation/session_runner*`, `.project/automation/test_controller_runtime.py`,
+`.project/automation/test_ci_discovery.py`, `.project/docs/REVIEW_CHECKLIST.md`,
+`.project/docs/DEVELOPMENT_WORKFLOW.md` and this status file. No adapter,
+capture, NATS or runner production logic changes; no Docker or native run.
+
+Base: `f8d3e67`. Branch/worktree: `feat/review-tooling` / `harness-review-tooling-288aea`.
+Next: self-check, CI, Spec and Standards reviews, draft PR. Merge needs the
+owner's permission for this PR.
+
 ## E01-01.harness — NATS settle check uses pinned raftz names
 
 Status: READY_FOR_REVIEW. This is the last open #12 item: the PR #128 follow-up

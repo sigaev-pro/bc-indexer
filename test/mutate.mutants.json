@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of mutate.py.",
+  "language": "python",
+  "copy": [
+    "mutate.py",
+    "test_mutate.py"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "-v",
+    "test_mutate"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "mutant build check",
+      "file": "mutate.py",
+      "original": "            build = self.compile(work, mutant[\"file\"])\n            if build[\"exit_code\"] != 0:",
+      "replacement": "            build = self.compile(work, mutant[\"file\"])\n            if False:"
+    },
+    {
+      "name": "baseline test check",
+      "file": "mutate.py",
+      "original": "            if tested[\"exit_code\"] != 0:\n                return {\"status\": \"BASELINE_FAILED\"",
+      "replacement": "            if False:\n                return {\"status\": \"BASELINE_FAILED\""
+    },
+    {
+      "name": "python import",
+      "file": "mutate.py",
+      "original": "\"for name in sys.argv[4:]:\\n\"",
+      "replacement": "\"for name in []:\\n\""
+    },
+    {
+      "name": "exactly one match",
+      "file": "mutate.py",
+      "original": "            if count != 1:",
+      "replacement": "            if count < 1:"
+    },
+    {
+      "name": "named kill required",
+      "file": "mutate.py",
+      "original": "        elif killers:",
+      "replacement": "        elif True:"
+    },
+    {
+      "name": "unlabeled survivor",
+      "file": "mutate.py",
+      "original": "            row[\"status\"] = \"EQUIVALENT\" if \"equivalent\" in mutant else \"SURVIVED\"",
+      "replacement": "            row[\"status\"] = \"EQUIVALENT\""
+    },
+    {
+      "name": "mislabeled equivalent",
+      "file": "mutate.py",
+      "original": "\"mislabeled_equivalent\": [row[\"name\"] for row in rows if row[\"status\"] == \"KILLED\" and \"equivalent\" in row],",
+      "replacement": "\"mislabeled_equivalent\": [],"
+    },
+    {
+      "name": "timeout is a kill",
+      "file": "mutate.py",
+      "original": "        if tested[\"timed_out\"]:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "timeout kills the group",
+      "file": "mutate.py",
+      "original": "            os.killpg(process.pid, signal.SIGKILL)\n        output, _ = process.communicate()",
+      "replacement": "            process.kill()\n        output, _ = process.communicate()"
+    },
+    {
+      "name": "go assertion lines",
+      "file": "mutate.py",
+      "original": "    r\"|[\\w./-]+_test\\.go:\\d+: .*\"               # Go test assertion line\n",
+      "replacement": ""
+    },
+    {
+      "name": "python test name",
+      "file": "mutate.py",
+      "original": "            names.append(location if location.endswith(\".\" + method) else f\"{location}.{method}\")",
+      "replacement": "            names.append(location)"
+    },
+    {
+      "name": "inside root",
+      "file": "mutate.py",
+      "original": "        if not target.is_relative_to(root) or not target.is_file():",
+      "replacement": "        if not target.is_file():",
+      "equivalent": "A file outside root is never among the copied files, so the uncopied-file check still rejects the table with exit 2 before any copy is written."
+    },
+    {
+      "name": "no-op mutant",
+      "file": "mutate.py",
+      "original": "        if mutant[\"original\"] == mutant[\"replacement\"]:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "mutate the copy",
+      "file": "mutate.py",
+      "original": "            target = work / mutant[\"file\"]",
+      "replacement": "            target = self.root / mutant[\"file\"]"
+    },
+    {
+      "name": "existing output",
+      "file": "mutate.py",
+      "original": "        if output.exists() or output.is_symlink():",
+      "replacement": "        if output.is_symlink():"
+    },
+    {
+      "name": "uncopied file",
+      "file": "mutate.py",
+      "original": "        if uncopied:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "no bytecode",
+      "file": "mutate.py",
+      "original": "        environment[\"PYTHONDONTWRITEBYTECODE\"] = \"1\"\n",
+      "replacement": "",
+      "equivalent": "Tests run only in temporary copies, so bytecode never reaches the source tree."
+    },
+    {
+      "name": "verdict",
+      "file": "mutate.py",
+      "original": "    return baseline[\"status\"] == \"PASS\" and not failures",
+      "replacement": "    return not failures"
+    }
+  ]
+}

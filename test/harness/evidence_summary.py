@@ -324,7 +324,7 @@ def case_rows(proof):
     return rows
 
 
-def launcher_records(run, proof_file):
+def launcher_records(run):
     """Read exit records kept beside the run, never inside its proof."""
     records = []
     candidates = [run.parent / (run.name + ".exit"), run / "run.exit"]
@@ -367,7 +367,7 @@ def summarize(run, test_logs=()):
         "top_references": top, "references": survey, "lineage": lineage(proof, verifier),
         "commands": command_rows(proof, verifier), "phases": phase_rows(proof),
         "children": child_rows(proof, verifier), "cases": case_rows(proof),
-        "launchers": launcher_records(run, path), "test_logs": [],
+        "launchers": launcher_records(run), "test_logs": [],
     }
     for log in test_logs:
         log = Path(log).resolve()

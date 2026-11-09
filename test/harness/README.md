@@ -678,6 +678,23 @@ and `case_oracle_acceptance_belongs_to_ac_owner`. Oracle independence for the
 three accepted fixtures was reviewed with their family slices (PRs #122–#124);
 accepting an oracle for a case verdict stays with that AC's owner.
 
+## Evidence figures and mutation checks
+
+`evidence_summary.py RUN_DIR` reads one retained run (`image-fence.json`,
+`preparation.json` or `run/run-record.json`) and prints a Markdown block with
+the proof, tool and native-report SHA256 values, timings, exit codes, cleanup
+and process-group flags, Go and Python test counts, unique absolute references
+with total bytes, and the attempt lineage. It only reads, verifies every
+absolute reference first and prints no summary on a mismatch (exit 1). Add
+`--test-log PATH` for a test log kept outside the run. Set
+`EVIDENCE_SUMMARY_RUNS` to the retained `d95-20261107` directory to run the
+opt-in checks against figures quoted in `.project/evidence/E01-01.harness.md`.
+
+`../mutate.py TABLE --output RUN_DIR` runs single-check mutants from a table
+kept next to its code: `evidence_summary.mutants.json` here and
+`fixtures/nats-image/mutants.json` for the Go driver. Every mutant must compile
+first; see the tool's help for the table format and verdicts.
+
 ## Issue 12 boundary and earlier slice notes
 
 The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)

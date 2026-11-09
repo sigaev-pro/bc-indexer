@@ -297,11 +297,18 @@ class TerminateGroupPermissionTests(unittest.TestCase):
             polls.append(True)
             return exits_after is not None and len(polls) > exits_after
 
+        sleeps = []
+
+        def bounded_sleep(seconds):
+            sleeps.append(seconds)
+            if len(sleeps) > 100000:
+                raise AssertionError("terminate_group kept polling past its grace deadline")
+
         process = SimpleNamespace(pid=424242, returncode=None)
         with patch.object(session_runner.os, "killpg", side_effect=killpg), \
                 patch.object(session_runner, "exited_unreaped", side_effect=exited), \
                 patch.object(session_runner, "live_group_members", return_value=live), \
-                patch.object(session_runner.time, "sleep"):
+                patch.object(session_runner.time, "sleep", side_effect=bounded_sleep):
             return session_runner.terminate_group(process, grace=grace), calls
 
     def test_transient_eperm_while_polling_is_not_a_denial(self):

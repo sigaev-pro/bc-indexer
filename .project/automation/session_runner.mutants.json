@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the terminate_group EPERM handling and the watchdog no-resume rule.",
+  "language": "python",
+  "copy": [
+    "*.py"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "-v",
+    "test_controller_runtime"
+  ],
+  "timeout_seconds": 120,
+  "mutants": [
+    {
+      "name": "polling EPERM is final",
+      "file": "session_runner.py",
+      "original": "        except PermissionError:\n            pass\n        if group_gone(process):",
+      "replacement": "        except PermissionError:\n            return \"cleanup-denied\"\n        if group_gone(process):"
+    },
+    {
+      "name": "SIGTERM EPERM exit wait",
+      "file": "session_runner.py",
+      "original": "            if group_gone(process):\n                return \"already-exited\"",
+      "replacement": "            if False:\n                return \"already-exited\""
+    },
+    {
+      "name": "SIGTERM EPERM deadline",
+      "file": "session_runner.py",
+      "original": "            if time.monotonic() >= deadline:\n                return \"cleanup-denied\"",
+      "replacement": "            if False:\n                return \"cleanup-denied\""
+    },
+    {
+      "name": "SIGKILL EPERM after exit",
+      "file": "session_runner.py",
+      "original": "        return \"graceful\" if group_gone(process) else \"cleanup-denied\"",
+      "replacement": "        return \"cleanup-denied\""
+    },
+    {
+      "name": "live members",
+      "file": "session_runner.py",
+      "original": "    return exited_unreaped(process) and not live_group_members(process.pid)",
+      "replacement": "    return exited_unreaped(process)"
+    },
+    {
+      "name": "watchdog resumes",
+      "file": "session_runner.py",
+      "original": "    supervisor = \"forced-while-stopped\" if frozen else \"forced-with-uncertain-child-ownership\"\n",
+      "replacement": "    supervisor = \"forced-while-stopped\" if frozen else \"forced-with-uncertain-child-ownership\"\n    os.kill(process.pid, signal.SIGCONT)\n    time.sleep(0.3)\n"
+    }
+  ]
+}
