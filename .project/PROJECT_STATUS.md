@@ -66,6 +66,41 @@ Next: Spec and Standards review of the new head, then the coordinator asks the
 owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
 this core into each client; the Bor block adds the in-process Heimdall stub.
 
+## E01-02.inputs — Geth block
+
+Status: IN_PROGRESS in draft PR #138; not accepted until review, CI and the
+owner's merge permission. Part of #14, after block 0 (PR #137, merged at
+`a2fb163`). Role: native-engineer (D98 item 5). Base `a2fb163`.
+
+Allowed paths: `test/harness/source_inputs_geth.py`,
+`test/harness/fixtures/source_inputs_geth/**` (coordinator technical decision:
+Geth-only files cannot live in `adapters/geth/source_inputs/` because the
+block 0 identity check compares every file of the three copies),
+`.project/evidence/E01-02.inputs.geth.md` and this section. Shared core files
+are unchanged. Profiles: none; private local Geth import with the ethash
+faker, so no AC verdict (AC-CAP-04-0x are POLY only) and no public-profile
+credit (D96, D98).
+
+Output: a test-only probe built inside the accepted Geth tree runs the shared
+core on the chain's own Pebble database. It routes the BLOCKHASH ancestor
+lookup of the serial state processor through the log as a test-only
+stand-in dependency; the product patch and the product classification of
+Geth ancestor hashes belong to E01-02.admission (D98).
+
+Review 001 (head `b8ece65`): Spec and Standards REQUEST_CHANGES. Commits
+`5e7bda8` and `affd2f9` add a replay of a saved log that differs from native
+truth, driver controls, two native mutants and the P3 fixes.
+
+Checks at commit `affd2f9`: preparation 02 PASS (shared unit tests 20 PASS
+inside the native module, five native mutants built); measured run 02 PASS
+(15.170 seconds of execution; the probe passes and all five native mutants
+are killed); Python mutants 95 killed, 0 survivors; 39 portable tests.
+Superseded run 01 and the failed hosted CI run are kept. Details and limits:
+[E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
+
+Next: fresh Spec and Standards review of the new head, exact-head
+`bootstrap/ci`, then the coordinator asks the owner for merge permission.
+
 ## E01-02.inputs — Bor block
 
 Status: IN_PROGRESS (draft PR, Part of #14). Base main `a2fb163` (block 0
