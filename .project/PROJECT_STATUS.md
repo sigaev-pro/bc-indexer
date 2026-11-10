@@ -2,44 +2,29 @@
 
 ## E01-02.pins — Native state retention and release (issue #13)
 
-Status: IN_PROGRESS. Block outcome: a hash-provider pin seam in
-`adapters/{geth,bsc,bor}/state_provider`, compiled inside each accepted native
-module, with a durable pin ledger in the native key-value store, a pin-aware
-guard on the native offline state pruner, and a read-only store and
-effective-profile preflight. Runtime evidence uses the accepted private local
-fixtures of the three families (D96 pattern) through the test driver
-`test/harness/pins.py`. Assigned ACs: AC-CAP-03-01, AC-CAP-03-02, AC-OPS-01-02,
-AC-OPS-01-03, AC-OPS-03-02.
+Status: READY_FOR_REVIEW in draft PR #133; #13 stays open. The block adds the
+hash-provider pin seam `adapters/{geth,bsc,bor}/state_provider` (durable pin
+ledger in the native key-value store; guards for the offline pruner, its
+startup resume, head rewinds and the chain freezer's side-chain wipe; a
+read-only store preflight; an effective-profile check) and the driver
+`test/harness/pins.py`. Assigned ACs: AC-CAP-03-01, AC-CAP-03-02,
+AC-OPS-01-02, AC-OPS-01-03, AC-OPS-03-02, covered on private local fixtures
+only; every public-profile cell stays NOT_RUN.
 
-Base: `f8d3e676` (main). Branch/worktree: `feat/e01-02-pins` / `e01-02-pins-a2f23f`.
-Allowed paths: `adapters/<client>/state_provider`, the new pins driver and its
-portable tests in `test/harness`, task evidence and status documents. Not
-touched: `core/capture` (E01-02.owned_capture) and the harness tooling files of
-the parallel tooling session.
+Executed source `9a842ec` from a clean detached worktree: preparation 02
+passed in 1,380.252 seconds, measured run 01 passed all three families in
+63.515 seconds with complete cleanup, and Go mutation record 02 compiled all
+67 mutants and killed 64 (three survivors labeled before the run). Details,
+hashes and the retained failed or stopped records are in
+[E01-02.pins evidence](evidence/E01-02.pins.md). Spec and Standards review of
+`9a842ec` returned PASS in round 3 with P3 notes (a missing-profile-result
+control, a `source_commit` value check in a run test, the `FreezeLimit`
+comment for a zero limit, the preparation attempt-index meaning). The branch
+is rebased onto `4c2abb2`; the rebase changed only this file among the
+block's files. Next: reviewer confirmation and exact-head CI of the rebased
+head; the coordinator merges.
 
-Reviews: head `9a842ec` has final Spec PASS and Standards PASS (round 3),
-with P3 notes only (a missing-profile-result control, a `source_commit` value
-check in a run test, the `FreezeLimit` comment for a zero limit, and the
-preparation `attempt_index`, which counts attempts per build manifest, not
-TESTING_CONTRACT retries). Retained records under
-`.project/automation/runs/d95-20261107/`: `e01-02-pins-preparation-01-7d6507a`
-(FAIL: files edited during the run, cleanup complete, 1,569.7 s),
-`e01-02-pins-admission-refused-01-1017878.*` (lock held by another session, no
-output), and `e01-02-pins-go-mutants-01-1017878` (INCOMPLETE, stopped because
-it ran outside the single-writer lock; see its STOPPED.md).
-
-Resume point (paused 2026-11-10 by coordinator request): preparation
-`e01-02-pins-preparation-02-9a842ec` was compiling from the clean detached
-worktree `scratchpad/exec-9a842ec`; the orchestration script
-(`scratchpad/measure.sh`) was stopped so no later step starts. If the
-shutdown cut preparation 02 off, keep its directory as an interrupted attempt
-(D83) and do not delete it. Next step after restart: remove only leftover
-containers labeled with this task's nonces or `extractor.pins.dev`; check
-`preparation.json` of preparation 02; if it is not a PASS, start
-`e01-02-pins-preparation-03-9a842ec` linked to it with `--previous-attempt`,
-`--previous-sha256` and a correction; then rerun `measure.sh` steps for run
-`e01-02-pins-run-01-9a842ec` and `e01-02-pins-go-mutants-02-9a842ec` (each under
-the lock), record the evidence, and post the PR review summary.
+Base: `4c2abb2` (main). Branch/worktree: `feat/e01-02-pins` / `e01-02-pins-a2f23f`.
 
 BLOCKED_DECISION (owner): the closure boundary for #13. Its ACs list all seven
 public profiles in `local-e2e` and `harness` modes, while D96 keeps public
