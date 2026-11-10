@@ -130,6 +130,9 @@ EXEC_READY binding stays with E01-02.admission.
 Next: none for this block; it is merged. The open #14 items are listed in
 the first E01-02.inputs section.
 
+The status line and "Next" above are for the merged block. A new block
+follows.
+
 Static manifest block (Part of #14): IN_PROGRESS on branch
 `claude/elegant-shirley-a32d31`, draft PR. Role: native-engineer. Allowed
 paths: the same BSC-only files as above. The BSC capsule now holds every
@@ -140,8 +143,8 @@ native commit, normalization profile and state profile. `ParliaDB` refuses a
 read of an undeclared key. Block 2 now replays alone on a home that never
 imported block 1: its headers come from the capsule, and its parent body and
 state come from the parent pin. A missing parent state stops the replay
-before execution (`single-no-state`), and so do missing headers
-(`single-no-headers`). The driver recomputes every item with its own
+before execution (`single-no-state`). Without the capsule headers, the live
+import fails with `unknown ancestor` (`single-no-headers`). The driver recomputes every item with its own
 Keccak-256. On clean merge `7028d28`: preparation 04 PASS; run 04 PASS in
 10.291 seconds with 36 Go tests; Go mutants 81 of 81 and Python 172 of 172
 killed. Go mutant record 04 at `c4d2657` (FAIL: 3 build failures, 1
