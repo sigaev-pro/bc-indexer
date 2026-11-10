@@ -61,8 +61,17 @@ capture, NATS or runner production logic changes; no Docker or native run.
 Resume point (paused for a host shutdown on 2026-11-10): round 2 Spec and
 Standards reviews of head `fd5b64f` and its exact-head `bootstrap/ci` run were
 in progress; the shutdown may cut off both reviewer sessions. This resume-point
-commit changes only PROJECT_STATUS.md after `fd5b64f`. Next step after restart:
-rerun Spec and Standards round 2 on the current head (code is unchanged since
+commit changes only PROJECT_STATUS.md after `fd5b64f`. Spec round 2 on `fd5b64f`
+finished before the pause: REQUEST_CHANGES with one new P2. `lineage()` in
+`evidence_summary.py` follows only `previous_attempt`, so a local-runner D83
+retry (`attempt` with `attempt_index` 2, `first_run_id`, `first_run_sha256`,
+`retry_reason`, see `runner.py`) prints "new lineage", which is false; print
+those fields, verify the first run when it can be found, never print "new
+lineage" above attempt 1, and add a control. P3: the timeout paragraph in the
+`mutate.py` help sits inside the table field list, and `description` is
+undocumented. All round 1 findings were confirmed fixed. Standards round 2 may
+have been cut off. Next step after restart: fix the Spec findings, then
+rerun Spec and Standards round 2 on the new head (code is unchanged since
 `076e74f`; retained record `review-tooling-02-076e74f` is current), confirm
 exact-head CI, fix any findings, then post the review summary comment. Do not
 merge: the owner has not authorized merging this PR.
