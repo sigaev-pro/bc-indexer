@@ -130,6 +130,25 @@ EXEC_READY binding stays with E01-02.admission.
 Next: none for this block; it is merged. The open #14 items are listed in
 the first E01-02.inputs section.
 
+Static manifest block (Part of #14): IN_PROGRESS on branch
+`claude/elegant-shirley-a32d31`, draft PR. Role: native-engineer. Allowed
+paths: the same BSC-only files as above. The BSC capsule now holds every
+static item of NATIVE_CAPTURE_PROTOCOL: the block, parent hash, parent header,
+parent root, the ancestor headers down to the Parlia checkpoint and BLOCKHASH
+floor, the genesis, the EIP-2124 fork id, the declared Parlia snapshot keys,
+native commit, normalization profile and state profile. `ParliaDB` refuses a
+read of an undeclared key. Block 2 now replays alone on a home that never
+imported block 1: its headers come from the capsule, and its parent body and
+state come from the parent pin. A missing parent state stops the replay
+before execution (`single-no-state`), and so do missing headers
+(`single-no-headers`). The driver recomputes every item with its own
+Keccak-256. On clean merge `7028d28`: preparation 04 PASS; run 04 PASS in
+10.291 seconds with 36 Go tests; Go mutants 81 of 81 and Python 172 of 172
+killed. Go mutant record 04 at `c4d2657` (FAIL: 3 build failures, 1
+survivor) is kept; `646a918` fixes it. Next: independent Spec and Standards
+review and hosted `bootstrap/ci` on the exact head. Still missing for BSC:
+see "Still missing" in the evidence.
+
 ## E01-02.inputs — Geth block
 
 Status: block ACCEPTED in PR #138 at merge `b7c2679` (part of #14), after
