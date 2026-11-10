@@ -1,0 +1,68 @@
+{
+  "call_inputs": [
+    {
+      "length": 4096,
+      "sha256": "3428636cdfd92ddcfd650d923c2ad8a4c040507264f51ca44e14c536a6f3a122",
+      "tag": 1
+    },
+    {
+      "length": 262144,
+      "sha256": "9e8855c91ddf6c78b83b9c7e6bf1e3739ef37eab12c4fc4e767c6a78bc6eada2",
+      "tag": 1
+    }
+  ],
+  "families": [
+    "geth",
+    "bsc",
+    "bor"
+  ],
+  "head_number": 3,
+  "kind": "owned-capture-oracle",
+  "log_sha256": [
+    "a84862218719c77747b95ad3baecdedc6224f940e9e69f8a7f7ea32ec83886d2",
+    "ac73c677ae467bb3b1da8ec4e8d2c9f4f83a50aa1233f0f2b26d657fccc13b90"
+  ],
+  "min_hold_milliseconds": 300,
+  "scenarios": {
+    "import_backpressure": {
+      "block_fields": 3,
+      "chunk_bytes": 256,
+      "min_waits": 1,
+      "notes": 0,
+      "pause": {
+        "head_number": 1,
+        "kind": "import"
+      }
+    },
+    "overlap_delayed_worker": {
+      "buffer_bytes": 1048576,
+      "call_chunks": [
+        4,
+        256
+      ],
+      "chunk_bytes": 1024,
+      "notes": 2,
+      "pause": null,
+      "waits": 0
+    },
+    "vm_safe_backpressure": {
+      "buffer_bytes": 32768,
+      "call_chunks": [
+        1,
+        64
+      ],
+      "chunk_bytes": 4096,
+      "min_waits": 1,
+      "notes": 2,
+      "pause": {
+        "head_number": 1,
+        "kind": "vm"
+      }
+    }
+  },
+  "schema_version": 1,
+  "storage_slot0": {
+    "0x00000000000000000000000000000000000000a1": "0x22a528ab2eb134b73abd40c346c94ccf52d558db5ee164e76aed70f376f97cff",
+    "0x00000000000000000000000000000000000000a2": "0x44c74acd50d356d95cdf62e568eb6ef174f77afd800386098c0f9215981b9e21"
+  }
+}
