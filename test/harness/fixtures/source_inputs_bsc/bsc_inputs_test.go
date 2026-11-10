@@ -372,6 +372,11 @@ func TestUnitBSCRecordKind(t *testing.T) {
 		keyPrefix + "o/unknown":                                   {"o", "other"},
 		keyPrefix + "o/log":                                       {"o", "other"},
 		"parlia-o/frontier":                                       {"", "other"},
+		keyPrefix + "o/capsule/0000000000000000":                  {"o", "other"},
+		keyPrefix + "o/x/y":                                       {"o", "other"},
+		keyPrefix + "o/x/y/z":                                     {"o", "other"},
+		keyPrefix + "o/frontier/x":                                {"o", "other"},
+		keyPrefix + "o/closed/x":                                  {"o", "other"},
 	}
 	for key, want := range cases {
 		observation, kind := RecordKind([]byte(key))

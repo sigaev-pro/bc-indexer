@@ -66,7 +66,11 @@ func ParliaRequest(tag string, key []byte) []byte {
 type Event map[string]any
 
 // ParliaDB is the database handle given to parlia.New. It is safe for
-// concurrent use; reads are logged in the order they take the lock.
+// concurrent use; reads are logged in the order they take the lock. The core
+// log expects native order, so concurrent reads of different keys in a
+// nondeterministic order would fail closed on replay with ErrPrefixConflict.
+// The private fixture's reads all use one key, so that case is not exercised
+// here; it belongs to E01-02.admission.
 type ParliaDB struct {
 	ethdb.Database
 
@@ -76,9 +80,11 @@ type ParliaDB struct {
 	live    bool
 	err     error
 	fetches int
-	emit    func(Event)
+	// emit runs while the lock is held; it must not call ParliaDB.
+	emit func(Event)
 	// Handoff, when set, runs after a response is durable and before Parlia
-	// receives it.
+	// receives it. It runs while the lock is held, so it must not call any
+	// ParliaDB method.
 	Handoff func(observation string, sequence uint64, response []byte)
 }
 
@@ -226,8 +232,10 @@ func (d *ParliaDB) malformed(tag string) error {
 	return d.stop(fmt.Errorf("%w: malformed %s response", ErrCorrupt, tag))
 }
 
-// NewIterator has no logged form. The pinned Parlia never calls it; a call
-// stops the observation so that no unlogged read can feed execution.
+// NewIterator has no logged form, and the pinned Parlia never calls it. It
+// still returns the native iterator, so its data could reach the import. The
+// call stops the wrapper, so Detach and Err report the observation as failed
+// and it cannot finish cleanly.
 func (d *ParliaDB) NewIterator(prefix []byte, start []byte) ethdb.Iterator {
 	d.mu.Lock()
 	d.stop(fmt.Errorf("%w: NewIterator", ErrUnloggedRead))

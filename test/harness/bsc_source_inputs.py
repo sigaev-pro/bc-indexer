@@ -468,8 +468,67 @@ def failing_tests(stdout):
     return sorted({line.strip().split()[2] for line in stdout.splitlines() if line.strip().startswith("--- FAIL: ")})
 
 
+def classify(failed, error_text):
+    """Return the outcome and evidence of a mutant whose probe run was rejected.
+
+    A kill must name the failing Go test or the driver check that rejected the
+    run; a failed native command with no failing test named is NO_EVIDENCE.
+    """
+    named = failed or ("Native command failed" not in error_text and error_text)
+    return ("KILLED" if named else "NO_EVIDENCE"), (failed or [error_text])
+
+
+OUTCOMES = ("KILLED", "SURVIVED", "BUILD_FAILED", "NO_EVIDENCE", "INCOMPLETE")
+
+
+def tally(rows):
+    """Return the mutants that fail the record and the count of each outcome."""
+    bad = [row["name"] for row in rows if row["outcome"] in ("BUILD_FAILED", "NO_EVIDENCE", "INCOMPLETE") or
+           (row["outcome"] == "SURVIVED" and not row["equivalent"]) or row["outcome"] not in OUTCOMES]
+    return bad, {outcome: sum(1 for row in rows if row["outcome"] == outcome) for outcome in OUTCOMES}
+
+
+def run_mutant(index, row, output, runner, rows, make_runner, build, probe):
+    """Build and probe one mutant, and always record it.
+
+    `build(runner)` compiles the mutant; `probe(runner, directory)` runs and
+    judges it. Both raise Rejected for a mutant outcome. Any other error or a
+    stop signal leaves the row INCOMPLETE and propagates. In every case the
+    row keeps the mutant runners' commands, and an incomplete cleanup marks
+    the owned `runner` incomplete, so the record never claims a clean host.
+    """
+    directory = output / "mutants" / f"{index:03d}"
+    directory.mkdir(parents=True)
+    result = {"name": row["name"], "file": row["file"], "equivalent": row.get("equivalent"), "outcome": "INCOMPLETE"}
+    runners = []
+    try:
+        runners.append(make_runner(directory))
+        try:
+            build(runners[0])
+        except Rejected as error:
+            result.update(outcome="BUILD_FAILED", evidence=str(error)[:300])
+            return result
+        (directory / "probe").mkdir()
+        runners.append(make_runner(directory / "probe"))
+        try:
+            probe(runners[1], directory / "probe")
+            result["outcome"] = "SURVIVED"
+        except Rejected as error:
+            logs = sorted((directory / "probe" / "logs").glob("*.stdout"))
+            failed = failing_tests(logs[-1].read_text(errors="replace")) if logs else []
+            outcome, evidence = classify(failed, str(error)[:300])
+            result.update(outcome=outcome, killed_by=evidence)
+        return result
+    finally:
+        result["commands"] = [command for item in runners for command in item.commands]
+        result["cleanup_complete"] = all(item.cleanup_complete for item in runners)
+        rows.append(result)
+        runner.commands.extend(result["commands"])
+        runner.cleanup_complete = runner.cleanup_complete and result["cleanup_complete"]
+
+
 def mutants(tool_path, tool_sha, manifest_path, manifest_sha, table_path, output, only=()):
-    """Run each mutant: install it, gofmt/vet/compile, run the probe, and classify the outcome."""
+    """Run each mutant: install it, vet and compile it, run the probe, and classify the outcome."""
     started = time.monotonic()
     deadline = started + MUTANT_SECONDS
     require(tool_path.is_absolute() and output.is_absolute(), "Paths must be absolute")
@@ -504,42 +563,22 @@ def mutants(tool_path, tool_sha, manifest_path, manifest_sha, table_path, output
             for name in PROBE_FILES:
                 shutil.copyfile(FIXTURE / name, target / name)
             (target / row["file"]).write_text(original.replace(row["original"], row["replacement"], 1))
-            directory = output / "mutants" / f"{index:03d}"
-            directory.mkdir(parents=True)
-            result = {"name": row["name"], "file": row["file"], "equivalent": row.get("equivalent")}
-            runners = [Native(directory, deadline)]
-            binary = f"mutant-{index:03d}.test"
-            try:
-                compile_package(runners[0], tool["compiler"], mounts, binary, check_format=False)
-            except Rejected as error:
-                result.update(outcome="BUILD_FAILED", evidence=str(error)[:300])
-            else:
-                (directory / "probe").mkdir()
-                runners.append(Native(directory / "probe", deadline))
+            binary = build / "generated" / f"mutant-{index:03d}.test"
+
+            def probe(probe_runner, directory):
                 try:
-                    probe_run(tool, fixture, genesis_hash, directory / "probe", runners[1], deadline,
-                              binary=build / "generated" / binary)
-                    result["outcome"] = "SURVIVED"
-                except Rejected as error:
-                    # A kill names the failing Go test, or the driver control that rejected the run.
-                    logs = sorted((directory / "probe" / "logs").glob("*.stdout"))
-                    failed = failing_tests(logs[-1].read_text(errors="replace")) if logs else []
-                    control = str(error)[:300]
-                    named = failed or ("Native command failed" not in control and control)
-                    result.update(outcome="KILLED" if named else "NO_EVIDENCE", killed_by=failed or [control])
+                    probe_run(tool, fixture, genesis_hash, directory, probe_runner, deadline, binary=binary)
                 finally:
-                    (build / "generated" / binary).unlink(missing_ok=True)
-            result["commands"] = [command for item in runners for command in item.commands]
-            result["cleanup_complete"] = all(item.cleanup_complete for item in runners)
-            proof["mutants"].append(result)
+                    binary.unlink(missing_ok=True)
+
+            result = run_mutant(index, row, output, runner, proof["mutants"], lambda path: Native(path, deadline),
+                                lambda build_runner: compile_package(build_runner, tool["compiler"], mounts,
+                                                                     binary.name, check_format=False), probe)
             require(result["cleanup_complete"], f"Mutant {row['name']} left resources behind")
         for name in PROBE_FILES:
             shutil.copyfile(FIXTURE / name, target / name)
         sources_unchanged(origins, deadline)
-        bad = [row["name"] for row in proof["mutants"] if row["outcome"] in ("BUILD_FAILED", "NO_EVIDENCE") or
-               (row["outcome"] == "SURVIVED" and not row["equivalent"])]
-        proof["counts"] = {outcome: sum(1 for row in proof["mutants"] if row["outcome"] == outcome)
-                           for outcome in ("KILLED", "SURVIVED", "BUILD_FAILED", "NO_EVIDENCE")}
+        bad, proof["counts"] = tally(proof["mutants"])
         require(not bad, f"Mutants not killed: {bad}")
 
     return pins.owned_attempt(output, started, deadline, proof, "mutants.json", body)

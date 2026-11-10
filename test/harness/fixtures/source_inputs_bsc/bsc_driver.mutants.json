@@ -503,6 +503,108 @@
       "file": "test/harness/bsc_source_inputs.py",
       "original": "require(all(step[\"response_sha256\"] != tamper[\"live_after_tamper_response_sha256\"] for step in steps),",
       "replacement": "require(True,"
+    },
+    {
+      "name": "classify failed test names",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    named = failed or (\"Native command failed\" not in error_text and error_text)",
+      "replacement": "    named = (\"Native command failed\" not in error_text and error_text)"
+    },
+    {
+      "name": "classify native failure is evidence",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    named = failed or (\"Native command failed\" not in error_text and error_text)",
+      "replacement": "    named = failed or error_text"
+    },
+    {
+      "name": "classify outcome",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    return (\"KILLED\" if named else \"NO_EVIDENCE\"), (failed or [error_text])",
+      "replacement": "    return \"KILLED\", (failed or [error_text])"
+    },
+    {
+      "name": "tally build failed",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "if row[\"outcome\"] in (\"BUILD_FAILED\", \"NO_EVIDENCE\", \"INCOMPLETE\") or",
+      "replacement": "if row[\"outcome\"] in (\"NO_EVIDENCE\", \"INCOMPLETE\") or"
+    },
+    {
+      "name": "tally no evidence",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "if row[\"outcome\"] in (\"BUILD_FAILED\", \"NO_EVIDENCE\", \"INCOMPLETE\") or",
+      "replacement": "if row[\"outcome\"] in (\"BUILD_FAILED\", \"INCOMPLETE\") or"
+    },
+    {
+      "name": "tally incomplete",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "if row[\"outcome\"] in (\"BUILD_FAILED\", \"NO_EVIDENCE\", \"INCOMPLETE\") or",
+      "replacement": "if row[\"outcome\"] in (\"BUILD_FAILED\", \"NO_EVIDENCE\") or"
+    },
+    {
+      "name": "tally unlabeled survivor",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "(row[\"outcome\"] == \"SURVIVED\" and not row[\"equivalent\"])",
+      "replacement": "(row[\"outcome\"] == \"SURVIVED\" and False)"
+    },
+    {
+      "name": "tally unknown outcome",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": " or row[\"outcome\"] not in OUTCOMES]",
+      "replacement": "]"
+    },
+    {
+      "name": "mutant default incomplete",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "\"equivalent\": row.get(\"equivalent\"), \"outcome\": \"INCOMPLETE\"}",
+      "replacement": "\"equivalent\": row.get(\"equivalent\"), \"outcome\": \"KILLED\"}"
+    },
+    {
+      "name": "mutant build failure",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "            result.update(outcome=\"BUILD_FAILED\", evidence=str(error)[:300])\n            return result",
+      "replacement": "            result.update(outcome=\"KILLED\", evidence=str(error)[:300])\n            return result"
+    },
+    {
+      "name": "mutant survivor",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "            result[\"outcome\"] = \"SURVIVED\"",
+      "replacement": "            result[\"outcome\"] = \"KILLED\""
+    },
+    {
+      "name": "mutant failing tests read",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "            failed = failing_tests(logs[-1].read_text(errors=\"replace\")) if logs else []",
+      "replacement": "            failed = []"
+    },
+    {
+      "name": "mutant commands recorded",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        result[\"commands\"] = [command for item in runners for command in item.commands]",
+      "replacement": "        result[\"commands\"] = []"
+    },
+    {
+      "name": "mutant cleanup recorded",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        result[\"cleanup_complete\"] = all(item.cleanup_complete for item in runners)",
+      "replacement": "        result[\"cleanup_complete\"] = True"
+    },
+    {
+      "name": "mutant row always appended",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        rows.append(result)\n",
+      "replacement": "        rows.append(result) if result[\"outcome\"] != \"INCOMPLETE\" else None\n"
+    },
+    {
+      "name": "mutant owned commands",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        runner.commands.extend(result[\"commands\"])",
+      "replacement": "        pass"
+    },
+    {
+      "name": "mutant owned cleanup",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        runner.cleanup_complete = runner.cleanup_complete and result[\"cleanup_complete\"]",
+      "replacement": "        pass"
     }
   ]
 }

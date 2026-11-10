@@ -67,10 +67,14 @@ def new_response(observation, sequence, response):
 
 
 def consumed(index, responses):
-    rows = [{"request_hex": REQUEST, "response_hex": response.hex()} for response in responses]
+    """Expected manifest, built from the source_inputs primitives, not from the driver."""
     digest = capsule(index)["digest"]
-    return {"observation": driver.OBSERVATIONS[index], "capsule_digest": digest, "count": len(rows),
-            "chain": "unused-by-the-driver", "digest": driver.consumed_digest(digest, rows)}
+    chain = source_inputs.chain_start(bytes.fromhex(digest))
+    for sequence, response in enumerate(responses):
+        chain = source_inputs.chain_next(chain, source_inputs.entry_digest(sequence, bytes.fromhex(REQUEST), response))
+    expected = source_inputs.consumed_digest(bytes.fromhex(digest), len(responses), chain).hex()
+    return {"observation": driver.OBSERVATIONS[index], "capsule_digest": digest, "count": len(responses),
+            "chain": "unused-by-the-driver", "digest": expected}
 
 
 def execute(observation):
@@ -479,6 +483,110 @@ class Evaluate(unittest.TestCase):
     def test_malformed_report_is_rejected(self):
         self.assertRejected(lambda r, t: r.pop("resume"), "Malformed probe report")
         self.assertRejected(lambda r, t: t.pop("trace-replay.jsonl"), "Malformed probe report")
+
+
+class FakeRunner:
+    def __init__(self, path, cleanup=True):
+        (path / "logs").mkdir(parents=True)
+        self.path, self.commands, self.cleanup_complete = path, [], cleanup
+
+
+class Mutants(unittest.TestCase):
+    ROW = {"name": "m", "file": "bsc_inputs.go", "original": "a", "replacement": "b"}
+
+    def run_one(self, build, probe, cleanup=True, row=None):
+        output = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        (output / "owned").mkdir()
+        owned = FakeRunner(output / "owned")
+        rows = []
+
+        def make_runner(path):
+            runner = FakeRunner(path, cleanup)
+            runner.commands.append({"request": str(path)})
+            return runner
+        try:
+            driver.run_mutant(0, row or self.ROW, output, owned, rows, make_runner, build, probe)
+        except InterruptedError:
+            pass
+        return rows, owned
+
+    def test_build_failure(self):
+        def build(runner):
+            raise Rejected("Native command failed; inspect 001.result.json")
+        rows, owned = self.run_one(build, None)
+        self.assertEqual([row["outcome"] for row in rows], ["BUILD_FAILED"])
+        self.assertEqual(len(owned.commands), 1)
+
+    def test_survivor(self):
+        rows, _ = self.run_one(lambda runner: None, lambda runner, directory: None)
+        self.assertEqual(rows[0]["outcome"], "SURVIVED")
+        self.assertEqual(len(rows[0]["commands"]), 2)
+
+    def test_kill_named_by_a_go_test(self):
+        def probe(runner, directory):
+            (directory / "logs" / "000.stdout").write_text("--- FAIL: TestX (1s)\n")
+            raise Rejected("Native command failed; inspect 000.result.json")
+        rows, _ = self.run_one(lambda runner: None, probe)
+        self.assertEqual((rows[0]["outcome"], rows[0]["killed_by"]), ("KILLED", ["TestX"]))
+
+    def test_kill_named_by_a_driver_check(self):
+        def probe(runner, directory):
+            raise Rejected("Resume did not import block 2")
+        rows, _ = self.run_one(lambda runner: None, probe)
+        self.assertEqual((rows[0]["outcome"], rows[0]["killed_by"]), ("KILLED", ["Resume did not import block 2"]))
+
+    def test_failure_without_a_named_test(self):
+        def probe(runner, directory):
+            (directory / "logs" / "000.stdout").write_text("panic: test timed out\n")
+            raise Rejected("Native command failed; inspect 000.result.json")
+        rows, _ = self.run_one(lambda runner: None, probe)
+        self.assertEqual(rows[0]["outcome"], "NO_EVIDENCE")
+
+    def test_stop_signal_is_recorded_and_cleanup_propagates(self):
+        def probe(runner, directory):
+            raise InterruptedError("Interrupted by SIGTERM")
+        with self.assertRaises(InterruptedError):
+            output = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+            (output / "owned").mkdir()
+            owned, rows = FakeRunner(output / "owned"), []
+            driver.run_mutant(0, self.ROW, output, owned, rows, lambda path: FakeRunner(path, False),
+                              lambda runner: None, probe)
+        self.assertEqual(rows[0]["outcome"], "INCOMPLETE")
+        self.assertIs(rows[0]["cleanup_complete"], False)
+        self.assertIs(owned.cleanup_complete, False)
+
+    def test_error_in_build_is_recorded(self):
+        def build(runner):
+            raise OSError("disk full")
+        output = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        (output / "owned").mkdir()
+        owned, rows = FakeRunner(output / "owned"), []
+        with self.assertRaises(OSError):
+            driver.run_mutant(0, self.ROW, output, owned, rows, lambda path: FakeRunner(path), build, None)
+        self.assertEqual(rows[0]["outcome"], "INCOMPLETE")
+        self.assertIs(owned.cleanup_complete, True)
+
+    def test_incomplete_cleanup_of_a_finished_mutant_reaches_the_owned_runner(self):
+        rows, owned = self.run_one(lambda runner: None, lambda runner, directory: None, cleanup=False)
+        self.assertIs(rows[0]["cleanup_complete"], False)
+        self.assertIs(owned.cleanup_complete, False)
+
+    def test_classify(self):
+        self.assertEqual(driver.classify(["TestA"], "Native command failed"), ("KILLED", ["TestA"]))
+        self.assertEqual(driver.classify([], "Replay fetched or wrote"), ("KILLED", ["Replay fetched or wrote"]))
+        self.assertEqual(driver.classify([], "Native command failed; inspect x"),
+                         ("NO_EVIDENCE", ["Native command failed; inspect x"]))
+        self.assertEqual(driver.classify([], ""), ("NO_EVIDENCE", [""]))
+
+    def test_tally(self):
+        def row(name, outcome, equivalent=None):
+            return {"name": name, "outcome": outcome, "equivalent": equivalent}
+        rows = [row("k", "KILLED"), row("e", "SURVIVED", "same behavior"), row("s", "SURVIVED"),
+                row("b", "BUILD_FAILED"), row("n", "NO_EVIDENCE"), row("i", "INCOMPLETE"), row("x", "OTHER")]
+        bad, counts = driver.tally(rows)
+        self.assertEqual(bad, ["s", "b", "n", "i", "x"])
+        self.assertEqual(counts, {"KILLED": 1, "SURVIVED": 2, "BUILD_FAILED": 1, "NO_EVIDENCE": 1, "INCOMPLETE": 1})
+        self.assertEqual(driver.tally([row("k", "KILLED"), row("e", "SURVIVED", "reason")])[0], [])
 
 
 class Helpers(unittest.TestCase):

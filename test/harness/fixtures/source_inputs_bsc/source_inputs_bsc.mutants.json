@@ -3,63 +3,215 @@
   "language": "go-native-bsc",
   "description": "Single-check mutants of the BSC wiring probe. Run with `python3 test/harness/bsc_source_inputs.py mutants TOOL --sha256 SHA --profile-manifest PATH SHA --output RUN_DIR` inside a fresh copy of the accepted BSC tree; each mutant must pass go vet and compile, and the unmutated driver judges the probe run.",
   "mutants": [
-    {"name": "attach-accepts-second-log", "file": "bsc_inputs.go",
-     "original": "\tif log == nil || d.log != nil {", "replacement": "\tif log == nil {"},
-    {"name": "stopped-wrapper-keeps-reading", "file": "bsc_inputs.go",
-     "original": "\tif d.err != nil {\n\t\treturn nil, d.err\n\t}\n\tnative :=", "replacement": "\tif false && d.err != nil {\n\t\treturn nil, d.err\n\t}\n\tnative :="},
-    {"name": "live-mode-ignored", "file": "bsc_inputs.go",
-     "original": "\t\tif d.live {", "replacement": "\t\tif false {"},
-    {"name": "read-outside-observation-passes", "file": "bsc_inputs.go",
-     "original": "\t\treturn nil, d.stop(fmt.Errorf(\"%w: %s\", ErrNoObservation, tag))", "replacement": "\t\treturn native()"},
-    {"name": "log-error-not-sticky", "file": "bsc_inputs.go",
-     "original": "\t\treturn nil, d.stop(err)\n\t}\n\tsequence", "replacement": "\t\treturn nil, err\n\t}\n\tsequence"},
-    {"name": "handoff-hook-skipped", "file": "bsc_inputs.go",
-     "original": "\tif d.Handoff != nil {", "replacement": "\tif false && d.Handoff != nil {"},
-    {"name": "handoff-event-renamed", "file": "bsc_inputs.go",
-     "original": "Event{\"event\": \"handoff\",", "replacement": "Event{\"event\": \"handed\","},
-    {"name": "fetch-event-renamed", "file": "bsc_inputs.go",
-     "original": "Event{\"event\": \"fetch\",", "replacement": "Event{\"event\": \"native\","},
-    {"name": "get-drops-status-byte", "file": "bsc_inputs.go",
-     "original": "\t\t\treturn append([]byte{statusPresent}, value...), nil", "replacement": "\t\t\treturn value, nil"},
-    {"name": "get-ignores-has-error", "file": "bsc_inputs.go",
-     "original": "\t\tif hasErr != nil {\n\t\t\treturn nil, hasErr", "replacement": "\t\tif false {\n\t\t\treturn nil, hasErr"},
-    {"name": "get-read-error-becomes-missing", "file": "bsc_inputs.go",
-     "original": "\t\tif present {\n\t\t\treturn nil, err\n\t\t}", "replacement": "\t\tif false && present {\n\t\t\treturn nil, err\n\t\t}"},
-    {"name": "get-missing-length-unchecked", "file": "bsc_inputs.go",
-     "original": "\tcase len(response) == 1 && response[0] == statusMissing:", "replacement": "\tcase len(response) >= 1 && response[0] == statusMissing:"},
-    {"name": "get-present-status-unchecked", "file": "bsc_inputs.go",
-     "original": "\tcase len(response) >= 1 && response[0] == statusPresent:", "replacement": "\tcase len(response) >= 1:"},
-    {"name": "has-status-unchecked", "file": "bsc_inputs.go",
-     "original": "\tif len(response) == 1 && (response[0] == statusMissing || response[0] == statusPresent) {", "replacement": "\tif len(response) == 1 {"},
-    {"name": "has-ignores-native-error", "file": "bsc_inputs.go",
-     "original": "\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tif present {\n\t\t\treturn []byte{statusPresent}, nil", "replacement": "\t\tif false {\n\t\t\treturn nil, err\n\t\t}\n\t\tif present {\n\t\t\treturn []byte{statusPresent}, nil"},
-    {"name": "iterator-not-refused", "file": "bsc_inputs.go",
-     "original": "\td.stop(fmt.Errorf(\"%w: NewIterator\", ErrUnloggedRead))", "replacement": "\td.stop(nil)"},
-    {"name": "stop-replaces-first-error", "file": "bsc_inputs.go",
-     "original": "\tif d.err == nil {\n\t\td.err = err\n\t}", "replacement": "\tif err != nil {\n\t\td.err = err\n\t}"},
-    {"name": "put-not-traced", "file": "bsc_inputs.go",
-     "original": "\ts.Emit(Event{\"event\": \"put\", \"observation\": observation, \"record\": record})", "replacement": "\t_, _ = observation, record"},
-    {"name": "sync-not-traced", "file": "bsc_inputs.go",
-     "original": "\ts.Emit(Event{\"event\": \"sync\"})\n", "replacement": ""},
-    {"name": "foreign-key-classified", "file": "bsc_inputs.go",
-     "original": "\tif !ok {\n\t\treturn \"\", \"other\"\n\t}", "replacement": "\tif false && !ok {\n\t\treturn \"\", \"other\"\n\t}"},
-    {"name": "capsule-chunk-as-capsule", "file": "bsc_inputs.go",
-     "original": "\t\tkind = \"capsule-chunk\"", "replacement": "\t\tkind = \"capsule\""},
-    {"name": "entry-depth-unchecked", "file": "bsc_inputs.go",
-     "original": "\tcase len(parts) == 3 && parts[1] == \"log\":", "replacement": "\tcase len(parts) >= 2 && parts[1] == \"log\":"},
-    {"name": "entry-chunk-as-entry", "file": "bsc_inputs.go",
-     "original": "\t\tkind = \"entry-chunk\"", "replacement": "\t\tkind = \"entry\""},
-    {"name": "frontier-unclassified", "file": "bsc_inputs.go",
-     "original": "\t\tkind = \"frontier\"", "replacement": "\t\tkind = \"other\""},
-    {"name": "closed-unclassified", "file": "bsc_inputs.go",
-     "original": "\t\tkind = \"closed\"", "replacement": "\t\tkind = \"other\""},
-    {"name": "state-profile-item-dropped", "file": "bsc_inputs.go",
-     "original": "\t\t{Name: \"state-profile\", Data: []byte(StateProfile)},\n", "replacement": ""},
-    {"name": "parent-hash-item-zeroed", "file": "bsc_inputs.go",
-     "original": "{Name: \"parent-hash\", Data: parent.Bytes()}", "replacement": "{Name: \"parent-hash\", Data: common.Hash{}.Bytes()}"},
-    {"name": "probe-attach-skipped", "file": "bsc_inputs_test.go",
-     "original": "\tif err := engineDB.Attach(id, log); err != nil {", "replacement": "\tif err := error(nil); err != nil {"},
-    {"name": "probe-crash-at-wrong-sequence", "file": "bsc_inputs_test.go",
-     "original": "\t\tif id == observationID(1) && sequence == 0 {", "replacement": "\t\tif id == observationID(1) && sequence == 1 {"}
+    {
+      "name": "attach-accepts-second-log",
+      "file": "bsc_inputs.go",
+      "original": "\tif log == nil || d.log != nil {",
+      "replacement": "\tif log == nil {"
+    },
+    {
+      "name": "stopped-wrapper-keeps-reading",
+      "file": "bsc_inputs.go",
+      "original": "\tif d.err != nil {\n\t\treturn nil, d.err\n\t}\n\tnative :=",
+      "replacement": "\tif false && d.err != nil {\n\t\treturn nil, d.err\n\t}\n\tnative :="
+    },
+    {
+      "name": "live-mode-ignored",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif d.live {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "read-outside-observation-passes",
+      "file": "bsc_inputs.go",
+      "original": "\t\treturn nil, d.stop(fmt.Errorf(\"%w: %s\", ErrNoObservation, tag))",
+      "replacement": "\t\treturn native()"
+    },
+    {
+      "name": "log-error-not-sticky",
+      "file": "bsc_inputs.go",
+      "original": "\t\treturn nil, d.stop(err)\n\t}\n\tsequence",
+      "replacement": "\t\treturn nil, err\n\t}\n\tsequence"
+    },
+    {
+      "name": "handoff-hook-skipped",
+      "file": "bsc_inputs.go",
+      "original": "\tif d.Handoff != nil {",
+      "replacement": "\tif false && d.Handoff != nil {"
+    },
+    {
+      "name": "handoff-event-renamed",
+      "file": "bsc_inputs.go",
+      "original": "Event{\"event\": \"handoff\",",
+      "replacement": "Event{\"event\": \"handed\","
+    },
+    {
+      "name": "fetch-event-renamed",
+      "file": "bsc_inputs.go",
+      "original": "Event{\"event\": \"fetch\",",
+      "replacement": "Event{\"event\": \"native\","
+    },
+    {
+      "name": "get-drops-status-byte",
+      "file": "bsc_inputs.go",
+      "original": "\t\t\treturn append([]byte{statusPresent}, value...), nil",
+      "replacement": "\t\t\treturn value, nil"
+    },
+    {
+      "name": "get-ignores-has-error",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif hasErr != nil {\n\t\t\treturn nil, hasErr",
+      "replacement": "\t\tif false {\n\t\t\treturn nil, hasErr"
+    },
+    {
+      "name": "get-read-error-becomes-missing",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif present {\n\t\t\treturn nil, err\n\t\t}",
+      "replacement": "\t\tif false && present {\n\t\t\treturn nil, err\n\t\t}"
+    },
+    {
+      "name": "get-missing-length-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(response) == 1 && response[0] == statusMissing:",
+      "replacement": "\tcase len(response) >= 1 && response[0] == statusMissing:"
+    },
+    {
+      "name": "get-present-status-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(response) >= 1 && response[0] == statusPresent:",
+      "replacement": "\tcase len(response) >= 1:"
+    },
+    {
+      "name": "has-status-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif len(response) == 1 && (response[0] == statusMissing || response[0] == statusPresent) {",
+      "replacement": "\tif len(response) == 1 {"
+    },
+    {
+      "name": "has-ignores-native-error",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tif present {\n\t\t\treturn []byte{statusPresent}, nil",
+      "replacement": "\t\tif false {\n\t\t\treturn nil, err\n\t\t}\n\t\tif present {\n\t\t\treturn []byte{statusPresent}, nil"
+    },
+    {
+      "name": "iterator-not-refused",
+      "file": "bsc_inputs.go",
+      "original": "\td.stop(fmt.Errorf(\"%w: NewIterator\", ErrUnloggedRead))",
+      "replacement": "\td.stop(nil)"
+    },
+    {
+      "name": "stop-replaces-first-error",
+      "file": "bsc_inputs.go",
+      "original": "\tif d.err == nil {\n\t\td.err = err\n\t}",
+      "replacement": "\tif err != nil {\n\t\td.err = err\n\t}"
+    },
+    {
+      "name": "put-not-traced",
+      "file": "bsc_inputs.go",
+      "original": "\ts.Emit(Event{\"event\": \"put\", \"observation\": observation, \"record\": record})",
+      "replacement": "\t_, _ = observation, record"
+    },
+    {
+      "name": "sync-not-traced",
+      "file": "bsc_inputs.go",
+      "original": "\ts.Emit(Event{\"event\": \"sync\"})\n",
+      "replacement": ""
+    },
+    {
+      "name": "foreign-key-classified",
+      "file": "bsc_inputs.go",
+      "original": "\tif !ok {\n\t\treturn \"\", \"other\"\n\t}",
+      "replacement": "\tif false && !ok {\n\t\treturn \"\", \"other\"\n\t}"
+    },
+    {
+      "name": "capsule-chunk-as-capsule",
+      "file": "bsc_inputs.go",
+      "original": "\t\tkind = \"capsule-chunk\"",
+      "replacement": "\t\tkind = \"capsule\""
+    },
+    {
+      "name": "entry-depth-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(parts) == 3 && parts[1] == \"log\":",
+      "replacement": "\tcase len(parts) >= 2 && parts[1] == \"log\":"
+    },
+    {
+      "name": "entry-chunk-as-entry",
+      "file": "bsc_inputs.go",
+      "original": "\t\tkind = \"entry-chunk\"",
+      "replacement": "\t\tkind = \"entry\""
+    },
+    {
+      "name": "frontier-unclassified",
+      "file": "bsc_inputs.go",
+      "original": "\t\tkind = \"frontier\"",
+      "replacement": "\t\tkind = \"other\""
+    },
+    {
+      "name": "closed-unclassified",
+      "file": "bsc_inputs.go",
+      "original": "\t\tkind = \"closed\"",
+      "replacement": "\t\tkind = \"other\""
+    },
+    {
+      "name": "state-profile-item-dropped",
+      "file": "bsc_inputs.go",
+      "original": "\t\t{Name: \"state-profile\", Data: []byte(StateProfile)},\n",
+      "replacement": ""
+    },
+    {
+      "name": "parent-hash-item-zeroed",
+      "file": "bsc_inputs.go",
+      "original": "{Name: \"parent-hash\", Data: parent.Bytes()}",
+      "replacement": "{Name: \"parent-hash\", Data: common.Hash{}.Bytes()}"
+    },
+    {
+      "name": "probe-attach-skipped",
+      "file": "bsc_inputs_test.go",
+      "original": "\tif err := engineDB.Attach(id, log); err != nil {",
+      "replacement": "\tif err := error(nil); err != nil {"
+    },
+    {
+      "name": "probe-crash-at-wrong-sequence",
+      "file": "bsc_inputs_test.go",
+      "original": "\t\tif id == observationID(1) && sequence == 0 {",
+      "replacement": "\t\tif id == observationID(1) && sequence == 1 {"
+    },
+    {
+      "name": "capsule-depth-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(parts) == 2 && parts[1] == \"capsule\":",
+      "replacement": "\tcase parts[1] == \"capsule\" && len(parts) != 4:"
+    },
+    {
+      "name": "capsule-chunk-depth-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(parts) == 4 && parts[1] == \"capsule\":",
+      "replacement": "\tcase len(parts) >= 3 && parts[1] == \"capsule\":"
+    },
+    {
+      "name": "entry-name-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(parts) == 3 && parts[1] == \"log\":",
+      "replacement": "\tcase len(parts) == 3:"
+    },
+    {
+      "name": "entry-chunk-name-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(parts) == 4 && parts[1] == \"log\":",
+      "replacement": "\tcase len(parts) == 4:"
+    },
+    {
+      "name": "frontier-depth-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(parts) == 2 && parts[1] == \"frontier\":",
+      "replacement": "\tcase len(parts) >= 2 && parts[1] == \"frontier\":"
+    },
+    {
+      "name": "closed-depth-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tcase len(parts) == 2 && parts[1] == \"closed\":",
+      "replacement": "\tcase len(parts) >= 2 && parts[1] == \"closed\":"
+    }
   ]
 }
