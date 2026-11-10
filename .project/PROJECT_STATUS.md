@@ -85,6 +85,57 @@ Base: `f8d3e67`. Branch/worktree: `feat/review-tooling` / `harness-review-toolin
 Next: exact-head CI, Spec and Standards reviews, draft PR. Merge needs the
 owner's permission for this PR.
 
+## E01-02.pins — Native state retention and release (issue #13)
+
+Status: READY_FOR_REVIEW in draft PR #133; #13 stays open. The block adds the
+hash-provider pin seam `adapters/{geth,bsc,bor}/state_provider` (durable pin
+ledger in the native key-value store; guards for the offline pruner, its
+startup resume, head rewinds and the chain freezer's side-chain wipe; a
+read-only store preflight; an effective-profile check) and the driver
+`test/harness/pins.py`. Assigned ACs: AC-CAP-03-01, AC-CAP-03-02,
+AC-OPS-01-02, AC-OPS-01-03, AC-OPS-03-02, covered on private local fixtures
+only; every public-profile cell stays NOT_RUN.
+
+Executed source `9a842ec` from a clean detached worktree: preparation 02
+passed in 1,380.252 seconds, measured run 01 passed all three families in
+63.515 seconds with complete cleanup, and Go mutation record 02 compiled all
+67 mutants and killed 64 (three survivors labeled before the run). Details,
+hashes and the retained failed or stopped records are in
+[E01-02.pins evidence](evidence/E01-02.pins.md). Spec and Standards review of
+`9a842ec` returned PASS in round 3 with P3 notes (a missing-profile-result
+control, a `source_commit` value check in a run test, the `FreezeLimit`
+comment for a zero limit, the preparation attempt-index meaning). The branch
+then merged main up to `d40c6ea` (PRs #134, #131 and #135); the merges changed
+none of the block's executed files and no harness file the driver imports. Next:
+reviewer confirmation and exact-head CI of the merged head; the coordinator
+merges after the owner's permission (D97).
+
+Base: `d40c6ea` (main, merged into the branch). Branch/worktree: `feat/e01-02-pins` / `e01-02-pins-a2f23f`.
+
+BLOCKED_DECISION (owner): the closure boundary for #13. Its ACs list all seven
+public profiles in `local-e2e` and `harness` modes, while D96 keeps public
+profile environments with E06. D96 settled this only for #12. Until the owner
+decides whether #13 may close on private local native-seam evidence, this block
+gives no public-profile credit, every public AC cell stays NOT_RUN, and #13 stays
+open after this block. Independent work continues.
+
+BLOCKED_DECISION (owner): who adds the native retention patch. The accepted
+native sources delete committed state, code or pinned headers through the
+offline prune command and its startup resume, head rewinds (`SetHead`, crash
+repair) and the chain freezer's side-chain wipe. This block adds a ledger
+guard for each path (`PruneState`, `RecoverPruning`, `RequireRewindAllowed`,
+`FreezeLimit`) and proves them against the native code in-process (the
+freezer guard by unit test). Calling them from the shipped binaries needs a
+native patch. E01-01.builds defines a source/patch identity, but its accepted
+builds carry no patch, and spec v3 says the hash scheme without retention
+patches is insufficient. Either E01-01.builds reopens to build patched
+clients, or E01-02.admission (which first wires the seam into the real import
+path) adds the patch set; this changes accepted-task sequencing, so it is the
+owner's call. Until then AC-CAP-03-01 `pinned_state_pruning_attempt` is proven
+in-process only, and the unpatched native `snapshot prune-state`, a manual
+`debug_setHead` and side-branch pins older than the freezer threshold remain
+hazards outside this block's evidence.
+
 ## E01-02.owned_capture — Owned capture seam with bounded memory (issue #15)
 
 Status: first block ACCEPTED in PR #134 at merge
