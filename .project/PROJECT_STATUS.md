@@ -136,6 +136,29 @@ Status: block ACCEPTED in PR #138 at merge `b7c2679` (part of #14), after
 block 0 (PR #137, merged at `a2fb163`). Role: native-engineer (D98 item 5).
 Base `a2fb163`.
 
+Static manifest follow-up (part of #14): IN_PROGRESS in a new draft PR; not
+accepted until review, CI and the owner's merge permission. Base `1cebde2`
+(main with PRs #137 to #141). Same role and allowed paths as below.
+
+- Coordinator technical decision (2026-11-10), not an owner answer, following
+  NATIVE_CAPTURE_PROTOCOL line 36: the BLOCKHASH window ancestors of a Geth
+  block (blocks `max(0, N-256)` to `N-1`) are known before execution, so
+  they are static capsule items (`parent-header`, `ancestor-header-<n>`).
+  The dependency log keeps only responses unknown in advance; the Geth
+  import has none, so its log stays empty and closes with count 0. This
+  replaces the test-only BLOCKHASH routing through the log described below.
+- Output: the Geth capsule holds every static item that the protocol lists:
+  header and body RLP, an encodings descriptor, the parent header, hash and
+  root, the window ancestor headers, the chain config and fork ID, the
+  native commit and the normalization profile (a stand-in ID until the
+  normalizer defines a product profile). The probe imports the block from
+  the saved header and body bytes and answers every BLOCKHASH lookup with
+  the Keccak-256 of the saved header. The oracle decodes and checks every
+  item with its own Keccak-256 and RLP decoder.
+- Checks: pending.
+- Next: Spec and Standards review of the exact head and hosted
+  `bootstrap/ci`; then the coordinator asks the owner for merge permission.
+
 Allowed paths: `test/harness/source_inputs_geth.py`,
 `test/harness/fixtures/source_inputs_geth/**` (coordinator technical decision:
 Geth-only files cannot live in `adapters/geth/source_inputs/` because the

@@ -12,6 +12,7 @@ local evidence gives no AC verdict and no public-profile credit.
 """
 
 import argparse
+import functools
 import hashlib
 import io
 import json
@@ -21,6 +22,7 @@ import sys
 import tarfile
 import time
 import uuid
+import zlib
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -51,21 +53,94 @@ BINARY_LIMIT = 512 * 1024 * 1024
 
 # ---------------------------------------------------------------- oracle
 
+KECCAK_ROUNDS = (
+    0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000, 0x000000000000808B,
+    0x0000000080000001, 0x8000000080008081, 0x8000000000008009, 0x000000000000008A, 0x0000000000000088,
+    0x0000000080008009, 0x000000008000000A, 0x000000008000808B, 0x800000000000008B, 0x8000000000008089,
+    0x8000000000008003, 0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
+    0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008)
+KECCAK_ROTATIONS = ((0, 36, 3, 41, 18), (1, 44, 10, 45, 2), (62, 6, 43, 15, 61), (28, 55, 25, 21, 56),
+                    (27, 20, 39, 8, 14))
+MASK = (1 << 64) - 1
 
-def ops(events):
-    """Compact form of an event list: ("put", key suffix) or (op, sequence)."""
-    rows = []
-    for event in events:
-        if event.get("op") == "put":
-            rows.append(("put", event.get("key", "").split("/", 2)[-1]))
-        else:
-            rows.append((event.get("op"), event.get("sequence")))
-    return rows
+
+@functools.lru_cache(maxsize=4096)
+def keccak256(data):
+    """Keccak-256 as Ethereum uses it (original padding, not SHA3-256), written from the specification.
+    It is slow in pure Python, so results are cached; data must be bytes."""
+    rate = 136
+    padded = bytearray(data) + b"\x01" + bytes(-(len(data) + 1) % rate)
+    padded[-1] |= 0x80
+    lanes = [[0] * 5 for _ in range(5)]
+    for offset in range(0, len(padded), rate):
+        for index in range(rate // 8):
+            lanes[index % 5][index // 5] ^= int.from_bytes(padded[offset + 8 * index:offset + 8 * index + 8], "little")
+        for constant in KECCAK_ROUNDS:
+            parity = [lanes[x][0] ^ lanes[x][1] ^ lanes[x][2] ^ lanes[x][3] ^ lanes[x][4] for x in range(5)]
+            for x in range(5):
+                mix = parity[(x - 1) % 5] ^ (((parity[(x + 1) % 5] << 1) | (parity[(x + 1) % 5] >> 63)) & MASK)
+                for y in range(5):
+                    lanes[x][y] ^= mix
+            moved = [[0] * 5 for _ in range(5)]
+            for x in range(5):
+                for y in range(5):
+                    shift = KECCAK_ROTATIONS[x][y]
+                    moved[y][(2 * x + 3 * y) % 5] = ((lanes[x][y] << shift) | (lanes[x][y] >> (64 - shift))) & MASK
+            for x in range(5):
+                for y in range(5):
+                    lanes[x][y] = moved[x][y] ^ (~moved[(x + 1) % 5][y] & moved[(x + 2) % 5][y])
+            lanes[0][0] ^= constant
+    return b"".join(lanes[index % 5][index // 5].to_bytes(8, "little") for index in range(4))
 
 
-def index_of(rows, op):
-    found = [index for index, row in enumerate(rows) if row[0] == op]
-    return found[0] if len(found) == 1 else None
+def rlp_item(data, offset=0):
+    """Decode one RLP item at offset. Return (value, raw encoding, next offset); a list value is a list of
+    (value, raw) pairs. Noncanonical lengths are refused."""
+    first = data[offset]
+    if first < 0x80:
+        return data[offset:offset + 1], data[offset:offset + 1], offset + 1
+    short, base = (first < 0xB8, 0x80) if first < 0xC0 else (first < 0xF8, 0xC0)
+    if short:
+        start, length = offset + 1, first - base
+    else:
+        size = first - base - 55
+        length = int.from_bytes(data[offset + 1:offset + 1 + size], "big")
+        if size == 0 or data[offset + 1] == 0 or length < 56:
+            raise ValueError("noncanonical RLP length")
+        start = offset + 1 + size
+    end = start + length
+    if end > len(data):
+        raise ValueError("truncated RLP item")
+    if base == 0x80:
+        if length == 1 and data[start] < 0x80:
+            raise ValueError("noncanonical RLP byte")
+        return data[start:end], data[offset:end], end
+    values, cursor = [], start
+    while cursor < end:
+        value, raw, cursor = rlp_item(data, cursor)
+        values.append((value, raw))
+    if cursor != end:
+        raise ValueError("RLP list overruns its length")
+    return values, data[offset:end], end
+
+
+def rlp_list(data):
+    """Decode bytes that must hold exactly one RLP list."""
+    value, _, end = rlp_item(data)
+    if end != len(data) or not isinstance(value, list):
+        raise ValueError("not exactly one RLP list")
+    return value
+
+
+# Positions in the RLP list of a Geth header.
+PARENT_HASH, STATE_ROOT, NUMBER, EXTRA = 0, 3, 8, 12
+
+
+def header_fields(data):
+    fields = [value for value, _ in rlp_list(data)]
+    if len(fields) < 15 or any(isinstance(field, list) for field in fields[:15]):
+        raise ValueError("not a header")
+    return fields
 
 
 def capsule_digest(refs):
@@ -78,66 +153,120 @@ def capsule_digest(refs):
 
 
 def poison(oracle, number):
-    """The changed source answer of the poisoned modes, from the formula in expected.json."""
-    return hashlib.sha256(oracle["poison_format"].format(number=number).encode()).hexdigest()
+    """The changed extra data of a poisoned header, from the formula in expected.json."""
+    return oracle["poison_format"].format(number=number).encode()
 
 
-def expected_log(observation, oracle, poisoned=False):
-    """The requests and responses the target block must consume: the generated chain's
-    ancestor hashes, or the poisoned answers when the saved log holds those."""
-    hashes = observation["generated_hashes"]
-    ref = hashes[oracle["target"] - 1]
-    rows = []
-    for number in oracle["requested_numbers"]:
-        request = oracle["request_format"].format(ref=ref, number=number)
-        rows.append((request, poison(oracle, number) if poisoned else hashes[number - 1][2:]))
+def window(oracle):
+    """Ancestor numbers below the parent that BLOCKHASH of the target block can read."""
+    return list(range(max(0, oracle["target"] - 256), oracle["target"] - 1))
+
+
+def item_names(oracle):
+    names = oracle["capsule_items"]
+    split = names.index("parent-root") + 1
+    return names[:split] + [f"ancestor-header-{number}" for number in window(oracle)] + names[split:]
+
+
+def headers(oracle):
+    """Capsule item name of every BLOCKHASH window header, by block number."""
+    rows = {number: f"ancestor-header-{number}" for number in window(oracle)}
+    rows[oracle["target"] - 1] = "parent-header"
     return rows
 
 
-def expected_consumed(capsule, log):
-    chain = source_inputs.chain_start(bytes.fromhex(capsule))
-    for sequence, (request, response) in enumerate(log):
-        chain = source_inputs.chain_next(chain, source_inputs.entry_digest(sequence, request.encode(),
-                                                                           bytes.fromhex(response)))
-    return source_inputs.consumed_digest(bytes.fromhex(capsule), len(log), chain).hex()
+def check_header(name, data, number, hashes, poisoned, oracle):
+    """Return a failure for one saved header, or None. A poisoned header differs from the native one only
+    in its extra data, so its hash differs and its other links stay intact."""
+    fields = header_fields(data)
+    if int.from_bytes(fields[NUMBER], "big") != number or (number and fields[PARENT_HASH].hex() != hashes[number - 1][2:]):
+        return f"capsule item {name} is not the header of block {number}"
+    if poisoned != (fields[EXTRA] == poison(oracle, number)) or \
+            poisoned == ("0x" + keccak256(data).hex() == hashes[number]):
+        return f"capsule item {name} is not the {'poisoned' if poisoned else 'native'} header of block {number}"
+    return None
 
 
-def check_capsule(result, observation, oracle, commit, fail):
+def check_body(data, transactions):
+    """The body is the RLP list [transactions, uncles] with the expected transactions and no uncles."""
+    fields = rlp_list(data)
+    if len(fields) != 2 or not isinstance(fields[0][0], list) or fields[1][0] != []:
+        return False
+    # A legacy transaction is an RLP list and its hash covers that encoding. A typed one is a byte string
+    # whose first byte, the type, is at most 0x7f (EIP-2718).
+    if any(not isinstance(value, list) and value[:1] > b"\x7f" for value, _ in fields[0][0]):
+        return False
+    found = ["0x" + keccak256(raw if isinstance(value, list) else value).hex() for value, raw in fields[0][0]]
+    return found == transactions
+
+
+def check_capsule(result, observation, oracle, commit, want, fail):
+    """Check the saved capsule bytes against independent values; return the digest and the saved items."""
     capsule = result.get("capsule") or {}
     refs = capsule.get("items") or []
-    if [ref.get("name") for ref in refs] != oracle["capsule_items"]:
+    names = item_names(oracle)
+    if [ref.get("name") for ref in refs] != names:
         fail("capsule items differ from the oracle")
-        return None
-    by_name = {ref["name"]: ref for ref in refs}
-    hashes = observation["generated_hashes"]
-    fixed = {"header-rlp": observation["header_rlp_sha256"],
-             "parent-hash": hashlib.sha256(bytes.fromhex(hashes[oracle["target"] - 2][2:])).hexdigest(),
-             "native-commit": hashlib.sha256(commit.encode()).hexdigest(),
-             "normalization-profile": hashlib.sha256(oracle["normalization_profile"].encode()).hexdigest()}
-    for name, sha in fixed.items():
-        if by_name[name].get("sha256") != sha:
-            fail(f"capsule item {name} differs from the expected bytes")
+        return None, None
     # Each item is one chunk, which check_seal_events relies on.
     if not all(type(ref.get("length")) is int and 0 < ref["length"] <= source_inputs.CHUNK_BYTES for ref in refs):
         fail("a capsule item is empty or longer than one chunk")
-        return None
+        return None, None
     if capsule.get("observation") != oracle["observation"] or capsule.get("digest") != capsule_digest(refs):
         fail("capsule digest differs from the independent formula")
-        return None
-    return capsule["digest"]
+        return None, None
+    rows = result.get("capsule_items") or []
+    if [row.get("name") for row in rows] != names:
+        fail("saved capsule bytes differ from the manifest")
+        return None, None
+    items = {row["name"]: bytes.fromhex(row["data"]) for row in rows}
+    if any(len(items[ref["name"]]) != ref["length"] or hashlib.sha256(items[ref["name"]]).hexdigest() != ref["sha256"]
+           for ref in refs):
+        fail("saved capsule bytes differ from the manifest")
+        return None, None
+    hashes, target, saved = observation["generated_hashes"], oracle["target"], want.get("saved", [])
+    try:
+        checks = {
+            "header-rlp": "0x" + keccak256(items["header-rlp"]).hex() == hashes[target],
+            "body-rlp": check_body(items["body-rlp"], observation["generated_transactions"]
+                                   [target - 1 if "body-rlp" in saved else target]),
+            "encodings": items["encodings"] == oracle["encodings"].encode(),
+            "parent-hash": items["parent-hash"].hex() == hashes[target - 1][2:],
+            "parent-root": items["parent-root"] == header_fields(items["parent-header"])[STATE_ROOT],
+            "chain-config": all(json.loads(items["chain-config"]).get(key) == value
+                                for key, value in oracle["chain_config"].items()),
+            "fork-id": json.loads(items["fork-id"]) == {
+                "hash": f"{zlib.crc32(bytes.fromhex(hashes[0][2:])):08x}", "next": "0"},
+            "native-commit": items["native-commit"] == commit.encode(),
+            "normalization-profile": items["normalization-profile"] == oracle["normalization_profile"].encode(),
+        }
+        for name, ok in checks.items():
+            if not ok:
+                fail(f"capsule item {name} differs from the expected bytes")
+        for number, name in headers(oracle).items():
+            problem = check_header(name, items[name], number, hashes, name in saved, oracle)
+            if problem:
+                fail(problem)
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        fail("a capsule item does not decode")
+        return None, None
+    return capsule["digest"], items
 
 
 def check_seal_events(rows, existed, items, fail):
-    """A new seal writes one chunk per item, syncs, writes the manifest and syncs before it returns."""
+    """A new seal asks the source, writes one chunk per item, syncs, writes the manifest and syncs before it
+    returns. A reseal of saved items asks nothing, writes nothing and syncs."""
     sealed = index_of(rows, "sealed")
     if sealed is None:
         fail("the attempt did not seal exactly once")
         return None
     before = rows[:sealed]
     if existed:
-        if any(row[0] == "put" for row in before) or ("sync", None) not in before:
-            fail("a reseal rewrote the capsule or did not sync")
+        if any(row[0] in ("put", "source") for row in before) or ("sync", None) not in before:
+            fail("a reseal asked the source, rewrote the capsule or did not sync")
         return sealed
+    if before[:1] != [("source", None)] or before.count(("source", None)) != 1:
+        fail("a new seal did not take its items from the source first")
     manifest = [index for index, row in enumerate(before) if row == ("put", "capsule")]
     chunks = [index for index, row in enumerate(before) if row[0] == "put" and row[1].startswith("capsule/")]
     keys = sorted(before[index][1] for index in chunks)
@@ -152,35 +281,42 @@ def check_seal_events(rows, existed, items, fail):
     return sealed
 
 
-def check_dependencies(rows, start, log, fetched, fail, handed=None):
-    """Each fetched response is persisted and synced, frontier last, before its hand-off."""
-    requests = [index for index, row in enumerate(rows) if row[0] == "request"]
-    count = len(log) if handed is None else len(handed) + 1
-    if [rows[index][1] for index in requests] != list(range(count)) or (requests and requests[0] < start):
-        fail("requests are not the expected sequences in order")
-        return
-    for position, index in enumerate(requests):
-        sequence = rows[index][1]
-        stop = requests[position + 1] if position + 1 < len(requests) else len(rows)
-        segment = rows[index + 1:stop]
-        handoffs = [offset for offset, row in enumerate(segment) if row[0] == "handoff"]
-        if handed is not None and sequence not in handed:
-            between = segment
-        elif len(handoffs) != 1 or segment[handoffs[0]][1] != sequence:
-            fail(f"sequence {sequence} was not handed off exactly once")
-            continue
+def ops(events):
+    """Compact form of an event list: ("put", key suffix) or (op, number)."""
+    rows = []
+    for event in events:
+        if event.get("op") == "put":
+            rows.append(("put", event.get("key", "").split("/", 2)[-1]))
         else:
-            between = segment[:handoffs[0]]
-            if position + 1 < len(requests) and segment[handoffs[0] + 1:]:
-                fail(f"events follow the hand-off of sequence {sequence}")
-        persisted = [("fetch", sequence), ("put", f"log/{sequence:016x}/0000000000000000"),
-                     ("put", f"log/{sequence:016x}"), ("sync", None), ("put", "frontier"), ("sync", None)]
-        if sequence in fetched:
-            want = persisted if handed is None or sequence in handed else persisted + [("crash", None)]
-            if between != want:
-                fail(f"sequence {sequence} was not persisted and synced before its hand-off")
-        elif between:
-            fail(f"replayed sequence {sequence} fetched or wrote data")
+            rows.append((event.get("op"), event.get("number")))
+    return rows
+
+
+def index_of(rows, op):
+    found = [index for index, row in enumerate(rows) if row[0] == op]
+    return found[0] if len(found) == 1 else None
+
+
+def expected_consumed(capsule):
+    """The consumed manifest of an empty dependency log."""
+    chain = source_inputs.chain_start(bytes.fromhex(capsule))
+    return source_inputs.consumed_digest(bytes.fromhex(capsule), 0, chain).hex()
+
+
+def check_lookups(events, items, oracle, fail):
+    """Every BLOCKHASH lookup is answered with the Keccak-256 hash of the saved header of that block."""
+    lookups = [event for event in events if event.get("op") == "lookup"]
+    if [event.get("number") for event in lookups] != oracle["requested_numbers"]:
+        fail("BLOCKHASH lookups differ from the oracle")
+        return []
+    answers = []
+    for event in lookups:
+        name = headers(oracle)[event["number"]]
+        answer = keccak256(items[name]).hex()
+        if event.get("item") != name or event.get("response") != answer:
+            fail("a BLOCKHASH answer differs from the saved header")
+        answers.append("0x" + answer)
+    return answers
 
 
 def check_complete(attempt, want, observation, oracle, commit, fail):
@@ -191,60 +327,57 @@ def check_complete(attempt, want, observation, oracle, commit, fail):
         return
     target = oracle["target"]
     hashes = observation["generated_hashes"]
-    rejected = want.get("rejected", False)
-    log = expected_log(observation, oracle, poisoned=want.get("saved", "native") == "poisoned")
+    rejected = want.get("rejected")
     if result.get("errors"):
         fail("the attempt reported errors")
-    if rejected:
-        if oracle["control_error"] not in str(result.get("import_error")) or result.get("head_number") != target - 1 \
-                or "consumed" in result or "reader_slots" in result:
-            fail("native validation did not reject the saved poisoned answers")
-    else:
-        if result.get("import_error") is not None:
-            fail("the attempt reported errors")
-        if result.get("head_number") != target or result.get("head_hash") != hashes[target - 1]:
-            fail("the imported head differs from the generated block")
-        if result.get("reader_slots") != ["0x" + response for _, response in log]:
-            fail("native execution did not receive the expected BLOCKHASH bytes")
-    if result.get("capsule_existed") is not want["capsule_existed"] or \
-            result.get("frontier_at_open") != want["frontier_at_open"]:
+    if result.get("capsule_existed") is not want["capsule_existed"] or result.get("frontier_at_open") != 0:
         fail("durable state at open differs from the oracle")
-    capsule = check_capsule(result, observation, oracle, commit, fail)
-    if not rejected:
-        consumed = result.get("consumed") or {}
-        if capsule is None or consumed.get("digest") != expected_consumed(capsule, log) or \
-                consumed.get("count") != len(log) or consumed.get("capsule_digest") != capsule:
-            fail("the consumed manifest differs from the independent digest")
-        if result.get("cursor") != len(log) or \
-                not str(result.get("extra_after_finish", "")).startswith(oracle["closed_error_prefix"]):
-            fail("the closed log accepted a new response")
+    capsule, items = check_capsule(result, observation, oracle, commit, want, fail)
     events = attempt.get("events") or []
     rows = ops(events)
-    fetch_poisoned = want.get("fetch_poisoned", False)
-    if any(event.get("op") == "fetch" and event.get("poisoned") is not fetch_poisoned for event in events):
-        fail("a fetch used the wrong source")
-    sealed = check_seal_events(rows, want["capsule_existed"], len(oracle["capsule_items"]), fail)
+    sources = [event for event in events if event.get("op") == "source"]
+    if not want["capsule_existed"] and [event.get("poison") or [] for event in sources] != [want.get("saved", [])]:
+        fail("a new seal used the wrong source")
+    sealed = check_seal_events(rows, want["capsule_existed"], len(item_names(oracle)), fail)
     opened, started = index_of(rows, "opened"), index_of(rows, "process_start")
     # The sync must lie between the seal and the open, so the slice is empty unless sealed < opened.
     # A failed seal check was already reported; rows[None:opened] then starts at the beginning.
-    if opened is None or started is None or not opened < started or \
-            ("sync", None) not in rows[sealed:opened]:
+    if (started is None) is not (rejected == "body"):
+        fail("block execution started only if the saved body was valid" if started is None else
+             "block execution started with a saved body that native validation must reject")
+        return
+    if opened is None or ("sync", None) not in rows[sealed:opened] or (started is not None and not opened < started):
         fail("the capsule and log were not durable before execution started")
         return
-    check_dependencies(rows, started, log, want["fetched"], fail)
-    for event in events:
-        if event.get("op") == "request" and event.get("request") != log[event["sequence"]][0]:
-            fail("a request differs from the expected identity")
-        if event.get("op") == "handoff" and event.get("response") != log[event["sequence"]][1]:
-            fail("a hand-off differs from the saved bytes")
-    tail = rows[[index for index, row in enumerate(rows) if row[0] == "handoff"][-1] + 1:]
+    answers = check_lookups(events, items, oracle, fail) if items is not None and started is not None else []
+    if rejected:
+        error = oracle["control_errors"][rejected]
+        if error not in str(result.get("import_error")) or result.get("head_number") != target - 1 \
+                or "consumed" in result or "reader_slots" in result:
+            fail("native validation did not reject the saved poisoned item")
+    else:
+        if result.get("import_error") is not None:
+            fail("the attempt reported errors")
+        if result.get("head_number") != target or result.get("head_hash") != hashes[target]:
+            fail("the imported head differs from the generated block")
+        if result.get("reader_slots") != answers:
+            fail("native execution did not receive the expected BLOCKHASH bytes")
+        consumed = result.get("consumed") or {}
+        if capsule is None or consumed.get("digest") != expected_consumed(capsule) or \
+                consumed.get("count") != 0 or consumed.get("capsule_digest") != capsule:
+            fail("the consumed manifest differs from the independent digest")
+        if result.get("cursor") != 0 or \
+                not str(result.get("extra_after_finish", "")).startswith(oracle["closed_error_prefix"]):
+            fail("the closed log accepted a new response")
+    last = started if started is not None else opened
+    tail = [row for row in rows[last + 1:] if row[0] != "lookup"]
     expected_tail = [] if rejected else \
         ([("put", "closed"), ("sync", None)] if want["closes"] else []) + [("finished", None)]
     if tail != expected_tail:
         fail("the consumed manifest was not closed as expected")
 
 
-def check_crash(attempt, want, observation, oracle, fail):
+def check_crash(attempt, want, oracle, fail):
     if attempt.get("signal") != "killed" or "result" in attempt:
         fail("the attempt was not killed at its crash point")
     events = attempt.get("events") or []
@@ -252,32 +385,26 @@ def check_crash(attempt, want, observation, oracle, fail):
     if not events or events[-1].get("op") != "crash" or events[-1].get("point") != want["point"]:
         fail("the last event is not the expected crash")
         return
-    if want["point"] == "after_seal":
-        if rows[-2:-1] != [("sealed", None)] or \
-                check_seal_events(rows, False, len(oracle["capsule_items"]), fail) is None:
-            fail("the crash did not follow a completed seal")
-        return
-    started = index_of(rows, "process_start")
-    if started is None:
-        fail("execution did not start before the crash")
-        return
-    check_dependencies(rows, started, expected_log(observation, oracle), want["handed"] + [want["sequence"]], fail,
-                       handed=want["handed"])
+    if rows[-2:-1] != [("sealed", None)] or check_seal_events(rows, False, len(item_names(oracle)), fail) is None:
+        fail("the crash did not follow a completed seal")
 
 
 def check_control(attempt, oracle, fail):
     result = attempt.get("result") or {}
     poisoned = [event for event in attempt.get("events") or [] if event.get("op") == "direct_poison"]
-    if oracle["control_error"] not in str(result.get("import_error")) or \
-            result.get("head_number") != oracle["target"] - 1 or len(poisoned) != len(oracle["requested_numbers"]):
+    if oracle["control_errors"]["blockhash"] not in str(result.get("import_error")) or \
+            result.get("head_number") != oracle["target"] - 1 or \
+            [event.get("number") for event in poisoned] != oracle["requested_numbers"]:
         fail("the poisoned control was not rejected by native validation")
 
 
 def compare(observation, oracle, commit):
     """Return the differences between one probe observation and the oracle."""
     failures = []
+    target = oracle["target"]
     if observation.get("family") != oracle["family"] or observation.get("observation") != oracle["observation"] or \
-            observation.get("target") != oracle["target"] or len(observation.get("generated_hashes", [])) != oracle["target"]:
+            observation.get("target") != target or len(observation.get("generated_hashes", [])) != target + 1 or \
+            len(observation.get("generated_transactions", [])) != target + 1:
         return ["the observation does not describe the oracle chain"]
     scenarios = {row.get("name"): row.get("attempts") for row in observation.get("scenarios", [])}
     if set(scenarios) != set(oracle["scenarios"]) or len(scenarios) != len(observation["scenarios"]):
@@ -293,7 +420,7 @@ def compare(observation, oracle, commit):
             if want["kind"] == "complete":
                 check_complete(attempt, want, observation, oracle, commit, fail)
             elif want["kind"] == "crash":
-                check_crash(attempt, want, observation, oracle, fail)
+                check_crash(attempt, want, oracle, fail)
             elif want["kind"] == "control":
                 check_control(attempt, oracle, fail)
             else:

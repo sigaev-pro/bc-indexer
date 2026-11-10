@@ -7,35 +7,56 @@
       "file": "hook.go.txt",
       "original": "\textractorGetHash = f\n",
       "replacement": "\t_ = f\n",
-      "reason": "No BLOCKHASH lookup goes through the dependency log, so no request is recorded."
-    },
-    {
-      "name": "bypass_saved_bytes",
-      "file": "probe.go",
-      "original": "\t\t\treturn common.BytesToHash(response)\n",
-      "replacement": "\t\t\tanswer, _ := resolve(seq, number)\n\t\t\treturn answer\n",
-      "reason": "Native code receives the source answer instead of the saved bytes; poisoned replays then fail native validation."
+      "reason": "No BLOCKHASH lookup reaches the capsule: native code reads its own chain, so no lookup is recorded and the saved poisoned headers are ignored."
     },
     {
       "name": "native_lookup_bypass",
       "file": "probe.go",
-      "original": "\t\t\treturn common.BytesToHash(response)\n",
+      "original": "\t\t\treturn saved.hash\n",
       "replacement": "\t\t\treturn native(number)\n",
-      "reason": "Native code receives a fresh native lookup instead of the saved bytes; the replay of a saved poisoned log then imports the block."
+      "reason": "Native code receives a fresh native lookup instead of the saved header hash; a capsule with a poisoned parent or ancestor header then imports the block."
     },
     {
-      "name": "crash_before_persist",
+      "name": "block_not_from_capsule",
       "file": "probe.go",
-      "original": "\t\t\tseq := input.Cursor()\n",
-      "replacement": "\t\t\tseq := input.Cursor()\n\t\t\tif spec.Crash == \"before_handoff\" && seq == spec.CrashSequence {\n\t\t\t\tcrash(log, spec.Crash)\n\t\t\t}\n",
-      "reason": "The crash happens before the response is persisted, so the retry sees a shorter durable frontier."
+      "original": "types.Blocks{imported}",
+      "replacement": "types.Blocks{map[bool]*types.Block{true: block, false: imported}[true]}",
+      "reason": "Native code imports the generated block instead of the saved header and body bytes; a capsule with a poisoned body then imports the block."
     },
     {
-      "name": "resolver_never_poisons",
+      "name": "retry_asks_source",
       "file": "probe.go",
-      "original": "\t\t\t\treturn poison(number), true\n",
-      "replacement": "\t\t\t\treturn native(number), true\n",
-      "reason": "The poisoning instrument is broken: poisoned modes give native answers, so the poisoned log holds native truth and its replay imports the block."
+      "original": "\t\tif !existed {\n",
+      "replacement": "\t\tif true {\n",
+      "reason": "A retry builds the items from its source again instead of reading the saved capsule; the poisoned source then conflicts with the sealed capsule."
+    },
+    {
+      "name": "parent_header_wrong_block",
+      "file": "probe.go",
+      "original": "\tparent := chain.GetHeader(block.ParentHash(), block.NumberU64()-1)\n",
+      "replacement": "\tparent := chain.GetHeaderByNumber(block.NumberU64() - 2)\n",
+      "reason": "The parent header, hash and root come from the block before the parent, so they differ from the generated chain and BLOCKHASH(3) is wrong."
+    },
+    {
+      "name": "ancestor_window_short",
+      "file": "probe.go",
+      "original": "\tfor number := windowStart(block.NumberU64()); ",
+      "replacement": "\tfor number := windowStart(block.NumberU64()) + 1; ",
+      "reason": "The genesis header, a BLOCKHASH window ancestor known before execution, is left out of the capsule."
+    },
+    {
+      "name": "header_never_poisoned",
+      "file": "probe.go",
+      "original": "\t\theader.Extra = poisonText(header.Number.Uint64())\n",
+      "replacement": "\t\t_ = poisonText(header.Number.Uint64())\n",
+      "reason": "The poisoning instrument is broken for headers: the saved parent and ancestor headers equal native truth, so their poisoned scenarios import the block."
+    },
+    {
+      "name": "body_never_poisoned",
+      "file": "probe.go",
+      "original": "\t\tbody = blocks[target-2].Body()\n",
+      "replacement": "\t\t_ = blocks[target-2].Body()\n",
+      "reason": "The poisoning instrument is broken for the body: the saved body equals native truth, so the poisoned body scenario imports the block."
     }
   ]
 }

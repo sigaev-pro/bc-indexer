@@ -162,7 +162,7 @@ class PrepareTest(DriverFixture):
         _, record = self.prepare("unit", self.build("build-unit"))
         self.assertIn("Shared unit tests did not pass", record["error"])
         FakeNative.unit_stdout = UNIT_OK
-        FakeNative.failing_build = "mutant-bypass_saved_bytes"
+        FakeNative.failing_build = "mutant-native_lookup_bypass"
         output, record = self.prepare("mutant", self.build("build-mutant"))
         self.assertEqual(record["result"], "FAIL")
         # A failed mutant build still restores the installed probe source.
