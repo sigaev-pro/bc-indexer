@@ -77,7 +77,10 @@ oracle), reviewer (Spec and Standards). Allowed paths: new Bor-specific files
 `test/harness/fixtures/source_inputs_bor/**`,
 `.project/evidence/E01-02.inputs.bor.md` and this section.
 `adapters/bor/source_inputs` is unchanged, so the shared-file check still
-passes.
+passes. Coordinator technical decision: Bor-only probe sources live in
+`test/harness/fixtures/source_inputs_bor/`, never under
+`adapters/*/source_inputs/`; Geth and BSC use `source_inputs_geth` and
+`source_inputs_bsc`.
 
 Output: a private probe builds inside the accepted Bor tree and runs native
 Bor consensus with the HTTP Heimdall client. A deterministic in-process
@@ -86,14 +89,19 @@ spans by ID pass through the shared dependency log, which saves the raw body
 before Bor decodes it (D98). Evidence:
 [E01-02.inputs.bor](evidence/E01-02.inputs.bor.md).
 
-Result on clean commit `a32bc67`: preparation 01 PASS; measured run 01 PASS
-in 25.482 seconds. Private local verdicts: AC-CAP-04-01 PASS, AC-CAP-04-02
-PASS, AC-CAP-04-03 PASS with the test-only stand-in marker; every public cell
-stays NOT_RUN (D96, D98). Mutants: Go 26 killed, Python 67 killed.
+Review 001 (head `0cb6c70`): Spec PASS with P3 notes; Standards
+REQUEST_CHANGES (P2: the driver's `prepare()` and `run()` had no tests or
+mutants). `ab172ee` adds them, moves the fixture and fixes the P3 notes.
 
-Next: independent Spec and Standards review of the exact head and hosted
-`bootstrap/ci`. The real EXEC_READY binding stays with E01-02.admission. #14
-stays open for the Geth and BSC blocks.
+Result on clean commit `8203955`: preparation 02 PASS; measured run 02 PASS
+in 5.473 seconds. Private local verdicts: AC-CAP-04-01 PASS, AC-CAP-04-02
+PASS, AC-CAP-04-03 PASS with the test-only stand-in marker; every public cell
+stays NOT_RUN (D96, D98). Mutants: Go 29 killed, Python 94 killed. The
+earlier preparation 01 and run 01 on `a32bc67` also passed and are kept.
+
+Next: Spec and Standards review of the new head and hosted `bootstrap/ci`.
+The real EXEC_READY binding stays with E01-02.admission. #14 stays open for
+the Geth and BSC blocks.
 
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
