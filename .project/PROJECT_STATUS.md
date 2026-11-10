@@ -45,8 +45,10 @@ Design (architect), in full in the package README
   then the advanced frontier is written and synced, and only then handed to
   native code. The synced frontier is the commit point; data beyond it was
   never handed out and is overwritten.
-- Replay: below the durable frontier, a matching request returns the saved
-  bytes and never calls the fetch function.
+- Replay: `OpenLog` syncs first, so a frontier that is visible but unsynced
+  after a process crash becomes durable before replay. Below the durable
+  frontier, a matching request returns the saved bytes and never calls the
+  fetch function.
 - Prefix conflict: a different request at a durable offset is
   `ErrPrefixConflict`; nothing is written and the log stops.
 - Tail append: at the frontier, the fetch function runs once and the new
@@ -55,7 +57,12 @@ Design (architect), in full in the package README
   durable entry, writes and syncs the closed manifest, and afterwards refuses
   new responses while still replaying the prefix.
 
-Next: Spec and Standards review of the draft PR, then the coordinator asks the
+Review 001 (head `143518c`): Spec PASS and Standards PASS with P3 notes.
+Commit `0fb3461` fixes them: the sync in `OpenLog` and on reseal, the
+enforced chunk layout, store read errors passed through, and one more
+mutant. Retained records and earlier attempts are in the evidence file.
+
+Next: Spec and Standards review of the new head, then the coordinator asks the
 owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
 this core into each client; the Bor block adds the in-process Heimdall stub.
 
