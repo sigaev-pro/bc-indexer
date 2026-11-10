@@ -2,9 +2,15 @@
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
-Status: ACCEPTED; issue #14 closed under D98 on 2026-11-10. Block 0
-inputs-core merged in PR #137 at `a2fb163`; the Geth, BSC and Bor blocks
-merged in PRs #138, #139 and #140 (sections below). Dependencies
+Status: IN_PROGRESS; #14 stays open. Block 0 inputs-core merged in PR #137
+at `a2fb163`; the Geth, BSC and Bor blocks merged in PRs #138, #139 and #140
+(sections below). The coordinator closed #14 too early on 2026-11-10 and
+reopened it the same day. Still open: the static manifest items that
+NATIVE_CAPTURE_PROTOCOL lists are not complete in any client capsule (parent
+header and state root, chain config or fork digest, normalization profile,
+known ancestor headers and BSC snapshot dependencies; Geth also defers how
+its ancestor hashes are classified). This waits for the owner's decision on
+where that work goes. Dependencies
 E01-02.pins and BOOT-09 are accepted (#13 closed under D98). Plan agreed with
 the owner under D97 and D98:
 
@@ -63,14 +69,13 @@ Commit `0fb3461` fixes them: the sync in `OpenLog` and on reseal, the
 enforced chunk layout, store read errors passed through, and one more
 mutant. Retained records and earlier attempts are in the evidence file.
 
-Next: Spec and Standards review of the new head, then the coordinator asks the
-owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
-this core into each client; the Bor block adds the in-process Heimdall stub.
+Next: none for this block; it is merged. The open #14 items are listed in
+the first E01-02.inputs section.
 
 ## E01-02.inputs — BSC block
 
-Status: ACCEPTED in PR #139 at merge `046d0a7` (part of #14). Base `a2fb163`, after
-block 0 (PR #137) merged. Role: native-engineer (D98). AC-CAP-04-01 to
+Status: block ACCEPTED in PR #139 at merge `046d0a7` (part of #14). Base
+`a2fb163`, after block 0 (PR #137) merged. Role: native-engineer (D98). AC-CAP-04-01 to
 AC-CAP-04-03 apply to POLY only, so this block issues no AC verdict. It is
 private local evidence under D96 and D98; public cells stay NOT_RUN.
 
@@ -120,13 +125,14 @@ Main `b7c2679` (the Geth block, PR #138) was then merged into this branch.
 Remaining for #14 after this block: those BSC capsule items. The real
 EXEC_READY binding stays with E01-02.admission.
 
-Next: Spec review of the new head and hosted `bootstrap/ci`. The coordinator
-then asks the owner for merge permission.
+Next: none for this block; it is merged. The open #14 items are listed in
+the first E01-02.inputs section.
 
 ## E01-02.inputs — Geth block
 
-Status: ACCEPTED in PR #138 at merge `b7c2679`. Part of #14, after block 0 (PR #137, merged at
-`a2fb163`). Role: native-engineer (D98 item 5). Base `a2fb163`.
+Status: block ACCEPTED in PR #138 at merge `b7c2679` (part of #14), after
+block 0 (PR #137, merged at `a2fb163`). Role: native-engineer (D98 item 5).
+Base `a2fb163`.
 
 Allowed paths: `test/harness/source_inputs_geth.py`,
 `test/harness/fixtures/source_inputs_geth/**` (coordinator technical decision:
@@ -154,13 +160,13 @@ are killed); Python mutants 95 killed, 0 survivors; 39 portable tests.
 Superseded run 01 and the failed hosted CI run are kept. Details and limits:
 [E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
 
-Next: fresh Spec and Standards review of the new head, exact-head
-`bootstrap/ci`, then the coordinator asks the owner for merge permission.
+Next: none for this block; it is merged. The open #14 items are listed in
+the first E01-02.inputs section.
 
 ## E01-02.inputs — Bor block
 
-Status: ACCEPTED in PR #140 at merge `9d14e96` (part of #14). Base main
-`a2fb163` (block 0
+Status: block ACCEPTED in PR #140 at merge `9d14e96` (part of #14). Base
+main `a2fb163` (block 0
 merged in PR #137). Roles: native-engineer (wiring), qa (AC matrix and
 oracle), reviewer (Spec and Standards). Allowed paths: new Bor-specific files
 `test/harness/bor_source_inputs_probe.py`,
@@ -194,9 +200,8 @@ stays NOT_RUN (D96, D98). Mutants: Go 29 killed (`8203955`). Review 002
 without changing the driver or probe code: Python 98 of 98 killed. The
 earlier preparation 01 and run 01 on `a32bc67` also passed and are kept.
 
-Next: Spec and Standards review of the new head and hosted `bootstrap/ci`.
-The real EXEC_READY binding stays with E01-02.admission. #14 stays open for
-the Geth and BSC blocks.
+Next: none for this block; it is merged. The open #14 items are listed in
+the first E01-02.inputs section.
 
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
