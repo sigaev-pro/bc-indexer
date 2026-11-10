@@ -29,6 +29,13 @@
       "original": "\t\t\tseq := input.Cursor()\n",
       "replacement": "\t\t\tseq := input.Cursor()\n\t\t\tif spec.Crash == \"before_handoff\" && seq == spec.CrashSequence {\n\t\t\t\tcrash(log, spec.Crash)\n\t\t\t}\n",
       "reason": "The crash happens before the response is persisted, so the retry sees a shorter durable frontier."
+    },
+    {
+      "name": "resolver_never_poisons",
+      "file": "probe.go",
+      "original": "\t\t\t\treturn poison(number), true\n",
+      "replacement": "\t\t\t\treturn native(number), true\n",
+      "reason": "The poisoning instrument is broken: poisoned modes give native answers, so the poisoned log holds native truth and its replay imports the block."
     }
   ]
 }

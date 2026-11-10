@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -323,6 +324,11 @@ class OracleTests(unittest.TestCase):
             events.insert(next(i for i, e in enumerate(events) if e["op"] == "opened") + 1, sealed)
         self.assertRejected(seal_after_open, "not durable before execution started")
 
+        def no_start(value):
+            events = attempt(value, *clean)["events"]
+            events[:] = [e for e in events if e["op"] != "process_start"]
+        self.assertRejected(no_start, "not durable before execution started")
+
         def no_open(value):
             events = attempt(value, *clean)["events"]
             events[:] = [e for e in events if e["op"] != "opened"]
@@ -432,6 +438,11 @@ class OracleTests(unittest.TestCase):
                             "poisoned control was not rejected")
         self.assertRejected(lambda v: attempt(v, *control_attempt)["events"].pop(), "poisoned control was not rejected")
 
+    def test_unknown_attempt_kind(self):
+        oracle = copy.deepcopy(ORACLE)
+        oracle["scenarios"]["control_direct_poison"][0]["kind"] = "other"
+        self.assertIn("unknown attempt kind", " ".join(geth.checked_compare(observation(), oracle, COMMIT)))
+
     def test_malformed_observation(self):
         self.assertRejected(lambda v: v["scenarios"][0].update(attempts=None), "attempts differ")
         self.assertTrue(geth.checked_compare({"family": "geth", "observation": ORACLE["observation"], "target": 4,
@@ -443,6 +454,7 @@ class OracleTests(unittest.TestCase):
 class InstallTests(unittest.TestCase):
     def tree(self, text="\tdefer evm.Release()\n"):
         directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, directory)
         (directory / "core").mkdir()
         (directory / geth.ANCHOR_FILE).write_text("func Process() {\n" + text + "}\n")
         return directory

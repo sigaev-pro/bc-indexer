@@ -226,7 +226,8 @@ def check_complete(attempt, want, observation, oracle, commit, fail):
     sealed = check_seal_events(rows, want["capsule_existed"], len(oracle["capsule_items"]), fail)
     opened, started = index_of(rows, "opened"), index_of(rows, "process_start")
     # The sync must lie between the seal and the open, so the slice is empty unless sealed < opened.
-    if sealed is None or opened is None or started is None or not opened < started or \
+    # A failed seal check was already reported; rows[None:opened] then starts at the beginning.
+    if opened is None or started is None or not opened < started or \
             ("sync", None) not in rows[sealed:opened]:
         fail("the capsule and log were not durable before execution started")
         return
@@ -293,8 +294,10 @@ def compare(observation, oracle, commit):
                 check_complete(attempt, want, observation, oracle, commit, fail)
             elif want["kind"] == "crash":
                 check_crash(attempt, want, observation, oracle, fail)
-            else:
+            elif want["kind"] == "control":
                 check_control(attempt, oracle, fail)
+            else:
+                fail(f"unknown attempt kind {want['kind']!r}")
     return failures
 
 
@@ -347,7 +350,7 @@ def go_environment():
 def prepare(manifest_path, expected_sha, output):
     started = time.monotonic()
     deadline = started + PREPARATION_SECONDS
-    require(manifest_path.is_absolute(), "BuildManifest path must be absolute")
+    # pinned_json refuses a relative path before anything is written.
     manifest_ref, manifest = pinned_json(manifest_path, expected_sha, 64 * 1024 * 1024, deadline)
     require(manifest.get("evidence_kind") == "actual-build" and manifest.get("task_id") == "E01-01.builds",
             "An accepted actual build is required")
@@ -444,7 +447,7 @@ def prepare(manifest_path, expected_sha, output):
 def run(preparation_path, expected_sha, output):
     started = time.monotonic()
     deadline = started + RUN_SECONDS
-    require(preparation_path.is_absolute(), "Preparation path must be absolute")
+    # pinned_json refuses a relative path before anything is written.
     preparation_ref, preparation = pinned_json(preparation_path, expected_sha, 16 * 1024 * 1024, deadline)
     require(preparation.get("kind") == "source-inputs-geth-preparation" and preparation.get("result") == "PASS" and
             preparation.get("cleanup_complete") is True, "A passing preparation is required")

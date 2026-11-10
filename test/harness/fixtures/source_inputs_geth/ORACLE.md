@@ -63,8 +63,15 @@ replay is rejected only if native code received the saved bytes; native
 mutant `native_lookup_bypass` (hand native code a fresh native lookup) is
 killed there. In the other replays the source answers for durable offsets
 are poisoned; native mutant `bypass_saved_bytes` (hand native code the source
-answer) is killed there. The poisoned answer for block `n` is SHA-256 of
-`changed external response <n>`.
+answer) is killed there. Native mutant `resolver_never_poisons` (the poisoned
+modes return native answers) is killed too, because the saved log of
+`poisoned_log_replay` then holds native truth. The poisoned answer for block
+`n` is SHA-256 of `changed external response <n>`.
+
+The driver tests (`test_source_inputs_geth_driver.py`) run preparation and
+the measured run with Docker faked at the Native boundary: refusals create no
+output, failures and stop signals still write the record, and a surviving
+native mutant fails the run.
 
 ## Limits
 

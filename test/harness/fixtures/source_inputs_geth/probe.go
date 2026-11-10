@@ -53,6 +53,15 @@ var (
 	lookbacks = []byte{1, 3, 1}
 )
 
+// lookbackNumbers returns lookbacks as numbers, so JSON does not encode them as base64.
+func lookbackNumbers() []int {
+	numbers := []int{}
+	for _, back := range lookbacks {
+		numbers = append(numbers, int(back))
+	}
+	return numbers
+}
+
 func readerCode() []byte {
 	var code []byte
 	for slot, back := range lookbacks {
@@ -451,7 +460,7 @@ func run(genesisPath, work, output, commit string) {
 		"family":            "geth",
 		"observation":       observation,
 		"target":            target,
-		"lookbacks":         lookbacks,
+		"lookbacks":         lookbackNumbers(),
 		"generated_hashes":  hashes,
 		"header_rlp_sha256": hex.EncodeToString(headerSum[:]),
 		"scenarios":         scenarios,

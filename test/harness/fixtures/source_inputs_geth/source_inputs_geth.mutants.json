@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Single-check mutants of the E01-02.inputs Geth probe oracle and tree install in test/harness/source_inputs_geth.py.",
+  "description": "Single-check mutants of the E01-02.inputs Geth probe oracle, tree install and driver in test/harness/source_inputs_geth.py.",
   "language": "python",
   "root": "../../../..",
   "copy": [
@@ -10,7 +10,13 @@
   ],
   "test": [
     "{python}",
-    "test/harness/fixtures/source_inputs_geth/test_source_inputs_geth.py",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/harness/fixtures/source_inputs_geth",
+    "-p",
+    "test_*.py",
     "-v"
   ],
   "import": [
@@ -171,8 +177,8 @@
     {
       "name": "missing open",
       "file": "test/harness/source_inputs_geth.py",
-      "original": "if sealed is None or opened is None or started is None",
-      "replacement": "if sealed is None or started is None"
+      "original": "if opened is None or started is None or not opened",
+      "replacement": "if started is None or not opened"
     },
     {
       "name": "request identity",
@@ -449,6 +455,144 @@
       "file": "test/harness/source_inputs_geth.py",
       "original": "                check_seal_events(rows, False, len(oracle[\"capsule_items\"]), fail) is None:",
       "replacement": "                False:"
+    },
+    {
+      "name": "missing start",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "or started is None or not opened < started",
+      "replacement": "or not opened < started"
+    },
+    {
+      "name": "unknown kind",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            elif want[\"kind\"] == \"control\":\n",
+      "replacement": "            elif True:\n"
+    },
+    {
+      "name": "prepare actual build",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "require(manifest.get(\"evidence_kind\") == \"actual-build\" and manifest.get(\"task_id\") == \"E01-01.builds\",",
+      "replacement": "require(manifest.get(\"task_id\") == \"E01-01.builds\","
+    },
+    {
+      "name": "prepare refuse inside",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    capture_probe.refuse_inside(output, (root, ROOT))\n",
+      "replacement": ""
+    },
+    {
+      "name": "compiler pinned",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            require(re.fullmatch(r\"docker.io/library/golang@sha256:[0-9a-f]{64}\", compiler), \"Unpinned compiler\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "family compiler",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            require(manifest[\"builds\"][\"geth\"][\"compiler_image\"] == compiler, \"Geth compiler mismatch\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "source closure",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            require(closure[\"source_commit\"] == manifest[\"builds\"][\"geth\"][\"source_commit\"], \"Source closure mismatch\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "unit tests ok",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            require(b\"\\nok  \\tgithub.com/ethereum/go-ethereum/extractor/source_inputs\" in b\"\\n\" + tests.read_bytes(),\n                    \"Shared unit tests did not pass inside the native module\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "mutant restore on build",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "                finally:\n                    restore()\n",
+      "replacement": "                except Exception:\n                    raise\n                restore()\n"
+    },
+    {
+      "name": "prepare pass",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            record[\"result\"] = \"PASS\"\n        except (Interrupted, Exception) as error:\n            record[\"error\"] = f\"{type(error).__name__}: {error}\"\n        finally:\n            write_until_done(output / \"preparation.json\"",
+      "replacement": "            record[\"result\"] = \"PASS\"\n        except (Interrupted, Exception) as error:\n            record[\"result\"] = \"PASS\"\n            record[\"error\"] = f\"{type(error).__name__}: {error}\"\n        finally:\n            write_until_done(output / \"preparation.json\""
+    },
+    {
+      "name": "run preparation kind",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "require(preparation.get(\"kind\") == \"source-inputs-geth-preparation\" and preparation.get(\"result\") == \"PASS\" and",
+      "replacement": "require(preparation.get(\"result\") == \"PASS\" and"
+    },
+    {
+      "name": "run preparation pass",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "and preparation.get(\"result\") == \"PASS\" and\n",
+      "replacement": "and\n"
+    },
+    {
+      "name": "run preparation cleanup",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            preparation.get(\"cleanup_complete\") is True, \"A passing preparation is required\")",
+      "replacement": "            True, \"A passing preparation is required\")"
+    },
+    {
+      "name": "run refuse inside",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    capture_probe.refuse_inside(output, (preparation_path.parent, manifest_root, ROOT))\n",
+      "replacement": ""
+    },
+    {
+      "name": "one oracle",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            require(len(oracles) == 1, \"The preparation must retain exactly one oracle\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "runtime pinned",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", runtime), \"Unpinned runtime image\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "binary verified",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            binary = artifact(preparation[\"binary\"], BINARY_LIMIT, deadline=deadline)\n",
+      "replacement": "            binary = Path(preparation[\"binary\"][\"path\"])\n"
+    },
+    {
+      "name": "mutants required",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            require(mutants, \"The preparation built no mutants\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "probe result",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            record[\"probe\"][\"result\"] = \"PASS\" if not record[\"probe\"][\"failures\"] else \"FAIL\"\n",
+      "replacement": "            record[\"probe\"][\"result\"] = \"PASS\"\n"
+    },
+    {
+      "name": "mutant result",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "                row[\"result\"] = \"KILLED\" if row[\"failures\"] else \"SURVIVED\"\n",
+      "replacement": "                row[\"result\"] = \"KILLED\"\n"
+    },
+    {
+      "name": "run verdict",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            if record[\"probe\"][\"result\"] == \"PASS\" and all(row[\"result\"] == \"KILLED\" for row in record[\"mutants\"].values()):\n",
+      "replacement": "            if True:\n"
+    },
+    {
+      "name": "run verdict probe",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            if record[\"probe\"][\"result\"] == \"PASS\" and all(",
+      "replacement": "            if all("
+    },
+    {
+      "name": "main exit code",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    return 0 if record[\"result\"] == \"PASS\" else 1\n",
+      "replacement": "    return 0\n"
     }
   ]
 }
