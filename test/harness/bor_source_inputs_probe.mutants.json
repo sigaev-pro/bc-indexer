@@ -1,0 +1,614 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.inputs Bor probe driver and judge.",
+  "language": "python",
+  "root": "../..",
+  "copy": [
+    "test/harness/bor_source_inputs_probe.py",
+    "test/harness/test_bor_source_inputs_probe.py",
+    "test/harness/source_inputs.py",
+    "test/harness/capture_probe.py",
+    "test/harness/artifacts.py",
+    "test/harness/native.py",
+    "test/harness/owned.py",
+    "test/harness/fixtures/source_inputs_bor/*",
+    "adapters/bor/source_inputs/inputs.go",
+    "adapters/bor/source_inputs/inputs_test.go"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/test_bor_source_inputs_probe.py",
+    "-v"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "to_time subtracts the delay",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "datetime.fromtimestamp(timestamp - delay, tz=timezone.utc)",
+      "replacement": "datetime.fromtimestamp(timestamp, tz=timezone.utc)"
+    },
+    {
+      "name": "to_time is UTC",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "datetime.fromtimestamp(timestamp - delay, tz=timezone.utc)",
+      "replacement": "datetime.fromtimestamp(timestamp - delay)"
+    },
+    {
+      "name": "requests fill to_time",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            request = request.replace(\"{to_time}\", to_time(timestamps[row[\"block\"]], delay))\n",
+      "replacement": "            pass\n"
+    },
+    {
+      "name": "entry digest uses the sequence",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "entry = source_inputs.entry_digest(sequence, request, response)",
+      "replacement": "entry = source_inputs.entry_digest(0, request, response)"
+    },
+    {
+      "name": "chain advances",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        chain = source_inputs.chain_next(chain, entry)\n",
+      "replacement": ""
+    },
+    {
+      "name": "consumed count",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "source_inputs.consumed_digest(capsule, len(requests), chain)",
+      "replacement": "source_inputs.consumed_digest(capsule, len(requests) - 1, chain)"
+    },
+    {
+      "name": "log keys are per observation",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "prefix = LOG_PREFIX + observation + \"/\"",
+      "replacement": "prefix = LOG_PREFIX"
+    },
+    {
+      "name": "entry pattern anchored",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "r\"/log/([0-9a-f]{16})$\")",
+      "replacement": "r\"/log/([0-9a-f]{16})\")"
+    },
+    {
+      "name": "row count",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    if len(rows) != len(origins):\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "row sequence",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if row.get(\"sequence\") != index or row.get(\"request\") != want[index][\"request\"]:",
+      "replacement": "if row.get(\"request\") != want[index][\"request\"]:"
+    },
+    {
+      "name": "row request",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if row.get(\"sequence\") != index or row.get(\"request\") != want[index][\"request\"]:",
+      "replacement": "if row.get(\"sequence\") != index:"
+    },
+    {
+      "name": "row request digest",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "elif row.get(\"request_sha256\") != want[index][\"request_sha256\"]:",
+      "replacement": "elif False:"
+    },
+    {
+      "name": "row error",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        elif row.get(\"error\"):\n",
+      "replacement": "        elif False:\n"
+    },
+    {
+      "name": "row response digest",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "elif row.get(\"response_sha256\") != want[index][\"response_sha256\"]:",
+      "replacement": "elif False:"
+    },
+    {
+      "name": "row origin",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "elif row.get(\"origin\") != origin:",
+      "replacement": "elif False:"
+    },
+    {
+      "name": "resumed prefix length",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "return [\"replay\"] * (point + 1) + [\"fetch\"] * (total - point - 1)",
+      "replacement": "return [\"replay\"] * point + [\"fetch\"] * (total - point)"
+    },
+    {
+      "name": "completed import error",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if attempt.get(\"import_error\") or attempt.get(\"inserted\") != len(generated[\"blocks\"]):",
+      "replacement": "if attempt.get(\"inserted\") != len(generated[\"blocks\"]):"
+    },
+    {
+      "name": "completed inserted",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if attempt.get(\"import_error\") or attempt.get(\"inserted\") != len(generated[\"blocks\"]):",
+      "replacement": "if attempt.get(\"import_error\"):"
+    },
+    {
+      "name": "completed head hash",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if attempt.get(\"head_hash\") != last[\"hash\"] or attempt.get(\"head_root\") != last[\"state_root\"]:",
+      "replacement": "if attempt.get(\"head_root\") != last[\"state_root\"]:"
+    },
+    {
+      "name": "completed head root",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if attempt.get(\"head_hash\") != last[\"hash\"] or attempt.get(\"head_root\") != last[\"state_root\"]:",
+      "replacement": "if attempt.get(\"head_hash\") != last[\"hash\"]:"
+    },
+    {
+      "name": "plan echoed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if observed.get(\"plan\") != ran or len(attempts) != len(plan[\"attempts\"]):",
+      "replacement": "if len(attempts) != len(plan[\"attempts\"]):"
+    },
+    {
+      "name": "attempt count",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if observed.get(\"plan\") != ran or len(attempts) != len(plan[\"attempts\"]):",
+      "replacement": "if observed.get(\"plan\") != ran:"
+    },
+    {
+      "name": "crash signal",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if status.get(\"signal\") != \"killed\" or not row.get(\"crash_result\"):",
+      "replacement": "if not row.get(\"crash_result\"):"
+    },
+    {
+      "name": "crash result",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if status.get(\"signal\") != \"killed\" or not row.get(\"crash_result\"):",
+      "replacement": "if status.get(\"signal\") != \"killed\":"
+    },
+    {
+      "name": "exit code",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "elif status.get(\"exit_code\") != 0 or status.get(\"signal\"):",
+      "replacement": "elif status.get(\"signal\"):"
+    },
+    {
+      "name": "exit signal",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "elif status.get(\"exit_code\") != 0 or status.get(\"signal\"):",
+      "replacement": "elif status.get(\"exit_code\") != 0:"
+    },
+    {
+      "name": "missing result",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        if result is None and row.get(\"crash_result\") is None:\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "lost attempt rows",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        check_rows(crash[\"counted_calls\"], want,\n                   [\"fetch\"] * (point + 1), fail, \"lost attempt\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "lost attempt prefix",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if entry_sequences(log_keys(lost[\"store_after\"], observation), observation) != list(range(point + 1)):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "retry frontier",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if retry[\"result\"].get(\"frontier_at_open\") != point + 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "retry rows",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        check_rows(retry[\"result\"][\"counted_calls\"], want,\n                   resumed(point, len(want)), fail, \"retry\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "changed body refused",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if any(r.get(\"response_sha256\") == changed for r in retry[\"result\"][\"counted_calls\"]):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "retry completed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        completed(retry[\"result\"], generated, fail, \"retry\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "retry consumed digest",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if (retry[\"result\"].get(\"consumed\") or {}).get(\"digest\") != full[\"consumed\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "conflict offset differs",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if delayed[offset][\"request\"] == requests[offset][\"request\"] or offset > point:",
+      "replacement": "if offset > point:"
+    },
+    {
+      "name": "conflict offset inside prefix",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if delayed[offset][\"request\"] == requests[offset][\"request\"] or offset > point:",
+      "replacement": "if delayed[offset][\"request\"] == requests[offset][\"request\"]:"
+    },
+    {
+      "name": "conflict prefix rows",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        check_rows(rows[:offset], want,\n                   [\"replay\"] * offset, fail, \"conflicting retry\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "conflict stops the log",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if len(rows) != offset + 1 or rows[offset].get(\"request\") != delayed[offset][\"request\"] or \\",
+      "replacement": "if rows[offset].get(\"request\") != delayed[offset][\"request\"] or \\"
+    },
+    {
+      "name": "conflict request",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if len(rows) != offset + 1 or rows[offset].get(\"request\") != delayed[offset][\"request\"] or \\",
+      "replacement": "if len(rows) != offset + 1 or \\"
+    },
+    {
+      "name": "conflict error",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "\"dependency log prefix conflict\" not in (rows[offset].get(\"error\") or \"\"):",
+      "replacement": "False:"
+    },
+    {
+      "name": "conflict flag",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if conflict[\"result\"].get(\"prefix_conflict\") is not True or not conflict[\"result\"].get(\"import_error\"):",
+      "replacement": "if not conflict[\"result\"].get(\"import_error\"):"
+    },
+    {
+      "name": "conflict import fails",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if conflict[\"result\"].get(\"prefix_conflict\") is not True or not conflict[\"result\"].get(\"import_error\"):",
+      "replacement": "if conflict[\"result\"].get(\"prefix_conflict\") is not True:"
+    },
+    {
+      "name": "conflict not closed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if conflict[\"result\"].get(\"consumed\") or conflict[\"result\"].get(\"stand_in_marker\"):",
+      "replacement": "if conflict[\"result\"].get(\"stand_in_marker\"):"
+    },
+    {
+      "name": "conflict no marker",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if conflict[\"result\"].get(\"consumed\") or conflict[\"result\"].get(\"stand_in_marker\"):",
+      "replacement": "if conflict[\"result\"].get(\"consumed\"):"
+    },
+    {
+      "name": "conflict store unchanged",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if conflict[\"store_after\"] != conflict[\"store_before\"] or conflict[\"store_before\"] != lost[\"store_after\"]:",
+      "replacement": "if conflict[\"store_before\"] != lost[\"store_after\"]:"
+    },
+    {
+      "name": "conflict store is the saved store",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if conflict[\"store_after\"] != conflict[\"store_before\"] or conflict[\"store_before\"] != lost[\"store_after\"]:",
+      "replacement": "if conflict[\"store_after\"] != conflict[\"store_before\"]:"
+    },
+    {
+      "name": "reopened frontier",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if reopened[\"result\"].get(\"frontier_at_open\") != point + 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "reopened rows",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        check_rows(reopened[\"result\"][\"counted_calls\"], want,\n                   resumed(point, len(want)), fail, \"reopened retry\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "reopened completed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        completed(reopened[\"result\"], generated, fail, \"reopened retry\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "tail lost prefix",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if entry_sequences(prefix, observation) != list(range(point + 1)):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "tail frontier",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if result.get(\"frontier_at_open\") != point + 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "tail rows",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        check_rows(result[\"counted_calls\"], want,\n                   resumed(point, len(want)), fail, \"retry\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "tail prefix keys",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if key != frontier and after.get(key) != value:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "tail frontier key may change",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if key != frontier and after.get(key) != value:",
+      "replacement": "if after.get(key) != value:"
+    },
+    {
+      "name": "tail appended",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if entry_sequences(after, observation) != list(range(len(want))):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "tail completed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        completed(result, generated, fail, \"retry\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "tail consumed digest",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if consumed.get(\"digest\") != full[\"consumed\"] or consumed.get(\"count\") != len(want) or \\",
+      "replacement": "if consumed.get(\"count\") != len(want) or \\"
+    },
+    {
+      "name": "tail consumed count",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if consumed.get(\"digest\") != full[\"consumed\"] or consumed.get(\"count\") != len(want) or \\",
+      "replacement": "if consumed.get(\"digest\") != full[\"consumed\"] or \\"
+    },
+    {
+      "name": "tail consumed capsule",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "consumed.get(\"capsule_digest\") != full[\"capsule\"]:",
+      "replacement": "False:"
+    },
+    {
+      "name": "tail marker binds",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if marker != {\"kind\": MARKER_KIND, \"observation\": observation, \"consumed_manifest_digest\": full[\"consumed\"]}:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "tail marker stored",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if not any(row[\"key\"] == MARKER_PREFIX + observation for row in retry[\"store_after\"]):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "control import error",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if not result.get(\"import_error\") or result.get(\"inserted\") != plan[\"expected_inserted\"]:",
+      "replacement": "if result.get(\"inserted\") != plan[\"expected_inserted\"]:"
+    },
+    {
+      "name": "control inserted",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if not result.get(\"import_error\") or result.get(\"inserted\") != plan[\"expected_inserted\"]:",
+      "replacement": "if not result.get(\"import_error\"):"
+    },
+    {
+      "name": "control delay requests",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if [row.get(\"request\") for row in result[\"counted_calls\"]] != [row[\"request\"] for row in delayed]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "control delay completed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        completed(result, generated, fail, \"control\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "unknown kind",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        fail(f\"unknown scenario kind {kind}\")\n",
+      "replacement": "        pass\n"
+    },
+    {
+      "name": "malformed observation",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as error:",
+      "replacement": "    except (AttributeError, IndexError, KeyError, ValueError) as error:"
+    },
+    {
+      "name": "prepare needs an actual build",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(manifest.get(\"evidence_kind\") == \"actual-build\" and manifest.get(\"task_id\") == \"E01-01.builds\",",
+      "replacement": "require(manifest.get(\"task_id\") == \"E01-01.builds\","
+    },
+    {
+      "name": "prepare output outside inputs",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    capture_probe.refuse_inside(output, (root, ROOT))\n",
+      "replacement": ""
+    },
+    {
+      "name": "prepare compiler pinned",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(re.fullmatch(r\"docker.io/library/golang@sha256:[0-9a-f]{64}\", compiler), \"Unpinned compiler\")",
+      "replacement": "require(True, \"Unpinned compiler\")"
+    },
+    {
+      "name": "prepare runtime pinned",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", runtime), \"Unpinned runtime image\")\n            record[\"compiler_image\"], record[\"runtime_image\"] = compiler, runtime",
+      "replacement": "            record[\"compiler_image\"], record[\"runtime_image\"] = compiler, runtime"
+    },
+    {
+      "name": "source closure commit",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(closure[\"source_commit\"] == manifest[\"builds\"][\"bor\"][\"source_commit\"], \"Source closure mismatch\")",
+      "replacement": "require(True, \"Source closure mismatch\")"
+    },
+    {
+      "name": "bor compiler matches",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(manifest[\"builds\"][\"bor\"][\"compiler_image\"] == compiler, \"Bor compiler mismatch\")",
+      "replacement": "require(True, \"Bor compiler mismatch\")"
+    },
+    {
+      "name": "both unit packages pass",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        require(f\"\\nok  \\t{PACKAGE}/{package}\".encode() in output_text,",
+      "replacement": "        require(True or output_text,"
+    },
+    {
+      "name": "stub sources copied",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    row[\"stub_sources\"] = capture_probe.copy_sources(STUB_FILES, FIXTURE / \"heimdallstub\", probe / \"heimdallstub\",\n                                                     deadline)\n",
+      "replacement": ""
+    },
+    {
+      "name": "rlp short string",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        start, length = offset + 1, first - 0x80\n",
+      "replacement": "        start, length = offset + 1, first - 0x81\n"
+    },
+    {
+      "name": "rlp long string",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        start, length = offset + 1 + size, int.from_bytes(data[offset + 1:offset + 1 + size], \"big\")\n    elif first < 0xf8:",
+      "replacement": "        start, length = offset + size, int.from_bytes(data[offset + 1:offset + 1 + size], \"big\")\n    elif first < 0xf8:"
+    },
+    {
+      "name": "rlp truncated item",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(end <= len(data), \"Truncated RLP\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "rlp truncated start",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(offset < len(data), \"Truncated RLP\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "rlp list end",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(position == end, \"Malformed RLP list\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "block shape",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(isinstance(block, list) and block and isinstance(block[0], list) and len(block[0]) > 11,",
+      "replacement": "require(isinstance(block, list) and block,"
+    },
+    {
+      "name": "header time field",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "\"timestamp\": int.from_bytes(header[11], \"big\"),",
+      "replacement": "\"timestamp\": int.from_bytes(header[10], \"big\"),"
+    },
+    {
+      "name": "blocks required",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(rows, \"No sealed blocks\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "generation record matches blocks",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require([{key: row[key] for key in (\"number\", \"timestamp\", \"state_root\")} for row in generated[\"blocks\"]] ==\n            headers, \"The generation record differs from the sealed blocks\")",
+      "replacement": "    require(True, \"The generation record differs from the sealed blocks\")"
+    },
+    {
+      "name": "run preparation kind",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(preparation.get(\"kind\") == \"bor-source-inputs-probe-preparation\" and preparation.get(\"result\") == \"PASS\"",
+      "replacement": "require(preparation.get(\"result\") == \"PASS\""
+    },
+    {
+      "name": "run preparation result",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(preparation.get(\"kind\") == \"bor-source-inputs-probe-preparation\" and preparation.get(\"result\") == \"PASS\"",
+      "replacement": "require(preparation.get(\"kind\") == \"bor-source-inputs-probe-preparation\""
+    },
+    {
+      "name": "run preparation cleanup",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            and preparation.get(\"cleanup_complete\") is True, \"A passing preparation is required\")",
+      "replacement": "            , \"A passing preparation is required\")"
+    },
+    {
+      "name": "run output outside inputs",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    capture_probe.refuse_inside(output, (preparation_path.parent, manifest_root, ROOT))\n",
+      "replacement": ""
+    },
+    {
+      "name": "one oracle",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(len(oracles) == 1, \"The preparation must retain exactly one oracle\")",
+      "replacement": "require(len(oracles) >= 1, \"The preparation must retain exactly one oracle\")"
+    },
+    {
+      "name": "run runtime pinned",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            runtime = preparation[\"runtime_image\"]\n            require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", runtime), \"Unpinned runtime image\")",
+      "replacement": "            runtime = preparation[\"runtime_image\"]"
+    },
+    {
+      "name": "binary verified",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            binary = artifact(bor[\"binary\"], 512 * 1024 * 1024, deadline=deadline)\n",
+      "replacement": "            binary = Path(bor[\"binary\"][\"path\"])\n"
+    },
+    {
+      "name": "scenario failures fail it",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "\"result\": \"PASS\" if not failures else \"FAIL\"}",
+      "replacement": "\"result\": \"PASS\"}"
+    },
+    {
+      "name": "run needs scenarios",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if record[\"scenarios\"] and all(row[\"result\"] == \"PASS\" for row in record[\"scenarios\"].values()):",
+      "replacement": "if all(row[\"result\"] == \"PASS\" for row in record[\"scenarios\"].values()):"
+    },
+    {
+      "name": "run needs every scenario to pass",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if record[\"scenarios\"] and all(row[\"result\"] == \"PASS\" for row in record[\"scenarios\"].values()):",
+      "replacement": "if record[\"scenarios\"]:"
+    },
+    {
+      "name": "prepare manifest path absolute",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(manifest_path.is_absolute(), \"BuildManifest path must be absolute\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "run preparation path absolute",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(preparation_path.is_absolute(), \"Preparation path must be absolute\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "module artifacts re-hashed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            artifact(module[field], 1024 * 1024 * 1024, root, deadline)\n",
+      "replacement": "            pass\n"
+    },
+    {
+      "name": "key source verified",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            artifact(bor[\"key_source\"], 4 * 1024 * 1024, deadline=deadline)\n",
+      "replacement": ""
+    }
+  ]
+}

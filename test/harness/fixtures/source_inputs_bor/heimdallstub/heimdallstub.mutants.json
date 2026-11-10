@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.inputs Bor Heimdall stub and transport recorder.",
+  "language": "go",
+  "root": ".",
+  "copy": [
+    "stub.go",
+    "stub_test.go"
+  ],
+  "go_module": "heimdallstub",
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "-v",
+    "."
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "counted state sync path",
+      "file": "stub.go",
+      "original": "return u.Path == \"/clerk/time\" || spanPath.MatchString(u.Path)",
+      "replacement": "return spanPath.MatchString(u.Path)"
+    },
+    {
+      "name": "counted span path",
+      "file": "stub.go",
+      "original": "return u.Path == \"/clerk/time\" || spanPath.MatchString(u.Path)",
+      "replacement": "return u.Path == \"/clerk/time\""
+    },
+    {
+      "name": "span path anchored at end",
+      "file": "stub.go",
+      "original": "regexp.MustCompile(`^/bor/spans/[0-9]+$`)",
+      "replacement": "regexp.MustCompile(`^/bor/spans/[0-9]+`)"
+    },
+    {
+      "name": "span path anchored at start",
+      "file": "stub.go",
+      "original": "regexp.MustCompile(`^/bor/spans/[0-9]+$`)",
+      "replacement": "regexp.MustCompile(`/bor/spans/[0-9]+$`)"
+    },
+    {
+      "name": "span id digits required",
+      "file": "stub.go",
+      "original": "regexp.MustCompile(`^/bor/spans/[0-9]+$`)",
+      "replacement": "regexp.MustCompile(`^/bor/spans/[0-9]*$`)"
+    },
+    {
+      "name": "stub span 1 served",
+      "file": "stub.go",
+      "original": "\tcase u.Path == \"/bor/spans/1\":\n\t\tname = \"span-1.json\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "stub variant selects first page",
+      "file": "stub.go",
+      "original": "if u.Query().Get(\"from_id\") == \"1\" {",
+      "replacement": "if true {"
+    },
+    {
+      "name": "stub variant name",
+      "file": "stub.go",
+      "original": "name = \"clerk-\" + s.Variant + \"-from-1.json\"",
+      "replacement": "name = \"clerk-a-from-1.json\""
+    },
+    {
+      "name": "stub unknown path is 404",
+      "file": "stub.go",
+      "original": "\tif name == \"\" {\n\t\treturn []byte(\"not found\\n\"), http.StatusNotFound\n\t}\n",
+      "replacement": "\tif name == \"\" {\n\t\tname = \"status.json\"\n\t}\n"
+    },
+    {
+      "name": "stub read error is 500",
+      "file": "stub.go",
+      "original": "return []byte(err.Error()), http.StatusInternalServerError",
+      "replacement": "return []byte(err.Error()), http.StatusOK"
+    },
+    {
+      "name": "foreign host refused",
+      "file": "stub.go",
+      "original": "\tif req.URL.Host != Host {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "uncounted calls bypass the log",
+      "file": "stub.go",
+      "original": "\tif !Counted(req.URL) {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "uncounted calls are tallied",
+      "file": "stub.go",
+      "original": "\t\tr.uncounted[req.URL.Path]++\n",
+      "replacement": ""
+    },
+    {
+      "name": "request identity includes the query",
+      "file": "stub.go",
+      "original": "request := []byte(req.Method + \" \" + req.URL.RequestURI())",
+      "replacement": "request := []byte(req.Method + \" \" + req.URL.Path)"
+    },
+    {
+      "name": "request identity includes the method",
+      "file": "stub.go",
+      "original": "request := []byte(req.Method + \" \" + req.URL.RequestURI())",
+      "replacement": "request := []byte(req.URL.RequestURI())"
+    },
+    {
+      "name": "fetch origin recorded",
+      "file": "stub.go",
+      "original": "\t\trow.Origin = \"fetch\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "stub error is a fetch error",
+      "file": "stub.go",
+      "original": "\t\tif status != http.StatusOK {\n",
+      "replacement": "\t\tif false {\n"
+    },
+    {
+      "name": "counted calls use the log",
+      "file": "stub.go",
+      "original": "\tif r.log == nil {\n\t\tbody, err = fetch()\n",
+      "replacement": "\tif true {\n\t\tbody, err = fetch()\n"
+    },
+    {
+      "name": "log error refused",
+      "file": "stub.go",
+      "original": "\tif err != nil {\n\t\trow.Error = err.Error()\n\t\tr.rows = append(r.rows, row)\n\t\treturn nil, err\n\t}\n",
+      "replacement": "\tif err != nil {\n\t\trow.Error = err.Error()\n\t}\n"
+    },
+    {
+      "name": "failed call recorded",
+      "file": "stub.go",
+      "original": "\t\trow.Error = err.Error()\n\t\tr.rows = append(r.rows, row)\n\t\treturn nil, err\n",
+      "replacement": "\t\trow.Error = err.Error()\n\t\treturn nil, err\n"
+    },
+    {
+      "name": "response digest recorded",
+      "file": "stub.go",
+      "original": "row.ResponseSHA256, row.ResponseLength = HexSum(body), len(body)",
+      "replacement": "row.ResponseLength = len(body)"
+    },
+    {
+      "name": "crash point sequence",
+      "file": "stub.go",
+      "original": "if row.Sequence == r.crashAfter {",
+      "replacement": "if row.Sequence == r.crashAfter+1 {"
+    },
+    {
+      "name": "crash point kills",
+      "file": "stub.go",
+      "original": "\t\tr.kill()\n",
+      "replacement": ""
+    },
+    {
+      "name": "crash rows include the saved call",
+      "file": "stub.go",
+      "original": "r.onCrash(append([]Row(nil), r.rows...))",
+      "replacement": "r.onCrash(append([]Row(nil), r.rows[:len(r.rows)-1]...))"
+    },
+    {
+      "name": "crash point after save",
+      "file": "stub.go",
+      "original": "\tvar body []byte\n\tvar err error\n\tif r.log == nil {",
+      "replacement": "\tif row.Sequence == r.crashAfter {\n\t\tr.onCrash(append([]Row(nil), r.rows...))\n\t\tr.kill()\n\t}\n\tvar body []byte\n\tvar err error\n\tif r.log == nil {"
+    },
+    {
+      "name": "snapshot returns tallies",
+      "file": "stub.go",
+      "original": "\t\tuncounted[key] = count\n",
+      "replacement": "\t\tuncounted[key] = count - 1\n"
+    },
+    {
+      "name": "stub status served",
+      "file": "stub.go",
+      "original": "\tcase u.Path == \"/status\":\n\t\tname = \"status.json\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "stub latest span served",
+      "file": "stub.go",
+      "original": "\tcase u.Path == \"/bor/spans/latest\":\n\t\tname = \"span-latest.json\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "stub span 0 served",
+      "file": "stub.go",
+      "original": "\tcase u.Path == \"/bor/spans/0\":\n\t\tname = \"span-0.json\"\n",
+      "replacement": ""
+    }
+  ]
+}
