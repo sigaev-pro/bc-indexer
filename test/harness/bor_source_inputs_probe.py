@@ -20,6 +20,7 @@ import sys
 import tarfile
 import time
 import uuid
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import capture_probe
@@ -43,6 +44,7 @@ PREPARATION_SECONDS = 3600
 RUN_SECONDS = 1200
 MARKER_KIND = "test-only-stand-in-exec-ready"
 LOG_PREFIX = "extractor-source-inputs-v1/"
+CHECKPOINT_INTERVAL = 1024
 MARKER_PREFIX = "extractor-test-only-stand-in-exec-ready/"
 
 
@@ -162,7 +164,8 @@ def generate_chain(output, native, runtime, deadline):
                    [(output / "bor/bin", "/probe", True), (output / "stub", "/stub", True), (chains, "/chains", False)],
                    cap=600, memory="2g")
     return {"blocks": reference(chains / "a/blocks.rlp", deadline=deadline),
-            "generated": reference(chains / "a/generated.json", deadline=deadline)}
+            "generated": reference(chains / "a/generated.json", deadline=deadline),
+            "parent_header": reference(chains / "a/parent-header.rlp", deadline=deadline)}
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +245,16 @@ def completed(attempt, generated, fail, label):
         fail(f"{label}: imported head differs from the sealed chain")
 
 
+def check_capsule(result, step, context, fail, label):
+    """A logged attempt sealed the independent capsule and ran Bor with its chain config,
+    except under the AC-CAP-04-02 fault, which runs with another delay on purpose."""
+    capsule = result.get("capsule") or {}
+    if capsule.get("items") != context["capsule_items"] or capsule.get("digest") != context["expected"]["capsule"]:
+        fail(f"{label}: the sealed capsule differs from the independent items")
+    if result.get("native_config_matches_capsule") is not (step["fault_state_sync_delay"] < 0):
+        fail(f"{label}: native Bor did not run with the expected chain config")
+
+
 def compare(name, observed, context):
     """Return the differences between one scenario result and the oracle."""
     failures = []
@@ -259,17 +272,24 @@ def compare(name, observed, context):
     full = context["expected"]
     requests = context["requests"]
     want = [{**entry, "request": row["request"]} for entry, row in zip(full["entries"], requests)]
+    refusals = plan.get("refusals") or {}
     for index, (step, row) in enumerate(zip(plan["attempts"], attempts)):
         status, result = row["status"], row.get("result")
         if step["crash_after"] >= 0:
             if status.get("signal") != "killed" or not row.get("crash_result"):
                 fail(f"attempt {index} was not lost at its crash point")
+        elif str(index) in refusals:
+            if status.get("exit_code") != 1 or status.get("signal"):
+                fail(f"attempt {index} exited with {status}, expected a refusal")
         elif status.get("exit_code") != 0 or status.get("signal"):
             fail(f"attempt {index} exited with {status}")
         if result is None and row.get("crash_result") is None:
             fail(f"attempt {index} left no result")
     if failures:
         return failures
+    for index, (step, row) in enumerate(zip(plan["attempts"], attempts)):
+        if step["log"] and str(index) not in refusals:
+            check_capsule(row.get("result") or row["crash_result"], step, context, fail, f"attempt {index}")
     kind = plan["kind"]
     if kind == "replay-after-loss":
         lost, retry = attempts[0], attempts[1]
@@ -293,7 +313,7 @@ def compare(name, observed, context):
         lost, conflict, reopened = attempts[0], attempts[1], attempts[2]
         point = plan["attempts"][0]["crash_after"]
         offset = plan["conflict_offset"]
-        delayed = expected_requests(oracle, context["timestamps"], plan["attempts"][1]["state_sync_delay"])
+        delayed = expected_requests(oracle, context["timestamps"], plan["attempts"][1]["fault_state_sync_delay"])
         if delayed[offset]["request"] == requests[offset]["request"] or offset > point:
             fail("the oracle conflict offset does not hold a different request inside the saved prefix")
         rows = conflict["result"]["counted_calls"]
@@ -341,6 +361,28 @@ def compare(name, observed, context):
             fail("the stand-in marker does not bind the final consumed-manifest digest")
         if not any(row["key"] == MARKER_PREFIX + observation for row in retry["store_after"]):
             fail("the stand-in marker is not in the store")
+    elif kind == "capsule-controls":
+        for index, row in enumerate(attempts):
+            result = row["result"]
+            if str(index) in refusals:
+                if refusals[str(index)] not in (result.get("error") or ""):
+                    fail(f"attempt {index} was not refused with {refusals[str(index)]!r}: {result.get('error')}")
+                if result.get("capsule") or result.get("counted_calls") or result.get("inserted") or \
+                        result.get("consumed") or result.get("stand_in_marker"):
+                    fail(f"attempt {index} sealed, fetched or imported before its refusal")
+                if row["store_after"] != row["store_before"]:
+                    fail(f"attempt {index} changed the store")
+            else:
+                completed(result, generated, fail, f"attempt {index}")
+                origins = ["fetch"] * len(want) if result.get("frontier_at_open") == 0 else ["replay"] * len(want)
+                check_rows(result["counted_calls"], want, origins, fail, f"attempt {index}")
+                if result.get("stand_in_marker") != {"kind": MARKER_KIND, "observation": observation,
+                                                     "consumed_manifest_digest": full["consumed"]}:
+                    fail(f"attempt {index} did not bind the independent consumed digest")
+        if attempts[0]["store_before"] != [] or str(0) not in refusals:
+            fail("the first control did not refuse an item on an empty store")
+        if [step["tamper"] for step in plan["attempts"] if step["tamper"]] != plan["tampered"]:
+            fail("the controls do not tamper every derived capsule item")
     elif kind == "control-changed-response":
         result = attempts[0]["result"]
         if not result.get("import_error") or result.get("inserted") != plan["expected_inserted"]:
@@ -391,8 +433,77 @@ def rlp_item(data, offset):
     return items, end
 
 
+def rlp_encode(value):
+    """RLP encoding of bytes or a list of values; for a canonical item it returns the original bytes."""
+    if isinstance(value, list):
+        payload, short, long = b"".join(rlp_encode(item) for item in value), 0xc0, 0xf7
+    elif len(value) == 1 and value[0] < 0x80:
+        return bytes(value)
+    else:
+        payload, short, long = bytes(value), 0x80, 0xb7
+    if len(payload) < 56:
+        return bytes([short + len(payload)]) + payload
+    size = len(payload).to_bytes((len(payload).bit_length() + 7) // 8, "big")
+    return bytes([long + len(size)]) + size + payload
+
+
+KECCAK_ROUND_CONSTANTS = (
+    0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000, 0x000000000000808B,
+    0x0000000080000001, 0x8000000080008081, 0x8000000000008009, 0x000000000000008A, 0x0000000000000088,
+    0x0000000080008009, 0x000000008000000A, 0x000000008000808B, 0x800000000000008B, 0x8000000000008089,
+    0x8000000000008003, 0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
+    0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008)
+# KECCAK_ROTATIONS[x][y] is the rho offset of lane (x, y).
+KECCAK_ROTATIONS = ((0, 36, 3, 41, 18), (1, 44, 10, 45, 2), (62, 6, 43, 15, 61), (28, 55, 25, 21, 56),
+                    (27, 20, 39, 8, 14))
+LANE = (1 << 64) - 1
+
+
+def rotate(value, count):
+    return ((value << count) | (value >> (64 - count))) & LANE
+
+
+def keccak_f(lanes):
+    """The Keccak-f[1600] permutation; lanes[x][y] are 64-bit integers."""
+    for constant in KECCAK_ROUND_CONSTANTS:
+        parity = [lanes[x][0] ^ lanes[x][1] ^ lanes[x][2] ^ lanes[x][3] ^ lanes[x][4] for x in range(5)]
+        mix = [parity[(x - 1) % 5] ^ rotate(parity[(x + 1) % 5], 1) for x in range(5)]
+        moved = [[0] * 5 for _ in range(5)]
+        for x in range(5):
+            for y in range(5):
+                moved[y][(2 * x + 3 * y) % 5] = rotate(lanes[x][y] ^ mix[x], KECCAK_ROTATIONS[x][y])
+        lanes = [[moved[x][y] ^ (~moved[(x + 1) % 5][y] & moved[(x + 2) % 5][y]) for y in range(5)]
+                 for x in range(5)]
+        lanes[0][0] ^= constant
+    return lanes
+
+
+def keccak256(data):
+    """Ethereum Keccak-256 (original Keccak padding, not SHA3-256); hashlib has no Keccak."""
+    rate = 136
+    padded = bytearray(data) + b"\x01"
+    padded += bytes(-len(padded) % rate)
+    padded[-1] |= 0x80
+    lanes = [[0] * 5 for _ in range(5)]
+    for start in range(0, len(padded), rate):
+        for index in range(rate // 8):
+            offset = start + 8 * index
+            lanes[index % 5][index // 5] ^= int.from_bytes(padded[offset:offset + 8], "little")
+        lanes = keccak_f(lanes)
+    return b"".join(lanes[index % 5][index // 5].to_bytes(8, "little") for index in range(4))
+
+
+def decoded_header(data):
+    """The fields of one encoded header; the encoding must be canonical."""
+    # Re-encoding to the same bytes also rules out trailing bytes.
+    header, _ = rlp_item(data, 0)
+    require(isinstance(header, list) and len(header) > 12 and rlp_encode(header) == data,
+            "Malformed header")
+    return header
+
+
 def sealed_headers(blocks):
-    """Number, time and state root of each block in a blocks.rlp stream, decoded here."""
+    """Number, time, state root, parent hash and hash of each block in a blocks.rlp stream, decoded here."""
     rows, offset = [], 0
     while offset < len(blocks):
         block, offset = rlp_item(blocks, offset)
@@ -400,23 +511,70 @@ def sealed_headers(blocks):
                 "Malformed block")
         header = block[0]
         rows.append({"number": int.from_bytes(header[8], "big"), "timestamp": int.from_bytes(header[11], "big"),
-                     "state_root": "0x" + header[3].hex()})
+                     "state_root": "0x" + header[3].hex(), "parent_hash": "0x" + header[0].hex(),
+                     "hash": "0x" + keccak256(rlp_encode(header)).hex()})
     require(rows, "No sealed blocks")
     return rows
 
 
-def build_context(oracle, generated, bodies, genesis, blocks, commit):
-    # Header times and state roots come from the sealed blocks, decoded here; only the
-    # block hashes (Keccak, not in hashlib) are taken from the generation record, which
-    # must agree with the decoded fields.
+def chain_config(genesis, delay):
+    """The chain-config item: the genesis config with the state sync delay, as canonical JSON."""
+    config = json.loads(genesis)["config"]
+    require(isinstance(config, dict) and isinstance(config.get("bor"), dict), "The genesis has no Bor config")
+    require("stateSyncConfirmationDelay" not in config["bor"], "The fixture genesis already sets the delay")
+    config["bor"]["stateSyncConfirmationDelay"] = {"0": delay}
+    return json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def fork_id(config, genesis_hash, head):
+    """The EIP-2124 fork ID item at block `head` (core/forkid NewID). Bor's chain config has block forks only."""
+    forks = sorted({value for key, value in config.items()
+                    if key.endswith("Block") and type(value) is int and value > 0})
+    checksum, following = zlib.crc32(genesis_hash), 0
+    for fork in forks:
+        if fork > head:
+            following = fork
+            break
+        checksum = zlib.crc32(fork.to_bytes(8, "big"), checksum)
+    return json.dumps({"hash": checksum.to_bytes(4, "big").hex(), "next": str(following)}, sort_keys=True,
+                      separators=(",", ":")).encode()
+
+
+def capsule_items(oracle, genesis, blocks, headers, parent, commit):
+    """The expected capsule items, in the oracle order, from the fixture inputs and the sealed chain."""
+    fields = decoded_header(parent)
+    document = json.loads(genesis)
+    parent_hash = keccak256(parent)
+    require(int.from_bytes(fields[8], "big") == 0 and "0x" + parent_hash.hex() == headers[0]["parent_hash"],
+            "The parent header is not the parent of the first sealed block")
+    extra = document.get("extraData") or ""
+    require(int.from_bytes(fields[11], "big") == int(document["timestamp"], 16) and
+            int.from_bytes(fields[9], "big") == int(document["gasLimit"], 16) and
+            fields[12] == bytes.fromhex(extra.removeprefix("0x")), "The parent header differs from the genesis file")
+    config = chain_config(genesis, oracle["state_sync_delay"])
+    items = (("genesis", genesis), ("blocks", blocks), ("parent-header", parent), ("parent-hash", parent_hash),
+             ("parent-root", fields[3]), ("ancestor-headers", rlp_encode([fields])),
+             ("chain-config", config), ("fork-id", fork_id(json.loads(config), parent_hash, headers[-1]["number"])),
+             ("native-commit", commit.encode()), ("normalization-profile", oracle["normalization_profile"].encode()))
+    require([name for name, _ in items] == oracle["capsule_items"], "The oracle capsule items differ")
+    return items
+
+
+def build_context(oracle, generated, bodies, genesis, blocks, commit, parent):
+    # Header times, state roots and hashes come from the sealed blocks, decoded and
+    # hashed here; the generation record must agree with them.
     headers = sealed_headers(blocks)
-    require([{key: row[key] for key in ("number", "timestamp", "state_root")} for row in generated["blocks"]] ==
-            headers, "The generation record differs from the sealed blocks")
+    fields = ("number", "timestamp", "state_root", "hash")
+    require([{key: row[key] for key in fields} for row in generated["blocks"]] ==
+            [{key: row[key] for key in fields} for row in headers], "The generation record differs from the sealed blocks")
+    require(all(row["parent_hash"] == previous["hash"] for previous, row in zip(headers, headers[1:])),
+            "The sealed blocks are not one chain")
     timestamps = {row["number"]: row["timestamp"] for row in headers}
     requests = expected_requests(oracle, timestamps)
-    items = (("genesis", genesis), ("blocks", blocks), ("bor-source-commit", commit.encode()))
+    items = capsule_items(oracle, genesis, blocks, headers, parent, commit)
+    refs = [{"name": name, "length": len(data), "sha256": source_inputs.sha(data).hex()} for name, data in items]
     return {"oracle": oracle, "generated": generated, "timestamps": timestamps, "requests": requests,
-            "plans": {plan["name"]: plan for plan in oracle["scenarios"]},
+            "plans": {plan["name"]: plan for plan in oracle["scenarios"]}, "capsule_items": refs,
             "expected": expected_digests(items, requests, bodies),
             "body_sha256": {name: source_inputs.sha(data).hex() for name, data in bodies.items()}}
 
@@ -469,8 +627,11 @@ def run(preparation_path, expected_sha, output):
             blocks_path = artifact(preparation["chain"]["blocks"], 64 * 1024 * 1024, deadline=deadline)
             blocks = read_bytes(blocks_path, 64 * 1024 * 1024, deadline)
             _, generated = json_artifact(preparation["chain"]["generated"], 16 * 1024 * 1024, deadline=deadline)
-            context = build_context(oracle, generated, bodies, genesis, blocks, bor["source_commit"])
-            record["expected"] = {"requests": context["requests"], **context["expected"]}
+            parent = read_bytes(artifact(preparation["chain"]["parent_header"], 1024 * 1024, deadline=deadline),
+                                1024 * 1024, deadline)
+            context = build_context(oracle, generated, bodies, genesis, blocks, bor["source_commit"], parent)
+            record["expected"] = {"requests": context["requests"], "capsule_items": context["capsule_items"],
+                                  **context["expected"]}
             record["phases"]["admission_finished"] = time.time()
             plans = output / "plans"
             plans.mkdir()
