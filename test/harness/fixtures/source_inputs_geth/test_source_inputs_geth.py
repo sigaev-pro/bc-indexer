@@ -37,9 +37,11 @@ def capsule():
     return {"observation": ORACLE["observation"], "items": refs, "digest": sha(items_digest)}
 
 
-def log():
+def log(poisoned=False):
     ref = HASHES[3]
-    return [(f"geth-blockhash-v1 ref={ref} number={number}", HASHES[number - 1][2:]) for number in ORACLE["requested_numbers"]]
+    return [(f"geth-blockhash-v1 ref={ref} number={number}",
+             sha(f"changed external response {number}".encode()) if poisoned else HASHES[number - 1][2:])
+            for number in ORACLE["requested_numbers"]]
 
 
 def put(key):
@@ -56,11 +58,11 @@ def seal_events(existed):
     return chunks + [SYNC, put("capsule"), SYNC, {"op": "sealed"}]
 
 
-def dependency_events(sequence, fetched, handed=True):
-    request, response = log()[sequence]
+def dependency_events(sequence, fetched, handed=True, poisoned=False):
+    request, response = log(poisoned)[sequence]
     rows = [{"op": "request", "sequence": sequence, "request": request}]
     if fetched:
-        rows += [{"op": "fetch", "sequence": sequence, "poisoned": False},
+        rows += [{"op": "fetch", "sequence": sequence, "poisoned": poisoned},
                  put(f"log/{sequence:016x}/0000000000000000"), put(f"log/{sequence:016x}"), SYNC, put("frontier"), SYNC]
     if handed:
         rows.append({"op": "handoff", "sequence": sequence, "response": response})
@@ -80,8 +82,17 @@ def complete(name, want):
     seal = capsule()
     events = seal_events(want["capsule_existed"]) + [SYNC, {"op": "opened", "frontier": want["frontier_at_open"]},
                                                     {"op": "process_start", "number": 4}]
+    saved_poison = want.get("saved") == "poisoned"
     for sequence in range(3):
-        events += dependency_events(sequence, sequence in want["fetched"])
+        events += dependency_events(sequence, sequence in want["fetched"], poisoned=saved_poison)
+        if sequence in want["fetched"]:
+            events[-6]["poisoned"] = want.get("fetch_poisoned", False)
+    if want.get("rejected"):
+        return {"name": name, "exit_code": 0, "signal": "", "events": events,
+                "result": {"errors": [], "capsule_existed": want["capsule_existed"],
+                           "frontier_at_open": want["frontier_at_open"], "head_before": 3, "head_number": 3,
+                           "head_hash": HASHES[2], "capsule": seal,
+                           "import_error": "invalid merkle root (remote: aa local: bb)"}}
     if want["closes"]:
         events += [put("closed"), SYNC]
     events.append({"op": "finished"})
@@ -191,6 +202,43 @@ class OracleTests(unittest.TestCase):
         self.assertRejected(lambda v: attempt(v, *clean)["result"]["capsule"]["items"][3].update(length=1),
                             "capsule digest differs")
 
+    def test_capsule_item_layout(self):
+        clean = ("clean_then_closed_replay", "clean-1")
+        for length in (0, 65537, "1"):
+            def change(value, length=length):
+                attempt(value, *clean)["result"]["capsule"]["items"][1]["length"] = length
+            self.assertRejected(change, "empty or longer than one chunk")
+
+    def test_saved_poisoned_answers_reach_native_code(self):
+        replay = ("poisoned_log_replay", "poisoned-2-replay")
+        first = ("poisoned_log_replay", "poisoned-1")
+
+        def imported(value):
+            result = attempt(value, *replay)["result"]
+            result.update(import_error=None, head_number=4, head_hash=HASHES[3])
+        self.assertRejected(imported, "did not reject the saved poisoned answers")
+        self.assertRejected(lambda v: attempt(v, *replay)["result"].update(head_number=4),
+                            "did not reject the saved poisoned answers")
+        self.assertRejected(lambda v: attempt(v, *replay)["result"].update(import_error="unknown ancestor"),
+                            "did not reject the saved poisoned answers")
+        self.assertRejected(lambda v: attempt(v, *replay)["result"].update(reader_slots=[]),
+                            "did not reject the saved poisoned answers")
+        self.assertRejected(lambda v: attempt(v, *replay)["result"].update(consumed={}),
+                            "did not reject the saved poisoned answers")
+        self.assertRejected(lambda v: attempt(v, *replay)["result"].update(errors=["x"]), "reported errors")
+
+        def native_bytes(value):
+            event = next(e for e in attempt(value, *replay)["events"] if e["op"] == "handoff")
+            event["response"] = HASHES[2][2:]
+        self.assertRejected(native_bytes, "a hand-off differs from the saved bytes")
+
+        def honest_fetch(value):
+            next(e for e in attempt(value, *first)["events"] if e["op"] == "fetch")["poisoned"] = False
+        self.assertRejected(honest_fetch, "a fetch used the wrong source")
+        self.assertRejected(lambda v: attempt(v, *first)["events"].append({"op": "finished"}),
+                            "consumed manifest was not closed")
+        self.assertRejected(lambda v: attempt(v, *replay)["result"].update(frontier_at_open=0), "durable state at open")
+
     def test_consumed_manifest(self):
         clean = ("clean_then_closed_replay", "clean-1")
         self.assertRejected(lambda v: attempt(v, *clean)["result"]["consumed"].update(digest="00" * 32),
@@ -205,7 +253,7 @@ class OracleTests(unittest.TestCase):
         def change(value):
             events = attempt(value, "crash_before_handoff", "handoff-2-retry")["events"]
             next(event for event in events if event["op"] == "fetch")["poisoned"] = True
-        self.assertRejected(change, "a poisoned source was fetched")
+        self.assertRejected(change, "a fetch used the wrong source")
 
     def test_seal_order(self):
         clean = ("clean_then_closed_replay", "clean-1")
@@ -224,7 +272,17 @@ class OracleTests(unittest.TestCase):
         def no_chunks(value):
             events = attempt(value, *clean)["events"]
             events[:] = [e for e in events if "/capsule/" not in e.get("key", "")]
-        self.assertRejected(no_chunks, "manifest was not written once and synced")
+        self.assertRejected(no_chunks, "did not write one chunk for every capsule item")
+
+        def missing_chunk(value):
+            events = attempt(value, *clean)["events"]
+            events[:] = [e for e in events if not e.get("key", "").endswith("/capsule/0000000000000003/0000000000000000")]
+        self.assertRejected(missing_chunk, "did not write one chunk for every capsule item")
+
+        def missing_chunk_in_crash(value):
+            events = attempt(value, "crash_after_seal", "seal-1-crash")["events"]
+            del events[0]
+        self.assertRejected(missing_chunk_in_crash, "did not write one chunk for every capsule item")
 
         def two_manifests(value):
             attempt(value, *clean)["events"].insert(0, put("capsule"))
@@ -304,6 +362,12 @@ class OracleTests(unittest.TestCase):
         def wrong_handoff_sequence(value):
             next(e for e in attempt(value, *clean)["events"] if e["op"] == "handoff")["sequence"] = 1
         self.assertRejected(wrong_handoff_sequence, "was not handed off exactly once")
+
+        def write_after_handoff(value):
+            events = attempt(value, *clean)["events"]
+            index = next(i for i, e in enumerate(events) if e["op"] == "handoff")
+            events.insert(index + 1, put("frontier"))
+        self.assertRejected(write_after_handoff, "events follow the hand-off of sequence 0")
 
         def replay_writes(value):
             events = attempt(value, "clean_then_closed_replay", "clean-2-closed-replay")["events"]

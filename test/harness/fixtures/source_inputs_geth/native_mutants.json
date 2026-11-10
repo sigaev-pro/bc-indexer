@@ -17,6 +17,13 @@
       "reason": "Native code receives the source answer instead of the saved bytes; poisoned replays then fail native validation."
     },
     {
+      "name": "native_lookup_bypass",
+      "file": "probe.go",
+      "original": "\t\t\treturn common.BytesToHash(response)\n",
+      "replacement": "\t\t\treturn native(number)\n",
+      "reason": "Native code receives a fresh native lookup instead of the saved bytes; the replay of a saved poisoned log then imports the block."
+    },
+    {
       "name": "crash_before_persist",
       "file": "probe.go",
       "original": "\t\t\tseq := input.Cursor()\n",

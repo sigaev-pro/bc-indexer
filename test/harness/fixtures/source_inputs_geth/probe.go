@@ -432,6 +432,16 @@ func run(genesisPath, work, output, commit string) {
 	retry.Crash, retry.Resolver, retry.PoisonBelow = "", "poisoned_below", 2
 	scenario("crash_before_handoff", runAttempt(work, "handoff-1-crash", handoff), runAttempt(work, "handoff-2-retry", retry))
 
+	// The saved log holds answers that differ from native truth: a replay
+	// with the native source must hand native code the saved answers, so
+	// native validation rejects the block again.
+	poisoned := base
+	poisoned.Datadir = dir("poisoned-log")
+	poisoned.Resolver = "poisoned_all"
+	replay = poisoned
+	replay.Resolver = "native"
+	scenario("poisoned_log_replay", runAttempt(work, "poisoned-1", poisoned), runAttempt(work, "poisoned-2-replay", replay))
+
 	control := base
 	control.Datadir = dir("control-direct-poison")
 	control.Resolver = "direct_poison"

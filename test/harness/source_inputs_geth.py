@@ -77,14 +77,20 @@ def capsule_digest(refs):
     return hashlib.sha256(data).hexdigest()
 
 
-def expected_log(observation, oracle):
-    """The requests and responses the target block must consume, from the generated chain."""
+def poison(oracle, number):
+    """The changed source answer of the poisoned modes, from the formula in expected.json."""
+    return hashlib.sha256(oracle["poison_format"].format(number=number).encode()).hexdigest()
+
+
+def expected_log(observation, oracle, poisoned=False):
+    """The requests and responses the target block must consume: the generated chain's
+    ancestor hashes, or the poisoned answers when the saved log holds those."""
     hashes = observation["generated_hashes"]
     ref = hashes[oracle["target"] - 1]
     rows = []
     for number in oracle["requested_numbers"]:
         request = oracle["request_format"].format(ref=ref, number=number)
-        rows.append((request, hashes[number - 1][2:]))
+        rows.append((request, poison(oracle, number) if poisoned else hashes[number - 1][2:]))
     return rows
 
 
@@ -111,14 +117,18 @@ def check_capsule(result, observation, oracle, commit, fail):
     for name, sha in fixed.items():
         if by_name[name].get("sha256") != sha:
             fail(f"capsule item {name} differs from the expected bytes")
+    # Each item is one chunk, which check_seal_events relies on.
+    if not all(type(ref.get("length")) is int and 0 < ref["length"] <= source_inputs.CHUNK_BYTES for ref in refs):
+        fail("a capsule item is empty or longer than one chunk")
+        return None
     if capsule.get("observation") != oracle["observation"] or capsule.get("digest") != capsule_digest(refs):
         fail("capsule digest differs from the independent formula")
         return None
     return capsule["digest"]
 
 
-def check_seal_events(rows, existed, fail):
-    """A new seal writes chunks, syncs, writes the manifest and syncs before it returns."""
+def check_seal_events(rows, existed, items, fail):
+    """A new seal writes one chunk per item, syncs, writes the manifest and syncs before it returns."""
     sealed = index_of(rows, "sealed")
     if sealed is None:
         fail("the attempt did not seal exactly once")
@@ -130,7 +140,11 @@ def check_seal_events(rows, existed, fail):
         return sealed
     manifest = [index for index, row in enumerate(before) if row == ("put", "capsule")]
     chunks = [index for index, row in enumerate(before) if row[0] == "put" and row[1].startswith("capsule/")]
-    if len(manifest) != 1 or not chunks or before[-1] != ("sync", None):
+    keys = sorted(before[index][1] for index in chunks)
+    if keys != [f"capsule/{item:016x}/0000000000000000" for item in range(items)]:
+        fail("the seal did not write one chunk for every capsule item")
+        return sealed
+    if len(manifest) != 1 or before[-1] != ("sync", None):
         fail("the capsule manifest was not written once and synced before execution")
         return sealed
     if not any(row == ("sync", None) for row in before[max(chunks) + 1:manifest[0]]):
@@ -157,6 +171,8 @@ def check_dependencies(rows, start, log, fetched, fail, handed=None):
             continue
         else:
             between = segment[:handoffs[0]]
+            if position + 1 < len(requests) and segment[handoffs[0] + 1:]:
+                fail(f"events follow the hand-off of sequence {sequence}")
         persisted = [("fetch", sequence), ("put", f"log/{sequence:016x}/0000000000000000"),
                      ("put", f"log/{sequence:016x}"), ("sync", None), ("put", "frontier"), ("sync", None)]
         if sequence in fetched:
@@ -168,35 +184,46 @@ def check_dependencies(rows, start, log, fetched, fail, handed=None):
 
 
 def check_complete(attempt, want, observation, oracle, commit, fail):
+    """An attempt that ran block 4 to the end: imported, or rejected by native validation."""
     result = attempt.get("result")
     if attempt.get("exit_code") != 0 or attempt.get("signal") or not isinstance(result, dict):
         fail("the attempt did not finish")
         return
-    if result.get("errors") or result.get("import_error") is not None:
-        fail("the attempt reported errors")
     target = oracle["target"]
     hashes = observation["generated_hashes"]
-    if result.get("head_number") != target or result.get("head_hash") != hashes[target - 1]:
-        fail("the imported head differs from the generated block")
-    log = expected_log(observation, oracle)
-    if result.get("reader_slots") != ["0x" + response for _, response in log]:
-        fail("native execution did not receive the expected BLOCKHASH bytes")
+    rejected = want.get("rejected", False)
+    log = expected_log(observation, oracle, poisoned=want.get("saved", "native") == "poisoned")
+    if result.get("errors"):
+        fail("the attempt reported errors")
+    if rejected:
+        if oracle["control_error"] not in str(result.get("import_error")) or result.get("head_number") != target - 1 \
+                or "consumed" in result or "reader_slots" in result:
+            fail("native validation did not reject the saved poisoned answers")
+    else:
+        if result.get("import_error") is not None:
+            fail("the attempt reported errors")
+        if result.get("head_number") != target or result.get("head_hash") != hashes[target - 1]:
+            fail("the imported head differs from the generated block")
+        if result.get("reader_slots") != ["0x" + response for _, response in log]:
+            fail("native execution did not receive the expected BLOCKHASH bytes")
     if result.get("capsule_existed") is not want["capsule_existed"] or \
             result.get("frontier_at_open") != want["frontier_at_open"]:
         fail("durable state at open differs from the oracle")
     capsule = check_capsule(result, observation, oracle, commit, fail)
-    consumed = result.get("consumed") or {}
-    if capsule is None or consumed.get("digest") != expected_consumed(capsule, log) or \
-            consumed.get("count") != len(log) or consumed.get("capsule_digest") != capsule:
-        fail("the consumed manifest differs from the independent digest")
-    if result.get("cursor") != len(log) or \
-            not str(result.get("extra_after_finish", "")).startswith(oracle["closed_error_prefix"]):
-        fail("the closed log accepted a new response")
+    if not rejected:
+        consumed = result.get("consumed") or {}
+        if capsule is None or consumed.get("digest") != expected_consumed(capsule, log) or \
+                consumed.get("count") != len(log) or consumed.get("capsule_digest") != capsule:
+            fail("the consumed manifest differs from the independent digest")
+        if result.get("cursor") != len(log) or \
+                not str(result.get("extra_after_finish", "")).startswith(oracle["closed_error_prefix"]):
+            fail("the closed log accepted a new response")
     events = attempt.get("events") or []
     rows = ops(events)
-    if any(event.get("op") == "fetch" and event.get("poisoned") is not False for event in events):
-        fail("a poisoned source was fetched")
-    sealed = check_seal_events(rows, want["capsule_existed"], fail)
+    fetch_poisoned = want.get("fetch_poisoned", False)
+    if any(event.get("op") == "fetch" and event.get("poisoned") is not fetch_poisoned for event in events):
+        fail("a fetch used the wrong source")
+    sealed = check_seal_events(rows, want["capsule_existed"], len(oracle["capsule_items"]), fail)
     opened, started = index_of(rows, "opened"), index_of(rows, "process_start")
     # The sync must lie between the seal and the open, so the slice is empty unless sealed < opened.
     if sealed is None or opened is None or started is None or not opened < started or \
@@ -210,7 +237,9 @@ def check_complete(attempt, want, observation, oracle, commit, fail):
         if event.get("op") == "handoff" and event.get("response") != log[event["sequence"]][1]:
             fail("a hand-off differs from the saved bytes")
     tail = rows[[index for index, row in enumerate(rows) if row[0] == "handoff"][-1] + 1:]
-    if tail != ([("put", "closed"), ("sync", None)] if want["closes"] else []) + [("finished", None)]:
+    expected_tail = [] if rejected else \
+        ([("put", "closed"), ("sync", None)] if want["closes"] else []) + [("finished", None)]
+    if tail != expected_tail:
         fail("the consumed manifest was not closed as expected")
 
 
@@ -223,7 +252,8 @@ def check_crash(attempt, want, observation, oracle, fail):
         fail("the last event is not the expected crash")
         return
     if want["point"] == "after_seal":
-        if rows[-2:-1] != [("sealed", None)] or check_seal_events(rows, False, fail) is None:
+        if rows[-2:-1] != [("sealed", None)] or \
+                check_seal_events(rows, False, len(oracle["capsule_items"]), fail) is None:
             fail("the crash did not follow a completed seal")
         return
     started = index_of(rows, "process_start")
