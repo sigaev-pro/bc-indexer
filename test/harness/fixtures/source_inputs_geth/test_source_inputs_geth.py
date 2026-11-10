@@ -67,6 +67,9 @@ def chain():
 
 
 HASHES, HEADERS, TRANSACTIONS = chain()
+PINNED_GENESIS = ORACLE["genesis_hash"]
+# The synthetic chain has its own genesis; the pinned native value is checked in test_pinned_values.
+ORACLE["genesis_hash"] = HASHES[0]
 
 
 def item_data(saved=()):
@@ -218,6 +221,8 @@ class KeccakAndRlpTests(unittest.TestCase):
         self.assertEqual(geth.rlp_list(rlp([b"\x7f"])), [(b"\x7f", b"\x7f")])
         # Each rule on its own: without it, the bytes would decode or fail differently.
         for bad, text in ((b"\xf8\x01\x80", "noncanonical RLP length"), (b"\xf9\x00\x01\x80", "noncanonical RLP length"),
+                          (b"\xf9\x00\x40" + b"\x01" * 64, "noncanonical RLP length"),
+                          (b"\xbf" + bytes(8), "noncanonical RLP length"), (b"\xc3\x82a", "truncated RLP item"),
                           (b"\xc4\x80\x80", "truncated RLP item"), (b"\xc2\x81\x01", "noncanonical RLP byte"),
                           (b"\xc4\xc1\x82ab", "RLP list overruns its length")):
             with self.assertRaisesRegex(ValueError, text):
@@ -225,7 +230,7 @@ class KeccakAndRlpTests(unittest.TestCase):
 
     def test_header_fields(self):
         self.assertEqual(geth.header_fields(HEADERS[2])[geth.NUMBER], b"\x02")
-        for bad in (rlp([b"a"] * 14), rlp([[b"a"]] + [b"a"] * 15)):
+        for bad in (rlp([b"a"] * 14), rlp([[b"a"]] + [b"a"] * 15), rlp([b"a"] * 14 + [[b"a"]])):
             with self.assertRaises(ValueError):
                 geth.header_fields(bad)
 
@@ -252,8 +257,14 @@ class OracleTests(unittest.TestCase):
         self.assertEqual(geth.headers(ORACLE), {0: "ancestor-header-0", 1: "ancestor-header-1", 2: "ancestor-header-2",
                                                 3: "parent-header"})
 
-    def test_oracle_chain_config_is_the_genesis_config(self):
-        self.assertEqual(ORACLE["chain_config"], json.loads((geth.FIXTURE / "genesis.json").read_text())["config"])
+    def test_pinned_values(self):
+        # The native config adds only the zero deposit contract address to the genesis.json config.
+        config = json.loads((geth.FIXTURE / "genesis.json").read_text())["config"]
+        self.assertEqual(ORACLE["chain_config"],
+                         dict(config, depositContractAddress="0x0000000000000000000000000000000000000000"))
+        self.assertRegex(PINNED_GENESIS, "^0x[0-9a-f]{64}$")
+        self.assertRejected(lambda v: v["generated_hashes"].__setitem__(0, PINNED_GENESIS[:-1] + "0"),
+                            "does not describe the oracle chain")
 
     def test_wrong_commit_is_rejected(self):
         self.assertIn("capsule item native-commit differs", " ".join(geth.checked_compare(observation(), ORACLE, "x")))
@@ -333,6 +344,12 @@ class OracleTests(unittest.TestCase):
             failures = self.failures(lambda v, name=name, data=data: set_item(v, CLEAN, name, data))
             self.assertTrue(any(f"capsule item {name} " in failure for failure in failures), (name, failures))
 
+    def test_chain_config_must_match_exactly(self):
+        for config in (dict(ORACLE["chain_config"], shanghaiTime=0),
+                       {key: value for key, value in ORACLE["chain_config"].items() if key != "londonBlock"}):
+            self.assertRejected(lambda v, c=config: set_item(v, CLEAN, "chain-config", json.dumps(c).encode()),
+                                "capsule item chain-config differs")
+
     def test_header_checks(self):
         poisoned_native = header(3, HASHES[2])
         for where, name, data, text in (
@@ -411,7 +428,7 @@ class OracleTests(unittest.TestCase):
         def parent_not_executed(value):
             events = attempt(value, *PARENT)["events"]
             events[:] = [e for e in events if e["op"] != "process_start"]
-        self.assertRejected(parent_not_executed, "started only if the saved body was valid")
+        self.assertRejected(parent_not_executed, "did not start although the saved body was valid")
 
     def test_source_use(self):
         def retry_asks_source(value):

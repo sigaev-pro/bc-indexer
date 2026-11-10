@@ -72,6 +72,14 @@ class DriverFixture(unittest.TestCase):
                 mock.patch.object(target, name, value)
             patch.start()
             self.addCleanup(patch.stop)
+        # The synthetic observation has its own genesis, so the preparation copies a fixture whose oracle
+        # pins that genesis hash instead of the native one; every other fixture file is unchanged.
+        fixture = self.root / "fixture"
+        shutil.copytree(geth.FIXTURE, fixture, ignore=shutil.ignore_patterns("__pycache__"))
+        (fixture / "expected.json").write_text(json.dumps(oracle_tests.ORACLE, indent=2) + "\n")
+        patch = mock.patch.object(geth, "FIXTURE", fixture)
+        patch.start()
+        self.addCleanup(patch.stop)
         self.containers = ""
         FakeNative.interrupt, FakeNative.cleanup_complete = False, True
         FakeNative.unit_stdout, FakeNative.failing_build = UNIT_OK, None

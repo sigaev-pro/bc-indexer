@@ -49,10 +49,16 @@
    "replacement": "    if first < 0x7F:\n"
   },
   {
-   "name": "rlp long length canonical",
+   "name": "rlp long leading zero",
    "file": "test/harness/source_inputs_geth.py",
-   "original": "if size == 0 or data[offset + 1] == 0 or length < 56:",
-   "replacement": "if False:"
+   "original": "if data[offset + 1] == 0 or length < 56:",
+   "replacement": "if length < 56:"
+  },
+  {
+   "name": "rlp long short length",
+   "file": "test/harness/source_inputs_geth.py",
+   "original": "if data[offset + 1] == 0 or length < 56:",
+   "replacement": "if data[offset + 1] == 0:"
   },
   {
    "name": "rlp truncated",
@@ -267,8 +273,14 @@
   {
    "name": "item chain config",
    "file": "test/harness/source_inputs_geth.py",
-   "original": "\"chain-config\": all(",
-   "replacement": "\"chain-config\": True or all("
+   "original": "\"chain-config\": json.loads(items[\"chain-config\"]) == oracle[\"chain_config\"],",
+   "replacement": "\"chain-config\": True,"
+  },
+  {
+   "name": "item chain config subset",
+   "file": "test/harness/source_inputs_geth.py",
+   "original": "\"chain-config\": json.loads(items[\"chain-config\"]) == oracle[\"chain_config\"],",
+   "replacement": "\"chain-config\": oracle[\"chain_config\"].items() <= json.loads(items[\"chain-config\"]).items(),"
   },
   {
    "name": "item fork id",
@@ -619,6 +631,12 @@
    "replacement": "False or \\"
   },
   {
+   "name": "chain genesis",
+   "file": "test/harness/source_inputs_geth.py",
+   "original": "            observation[\"generated_hashes\"][0] != oracle[\"genesis_hash\"] or \\\n",
+   "replacement": ""
+  },
+  {
    "name": "chain transactions",
    "file": "test/harness/source_inputs_geth.py",
    "original": "len(observation.get(\"generated_transactions\", [])) != target + 1:",
@@ -803,6 +821,24 @@
    "file": "test/harness/source_inputs_geth.py",
    "original": "    return 0 if record[\"result\"] == \"PASS\" else 1\n",
    "replacement": "    return 0\n"
+  },
+  {
+   "name": "rlp list prefix",
+   "file": "test/harness/source_inputs_geth.py",
+   "original": "if first < 0xC0 else",
+   "replacement": "if first < 0xBF else"
+  },
+  {
+   "name": "rlp truncated by one",
+   "file": "test/harness/source_inputs_geth.py",
+   "original": "    if end > len(data):\n",
+   "replacement": "    if end > len(data) + 1:\n"
+  },
+  {
+   "name": "header field type range",
+   "file": "test/harness/source_inputs_geth.py",
+   "original": "for field in fields[:15]",
+   "replacement": "for field in fields[:14]"
   }
  ]
 }

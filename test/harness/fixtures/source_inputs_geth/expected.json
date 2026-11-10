@@ -3,6 +3,7 @@
   "family": "geth",
   "observation": "geth-probe-obs-4",
   "target": 4,
+  "genesis_hash": "0x40c7b676bbc3682e9e4007290469eb76d376c7ea063097d6291a1bb06e1d1167",
   "requested_numbers": [
     3,
     1,
@@ -38,6 +39,7 @@
     "arrowGlacierBlock": 0,
     "grayGlacierBlock": 0,
     "terminalTotalDifficulty": 1000000000000000000000000000000,
+    "depositContractAddress": "0x0000000000000000000000000000000000000000",
     "ethash": {}
   },
   "normalization_profile": "test-only-probe-v1",

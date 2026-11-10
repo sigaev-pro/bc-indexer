@@ -5,8 +5,10 @@ observations. The oracle is `compare()` in `test/harness/source_inputs_geth.py`
 with the fixed values in `expected.json`. It never trusts a value the probe
 computes about itself when an independent value exists:
 
-- Expected block and transaction hashes come from the generated chain, which
-  the probe builds with `core.GenerateChain` and a separate in-memory chain,
+- The genesis hash is pinned in `expected.json` (genesis.json plus the
+  reader contract; the value was first observed in measured run 03 and is
+  fixed since then, so a changed genesis fails). Expected block and
+  transaction hashes come from the generated chain, which the probe builds with `core.GenerateChain` and a separate in-memory chain,
   not from the import under test. `generated_hashes[n]` is the hash of block
   `n`; index 0 is the genesis.
 - The probe reports the saved bytes of every capsule item, read back from the
@@ -44,7 +46,7 @@ not dependency log entries. The capsule of block 4 holds, in order:
 | `parent-hash` | 32 bytes | The generated block 3 hash |
 | `parent-root` | 32 bytes | The state root field of the saved parent header |
 | `ancestor-header-0` to `-2` | RLP of the headers of blocks 0 to 2 | Number, parent hash and Keccak-256 against the generated chain |
-| `chain-config` | JSON of the native chain config | Holds every field of the `genesis.json` config with the same value |
+| `chain-config` | JSON of the native chain config | Equals `chain_config` in `expected.json`: the `genesis.json` config plus the zero `depositContractAddress` that Geth writes |
 | `fork-id` | JSON `{hash, next}` | `hash` is the big-endian CRC-32 of the genesis hash (every fork of this config is at block 0), `next` is `"0"` |
 | `native-commit` | The accepted Geth source commit | Equal |
 | `normalization-profile` | `test-only-probe-v1` | Equal; a stand-in until the normalizer defines a product profile |

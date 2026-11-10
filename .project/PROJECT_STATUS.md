@@ -145,7 +145,8 @@ accepted until review, CI and the owner's merge permission. Base `1cebde2`
   block (blocks `max(0, N-256)` to `N-1`) are known before execution, so
   they are static capsule items (`parent-header`, `ancestor-header-<n>`).
   The dependency log keeps only responses unknown in advance; the Geth
-  import has none, so its log stays empty and closes with count 0. This
+  import of this profile has none, so its log stays empty and closes with
+  count 0. This
   replaces the test-only BLOCKHASH routing through the log described below.
 - Output: the Geth capsule holds every static item that the protocol lists:
   header and body RLP, an encodings descriptor, the parent header, hash and

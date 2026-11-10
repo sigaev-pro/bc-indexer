@@ -105,7 +105,7 @@ def rlp_item(data, offset=0):
     else:
         size = first - base - 55
         length = int.from_bytes(data[offset + 1:offset + 1 + size], "big")
-        if size == 0 or data[offset + 1] == 0 or length < 56:
+        if data[offset + 1] == 0 or length < 56:
             raise ValueError("noncanonical RLP length")
         start = offset + 1 + size
     end = start + length
@@ -233,8 +233,7 @@ def check_capsule(result, observation, oracle, commit, want, fail):
             "encodings": items["encodings"] == oracle["encodings"].encode(),
             "parent-hash": items["parent-hash"].hex() == hashes[target - 1][2:],
             "parent-root": items["parent-root"] == header_fields(items["parent-header"])[STATE_ROOT],
-            "chain-config": all(json.loads(items["chain-config"]).get(key) == value
-                                for key, value in oracle["chain_config"].items()),
+            "chain-config": json.loads(items["chain-config"]) == oracle["chain_config"],
             "fork-id": json.loads(items["fork-id"]) == {
                 "hash": f"{zlib.crc32(bytes.fromhex(hashes[0][2:])):08x}", "next": "0"},
             "native-commit": items["native-commit"] == commit.encode(),
@@ -343,7 +342,7 @@ def check_complete(attempt, want, observation, oracle, commit, fail):
     # The sync must lie between the seal and the open, so the slice is empty unless sealed < opened.
     # A failed seal check was already reported; rows[None:opened] then starts at the beginning.
     if (started is None) is not (rejected == "body"):
-        fail("block execution started only if the saved body was valid" if started is None else
+        fail("block execution did not start although the saved body was valid" if started is None else
              "block execution started with a saved body that native validation must reject")
         return
     if opened is None or ("sync", None) not in rows[sealed:opened] or (started is not None and not opened < started):
@@ -404,6 +403,7 @@ def compare(observation, oracle, commit):
     target = oracle["target"]
     if observation.get("family") != oracle["family"] or observation.get("observation") != oracle["observation"] or \
             observation.get("target") != target or len(observation.get("generated_hashes", [])) != target + 1 or \
+            observation["generated_hashes"][0] != oracle["genesis_hash"] or \
             len(observation.get("generated_transactions", [])) != target + 1:
         return ["the observation does not describe the oracle chain"]
     scenarios = {row.get("name"): row.get("attempts") for row in observation.get("scenarios", [])}
