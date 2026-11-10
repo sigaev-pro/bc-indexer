@@ -22,7 +22,9 @@ import (
 // Store is the subset of the native key-value store that this package uses.
 // The native ethdb.Database of each accepted client satisfies it. Writes are
 // durable only after SyncKeyValue returns nil; before that, a power loss may
-// keep any subset of them.
+// keep any subset of them. After a process crash, unsynced writes may still
+// be visible and be lost later, so SealCapsule and OpenLog sync what they
+// read before they rely on it.
 type Store interface {
 	Has(key []byte) (bool, error)
 	Get(key []byte) ([]byte, error)
@@ -284,14 +286,26 @@ func putChunks(db Store, data []byte, key func(uint64) []byte) error {
 	return nil
 }
 
-// readChunks reads the chunks of length bytes and checks the whole SHA-256
-// against the record, which also covers every chunk size.
+// readChunks reads the chunks of length bytes. Every chunk except the last
+// must hold exactly ChunkBytes, and the whole SHA-256 must match the record.
+// A missing or wrong-sized chunk is ErrCorrupt; a store error passes through.
 func readChunks(db Store, length uint64, digest string, key func(uint64) []byte) ([]byte, error) {
 	data := make([]byte, 0, length)
 	for index := uint64(0); index < chunkCount(length); index++ {
+		ok, err := db.Has(key(index))
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("%w: missing chunk %d", ErrCorrupt, index)
+		}
 		chunk, err := db.Get(key(index))
 		if err != nil {
-			return nil, fmt.Errorf("%w: missing chunk %d: %v", ErrCorrupt, index, err)
+			return nil, err
+		}
+		want := min(uint64(ChunkBytes), length-index*ChunkBytes)
+		if uint64(len(chunk)) != want {
+			return nil, fmt.Errorf("%w: chunk %d has %d bytes, want %d", ErrCorrupt, index, len(chunk), want)
 		}
 		data = append(data, chunk...)
 	}
@@ -345,6 +359,10 @@ func SealCapsule(db Store, id string, items []Item) (Capsule, error) {
 			if _, err := ReadItem(db, id, index); err != nil {
 				return Capsule{}, err
 			}
+		}
+		// The manifest may be visible but unsynced after a process crash.
+		if err := db.SyncKeyValue(); err != nil {
+			return Capsule{}, err
 		}
 		return existing, nil
 	}
@@ -473,6 +491,12 @@ func OpenLog(db Store, id string) (*Log, error) {
 			return nil, fmt.Errorf("%w: closed manifest of %s", ErrCorrupt, id)
 		}
 		log.closed = &closed
+	}
+	// After a process crash, the frontier and its entries may be visible but
+	// not yet synced. Sync them before any of them is replayed, so a replayed
+	// response is always durable.
+	if err := db.SyncKeyValue(); err != nil {
+		return nil, err
 	}
 	return log, nil
 }

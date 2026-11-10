@@ -60,7 +60,11 @@ type memStore struct {
 	getErr  error
 	hasErr  error
 	syncErr error
-	writes  []string
+	// hasErrFor and getErrFor fail Has or Get with errDisk for a key that
+	// ends with the given suffix.
+	hasErrFor string
+	getErrFor string
+	writes    []string
 }
 
 func newStore() *memStore { return &memStore{durable: map[string][]byte{}} }
@@ -79,6 +83,9 @@ func (s *memStore) Has(key []byte) (bool, error) {
 	if s.hasErr != nil {
 		return false, s.hasErr
 	}
+	if s.hasErrFor != "" && strings.HasSuffix(string(key), s.hasErrFor) {
+		return false, errDisk
+	}
 	_, ok := s.view(string(key))
 	return ok, nil
 }
@@ -86,6 +93,9 @@ func (s *memStore) Has(key []byte) (bool, error) {
 func (s *memStore) Get(key []byte) ([]byte, error) {
 	if s.getErr != nil {
 		return nil, s.getErr
+	}
+	if s.getErrFor != "" && strings.HasSuffix(string(key), s.getErrFor) {
+		return nil, errDisk
 	}
 	value, ok := s.view(string(key))
 	if !ok {
@@ -438,8 +448,9 @@ func TestNextPowerLossAtEveryPoint(t *testing.T) {
 		mustNext(t, first, request1, serve(old), old)
 		total := base.ops - start
 		for crash := 1; crash <= total+1; crash++ {
-			probe := &memStore{durable: maps.Clone(reference), crashAt: crash}
+			probe := &memStore{durable: maps.Clone(reference)}
 			log := mustOpen(t, probe)
+			probe.crashAt = probe.ops + crash
 			mustNext(t, log, request0, noFetch(t), response0)
 			got, err := log.Next(request1, serve(old))
 			if crash <= total {
@@ -816,6 +827,12 @@ func TestCorruptRecords(t *testing.T) {
 			key := string(responseChunkKey(observation, 1, 1))
 			s.durable[key] = s.durable[key][1:]
 		},
+		"shifted byte": func(s *memStore) {
+			first, second := string(responseChunkKey(observation, 1, 0)), string(responseChunkKey(observation, 1, 1))
+			last := s.durable[first][len(s.durable[first])-1]
+			s.durable[first] = s.durable[first][:len(s.durable[first])-1]
+			s.durable[second] = append([]byte{last}, s.durable[second]...)
+		},
 		"missing chunk": func(s *memStore) { delete(s.durable, string(responseChunkKey(observation, 1, 1))) },
 		"chunk too long": func(s *memStore) {
 			key := string(responseChunkKey(observation, 1, 0))
@@ -883,5 +900,74 @@ func TestKeysStayOutsidePrunedSpace(t *testing.T) {
 		if len(key) == 32 || len(key) == 33 || !strings.HasPrefix(key, keyPrefix+"a/") {
 			t.Fatalf("key %q can collide with native or foreign keys", key)
 		}
+	}
+}
+
+// After a process crash without power loss, a frontier or manifest that was
+// written but not synced can still be visible. Opening the log, or sealing
+// the same capsule again, syncs it before relying on it, so a later power
+// loss cannot drop a response that was replayed.
+func TestProcessCrashVisibleWritesAreSyncedOnOpen(t *testing.T) {
+	db := newStore()
+	mustSeal(t, db)
+	log := mustOpen(t, db)
+	db.crashAt = db.ops + 5 // chunk, entry, sync, frontier put, then the final sync fails
+	if _, err := log.Next(request0, serve(response0)); !errors.Is(err, errCrash) {
+		t.Fatalf("crash: %v", err)
+	}
+	db.crashAt = 0 // the process restarts on the same store; pending writes stay visible
+	reopened := mustOpen(t, db)
+	if reopened.Frontier() != 1 {
+		t.Fatalf("visible frontier %d, want 1", reopened.Frontier())
+	}
+	mustNext(t, reopened, request0, noFetch(t), response0)
+	afterPowerLoss := mustOpen(t, db.powerLoss(0))
+	if afterPowerLoss.Frontier() != 1 {
+		t.Fatal("a replayed response was lost by a later power loss")
+	}
+	mustNext(t, afterPowerLoss, request0, noFetch(t), response0)
+
+	db = newStore()
+	db.crashAt = 4 // chunk, sync, manifest put, then the final sync fails
+	if _, err := SealCapsule(db, observation, vectorItems); !errors.Is(err, errCrash) {
+		t.Fatalf("seal crash: %v", err)
+	}
+	db.crashAt = 0
+	if _, err := SealCapsule(db, observation, vectorItems); err != nil {
+		t.Fatalf("reseal after a process crash: %v", err)
+	}
+	if _, err := ReadCapsule(db.powerLoss(0), observation); err != nil {
+		t.Fatalf("a resealed capsule was lost by a later power loss: %v", err)
+	}
+}
+
+func TestChunkReadErrorsPassThrough(t *testing.T) {
+	for _, field := range []string{"has", "get"} {
+		db := newStore()
+		mustSeal(t, db)
+		log := mustOpen(t, db)
+		mustNext(t, log, request0, serve(response0), response0)
+		replay := mustOpen(t, db)
+		suffix := string(responseChunkKey(observation, 0, 0))
+		if field == "has" {
+			db.hasErrFor = suffix
+		} else {
+			db.getErrFor = suffix
+		}
+		if _, err := replay.Next(request0, noFetch(t)); !errors.Is(err, errDisk) || errors.Is(err, ErrCorrupt) {
+			t.Fatalf("%s error on a chunk: %v", field, err)
+		}
+		if _, err := replay.Next(request0, noFetch(t)); !errors.Is(err, ErrFailed) {
+			t.Fatalf("%s: replay continued: %v", field, err)
+		}
+	}
+	db := newStore()
+	mustSeal(t, db)
+	db.syncErr = errDisk
+	if _, err := OpenLog(db, observation); !errors.Is(err, errDisk) {
+		t.Fatalf("open sync error: %v", err)
+	}
+	if _, err := SealCapsule(db, observation, vectorItems); !errors.Is(err, errDisk) {
+		t.Fatalf("reseal sync error: %v", err)
 	}
 }

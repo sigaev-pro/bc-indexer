@@ -22,7 +22,10 @@ the real EXEC_READY binding are later blocks.
 The package writes through `Store` (`Has`, `Get`, `Put`, `SyncKeyValue`), a
 subset of the native `ethdb.Database` of each client. A `Put` is durable only
 after `SyncKeyValue` returns nil; before that, a power loss may keep any subset
-of the unsynced writes. Every multi-write step therefore writes its data,
+of the unsynced writes. After a process crash (no power loss), unsynced writes
+may still be visible on reopen and be lost later; `SealCapsule` (for an
+existing capsule) and `OpenLog` therefore sync before they return, so nothing
+they read is replayed or trusted unless it is durable. Every multi-write step therefore writes its data,
 syncs, and only then writes one small commit record and syncs again. Data left
 by an interrupted step is never read, because no commit record points to it,
 and it is overwritten by the next attempt.
@@ -43,8 +46,9 @@ native offline pruner (trie node and code keys) never deletes one.
 
 `<item>`, `<sequence>` and `<chunk>` are 16 lowercase hex digits. Data is
 stored in chunks of at most `ChunkBytes` (65,536); every chunk except the last
-is full. A read checks the whole SHA-256, which also covers every chunk
-size; a damaged or missing chunk is `ErrCorrupt`.
+is full. A read requires that exact layout and the whole SHA-256; a damaged,
+missing or wrong-sized chunk is `ErrCorrupt`, and a store read error passes
+through unchanged.
 
 ### Digests
 
@@ -85,7 +89,8 @@ durable entry and refuses a frontier, entry or closed manifest that does not
 match (`ErrCorrupt`). Each attempt starts at the first logical request of the
 observation with its cursor at 0. `Next(request, fetch)`:
 
-1. **Replay.** Below the durable frontier, the request digest must equal the
+1. **Replay.** `OpenLog` syncs first, so every entry it can see is durable.
+   Below the durable frontier, the request digest must equal the
    saved one. Then `Next` returns the saved response bytes after checking them
    and never calls `fetch`, so a retry never sees a fresh response.
 2. **Prefix conflict.** A different request at a durable offset is
