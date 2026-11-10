@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.inputs identity check and Python digest reference.",
+  "language": "python",
+  "root": "../..",
+  "copy": [
+    "test/harness/source_inputs.py",
+    "test/harness/test_source_inputs.py",
+    "adapters/*/source_inputs/*"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/test_source_inputs.py",
+    "-v"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "missing package",
+      "file": "test/harness/source_inputs.py",
+      "original": "    if not base.is_dir():\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "only files are compared",
+      "file": "test/harness/source_inputs.py",
+      "original": "for path in sorted(base.rglob(\"*\")) if path.is_file()}",
+      "replacement": "for path in sorted(base.rglob(\"*\"))}"
+    },
+    {
+      "name": "empty package",
+      "file": "test/harness/source_inputs.py",
+      "original": "    if not names[FAMILIES[0]]:\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "file names compared",
+      "file": "test/harness/source_inputs.py",
+      "original": "        if names[family] != names[FAMILIES[0]]:\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "every family compared",
+      "file": "test/harness/source_inputs.py",
+      "original": "    for family in FAMILIES[1:]:\n",
+      "replacement": "    for family in FAMILIES[2:]:\n"
+    },
+    {
+      "name": "file bytes compared",
+      "file": "test/harness/source_inputs.py",
+      "original": "        if len(set(values.values())) != 1:\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "check exit code",
+      "file": "test/harness/source_inputs.py",
+      "original": "        return 1\n",
+      "replacement": "        return 0\n"
+    },
+    {
+      "name": "vector capsule name length",
+      "file": "test/harness/source_inputs.py",
+      "original": "data += u64(len(name)) + name.encode() + u64(len(content)) + sha(content)",
+      "replacement": "data += name.encode() + u64(len(content)) + sha(content)"
+    },
+    {
+      "name": "vector chain order",
+      "file": "test/harness/source_inputs.py",
+      "original": "return sha(chain + entry)",
+      "replacement": "return sha(entry + chain)"
+    },
+    {
+      "name": "vector consumed count",
+      "file": "test/harness/source_inputs.py",
+      "original": "+ capsule + u64(count) + chain)",
+      "replacement": "+ capsule + chain)"
+    },
+    {
+      "name": "vector entry response length",
+      "file": "test/harness/source_inputs.py",
+      "original": "+ sha(response) + u64(len(response)))",
+      "replacement": "+ sha(response))"
+    }
+  ]
+}
