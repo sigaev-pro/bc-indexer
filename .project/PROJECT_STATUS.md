@@ -66,6 +66,35 @@ Next: Spec and Standards review of the new head, then the coordinator asks the
 owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
 this core into each client; the Bor block adds the in-process Heimdall stub.
 
+## E01-02.inputs — Bor block
+
+Status: IN_PROGRESS (draft PR, Part of #14). Base main `a2fb163` (block 0
+merged in PR #137). Roles: native-engineer (wiring), qa (AC matrix and
+oracle), reviewer (Spec and Standards). Allowed paths: new Bor-specific files
+`test/harness/bor_source_inputs_probe.py`,
+`test/harness/test_bor_source_inputs_probe.py`,
+`test/harness/bor_source_inputs_probe.mutants.json`,
+`test/harness/fixtures/bor_source_inputs/**`,
+`.project/evidence/E01-02.inputs.bor.md` and this section.
+`adapters/bor/source_inputs` is unchanged, so the shared-file check still
+passes.
+
+Output: a private probe builds inside the accepted Bor tree and runs native
+Bor consensus with the HTTP Heimdall client. A deterministic in-process
+Heimdall stub answers through the process transport; state sync pages and
+spans by ID pass through the shared dependency log, which saves the raw body
+before Bor decodes it (D98). Evidence:
+[E01-02.inputs.bor](evidence/E01-02.inputs.bor.md).
+
+Result on clean commit `a32bc67`: preparation 01 PASS; measured run 01 PASS
+in 25.482 seconds. Private local verdicts: AC-CAP-04-01 PASS, AC-CAP-04-02
+PASS, AC-CAP-04-03 PASS with the test-only stand-in marker; every public cell
+stays NOT_RUN (D96, D98). Mutants: Go 26 killed, Python 67 killed.
+
+Next: independent Spec and Standards review of the exact head and hosted
+`bootstrap/ci`. The real EXEC_READY binding stays with E01-02.admission. #14
+stays open for the Geth and BSC blocks.
+
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
 Status: ACCEPTED in PR #132 at merge
