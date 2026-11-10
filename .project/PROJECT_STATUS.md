@@ -2,8 +2,9 @@
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
-Status: IN_PROGRESS. Block 0, inputs-core, is in a draft PR; it is not
-accepted until review, CI and the owner's merge permission. Dependencies
+Status: ACCEPTED; issue #14 closed under D98 on 2026-11-10. Block 0
+inputs-core merged in PR #137 at `a2fb163`; the Geth, BSC and Bor blocks
+merged in PRs #138, #139 and #140 (sections below). Dependencies
 E01-02.pins and BOOT-09 are accepted (#13 closed under D98). Plan agreed with
 the owner under D97 and D98:
 
@@ -68,7 +69,7 @@ this core into each client; the Bor block adds the in-process Heimdall stub.
 
 ## E01-02.inputs — BSC block
 
-Status: IN_PROGRESS in draft PR #139 (part of #14). Base `a2fb163`, after
+Status: ACCEPTED in PR #139 at merge `046d0a7` (part of #14). Base `a2fb163`, after
 block 0 (PR #137) merged. Role: native-engineer (D98). AC-CAP-04-01 to
 AC-CAP-04-03 apply to POLY only, so this block issues no AC verdict. It is
 private local evidence under D96 and D98; public cells stay NOT_RUN.
@@ -124,8 +125,7 @@ then asks the owner for merge permission.
 
 ## E01-02.inputs — Geth block
 
-Status: IN_PROGRESS in draft PR #138; not accepted until review, CI and the
-owner's merge permission. Part of #14, after block 0 (PR #137, merged at
+Status: ACCEPTED in PR #138 at merge `b7c2679`. Part of #14, after block 0 (PR #137, merged at
 `a2fb163`). Role: native-engineer (D98 item 5). Base `a2fb163`.
 
 Allowed paths: `test/harness/source_inputs_geth.py`,
@@ -159,7 +159,8 @@ Next: fresh Spec and Standards review of the new head, exact-head
 
 ## E01-02.inputs — Bor block
 
-Status: IN_PROGRESS (draft PR, Part of #14). Base main `a2fb163` (block 0
+Status: ACCEPTED in PR #140 at merge `9d14e96` (part of #14). Base main
+`a2fb163` (block 0
 merged in PR #137). Roles: native-engineer (wiring), qa (AC matrix and
 oracle), reviewer (Spec and Standards). Allowed paths: new Bor-specific files
 `test/harness/bor_source_inputs_probe.py`,
