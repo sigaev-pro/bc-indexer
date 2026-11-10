@@ -2,6 +2,7 @@
 
 import contextlib
 import copy
+import functools
 import io
 import json
 import os
@@ -13,6 +14,7 @@ import tarfile
 import tempfile
 import unittest
 from unittest import mock
+import zlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bor_source_inputs_probe as probe
@@ -45,15 +47,43 @@ def rlp(value):
     return bytes([long + len(size)]) + size + payload
 
 
-def sealed(times=TIMES):
+GENESIS = json.dumps({"config": {"chainId": 15001, "homesteadBlock": 0, "londonBlock": 1, "shanghaiBlock": 3,
+                                  "eip150Hash": "0x" + "0" * 64,
+                                  "bor": {"indoreBlock": 3, "sprint": {"0": 4}, "period": {"0": 1}}},
+                       "timestamp": "0x5ce28211", "gasLimit": "0x989680", "extraData": "", "alloc": {}},
+                      indent=1).encode()
+# The genesis header of the test chain: number 0, the genesis file's time, gas limit and extra data.
+PARENT = rlp([b"\0" * 32, b"\x22" * 32, b"\0" * 20, b"\x77" * 32, b"\x44" * 32, b"\x55" * 32, b"\0" * 256, 1,
+              0, 0x989680, 0, 0x5ce28211, b"", b"\0" * 32, b"\0" * 8])
+# Block 1 of preparation 02 (e01-02-inputs-bor-preparation-02-8203955) and its native hash: a Keccak vector
+# longer than one 136-byte block.
+BOR_HEADER = bytes.fromhex(
+    "f9025ca03ea63916b1dcd05d0985412c6ca681b097ca32c341b966a4d2052352c89976aba01dcc4de8dec75d7aab85b567b6ccd41ad3"
+    "12451b948a7413f0a142fd40d49347940000000000000000000000000000000000000000a0724f4ae53d14eb6c093025f459a4c274d5"
+    "02d2bc585702de63478465f9cc79bba056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171b"
+    "cc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100" + "00" * 256 +
+    "01018401312d0080846af32eb4b86100000000000000000000000000000000000000000000000000000000000000003012977fdb0f0b"
+    "419804b86607c9de12b7609369b70199d2a1ceb067917ba215308fd0e795624a2ac279ae5e7b4c24a9357e17ff5c3ae7fff6cab5bb4d"
+    "f3de4a01a00000000000000000000000000000000000000000000000000000000000000000880000000000000000843b9aca00")
+BOR_HASH = "b99457cfd6f9e0731f4b590ca381f5700e0ed3f977619d44469caa8715fda065"
+
+
+def sealed(times=TIMES, parent=PARENT):
     """blocks.rlp bytes and the matching generation record for blocks 1 to len(times)."""
-    blocks, rows = b"", []
+    blocks, generated = sealed_once(tuple(times), parent)
+    return blocks, copy.deepcopy(generated)
+
+
+@functools.lru_cache(maxsize=None)
+def sealed_once(times, parent):
+    blocks, rows, previous = b"", [], probe.keccak256(parent)
     for number, moment in enumerate(times, 1):
         root = bytes([number]) * 32
-        header = [b"\x11" * 32, b"\x22" * 32, b"\x33" * 20, root, b"\x44" * 32, b"\x55" * 32, b"\0" * 256, 1,
+        header = [previous, b"\x22" * 32, b"\x33" * 20, root, b"\x44" * 32, b"\x55" * 32, b"\0" * 256, 1,
                   number, 20000000, 0, moment, b"\x99" * 600, b"\0" * 32, b"\0" * 8]
         blocks += rlp([header, [], []])
-        rows.append({"number": number, "hash": f"0x{number:064x}", "state_root": "0x" + root.hex(),
+        previous = probe.keccak256(rlp(header))
+        rows.append({"number": number, "hash": "0x" + previous.hex(), "state_root": "0x" + root.hex(),
                      "timestamp": moment})
     return blocks, {"blocks": rows}
 
@@ -62,7 +92,7 @@ def context():
     oracle = probe.load(FIXTURE / "expected.json")
     bodies = {path.name: path.read_bytes() for path in (FIXTURE / "stub").iterdir()}
     blocks, generated = sealed()
-    return probe.build_context(oracle, generated, bodies, b"genesis-bytes", blocks, COMMIT)
+    return probe.build_context(oracle, generated, bodies, GENESIS, blocks, COMMIT, PARENT)
 
 
 def call_rows(ctx, origins, requests=None):
@@ -93,12 +123,22 @@ def dump(observation, count, closed=False, marker=None):
     return rows
 
 
+def sealed_fields(ctx, plan, step):
+    """The capsule fields a logged attempt reports after it sealed the expected capsule."""
+    if not step["log"]:
+        return {"native_config_matches_capsule": True}
+    return {"capsule": {"observation": plan["observation"], "items": copy.deepcopy(ctx["capsule_items"]),
+                        "digest": ctx["expected"]["capsule"]},
+            "native_config_matches_capsule": step["fault_state_sync_delay"] < 0}
+
+
 def result(ctx, plan, step, rows, complete=True, frontier=0, consumed=True, marker=True):
     last = ctx["generated"]["blocks"][-1]
     value = {"observation": plan["observation"], "frontier_at_open": frontier, "counted_calls": rows,
              "inserted": len(ctx["generated"]["blocks"]) if complete else 3,
              "head_hash": last["hash"] if complete else "0x0", "head_root": last["state_root"] if complete else "0x0",
-             "prefix_conflict": False, "crashed": False, "crash_after": step["crash_after"]}
+             "prefix_conflict": False, "crashed": False, "crash_after": step["crash_after"],
+             **sealed_fields(ctx, plan, step)}
     if not complete:
         value["import_error"] = "invalid merkle root"
     if complete and consumed and step["log"]:
@@ -127,14 +167,15 @@ def passing(ctx, name):
     kind = plan["kind"]
     if kind in ("replay-after-loss", "tail-append"):
         point = steps[0]["crash_after"]
-        crash = {"counted_calls": call_rows(ctx, ["fetch"] * (point + 1)), "crashed": True}
+        crash = {"counted_calls": call_rows(ctx, ["fetch"] * (point + 1)), "crashed": True,
+                 **sealed_fields(ctx, plan, steps[0])}
         retry = call_rows(ctx, ["replay"] * (point + 1) + ["fetch"] * (total - point - 1))
         attempts = [attempt(KILLED, [], dump(obs, point + 1), None, crash),
                     attempt(OK, dump(obs, point + 1), dump(obs, total, True, marker=True),
                             result(ctx, plan, steps[1], retry, frontier=point + 1))]
     elif kind == "prefix-conflict":
         point, offset = steps[0]["crash_after"], plan["conflict_offset"]
-        delayed = probe.expected_requests(ctx["oracle"], ctx["timestamps"], steps[1]["state_sync_delay"])
+        delayed = probe.expected_requests(ctx["oracle"], ctx["timestamps"], steps[1]["fault_state_sync_delay"])
         rows = call_rows(ctx, ["replay"] * offset)
         rows.append({"sequence": offset, "request": delayed[offset]["request"], "request_sha256": "0" * 64,
                      "response_length": 0, "origin": "replay",
@@ -142,11 +183,26 @@ def passing(ctx, name):
         conflict = result(ctx, plan, steps[1], rows, complete=False, frontier=point + 1)
         conflict["prefix_conflict"] = True
         saved = dump(obs, point + 1)
-        attempts = [attempt(KILLED, [], saved, None, {"counted_calls": call_rows(ctx, ["fetch"] * (point + 1))}),
+        attempts = [attempt(KILLED, [], saved, None, {"counted_calls": call_rows(ctx, ["fetch"] * (point + 1)),
+                                                      **sealed_fields(ctx, plan, steps[0])}),
                     attempt(OK, saved, copy.deepcopy(saved), conflict),
                     attempt(OK, saved, dump(obs, total, True, marker=True),
                             result(ctx, plan, steps[2], call_rows(
                                 ctx, ["replay"] * (point + 1) + ["fetch"] * (total - point - 1)), frontier=point + 1))]
+    elif kind == "capsule-controls":
+        attempts, store = [], []
+        for index, step in enumerate(steps):
+            if str(index) in plan["refusals"]:
+                value = {"observation": obs, "counted_calls": None, "inserted": 0, "tamper": step["tamper"],
+                         "error": plan["refusals"][str(index)] + " the sealed blocks"}
+                attempts.append(attempt({"exit_code": 1, "signal": ""}, store, copy.deepcopy(store), value))
+            else:
+                frontier = 0 if not store else total
+                value = result(ctx, plan, step, call_rows(ctx, ["fetch" if not store else "replay"] * total),
+                               frontier=frontier)
+                after = dump(obs, total, True, marker=True)
+                attempts.append(attempt(OK, store, after, value))
+                store = after
     elif kind == "control-changed-response":
         value = result(ctx, plan, steps[0], call_rows(ctx, ["fetch"] * 3), complete=False)
         attempts = [attempt(OK, [], [], value)]
@@ -170,7 +226,19 @@ class OracleTests(unittest.TestCase):
 
     def test_expected_digests_use_the_readme_formulas(self):
         ctx = context()
-        items = (("genesis", b"genesis-bytes"), ("blocks", sealed()[0]), ("bor-source-commit", COMMIT.encode()))
+        parent_hash = probe.keccak256(PARENT)
+        config = json.loads(GENESIS)["config"]
+        config["bor"]["stateSyncConfirmationDelay"] = {"0": 0}
+        config_bytes = json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+        # Forks above block 0, in order: London at 1, Shanghai at 3; the head is block 9, so none is next.
+        checksum = zlib.crc32((3).to_bytes(8, "big"), zlib.crc32((1).to_bytes(8, "big"), zlib.crc32(parent_hash)))
+        fork = ('{"hash":"%08x","next":"0"}' % checksum).encode()
+        items = (("genesis", GENESIS), ("blocks", sealed()[0]), ("parent-header", PARENT), ("parent-hash", parent_hash),
+                 ("parent-root", b"\x77" * 32), ("ancestor-headers", rlp([probe.rlp_item(PARENT, 0)[0]])),
+                 ("chain-config", config_bytes), ("fork-id", fork), ("native-commit", COMMIT.encode()),
+                 ("normalization-profile", b"test-only-probe-v1"))
+        self.assertEqual([(ref["name"], ref["sha256"]) for ref in ctx["capsule_items"]],
+                         [(name, source_inputs.sha(data).hex()) for name, data in items])
         capsule = source_inputs.capsule_digest(items)
         chain = source_inputs.chain_start(capsule)
         for sequence, row in enumerate(ctx["requests"]):
@@ -183,7 +251,7 @@ class OracleTests(unittest.TestCase):
     def test_every_scenario_passes_when_it_matches_the_oracle(self):
         ctx = context()
         self.assertEqual(sorted(ctx["plans"]), ["ac-cap-04-01", "ac-cap-04-02", "ac-cap-04-03",
-                                                 "control-changed-response", "control-delay"])
+                                                 "control-capsule-items", "control-changed-response", "control-delay"])
         for name in ctx["plans"]:
             self.assertEqual(probe.checked_compare(name, passing(ctx, name), ctx), [], name)
 
@@ -327,6 +395,57 @@ class CompareControls(unittest.TestCase):
         self.assertTrue(any("malformed observation" in f for f in probe.checked_compare("ac-cap-04-01", observed,
                                                                                          context())))
 
+    def test_capsule_of_every_logged_attempt(self):
+        retry = lambda o: o["attempts"][1]["result"]
+        self.refused("ac-cap-04-01", lambda o: retry(o)["capsule"]["items"][6].update(sha256="0" * 64),
+                     "attempt 1: the sealed capsule differs")
+        self.refused("ac-cap-04-01", lambda o: retry(o)["capsule"]["items"].pop(), "the sealed capsule differs")
+        self.refused("ac-cap-04-01", lambda o: retry(o)["capsule"].update(digest="0" * 64), "the sealed capsule differs")
+        self.refused("ac-cap-04-01", lambda o: retry(o).pop("capsule"), "the sealed capsule differs")
+        self.refused("ac-cap-04-01", lambda o: o["attempts"][0]["crash_result"]["capsule"]["items"][2].update(length=1),
+                     "attempt 0: the sealed capsule differs")
+        self.refused("ac-cap-04-03", lambda o: retry(o).update(native_config_matches_capsule=False),
+                     "attempt 1: native Bor did not run with the expected chain config")
+        self.refused("ac-cap-04-03", lambda o: retry(o).pop("native_config_matches_capsule"), "expected chain config")
+        self.refused("ac-cap-04-02", lambda o: retry(o).update(native_config_matches_capsule=True),
+                     "attempt 1: native Bor did not run with the expected chain config")
+        self.refused("control-capsule-items", lambda o: o["attempts"][-1]["result"]["capsule"].update(digest="0"),
+                     "attempt 8: the sealed capsule differs")
+
+    def test_capsule_controls(self):
+        name = "control-capsule-items"
+        at = lambda o, index: o["attempts"][index]["result"]
+        self.refused(name, lambda o: at(o, 2).update(error="other error"), "attempt 2 was not refused with")
+        self.refused(name, lambda o: at(o, 7).pop("error"), "attempt 7 was not refused with")
+        for change in (dict(capsule={"digest": "x"}), dict(counted_calls=[{}]), dict(inserted=1),
+                       dict(consumed={"digest": "x"}), dict(stand_in_marker={"kind": "x"})):
+            with self.subTest(change=change):
+                self.refused(name, lambda o: at(o, 3).update(change), "attempt 3 sealed, fetched or imported")
+        self.refused(name, lambda o: o["attempts"][4]["store_after"].pop(), "attempt 4 changed the store")
+        self.refused(name, lambda o: o["attempts"][0]["store_after"].append({"key": "k"}), "attempt 0 changed the store")
+        self.refused(name, lambda o: o["attempts"][5]["status"].update(exit_code=0), "expected a refusal")
+        self.refused(name, lambda o: o["attempts"][5]["status"].update(signal="killed"), "expected a refusal")
+        self.refused(name, lambda o: at(o, 1).update(head_hash="0x1"), "attempt 1: imported head differs")
+        self.refused(name, lambda o: at(o, 8)["counted_calls"][0].update(origin="fetch"), "origin fetch, expected replay")
+        self.refused(name, lambda o: at(o, 1)["counted_calls"][0].update(origin="replay"), "origin replay, expected fetch")
+        self.refused(name, lambda o: at(o, 8)["stand_in_marker"].update(consumed_manifest_digest="0"),
+                     "attempt 8 did not bind")
+        self.refused(name, lambda o: at(o, 1).pop("stand_in_marker"), "attempt 1 did not bind")
+        row = {"key": "k", "value_sha256": "0", "value_length": 1}
+        self.refused(name, lambda o: o["attempts"][0].update(store_before=[row], store_after=[row]), "on an empty store")
+
+    def test_capsule_controls_plan_rules(self):
+        plan = self.ctx["plans"]["control-capsule-items"]
+        plan["tampered"] = plan["tampered"][1:]
+        self.assertTrue(any("do not tamper every derived" in f for f in probe.checked_compare(
+            "control-capsule-items", passing(self.ctx, "control-capsule-items"), self.ctx)))
+        ctx = context()
+        plan = ctx["plans"]["control-capsule-items"]
+        plan["attempts"][0]["tamper"], plan["tampered"] = "", plan["tampered"][1:]
+        del plan["refusals"]["0"]
+        failures = probe.checked_compare("control-capsule-items", passing(ctx, "control-capsule-items"), ctx)
+        self.assertTrue(any("did not refuse an item on an empty store" in f for f in failures), failures)
+
     def test_to_time_format(self):
         self.assertEqual(probe.to_time(1794317143, 0), "2026-11-10T13:25:43Z")
         self.assertEqual(probe.to_time(1794317143, 1), "2026-11-10T13:25:42Z")
@@ -341,10 +460,33 @@ class CompareControls(unittest.TestCase):
 
 
 class SealedHeaderTests(unittest.TestCase):
-    def test_decodes_number_time_and_root(self):
+    def test_decodes_number_time_root_and_hashes(self):
         blocks, generated = sealed()
+        parents = ["0x" + probe.keccak256(PARENT).hex()] + [row["hash"] for row in generated["blocks"][:-1]]
         self.assertEqual(probe.sealed_headers(blocks),
-                         [{key: row[key] for key in ("number", "timestamp", "state_root")} for row in generated["blocks"]])
+                         [{**{key: row[key] for key in ("number", "timestamp", "state_root", "hash")},
+                           "parent_hash": parent} for row, parent in zip(generated["blocks"], parents)])
+
+    def test_keccak_vectors(self):
+        # Published Keccak-256 vectors, a native Bor header hash, and the 135/136/137-byte padding edges
+        # (values from `openssl dgst -keccak-256`, OpenSSL 3.5.1).
+        vectors = {b"": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                   b"abc": "4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45",
+                   b"\xc0": "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+                   b"a" * 135: "34367dc248bbd832f4e3e69dfaac2f92638bd0bbd18f2912ba4ef454919cf446",
+                   b"a" * 136: "a6c4d403279fe3e0af03729caada8374b5ca54d8065329a3ebcaeb4b60aa386e",
+                   b"a" * 137: "d869f639c7046b4929fc92a4d988a8b22c55fbadb802c0c66ebcd484f1915f39",
+                   BOR_HEADER: BOR_HASH}
+        for data, digest in vectors.items():
+            with self.subTest(length=len(data)):
+                self.assertEqual(probe.keccak256(data).hex(), digest)
+
+    def test_rlp_encode_matches_the_reference_encoder(self):
+        for value in (b"", b"\x05", b"\x80", b"abc", b"x" * 55, b"x" * 56, b"y" * 300, [], [b"a", [b"b", []]],
+                      [b"z" * 60], [b"q" * 70000]):
+            with self.subTest(value=str(value)[:20]):
+                self.assertEqual(probe.rlp_encode(value), rlp(value))
+        self.assertEqual(probe.rlp_encode(probe.rlp_item(BOR_HEADER, 0)[0]), BOR_HEADER)
 
     def test_short_and_long_items(self):
         self.assertEqual(probe.rlp_item(b"\x05", 0), (b"\x05", 1))
@@ -372,9 +514,98 @@ class SealedHeaderTests(unittest.TestCase):
             changed = copy.deepcopy(generated)
             changed["blocks"][3][field] = value
             with self.subTest(field=field), self.assertRaises(Rejected):
-                probe.build_context(oracle, changed, bodies, b"g", blocks, COMMIT)
+                probe.build_context(oracle, changed, bodies, GENESIS, blocks, COMMIT, PARENT)
         with self.assertRaises(Rejected):
-            probe.build_context(oracle, {"blocks": generated["blocks"][:-1]}, bodies, b"g", blocks, COMMIT)
+            probe.build_context(oracle, {"blocks": generated["blocks"][:-1]}, bodies, GENESIS, blocks, COMMIT, PARENT)
+
+
+class CapsuleInputTests(unittest.TestCase):
+    def setUp(self):
+        self.oracle = probe.load(FIXTURE / "expected.json")
+        self.bodies = {path.name: path.read_bytes() for path in (FIXTURE / "stub").iterdir()}
+
+    def build(self, genesis=GENESIS, parent=PARENT, sealed_parent=PARENT, oracle=None):
+        blocks, generated = sealed(parent=sealed_parent)
+        return probe.build_context(oracle or self.oracle, generated, self.bodies, genesis, blocks, COMMIT, parent)
+
+    def test_parent_header_must_be_the_genesis_parent_of_block_1(self):
+        fields = probe.rlp_item(PARENT, 0)[0]
+        cases = {"number": 8, "time": 11, "gas limit": 9, "extra data": 12}
+        for label, index in cases.items():
+            changed = list(fields)
+            changed[index] = b"\x01"
+            with self.subTest(label), self.assertRaises(Rejected):
+                self.build(parent=rlp(changed), sealed_parent=rlp(changed))
+        with self.assertRaisesRegex(Rejected, "not the parent of the first sealed block"):
+            self.build(sealed_parent=rlp([b"\x01"] + fields[1:]))
+        for data in (PARENT + b"\0", PARENT[:-1], rlp(fields[:12]), b"\xb8\x01a"):
+            with self.subTest(data=data[-3:]), self.assertRaises(Rejected):
+                self.build(parent=data)
+        # A header without extra data that block 1 still links to.
+        with self.assertRaisesRegex(Rejected, "Malformed header"):
+            self.build(parent=rlp(fields[:12]), sealed_parent=rlp(fields[:12]))
+        # A non-canonical length prefix decodes to the same fields and is still refused.
+        payload = PARENT[3:]
+        with self.assertRaisesRegex(Rejected, "Malformed header"):
+            self.build(parent=b"\xfa\x00" + PARENT[1:])
+        self.assertEqual(len(payload) + 3, len(PARENT))
+
+    def test_generation_hashes_and_links(self):
+        blocks, generated = sealed()
+        changed = copy.deepcopy(generated)
+        changed["blocks"][2]["hash"] = "0x" + "0" * 64
+        with self.assertRaisesRegex(Rejected, "generation record differs"):
+            probe.build_context(self.oracle, changed, self.bodies, GENESIS, blocks, COMMIT, PARENT)
+        # Block 2 points to another parent; its hash in the record is correct, so only the link check refuses it.
+        first, _ = sealed(TIMES[:1])
+        header = probe.rlp_item(sealed(TIMES[:2])[0], len(first))[0][0]
+        header[0] = b"\x09" * 32
+        _, rows = sealed(TIMES[:2])
+        rows["blocks"][1]["hash"] = "0x" + probe.keccak256(rlp(header)).hex()
+        with self.assertRaisesRegex(Rejected, "not one chain"):
+            probe.build_context(self.oracle, rows, self.bodies, GENESIS, first + rlp([header, [], []]), COMMIT, PARENT)
+
+    def test_chain_config_item(self):
+        config = probe.chain_config(GENESIS, 2)
+        self.assertEqual(json.loads(config)["bor"]["stateSyncConfirmationDelay"], {"0": 2})
+        self.assertNotIn(b" ", config)
+        self.assertEqual(config, json.dumps(json.loads(config), sort_keys=True, separators=(",", ":")).encode())
+        self.assertTrue(config.startswith(b'{"bor":{"indoreBlock":3,"period":{"0":1}'))
+        document = json.loads(GENESIS)
+        document["config"]["bor"]["stateSyncConfirmationDelay"] = {"0": 0}
+        with self.assertRaisesRegex(Rejected, "already sets the delay"):
+            probe.chain_config(json.dumps(document).encode(), 0)
+        del document["config"]["bor"]
+        with self.assertRaisesRegex(Rejected, "no Bor config"):
+            probe.chain_config(json.dumps(document).encode(), 0)
+        with self.assertRaisesRegex(Rejected, "no Bor config"):
+            probe.chain_config(b'{"config": []}', 0)
+        self.assertNotEqual(self.build()["capsule_items"][6], self.build(oracle={**self.oracle, "state_sync_delay": 1})
+                            ["capsule_items"][6])
+
+    def test_fork_id_item(self):
+        genesis = b"\x01" * 32
+        start = zlib.crc32(genesis)
+        after_one = zlib.crc32((1).to_bytes(8, "big"), start)
+        config = {"homesteadBlock": 0, "londonBlock": 1, "berlinBlock": 1, "shanghaiBlock": 3, "eip150Hash": "0x00",
+                  "osakaBlock": None, "chainId": 15001}
+        self.assertEqual(probe.fork_id(config, genesis, 0), ('{"hash":"%08x","next":"1"}' % start).encode())
+        self.assertEqual(probe.fork_id(config, genesis, 2), ('{"hash":"%08x","next":"3"}' % after_one).encode())
+        last = zlib.crc32((3).to_bytes(8, "big"), after_one)
+        self.assertEqual(probe.fork_id(config, genesis, 3), ('{"hash":"%08x","next":"0"}' % last).encode())
+        self.assertEqual(probe.fork_id({"aBlock": 5, "bBlock": 4}, genesis, 9),
+                         ('{"hash":"%08x","next":"0"}' % zlib.crc32((5).to_bytes(8, "big"), zlib.crc32(
+                             (4).to_bytes(8, "big"), start))).encode())
+
+    def test_oracle_item_order_is_checked(self):
+        oracle = copy.deepcopy(self.oracle)
+        oracle["capsule_items"][0], oracle["capsule_items"][1] = oracle["capsule_items"][1], oracle["capsule_items"][0]
+        with self.assertRaisesRegex(Rejected, "capsule items differ"):
+            self.build(oracle=oracle)
+        refs = self.build()["capsule_items"]
+        self.assertEqual([ref["name"] for ref in refs], self.oracle["capsule_items"])
+        self.assertEqual(refs[3]["length"], 32)
+        self.assertEqual(refs[9]["sha256"], source_inputs.sha(b"test-only-probe-v1").hex())
 
 
 class FakeNative:
@@ -402,6 +633,7 @@ class FakeNative:
             blocks, generated = sealed()
             (chain / "blocks.rlp").write_bytes(blocks)
             (chain / "generated.json").write_text(json.dumps(generated))
+            (chain / "parent-header.rlp").write_bytes(PARENT)
         elif argv[:2] == ["/probe/probe", "scenario"]:
             name = argv[argv.index("-out") + 1].removeprefix("/out/")
             directory = targets["/out"] / name
@@ -457,7 +689,7 @@ class DriverFixture(unittest.TestCase):
         if not archive.exists():
             with tarfile.open(archive, "w") as stream:
                 for name, data in (("go.mod", b"module github.com/ethereum/go-ethereum\n\ngo 1.25.0\n"),
-                                   ("tests/bor/testdata/genesis.json", b"genesis-bytes"),
+                                   ("tests/bor/testdata/genesis.json", GENESIS),
                                    ("tests/bor/helper.go", b"package bor\n")):
                     info = tarfile.TarInfo(name)
                     info.size = len(data)
@@ -506,7 +738,8 @@ class PrepareTests(DriverFixture):
             self.assertTrue((source / path).is_file(), path)
         self.assertEqual((source / "sourceinputs/inputs.go").read_bytes(),
                          (probe.ROOT / "adapters/bor/source_inputs/inputs.go").read_bytes())
-        self.assertEqual((output / "bor/bin/genesis.json").read_bytes(), b"genesis-bytes")
+        self.assertEqual((output / "bor/bin/genesis.json").read_bytes(), GENESIS)
+        self.assertEqual(record["chain"]["parent_header"]["sha256"], source_inputs.sha(PARENT).hex())
         self.assertEqual(record["chain"]["blocks"]["sha256"], reference(output / "chains/a/blocks.rlp")["sha256"])
         self.assertEqual(json.loads((output / "preparation.json").read_text())["result"], "PASS")
 
@@ -571,6 +804,7 @@ class RunTests(DriverFixture):
         self.assertEqual(record["result"], "PASS", record.get("error"))
         self.assertEqual(sorted(record["scenarios"]), sorted(FakeNative.context["plans"]))
         self.assertEqual(record["expected"]["consumed"], FakeNative.context["expected"]["consumed"])
+        self.assertEqual(record["expected"]["capsule_items"], FakeNative.context["capsule_items"])
         self.assertIn("admission_finished", record["phases"])
         self.assertEqual(json.loads((output / "run-record.json").read_text())["result"], "PASS")
         self.assertEqual({number: signal.getsignal(number) for number in capture_probe.STOP_SIGNALS}, before)

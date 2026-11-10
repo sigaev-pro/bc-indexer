@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -38,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
@@ -48,6 +50,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -60,6 +63,10 @@ const (
 	// The stand-in marker is test-only; the real EXEC_READY binding belongs to E01-02.admission (D98).
 	markerPrefix = "extractor-test-only-stand-in-exec-ready/"
 	logPrefix    = "extractor-source-inputs-v1/"
+	// The normalization profile item names the test-only probe profile, as in the Geth block.
+	normalizationProfile = "test-only-probe-v1"
+	// Bor stores a vote snapshot every checkpointInterval blocks (consensus/bor/bor.go).
+	checkpointInterval = 1024
 )
 
 func readBounded(path string, maximum int64) ([]byte, error) {
@@ -107,27 +114,160 @@ func testKey(source string) (*ecdsa.PrivateKey, error) {
 	return key, nil
 }
 
-func loadGenesis(path string, delay uint64) (*core.Genesis, []byte, error) {
+// loadGenesis reads the fixture genesis and builds its effective chain config:
+// the genesis "config" object with stateSyncConfirmationDelay set to {"0": delay}.
+// Bor reads this map at every sprint start after Indore and panics when it is
+// empty; the test genesis omits it. The config bytes are canonical JSON (sorted
+// keys, no spaces, numbers as written in the file), and the returned genesis
+// runs with exactly their decoding, so the capsule item is the config native
+// Bor uses.
+func loadGenesis(path string, delay uint64) (*core.Genesis, []byte, []byte, error) {
 	data, err := readBounded(path, 1024*1024)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	var genesis core.Genesis
 	if err = json.Unmarshal(data, &genesis); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if genesis.Config == nil || genesis.Config.Bor == nil || genesis.Config.ChainID.Cmp(big.NewInt(15001)) != 0 {
-		return nil, nil, errors.New("expected private Bor genesis 15001")
+		return nil, nil, nil, errors.New("expected private Bor genesis 15001")
 	}
 	if len(genesis.Config.Bor.StateSyncConfirmationDelay) != 0 {
-		return nil, nil, errors.New("the fixture genesis already sets a state sync confirmation delay")
+		return nil, nil, nil, errors.New("the fixture genesis already sets a state sync confirmation delay")
 	}
-	// Bor reads this map at every sprint start after Indore and panics when it is
-	// empty; the test genesis omits it, so the probe sets it in memory. A nonzero
-	// delay is the fault injection of AC-CAP-04-02: Bor itself then builds a
-	// different state sync request.
-	genesis.Config.Bor.StateSyncConfirmationDelay = map[string]uint64{"0": delay}
-	return &genesis, data, nil
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var raw map[string]any
+	if err = decoder.Decode(&raw); err != nil {
+		return nil, nil, nil, err
+	}
+	object, ok := raw["config"].(map[string]any)
+	if !ok {
+		return nil, nil, nil, errors.New("the genesis config is not an object")
+	}
+	borObject, ok := object["bor"].(map[string]any)
+	if !ok {
+		return nil, nil, nil, errors.New("the genesis Bor config is not an object")
+	}
+	borObject["stateSyncConfirmationDelay"] = map[string]any{"0": json.Number(fmt.Sprint(delay))}
+	config, err := json.Marshal(object)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	var effective params.ChainConfig
+	if err = json.Unmarshal(config, &effective); err != nil {
+		return nil, nil, nil, err
+	}
+	genesis.Config = &effective
+	return &genesis, data, config, nil
+}
+
+// capsuleItems builds the static input manifest of one observation: the import
+// of the sealed blocks on top of the genesis. Its parent is the genesis block,
+// and Bor's snapshot walk from that parent reads only the genesis header.
+func capsuleItems(genesis *core.Genesis, genesisBytes, config []byte, blocks []*types.Block, blocksBytes []byte,
+	commit string) ([]sourceinputs.Item, error) {
+	if len(blocks) == 0 || blocks[0].NumberU64() != 1 {
+		return nil, errors.New("the probe imports a chain that starts at block 1")
+	}
+	base := genesis.ToBlock()
+	parent, err := rlp.EncodeToBytes(base.Header())
+	if err != nil {
+		return nil, err
+	}
+	ancestors, err := rlp.EncodeToBytes([]*types.Header{base.Header()})
+	if err != nil {
+		return nil, err
+	}
+	fork, err := forkItem(genesis.Config, base, blocks[len(blocks)-1])
+	if err != nil {
+		return nil, err
+	}
+	return []sourceinputs.Item{
+		{Name: "genesis", Data: genesisBytes},
+		{Name: "blocks", Data: blocksBytes},
+		{Name: "parent-header", Data: parent},
+		{Name: "parent-hash", Data: base.Hash().Bytes()},
+		{Name: "parent-root", Data: base.Root().Bytes()},
+		{Name: "ancestor-headers", Data: ancestors},
+		{Name: "chain-config", Data: config},
+		{Name: "fork-id", Data: fork},
+		{Name: "native-commit", Data: []byte(commit)},
+		{Name: "normalization-profile", Data: []byte(normalizationProfile)},
+	}, nil
+}
+
+// forkItem is the native EIP-2124 fork ID at the last block of the observation.
+func forkItem(config *params.ChainConfig, genesis *types.Block, last *types.Block) ([]byte, error) {
+	id := forkid.NewID(config, genesis, last.NumberU64(), last.Time())
+	return json.Marshal(map[string]string{"hash": hex.EncodeToString(id.Hash[:]), "next": fmt.Sprint(id.Next)})
+}
+
+// tamperItem changes the last byte of one item. It is the negative control of
+// that item: the cross-check below must refuse it before anything is sealed.
+func tamperItem(items []sourceinputs.Item, name string) error {
+	for index := range items {
+		if items[index].Name == name && len(items[index].Data) > 0 {
+			data := bytes.Clone(items[index].Data)
+			data[len(data)-1] ^= 1
+			items[index].Data = data
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown tamper item %q", name)
+}
+
+// checkItems cross-checks the capsule items against each other, the sealed
+// blocks and the genesis item before the capsule is sealed.
+func checkItems(items []sourceinputs.Item, genesis *core.Genesis, blocks []*types.Block) error {
+	data := map[string][]byte{}
+	for _, item := range items {
+		data[item.Name] = item.Data
+	}
+	disagree := func(name, other string) error {
+		return fmt.Errorf("capsule item %s disagrees with %s", name, other)
+	}
+	var parent types.Header
+	if rlp.DecodeBytes(data["parent-header"], &parent) != nil || parent.Number == nil ||
+		parent.Hash() != blocks[0].ParentHash() || parent.Number.Uint64()+1 != blocks[0].NumberU64() {
+		return disagree("parent-header", "the first sealed block")
+	}
+	if !bytes.Equal(data["parent-hash"], parent.Hash().Bytes()) {
+		return disagree("parent-hash", "the parent header")
+	}
+	if !bytes.Equal(data["parent-root"], parent.Root.Bytes()) {
+		return disagree("parent-root", "the parent header")
+	}
+	var ancestors []*types.Header
+	if rlp.DecodeBytes(data["ancestor-headers"], &ancestors) != nil || len(ancestors) == 0 {
+		return disagree("ancestor-headers", "the Bor snapshot walk")
+	}
+	// Bor's snapshot walk goes back from the parent to the genesis or to the
+	// nearest checkpoint header; the list holds every header it may read.
+	for index, header := range ancestors {
+		if header.Number == nil || (index > 0 && (header.ParentHash != ancestors[index-1].Hash() ||
+			header.Number.Uint64() != ancestors[index-1].Number.Uint64()+1 ||
+			header.Number.Uint64()%checkpointInterval == 0)) {
+			return disagree("ancestor-headers", "the Bor snapshot walk")
+		}
+	}
+	first := ancestors[0].Number.Uint64()
+	if ancestors[len(ancestors)-1].Hash() != parent.Hash() || first%checkpointInterval != 0 {
+		return disagree("ancestor-headers", "the Bor snapshot walk")
+	}
+	base := genesis.ToBlock()
+	if first == 0 && ancestors[0].Hash() != base.Hash() {
+		return disagree("ancestor-headers", "the genesis item")
+	}
+	fork, err := forkItem(genesis.Config, base, blocks[len(blocks)-1])
+	if err != nil || !bytes.Equal(data["fork-id"], fork) {
+		return disagree("fork-id", "the chain config")
+	}
+	if string(data["normalization-profile"]) != normalizationProfile {
+		return disagree("normalization-profile", "the probe profile")
+	}
+	return nil
 }
 
 // backend starts a native Bor backend in its own data directory. Heimdall is
@@ -180,7 +320,7 @@ func generate(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	genesis, _, err := loadGenesis(*genesisPath, 0)
+	genesis, _, _, err := loadGenesis(*genesisPath, 0)
 	if err != nil {
 		return err
 	}
@@ -253,23 +393,35 @@ func generate(args []string) error {
 		prepared = append(prepared, map[string]any{"number": number, "hash": block.Hash().Hex(),
 			"state_root": block.Root().Hex(), "timestamp": block.Time()})
 	}
-	f, err := os.OpenFile(filepath.Join(*output, "blocks.rlp"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err = writeNew(filepath.Join(*output, "blocks.rlp"), encoded.Bytes()); err != nil {
+		return err
+	}
+	// The parent of block 1 is the genesis header; the driver checks it against the sealed blocks.
+	parentHeader, err := rlp.EncodeToBytes(chain.GetHeaderByNumber(0))
 	if err != nil {
 		return err
 	}
-	if _, err = f.Write(encoded.Bytes()); err == nil {
-		err = f.Sync()
-	}
-	if closeErr := f.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
+	if err = writeNew(filepath.Join(*output, "parent-header.rlp"), parentHeader); err != nil {
 		return err
 	}
 	rows, uncounted := transport.Snapshot()
 	return saveJSON(filepath.Join(*output, "generated.json"), map[string]any{
 		"genesis_hash": chain.GetBlockByNumber(0).Hash().Hex(), "blocks": prepared,
 		"counted_calls": rows, "uncounted_calls": uncounted})
+}
+
+func writeNew(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err = f.Write(data); err == nil {
+		err = f.Sync()
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func readBlocks(path string) ([]*types.Block, error) {
@@ -320,8 +472,12 @@ type attemptResult struct {
 	Variant        string                 `json:"variant"`
 	UsesLog        bool                   `json:"uses_log"`
 	StateSyncDelay uint64                 `json:"state_sync_delay"`
+	FaultDelay     int                    `json:"fault_state_sync_delay"`
+	Tamper         string                 `json:"tamper"`
 	CrashAfter     int                    `json:"crash_after"`
+	Error          string                 `json:"error,omitempty"`
 	Capsule        *sourceinputs.Capsule  `json:"capsule,omitempty"`
+	ConfigMatches  *bool                  `json:"native_config_matches_capsule,omitempty"`
 	FrontierAtOpen uint64                 `json:"frontier_at_open"`
 	Rows           []heimdallstub.Row     `json:"counted_calls"`
 	Uncounted      map[string]int         `json:"uncounted_calls"`
@@ -348,20 +504,26 @@ func attempt(args []string) (returned error) {
 	commit := flags.String("commit", "", "Bor source commit")
 	variant := flags.String("variant", "a", "stub variant")
 	useLog := flags.Bool("log", true, "pass counted calls through the dependency log")
-	delay := flags.Uint64("state-sync-delay", 0, "state sync confirmation delay override")
+	delay := flags.Uint64("state-sync-delay", 0, "state sync confirmation delay of the effective chain config")
+	fault := flags.Int("fault-state-sync-delay", -1, "test fault: run with this delay after sealing the capsule")
+	tamper := flags.String("tamper", "", "negative control: change this capsule item before the cross-check")
 	crashAfter := flags.Int("crash-after", -1, "lose the process after this saved counted call")
 	output := flags.String("out", "", "result JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	result := attemptResult{Observation: *observation, Blocks: filepath.Base(filepath.Dir(*blocksPath)),
-		Variant: *variant, UsesLog: *useLog, StateSyncDelay: *delay, CrashAfter: *crashAfter}
+		Variant: *variant, UsesLog: *useLog, StateSyncDelay: *delay, FaultDelay: *fault, Tamper: *tamper,
+		CrashAfter: *crashAfter}
 	defer func() {
+		if returned != nil {
+			result.Error = returned.Error()
+		}
 		if err := saveJSON(*output, result); returned == nil {
 			returned = err
 		}
 	}()
-	genesis, genesisBytes, err := loadGenesis(*genesisPath, *delay)
+	genesis, genesisBytes, config, err := loadGenesis(*genesisPath, *delay)
 	if err != nil {
 		return err
 	}
@@ -373,15 +535,26 @@ func attempt(args []string) (returned error) {
 	if err != nil {
 		return err
 	}
+	items, err := capsuleItems(genesis, genesisBytes, config, blocks, blocksBytes, *commit)
+	if err != nil {
+		return err
+	}
+	if *tamper != "" {
+		if err = tamperItem(items, *tamper); err != nil {
+			return err
+		}
+	}
+	// A refused item is never sealed: the cross-check runs before the store opens.
+	if err = checkItems(items, genesis, blocks); err != nil {
+		return err
+	}
 	var store *pebble.Database
 	var dependencies *sourceinputs.Log
 	if *useLog {
 		if store, err = openStore(*storePath); err != nil {
 			return err
 		}
-		capsule, err := sourceinputs.SealCapsule(store, *observation, []sourceinputs.Item{
-			{Name: "genesis", Data: genesisBytes}, {Name: "blocks", Data: blocksBytes},
-			{Name: "bor-source-commit", Data: []byte(*commit)}})
+		capsule, err := sourceinputs.SealCapsule(store, *observation, items)
 		if err != nil {
 			store.Close()
 			return err
@@ -402,6 +575,22 @@ func attempt(args []string) (returned error) {
 	if dependencies != nil {
 		dependencyLog = dependencies
 	}
+	sealed, err := json.Marshal(genesis.Config)
+	if err != nil {
+		if store != nil {
+			store.Close()
+		}
+		return err
+	}
+	if *fault >= 0 {
+		// The AC-CAP-04-02 fault: native Bor runs with a delay that differs from the
+		// sealed chain config, so it builds a different state sync request than the
+		// lost attempt did. The capsule stays the same; only the log can refuse it.
+		faulty, borConfig := *genesis.Config, *genesis.Config.Bor
+		borConfig.StateSyncConfirmationDelay = map[string]uint64{"0": uint64(*fault)}
+		faulty.Bor = &borConfig
+		genesis.Config = &faulty
+	}
 	transport := heimdallstub.NewRecorder(heimdallstub.Stub{Bodies: *bodies, Variant: *variant}, dependencyLog, *crashAfter, onCrash)
 	http.DefaultTransport = transport
 	stack, backend, err := backend(genesis, *dataDir)
@@ -412,6 +601,16 @@ func attempt(args []string) (returned error) {
 		return err
 	}
 	chain := backend.BlockChain()
+	running, err := json.Marshal(chain.Config())
+	matches := err == nil && bytes.Equal(running, sealed)
+	result.ConfigMatches = &matches
+	if chain.Genesis().Hash() != blocks[0].ParentHash() || (!matches && *fault < 0) {
+		shutdown(stack, backend)
+		if store != nil {
+			store.Close()
+		}
+		return errors.New("native Bor does not run with the capsule chain config and parent")
+	}
 	result.Inserted, err = chain.InsertChain(blocks, false)
 	if err != nil {
 		result.ImportError = err.Error()
@@ -471,6 +670,8 @@ type Plan struct {
 		Variant        string `json:"variant"`
 		Log            bool   `json:"log"`
 		StateSyncDelay uint64 `json:"state_sync_delay"`
+		FaultDelay     int    `json:"fault_state_sync_delay"`
+		Tamper         string `json:"tamper"`
 		CrashAfter     int    `json:"crash_after"`
 	} `json:"attempts"`
 }
@@ -522,6 +723,7 @@ func scenario(args []string) error {
 			"-bodies", *bodies, "-store", storePath, "-datadir", filepath.Join(*output, fmt.Sprintf("chain-%d", index)),
 			"-observation", plan.Observation, "-commit", *commit, "-variant", step.Variant,
 			fmt.Sprintf("-log=%t", step.Log), "-state-sync-delay", fmt.Sprint(step.StateSyncDelay),
+			"-fault-state-sync-delay", fmt.Sprint(step.FaultDelay), "-tamper=" + step.Tamper,
 			"-crash-after", fmt.Sprint(step.CrashAfter), "-out", out}
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		child := exec.CommandContext(ctx, os.Args[0], argv...)
