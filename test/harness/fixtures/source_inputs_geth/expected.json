@@ -1,18 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "family": "geth",
   "observation": "geth-probe-obs-4",
   "target": 4,
+  "genesis_hash": "0x40c7b676bbc3682e9e4007290469eb76d376c7ea063097d6291a1bb06e1d1167",
   "requested_numbers": [
     3,
     1,
     3
   ],
-  "request_format": "geth-blockhash-v1 ref={ref} number={number}",
   "poison_format": "changed external response {number}",
   "capsule_items": [
     "header-rlp",
     "body-rlp",
+    "encodings",
+    "parent-header",
     "parent-hash",
     "parent-root",
     "chain-config",
@@ -20,29 +22,46 @@
     "native-commit",
     "normalization-profile"
   ],
+  "encodings": "{\"ancestor-header\":\"rlp(types.Header)\",\"body-rlp\":\"rlp(types.Body)\",\"header-rlp\":\"rlp(types.Header)\",\"parent-header\":\"rlp(types.Header)\"}",
+  "chain_config": {
+    "chainId": 31337,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "muirGlacierBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
+    "arrowGlacierBlock": 0,
+    "grayGlacierBlock": 0,
+    "terminalTotalDifficulty": 1000000000000000000000000000000,
+    "depositContractAddress": "0x0000000000000000000000000000000000000000",
+    "ethash": {}
+  },
   "normalization_profile": "test-only-probe-v1",
   "closed_error_prefix": "dependency log is closed",
-  "control_error": "invalid merkle root",
+  "control_errors": {
+    "blockhash": "invalid merkle root",
+    "body": "transaction root hash mismatch"
+  },
   "scenarios": {
     "clean_then_closed_replay": [
       {
         "name": "clean-1",
         "kind": "complete",
         "capsule_existed": false,
-        "frontier_at_open": 0,
-        "fetched": [
-          0,
-          1,
-          2
-        ],
+        "saved": [],
         "closes": true
       },
       {
         "name": "clean-2-closed-replay",
         "kind": "complete",
         "capsule_existed": true,
-        "frontier_at_open": 3,
-        "fetched": [],
+        "saved": [],
         "closes": false
       }
     ],
@@ -50,66 +69,74 @@
       {
         "name": "seal-1-crash",
         "kind": "crash",
-        "point": "after_seal",
-        "handed": []
+        "point": "after_seal"
       },
       {
         "name": "seal-2-retry",
         "kind": "complete",
         "capsule_existed": true,
-        "frontier_at_open": 0,
-        "fetched": [
-          0,
-          1,
-          2
-        ],
+        "saved": [],
         "closes": true
       }
     ],
-    "crash_before_handoff": [
+    "poisoned_parent_header": [
       {
-        "name": "handoff-1-crash",
-        "kind": "crash",
-        "point": "before_handoff",
-        "sequence": 1,
-        "handed": [
-          0
-        ]
-      },
-      {
-        "name": "handoff-2-retry",
-        "kind": "complete",
-        "capsule_existed": true,
-        "frontier_at_open": 2,
-        "fetched": [
-          2
-        ],
-        "closes": true
-      }
-    ],
-    "poisoned_log_replay": [
-      {
-        "name": "poisoned-1",
+        "name": "poisoned-parent-header-1",
         "kind": "complete",
         "capsule_existed": false,
-        "frontier_at_open": 0,
-        "fetched": [
-          0,
-          1,
-          2
+        "saved": [
+          "parent-header"
         ],
-        "fetch_poisoned": true,
-        "saved": "poisoned",
-        "rejected": true
+        "rejected": "blockhash"
       },
       {
-        "name": "poisoned-2-replay",
+        "name": "poisoned-parent-header-2-replay",
         "kind": "complete",
         "capsule_existed": true,
-        "frontier_at_open": 3,
-        "fetched": [],
-        "saved": "poisoned",
-        "rejected": true
+        "saved": [
+          "parent-header"
+        ],
+        "rejected": "blockhash"
+      }
+    ],
+    "poisoned_ancestor_header": [
+      {
+        "name": "poisoned-ancestor-header-1",
+        "kind": "complete",
+        "capsule_existed": false,
+        "saved": [
+          "ancestor-header-1"
+        ],
+        "rejected": "blockhash"
+      },
+      {
+        "name": "poisoned-ancestor-header-2-replay",
+        "kind": "complete",
+        "capsule_existed": true,
+        "saved": [
+          "ancestor-header-1"
+        ],
+        "rejected": "blockhash"
+      }
+    ],
+    "poisoned_body": [
+      {
+        "name": "poisoned-body-1",
+        "kind": "complete",
+        "capsule_existed": false,
+        "saved": [
+          "body-rlp"
+        ],
+        "rejected": "body"
+      },
+      {
+        "name": "poisoned-body-2-replay",
+        "kind": "complete",
+        "capsule_existed": true,
+        "saved": [
+          "body-rlp"
+        ],
+        "rejected": "body"
       }
     ],
     "control_direct_poison": [

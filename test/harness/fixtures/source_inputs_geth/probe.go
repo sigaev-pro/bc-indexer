@@ -2,9 +2,16 @@
 // import of the accepted Geth tree. Preparation copies it to
 // cmd/extractor-inputs-probe, copies the shared package to
 // extractor/source_inputs, and adds a test-only hook (hook.go.txt) that lets
-// the probe resolve the BLOCKHASH ancestor lookups of the serial state
-// processor through the dependency log. The probe reports observations only;
-// the driver's separately written oracle judges them against expected.json.
+// the probe answer the BLOCKHASH ancestor lookups of the serial state
+// processor. The sealed static capsule holds every static input of the
+// target block, including the parent header and the other headers of the
+// BLOCKHASH window, which are known before execution. Native code imports
+// the block decoded from the saved header and body bytes, and every
+// BLOCKHASH answer is the Keccak-256 hash of a saved ancestor header. The
+// Geth import of this fixture has no response that is unknown in advance,
+// so the dependency log stays empty and closes with count 0. The probe
+// reports observations only; the driver's separately written oracle judges
+// them against expected.json.
 //
 // Usage:
 //
@@ -23,6 +30,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -83,14 +91,15 @@ type Spec struct {
 	NativeCommit string `json:"native_commit"`
 	Events       string `json:"events"`
 	Result       string `json:"result"`
-	// Resolver is "native", "poisoned_below" (poisoned below PoisonBelow,
-	// native beyond), "poisoned_all" or "direct_poison" (no log at all).
-	Resolver    string `json:"resolver"`
-	PoisonBelow uint64 `json:"poison_below"`
-	// Crash is "", "after_seal" or "before_handoff"; CrashSequence is the
-	// sequence whose hand-off the attempt never reaches.
-	Crash         string `json:"crash"`
-	CrashSequence uint64 `json:"crash_sequence"`
+	// Poison names the capsule items that the source of a new seal changes:
+	// "body-rlp" (the body of the block before the target),
+	// "parent-header" or "ancestor-header-<n>" (the header with changed
+	// extra data). A retry that finds a sealed capsule never asks the source.
+	Poison []string `json:"poison"`
+	// DirectPoison answers BLOCKHASH with poisoned hashes and uses no capsule.
+	DirectPoison bool `json:"direct_poison"`
+	// Crash is "" or "after_seal".
+	Crash string `json:"crash"`
 	// Rewind sets the head back to the parent first, for a native-only replay
 	// of a block that an earlier attempt imported.
 	Rewind bool `json:"rewind"`
@@ -179,19 +188,51 @@ func crash(log *events, point string) {
 	select {}
 }
 
-// poison is the changed "external" answer: wrong for every lookup.
-func poison(number uint64) common.Hash {
-	return common.Hash(sha256.Sum256([]byte(fmt.Sprintf("changed external response %d", number))))
+// poisonText is the changed extra data of a poisoned header, and its
+// SHA-256 is the BLOCKHASH answer of the direct poison control.
+func poisonText(number uint64) []byte {
+	return []byte(fmt.Sprintf("changed external response %d", number))
 }
 
-func request(ref common.Hash, number uint64) []byte {
-	return []byte(fmt.Sprintf("geth-blockhash-v1 ref=%s number=%d", ref.Hex(), number))
+func poison(number uint64) common.Hash { return common.Hash(sha256.Sum256(poisonText(number))) }
+
+// encodings names the byte format of every encoded capsule item.
+const encodings = `{"ancestor-header":"rlp(types.Header)","body-rlp":"rlp(types.Body)","header-rlp":"rlp(types.Header)","parent-header":"rlp(types.Header)"}`
+
+// windowStart is the lowest block number that BLOCKHASH of block number can read.
+func windowStart(number uint64) uint64 {
+	if number < 257 {
+		return 0
+	}
+	return number - 256
 }
 
-func capsuleItems(chain *core.BlockChain, genesis *core.Genesis, block *types.Block, commit string) []sourceinputs.Item {
+func ancestorName(number uint64) string { return fmt.Sprintf("ancestor-header-%d", number) }
+
+// encodeHeader returns the header bytes, with changed extra data when the
+// source poisons the item name.
+func encodeHeader(header *types.Header, name string, poisoned map[string]bool) []byte {
+	if poisoned[name] {
+		header = types.CopyHeader(header)
+		header.Extra = poisonText(header.Number.Uint64())
+	}
+	data, err := rlp.EncodeToBytes(header)
+	check(err)
+	return data
+}
+
+// sourceItems builds the static inputs of block from the native chain. The
+// target block's parent and the other BLOCKHASH window ancestors are known
+// before execution, so they are capsule items, not dependency log entries.
+func sourceItems(chain *core.BlockChain, genesis *core.Genesis, blocks []*types.Block, commit string, poisoned map[string]bool) []sourceinputs.Item {
+	block := blocks[target-1]
 	header, err := rlp.EncodeToBytes(block.Header())
 	check(err)
-	body, err := rlp.EncodeToBytes(block.Body())
+	body := block.Body()
+	if poisoned["body-rlp"] {
+		body = blocks[target-2].Body()
+	}
+	bodyBytes, err := rlp.EncodeToBytes(body)
 	check(err)
 	parent := chain.GetHeader(block.ParentHash(), block.NumberU64()-1)
 	if parent == nil {
@@ -202,16 +243,67 @@ func capsuleItems(chain *core.BlockChain, genesis *core.Genesis, block *types.Bl
 	id := forkid.NewID(genesis.Config, chain.Genesis(), block.NumberU64(), block.Time())
 	fork, err := json.Marshal(map[string]string{"hash": hex.EncodeToString(id.Hash[:]), "next": fmt.Sprint(id.Next)})
 	check(err)
-	return []sourceinputs.Item{
+	items := []sourceinputs.Item{
 		{Name: "header-rlp", Data: header},
-		{Name: "body-rlp", Data: body},
+		{Name: "body-rlp", Data: bodyBytes},
+		{Name: "encodings", Data: []byte(encodings)},
+		{Name: "parent-header", Data: encodeHeader(parent, "parent-header", poisoned)},
 		{Name: "parent-hash", Data: parent.Hash().Bytes()},
 		{Name: "parent-root", Data: parent.Root.Bytes()},
-		{Name: "chain-config", Data: config},
-		{Name: "fork-id", Data: fork},
-		{Name: "native-commit", Data: []byte(commit)},
-		{Name: "normalization-profile", Data: []byte("test-only-probe-v1")},
 	}
+	for number := windowStart(block.NumberU64()); number+1 < block.NumberU64(); number++ {
+		ancestor := chain.GetHeaderByNumber(number)
+		if ancestor == nil {
+			panic("ancestor header is missing")
+		}
+		items = append(items, sourceinputs.Item{Name: ancestorName(number), Data: encodeHeader(ancestor, ancestorName(number), poisoned)})
+	}
+	return append(items,
+		sourceinputs.Item{Name: "chain-config", Data: config},
+		sourceinputs.Item{Name: "fork-id", Data: fork},
+		sourceinputs.Item{Name: "native-commit", Data: []byte(commit)},
+		sourceinputs.Item{Name: "normalization-profile", Data: []byte("test-only-probe-v1")},
+	)
+}
+
+// savedItems reads every sealed item back from the store.
+func savedItems(store sourceinputs.Store, capsule sourceinputs.Capsule) []sourceinputs.Item {
+	items := []sourceinputs.Item{}
+	for index, ref := range capsule.Items {
+		data, err := sourceinputs.ReadItem(store, observation, index)
+		check(err)
+		items = append(items, sourceinputs.Item{Name: ref.Name, Data: data})
+	}
+	return items
+}
+
+// ancestor is one BLOCKHASH answer of the capsule.
+type ancestor struct {
+	name string
+	hash common.Hash
+}
+
+// capsuleInputs decodes the block to import and the BLOCKHASH answers from
+// the saved bytes. Each answer is the Keccak-256 hash of the saved header.
+func capsuleInputs(items []sourceinputs.Item) (*types.Block, map[uint64]ancestor) {
+	byName := map[string][]byte{}
+	for _, item := range items {
+		byName[item.Name] = item.Data
+	}
+	header := new(types.Header)
+	check(rlp.DecodeBytes(byName["header-rlp"], header))
+	body := new(types.Body)
+	check(rlp.DecodeBytes(byName["body-rlp"], body))
+	answers := map[uint64]ancestor{}
+	for _, item := range items {
+		if item.Name != "parent-header" && !strings.HasPrefix(item.Name, "ancestor-header-") {
+			continue
+		}
+		saved := new(types.Header)
+		check(rlp.DecodeBytes(item.Data, saved))
+		answers[saved.Number.Uint64()] = ancestor{name: item.Name, hash: crypto.Keccak256Hash(item.Data)}
+	}
+	return types.NewBlockWithHeader(header).WithBody(*body), answers
 }
 
 func attempt(specPath string) {
@@ -227,6 +319,8 @@ func attempt(specPath string) {
 
 	genesis, blocks := chainInputs(spec.Genesis)
 	block := blocks[target-1]
+	imported := block
+	var answers map[uint64]ancestor
 	db := openStore(spec.Datadir)
 	chain := newChain(db, genesis)
 	if spec.Rewind {
@@ -236,19 +330,41 @@ func attempt(specPath string) {
 	store := &recorder{db: db, log: log}
 
 	var input *sourceinputs.Log
-	if spec.Resolver != "direct_poison" {
-		_, err := sourceinputs.ReadCapsule(store, observation)
-		result["capsule_existed"] = err == nil
+	if !spec.DirectPoison {
+		existing, err := sourceinputs.ReadCapsule(store, observation)
+		existed := err == nil
+		result["capsule_existed"] = existed
 		if err != nil && !errors.Is(err, sourceinputs.ErrNoCapsule) {
 			fail(err)
 		}
-		capsule, err := sourceinputs.SealCapsule(store, observation, capsuleItems(chain, genesis, block, spec.NativeCommit))
+		// A retry seals the saved items again, which verifies them and
+		// syncs; only a new seal asks the source.
+		var items []sourceinputs.Item
+		if existed {
+			items = savedItems(store, existing)
+		}
+		if !existed {
+			poisoned := map[string]bool{}
+			for _, name := range spec.Poison {
+				poisoned[name] = true
+			}
+			log.add(map[string]any{"op": "source", "poison": spec.Poison})
+			items = sourceItems(chain, genesis, blocks, spec.NativeCommit, poisoned)
+		}
+		capsule, err := sourceinputs.SealCapsule(store, observation, items)
 		check(err)
 		result["capsule"] = capsule
 		log.add(map[string]any{"op": "sealed", "digest": capsule.Digest})
 		if spec.Crash == "after_seal" {
 			crash(log, spec.Crash)
 		}
+		saved := savedItems(store, capsule)
+		rows := []map[string]string{}
+		for _, item := range saved {
+			rows = append(rows, map[string]string{"name": item.Name, "data": hex.EncodeToString(item.Data)})
+		}
+		result["capsule_items"] = rows
+		imported, answers = capsuleInputs(saved)
 		input, err = sourceinputs.OpenLog(store, observation)
 		check(err)
 		result["frontier_at_open"] = input.Frontier()
@@ -260,46 +376,22 @@ func attempt(specPath string) {
 			return native
 		}
 		log.add(map[string]any{"op": "process_start", "number": header.Number.Uint64()})
-		ref := header.Hash()
-		// resolve is the only "external" source this attempt has. In the
-		// poisoned modes it hides the native answer, so the block imports
-		// only if native code received the saved bytes.
-		resolve := func(seq, number uint64) (common.Hash, bool) {
-			if spec.Resolver == "poisoned_all" || (spec.Resolver == "poisoned_below" && seq < spec.PoisonBelow) {
-				return poison(number), true
-			}
-			return native(number), false
-		}
 		return func(number uint64) common.Hash {
-			if spec.Resolver == "direct_poison" {
+			if spec.DirectPoison {
 				log.add(map[string]any{"op": "direct_poison", "number": number})
 				return poison(number)
 			}
-			seq := input.Cursor()
-			req := request(ref, number)
-			log.add(map[string]any{"op": "request", "sequence": seq, "request": string(req)})
-			response, err := input.Next(req, func() ([]byte, error) {
-				answer, poisoned := resolve(seq, number)
-				log.add(map[string]any{"op": "fetch", "sequence": seq, "poisoned": poisoned})
-				return answer.Bytes(), nil
-			})
-			if err == nil && len(response) != common.HashLength {
-				err = fmt.Errorf("response of %d bytes", len(response))
-			}
-			if err != nil {
-				log.add(map[string]any{"op": "error", "sequence": seq, "error": err.Error()})
-				fail(err)
+			saved, ok := answers[number]
+			log.add(map[string]any{"op": "lookup", "number": number, "item": saved.name, "response": hex.EncodeToString(saved.hash[:])})
+			if !ok {
+				fail(fmt.Errorf("BLOCKHASH %d is not in the capsule", number))
 				return common.Hash{}
 			}
-			if spec.Crash == "before_handoff" && seq == spec.CrashSequence {
-				crash(log, spec.Crash)
-			}
-			log.add(map[string]any{"op": "handoff", "sequence": seq, "response": hex.EncodeToString(response)})
-			return common.BytesToHash(response)
+			return saved.hash
 		}
 	})
 
-	if _, err := chain.InsertChain(types.Blocks{block}); err != nil {
+	if _, err := chain.InsertChain(types.Blocks{imported}); err != nil {
 		result["import_error"] = err.Error()
 	}
 	head := chain.CurrentBlock()
@@ -402,14 +494,18 @@ func setup(datadir string, genesis *core.Genesis, blocks []*types.Block) {
 func run(genesisPath, work, output, commit string) {
 	check(os.Mkdir(work, 0o700))
 	genesis, blocks := chainInputs(genesisPath)
-	hashes := []string{}
+	// generated_hashes[n] is the hash of block n; index 0 is the genesis.
+	hashes := []string{genesis.ToBlock().Hash().Hex()}
+	transactions := [][]string{{}}
 	for _, block := range blocks {
 		hashes = append(hashes, block.Hash().Hex())
+		row := []string{}
+		for _, tx := range block.Transactions() {
+			row = append(row, tx.Hash().Hex())
+		}
+		transactions = append(transactions, row)
 	}
-	header, err := rlp.EncodeToBytes(blocks[target-1].Header())
-	check(err)
-	headerSum := sha256.Sum256(header)
-	base := Spec{Genesis: genesisPath, NativeCommit: commit, Resolver: "native"}
+	base := Spec{Genesis: genesisPath, NativeCommit: commit}
 	scenarios := []map[string]any{}
 	scenario := func(name string, attempts ...map[string]any) {
 		scenarios = append(scenarios, map[string]any{"name": name, "attempts": attempts})
@@ -419,51 +515,54 @@ func run(genesisPath, work, output, commit string) {
 		setup(path, genesis, blocks)
 		return path
 	}
+	everything := []string{"body-rlp", "parent-header", ancestorName(1)}
 
+	// A retry must use the saved capsule: its source would poison every
+	// item that native execution reads.
 	clean := base
 	clean.Datadir = dir("clean")
 	first := runAttempt(work, "clean-1", clean)
 	replay := clean
-	replay.Resolver, replay.Rewind = "poisoned_all", true
+	replay.Poison, replay.Rewind = everything, true
 	scenario("clean_then_closed_replay", first, runAttempt(work, "clean-2-closed-replay", replay))
 
 	sealed := base
 	sealed.Datadir = dir("crash-after-seal")
 	sealed.Crash = "after_seal"
 	retry := sealed
-	retry.Crash = ""
+	retry.Crash, retry.Poison = "", everything
 	scenario("crash_after_seal", runAttempt(work, "seal-1-crash", sealed), runAttempt(work, "seal-2-retry", retry))
 
-	handoff := base
-	handoff.Datadir = dir("crash-before-handoff")
-	handoff.Crash, handoff.CrashSequence = "before_handoff", 1
-	retry = handoff
-	retry.Crash, retry.Resolver, retry.PoisonBelow = "", "poisoned_below", 2
-	scenario("crash_before_handoff", runAttempt(work, "handoff-1-crash", handoff), runAttempt(work, "handoff-2-retry", retry))
-
-	// The saved log holds answers that differ from native truth: a replay
-	// with the native source must hand native code the saved answers, so
-	// native validation rejects the block again.
-	poisoned := base
-	poisoned.Datadir = dir("poisoned-log")
-	poisoned.Resolver = "poisoned_all"
-	replay = poisoned
-	replay.Resolver = "native"
-	scenario("poisoned_log_replay", runAttempt(work, "poisoned-1", poisoned), runAttempt(work, "poisoned-2-replay", replay))
+	// Each poisoned capsule item differs from native truth. Native
+	// validation rejects the block, and a retry with the native source
+	// still uses the saved poisoned item, so it is rejected again.
+	for _, poisoned := range []struct{ name, item string }{
+		{"poisoned_parent_header", "parent-header"},
+		{"poisoned_ancestor_header", ancestorName(1)},
+		{"poisoned_body", "body-rlp"},
+	} {
+		spec := base
+		spec.Datadir = dir(poisoned.name)
+		spec.Poison = []string{poisoned.item}
+		replay := spec
+		replay.Poison = nil
+		prefix := strings.ReplaceAll(poisoned.name, "_", "-")
+		scenario(poisoned.name, runAttempt(work, prefix+"-1", spec), runAttempt(work, prefix+"-2-replay", replay))
+	}
 
 	control := base
 	control.Datadir = dir("control-direct-poison")
-	control.Resolver = "direct_poison"
+	control.DirectPoison = true
 	scenario("control_direct_poison", runAttempt(work, "control-1", control))
 
 	result := map[string]any{
-		"family":            "geth",
-		"observation":       observation,
-		"target":            target,
-		"lookbacks":         lookbackNumbers(),
-		"generated_hashes":  hashes,
-		"header_rlp_sha256": hex.EncodeToString(headerSum[:]),
-		"scenarios":         scenarios,
+		"family":                 "geth",
+		"observation":            observation,
+		"target":                 target,
+		"lookbacks":              lookbackNumbers(),
+		"generated_hashes":       hashes,
+		"generated_transactions": transactions,
+		"scenarios":              scenarios,
 	}
 	data, err := json.MarshalIndent(result, "", "  ")
 	check(err)
