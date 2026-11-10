@@ -136,7 +136,7 @@ Status: block ACCEPTED in PR #138 at merge `b7c2679` (part of #14), after
 block 0 (PR #137, merged at `a2fb163`). Role: native-engineer (D98 item 5).
 Base `a2fb163`.
 
-Static manifest follow-up (part of #14): IN_PROGRESS in a new draft PR; not
+Static manifest follow-up (part of #14): IN_PROGRESS in draft PR #142; not
 accepted until review, CI and the owner's merge permission. Base `1cebde2`
 (main with PRs #137 to #141). Same role and allowed paths as below.
 
