@@ -1,9 +1,27 @@
 # Состояние проекта
 
+## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
+
+Status: PLANNED. Unlocked when D98 merges and #13 closes (dependencies
+E01-02.pins and BOOT-09 accepted). Plan agreed with the owner under D97 and
+D98:
+
+- Block 0, inputs-core: static input capsule and append-only dependency log;
+  shared files are copied into each `adapters/<client>/source_inputs`.
+  Roles: architect (design), native-engineer (implementation), reviewer.
+- Then up to three parallel blocks: Geth, BSC and Bor (native-engineer each);
+  qa owns the Bor matrix for AC-CAP-04-01 to AC-CAP-04-03 (POLY only).
+- Bor evidence uses a deterministic in-process Heimdall stub; the counted
+  calls are state sync events and spans; saved bytes are the raw response
+  body at the transport boundary, before decoding.
+- AC-CAP-04-03 binds the final consumed-manifest digest to a test-only
+  stand-in marker; the real EXEC_READY binding is proven in E01-02.admission.
+
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
-Status: READY_FOR_REVIEW. Owner-approved process improvements 1-3, run in
-parallel with E01-02.pins and E01-02.owned_capture under D97 (draft PR #131).
+Status: ACCEPTED in PR #132 at merge `0de9dc129a2655fee8063c62ec1bea185027d2b0`. Owner-approved
+process improvements 1-3, run in parallel with E01-02.pins and
+E01-02.owned_capture under D97.
 Most extra review rounds in PRs #128-#130 came from hand-copied evidence
 numbers, hand-made mutation checks (one counted 10 compile failures as kills)
 and a flaky controller test. Outputs:
@@ -77,7 +95,10 @@ comment, then report READY to the coordinator, who merges.
 
 ## E01-02.pins — Native state retention and release (issue #13)
 
-Status: READY_FOR_REVIEW in draft PR #133; #13 stays open. The block adds the
+Status: ACCEPTED in PR #133 at merge `667bf40e45327d01cc7a319f410c7808dfe2cb5e`; #13 closes under the D98
+boundary (private local native-seam evidence; public cells NOT_RUN with E06
+and E07). GitHub closed #13 early on that merge; it was reopened until D98
+merges. The block adds the
 hash-provider pin seam `adapters/{geth,bsc,bor}/state_provider` (durable pin
 ledger in the native key-value store; guards for the offline pruner, its
 startup resume, head rewinds and the chain freezer's side-chain wipe; a
@@ -102,14 +123,15 @@ merges after the owner's permission (D97).
 
 Base: `d40c6ea` (main, merged into the branch). Branch/worktree: `feat/e01-02-pins` / `e01-02-pins-a2f23f`.
 
-BLOCKED_DECISION (owner): the closure boundary for #13. Its ACs list all seven
+RESOLVED by D98 (was BLOCKED_DECISION): the closure boundary for #13. Its ACs list all seven
 public profiles in `local-e2e` and `harness` modes, while D96 keeps public
 profile environments with E06. D96 settled this only for #12. Until the owner
 decides whether #13 may close on private local native-seam evidence, this block
 gives no public-profile credit, every public AC cell stays NOT_RUN, and #13 stays
 open after this block. Independent work continues.
 
-BLOCKED_DECISION (owner): who adds the native retention patch. The accepted
+RESOLVED by D98, which assigns the patch to E01-02.admission (was
+BLOCKED_DECISION): who adds the native retention patch. The accepted
 native sources delete committed state, code or pinned headers through the
 offline prune command and its startup resume, head rewinds (`SetHead`, crash
 repair) and the chain freezer's side-chain wipe. This block adds a ledger
@@ -130,7 +152,11 @@ hazards outside this block's evidence.
 
 Status: first block ACCEPTED in PR #134 at merge
 `4c2abb20b3ef42f4388e93403b323cfd5277ff7f` from reviewed head `14c315a`;
-follow-up block IN_PROGRESS (see below); #15 stays open. The block delivers the
+follow-up block ACCEPTED in PR #135 at merge `d40c6ea9b25894bf1b7e786d810eaa0bc511886a`; #15 closes under the
+D98 boundary (ethash-faker BSC and Bor runs count for the seam; native
+consensus, public slots and RunManifests move to E06 and E07; the safe-point
+patch goes to E01-02.admission and the raw spool encoder to
+E04-04.import_pressure). The block delivers the
 dependency-free Go module `core/capture` (immutable frames,
 BEGIN_FIELD/CHUNK/END_FIELD with sequence, offset, length and SHA-256, one
 fixed byte budget, safe-point waits that a callback can never enter, callback
@@ -146,7 +172,7 @@ mutation records are retained as failures or superseded; see
 Spec PASS with notes, Standards REQUEST_CHANGES; the fixes are in `cd60d53`.
 All seven public profile slots stay NOT_RUN and no AC verdict is issued.
 
-BLOCKED_DECISION (owner), needed before #15 can close; independent work continues:
+RESOLVED by D98 (was BLOCKED_DECISION, needed before #15 could close):
 
 1. Closure boundary for #15. The issue asks for every applicable mainnet and
    testnet profile, and the corpus lists AC-CAP-05-01 and AC-CAP-06-02 for all
