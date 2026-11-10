@@ -66,6 +66,46 @@ Next: Spec and Standards review of the new head, then the coordinator asks the
 owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
 this core into each client; the Bor block adds the in-process Heimdall stub.
 
+## E01-02.inputs — Bor block
+
+Status: IN_PROGRESS (draft PR, Part of #14). Base main `a2fb163` (block 0
+merged in PR #137). Roles: native-engineer (wiring), qa (AC matrix and
+oracle), reviewer (Spec and Standards). Allowed paths: new Bor-specific files
+`test/harness/bor_source_inputs_probe.py`,
+`test/harness/test_bor_source_inputs_probe.py`,
+`test/harness/bor_source_inputs_probe.mutants.json`,
+`test/harness/fixtures/source_inputs_bor/**`,
+`.project/evidence/E01-02.inputs.bor.md` and this section.
+`adapters/bor/source_inputs` is unchanged, so the shared-file check still
+passes. Coordinator technical decision: Bor-only probe sources live in
+`test/harness/fixtures/source_inputs_bor/`, never under
+`adapters/*/source_inputs/`; Geth and BSC use `source_inputs_geth` and
+`source_inputs_bsc`.
+
+Output: a private probe builds inside the accepted Bor tree and runs native
+Bor consensus with the HTTP Heimdall client. A deterministic in-process
+Heimdall stub answers through the process transport; state sync pages and
+spans by ID pass through the shared dependency log, which saves the raw body
+before Bor decodes it (D98). Evidence:
+[E01-02.inputs.bor](evidence/E01-02.inputs.bor.md).
+
+Review 001 (head `0cb6c70`): Spec PASS with P3 notes; Standards
+REQUEST_CHANGES (P2: the driver's `prepare()` and `run()` had no tests or
+mutants). `ab172ee` adds them, moves the fixture and fixes the P3 notes.
+
+Result on clean commit `8203955`: preparation 02 PASS; measured run 02 PASS
+in 5.473 seconds. Private local verdicts: AC-CAP-04-01 PASS, AC-CAP-04-02
+PASS, AC-CAP-04-03 PASS with the test-only stand-in marker; every public cell
+stays NOT_RUN (D96, D98). Mutants: Go 29 killed (`8203955`). Review 002
+(head `eba6992`): Spec PASS with a P3 wording note; Standards REQUEST_CHANGES
+(P2: four checks without a control). `170f85f` adds the controls and mutants
+without changing the driver or probe code: Python 98 of 98 killed. The
+earlier preparation 01 and run 01 on `a32bc67` also passed and are kept.
+
+Next: Spec and Standards review of the new head and hosted `bootstrap/ci`.
+The real EXEC_READY binding stays with E01-02.admission. #14 stays open for
+the Geth and BSC blocks.
+
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
 Status: ACCEPTED in PR #132 at merge
