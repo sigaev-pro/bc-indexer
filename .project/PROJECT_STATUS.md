@@ -66,6 +66,43 @@ Next: Spec and Standards review of the new head, then the coordinator asks the
 owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
 this core into each client; the Bor block adds the in-process Heimdall stub.
 
+## E01-02.inputs — BSC block
+
+Status: IN_PROGRESS in draft PR #139 (part of #14). Base `a2fb163`, after
+block 0 (PR #137) merged. Role: native-engineer (D98). AC-CAP-04-01 to
+AC-CAP-04-03 apply to POLY only, so this block issues no AC verdict. It is
+private local evidence under D96 and D98; public cells stay NOT_RUN.
+
+Allowed paths: `test/harness/bsc_source_inputs.py`,
+`test/harness/fixtures/source_inputs_bsc/**`,
+`.project/evidence/E01-02.inputs.bsc.md` and this section.
+`adapters/bsc/source_inputs/**` was also allowed, but this block leaves it
+unchanged.
+
+Coordinator technical decision (2026-11-10), not an owner answer: BSC-only Go
+sources live in `test/harness/fixtures/source_inputs_bsc/`, and the driver
+copies them into the native tree. A BSC-only file in the shared package would
+fail the shared-file check. The Geth and Bor blocks use their own
+`source_inputs_<client>` directories.
+
+Output: `ParliaDB` wraps the database handle that `parlia.New` receives, so
+every Parlia read goes through the dependency log of the current observation.
+A private native probe on the accepted BSC Parlia fixture shows:
+
+- the capsule is synced before execution;
+- each new response is durable before Parlia receives it (SIGKILL at the
+  hand-off keeps it);
+- resume and native-only replay hand Parlia the saved bytes. A tampered live
+  snapshot breaks block 2 in the control but not in the replay.
+
+Evidence: [E01-02.inputs.bsc](evidence/E01-02.inputs.bsc.md). Preparation 01
+and measured run 01 at `943817f` PASS. Go mutant record 02 at `03e058b`
+killed 29 of 29. Record 01 had 2 BUILD_FAILED mutants from table bugs and is
+kept as a FAIL. The Python driver mutants killed 81 of 81.
+
+Next: independent Spec and Standards review of the exact head and hosted
+`bootstrap/ci`. The coordinator then asks the owner for merge permission.
+
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
 Status: ACCEPTED in PR #132 at merge
