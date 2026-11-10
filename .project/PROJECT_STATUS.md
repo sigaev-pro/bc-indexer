@@ -2,15 +2,16 @@
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
-Status: IN_PROGRESS; #14 stays open. Block 0 inputs-core merged in PR #137
-at `a2fb163`; the Geth, BSC and Bor blocks merged in PRs #138, #139 and #140
+Status: IN_PROGRESS; #14 stays open. Block 0 inputs-core merged in PR #137 at
+`a2fb163`; the Geth, BSC and Bor blocks merged in PRs #138, #139 and #140
 (sections below). The coordinator closed #14 too early on 2026-11-10 and
-reopened it the same day. Still open: the static manifest items that
-NATIVE_CAPTURE_PROTOCOL lists are not complete in any client capsule (parent
-header and state root, chain config or fork digest, normalization profile,
-known ancestor headers and BSC snapshot dependencies; Geth also defers how
-its ancestor hashes are classified). This waits for the owner's decision on
-where that work goes. Dependencies
+reopened it the same day. Still open against the static manifest list in
+NATIVE_CAPTURE_PROTOCOL, per client: Geth, the known ancestor headers (its
+evidence had assigned their classification to E01-02.admission); BSC, the
+parent header, the parent state root and the ancestor headers; Bor, the parent
+hash and state root, the normalization profile and the in-memory
+`stateSyncConfirmationDelay`. On 2026-11-10 the owner chose to finish these
+items inside #14, in three per-client blocks. Dependencies
 E01-02.pins and BOOT-09 are accepted (#13 closed under D98). Plan agreed with
 the owner under D97 and D98:
 
@@ -75,9 +76,10 @@ the first E01-02.inputs section.
 ## E01-02.inputs — BSC block
 
 Status: block ACCEPTED in PR #139 at merge `046d0a7` (part of #14). Base
-`a2fb163`, after block 0 (PR #137) merged. Role: native-engineer (D98). AC-CAP-04-01 to
-AC-CAP-04-03 apply to POLY only, so this block issues no AC verdict. It is
-private local evidence under D96 and D98; public cells stay NOT_RUN.
+`a2fb163`, after block 0 (PR #137) merged. Role: native-engineer (D98).
+AC-CAP-04-01 to AC-CAP-04-03 apply to POLY only, so this block issues no AC
+verdict. It is private local evidence under D96 and D98; public cells stay
+NOT_RUN.
 
 Allowed paths: `test/harness/bsc_source_inputs.py`,
 `test/harness/fixtures/source_inputs_bsc/**`,
@@ -165,11 +167,10 @@ the first E01-02.inputs section.
 
 ## E01-02.inputs — Bor block
 
-Status: block ACCEPTED in PR #140 at merge `9d14e96` (part of #14). Base
-main `a2fb163` (block 0
-merged in PR #137). Roles: native-engineer (wiring), qa (AC matrix and
-oracle), reviewer (Spec and Standards). Allowed paths: new Bor-specific files
-`test/harness/bor_source_inputs_probe.py`,
+Status: block ACCEPTED in PR #140 at merge `9d14e96` (part of #14). Base main
+`a2fb163` (block 0 merged in PR #137). Roles: native-engineer (wiring), qa (AC
+matrix and oracle), reviewer (Spec and Standards). Allowed paths: new
+Bor-specific files `test/harness/bor_source_inputs_probe.py`,
 `test/harness/test_bor_source_inputs_probe.py`,
 `test/harness/bor_source_inputs_probe.mutants.json`,
 `test/harness/fixtures/source_inputs_bor/**`,
