@@ -585,6 +585,30 @@
       "file": "test/harness/bor_source_inputs_probe.py",
       "original": "if record[\"scenarios\"] and all(row[\"result\"] == \"PASS\" for row in record[\"scenarios\"].values()):",
       "replacement": "if record[\"scenarios\"]:"
+    },
+    {
+      "name": "prepare manifest path absolute",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(manifest_path.is_absolute(), \"BuildManifest path must be absolute\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "run preparation path absolute",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(preparation_path.is_absolute(), \"Preparation path must be absolute\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "module artifacts re-hashed",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            artifact(module[field], 1024 * 1024 * 1024, root, deadline)\n",
+      "replacement": "            pass\n"
+    },
+    {
+      "name": "key source verified",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            artifact(bor[\"key_source\"], 4 * 1024 * 1024, deadline=deadline)\n",
+      "replacement": ""
     }
   ]
 }

@@ -45,9 +45,9 @@ state sync event pages (`/clerk/time`) and spans by ID (`/bor/spans/<id>`).
 The latest-span and status calls (from the span store poll loop,
 `getLatestSpan` and `waitUntilHeimdallIsSynced`) are answered by the stub
 without the log. Their bytes do not enter execution directly, but the latest
-span chooses which span IDs Bor reads. A changed latest span would therefore
-change the counted span requests, and the log would refuse that change as a
-prefix conflict instead of silently replaying it. The saved bytes
+span ID bounds which span IDs Bor reads. A changed latest span could
+therefore change the counted span requests, and the log would refuse that
+change as a prefix conflict instead of silently replaying it. The saved bytes
 are the raw response body at the transport boundary, before Bor decodes it;
 the request identity is `GET <path>?<query>` exactly as Bor builds it.
 

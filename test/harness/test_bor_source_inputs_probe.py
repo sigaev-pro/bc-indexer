@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import sys
 import tarfile
@@ -432,6 +433,7 @@ class DriverFixture(unittest.TestCase):
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.root, True)
         for target, value in ((capture_probe, "LOCK"), (probe, "Native")):
             patcher = mock.patch.object(target, value, self.root / "lock" if value == "LOCK" else FakeNative)
             patcher.start()
@@ -539,6 +541,10 @@ class PrepareTests(DriverFixture):
         manifest = self.build()
         with self.assertRaises(Rejected):
             probe.prepare(manifest, "0" * 64, self.root / "digest")
+        relative = Path(os.path.relpath(manifest))
+        self.assertFalse(relative.is_absolute())
+        with self.assertRaisesRegex(Rejected, "BuildManifest path must be absolute"):
+            probe.prepare(relative, reference(manifest)["sha256"], self.root / "relative")
         not_built = self.build(kind="plan")
         with self.assertRaises(Rejected):
             probe.prepare(not_built, reference(not_built)["sha256"], self.root / "plan")
@@ -546,8 +552,16 @@ class PrepareTests(DriverFixture):
             with self.subTest(output=output), self.assertRaises(Rejected):
                 probe.prepare(manifest, reference(manifest)["sha256"], output)
             self.assertFalse(output.exists())
-        for name in ("digest", "plan"):
+        for name in ("digest", "plan", "relative"):
             self.assertFalse((self.root / name).exists())
+
+    def test_changed_module_artifact_fails_the_preparation(self):
+        manifest = self.build()
+        (self.root / "build/bor.zip").write_text("changed")
+        output, record = self.prepare("changed-module", manifest)
+        self.assertEqual(record["result"], "FAIL")
+        self.assertIn("changed", record["error"])
+        self.assertNotIn("module_artifacts_verified", json.loads((output / "preparation.json").read_text()).get("bor", {}))
 
 
 class RunTests(DriverFixture):
@@ -615,11 +629,18 @@ class RunTests(DriverFixture):
         Path(json.loads(preparation.read_text())["bor"]["binary"]["path"]).write_bytes(b"changed")
         _, record = self.run_probe(preparation, "changed")
         self.assertIn("changed", record["error"])
+        preparation = self.prepared()
+        Path(json.loads(preparation.read_text())["bor"]["key_source"]["path"]).write_bytes(b"changed key source")
+        _, record = self.run_probe(preparation, "changed-key-source")
+        self.assertEqual(record["result"], "FAIL")
+        self.assertIn("changed", record["error"])
 
     def test_refusals_create_no_output(self):
         preparation = self.prepared()
         with self.assertRaises(Rejected):
             probe.run(preparation, "0" * 64, self.root / "digest")
+        with self.assertRaisesRegex(Rejected, "Preparation path must be absolute"):
+            probe.run(Path(os.path.relpath(preparation)), reference(preparation)["sha256"], self.root / "relative")
         self.containers = "abc\n"
         with self.assertRaises(Rejected):
             self.run_probe(preparation, "foreign")
@@ -632,7 +653,7 @@ class RunTests(DriverFixture):
             with self.subTest(output=output), self.assertRaises(Rejected):
                 probe.run(preparation, reference(preparation)["sha256"], output)
             self.assertFalse(output.exists())
-        for name in ("digest", "foreign", "locked"):
+        for name in ("digest", "relative", "foreign", "locked"):
             self.assertFalse((self.root / name).exists())
 
     def test_existing_output_is_never_written(self):
