@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "kind": "bor-source-inputs-oracle",
+  "requests": [
+    {
+      "request": "GET /bor/spans/0",
+      "body": "span-0.json"
+    },
+    {
+      "request": "GET /bor/spans/1",
+      "body": "span-1.json"
+    },
+    {
+      "request": "GET /clerk/time?from_id=1&to_time={to_time}&pagination.limit=50",
+      "block": 4,
+      "body": "clerk-a-from-1.json"
+    },
+    {
+      "request": "GET /clerk/time?from_id=3&to_time={to_time}&pagination.limit=50",
+      "block": 4,
+      "body": "clerk-empty.json"
+    },
+    {
+      "request": "GET /clerk/time?from_id=3&to_time={to_time}&pagination.limit=50",
+      "block": 8,
+      "body": "clerk-empty.json"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "ac-cap-04-01",
+      "ac": "AC-CAP-04-01",
+      "kind": "replay-after-loss",
+      "observation": "ac-cap-04-01",
+      "changed_body": "clerk-b-from-1.json",
+      "attempts": [
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "crash_after": 2
+        },
+        {
+          "blocks": "a",
+          "variant": "b",
+          "log": true,
+          "state_sync_delay": 0,
+          "crash_after": -1
+        }
+      ]
+    },
+    {
+      "name": "ac-cap-04-02",
+      "ac": "AC-CAP-04-02",
+      "kind": "prefix-conflict",
+      "observation": "ac-cap-04-02",
+      "conflict_offset": 2,
+      "attempts": [
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "crash_after": 2
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 1,
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "crash_after": -1
+        }
+      ]
+    },
+    {
+      "name": "ac-cap-04-03",
+      "ac": "AC-CAP-04-03",
+      "kind": "tail-append",
+      "observation": "ac-cap-04-03",
+      "attempts": [
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "crash_after": 1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "crash_after": -1
+        }
+      ]
+    },
+    {
+      "name": "control-changed-response",
+      "ac": "control",
+      "kind": "control-changed-response",
+      "observation": "control-changed-response",
+      "expected_inserted": 3,
+      "attempts": [
+        {
+          "blocks": "a",
+          "variant": "b",
+          "log": false,
+          "state_sync_delay": 0,
+          "crash_after": -1
+        }
+      ]
+    },
+    {
+      "name": "control-delay",
+      "ac": "control",
+      "kind": "control-delay",
+      "observation": "control-delay",
+      "attempts": [
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": false,
+          "state_sync_delay": 1,
+          "crash_after": -1
+        }
+      ]
+    }
+  ]
+}
