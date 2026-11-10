@@ -46,10 +46,16 @@ def source_checks(paths):
     return counts
 
 
+def test_modules(paths, root=ROOT):
+    """Select tracked unittest files; test/builds and test/evidence are not in this suite."""
+    return [path for path in paths if path.name.startswith("test_") and path.suffix == ".py"
+            and (path.is_relative_to(root / ".project") or
+                 path.is_relative_to(root / "test/harness") or
+                 path.parent == root / "test")]
+
+
 def run_tests(paths):
-    tests = [path for path in paths if path.name.startswith("test_") and path.suffix == ".py"
-             and (path.is_relative_to(ROOT / ".project") or
-                  path.is_relative_to(ROOT / "test/harness"))]
+    tests = test_modules(paths)
     suite = unittest.TestSuite()
     for path in tests:
         module_name = "bootstrap_test_" + hashlib.sha256(str(path.relative_to(ROOT)).encode()).hexdigest()[:16]

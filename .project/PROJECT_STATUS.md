@@ -1,5 +1,80 @@
 # Состояние проекта
 
+## Review tooling that cuts review rounds (D97 process improvements 1-3)
+
+Status: READY_FOR_REVIEW. Owner-approved process improvements 1-3, run in
+parallel with E01-02.pins and E01-02.owned_capture under D97 (draft PR #131).
+Most extra review rounds in PRs #128-#130 came from hand-copied evidence
+numbers, hand-made mutation checks (one counted 10 compile failures as kills)
+and a flaky controller test. Outputs:
+
+- `test/harness/evidence_summary.py`: prints the figures an evidence section
+  quotes from one retained run and fails closed on any reference mismatch.
+- `test/mutate.py`: shared single-check mutation tool for Python and Go with
+  tables next to the code (`*.mutants.json`). Mutants must compile first; a
+  build failure is BUILD_FAILED and fails the tool.
+- `.project/docs/REVIEW_CHECKLIST.md`, linked from DEVELOPMENT_WORKFLOW.
+- Deterministic controller tests. The watchdog spawn test failed when the
+  supervisor started after its own 0.3-second dispatch deadline (reproduced
+  with a 0.5-second start delay: "supervisor never reached the spawn
+  boundary", about 10 ms past the spin deadline). The signal test failed when
+  Darwin returned a transient EPERM from `killpg` while the group leader was
+  exiting, which `terminate_group` treated as a final denial. Retained probe
+  `review-tooling-eperm-01-fc3a1ac` killed 300 sleeping children with each
+  version: the `f8d3e67` code reported `cleanup-denied` once although the
+  group exit was then confirmed; the fixed code reported `graceful` 300 times.
+  `session_runner.py` now reports
+  `cleanup-denied` only when EPERM persists to the grace deadline with live
+  members.
+
+Review 001 (head `2b76a0b`) returned REQUEST_CHANGES from Spec and Standards;
+`076e74f` fixed the 0–5 sequence range (the lower bound is an exclusive
+frontier), the Git provenance of reports from an extracted copy, timeout
+cleanup of process trees (children in their own session), a false equivalence
+label and the P3 items. Review 002 (head `fd5b64f`): Standards PASS with P3
+notes; Spec REQUEST_CHANGES because a local runner D83 retry was printed as a
+new lineage. The fixes report the retry's first run ID, SHA256 and reason,
+verify the first run record when it is found among sibling runs, re-read the
+process tree before SIGKILL, keep the Darwin CLD_STOPPED check with a control,
+and fix the help text. After main gained the E01-02 blocks, the tool also reads
+top-level `run-record.json` and `run.json` proofs and flat epoch phase marks.
+
+The branch includes main at `667bf40` through merge commits: a rebase would
+need a force push, which the permission check denied. Every PROJECT_STATUS and
+harness README section from main is kept unchanged.
+
+Retained record `.project/automation/runs/d95-20261107/review-tooling-05-55365b2`
+(source `55365b2` extracted with `git archive`, its `record.sh`, Python 3.13.5,
+go1.27.1 darwin/amd64; the tool, test and table files are byte-identical at the
+merged head): `evidence_summary.py` summarized 40 retained runs with exit 0 (32
+NATS image, NATS source, local runner and family preparation runs, owned-capture
+runs 01-05 and the three pins runs). The eight owned-capture preparations fail
+closed (exit 1) because their proofs cite files in a live worktree that later
+changed; the seven mutation record directories have no run proof (exit 2). Its
+30 tests passed with none skipped, including the four opt-in checks that
+reproduce the figures of attempt 08, preparation 08, attempt 06 and runner run
+04; `test_mutate` passed 27 tests. Mutation reports (killed, pre-labeled
+equivalent): NATS driver 38 and 2 (matches record 09); `evidence_summary.py`
+37 and 2; `mutate.py` 37 and 1; `session_runner.py` 6 and 0; no build failure,
+unlabeled survivor or cleanup failure. The watchdog, signal and five EPERM tests
+passed 25 of 25 verbose repeats beside 16 busy `yes` processes. Records 01-04
+are retained and superseded. Local `.project/automation/ci.py` passed 685
+tests in 54 files at the merged head.
+
+Allowed paths: `test/mutate.py`, `test/test_mutate.py`, `test/mutate.mutants.json`,
+`test/harness/evidence_summary*`, `test/harness/test_evidence_summary.py`,
+`test/harness/fixtures/nats-image/mutants.json`, `test/harness/README.md` (its
+own section), `.project/automation/ci.py`, `.project/automation/session_runner*`,
+`.project/automation/test_controller_runtime.py`,
+`.project/automation/test_ci_discovery.py`, `.project/docs/REVIEW_CHECKLIST.md`,
+`.project/docs/DEVELOPMENT_WORKFLOW.md` and this status file. No adapter,
+capture, NATS or runner production logic changes; no Docker or native run.
+
+Base: `f8d3e67`, with main merged up to `667bf40`. Branch/worktree:
+`feat/review-tooling` / `harness-review-tooling-288aea`. Next: Spec and
+Standards review round 3 of the exact head, exact-head CI, a review summary
+comment, then report READY to the coordinator, who merges.
+
 ## E01-02.pins — Native state retention and release (issue #13)
 
 Status: READY_FOR_REVIEW in draft PR #133; #13 stays open. The block adds the

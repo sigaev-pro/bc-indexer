@@ -193,16 +193,37 @@ class RuntimeTests(unittest.TestCase):
         backend.root, backend.source, backend.store = self.root, self.root, self.store
         source = self.root / ".project/automation/session_runner.py"
         source.parent.mkdir(parents=True)
+        # The 0.3-second session timeout is also the supervisor's own dispatch
+        # deadline. A supervisor that starts late (as under load) correctly
+        # refuses to dispatch and never reaches the spawn boundary, so its
+        # clock stays at the request time until it reaches Popen. The start
+        # delay makes every run take that late-start path; the parent watchdog
+        # still uses the real clock.
         source.write_text(
-            "import os, signal, sys, time\n"
+            "import json, os, signal, sys, time\n"
             "from pathlib import Path\n"
+            "time.sleep(0.5)\n"
             f"sys.path.insert(0, {str(Path(session_runner.__file__).parent)!r})\n"
             "import session_runner\n"
+            "request = json.loads(Path(sys.argv[sys.argv.index('--request') + 1]).read_text())\n"
+            "class RequestClock:\n"
+            "    frozen = True\n"
+            "    wall = request['deadline'] - request['timeout_seconds']\n"
+            "    steady = time.monotonic()\n"
+            "    def time(self):\n"
+            "        return self.wall if self.frozen else time.time()\n"
+            "    def monotonic(self):\n"
+            "        return self.steady if self.frozen else time.monotonic()\n"
+            "    def __getattr__(self, name):\n"
+            "        return getattr(time, name)\n"
+            "clock = RequestClock()\n"
+            "session_runner.time = clock\n"
             "original = session_runner.subprocess.Popen\n"
             "paused = False\n"
             "def before_spawn(*args, **kwargs):\n"
             "    global paused\n"
             "    first = not paused\n"
+            "    clock.frozen = False\n"
             "    if not paused:\n"
             "        paused = True\n"
             f"        open({str(self.root / 'before-spawn')!r}, 'w').write('paused')\n"
@@ -221,16 +242,20 @@ class RuntimeTests(unittest.TestCase):
                   "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
                   f"Path({str(marker)!r}).write_text('started'); time.sleep(6)")
         run = {"run_id": "prespawn_run", "deadline": time.time() + 15, "authorization": AUTHORIZATION}
-        started = time.monotonic()
+        paused_at = []
         original_launch = subprocess.Popen
 
         def launch_and_wait_for_pause(*args, **kwargs):
             process = original_launch(*args, **kwargs)
             if isinstance(args[0], list) and len(args[0]) > 1 and args[0][1] == str(source):
-                deadline = time.monotonic() + 5
+                # A hang guard only: the frozen supervisor clock means a slow
+                # start can delay, but never prevent, the spawn boundary.
+                deadline = time.monotonic() + 60
                 while not (self.root / "before-spawn").exists():
+                    self.assertIsNone(process.poll(), "supervisor exited before the spawn boundary")
                     self.assertLess(time.monotonic(), deadline, "supervisor never reached the spawn boundary")
                     time.sleep(0.01)
+                paused_at.append(time.monotonic())
             return process
 
         try:
@@ -243,14 +268,85 @@ class RuntimeTests(unittest.TestCase):
             self.assertFalse(marker.exists(), "watchdog resumed the supervisor into a new worker")
             with Store(self.store.directory).lock():
                 pass
-            self.assertLess(time.monotonic() - started, 8)
+            # The watchdog is bounded from the pause, not from a worker that
+            # sleeps six seconds; supervisor start time is excluded.
+            self.assertEqual(len(paused_at), 1)
+            self.assertLess(time.monotonic() - paused_at[0], 5)
         finally:
             # The regression worker is self-bounded even when run against the old
             # implementation, so a failing red test cannot leave a live helper.
             if marker.exists():
-                remaining = 8 - (time.monotonic() - started)
+                remaining = marker.stat().st_mtime + 6.5 - time.time()
                 if remaining > 0:
                     time.sleep(remaining)
+
+
+class TerminateGroupPermissionTests(unittest.TestCase):
+    """Darwin reports EPERM from killpg while a group leader is still exiting."""
+
+    def run_group(self, denied, exits_after, live=False, grace=0.3):
+        calls = []
+        polls = []
+
+        def killpg(group, signum):
+            calls.append(signum)
+            if signum in denied:
+                raise PermissionError(1, "Operation not permitted")
+
+        def exited(process):
+            polls.append(True)
+            return exits_after is not None and len(polls) > exits_after
+
+        sleeps = []
+
+        def bounded_sleep(seconds):
+            sleeps.append(seconds)
+            if len(sleeps) > 100000:
+                raise AssertionError("terminate_group kept polling past its grace deadline")
+
+        process = SimpleNamespace(pid=424242, returncode=None)
+        with patch.object(session_runner.os, "killpg", side_effect=killpg), \
+                patch.object(session_runner, "exited_unreaped", side_effect=exited), \
+                patch.object(session_runner, "live_group_members", return_value=live), \
+                patch.object(session_runner.time, "sleep", side_effect=bounded_sleep):
+            return session_runner.terminate_group(process, grace=grace), calls
+
+    def test_transient_eperm_while_polling_is_not_a_denial(self):
+        result, calls = self.run_group({0}, exits_after=3)
+        self.assertEqual(result, "graceful")
+        self.assertNotIn(9, calls)
+
+    def test_transient_eperm_on_sigterm_waits_for_the_exit(self):
+        result, calls = self.run_group({15}, exits_after=3)
+        self.assertEqual(result, "already-exited")
+        self.assertEqual(calls, [15])
+
+    def test_persistent_eperm_with_live_members_is_a_denial(self):
+        for denied in ({15}, {0, 9}):
+            with self.subTest(denied=sorted(denied)):
+                result, _ = self.run_group(denied, exits_after=None, live=True, grace=0.05)
+                self.assertEqual(result, "cleanup-denied")
+
+    def test_exited_leader_with_live_members_is_not_gone(self):
+        result, calls = self.run_group({0, 9}, exits_after=0, live=True, grace=0.05)
+        self.assertEqual(result, "cleanup-denied")
+        self.assertEqual(calls[-1], 9)
+
+    def test_eperm_on_sigkill_after_exit_is_graceful(self):
+        exited = []
+
+        def killpg(group, signum):
+            if signum == 9:
+                exited.append(True)
+            if signum in (0, 9):
+                raise PermissionError(1, "Operation not permitted")
+
+        process = SimpleNamespace(pid=424242, returncode=None)
+        with patch.object(session_runner.os, "killpg", side_effect=killpg), \
+                patch.object(session_runner, "exited_unreaped", side_effect=lambda process: bool(exited)), \
+                patch.object(session_runner, "live_group_members", return_value=False), \
+                patch.object(session_runner.time, "sleep"):
+            self.assertEqual(session_runner.terminate_group(process, grace=0.05), "graceful")
 
 
 if __name__ == "__main__":

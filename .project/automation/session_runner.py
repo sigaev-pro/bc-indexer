@@ -39,31 +39,41 @@ def live_group_members(group):
                for line in rows.stdout.splitlines())
 
 
+def group_gone(process):
+    return exited_unreaped(process) and not live_group_members(process.pid)
+
+
 def terminate_group(process, grace=3):
-    """Signal only a direct child whose unreaped leader still reserves the group ID."""
+    """Signal only a direct child whose unreaped leader still reserves the group ID.
+
+    Darwin returns EPERM from killpg while the group leader is exiting but
+    before waitid reports the exit. EPERM is therefore a denial only when it
+    persists until the grace deadline with live group members.
+    """
     try:
         exited_unreaped(process)
     except ChildProcessError:
         return "ownership-lost"
+    deadline = time.monotonic() + grace
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
         return "already-exited"
     except PermissionError:
-        if exited_unreaped(process) and not live_group_members(process.pid):
-            return "already-exited"
-        return "cleanup-denied"
-    deadline = time.monotonic() + grace
+        while True:
+            if group_gone(process):
+                return "already-exited"
+            if time.monotonic() >= deadline:
+                return "cleanup-denied"
+            time.sleep(0.02)
     while time.monotonic() < deadline:
         try:
             os.killpg(process.pid, 0)
         except ProcessLookupError:
             return "graceful"
         except PermissionError:
-            if exited_unreaped(process) and not live_group_members(process.pid):
-                return "graceful"
-            return "cleanup-denied"
-        if exited_unreaped(process) and not live_group_members(process.pid):
+            pass
+        if group_gone(process):
             return "graceful"
         time.sleep(0.05)
     try:
@@ -71,7 +81,7 @@ def terminate_group(process, grace=3):
     except ProcessLookupError:
         return "graceful"
     except PermissionError:
-        return "cleanup-denied"
+        return "graceful" if group_gone(process) else "cleanup-denied"
     return "forced"
 
 

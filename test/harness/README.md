@@ -723,6 +723,28 @@ Once the new output exists, the record (`preparation.json` or
 write; a refusal before that leaves no output. Portable tests in
 `test_capture_probe.py` replace Docker at the `Native` boundary.
 
+## Evidence figures and mutation checks
+
+`evidence_summary.py RUN_DIR` reads one retained run (`image-fence.json`,
+`preparation.json`, `run/run-record.json`, `run-record.json` or `run.json`) and
+prints a Markdown block with
+the proof, tool and native-report SHA256 values, timings, exit codes, cleanup
+and process-group flags, Go and Python test counts, unique absolute references
+with total bytes, and the attempt lineage. It only reads. Before printing, it
+verifies the absolute references in the proof, in each previous attempt, among
+the top-level references of directly cited JSON files up to 1 MiB, and in
+child proofs; on any mismatch it prints no summary (exit 1). Mutation record
+directories have no run proof and exit 2. The E01-02 owned-capture preparations
+cite files in a live worktree that later changed, so they fail closed. Add
+`--test-log PATH` for a test log kept outside the run. Set
+`EVIDENCE_SUMMARY_RUNS` to the retained `d95-20261107` directory to run the
+opt-in checks against figures quoted in `.project/evidence/E01-01.harness.md`.
+
+`../mutate.py TABLE --output RUN_DIR` runs single-check mutants from a table
+kept next to its code: `evidence_summary.mutants.json` here and
+`fixtures/nats-image/mutants.json` for the Go driver. Every mutant must compile
+first; see the tool's help for the table format and verdicts.
+
 ## Issue 12 boundary and earlier slice notes
 
 The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)

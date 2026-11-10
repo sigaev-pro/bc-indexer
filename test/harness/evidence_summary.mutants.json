@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of evidence_summary.py.",
+  "language": "python",
+  "copy": [
+    "evidence_summary.py",
+    "test_evidence_summary.py"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "-v",
+    "test_evidence_summary"
+  ],
+  "timeout_seconds": 120,
+  "mutants": [
+    {
+      "name": "size check",
+      "file": "evidence_summary.py",
+      "original": "            if actual[1] != claim[1]:",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "hash check",
+      "file": "evidence_summary.py",
+      "original": "            elif actual[0] != claim[0]:",
+      "replacement": "            elif False:"
+    },
+    {
+      "name": "conflicting claims",
+      "file": "evidence_summary.py",
+      "original": "            if self.seen[path][\"claim\"] != claim:",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "regular file",
+      "file": "evidence_summary.py",
+      "original": "        if not stat.S_ISREG(info.st_mode):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "absolute only",
+      "file": "evidence_summary.py",
+      "original": "            if os.path.isabs(reference[\"path\"]):",
+      "replacement": "            if True:"
+    },
+    {
+      "name": "first size wins",
+      "file": "evidence_summary.py",
+      "original": "                unique.setdefault(reference[\"path\"], reference[\"size_bytes\"])",
+      "replacement": "                unique[reference[\"path\"]] = reference[\"size_bytes\"]",
+      "equivalent": "Two references to one path with different sizes are conflicting claims, which fail closed before any summary."
+    },
+    {
+      "name": "list references",
+      "file": "evidence_summary.py",
+      "original": "            stack.extend(reversed(item))",
+      "replacement": "            pass"
+    },
+    {
+      "name": "one proof file",
+      "file": "evidence_summary.py",
+      "original": "    if len(present) != 1:",
+      "replacement": "    if len(present) < 1:"
+    },
+    {
+      "name": "lineage hash",
+      "file": "evidence_summary.py",
+      "original": "        if not verifier.check(previous):\n            break",
+      "replacement": "        if False:\n            break"
+    },
+    {
+      "name": "command result check",
+      "file": "evidence_summary.py",
+      "original": "        if not verifier.check(command[\"result\"]):\n            continue",
+      "replacement": "        if False:\n            continue",
+      "equivalent": "survey() already verifies every absolute reference in the proof, including each command result."
+    },
+    {
+      "name": "nested reference check",
+      "file": "evidence_summary.py",
+      "original": "                    verifier.check(inner)\n",
+      "replacement": "                    pass\n"
+    },
+    {
+      "name": "child proof survey",
+      "file": "evidence_summary.py",
+      "original": "            nested = verifier.survey(load_json(child_proof[\"path\"]))",
+      "replacement": "            nested = None"
+    },
+    {
+      "name": "subtest bucket",
+      "file": "evidence_summary.py",
+      "original": "bucket = \"subtests\" if match[\"indent\"] else \"methods\"",
+      "replacement": "bucket = \"methods\""
+    },
+    {
+      "name": "python status once",
+      "file": "evidence_summary.py",
+      "original": "        if match and python and python[-1][\"status\"] is None:",
+      "replacement": "        if match and python:"
+    },
+    {
+      "name": "phase duration",
+      "file": "evidence_summary.py",
+      "original": "    return (parse(finished) - parse(started)).total_seconds()",
+      "replacement": "    return (parse(finished) - parse(finished)).total_seconds()"
+    },
+    {
+      "name": "prefixed exit record",
+      "file": "evidence_summary.py",
+      "original": "EXIT_RECORD = re.compile(r\"(?:EXIT=)?(?P<code>-?\\d+)\")",
+      "replacement": "EXIT_RECORD = re.compile(r\"(?P<code>-?\\d+)\")"
+    },
+    {
+      "name": "relative listing",
+      "file": "evidence_summary.py",
+      "original": "    if refs[\"relative\"]:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "mismatch exit",
+      "file": "evidence_summary.py",
+      "original": "        print(f\"FAIL: {len(error.problems)} reference problem(s); no summary printed\", file=sys.stderr)\n        return 1",
+      "replacement": "        print(f\"FAIL: {len(error.problems)} reference problem(s); no summary printed\", file=sys.stderr)\n        return 0"
+    },
+    {
+      "name": "format exit",
+      "file": "evidence_summary.py",
+      "original": "        print(f\"ERROR: {error}\", file=sys.stderr)\n        return 2",
+      "replacement": "        print(f\"ERROR: {error}\", file=sys.stderr)\n        return 1"
+    },
+    {
+      "name": "exclusive lower frontier",
+      "file": "evidence_summary.py",
+      "original": "    return f\"{lower + 1}\u2013{upper}\"",
+      "replacement": "    return f\"{lower}\u2013{upper}\""
+    },
+    {
+      "name": "empty range",
+      "file": "evidence_summary.py",
+      "original": "    if upper <= lower:\n        return \"none\"",
+      "replacement": "    if False:\n        return \"none\""
+    },
+    {
+      "name": "non-object result",
+      "file": "evidence_summary.py",
+      "original": "        if type(result) is not dict:\n            raise FormatError",
+      "replacement": "        if False:\n            raise FormatError"
+    },
+    {
+      "name": "non-object previous attempt",
+      "file": "evidence_summary.py",
+      "original": "        if type(document) is not dict:\n            raise FormatError(f\"previous attempt",
+      "replacement": "        if False:\n            raise FormatError(f\"previous attempt"
+    },
+    {
+      "name": "nested size limit",
+      "file": "evidence_summary.py",
+      "original": "value[\"size_bytes\"] <= NESTED_LIMIT",
+      "replacement": "True"
+    },
+    {
+      "name": "commands must be a list",
+      "file": "evidence_summary.py",
+      "original": "    if type(commands) is not list:\n        raise FormatError",
+      "replacement": "    if False:\n        raise FormatError"
+    },
+    {
+      "name": "phases must be an object",
+      "file": "evidence_summary.py",
+      "original": "    if type(phases) is not dict:\n        raise FormatError",
+      "replacement": "    if False:\n        raise FormatError"
+    },
+    {
+      "name": "child must be an object",
+      "file": "evidence_summary.py",
+      "original": "        if type(child) is not dict:\n            raise FormatError",
+      "replacement": "        if False:\n            raise FormatError"
+    },
+    {
+      "name": "strip color codes",
+      "file": "evidence_summary.py",
+      "original": "    for line in ANSI.sub(\"\", text).splitlines():",
+      "replacement": "    for line in text.splitlines():"
+    },
+    {
+      "name": "runner retry detection",
+      "file": "evidence_summary.py",
+      "original": "    if type(attempt) is not dict or set(attempt) == {\"attempt_index\"}:\n        return None",
+      "replacement": "    if True:\n        return None"
+    },
+    {
+      "name": "runner retry fields",
+      "file": "evidence_summary.py",
+      "original": "    if (set(attempt) != set(fields) or type(attempt[\"attempt_index\"]) is not int",
+      "replacement": "    if (False or type(attempt[\"attempt_index\"]) is not int"
+    },
+    {
+      "name": "first run ID check",
+      "file": "evidence_summary.py",
+      "original": "            if type(first) is not dict or first.get(\"run_id\") != attempt[\"first_run_id\"]:",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "first run located",
+      "file": "evidence_summary.py",
+      "original": "            located = candidate\n",
+      "replacement": ""
+    },
+    {
+      "name": "unlinked later attempt",
+      "file": "evidence_summary.py",
+      "original": "    elif summary[\"attempt_index\"] == 1:",
+      "replacement": "    elif True:"
+    },
+    {
+      "name": "top-level run records",
+      "file": "evidence_summary.py",
+      "original": "\"run/run-record.json\", \"run-record.json\", \"run.json\")",
+      "replacement": "\"run/run-record.json\")"
+    },
+    {
+      "name": "flat phase marks",
+      "file": "evidence_summary.py",
+      "original": "    if phases and all(type(value) in (int, float) for value in phases.values()):\n        return mark_rows(phases)\n",
+      "replacement": ""
+    },
+    {
+      "name": "mark order check",
+      "file": "evidence_summary.py",
+      "original": "        if finished is not None and finished < started:\n            raise FormatError",
+      "replacement": "        if False:\n            raise FormatError"
+    },
+    {
+      "name": "missing attempt index",
+      "file": "evidence_summary.py",
+      "original": "    elif summary[\"attempt_index\"] is None:",
+      "replacement": "    elif False:"
+    },
+    {
+      "name": "unfinished phase",
+      "file": "evidence_summary.py",
+      "original": "            seconds = \"no finish mark\" if row[\"seconds\"] is None else number(row[\"seconds\"])",
+      "replacement": "            seconds = number(row[\"seconds\"])"
+    },
+    {
+      "name": "started marks only",
+      "file": "evidence_summary.py",
+      "original": "        if not name.endswith(\"_started\"):\n            continue",
+      "replacement": "        if False:\n            continue"
+    }
+  ]
+}
