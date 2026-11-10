@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the shared E01-02.inputs core. The table is shared byte for byte by the geth, bsc and bor copies.",
+  "language": "go",
+  "copy": [
+    "inputs.go",
+    "inputs_test.go"
+  ],
+  "go_module": "extractor/source_inputs",
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "."
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "id pattern anchors",
+      "file": "inputs.go",
+      "original": "`^[0-9a-z][0-9a-z._-]{0,127}$`",
+      "replacement": "`[0-9a-z][0-9a-z._-]{0,127}`"
+    },
+    {
+      "name": "id length limit",
+      "file": "inputs.go",
+      "original": "{0,127}$`",
+      "replacement": "{0,128}$`"
+    },
+    {
+      "name": "observation id check",
+      "file": "inputs.go",
+      "original": "\tif !idPattern.MatchString(id) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "item name pattern",
+      "file": "inputs.go",
+      "original": "if !idPattern.MatchString(item.Name) || names[item.Name] {",
+      "replacement": "if names[item.Name] {"
+    },
+    {
+      "name": "duplicate item name",
+      "file": "inputs.go",
+      "original": "if !idPattern.MatchString(item.Name) || names[item.Name] {",
+      "replacement": "if !idPattern.MatchString(item.Name) {"
+    },
+    {
+      "name": "capsule tag",
+      "file": "inputs.go",
+      "original": "\"extractor-source-inputs-capsule-v1\"",
+      "replacement": "\"extractor-source-inputs-capsule-v2\""
+    },
+    {
+      "name": "digest tag zero byte",
+      "file": "inputs.go",
+      "original": "return append([]byte(tag), 0)",
+      "replacement": "return []byte(tag)"
+    },
+    {
+      "name": "capsule item count",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, u64(uint64(len(items)))...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "capsule name length",
+      "file": "inputs.go",
+      "original": "\t\tbuf = append(buf, u64(uint64(len(item.Name)))...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "capsule name",
+      "file": "inputs.go",
+      "original": "\t\tbuf = append(buf, item.Name...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "capsule item length",
+      "file": "inputs.go",
+      "original": "\t\tbuf = append(buf, u64(item.Length)...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "capsule item digest",
+      "file": "inputs.go",
+      "original": "\t\tbuf = append(buf, digest[:]...)\n",
+      "replacement": "\t\t_ = digest\n"
+    },
+    {
+      "name": "entry sequence",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, u64(entry.Sequence)...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "entry request digest",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, request[:]...)\n",
+      "replacement": "\t_ = request\n"
+    },
+    {
+      "name": "entry request length",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, u64(entry.RequestLength)...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "entry response digest",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, response[:]...)\n",
+      "replacement": "\t_ = response\n"
+    },
+    {
+      "name": "entry response length",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, u64(entry.ResponseLength)...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "chain start tag",
+      "file": "inputs.go",
+      "original": "sum(append(tagged(tagChain), capsule[:]...))",
+      "replacement": "sum(capsule[:])"
+    },
+    {
+      "name": "chain order",
+      "file": "inputs.go",
+      "original": "sum(append(previous[:], entry[:]...))",
+      "replacement": "sum(append(entry[:], previous[:]...))"
+    },
+    {
+      "name": "consumed capsule",
+      "file": "inputs.go",
+      "original": "\tbuf := tagged(tagConsumed)\n\tbuf = append(buf, capsule[:]...)\n",
+      "replacement": "\tbuf := tagged(tagConsumed)\n\t_ = capsule\n"
+    },
+    {
+      "name": "consumed count",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, u64(count)...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "consumed chain",
+      "file": "inputs.go",
+      "original": "\tbuf = append(buf, last[:]...)\n",
+      "replacement": "\t_ = last\n"
+    },
+    {
+      "name": "digest length check",
+      "file": "inputs.go",
+      "original": "\tif len(value) != 64 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "digest canonical hex",
+      "file": "inputs.go",
+      "original": "err != nil || hex.EncodeToString(out[:]) != value {",
+      "replacement": "err != nil {"
+    },
+    {
+      "name": "unknown JSON fields",
+      "file": "inputs.go",
+      "original": "\tdecoder.DisallowUnknownFields()\n",
+      "replacement": ""
+    },
+    {
+      "name": "trailing JSON data",
+      "file": "inputs.go",
+      "original": "if _, err := decoder.Token(); err != io.EOF {",
+      "replacement": "if _, err := decoder.Token(); err != io.EOF && false {"
+    },
+    {
+      "name": "missing record",
+      "file": "inputs.go",
+      "original": "\tif err != nil || !ok {\n\t\treturn false, err",
+      "replacement": "\tif err != nil || (!ok && false) {\n\t\treturn false, err"
+    },
+    {
+      "name": "chunk count rounding",
+      "file": "inputs.go",
+      "original": "(length + ChunkBytes - 1) / ChunkBytes",
+      "replacement": "length / ChunkBytes"
+    },
+    {
+      "name": "data digest check",
+      "file": "inputs.go",
+      "original": "if hex.EncodeToString(got[:]) != digest {",
+      "replacement": "if hex.EncodeToString(got[:]) != digest && false {"
+    },
+    {
+      "name": "capsule conflict",
+      "file": "inputs.go",
+      "original": "if existing.Digest != digest {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "reseal verifies chunks",
+      "file": "inputs.go",
+      "original": "\t\t\tif _, err := ReadItem(db, id, index); err != nil {",
+      "replacement": "\t\t\tif _, err := ReadItem(db, id, index); false {"
+    },
+    {
+      "name": "seal chunk sync",
+      "file": "inputs.go",
+      "original": "\t\treturn Capsule{}, err\n\t\t}\n\t}\n\tif err := db.SyncKeyValue(); err != nil {\n\t\treturn Capsule{}, err\n\t}\n",
+      "replacement": "\t\treturn Capsule{}, err\n\t\t}\n\t}\n"
+    },
+    {
+      "name": "seal manifest sync",
+      "file": "inputs.go",
+      "original": "\tif err := putRecord(db, capsuleKey(id), capsule); err != nil {\n\t\treturn Capsule{}, err\n\t}\n\tif err := db.SyncKeyValue(); err != nil {\n\t\treturn Capsule{}, err\n\t}\n",
+      "replacement": "\tif err := putRecord(db, capsuleKey(id), capsule); err != nil {\n\t\treturn Capsule{}, err\n\t}\n"
+    },
+    {
+      "name": "capsule observation check",
+      "file": "inputs.go",
+      "original": "err != nil || capsule.Observation != id || capsule.Digest != digest {",
+      "replacement": "err != nil || capsule.Digest != digest {"
+    },
+    {
+      "name": "capsule digest check",
+      "file": "inputs.go",
+      "original": "err != nil || capsule.Observation != id || capsule.Digest != digest {",
+      "replacement": "err != nil || capsule.Observation != id || (capsule.Digest != digest && false) {"
+    },
+    {
+      "name": "item index lower bound",
+      "file": "inputs.go",
+      "original": "if index < 0 || index >= len(capsule.Items) {",
+      "replacement": "if index >= len(capsule.Items) {"
+    },
+    {
+      "name": "item index upper bound",
+      "file": "inputs.go",
+      "original": "if index < 0 || index >= len(capsule.Items) {",
+      "replacement": "if index < 0 {"
+    },
+    {
+      "name": "frontier chain check",
+      "file": "inputs.go",
+      "original": "\tif chain != durable.Chain {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "closed manifest check",
+      "file": "inputs.go",
+      "original": "\t\tif closed != want {",
+      "replacement": "\t\tif closed != want && false {"
+    },
+    {
+      "name": "open keeps closed state",
+      "file": "inputs.go",
+      "original": "\t\tlog.closed = &closed\n",
+      "replacement": ""
+    },
+    {
+      "name": "missing entry",
+      "file": "inputs.go",
+      "original": "\tif !ok {\n\t\treturn Entry{}",
+      "replacement": "\tif !ok && false {\n\t\treturn Entry{}"
+    },
+    {
+      "name": "next stops after error",
+      "file": "inputs.go",
+      "original": "func (l *Log) Next(request []byte, fetch func() ([]byte, error)) ([]byte, error) {\n\tif l.err != nil {",
+      "replacement": "func (l *Log) Next(request []byte, fetch func() ([]byte, error)) ([]byte, error) {\n\tif false {"
+    },
+    {
+      "name": "empty request",
+      "file": "inputs.go",
+      "original": "\tif len(request) == 0 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "replay below frontier",
+      "file": "inputs.go",
+      "original": "\tif l.cursor < l.durable.Count {",
+      "replacement": "\tif l.cursor <= l.durable.Count {"
+    },
+    {
+      "name": "closed refuses append",
+      "file": "inputs.go",
+      "original": "\tif l.closed != nil {\n\t\treturn nil, fmt.Errorf(\"%w: %s at %d\", ErrClosed",
+      "replacement": "\tif false {\n\t\treturn nil, fmt.Errorf(\"%w: %s at %d\", ErrClosed"
+    },
+    {
+      "name": "response copy",
+      "file": "inputs.go",
+      "original": "\tresponse = bytes.Clone(response)\n",
+      "replacement": ""
+    },
+    {
+      "name": "entry sync before frontier",
+      "file": "inputs.go",
+      "original": "\tif err := putRecord(l.db, entryKey(l.id, seq), entry); err != nil {\n\t\treturn nil, l.fail(err)\n\t}\n\tif err := l.db.SyncKeyValue(); err != nil {\n\t\treturn nil, l.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(l.db, entryKey(l.id, seq), entry); err != nil {\n\t\treturn nil, l.fail(err)\n\t}\n"
+    },
+    {
+      "name": "frontier sync before hand-off",
+      "file": "inputs.go",
+      "original": "\tif err := putRecord(l.db, frontierKey(l.id), next); err != nil {\n\t\treturn nil, l.fail(err)\n\t}\n\tif err := l.db.SyncKeyValue(); err != nil {\n\t\treturn nil, l.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(l.db, frontierKey(l.id), next); err != nil {\n\t\treturn nil, l.fail(err)\n\t}\n"
+    },
+    {
+      "name": "append advances chain",
+      "file": "inputs.go",
+      "original": "\tl.durable, l.chain, l.cursor = next, chain, seq+1",
+      "replacement": "\tl.durable, l.cursor = next, seq+1"
+    },
+    {
+      "name": "prefix request check",
+      "file": "inputs.go",
+      "original": "\tif entry.RequestSHA256 != requestSHA {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "replay advances chain",
+      "file": "inputs.go",
+      "original": "\tif l.chain, err = ChainNext(l.chain, digest); err != nil {",
+      "replacement": "\tif _, err = ChainNext(l.chain, digest); err != nil {"
+    },
+    {
+      "name": "replay advances cursor",
+      "file": "inputs.go",
+      "original": "\tl.cursor++\n",
+      "replacement": ""
+    },
+    {
+      "name": "finish stops after error",
+      "file": "inputs.go",
+      "original": "func (l *Log) Finish() (Consumed, error) {\n\tif l.err != nil {",
+      "replacement": "func (l *Log) Finish() (Consumed, error) {\n\tif false {"
+    },
+    {
+      "name": "finish needs every entry",
+      "file": "inputs.go",
+      "original": "\tif l.cursor != l.durable.Count {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "finish returns closed manifest",
+      "file": "inputs.go",
+      "original": "\tif l.closed != nil {\n\t\treturn *l.closed, nil\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "finish sync",
+      "file": "inputs.go",
+      "original": "\tif err := putRecord(l.db, closedKey(l.id), manifest); err != nil {\n\t\treturn Consumed{}, l.fail(err)\n\t}\n\tif err := l.db.SyncKeyValue(); err != nil {\n\t\treturn Consumed{}, l.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(l.db, closedKey(l.id), manifest); err != nil {\n\t\treturn Consumed{}, l.fail(err)\n\t}\n"
+    },
+    {
+      "name": "finish closes log",
+      "file": "inputs.go",
+      "original": "\tl.closed = &manifest\n",
+      "replacement": ""
+    },
+    {
+      "name": "fail records error",
+      "file": "inputs.go",
+      "original": "\tl.err = err\n",
+      "replacement": ""
+    },
+    {
+      "name": "put chunk bound",
+      "file": "inputs.go",
+      "original": "end := min(start+ChunkBytes, uint64(len(data)))",
+      "replacement": "end := start + ChunkBytes"
+    }
+  ]
+}
