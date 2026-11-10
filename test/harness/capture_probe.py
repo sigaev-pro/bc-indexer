@@ -50,8 +50,55 @@ class Interrupted(BaseException):
     """A stop signal arrived; the record is still written."""
 
 
+# The handler always records a signal. It raises only while stops are allowed,
+# that is, inside the try of prepare() and run(); the record is written by
+# write_until_done(), which retries if a signal raises before stops are blocked.
+STOPS = {"raise": False, "deferred": []}
+
+
 def stop(signum, frame):
-    raise Interrupted(f"signal {signum}")
+    STOPS["deferred"].append(signum)
+    if STOPS["raise"]:
+        raise Interrupted(f"signal {signum}")
+
+
+def block_stops():
+    STOPS["raise"] = False
+    signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+
+
+def unblock_stops():
+    """Allow stop signals; one that arrived while they were blocked stops the work now."""
+    STOPS["raise"] = True
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, STOP_SIGNALS)
+    if STOPS["deferred"]:
+        raise Interrupted(f"signal {STOPS['deferred'][0]}")
+
+
+def write_until_done(path, record, native, started):
+    """Write the record even if a stop raises before finish_record blocks stops."""
+    while True:
+        try:
+            finish_record(path, record, native, started)
+            return
+        except Interrupted:
+            continue
+
+
+def finish_record(path, record, native, started):
+    """Block stops first, then complete and write the record once."""
+    block_stops()
+    record.update(commands=native.commands if native else [],
+                  cleanup_complete=native.cleanup_complete if native else True,
+                  elapsed_seconds=time.monotonic() - started)
+    if STOPS["deferred"]:
+        # The operator asked to stop; the record keeps the signal and never passes.
+        record["deferred_signals"] = list(STOPS["deferred"])
+        record["result"] = "FAIL"
+        record.setdefault("error", f"Interrupted: signal {STOPS['deferred'][0]}")
+    if not record["cleanup_complete"]:
+        record["result"] = "FAIL"
+    path.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
 
 
 @contextlib.contextmanager
@@ -78,6 +125,7 @@ def single_writer():
             raise Rejected(f"Docker cannot list harness containers: {error}") from None
         require(listed.returncode == 0, "Docker cannot list harness containers")
         require(not listed.stdout.strip(), "Foreign harness containers exist; refusing to start")
+        STOPS["raise"], STOPS["deferred"] = False, []
         handlers = {number: signal.signal(number, stop) for number in STOP_SIGNALS}
         yield
     finally:
@@ -86,12 +134,6 @@ def single_writer():
             signal.signal(number, handler)
         handle.close()
         signal.pthread_sigmask(signal.SIG_SETMASK, original_mask)
-
-
-def write_record(path, record):
-    """Write the record with stop signals blocked; single_writer unblocks them later."""
-    signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
-    path.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
 
 
 def refuse_inside(output, roots):
@@ -150,11 +192,13 @@ def prepare(manifest_path, expected_sha, output):
     refuse_inside(output, (root, ROOT))
     state = source_state()
     with single_writer():
+        block_stops()
         output = new_output(output)
         native = None
         record = {"schema_version": 1, "kind": "owned-capture-probe-preparation", "result": "FAIL",
                   "run_id": uuid.uuid4().hex, "source": state, "build_manifest": manifest_ref, "families": {}}
         try:
+            unblock_stops()
             native = Native(output, deadline)
             record["native_owner_nonce"] = native.nonce
             record["fixture"] = copy_sources(FIXTURE_FILES, FIXTURE, output / "fixture", deadline)
@@ -184,12 +228,7 @@ def prepare(manifest_path, expected_sha, output):
         except (Interrupted, Exception) as error:
             record["error"] = f"{type(error).__name__}: {error}"
         finally:
-            record.update(commands=native.commands if native else [],
-                          cleanup_complete=native.cleanup_complete if native else True,
-                          elapsed_seconds=time.monotonic() - started)
-            if not record["cleanup_complete"]:
-                record["result"] = "FAIL"
-            write_record(output / "preparation.json", record)
+            write_until_done(output / "preparation.json", record, native, started)
     return output, record
 
 
@@ -344,17 +383,19 @@ def run(preparation_path, expected_sha, output):
     refuse_inside(output, (preparation_path.parent, manifest_root, ROOT))
     state = source_state()
     with single_writer():
+        block_stops()
         output = new_output(output)
         native = None
         record = {"schema_version": 1, "kind": "owned-capture-probe-run", "result": "FAIL",
                   "run_id": uuid.uuid4().hex, "source": state, "preparation": preparation_ref,
                   "families": {}, "phases": {"admission_started": time.time()}}
         try:
+            unblock_stops()
             native = Native(output, deadline)
             record["native_owner_nonce"] = native.nonce
             oracles = [row["copy"] for row in preparation["fixture"] if row["copy"]["path"].endswith("/expected.json")]
             require(len(oracles) == 1, "The preparation must retain exactly one oracle")
-            oracle = load(artifact(oracles[0], 1024 * 1024, deadline=deadline), deadline=deadline)
+            _, oracle = json_artifact(oracles[0], 1024 * 1024, deadline=deadline)
             record["oracle"] = oracles[0]
             _, manifest = json_artifact(preparation["build_manifest"], 64 * 1024 * 1024, deadline=deadline)
             runtime = manifest["image_inputs"]["debian-runtime-image"]["reference"]
@@ -384,12 +425,7 @@ def run(preparation_path, expected_sha, output):
         except (Interrupted, Exception) as error:
             record["error"] = f"{type(error).__name__}: {error}"
         finally:
-            record.update(commands=native.commands if native else [],
-                          cleanup_complete=native.cleanup_complete if native else True,
-                          elapsed_seconds=time.monotonic() - started)
-            if not record["cleanup_complete"]:
-                record["result"] = "FAIL"
-            write_record(output / "run-record.json", record)
+            write_until_done(output / "run-record.json", record, native, started)
     return output, record
 
 
@@ -410,7 +446,7 @@ def main(argv=None):
             path, record = prepare(args.build_manifest, args.sha256, args.output)
         else:
             path, record = run(args.preparation, args.sha256, args.output)
-    except Exception as error:
+    except (Interrupted, Exception) as error:
         print(json.dumps({"valid": False, "error": f"{type(error).__name__}: {error}"}))
         return 2
     print(json.dumps({"result": record["result"], "output": str(path), "error": record.get("error")}))
