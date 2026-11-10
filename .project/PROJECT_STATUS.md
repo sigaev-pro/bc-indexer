@@ -82,17 +82,23 @@ faker, so no AC verdict (AC-CAP-04-0x are POLY only) and no public-profile
 credit (D96, D98).
 
 Output: a test-only probe built inside the accepted Geth tree runs the shared
-core on the chain's own Pebble database. The dependency source is the
-BLOCKHASH ancestor lookup of the serial state processor, through a test-only
-hook; the product patch belongs to E01-02.admission (D98).
+core on the chain's own Pebble database. It routes the BLOCKHASH ancestor
+lookup of the serial state processor through the log as a test-only
+stand-in dependency; the product patch and the product classification of
+Geth ancestor hashes belong to E01-02.admission (D98).
 
-Checks at commit `27e0cac`: preparation 01 PASS (shared unit tests 20 PASS
-inside the native module, three native mutants built); measured run 01 PASS
-(13.436 seconds of execution; the probe passes and all three native mutants
-are killed); Python oracle mutants 60 killed, 0 survivors. Details and
-limits: [E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
+Review 001 (head `b8ece65`): Spec and Standards REQUEST_CHANGES. Commits
+`5e7bda8` and `affd2f9` add a replay of a saved log that differs from native
+truth, driver controls, two native mutants and the P3 fixes.
 
-Next: independent Spec and Standards review of the exact head, exact-head
+Checks at commit `affd2f9`: preparation 02 PASS (shared unit tests 20 PASS
+inside the native module, five native mutants built); measured run 02 PASS
+(15.170 seconds of execution; the probe passes and all five native mutants
+are killed); Python mutants 95 killed, 0 survivors; 39 portable tests.
+Superseded run 01 and the failed hosted CI run are kept. Details and limits:
+[E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
+
+Next: fresh Spec and Standards review of the new head, exact-head
 `bootstrap/ci`, then the coordinator asks the owner for merge permission.
 
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
