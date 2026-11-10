@@ -2,9 +2,10 @@
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
-Status: PLANNED. Unlocked when D98 merges and #13 closes (dependencies
-E01-02.pins and BOOT-09 accepted). Plan agreed with the owner under D97 and
-D98:
+Status: IN_PROGRESS. Block 0, inputs-core, is in a draft PR; it is not
+accepted until review, CI and the owner's merge permission. Dependencies
+E01-02.pins and BOOT-09 are accepted (#13 closed under D98). Plan agreed with
+the owner under D97 and D98:
 
 - Block 0, inputs-core: static input capsule and append-only dependency log;
   shared files are copied into each `adapters/<client>/source_inputs`.
@@ -16,6 +17,47 @@ D98:
   body at the transport boundary, before decoding.
 - AC-CAP-04-03 binds the final consumed-manifest digest to a test-only
   stand-in marker; the real EXEC_READY binding is proven in E01-02.admission.
+
+### Block 0: inputs-core
+
+Base `bf17dbe`. Allowed paths: `adapters/{geth,bsc,bor}/source_inputs/**`,
+`test/harness/source_inputs.py`, `test/harness/test_source_inputs.py`,
+`test/harness/source_inputs.mutants.json`, `.project/evidence/E01-02.inputs.md`
+and this section. Profiles: none; these are client-independent unit tests on
+an in-memory power-loss store model, so every AC-CAP-04 profile cell stays
+NOT_RUN. Evidence: [E01-02.inputs](evidence/E01-02.inputs.md).
+
+Design (architect), in full in the package README
+[adapters/geth/source_inputs/README.md](../adapters/geth/source_inputs/README.md):
+
+- Store: the subset `Has`, `Get`, `Put`, `SyncKeyValue` of the native
+  `ethdb.Database`; a write is durable only after a sync, and a power loss may
+  keep any subset of unsynced writes. Keys are
+  `extractor-source-inputs-v1/<observation>/...`; no key is 32 or 33 bytes, so
+  the native offline pruner never deletes one.
+- Records and digests: SHA-256 with domain tags. The capsule digest covers the
+  ordered item names, lengths and data digests. Each log entry records the
+  sequence, the request SHA-256 and length, and the response SHA-256 and
+  length; a hash chain starting from the capsule digest binds the entries in
+  order. The consumed-manifest digest covers the capsule digest, the entry
+  count and the last chain value.
+- Durability order: a response is written as chunks plus its entry, synced,
+  then the advanced frontier is written and synced, and only then handed to
+  native code. The synced frontier is the commit point; data beyond it was
+  never handed out and is overwritten.
+- Replay: below the durable frontier, a matching request returns the saved
+  bytes and never calls the fetch function.
+- Prefix conflict: a different request at a durable offset is
+  `ErrPrefixConflict`; nothing is written and the log stops.
+- Tail append: at the frontier, the fetch function runs once and the new
+  response is appended under the durability order above.
+- Final consumed manifest: `Finish` requires that the attempt consumed every
+  durable entry, writes and syncs the closed manifest, and afterwards refuses
+  new responses while still replaying the prefix.
+
+Next: Spec and Standards review of the draft PR, then the coordinator asks the
+owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
+this core into each client; the Bor block adds the in-process Heimdall stub.
 
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
