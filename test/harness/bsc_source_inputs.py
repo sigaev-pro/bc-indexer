@@ -9,16 +9,18 @@ compiler, and writes a tool manifest that the caller must pin.
 
 `run` executes that binary against the accepted private BSC Parlia fixture,
 then checks the report and the event traces with its own rules: the static
-capsule is synced before execution, each new dependency response is durable
-before Parlia receives it, a SIGKILL at a hand-off keeps the response, and
-replay hands Parlia the saved bytes. Private local evidence gives no
-public-profile credit and no AC verdict.
+capsule holds every static item and is synced before execution, each new
+dependency response is durable before Parlia receives it, a SIGKILL at a
+hand-off keeps the response, replay hands Parlia the saved bytes, and block 2
+replays alone on a home seeded from its capsule and the parent pin. Private
+local evidence gives no public-profile credit and no AC verdict.
 
 `mutants` runs single-check mutants of the Go probe from a table inside a
 fresh copy of the accepted BSC tree; each mutant must pass `go vet` and compile.
 """
 
 import argparse
+import functools
 import hashlib
 import io
 import json
@@ -31,6 +33,7 @@ import sys
 import tarfile
 import time
 import uuid
+import zlib
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -53,14 +56,25 @@ HARNESS = ("bsc_source_inputs.py", "pins.py", "artifacts.py", "native.py", "owne
 CHILD_TEST = "TestNativeBSCInputsChild"
 # Independent copies of the probe's declared constants.
 STATE_PROFILE = b"state.scheme=hash;gcmode=full;snapshots=off"
+NORMALIZATION_PROFILE = b"test-only-probe-v1"
 GET_TAG = b"bsc-parlia-db-get-v1\x00"
+HAS_TAG = b"bsc-parlia-db-has-v1\x00"
+SNAPSHOT_PREFIX = b"parlia-"
+# The pinned Parlia checkpoint interval and the BLOCKHASH window.
+CHECKPOINT_INTERVAL = 1024
+BLOCKHASH_WINDOW = 256
+ITEM_NAMES = ("block-rlp", "parent-hash", "parent-header-rlp", "parent-root", "ancestor-headers-rlp", "genesis-json",
+              "fork-id", "parlia-snapshot-keys", "native-commit", "normalization-profile", "state-profile")
+PARENT_STATE_ERROR = "parent state is missing from the home"
+UNKNOWN_ANCESTOR = "unknown ancestor"
 OBSERVATIONS = ("bsc-block-1", "bsc-block-2")
 CONTROL_ERROR = "unauthorized validator"
 PREPARATION_SECONDS = 3600
 RUN_SECONDS = 1800
 MUTANT_SECONDS = 4 * 3600
 TEST_CAP = 900
-TRACES = ("trace-capture.jsonl", "trace-resume.jsonl", "trace-control.jsonl", "trace-replay.jsonl")
+TRACES = ("trace-capture.jsonl", "trace-resume.jsonl", "trace-control.jsonl", "trace-replay.jsonl",
+          "trace-single.jsonl", "trace-single-no-state.jsonl", "trace-single-no-headers.jsonl")
 
 
 def test_names(paths):
@@ -189,9 +203,162 @@ def split_rlp_list_items(data):
     return items
 
 
-def expected_items(raw_block, parent_hash, genesis, native_commit):
-    return [("block-rlp", raw_block), ("parent-hash", bytes.fromhex(parent_hash.removeprefix("0x"))),
-            ("genesis-json", genesis), ("native-commit", native_commit.encode()), ("state-profile", STATE_PROFILE)]
+# ---- independent encodings: Keccak-256, RLP and the fork identifier ----
+
+def _round_constants():
+    constants, register = [], 1
+    for _ in range(24):
+        constant = 0
+        for bit in range(7):
+            register = ((register << 1) ^ ((register >> 7) * 0x71)) % 256
+            if register & 2:
+                constant ^= 1 << ((1 << bit) - 1)
+        constants.append(constant)
+    return constants
+
+
+ROUND_CONSTANTS = _round_constants()
+# ROTATIONS[x][y] is the rho offset of lane (x, y).
+ROTATIONS = ((0, 36, 3, 41, 18), (1, 44, 10, 45, 2), (62, 6, 43, 15, 61), (28, 55, 25, 21, 56), (27, 20, 39, 8, 14))
+MASK = (1 << 64) - 1
+
+
+def _rotate(value, count):
+    return ((value << count) | (value >> (64 - count))) & MASK if count else value
+
+
+def _permute(lanes):
+    for constant in ROUND_CONSTANTS:
+        column = [lanes[x] ^ lanes[x + 5] ^ lanes[x + 10] ^ lanes[x + 15] ^ lanes[x + 20] for x in range(5)]
+        theta = [column[(x - 1) % 5] ^ _rotate(column[(x + 1) % 5], 1) for x in range(5)]
+        lanes = [lanes[index] ^ theta[index % 5] for index in range(25)]
+        moved = [0] * 25
+        for x in range(5):
+            for y in range(5):
+                moved[y + 5 * ((2 * x + 3 * y) % 5)] = _rotate(lanes[x + 5 * y], ROTATIONS[x][y])
+        lanes = [moved[index] ^ (~moved[(index + 1) % 5 + 5 * (index // 5)] & moved[(index + 2) % 5 + 5 * (index // 5)])
+                 for index in range(25)]
+        lanes[0] ^= constant
+    return lanes
+
+
+@functools.lru_cache(maxsize=256)
+def keccak256(data):
+    """Return the Keccak-256 digest (Ethereum hashing, not SHA3-256 padding)."""
+    rate = 136
+    padded = bytearray(data) + b"\x01"
+    padded += b"\x00" * (-len(padded) % rate)
+    padded[-1] |= 0x80
+    lanes = [0] * 25
+    for offset in range(0, len(padded), rate):
+        for index in range(rate // 8):
+            lanes[index] ^= int.from_bytes(padded[offset + 8 * index:offset + 8 * index + 8], "little")
+        lanes = _permute(lanes)
+    return b"".join(lane.to_bytes(8, "little") for lane in lanes[:4])
+
+
+def _rlp_span(data, offset):
+    """Return (is_list, payload_start, end) of the RLP item at offset."""
+    require(offset < len(data), "Truncated RLP item")
+    first = data[offset]
+    if first < 0x80:
+        return False, offset, offset + 1
+    is_list = first >= 0xc0
+    short = first - (0xc0 if is_list else 0x80)
+    if short <= 55:
+        start, length = offset + 1, short
+    else:
+        size = short - 55
+        start = offset + 1 + size
+        length = int.from_bytes(data[offset + 1:start], "big")
+    require(start + length <= len(data), "Truncated RLP item")
+    return is_list, start, start + length
+
+
+def rlp_list(raw):
+    """Return the raw encoding of each element of one RLP list."""
+    is_list, start, end = _rlp_span(raw, 0)
+    require(is_list and end == len(raw), "Not exactly one RLP list")
+    items, offset = [], start
+    while offset < end:
+        _, _, item_end = _rlp_span(raw, offset)
+        items.append(raw[offset:item_end])
+        offset = item_end
+    return items
+
+
+def rlp_bytes(raw):
+    """Return the payload of one RLP string."""
+    is_list, start, end = _rlp_span(raw, 0)
+    require(not is_list and end == len(raw), "Not exactly one RLP string")
+    return raw[start:end]
+
+
+def rlp_encode_list(items):
+    payload = b"".join(items)
+    if len(payload) <= 55:
+        return bytes([0xc0 + len(payload)]) + payload
+    size = (len(payload).bit_length() + 7) // 8
+    return bytes([0xf7 + size]) + len(payload).to_bytes(size, "big") + payload
+
+
+def header_number(raw):
+    return int.from_bytes(rlp_bytes(rlp_list(raw)[8]), "big")
+
+
+def fork_id(genesis_json, genesis_hash, number, time):
+    """Recompute the EIP-2124 fork identifier from the genesis JSON, as the fork-id item encodes it."""
+    genesis = json.loads(genesis_json)
+    config = genesis["config"]
+
+    def forks(suffix):
+        return sorted({value for key, value in config.items() if key.endswith(suffix) and type(value) is int})
+    blocks = [fork for fork in forks("Block") if fork != 0]
+    times = [fork for fork in forks("Time") if fork > int(genesis["timestamp"], 16)]
+    checksum = zlib.crc32(genesis_hash)
+    for forks_list, head in ((blocks, number), (times, time)):
+        for fork in forks_list:
+            if fork > head:
+                return json.dumps({"hash": f"{checksum:08x}", "next": str(fork)}, separators=(",", ":")).encode()
+            checksum = zlib.crc32(fork.to_bytes(8, "big"), checksum)
+    return json.dumps({"hash": f"{checksum:08x}", "next": "0"}, separators=(",", ":")).encode()
+
+
+def ancestor_floor(number):
+    """Lowest ancestor header that block `number` (>= 2) may read: Parlia checkpoint or BLOCKHASH window."""
+    return min((number - 1) // CHECKPOINT_INTERVAL * CHECKPOINT_INTERVAL, max(0, number - BLOCKHASH_WINDOW))
+
+
+def expected_items(index, raw_blocks, genesis_header, genesis, native_commit):
+    """Recompute the static items of block index + 1 from the fixture bytes and the genesis header."""
+    headers = [genesis_header] + [rlp_list(raw)[0] for raw in raw_blocks]
+    number = index + 1
+    parent = headers[number - 1]
+    ancestors = [headers[k] for k in range(number - 2, ancestor_floor(number) - 1, -1)] if number >= 2 else []
+    checkpoint = (number - 1) // CHECKPOINT_INTERVAL * CHECKPOINT_INTERVAL
+    snapshot = json.dumps({"checkpoint": checkpoint, "keys": [(SNAPSHOT_PREFIX + keccak256(headers[checkpoint])).hex()]},
+                          separators=(",", ":")).encode()
+    time = int.from_bytes(rlp_bytes(rlp_list(headers[number])[11]), "big")
+    return [("block-rlp", raw_blocks[index]), ("parent-hash", keccak256(parent)), ("parent-header-rlp", parent),
+            ("parent-root", rlp_bytes(rlp_list(parent)[3])), ("ancestor-headers-rlp", rlp_encode_list(ancestors)),
+            ("genesis-json", genesis), ("fork-id", fork_id(genesis, keccak256(genesis_header), number, time)),
+            ("parlia-snapshot-keys", snapshot), ("native-commit", native_commit.encode()),
+            ("normalization-profile", NORMALIZATION_PROFILE), ("state-profile", STATE_PROFILE)]
+
+
+def check_static(result, observation, items):
+    """The static item bytes in a probe result equal the independently recomputed items."""
+    require(result.get("static_items_hex") == {name: data.hex() for name, data in items},
+            f"{observation}: static item bytes differ from the fixture inputs")
+
+
+def check_declared(rows, observation, items):
+    """Every logged Parlia read names a key that the capsule declares."""
+    declared = {bytes.fromhex(key) for key in json.loads(dict(items)["parlia-snapshot-keys"])["keys"]}
+    for row in rows:
+        request = bytes.fromhex(row["request_hex"])
+        key = request[len(GET_TAG):] if request[:len(GET_TAG)] in (GET_TAG, HAS_TAG) else None
+        require(key in declared, f"{observation}: a read of an undeclared key")
 
 
 def check_capsule(capsule, observation, items):
@@ -280,7 +447,17 @@ def evaluate(report, traces, fixture, raw_blocks, genesis, native_commit, genesi
     require(report.get("public_profile_credit") is False, "Report claims public-profile credit")
     require(report.get("genesis_hash") == genesis_hash and report.get("block_hashes") == hashes,
             "Report names another chain")
-    items = [expected_items(raw_blocks[index], parents[index], genesis, native_commit) for index in range(2)]
+    # The genesis header comes from the probe; it must hash to the ProfileManifest genesis. Every
+    # other static item is recomputed from the fixture bytes.
+    genesis_header = bytes.fromhex(report["replay"][0]["static_items_hex"]["parent-header-rlp"])
+    require("0x" + keccak256(genesis_header).hex() == genesis_hash and header_number(genesis_header) == 0,
+            "The genesis header does not hash to the genesis")
+    for index, raw in enumerate(raw_blocks):
+        header = rlp_list(raw)[0]
+        require("0x" + keccak256(header).hex() == hashes[index] and header_number(header) == index + 1 and
+                "0x" + rlp_bytes(rlp_list(header)[0]).hex() == parents[index], f"Fixture block {index + 1} identity")
+    items = [expected_items(index, raw_blocks, genesis_header, genesis, native_commit) for index in range(2)]
+    require("0x" + dict(items[1])["parent-root"].hex() == blocks[0]["state_root"], "Block 2 parent root")
 
     # Capture child: block 1 completes, block 2 is killed right after its first durable hand-off.
     require(report["child"].get("killed_by_sigkill") is True, "Capture child was not killed by SIGKILL")
@@ -292,7 +469,9 @@ def evaluate(report, traces, fixture, raw_blocks, genesis, native_commit, genesi
     require(sum(1 for event in capture if event.get("event") == "fetch" and event.get("observation") == OBSERVATIONS[0])
             == len(first), "Block 1 has a fetch without a hand-off")
     first_consumed = finish_steps(capture, OBSERVATIONS[0], False)
+    check_declared(first, OBSERVATIONS[0], items[0])
     second = handoff_steps(capture, OBSERVATIONS[1])
+    check_declared(second, OBSERVATIONS[1], items[1])
     require(len(second) == 1 and second[0]["kind"] == "new", "Block 2 capture must stop at its first new hand-off")
     require(capture[-1] == {"event": "crash", "observation": OBSERVATIONS[1], "sequence": 0} and
             capture[-2].get("event") == "handoff", "The crash is not the hand-off of block 2")
@@ -322,9 +501,11 @@ def evaluate(report, traces, fixture, raw_blocks, genesis, native_commit, genesi
     require(resume["head_number"] == 2 and resume["head_hash"] == hashes[1] and
             resume["head_root"] == blocks[1]["state_root"], "Resume did not import block 2")
     check_capsule(resume["capsule"], OBSERVATIONS[1], items[1])
+    check_static(resume, OBSERVATIONS[1], items[1])
     trace = traces["trace-resume.jsonl"]
     capsule_synced_before_execute(trace, OBSERVATIONS[1])
     resumed = handoff_steps(trace, OBSERVATIONS[1])
+    check_declared(resumed, OBSERVATIONS[1], items[1])
     require(resumed and resumed[0]["kind"] == "replay" and resumed[0]["request_hex"] == second[0]["request_hex"] and
             resumed[0]["response_hex"] == second[0]["response_hex"], "Resume did not replay the saved response")
     require(all(row["kind"] == "new" for row in resumed[1:]) and
@@ -360,17 +541,80 @@ def evaluate(report, traces, fixture, raw_blocks, genesis, native_commit, genesi
                 row["head_hash"] == hashes[index] and row["head_root"] == blocks[index]["state_root"],
                 f"Replay of {observation} failed: {row.get('error')}")
         check_capsule(row["capsule"], observation, items[index])
+        check_static(row, observation, items[index])
         capsule_synced_before_execute(trace, observation)
         steps = handoff_steps(trace, observation)
+        check_declared(steps, observation, items[index])
         require(all(step["kind"] == "replay" for step in steps), f"Replay of {observation} fetched")
         require(all(step["response_sha256"] != tamper["live_after_tamper_response_sha256"] for step in steps),
                 f"Replay of {observation} handed the tampered snapshot")
         require(row["consumed"] == finish_steps(trace, observation, True) ==
                 (first_consumed if index == 0 else second_consumed), f"Replay of {observation} changed its manifest")
+
+    single = check_single(report, traces, items[1], second_consumed, hashes[1], blocks[1]["state_root"])
     return {"block1_responses": len(first), "block2_responses": len(resumed),
             "crash_request": request[len(GET_TAG):].hex(), "saved_response_sha256": after["saved_response_sha256"],
             "live_after_tamper_response_sha256": tamper["live_after_tamper_response_sha256"],
-            "control_error": control["error"], "consumed": [first_consumed["digest"], second_consumed["digest"]]}
+            "control_error": control["error"], "consumed": [first_consumed["digest"], second_consumed["digest"]],
+            "static_items": list(ITEM_NAMES), "capsule_digests": [after[name + "_capsule"]["digest"]
+                                                                 for name in OBSERVATIONS], **single}
+
+
+def seed_steps(trace, observation):
+    """Return the seed and preflight events that open a single-block replay trace."""
+    require(len(trace) >= 1 and trace[0].get("event") == "seed" and trace[0].get("observation") == observation,
+            "A single-block replay must start with its seed")
+    preflight = trace[1] if len(trace) > 1 and trace[1].get("event") == "preflight" else None
+    return trace[0], preflight
+
+
+def check_single(report, traces, items, consumed_two, block_hash, state_root):
+    """Block 2 replays alone on a home seeded from its capsule and the parent pin; each withheld part fails."""
+    observation = OBSERVATIONS[1]
+    window = len(rlp_list(dict(items)["ancestor-headers-rlp"]))
+    genesis_seeded = 1 if window and header_number(rlp_list(dict(items)["ancestor-headers-rlp"])[-1]) == 0 else 0
+    headers = 1 + window - genesis_seeded
+
+    single, trace = report["single"], traces["trace-single.jsonl"]
+    seed, preflight = seed_steps(trace, observation)
+    require(single.get("stage") == "observe" and single.get("error") == "", f"Single replay failed: {single.get('error')}")
+    require(seed["error"] == "<nil>" and seed["seed"] == single["seed"] and single["seed"]["headers"] == headers and
+            single["seed"]["state_nodes"] > 0 and single["seed"]["body_sha256"], "Single replay seed")
+    require(preflight is not None and preflight["error"] == "<nil>", "Single replay preflight")
+    row = single["observation"]
+    require(row.get("error") == "" and row["fetches"] == 0 and row["head_number"] == 2 and row["head_hash"] == block_hash
+            and row["head_root"] == state_root, "Single replay did not import block 2")
+    check_capsule(row["capsule"], observation, items)
+    check_static(row, observation, items)
+    require(not any(event.get("event") in ("fetch", "put") for event in trace), "Single replay fetched or wrote")
+    require(not any(event.get("observation") == OBSERVATIONS[0] for event in trace), "Single replay ran block 1")
+    capsule_synced_before_execute(trace, observation)
+    steps = handoff_steps(trace, observation)
+    check_declared(steps, observation, items)
+    require(steps and all(step["kind"] == "replay" for step in steps), "Single replay fetched")
+    require(finish_steps(trace, observation, True) == row["consumed"] == consumed_two,
+            "Single replay changed the block 2 manifest")
+
+    # Control: without the parent state the preflight refuses before execution.
+    no_state, trace = report["single_no_state"], traces["trace-single-no-state.jsonl"]
+    seed, preflight = seed_steps(trace, observation)
+    require(no_state.get("stage") == "preflight" and PARENT_STATE_ERROR in no_state.get("error", "") and
+            seed["error"] == "<nil>" and no_state["seed"]["state_nodes"] == 0 and
+            no_state["seed"]["headers"] == headers and preflight is not None and PARENT_STATE_ERROR in preflight["error"],
+            "State-withheld control did not stop at the preflight")
+    require(not any(event.get("event") in ("execute", "handoff", "fetch") for event in trace),
+            "State-withheld control executed")
+
+    # Control: without the capsule headers the native import fails on the unknown parent.
+    no_headers, trace = report["single_no_headers"], traces["trace-single-no-headers.jsonl"]
+    seed, preflight = seed_steps(trace, observation)
+    require(no_headers.get("stage") == "import" and UNKNOWN_ANCESTOR in no_headers.get("error", "") and
+            no_headers.get("head_number") == 0 and seed["error"] == "<nil>" and no_headers["seed"]["headers"] == 0 and
+            no_headers["seed"]["state_nodes"] == single["seed"]["state_nodes"] and preflight is not None and
+            preflight["error"] == "<nil>", "Header-withheld control did not fail on the unknown parent")
+    require(not any(event.get("event") in ("execute", "handoff") for event in trace), "Header-withheld control executed")
+    return {"single_seed": single["seed"], "single_consumed": row["consumed"]["digest"],
+            "no_state_error": no_state["error"], "no_headers_error": no_headers["error"]}
 
 
 def checked_evaluate(*args):

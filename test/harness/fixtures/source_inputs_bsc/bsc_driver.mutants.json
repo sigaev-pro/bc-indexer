@@ -605,6 +605,450 @@
       "file": "test/harness/bsc_source_inputs.py",
       "original": "        runner.cleanup_complete = runner.cleanup_complete and result[\"cleanup_complete\"]",
       "replacement": "        pass"
+    },
+    {
+      "name": "keccak sha3 padding",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "bytearray(data) + b\"\\x01\"",
+      "replacement": "bytearray(data) + b\"\\x06\""
+    },
+    {
+      "name": "keccak rate",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    rate = 136\n",
+      "replacement": "    rate = 144\n"
+    },
+    {
+      "name": "keccak iota",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        lanes[0] ^= constant",
+      "replacement": "        lanes[0] ^= 0"
+    },
+    {
+      "name": "keccak rotation",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "(62, 6, 43, 15, 61)",
+      "replacement": "(62, 6, 43, 15, 60)"
+    },
+    {
+      "name": "keccak chi",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "(~moved[(index + 1) % 5 + 5 * (index // 5)]",
+      "replacement": "(moved[(index + 1) % 5 + 5 * (index // 5)]"
+    },
+    {
+      "name": "keccak output lanes",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "for lane in lanes[:4])",
+      "replacement": "for lane in lanes[1:5])"
+    },
+    {
+      "name": "rlp long length",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        size = short - 55\n",
+      "replacement": "        size = short - 56\n"
+    },
+    {
+      "name": "rlp single byte",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        return False, offset, offset + 1",
+      "replacement": "        return True, offset, offset + 1"
+    },
+    {
+      "name": "rlp list trailing",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(is_list and end == len(raw), \"Not exactly one RLP list\")",
+      "replacement": "require(is_list, \"Not exactly one RLP list\")"
+    },
+    {
+      "name": "rlp bytes of list",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(not is_list and end == len(raw), \"Not exactly one RLP string\")",
+      "replacement": "require(end == len(raw), \"Not exactly one RLP string\")"
+    },
+    {
+      "name": "rlp truncation",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(start + length <= len(data), \"Truncated RLP item\")",
+      "replacement": "require(True, \"Truncated RLP item\")"
+    },
+    {
+      "name": "rlp empty input",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(offset < len(data), \"Truncated RLP item\")",
+      "replacement": "require(True, \"Truncated RLP item\")"
+    },
+    {
+      "name": "rlp encode long prefix",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "return bytes([0xf7 + size])",
+      "replacement": "return bytes([0xf8 + size])"
+    },
+    {
+      "name": "header number field",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "return int.from_bytes(rlp_bytes(rlp_list(raw)[8]), \"big\")",
+      "replacement": "return int.from_bytes(rlp_bytes(rlp_list(raw)[7]), \"big\")"
+    },
+    {
+      "name": "fork zero block kept",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "blocks = [fork for fork in forks(\"Block\") if fork != 0]",
+      "replacement": "blocks = forks(\"Block\")"
+    },
+    {
+      "name": "fork times unfiltered",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "times = [fork for fork in forks(\"Time\") if fork > int(genesis[\"timestamp\"], 16)]",
+      "replacement": "times = forks(\"Time\")"
+    },
+    {
+      "name": "fork duplicates kept",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "return sorted({value for key, value in config.items() if key.endswith(suffix) and type(value) is int})",
+      "replacement": "return sorted([value for key, value in config.items() if key.endswith(suffix) and type(value) is int])"
+    },
+    {
+      "name": "fork next is head",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "\"next\": str(fork)}",
+      "replacement": "\"next\": str(head)}"
+    },
+    {
+      "name": "fork passed boundary",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "            if fork > head:",
+      "replacement": "            if fork >= head:"
+    },
+    {
+      "name": "ancestor floor window",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "max(0, number - BLOCKHASH_WINDOW))",
+      "replacement": "max(0, number - BLOCKHASH_WINDOW - 1))"
+    },
+    {
+      "name": "ancestor floor checkpoint",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "return min((number - 1) // CHECKPOINT_INTERVAL",
+      "replacement": "return min(number // CHECKPOINT_INTERVAL"
+    },
+    {
+      "name": "ancestors stop early",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "range(number - 2, ancestor_floor(number) - 1, -1)",
+      "replacement": "range(number - 2, ancestor_floor(number), -1)"
+    },
+    {
+      "name": "parent root field",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "(\"parent-root\", rlp_bytes(rlp_list(parent)[3]))",
+      "replacement": "(\"parent-root\", rlp_bytes(rlp_list(parent)[4]))"
+    },
+    {
+      "name": "snapshot key of parent",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "(SNAPSHOT_PREFIX + keccak256(headers[checkpoint])).hex()",
+      "replacement": "(SNAPSHOT_PREFIX + keccak256(parent)).hex()"
+    },
+    {
+      "name": "fork time field",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "time = int.from_bytes(rlp_bytes(rlp_list(headers[number])[11]), \"big\")",
+      "replacement": "time = int.from_bytes(rlp_bytes(rlp_list(headers[number])[10]), \"big\")"
+    },
+    {
+      "name": "fork genesis hash",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "fork_id(genesis, keccak256(genesis_header), number, time)",
+      "replacement": "fork_id(genesis, keccak256(parent), number, time)"
+    },
+    {
+      "name": "static bytes unchecked",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(result.get(\"static_items_hex\") == {name: data.hex() for name, data in items},",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "declared unchecked",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(key in declared, f\"{observation}: a read of an undeclared key\")",
+      "replacement": "require(True, f\"{observation}: a read of an undeclared key\")"
+    },
+    {
+      "name": "declared has tag",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "in (GET_TAG, HAS_TAG) else None",
+      "replacement": "in (GET_TAG,) else None"
+    },
+    {
+      "name": "genesis header number",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(\"0x\" + keccak256(genesis_header).hex() == genesis_hash and header_number(genesis_header) == 0,",
+      "replacement": "require(\"0x\" + keccak256(genesis_header).hex() == genesis_hash,"
+    },
+    {
+      "name": "genesis header hash",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(\"0x\" + keccak256(genesis_header).hex() == genesis_hash and header_number(genesis_header) == 0,",
+      "replacement": "require(header_number(genesis_header) == 0,"
+    },
+    {
+      "name": "fixture block hash",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(\"0x\" + keccak256(header).hex() == hashes[index] and header_number(header) == index + 1 and",
+      "replacement": "require(header_number(header) == index + 1 and"
+    },
+    {
+      "name": "fixture block number",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "keccak256(header).hex() == hashes[index] and header_number(header) == index + 1 and",
+      "replacement": "keccak256(header).hex() == hashes[index] and"
+    },
+    {
+      "name": "fixture block parent",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "\"0x\" + rlp_bytes(rlp_list(header)[0]).hex() == parents[index], f\"Fixture block {index + 1} identity\")",
+      "replacement": "True, f\"Fixture block {index + 1} identity\")"
+    },
+    {
+      "name": "block two parent root",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(\"0x\" + dict(items[1])[\"parent-root\"].hex() == blocks[0][\"state_root\"], \"Block 2 parent root\")",
+      "replacement": "require(True, \"Block 2 parent root\")"
+    },
+    {
+      "name": "declared capture one",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_declared(first, OBSERVATIONS[0], items[0])\n",
+      "replacement": ""
+    },
+    {
+      "name": "declared capture two",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_declared(second, OBSERVATIONS[1], items[1])\n",
+      "replacement": ""
+    },
+    {
+      "name": "declared resume",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_declared(resumed, OBSERVATIONS[1], items[1])\n",
+      "replacement": ""
+    },
+    {
+      "name": "declared replay",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        check_declared(steps, observation, items[index])\n",
+      "replacement": ""
+    },
+    {
+      "name": "static resume",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_static(resume, OBSERVATIONS[1], items[1])\n",
+      "replacement": ""
+    },
+    {
+      "name": "static replay",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        check_static(row, observation, items[index])\n",
+      "replacement": ""
+    },
+    {
+      "name": "single seed count",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    headers = 1 + window - genesis_seeded\n",
+      "replacement": "    headers = 1 + window\n"
+    },
+    {
+      "name": "single seed state nodes",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "single[\"seed\"][\"state_nodes\"] > 0 and single[\"seed\"][\"body_sha256\"]",
+      "replacement": "single[\"seed\"][\"state_nodes\"] >= 0 and single[\"seed\"][\"body_sha256\"]"
+    },
+    {
+      "name": "single seed body",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "single[\"seed\"][\"state_nodes\"] > 0 and single[\"seed\"][\"body_sha256\"], \"Single replay seed\")",
+      "replacement": "single[\"seed\"][\"state_nodes\"] > 0, \"Single replay seed\")"
+    },
+    {
+      "name": "single seed event",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(seed[\"error\"] == \"<nil>\" and seed[\"seed\"] == single[\"seed\"] and single[\"seed\"][\"headers\"] == headers and",
+      "replacement": "require(seed[\"error\"] == \"<nil>\" and single[\"seed\"][\"headers\"] == headers and"
+    },
+    {
+      "name": "single seed error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(seed[\"error\"] == \"<nil>\" and seed[\"seed\"] == single[\"seed\"] and single[\"seed\"][\"headers\"] == headers and",
+      "replacement": "require(seed[\"seed\"] == single[\"seed\"] and single[\"seed\"][\"headers\"] == headers and"
+    },
+    {
+      "name": "single stage",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(single.get(\"stage\") == \"observe\" and single.get(\"error\") == \"\", f\"Single replay failed:",
+      "replacement": "require(single.get(\"error\") == \"\", f\"Single replay failed:"
+    },
+    {
+      "name": "single preflight",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(preflight is not None and preflight[\"error\"] == \"<nil>\", \"Single replay preflight\")",
+      "replacement": "require(True, \"Single replay preflight\")"
+    },
+    {
+      "name": "single head",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "and row[\"head_root\"] == state_root, \"Single replay did not import block 2\")",
+      "replacement": "and True, \"Single replay did not import block 2\")"
+    },
+    {
+      "name": "single fetch or put",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(not any(event.get(\"event\") in (\"fetch\", \"put\") for event in trace), \"Single replay fetched or wrote\")",
+      "replacement": "require(not any(event.get(\"event\") in (\"fetch\",) for event in trace), \"Single replay fetched or wrote\")"
+    },
+    {
+      "name": "single block one",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(not any(event.get(\"observation\") == OBSERVATIONS[0] for event in trace), \"Single replay ran block 1\")",
+      "replacement": "require(True, \"Single replay ran block 1\")"
+    },
+    {
+      "name": "single steps present",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(steps and all(step[\"kind\"] == \"replay\" for step in steps), \"Single replay fetched\")",
+      "replacement": "require(all(step[\"kind\"] == \"replay\" for step in steps), \"Single replay fetched\")"
+    },
+    {
+      "name": "single declared",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_declared(steps, observation, items)\n    require(steps",
+      "replacement": "    require(steps"
+    },
+    {
+      "name": "single manifest",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(finish_steps(trace, observation, True) == row[\"consumed\"] == consumed_two,",
+      "replacement": "require(finish_steps(trace, observation, True) == row[\"consumed\"],"
+    },
+    {
+      "name": "single static",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_static(row, observation, items)\n    require(not any",
+      "replacement": "    require(not any"
+    },
+    {
+      "name": "single capsule",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_capsule(row[\"capsule\"], observation, items)\n    check_static(row, observation, items)\n    require(not any",
+      "replacement": "    check_static(row, observation, items)\n    require(not any"
+    },
+    {
+      "name": "single capsule sync",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    capsule_synced_before_execute(trace, observation)\n    steps = handoff_steps(trace, observation)\n    check_declared(steps, observation, items)",
+      "replacement": "    steps = handoff_steps(trace, observation)\n    check_declared(steps, observation, items)"
+    },
+    {
+      "name": "seed observation",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "trace[0].get(\"event\") == \"seed\" and trace[0].get(\"observation\") == observation,",
+      "replacement": "trace[0].get(\"event\") == \"seed\","
+    },
+    {
+      "name": "seed preflight event",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "preflight = trace[1] if len(trace) > 1 and trace[1].get(\"event\") == \"preflight\" else None",
+      "replacement": "preflight = trace[1] if len(trace) > 1 else None"
+    },
+    {
+      "name": "no state stage",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(no_state.get(\"stage\") == \"preflight\" and PARENT_STATE_ERROR in no_state.get(\"error\", \"\") and",
+      "replacement": "require(PARENT_STATE_ERROR in no_state.get(\"error\", \"\") and"
+    },
+    {
+      "name": "no state error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(no_state.get(\"stage\") == \"preflight\" and PARENT_STATE_ERROR in no_state.get(\"error\", \"\") and",
+      "replacement": "require(no_state.get(\"stage\") == \"preflight\" and"
+    },
+    {
+      "name": "no state seed error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "            seed[\"error\"] == \"<nil>\" and no_state[\"seed\"][\"state_nodes\"] == 0 and",
+      "replacement": "            no_state[\"seed\"][\"state_nodes\"] == 0 and"
+    },
+    {
+      "name": "no state nodes",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "no_state[\"seed\"][\"state_nodes\"] == 0 and",
+      "replacement": "no_state[\"seed\"][\"state_nodes\"] >= 0 and"
+    },
+    {
+      "name": "no state headers",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "no_state[\"seed\"][\"headers\"] == headers and preflight is not None",
+      "replacement": "preflight is not None"
+    },
+    {
+      "name": "no state preflight",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "and PARENT_STATE_ERROR in preflight[\"error\"],",
+      "replacement": "and True,"
+    },
+    {
+      "name": "no state executed",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "event.get(\"event\") in (\"execute\", \"handoff\", \"fetch\") for event in trace",
+      "replacement": "event.get(\"event\") in (\"handoff\", \"fetch\") for event in trace"
+    },
+    {
+      "name": "no headers stage",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(no_headers.get(\"stage\") == \"import\" and UNKNOWN_ANCESTOR in no_headers.get(\"error\", \"\") and",
+      "replacement": "require(UNKNOWN_ANCESTOR in no_headers.get(\"error\", \"\") and"
+    },
+    {
+      "name": "no headers error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(no_headers.get(\"stage\") == \"import\" and UNKNOWN_ANCESTOR in no_headers.get(\"error\", \"\") and",
+      "replacement": "require(no_headers.get(\"stage\") == \"import\" and"
+    },
+    {
+      "name": "no headers head",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "no_headers.get(\"head_number\") == 0 and seed[\"error\"] == \"<nil>\"",
+      "replacement": "seed[\"error\"] == \"<nil>\""
+    },
+    {
+      "name": "no headers seed error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "no_headers.get(\"head_number\") == 0 and seed[\"error\"] == \"<nil>\" and",
+      "replacement": "no_headers.get(\"head_number\") == 0 and"
+    },
+    {
+      "name": "no headers count",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "no_headers[\"seed\"][\"headers\"] == 0 and",
+      "replacement": "True and"
+    },
+    {
+      "name": "no headers nodes",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "no_headers[\"seed\"][\"state_nodes\"] == single[\"seed\"][\"state_nodes\"] and preflight is not None",
+      "replacement": "preflight is not None"
+    },
+    {
+      "name": "no headers preflight",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "            preflight[\"error\"] == \"<nil>\", \"Header-withheld control did not fail on the unknown parent\")",
+      "replacement": "            True, \"Header-withheld control did not fail on the unknown parent\")"
+    },
+    {
+      "name": "no headers executed",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "event.get(\"event\") in (\"execute\", \"handoff\") for event in trace), \"Header-withheld",
+      "replacement": "event.get(\"event\") in (\"handoff\",) for event in trace), \"Header-withheld"
     }
   ]
 }

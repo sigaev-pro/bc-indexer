@@ -162,7 +162,7 @@
     {
       "name": "parent-hash-item-zeroed",
       "file": "bsc_inputs.go",
-      "original": "{Name: \"parent-hash\", Data: parent.Bytes()}",
+      "original": "{Name: \"parent-hash\", Data: parent.Hash().Bytes()}",
       "replacement": "{Name: \"parent-hash\", Data: common.Hash{}.Bytes()}"
     },
     {
@@ -212,6 +212,282 @@
       "file": "bsc_inputs.go",
       "original": "\tcase len(parts) == 2 && parts[1] == \"closed\":",
       "replacement": "\tcase len(parts) >= 2 && parts[1] == \"closed\":"
+    },
+    {
+      "name": "declare-check-skipped",
+      "file": "bsc_inputs.go",
+      "original": "\tif !d.declared[string(key)] {",
+      "replacement": "\tif false && !d.declared[string(key)] {"
+    },
+    {
+      "name": "undeclared-read-not-sticky",
+      "file": "bsc_inputs.go",
+      "original": "return nil, d.stop(fmt.Errorf(\"%w: %s %x\", ErrUndeclaredRead, tag, key))",
+      "replacement": "return nil, fmt.Errorf(\"%w: %s %x\", ErrUndeclaredRead, tag, key)"
+    },
+    {
+      "name": "detach-keeps-declaration",
+      "file": "bsc_inputs.go",
+      "original": "d.log, d.id, d.declared = nil, \"\", nil",
+      "replacement": "d.log, d.id = nil, \"\""
+    },
+    {
+      "name": "declare-drops-keys",
+      "file": "bsc_inputs.go",
+      "original": "\tfor _, key := range keys {\n\t\td.declared",
+      "replacement": "\tfor _, key := range keys[:0] {\n\t\td.declared"
+    },
+    {
+      "name": "ancestor-floor-checkpoint-only",
+      "file": "bsc_inputs.go",
+      "original": "\tif n > BlockHashWindow && n-BlockHashWindow < floor {",
+      "replacement": "\tif false && n > BlockHashWindow && n-BlockHashWindow < floor {"
+    },
+    {
+      "name": "ancestor-floor-of-block",
+      "file": "bsc_inputs.go",
+      "original": "\tfloor := (n - 1) / CheckpointInterval * CheckpointInterval",
+      "replacement": "\tfloor := n / CheckpointInterval * CheckpointInterval"
+    },
+    {
+      "name": "snapshot-checkpoint-is-parent",
+      "file": "bsc_inputs.go",
+      "original": "\tcheckpoint := parent.Number.Uint64() / CheckpointInterval * CheckpointInterval",
+      "replacement": "\tcheckpoint := parent.Number.Uint64()"
+    },
+    {
+      "name": "block-items-skip-window",
+      "file": "bsc_inputs.go",
+      "original": "n >= 2 && number > AncestorFloor(n);",
+      "replacement": "n >= 2 && number > n-1;"
+    },
+    {
+      "name": "parent-header-item-is-ancestors",
+      "file": "bsc_inputs.go",
+      "original": "{Name: \"parent-header-rlp\", Data: parentRLP}",
+      "replacement": "{Name: \"parent-header-rlp\", Data: ancestorsRLP}"
+    },
+    {
+      "name": "parent-root-item-zeroed",
+      "file": "bsc_inputs.go",
+      "original": "{Name: \"parent-root\", Data: parent.Root.Bytes()}",
+      "replacement": "{Name: \"parent-root\", Data: common.Hash{}.Bytes()}"
+    },
+    {
+      "name": "fork-id-of-parent",
+      "file": "bsc_inputs.go",
+      "original": "\tfork, err := ForkID(genesis, n, block.Time())",
+      "replacement": "\tfork, err := ForkID(genesis, n-1, block.Time())"
+    },
+    {
+      "name": "normalization-item-changed",
+      "file": "bsc_inputs.go",
+      "original": "{Name: \"normalization-profile\", Data: []byte(NormalizationProfile)}",
+      "replacement": "{Name: \"normalization-profile\", Data: []byte(StateProfile)}"
+    },
+    {
+      "name": "snapshot-item-dropped",
+      "file": "bsc_inputs.go",
+      "original": "\t\t{Name: \"parlia-snapshot-keys\", Data: snapshot},\n",
+      "replacement": ""
+    },
+    {
+      "name": "missing-item-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif _, ok := items[name]; !ok {",
+      "replacement": "\t\tif _, ok := items[name]; false && !ok {"
+    },
+    {
+      "name": "parent-hash-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif !bytes.Equal(items[\"parent-hash\"], static.Parent.Hash().Bytes()) {",
+      "replacement": "\tif false && !bytes.Equal(items[\"parent-hash\"], static.Parent.Hash().Bytes()) {"
+    },
+    {
+      "name": "parent-root-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif !bytes.Equal(items[\"parent-root\"], static.Parent.Root.Bytes()) {",
+      "replacement": "\tif false && !bytes.Equal(items[\"parent-root\"], static.Parent.Root.Bytes()) {"
+    },
+    {
+      "name": "block-child-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif static.Block.NumberU64() != n || static.Block.ParentHash() != static.Parent.Hash() {",
+      "replacement": "\tif false && (static.Block.NumberU64() != n || static.Block.ParentHash() != static.Parent.Hash()) {"
+    },
+    {
+      "name": "window-count-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif uint64(len(static.Ancestors)) != want {",
+      "replacement": "\tif false && uint64(len(static.Ancestors)) != want {"
+    },
+    {
+      "name": "ancestor-link-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif ancestor.Hash() != child.ParentHash || ancestor.Number.Uint64()+1 != child.Number.Uint64() {",
+      "replacement": "\t\tif false && (ancestor.Hash() != child.ParentHash || ancestor.Number.Uint64()+1 != child.Number.Uint64()) {"
+    },
+    {
+      "name": "ancestor-number-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif ancestor.Hash() != child.ParentHash || ancestor.Number.Uint64()+1 != child.Number.Uint64() {",
+      "replacement": "\t\tif ancestor.Hash() != child.ParentHash {"
+    },
+    {
+      "name": "snapshot-item-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "err != nil || !bytes.Equal(encoded, items[\"parlia-snapshot-keys\"]) {",
+      "replacement": "err != nil || false && !bytes.Equal(encoded, items[\"parlia-snapshot-keys\"]) {"
+    },
+    {
+      "name": "seed-genesis-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif rawdb.ReadCanonicalHash(home, 0) != lowest.Hash() {",
+      "replacement": "\t\tif false && rawdb.ReadCanonicalHash(home, 0) != lowest.Hash() {"
+    },
+    {
+      "name": "seed-td-base-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif td == nil {\n\t\treturn report, fmt.Errorf(",
+      "replacement": "\tif false && td == nil {\n\t\treturn report, fmt.Errorf("
+    },
+    {
+      "name": "seed-td-not-accumulated",
+      "file": "bsc_inputs.go",
+      "original": "\t\ttd.Add(td, header.Difficulty)",
+      "replacement": "\t\ttd.Add(td, common.Big0)"
+    },
+    {
+      "name": "seed-header-not-written",
+      "file": "bsc_inputs.go",
+      "original": "\t\trawdb.WriteHeader(home, header)\n",
+      "replacement": ""
+    },
+    {
+      "name": "seed-canonical-not-written",
+      "file": "bsc_inputs.go",
+      "original": "\t\trawdb.WriteCanonicalHash(home, header.Hash(), header.Number.Uint64())\n",
+      "replacement": ""
+    },
+    {
+      "name": "seed-withheld-headers-written",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif options.WithholdHeaders {\n\t\t\tcontinue",
+      "replacement": "\t\tif false && options.WithholdHeaders {\n\t\t\tcontinue"
+    },
+    {
+      "name": "seed-no-body-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif body == nil {",
+      "replacement": "\tif false && body == nil {"
+    },
+    {
+      "name": "seed-tx-root-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "trie.NewStackTrie(nil)) != parent.TxHash ||",
+      "replacement": "trie.NewStackTrie(nil)) != parent.TxHash && false ||"
+    },
+    {
+      "name": "seed-uncle-hash-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\ttypes.CalcUncleHash(body.Uncles) != parent.UncleHash {",
+      "replacement": "\t\ttypes.CalcUncleHash(body.Uncles) != parent.UncleHash && false {"
+    },
+    {
+      "name": "seed-withdrawals-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif parent.WithdrawalsHash == nil && len(body.Withdrawals) != 0 ||",
+      "replacement": "\tif false && parent.WithdrawalsHash == nil && len(body.Withdrawals) != 0 ||"
+    },
+    {
+      "name": "seed-node-hash-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\t\tif crypto.Keccak256Hash(blob) != hash {",
+      "replacement": "\t\t\tif false && crypto.Keccak256Hash(blob) != hash {"
+    },
+    {
+      "name": "seed-code-hash-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\t\tif crypto.Keccak256Hash(code) != hash {",
+      "replacement": "\t\t\tif false && crypto.Keccak256Hash(code) != hash {"
+    },
+    {
+      "name": "seed-withhold-state-ignored",
+      "file": "bsc_inputs.go",
+      "original": "\tif !options.WithholdState {",
+      "replacement": "\tif true {"
+    },
+    {
+      "name": "seed-node-not-written",
+      "file": "bsc_inputs.go",
+      "original": "\t\t\trawdb.WriteLegacyTrieNode(home, hash, blob)\n",
+      "replacement": ""
+    },
+    {
+      "name": "seed-code-not-written",
+      "file": "bsc_inputs.go",
+      "original": "\t\t\trawdb.WriteCode(home, hash, code)\n",
+      "replacement": ""
+    },
+    {
+      "name": "seed-head-not-set",
+      "file": "bsc_inputs.go",
+      "original": "\t\trawdb.WriteHeadBlockHash(home, parent.Hash())\n",
+      "replacement": ""
+    },
+    {
+      "name": "seed-pin-error-not-wrapped",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif err != nil && !errors.Is(err, ErrParentPin) {",
+      "replacement": "\t\tif false && err != nil && !errors.Is(err, ErrParentPin) {"
+    },
+    {
+      "name": "check-state-ignores-error",
+      "file": "bsc_inputs.go",
+      "original": "\tif err != nil {\n\t\treturn fmt.Errorf(\"%w: root %x: %v\", ErrParentState, root, err)",
+      "replacement": "\tif false && err != nil {\n\t\treturn fmt.Errorf(\"%w: root %x: %v\", ErrParentState, root, err)"
+    },
+    {
+      "name": "walk-skips-storage",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif account.Root != types.EmptyRootHash {",
+      "replacement": "\t\tif false && account.Root != types.EmptyRootHash {"
+    },
+    {
+      "name": "walk-skips-code",
+      "file": "bsc_inputs.go",
+      "original": "; hash != types.EmptyCodeHash {",
+      "replacement": "; false && hash != types.EmptyCodeHash {"
+    },
+    {
+      "name": "walk-skips-leaves",
+      "file": "bsc_inputs.go",
+      "original": "\t\t\tif it.Leaf() && leaf != nil {",
+      "replacement": "\t\t\tif false && it.Leaf() && leaf != nil {"
+    },
+    {
+      "name": "walk-ignores-iterator-error",
+      "file": "bsc_inputs.go",
+      "original": "\t\treturn it.Error()\n\t}",
+      "replacement": "\t\treturn nil\n\t}"
+    },
+    {
+      "name": "probe-declare-skipped",
+      "file": "bsc_inputs_test.go",
+      "original": "\tengineDB.Declare(keys)",
+      "replacement": "\tengineDB.Declare(nil)"
+    },
+    {
+      "name": "probe-preflight-skipped",
+      "file": "bsc_inputs_test.go",
+      "original": "\t\terr = CheckParentState(db, static.Root)",
+      "replacement": "\t\terr = nil"
+    },
+    {
+      "name": "probe-seed-ignores-options",
+      "file": "bsc_inputs_test.go",
+      "original": "\t\tresult.Seed, err = SeedParent(db, store, static, options)",
+      "replacement": "\t\tresult.Seed, err = SeedParent(db, store, static, SeedOptions{})"
     }
   ]
 }
