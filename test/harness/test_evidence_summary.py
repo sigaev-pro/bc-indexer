@@ -422,13 +422,11 @@ class EvidenceSummaryTests(unittest.TestCase):
                 self.assertEqual((code, errors), (0, ""))
                 self.assertIn(f"- Proof `{name}` SHA256", output)
                 self.assertIn("| execution | 5.250 | n/a |", output)
+                self.assertIn("| admission | no finish mark | n/a |", output)
                 self.assertIn("- Attempt index 1; new lineage", output)
-                self.assertNotIn("| admission |", output)
-        for marks, message in (({"execution_started": 5.0, "execution_finished": 4.0}, "finishes before"),
-                               ({"admission_started": 1.0}, "no matching")):
-            with self.subTest(marks=marks):
-                with self.assertRaisesRegex(evidence_summary.FormatError, message):
-                    evidence_summary.phase_rows({"phases": marks})
+        with self.assertRaisesRegex(evidence_summary.FormatError, "finishes before"):
+            evidence_summary.phase_rows({"phases": {"execution_started": 5.0, "execution_finished": 4.0}})
+        self.assertEqual(evidence_summary.phase_rows({"phases": {"execution_finished": 5.0}}), [])
 
     def test_large_nested_documents_are_not_listed(self):
         run = self.fixture.nats_run()

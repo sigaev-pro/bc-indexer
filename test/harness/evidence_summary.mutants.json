@@ -230,20 +230,26 @@
     {
       "name": "mark order check",
       "file": "evidence_summary.py",
-      "original": "            if finished < started:\n                raise FormatError",
-      "replacement": "            if False:\n                raise FormatError"
-    },
-    {
-      "name": "mark pair required",
-      "file": "evidence_summary.py",
-      "original": "    if not rows:\n        raise FormatError(\"phase marks",
-      "replacement": "    if False:\n        raise FormatError(\"phase marks"
+      "original": "        if finished is not None and finished < started:\n            raise FormatError",
+      "replacement": "        if False:\n            raise FormatError"
     },
     {
       "name": "missing attempt index",
       "file": "evidence_summary.py",
       "original": "    elif summary[\"attempt_index\"] is None:",
       "replacement": "    elif False:"
+    },
+    {
+      "name": "unfinished phase",
+      "file": "evidence_summary.py",
+      "original": "            seconds = \"no finish mark\" if row[\"seconds\"] is None else number(row[\"seconds\"])",
+      "replacement": "            seconds = number(row[\"seconds\"])"
+    },
+    {
+      "name": "started marks only",
+      "file": "evidence_summary.py",
+      "original": "        if not name.endswith(\"_started\"):\n            continue",
+      "replacement": "        if False:\n            continue"
     }
   ]
 }

@@ -331,19 +331,21 @@ def phase_rows(proof):
 
 
 def mark_rows(marks):
-    """Turn flat epoch marks such as execution_started/execution_finished into durations."""
+    """Turn flat epoch marks such as execution_started/execution_finished into durations.
+
+    A phase with a start mark but no finish mark (for example admission, which
+    ends when execution starts, or a failed run) is reported without a duration.
+    """
     rows = []
     for name, started in marks.items():
         if not name.endswith("_started"):
             continue
         phase = name[:-len("_started")]
         finished = marks.get(phase + "_finished")
-        if finished is not None:
-            if finished < started:
-                raise FormatError(f"phase {phase} finishes before it starts")
-            rows.append({"name": phase, "seconds": finished - started, "deadline_seconds": None})
-    if not rows:
-        raise FormatError("phase marks have no matching _started and _finished pair")
+        if finished is not None and finished < started:
+            raise FormatError(f"phase {phase} finishes before it starts")
+        rows.append({"name": phase, "seconds": None if finished is None else finished - started,
+                     "deadline_seconds": None})
     return rows
 
 
@@ -515,7 +517,8 @@ def render(summary):
         lines += ["", "| Phase | Seconds | Deadline |", "|---|---|---|"]
         for row in summary["phases"]:
             deadline = row["deadline_seconds"] if row["deadline_seconds"] is not None else "n/a"
-            lines.append(f"| {row['name']} | {number(row['seconds'])} | {deadline} |")
+            seconds = "no finish mark" if row["seconds"] is None else number(row["seconds"])
+            lines.append(f"| {row['name']} | {seconds} | {deadline} |")
     if summary["cases"]:
         # lower_sequence is an exclusive frontier: messages 1..5 have lower 0, upper 5.
         lines += ["", "| Case | Result | Native report SHA256 | Report bytes | Stored | Sequences | Groups |",

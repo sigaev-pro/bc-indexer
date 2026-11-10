@@ -733,7 +733,9 @@ and process-group flags, Go and Python test counts, unique absolute references
 with total bytes, and the attempt lineage. It only reads. Before printing, it
 verifies the absolute references in the proof, in each previous attempt, among
 the top-level references of directly cited JSON files up to 1 MiB, and in
-child proofs; on any mismatch it prints no summary (exit 1). Add
+child proofs; on any mismatch it prints no summary (exit 1). Mutation record
+directories have no run proof and exit 2. The E01-02 owned-capture preparations
+cite files in a live worktree that later changed, so they fail closed. Add
 `--test-log PATH` for a test log kept outside the run. Set
 `EVIDENCE_SUMMARY_RUNS` to the retained `d95-20261107` directory to run the
 opt-in checks against figures quoted in `.project/evidence/E01-01.harness.md`.
