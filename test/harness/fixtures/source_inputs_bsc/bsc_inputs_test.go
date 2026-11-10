@@ -663,13 +663,26 @@ func TestUnitBSCStaticItems(t *testing.T) {
 	}
 
 	// BlockItems refuses a block without its parent or an ancestor header.
+	// Each lookup differs from the canonical headers at one number only.
 	block := types.NewBlockWithHeader(headers[3])
-	for name, lookup := range map[string]func(uint64) *types.Header{
-		"missing parent":   func(number uint64) *types.Header { return nil },
-		"wrong parent":     func(number uint64) *types.Header { return headers[1] },
-		"missing ancestor": func(number uint64) *types.Header { return map[uint64]*types.Header{2: headers[2]}[number] },
+	lookup := func(number uint64, header *types.Header) func(uint64) *types.Header {
+		return func(n uint64) *types.Header {
+			if n == number {
+				return header
+			}
+			return headers[n]
+		}
+	}
+	for name, test := range map[string]struct {
+		lookup func(uint64) *types.Header
+		want   string
+	}{
+		"missing parent":   {lookup(2, nil), "no parent header of block 3"},
+		"wrong parent":     {lookup(2, headers[1]), "parent header of block 3 has another hash"},
+		"missing ancestor": {lookup(1, nil), "ancestor header 1"},
 	} {
-		if _, err := BlockItems(nil, block, lookup, nil, genesis, ""); !errors.Is(err, ErrStaticInput) {
+		if _, err := BlockItems(nil, block, test.lookup, nil, genesis, ""); !errors.Is(err, ErrStaticInput) ||
+			!strings.Contains(err.Error(), test.want) {
 			t.Errorf("%s: BlockItems = %v", name, err)
 		}
 	}

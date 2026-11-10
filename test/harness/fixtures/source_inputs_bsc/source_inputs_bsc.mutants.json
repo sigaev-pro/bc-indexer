@@ -504,14 +504,14 @@
     {
       "name": "block-items-parent-hash-unchecked",
       "file": "bsc_inputs.go",
-      "original": "\tif parent == nil || parent.Hash() != block.ParentHash() {",
-      "replacement": "\tif parent == nil {"
+      "original": "\tif parent.Hash() != block.ParentHash() {",
+      "replacement": "\tif false {"
     },
     {
       "name": "block-items-parent-nil-unchecked",
       "file": "bsc_inputs.go",
-      "original": "\tif parent == nil || parent.Hash() != block.ParentHash() {",
-      "replacement": "\tif parent.Hash() != block.ParentHash() {"
+      "original": "\tif parent == nil {\n\t\treturn nil, fmt.Errorf(\"%w: no parent header",
+      "replacement": "\tif false {\n\t\treturn nil, fmt.Errorf(\"%w: no parent header"
     },
     {
       "name": "ancestor-nil-accepted",

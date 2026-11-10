@@ -434,8 +434,11 @@ func BlockItems(blockRLP []byte, block *types.Block, header func(uint64) *types.
 		return nil, fmt.Errorf("%w: block 0 has no parent", ErrStaticInput)
 	}
 	parent := header(n - 1)
-	if parent == nil || parent.Hash() != block.ParentHash() {
-		return nil, fmt.Errorf("%w: parent header of block %d", ErrStaticInput, n)
+	if parent == nil {
+		return nil, fmt.Errorf("%w: no parent header of block %d", ErrStaticInput, n)
+	}
+	if parent.Hash() != block.ParentHash() {
+		return nil, fmt.Errorf("%w: parent header of block %d has another hash", ErrStaticInput, n)
 	}
 	ancestors := []*types.Header{}
 	for number := n - 1; n >= 2 && number > AncestorFloor(n); {
