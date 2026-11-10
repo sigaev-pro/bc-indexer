@@ -265,7 +265,7 @@
       "name": "parent-header-item-is-ancestors",
       "file": "bsc_inputs.go",
       "original": "{Name: \"parent-header-rlp\", Data: parentRLP}",
-      "replacement": "{Name: \"parent-header-rlp\", Data: ancestorsRLP}"
+      "replacement": "{Name: \"parent-header-rlp\", Data: append(ancestorsRLP, parentRLP[:0]...)}"
     },
     {
       "name": "parent-root-item-zeroed",
@@ -286,10 +286,10 @@
       "replacement": "{Name: \"normalization-profile\", Data: []byte(StateProfile)}"
     },
     {
-      "name": "snapshot-item-dropped",
+      "name": "snapshot-item-emptied",
       "file": "bsc_inputs.go",
-      "original": "\t\t{Name: \"parlia-snapshot-keys\", Data: snapshot},\n",
-      "replacement": ""
+      "original": "{Name: \"parlia-snapshot-keys\", Data: snapshot}",
+      "replacement": "{Name: \"parlia-snapshot-keys\", Data: snapshot[:0]}"
     },
     {
       "name": "missing-item-unchecked",
@@ -475,7 +475,7 @@
       "name": "probe-declare-skipped",
       "file": "bsc_inputs_test.go",
       "original": "\tengineDB.Declare(keys)",
-      "replacement": "\tengineDB.Declare(nil)"
+      "replacement": "\tengineDB.Declare(keys[:0])"
     },
     {
       "name": "probe-preflight-skipped",

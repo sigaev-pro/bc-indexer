@@ -631,6 +631,24 @@ func TestUnitBSCStaticItems(t *testing.T) {
 		}
 	}
 
+	// Above a checkpoint, the BLOCKHASH window sets the floor: block 1025
+	// keeps 255 ancestors down to 769, and its checkpoint is the parent. A
+	// window without its lowest header is refused by its length alone.
+	long := unitHeaders(headers[0], 1025, common.Hash{9})
+	longItems := unitItems(t, long, genesis, 1025)
+	if static, err := DecodeStatic(longItems); err != nil || len(static.Ancestors) != 255 ||
+		static.Ancestors[254].Number.Uint64() != 769 || static.Snapshot.Checkpoint != 1024 {
+		t.Fatalf("block 1025: %v", err)
+	}
+	var short []*types.Header
+	for number := 1023; number >= 770; number-- {
+		short = append(short, long[number])
+	}
+	longItems["ancestor-headers-rlp"] = reencode(short)
+	if _, err := DecodeStatic(longItems); !errors.Is(err, ErrStaticInput) || !strings.Contains(err.Error(), "want 255") {
+		t.Errorf("short BLOCKHASH window: DecodeStatic = %v", err)
+	}
+
 	// An ancestor whose hash links but whose number does not is refused.
 	renumbered := *headers[1]
 	renumbered.Number = big.NewInt(7)
