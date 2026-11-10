@@ -95,13 +95,23 @@ A private native probe on the accepted BSC Parlia fixture shows:
 - resume and native-only replay hand Parlia the saved bytes. A tampered live
   snapshot breaks block 2 in the control but not in the replay.
 
-Evidence: [E01-02.inputs.bsc](evidence/E01-02.inputs.bsc.md). Preparation 01
-and measured run 01 at `943817f` PASS. Go mutant record 02 at `03e058b`
-killed 29 of 29. Record 01 had 2 BUILD_FAILED mutants from table bugs and is
-kept as a FAIL. The Python driver mutants killed 81 of 81.
+Main `9d14e96` (the Bor block, PR #140) was merged into this branch at
+`bd323fc`, as the coordinator asked. It adds only Bor files.
 
-Next: independent Spec and Standards review of the exact head and hosted
-`bootstrap/ci`. The coordinator then asks the owner for merge permission.
+Review 001 (heads `3ae655e` and `bd323fc`): Spec and Standards both returned
+REQUEST_CHANGES with no P1 finding. The findings were five P2 items (missing
+controls, the record of an interrupted mutant, unstated boundary limits, the
+replay wording) and P3 notes. Commit `0cce068` fixes the code and the
+evidence file fixes the documents.
+
+Evidence: [E01-02.inputs.bsc](evidence/E01-02.inputs.bsc.md). At `0cce068`,
+preparation 02 and measured run 02 PASS. Go mutant record 03 killed 35 of 35,
+and the Python driver mutants killed 98 of 98. The records at `943817f` and
+`03e058b` are kept, including Go mutant record 01 (FAIL: 2 BUILD_FAILED
+mutants from table bugs).
+
+Next: Spec and Standards review of the new head and hosted `bootstrap/ci`. The
+coordinator then asks the owner for merge permission.
 
 ## E01-02.inputs — Bor block
 
