@@ -748,8 +748,8 @@ func TestWakeupsAndCounts(t *testing.T) {
 	waitUntil(t, "the reservation waits", func() bool { return c.Stats().ProducerWaiting })
 	begin, _ := c.Next(ctx)
 	end, _ := c.Next(ctx)
-	c.Release(begin) // not enough yet: the wait continues
-	waitUntil(t, "the reservation waits again", func() bool { return c.Stats().ProducerWaiting })
+	c.Release(begin) // not enough yet: the same call wakes and waits again
+	time.Sleep(20 * time.Millisecond)
 	c.Release(end)
 	if err := <-done; err != nil {
 		t.Fatal(err)

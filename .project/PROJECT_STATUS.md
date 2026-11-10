@@ -2,17 +2,46 @@
 
 ## E01-02.owned_capture — Owned capture seam with bounded memory (issue #15)
 
-Status: IN_PROGRESS. Block outcome: the dependency-free Go module `core/capture`
-(immutable owned frames, BEGIN_FIELD/CHUNK/END_FIELD with sequence, length and
-SHA-256 digest, a fixed byte budget, safe-point waits that a callback can never
-enter, and callback notes that spend credit reserved at a safe point), plus a
-private native probe that runs the module inside the accepted Geth, BSC and Bor
-block-import paths. Allowed paths: `core/capture`, the probe under
-`test/harness`, and status documents. `adapters/<client>/state_provider` and the
-harness tooling files stay untouched. Required checks: Go unit tests with the
-race detector in the accepted compiler image, compiling single-check mutants,
-one measured private probe run per family, independent Spec and Standards review.
-Runtime results stay NOT_RUN until that evidence exists.
+Status: READY_FOR_REVIEW in a draft PR; #15 stays open. The block delivers the
+dependency-free Go module `core/capture` (immutable frames,
+BEGIN_FIELD/CHUNK/END_FIELD with sequence, offset, length and SHA-256, one
+fixed byte budget, safe-point waits that a callback can never enter, callback
+notes paid from credit reserved at a safe point, fail-closed errors) and a
+private native probe, `test/harness/capture_probe.py`, that runs the module
+inside the accepted Geth, BSC and Bor block import. Executed source `cd60d53`:
+preparation 08 passed in 467.473 seconds (unit tests with the race detector in
+the pinned compiler, 100.0% coverage) and measured run 03 passed all three
+families in 4.705 seconds of execution with complete cleanup. Five earlier
+preparations, run 01 (a Bor prefetcher reached the probe safe point) and three
+mutation records are retained as failures or superseded; see
+[the evidence](evidence/E01-02.owned_capture.md). Review 001 of `d2c51cc`:
+Spec PASS with notes, Standards REQUEST_CHANGES; the fixes are in `cd60d53`.
+All seven public profile slots stay NOT_RUN and no AC verdict is issued.
+
+BLOCKED_DECISION (owner), needed before #15 can close; independent work continues:
+
+1. Closure boundary for #15. The issue asks for every applicable mainnet and
+   testnet profile, and the corpus lists AC-CAP-05-01 and AC-CAP-06-02 for all
+   seven profiles in `local-e2e` mode. D96 set a private-fixture boundary only
+   for #12. This block's probe uses one Ethereum-style genesis with the ethash
+   faker for all three clients, so it runs each client's own interpreter and
+   `InsertChain` but not Parlia, Bor consensus, system transactions or
+   StateSync, and it writes no RunManifest. Options: a D96-style boundary for
+   #15 (private local probe evidence accepted for the seam, public slots
+   NOT_RUN with E06/E07, and whether the ethash-faker BSC and Bor runs count
+   for those families), or #15 stays open until family-native fixtures and
+   per-AC RunManifests exist.
+2. Owner of the product VM safe-point patch. TASK_DECOMPOSITION gives the
+   safe-point interface to E01-02.owned_capture and lists it as an input of
+   E04-04.import_pressure (`test/native_import`), but no adapter task names the
+   interpreter patch that calls it, or a wait inside the client's own block
+   loop. The probe's interpreter line is test-only.
+3. Owner of the raw spool writer. NATIVE_CAPTURE_PROTOCOL requires the
+   BEGIN_FIELD/CHUNK/END_FIELD raw spool; this block provides the in-memory
+   frames and leaves writing them to the worker. The module table assigns the
+   spool to `core/capture` and `core/normalization`. Confirm that the spool
+   encoder belongs to a later task (for example the AC-CAP-06-01 owner in E04)
+   and name it.
 
 Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93`.
 Branch/worktree: `feat/e01-02-owned-capture` / `e01-02-owned-capture-157133`.
