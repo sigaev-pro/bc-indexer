@@ -665,6 +665,7 @@ func TestUnitBSCStaticItems(t *testing.T) {
 	// BlockItems refuses a block without its parent or an ancestor header.
 	block := types.NewBlockWithHeader(headers[3])
 	for name, lookup := range map[string]func(uint64) *types.Header{
+		"missing parent":   func(number uint64) *types.Header { return nil },
 		"wrong parent":     func(number uint64) *types.Header { return headers[1] },
 		"missing ancestor": func(number uint64) *types.Header { return map[uint64]*types.Header{2: headers[2]}[number] },
 	} {
@@ -674,6 +675,33 @@ func TestUnitBSCStaticItems(t *testing.T) {
 	}
 	if _, err := BlockItems(nil, types.NewBlockWithHeader(headers[0]), nil, nil, genesis, ""); !errors.Is(err, ErrStaticInput) {
 		t.Errorf("block 0: BlockItems = %v", err)
+	}
+
+	// ReadStatic accepts only the static item names, once each, in order.
+	ordered := make([]Item, len(StaticItemNames))
+	for index, name := range StaticItemNames {
+		ordered[index] = Item{Name: name, Data: items[name]}
+	}
+	swapped := append([]Item{}, ordered...)
+	swapped[1], swapped[2] = swapped[2], swapped[1]
+	duplicated := append([]Item{}, ordered...)
+	duplicated[len(duplicated)-1] = ordered[0]
+	for name, capsule := range map[string][]Item{
+		"ordered": ordered, "swapped": swapped, "duplicated": duplicated,
+		"short": ordered[:len(ordered)-1], "extra": append(append([]Item{}, ordered...), Item{Name: "extra"}),
+	} {
+		db := rawdb.NewMemoryDatabase()
+		if _, err := SealCapsule(db, name, capsule); err != nil {
+			t.Fatal(err)
+		}
+		static, err := ReadStatic(db, name)
+		if name == "ordered" {
+			if err != nil || static.Block.NumberU64() != 3 {
+				t.Errorf("ordered: ReadStatic = %v", err)
+			}
+		} else if !errors.Is(err, ErrStaticInput) {
+			t.Errorf("%s: ReadStatic = %v", name, err)
+		}
 	}
 }
 

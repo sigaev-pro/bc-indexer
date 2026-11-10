@@ -777,8 +777,8 @@
     {
       "name": "declared has tag",
       "file": "test/harness/bsc_source_inputs.py",
-      "original": "in (GET_TAG, HAS_TAG) else None",
-      "replacement": "in (GET_TAG,) else None"
+      "original": "for tag in (GET_TAG, HAS_TAG) if request",
+      "replacement": "for tag in (GET_TAG,) if request"
     },
     {
       "name": "genesis header number",

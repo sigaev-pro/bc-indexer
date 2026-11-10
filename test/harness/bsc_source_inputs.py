@@ -357,7 +357,8 @@ def check_declared(rows, observation, items):
     declared = {bytes.fromhex(key) for key in json.loads(dict(items)["parlia-snapshot-keys"])["keys"]}
     for row in rows:
         request = bytes.fromhex(row["request_hex"])
-        key = request[len(GET_TAG):] if request[:len(GET_TAG)] in (GET_TAG, HAS_TAG) else None
+        tag = next((tag for tag in (GET_TAG, HAS_TAG) if request.startswith(tag)), None)
+        key = request[len(tag):] if tag else None
         require(key in declared, f"{observation}: a read of an undeclared key")
 
 

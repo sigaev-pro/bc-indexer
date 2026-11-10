@@ -488,6 +488,54 @@
       "file": "bsc_inputs_test.go",
       "original": "\t\tresult.Seed, err = SeedParent(db, store, static, options)",
       "replacement": "\t\tresult.Seed, err = SeedParent(db, store, static, SeedOptions{})"
+    },
+    {
+      "name": "snapshot-key-prefix-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif err != nil || !bytes.HasPrefix(data, []byte(SnapshotPrefix)) {",
+      "replacement": "\t\tif err != nil {"
+    },
+    {
+      "name": "block-zero-accepted",
+      "file": "bsc_inputs.go",
+      "original": "\tif n == 0 {\n\t\treturn nil, fmt.Errorf(\"%w: block 0 has no parent\", ErrStaticInput)",
+      "replacement": "\tif false {\n\t\treturn nil, fmt.Errorf(\"%w: block 0 has no parent\", ErrStaticInput)"
+    },
+    {
+      "name": "block-items-parent-hash-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif parent == nil || parent.Hash() != block.ParentHash() {",
+      "replacement": "\tif parent == nil {"
+    },
+    {
+      "name": "block-items-parent-nil-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif parent == nil || parent.Hash() != block.ParentHash() {",
+      "replacement": "\tif parent.Hash() != block.ParentHash() {"
+    },
+    {
+      "name": "ancestor-nil-accepted",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif ancestor == nil {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "missing-code-accepted",
+      "file": "bsc_inputs.go",
+      "original": "\t\t\tif len(blob) == 0 {\n\t\t\t\treturn fmt.Errorf(\"missing code %x\", hash)",
+      "replacement": "\t\t\tif false {\n\t\t\t\treturn fmt.Errorf(\"missing code %x\", hash)"
+    },
+    {
+      "name": "read-static-count-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\tif len(capsule.Items) != len(StaticItemNames) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "read-static-order-unchecked",
+      "file": "bsc_inputs.go",
+      "original": "\t\tif ref.Name != StaticItemNames[index] {",
+      "replacement": "\t\tif false {"
     }
   ]
 }

@@ -366,8 +366,10 @@ var (
 // of block n (n >= 2) may read through the chain: the Parlia snapshot walk
 // reads headers from the parent down to the checkpoint below it, and
 // BLOCKHASH reads the 256 most recent ancestors. The window is derived from
-// the pinned source; a read below it finds no header in a replay home and
-// fails the import.
+// the pinned source. It does not cover two other Parlia header reads: the
+// validator-switch lookback (FindAncientHeader), which fails the import with
+// an unknown ancestor when its header is missing, and the finalized header
+// (GetFinalizedHeader), which returns nil without an error.
 func AncestorFloor(n uint64) uint64 {
 	floor := (n - 1) / CheckpointInterval * CheckpointInterval
 	if n > BlockHashWindow && n-BlockHashWindow < floor {
@@ -397,6 +399,8 @@ func SnapshotFor(parent *types.Header, ancestors []*types.Header) (SnapshotDepen
 			return SnapshotDependency{Checkpoint: checkpoint, Keys: []string{hex.EncodeToString(SnapshotKey(header.Hash()))}}, nil
 		}
 	}
+	// Defensive: the floor never passes the checkpoint, so the window that
+	// the callers check always holds the checkpoint header.
 	return SnapshotDependency{}, fmt.Errorf("%w: no header of checkpoint %d", ErrStaticInput, checkpoint)
 }
 
@@ -492,8 +496,14 @@ func ReadStatic(db Store, id string) (Static, error) {
 	if err != nil {
 		return Static{}, err
 	}
+	if len(capsule.Items) != len(StaticItemNames) {
+		return Static{}, fmt.Errorf("%w: %d capsule items, want %d", ErrStaticInput, len(capsule.Items), len(StaticItemNames))
+	}
 	items := make(map[string][]byte, len(capsule.Items))
 	for index, ref := range capsule.Items {
+		if ref.Name != StaticItemNames[index] {
+			return Static{}, fmt.Errorf("%w: capsule item %d is %q, want %q", ErrStaticInput, index, ref.Name, StaticItemNames[index])
+		}
 		if items[ref.Name], err = ReadItem(db, id, index); err != nil {
 			return Static{}, err
 		}
@@ -585,8 +595,11 @@ type SeedReport struct {
 //     capsule's parent header, and each state node and code must match its
 //     hash.
 //
-// Every check fails closed: SeedParent writes nothing before the headers
-// check, and the caller must run CheckParentState before execution.
+// Every check fails closed. SeedParent writes nothing before the genesis and
+// total difficulty checks. It writes the headers, total difficulty and
+// canonical marks before it checks the body and the state, so after an error
+// the home is partly seeded and the caller must discard it. The caller must
+// also run CheckParentState before execution.
 func SeedParent(home, pin ethdb.Database, static Static, options SeedOptions) (SeedReport, error) {
 	var report SeedReport
 	parent := static.Parent
@@ -663,6 +676,10 @@ func SeedParent(home, pin ethdb.Database, static Static, options SeedOptions) (S
 		}
 	}
 	if !options.WithholdHeaders {
+		// The three head markers are written as a native import of the parent
+		// leaves them. BlockChain reads the head block marker; the header and
+		// fast-block markers keep the home consistent and are not needed on
+		// this fixture.
 		rawdb.WriteHeadHeaderHash(home, parent.Hash())
 		rawdb.WriteHeadBlockHash(home, parent.Hash())
 		rawdb.WriteHeadFastBlockHash(home, parent.Hash())
@@ -671,9 +688,8 @@ func SeedParent(home, pin ethdb.Database, static Static, options SeedOptions) (S
 }
 
 // CheckParentState fails unless the home holds every node and code of the
-// parent state. The native import would otherwise fail later, or a
-// different pruning profile could make it read state the pin no longer
-// protects; this check stops the replay before execution.
+// parent state. The native import reads the parent state during execution,
+// so a home without it must stop before execution.
 func CheckParentState(home ethdb.Database, root common.Hash) error {
 	err := walkState(home, root, func(common.Hash, []byte) error { return nil },
 		func(common.Hash, []byte) error { return nil })
