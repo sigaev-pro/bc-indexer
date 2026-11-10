@@ -53,7 +53,9 @@ hazards outside this block's evidence.
 
 ## E01-02.owned_capture — Owned capture seam with bounded memory (issue #15)
 
-Status: READY_FOR_REVIEW in a draft PR; #15 stays open. The block delivers the
+Status: first block ACCEPTED in PR #134 at merge
+`4c2abb20b3ef42f4388e93403b323cfd5277ff7f` from reviewed head `14c315a`;
+follow-up block IN_PROGRESS (see below); #15 stays open. The block delivers the
 dependency-free Go module `core/capture` (immutable frames,
 BEGIN_FIELD/CHUNK/END_FIELD with sequence, offset, length and SHA-256, one
 fixed byte budget, safe-point waits that a callback can never enter, callback
@@ -94,32 +96,40 @@ BLOCKED_DECISION (owner), needed before #15 can close; independent work continue
    encoder belongs to a later task (for example the AC-CAP-06-01 owner in E04)
    and name it.
 
-Mutation record 05 of `4f1154a` (90 compiled, 89 killed, one equivalent
-survivor) completed before a host shutdown on 2026-11-10; work resumed
-afterwards without a new mutation run. Next: exact-head `bootstrap/ci`, Spec
-and Standards re-review of draft PR #134, then report READY to the
-coordinator, who merges.
+Mutation record 05 of `4f1154a` compiles all 90 mutants and kills 89; the
+survivor is equivalent.
 
-Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93`.
-Branch/worktree: `feat/e01-02-owned-capture` / `e01-02-owned-capture-157133`.
+Follow-up block (branch `feat/e01-02-owned-capture-followup` from
+`4c2abb2`): corrects the shared-host window in the evidence (the pins
+session's corrected window overlapped preparation 08 but not run 03), closes
+the P3 notes of the final review (`capture_probe.py` blocks stop signals before
+the output exists and reads the oracle once; accurate wording for `4f1154a`)
+and marks the E01-01.harness section accepted. Because `capture_probe.py`
+changed, measured run 04 ran preparation 08 with the tool at `93c7470` and
+passed all three families in 6.147 seconds of execution. Review of `93c7470`
+returned Spec and Standards PASS; Standards reproduced a remaining stop window
+at the start of `finally`, now closed by retrying the record write. Measured
+run 05 of that tool at `4da6fec` passed all three families in 5.918 seconds of
+execution with complete cleanup. Next: re-review, exact-head CI, then READY to
+the coordinator.
+
+Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93` (first block),
+`4c2abb20b3ef42f4388e93403b323cfd5277ff7f` (follow-up).
+Branch/worktree: `feat/e01-02-owned-capture`, then
+`feat/e01-02-owned-capture-followup` / `e01-02-owned-capture-157133`.
 
 ## E01-01.harness — NATS settle check uses pinned raftz names
 
-Status: READY_FOR_REVIEW. This is the last open #12 item: the PR #128 follow-up
+Status: ACCEPTED in PR #130 at merge `f8d3e67d2aa936adaa69316ed268523a549c7e93`
+from reviewed head `7edd9e0` (2026-11-09T22:15:35Z). This was the last open #12 item: the PR #128 follow-up
 in which the Go `settled()` polling filter read raftz `catchup` and
 `write_error`, while pinned NATS (`server/monitor.go` `RaftzGroup`) names them
-`catching_up` and `wal_error`. Executed source `803d468` read the pinned names
-and added direct Go controls; preparation and attempt 07 passed. Reviews of head
-`07c46d5` returned Spec and Standards PASS with P3 notes. Executed source
-`ed723a4` closes the Go notes (all queue fields, a follower naming another
-leader, agreed non-numeric or missing indexes, JSZ status, the native WAL error
-shape, the source path). Retained mutation record 09 compiles all 40
-mutants first (`go vet`) and the tests kill 38, with two pre-labeled equivalent
-survivors; record 08 counted 10 compile failures as kills and is superseded. Preparation 08 passed in 56.826 seconds and
-measured attempt 08 (new lineage, `attempt_index` 1) passed both topologies in
-9.064 seconds with complete cleanup. Next: exact-head CI, fresh Spec and
-Standards reviews, protected acceptance; after that, close #12 under D96 and
-start E01-02.
+`catching_up` and `wal_error`. Executed source `ed723a4`; retained mutation
+record 09 compiles all 40 mutants and the tests kill 38, with two pre-labeled
+equivalent survivors. Preparation 08 passed in 56.826 seconds and measured
+attempt 08 passed both topologies in 9.064 seconds with complete cleanup.
+Issue #12 closed under D96 on 2026-11-09T22:15:49Z after PRs #128, #129 and
+#130; E01-02 has started.
 
 Base: `c60591bba17fce65e02af4f577146e2374b938bf`.
 Branch/worktree: `feat/e01-harness-raftz-fields` / `e01-harness-raftz-fields`.
