@@ -32,13 +32,17 @@ Table fields:
   import          for Python: module names to import after compiling
                   (default: the mutated file's module name)
   timeout_seconds per command (default 300)
-
-A command that exceeds its timeout is stopped with its whole process tree,
-including children that started their own session; a mutant whose tree cannot
-be removed is CLEANUP_FAILED and fails the tool. A process that detaches and
-is orphaned before its command ends normally is outside this tracking.
+  description     optional free text
   mutants         list of {name, file, original, replacement, equivalent?};
                   an empty replacement deletes the fragment
+
+A command that exceeds its timeout is stopped with its whole process tree,
+including children that started their own session; a mutant or baseline whose
+tree cannot be removed is CLEANUP_FAILED and fails the tool. When a command
+ends on its own, leftovers in its process group are killed. Limitation: a
+child that started its own session and is still running when its command ends
+normally is neither killed nor reported, because it is no longer linked to the
+command.
 """
 
 import argparse
@@ -161,6 +165,7 @@ def process_tree(root_pid):
 def exited_unreaped(process):
     """Report whether the child exited without reaping it."""
     event = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    # Darwin can report CLD_STOPPED even though WSTOPPED was not requested.
     return event is not None and event.si_pid == process.pid and event.si_code in (
         os.CLD_EXITED, os.CLD_KILLED, os.CLD_DUMPED)
 
@@ -171,25 +176,32 @@ def alive(pid):
 
 
 def stop_tree(process):
-    """Stop, then kill, the command's group and every descendant; return survivors."""
+    """Stop, then kill, the command and every descendant; return survivors.
+
+    The command's group is stopped first so it cannot fork during the scan,
+    then each descendant is stopped. Just before SIGKILL the tree is read
+    again and only processes that are still descendants are signaled, so a
+    PID that was reused after the first scan is never touched. The unreaped
+    leader is killed directly as well as through its group.
+    """
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(process.pid, signal.SIGSTOP)
-    tree = {}
-    for _ in range(2):
-        for pid, group in process_tree(process.pid):
-            tree[pid] = group
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                os.kill(pid, signal.SIGSTOP)
-    groups = {process.pid} | {group for group in tree.values() if group in tree}
-    for group in groups:
+    seen = set()
+    for pid, _ in process_tree(process.pid):
+        seen.add(pid)
         with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(group, signal.SIGKILL)
-    for pid in tree:
+            os.kill(pid, signal.SIGSTOP)
+    for pid, _ in process_tree(process.pid):
+        seen.add(pid)
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.kill(pid, signal.SIGKILL)
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, signal.SIGKILL)
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.kill(process.pid, signal.SIGKILL)
     process.wait()
     deadline = time.monotonic() + 5
-    remaining = sorted(tree)
+    remaining = sorted(seen)
     while remaining and time.monotonic() < deadline:
         remaining = [pid for pid in remaining if alive(pid)]
         if remaining:

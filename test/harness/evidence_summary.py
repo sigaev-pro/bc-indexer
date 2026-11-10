@@ -10,7 +10,9 @@ The tool only reads. It verifies every absolute artifact reference (an object
 with `path`, `sha256` and `size_bytes`) in the run proof, in each previous
 attempt the proof cites, among the top-level references of each JSON document
 (up to 1 MiB) the proof references directly and, for a runner run, in each
-child proof. Any missing
+child proof. A runner D83 retry pins its first run only by run ID and SHA256;
+the tool verifies that record when it finds it among sibling run directories
+and otherwise reports it as not located. Any missing
 file, size or hash mismatch, or conflicting reference fails closed: the tool
 prints the problems to standard error, prints no summary and exits 1. Exit 2
 means the directory is not a recognized run or its proof is malformed.
@@ -264,6 +266,38 @@ def lineage(proof, verifier):
     return chain
 
 
+def runner_retry(proof, run, verifier):
+    """Describe a local runner D83 retry, which pins its first run by run ID and SHA256 only.
+
+    The record keeps no path, so the first run's record is searched among
+    sibling run directories. A record found by SHA256 must carry the pinned run
+    ID; a record that cannot be found is reported as not located.
+    """
+    attempt = proof.get("attempt")
+    if type(attempt) is not dict or set(attempt) == {"attempt_index"}:
+        return None
+    fields = ("attempt_index", "first_run_id", "first_run_sha256", "retry_reason")
+    if (set(attempt) != set(fields) or type(attempt["attempt_index"]) is not int
+            or not all(type(attempt[key]) is str for key in fields[1:])):
+        raise FormatError("runner retry attempt needs attempt_index, first_run_id, first_run_sha256 and retry_reason")
+    located = None
+    for candidate in sorted(run.parent.glob("*/run/run-record.json")):
+        if candidate.parent.parent == run:
+            continue
+        try:
+            sha256, _ = digest(candidate)
+        except OSError:
+            continue
+        if sha256 == attempt["first_run_sha256"]:
+            located = candidate
+            first = load_json(candidate)
+            if type(first) is not dict or first.get("run_id") != attempt["first_run_id"]:
+                verifier.problems.append(f"first run record {candidate} does not carry run ID {attempt['first_run_id']}")
+            break
+    return {"first_run_id": attempt["first_run_id"], "first_run_sha256": attempt["first_run_sha256"],
+            "retry_reason": attempt["retry_reason"], "located": located}
+
+
 def attempt_index(document):
     if type(document.get("attempt")) is dict:
         return document["attempt"].get("attempt_index")
@@ -366,6 +400,7 @@ def summarize(run, test_logs=()):
         "runtime_admitted": proof.get("runtime_admitted"), "public_profiles": proof.get("public_profiles"),
         "resolution_sha256": proof.get("resolution_sha256"), "teardown": proof.get("teardown"),
         "top_references": top, "references": survey, "lineage": lineage(proof, verifier),
+        "runner_retry": runner_retry(proof, run, verifier),
         "commands": command_rows(proof, verifier), "phases": phase_rows(proof),
         "children": child_rows(proof, verifier), "cases": case_rows(proof),
         "launchers": launcher_records(run), "test_logs": [],
@@ -418,12 +453,20 @@ def render(summary):
         deadline = f" (deadline {summary['deadline_seconds']} s)" if summary["deadline_seconds"] is not None else ""
         lines.append(f"- Elapsed {number(summary['elapsed_seconds'])} seconds{deadline}")
     chain = summary["lineage"]
-    if chain:
+    retry = summary["runner_retry"]
+    if retry is not None:
+        where = (f"verified at `{retry['located'].parent.parent.name}`" if retry["located"] is not None
+                 else "not located among sibling runs, so not verified")
+        lines.append(f"- Attempt index {summary['attempt_index']}; D83 retry of first run `{retry['first_run_id']}` "
+                     f"(record SHA256 `{retry['first_run_sha256']}`, {where}); reason: {retry['retry_reason']}")
+    elif chain:
         history = "; ".join(f"`{Path(entry['path']).parent.name}` {entry['result']} attempt {entry['attempt_index']} "
                             f"(`{entry['sha256']}`)" for entry in chain)
         lines.append(f"- Attempt index {summary['attempt_index']}; previous attempts, newest first: {history}")
-    else:
+    elif summary["attempt_index"] in (1, None):
         lines.append(f"- Attempt index {summary['attempt_index']}; new lineage (no previous attempt)")
+    else:
+        lines.append(f"- Attempt index {summary['attempt_index']}; the proof links no previous attempt")
     if summary["correction"] is not None:
         lines.append(f"- Correction: {summary['correction']}")
     for key, label in (("cleanup_complete", "Cleanup complete"), ("runtime_admitted", "Runtime admitted"),

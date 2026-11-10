@@ -242,6 +242,12 @@ class MutateTests(unittest.TestCase):
             time.sleep(0.05)
         self.assertFalse(mutate.alive(int(marker.read_text())), "a same-group child outlived its finished command")
 
+    def test_a_stopped_command_is_not_a_finished_command(self):
+        environment = mutate.Session(*mutate.load_table(self.table([LOW]))).environment
+        result = mutate.run([sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGSTOP)"],
+                            self.code, environment, 2)
+        self.assertEqual((result["timed_out"], result["exit_code"], result["survivors"]), (True, None, []))
+
     def test_surviving_processes_fail_the_mutant_and_the_baseline(self):
         spawner = ["{python}", "-c", "import calc, subprocess, sys, time\n"
                    "if calc.clamp(5, 0, 10) != 5:\n"

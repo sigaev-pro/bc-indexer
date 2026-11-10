@@ -184,6 +184,36 @@
       "file": "evidence_summary.py",
       "original": "    for line in ANSI.sub(\"\", text).splitlines():",
       "replacement": "    for line in text.splitlines():"
+    },
+    {
+      "name": "runner retry detection",
+      "file": "evidence_summary.py",
+      "original": "    if type(attempt) is not dict or set(attempt) == {\"attempt_index\"}:\n        return None",
+      "replacement": "    if True:\n        return None"
+    },
+    {
+      "name": "runner retry fields",
+      "file": "evidence_summary.py",
+      "original": "    if (set(attempt) != set(fields) or type(attempt[\"attempt_index\"]) is not int",
+      "replacement": "    if (False or type(attempt[\"attempt_index\"]) is not int"
+    },
+    {
+      "name": "first run ID check",
+      "file": "evidence_summary.py",
+      "original": "            if type(first) is not dict or first.get(\"run_id\") != attempt[\"first_run_id\"]:",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "first run located",
+      "file": "evidence_summary.py",
+      "original": "            located = candidate\n",
+      "replacement": ""
+    },
+    {
+      "name": "unlinked later attempt",
+      "file": "evidence_summary.py",
+      "original": "    elif summary[\"attempt_index\"] in (1, None):",
+      "replacement": "    elif True:"
     }
   ]
 }

@@ -143,12 +143,6 @@
       "replacement": "            if False:\n                return {\"status\": \"BASELINE_CLEANUP_FAILED\""
     },
     {
-      "name": "detached descendants",
-      "file": "mutate.py",
-      "original": "        for pid, group in process_tree(process.pid):\n            tree[pid] = group",
-      "replacement": "        for pid, group in []:\n            tree[pid] = group"
-    },
-    {
       "name": "survivor check",
       "file": "mutate.py",
       "original": "        remaining = [pid for pid in remaining if alive(pid)]",
@@ -237,6 +231,18 @@
       "file": "mutate.py",
       "original": "    if type(table) is not dict:\n        raise TableError",
       "replacement": "    if False:\n        raise TableError"
+    },
+    {
+      "name": "detached descendants",
+      "file": "mutate.py",
+      "original": "    for pid, _ in process_tree(process.pid):\n        seen.add(pid)\n        with contextlib.suppress(ProcessLookupError, PermissionError):\n            os.kill(pid, signal.SIGKILL)",
+      "replacement": "    for pid, _ in []:\n        seen.add(pid)\n        with contextlib.suppress(ProcessLookupError, PermissionError):\n            os.kill(pid, signal.SIGKILL)"
+    },
+    {
+      "name": "stopped is not exited",
+      "file": "mutate.py",
+      "original": " and event.si_code in (\n        os.CLD_EXITED, os.CLD_KILLED, os.CLD_DUMPED)",
+      "replacement": ""
     }
   ]
 }

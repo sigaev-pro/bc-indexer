@@ -99,14 +99,14 @@ class Fixture:
         (self.root / (name + ".exit")).write_text("0\n")
         return run
 
-    def runner(self):
-        run = self.root / "local-runner-01-abc"
+    def runner(self, name="local-runner-01-abc", attempt=None):
+        run = self.root / name
         child = write_json(run / "run" / "children" / "eth" / "proof.json",
                            {"kind": "child", "input": reference(write_json(self.root / "child-input.json", {}))})
         plan = write_json(run / "plan" / "plan.json", {"plan": 1})
         admission = write_json(run / "run" / "admission.json", {"kind": "admission", "plan": reference(plan)})
         record = {"kind": "local-native-seam-run", "result": "PASS", "run_id": "r2", "error": None,
-                  "attempt": {"attempt_index": 1}, "admission": reference(admission),
+                  "attempt": attempt or {"attempt_index": 1}, "admission": reference(admission),
                   "resolution_sha256": "a" * 64,
                   "phases": {"preparation": {"deadline_seconds": 900, "started_at": "2026-11-09T18:58:57.744721Z",
                                              "finished_at": "2026-11-09T18:58:58.277276Z"},
@@ -273,6 +273,50 @@ class EvidenceSummaryTests(unittest.TestCase):
                          "Teardown: cleanup_complete true, foreign_harness_containers 0.",
                          f"Resolution SHA256: `{'a' * 64}`"):
             self.assertIn(expected, output)
+
+    def test_runner_retry_reports_and_verifies_its_first_run(self):
+        first = self.fixture.runner()
+        record = first / "run" / "run-record.json"
+        retry = {"attempt_index": 2, "first_run_id": "r2", "first_run_sha256": reference(record)["sha256"],
+                 "retry_reason": "Diagnostic retry after a transient failure."}
+        second = self.fixture.runner("local-runner-02-abc", attempt=retry)
+        code, output, _ = run_tool(second)
+        self.assertEqual(code, 0)
+        self.assertIn("- Attempt index 2; D83 retry of first run `r2` (record SHA256 "
+                      f"`{retry['first_run_sha256']}`, verified at `local-runner-01-abc`); "
+                      "reason: Diagnostic retry after a transient failure.", output)
+        self.assertNotIn("new lineage", output)
+
+    def test_runner_retry_with_a_wrong_or_missing_first_run(self):
+        first = self.fixture.runner()
+        sha256 = reference(first / "run" / "run-record.json")["sha256"]
+        retry = {"attempt_index": 2, "first_run_id": "another", "first_run_sha256": sha256,
+                 "retry_reason": "Diagnostic retry after a transient failure."}
+        second = self.fixture.runner("local-runner-02-abc", attempt=retry)
+        code, output, errors = run_tool(second)
+        self.assertEqual((code, output), (1, ""))
+        self.assertIn("does not carry run ID another", errors)
+        write_json(second / "run" / "run-record.json",
+                   dict(json.loads((second / "run" / "run-record.json").read_text()),
+                        attempt=dict(retry, first_run_id="r2", first_run_sha256="0" * 64)))
+        code, output, _ = run_tool(second)
+        self.assertEqual(code, 0)
+        self.assertIn("not located among sibling runs, so not verified", output)
+
+    def test_malformed_runner_retry_is_an_error(self):
+        for attempt in ({"attempt_index": 2, "first_run_id": "r1"},
+                        {"attempt_index": "2", "first_run_id": "r1", "first_run_sha256": "0" * 64, "retry_reason": "x"},
+                        {"attempt_index": 2, "first_run_id": 1, "first_run_sha256": "0" * 64, "retry_reason": "x"}):
+            with self.subTest(attempt=attempt), tempfile.TemporaryDirectory() as temporary:
+                run = Fixture(temporary).runner(attempt=attempt)
+                self.assertEqual(run_tool(run)[0], 2)
+
+    def test_unlinked_later_attempt_is_not_called_a_new_lineage(self):
+        run = self.fixture.nats_run(attempt=3)
+        code, output, _ = run_tool(run)
+        self.assertEqual(code, 0)
+        self.assertIn("- Attempt index 3; the proof links no previous attempt", output)
+        self.assertNotIn("new lineage", output)
 
     def test_runner_child_and_nested_references_fail_closed(self):
         for target in ("child-input.json", "plan/plan.json"):
