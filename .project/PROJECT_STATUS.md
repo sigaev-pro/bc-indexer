@@ -43,6 +43,19 @@ BLOCKED_DECISION (owner), needed before #15 can close; independent work continue
    encoder belongs to a later task (for example the AC-CAP-06-01 owner in E04)
    and name it.
 
+Resume point (paused for a host shutdown on 2026-11-10): draft PR #134, head
+before this note `4f1154a`. In progress: mutation record 05 of `core/capture`
+(`e01-02-owned-capture-mutants-05-4f1154a`, host Go, no Docker). The shutdown
+may cut it off; keep it as an interrupted attempt under D83 and start record 06
+with `python3 -I <record>/mutate.py . <full head sha> <record>/mutants.json`.
+No preparation or measured run was active. Next steps: fill the mutation
+section of the evidence file (it still has a placeholder) and note that the
+E01-02.pins session ran Docker builds outside the host lock from about
+23:00Z to 00:55Z, overlapping preparation 08 and run 03, so their timings
+come from a shared host; then check exact-head `bootstrap/ci`, rerun the Spec
+and Standards reviewers on the new head, fix their findings, and post the
+review summary comment. Do not merge or mark the PR ready.
+
 Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93`.
 Branch/worktree: `feat/e01-02-owned-capture` / `e01-02-owned-capture-157133`.
 
