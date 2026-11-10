@@ -353,12 +353,37 @@ class RunRefusalTest(ProbeFixture):
         self.assertEqual((written["result"], written["deferred_signals"]), ("FAIL", [signal.SIGTERM]))
         self.assertIn("signal", written["error"])
 
+    def test_signal_at_the_start_of_finally_still_writes_the_record(self):
+        # A stop that raises before finish_record blocks stops is retried, not lost.
+        capture_probe.STOPS.update({"raise": True, "deferred": []})
+        real = capture_probe.finish_record
+        calls = []
+
+        def interrupted_once(*args):
+            calls.append(1)
+            if len(calls) == 1:
+                capture_probe.stop(signal.SIGTERM, None)  # raises while stops are still allowed
+            return real(*args)
+
+        path = self.root / "finally.json"
+        with mock.patch.object(capture_probe, "finish_record", side_effect=interrupted_once):
+            capture_probe.write_until_done(path, {"result": "PASS"}, None, 0)
+        capture_probe.signal.pthread_sigmask(capture_probe.signal.SIG_UNBLOCK, capture_probe.STOP_SIGNALS)
+        written = json.loads(path.read_text())
+        self.assertEqual(len(calls), 2)
+        self.assertEqual((written["result"], written["deferred_signals"]), ("FAIL", [signal.SIGTERM]))
+
     def test_signal_seen_while_blocked_stops_at_unblock(self):
         capture_probe.STOPS.update({"raise": False, "deferred": []})
         capture_probe.stop(signal.SIGHUP, None)
         with self.assertRaises(capture_probe.Interrupted):
             capture_probe.unblock_stops()
         capture_probe.STOPS.update({"raise": False, "deferred": []})
+
+    def test_main_reports_a_late_stop_as_json(self):
+        with mock.patch.object(capture_probe, "run", side_effect=capture_probe.Interrupted("signal 15")):
+            self.assertEqual(capture_probe.main(["run", str(self.preparation), "--sha256", "0" * 64,
+                                                 "--output", str(self.root / "late")]), 2)
 
     def test_signal_mask_is_restored(self):
         before = capture_probe.signal.pthread_sigmask(capture_probe.signal.SIG_BLOCK, ())

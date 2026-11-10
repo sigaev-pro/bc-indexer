@@ -54,10 +54,12 @@ session's corrected window overlapped preparation 08 but not run 03), closes
 the P3 notes of the final review (`capture_probe.py` blocks stop signals before
 the output exists and reads the oracle once; accurate wording for `4f1154a`)
 and marks the E01-01.harness section accepted. Because `capture_probe.py`
-changed, measured run 04 ran preparation 08 with the changed tool at
-`93c7470` and passed all three families in 6.147 seconds of execution with
-complete cleanup. Next: Spec and Standards review, exact-head CI, then READY to
-the coordinator.
+changed, measured run 04 ran preparation 08 with the tool at `93c7470` and
+passed all three families in 6.147 seconds of execution. Review of `93c7470`
+returned Spec and Standards PASS; Standards reproduced a remaining stop window
+at the start of `finally`, now closed by retrying the record write. That tool
+change needs measured run 05. Next: run 05, re-review, exact-head CI, then
+READY to the coordinator.
 
 Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93` (first block),
 `4c2abb20b3ef42f4388e93403b323cfd5277ff7f` (follow-up).
@@ -67,7 +69,7 @@ Branch/worktree: `feat/e01-02-owned-capture`, then
 ## E01-01.harness — NATS settle check uses pinned raftz names
 
 Status: ACCEPTED in PR #130 at merge `f8d3e67d2aa936adaa69316ed268523a549c7e93`
-(2026-11-09T22:15:35Z). This was the last open #12 item: the PR #128 follow-up
+from reviewed head `7edd9e0` (2026-11-09T22:15:35Z). This was the last open #12 item: the PR #128 follow-up
 in which the Go `settled()` polling filter read raftz `catchup` and
 `write_error`, while pinned NATS (`server/monitor.go` `RaftzGroup`) names them
 `catching_up` and `wal_error`. Executed source `ed723a4`; retained mutation

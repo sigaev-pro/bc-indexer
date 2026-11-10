@@ -50,20 +50,21 @@ class Interrupted(BaseException):
     """A stop signal arrived; the record is still written."""
 
 
-# While stops are blocked, the handler only records a signal; it never raises
-# inside the code that creates the output or writes the record.
+# The handler always records a signal. It raises only while stops are allowed,
+# that is, inside the try of prepare() and run(); the record is written by
+# write_until_done(), which retries if a signal raises before stops are blocked.
 STOPS = {"raise": False, "deferred": []}
 
 
 def stop(signum, frame):
+    STOPS["deferred"].append(signum)
     if STOPS["raise"]:
         raise Interrupted(f"signal {signum}")
-    STOPS["deferred"].append(signum)
 
 
 def block_stops():
-    signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
     STOPS["raise"] = False
+    signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
 
 
 def unblock_stops():
@@ -72,6 +73,16 @@ def unblock_stops():
     signal.pthread_sigmask(signal.SIG_UNBLOCK, STOP_SIGNALS)
     if STOPS["deferred"]:
         raise Interrupted(f"signal {STOPS['deferred'][0]}")
+
+
+def write_until_done(path, record, native, started):
+    """Write the record even if a stop raises before finish_record blocks stops."""
+    while True:
+        try:
+            finish_record(path, record, native, started)
+            return
+        except Interrupted:
+            continue
 
 
 def finish_record(path, record, native, started):
@@ -217,7 +228,7 @@ def prepare(manifest_path, expected_sha, output):
         except (Interrupted, Exception) as error:
             record["error"] = f"{type(error).__name__}: {error}"
         finally:
-            finish_record(output / "preparation.json", record, native, started)
+            write_until_done(output / "preparation.json", record, native, started)
     return output, record
 
 
@@ -414,7 +425,7 @@ def run(preparation_path, expected_sha, output):
         except (Interrupted, Exception) as error:
             record["error"] = f"{type(error).__name__}: {error}"
         finally:
-            finish_record(output / "run-record.json", record, native, started)
+            write_until_done(output / "run-record.json", record, native, started)
     return output, record
 
 
@@ -435,7 +446,7 @@ def main(argv=None):
             path, record = prepare(args.build_manifest, args.sha256, args.output)
         else:
             path, record = run(args.preparation, args.sha256, args.output)
-    except Exception as error:
+    except (Interrupted, Exception) as error:
         print(json.dumps({"valid": False, "error": f"{type(error).__name__}: {error}"}))
         return 2
     print(json.dumps({"result": record["result"], "output": str(path), "error": record.get("error")}))
