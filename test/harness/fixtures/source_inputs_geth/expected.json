@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "family": "geth",
+  "observation": "geth-probe-obs-4",
+  "target": 4,
+  "requested_numbers": [
+    3,
+    1,
+    3
+  ],
+  "request_format": "geth-blockhash-v1 ref={ref} number={number}",
+  "poison_format": "changed external response {number}",
+  "capsule_items": [
+    "header-rlp",
+    "body-rlp",
+    "parent-hash",
+    "parent-root",
+    "chain-config",
+    "fork-id",
+    "native-commit",
+    "normalization-profile"
+  ],
+  "normalization_profile": "test-only-probe-v1",
+  "closed_error_prefix": "dependency log is closed",
+  "control_error": "invalid merkle root",
+  "scenarios": {
+    "clean_then_closed_replay": [
+      {
+        "name": "clean-1",
+        "kind": "complete",
+        "capsule_existed": false,
+        "frontier_at_open": 0,
+        "fetched": [
+          0,
+          1,
+          2
+        ],
+        "closes": true
+      },
+      {
+        "name": "clean-2-closed-replay",
+        "kind": "complete",
+        "capsule_existed": true,
+        "frontier_at_open": 3,
+        "fetched": [],
+        "closes": false
+      }
+    ],
+    "crash_after_seal": [
+      {
+        "name": "seal-1-crash",
+        "kind": "crash",
+        "point": "after_seal",
+        "handed": []
+      },
+      {
+        "name": "seal-2-retry",
+        "kind": "complete",
+        "capsule_existed": true,
+        "frontier_at_open": 0,
+        "fetched": [
+          0,
+          1,
+          2
+        ],
+        "closes": true
+      }
+    ],
+    "crash_before_handoff": [
+      {
+        "name": "handoff-1-crash",
+        "kind": "crash",
+        "point": "before_handoff",
+        "sequence": 1,
+        "handed": [
+          0
+        ]
+      },
+      {
+        "name": "handoff-2-retry",
+        "kind": "complete",
+        "capsule_existed": true,
+        "frontier_at_open": 2,
+        "fetched": [
+          2
+        ],
+        "closes": true
+      }
+    ],
+    "poisoned_log_replay": [
+      {
+        "name": "poisoned-1",
+        "kind": "complete",
+        "capsule_existed": false,
+        "frontier_at_open": 0,
+        "fetched": [
+          0,
+          1,
+          2
+        ],
+        "fetch_poisoned": true,
+        "saved": "poisoned",
+        "rejected": true
+      },
+      {
+        "name": "poisoned-2-replay",
+        "kind": "complete",
+        "capsule_existed": true,
+        "frontier_at_open": 3,
+        "fetched": [],
+        "saved": "poisoned",
+        "rejected": true
+      }
+    ],
+    "control_direct_poison": [
+      {
+        "name": "control-1",
+        "kind": "control"
+      }
+    ]
+  }
+}
