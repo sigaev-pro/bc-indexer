@@ -110,8 +110,16 @@ and the Python driver mutants killed 98 of 98. The records at `943817f` and
 `03e058b` are kept, including Go mutant record 01 (FAIL: 2 BUILD_FAILED
 mutants from table bugs).
 
-Next: Spec and Standards review of the new head and hosted `bootstrap/ci`. The
-coordinator then asks the owner for merge permission.
+Review 002 (head `b577212`): Standards PASS with two P3 notes. Spec
+REQUEST_CHANGES with one P2 on wording: the missing BSC capsule items (the
+parent header, the parent state root and the ancestor headers) stay open work
+of #14, not E01-02.admission. The evidence now says so.
+
+Remaining for #14 after this block: those BSC capsule items and the Geth
+block. The real EXEC_READY binding stays with E01-02.admission.
+
+Next: Spec review of the new head and hosted `bootstrap/ci`. The coordinator
+then asks the owner for merge permission.
 
 ## E01-02.inputs — Bor block
 
