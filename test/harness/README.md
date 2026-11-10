@@ -678,6 +678,51 @@ and `case_oracle_acceptance_belongs_to_ac_owner`. Oracle independence for the
 three accepted fixtures was reviewed with their family slices (PRs #122–#124);
 accepting an oracle for a case verdict stays with that AC's owner.
 
+## Owned capture probe (E01-02.owned_capture)
+
+[capture_probe.py](capture_probe.py) checks the [owned capture
+seam](../../core/capture/README.md) inside the accepted native import path of
+each family. It is test-only and separate from the D96 runner: it uses its own
+private fixture, writes no ProfileManifest, CaseResult, ReaderBoundaryManifest
+or RunManifest, and issues no AC verdict.
+
+```sh
+python3 -I test/harness/capture_probe.py prepare --build-manifest /abs/manifest.json \
+  --sha256 PIN --output /abs/new-preparation
+python3 -I test/harness/capture_probe.py run /abs/new-preparation/preparation.json \
+  --sha256 PREPARATION_PIN --output /abs/new-run
+```
+
+Preparation reads the pinned accepted BuildManifest, re-hashes each family's
+source archive and module closure, and extracts the source into its new output.
+It inserts one test-only line into `core/vm/interpreter.go`, before the opcode
+hook block, which calls a VM safe point only in traced execution (the native
+prefetchers clear the tracer and never reach it), and adds the probe under
+`cmd/extractor-capture-probe`. A `go.work` in an owned writable directory joins
+the client module with `core/capture`. The pinned compiler image runs
+`go mod verify` and `go build` offline with cgo, a read-only module cache and
+owned cache, temporary and output directories. It then runs the `core/capture`
+unit tests with the race detector. Preparation has a 3,600-second bound.
+
+The measured run executes each prepared binary in the pinned runtime image
+with no network, 2 CPUs, 1 GiB and a 300-second cap per family, inside a
+900-second total. Each probe generates three blocks with the client's own
+`core.GenerateChainWithGenesis`, imports them once without capture as a
+baseline, then imports them into fresh chains in three scenarios described in
+the [oracle](fixtures/capture/ORACLE.md). All three families use one
+Ethereum-style genesis and the ethash faker: the probe runs each client's own
+interpreter and `core.BlockChain.InsertChain`, but not Parlia, Bor consensus,
+system transactions or StateSync, and it earns no BSC or Polygon profile credit.
+
+Both commands hold the host single-writer lock
+`/tmp/extractor-harness-runner.lock`, refuse to start beside any
+`extractor.harness` container, and refuse an output inside the repository, the
+build storage or the preparation. Containers are owned through `native.py`.
+Once the new output exists, the record (`preparation.json` or
+`run-record.json`) is always written, with stop signals blocked during the
+write; a refusal before that leaves no output. Portable tests in
+`test_capture_probe.py` replace Docker at the `Native` boundary.
+
 ## Issue 12 boundary and earlier slice notes
 
 The first Bor checkpoint adds a [fixed private oracle](fixtures/bor/ORACLE.md)
@@ -732,8 +777,9 @@ corpus owners and E01-03.smoke_corpus; Polygon local supporting services, their
 test credentials and own-L1 inputs belong to E05-01.polygon_observer; public
 ProfileManifests, environments and mainnet/testnet smoke belong to E06 and E07;
 the first real-delivery reader boundary belongs to E03-11.block_lifecycle; capture
-and Gateway integration belong to their E02–E05 tasks. Within #12 only the Go
-`settled()` raftz field-name follow-up from PR #128 remains. The collector and NATS
+and Gateway integration belong to their E02–E05 tasks. The last #12 item, the
+PR #128 follow-up in which the Go `settled()` filter read old raftz flag names,
+is fixed at `ed723a4` (preparation and attempt 08). The collector and NATS
 are absent by design at this first native seam. E03 delivery and later composed
 gates will add their assigned runtime requirements. The accepted corpus and
 product contracts are unchanged.

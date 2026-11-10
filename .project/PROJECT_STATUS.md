@@ -1,8 +1,87 @@
 # Состояние проекта
 
+## E01-02.owned_capture — Owned capture seam with bounded memory (issue #15)
+
+Status: READY_FOR_REVIEW in a draft PR; #15 stays open. The block delivers the
+dependency-free Go module `core/capture` (immutable frames,
+BEGIN_FIELD/CHUNK/END_FIELD with sequence, offset, length and SHA-256, one
+fixed byte budget, safe-point waits that a callback can never enter, callback
+notes paid from credit reserved at a safe point, fail-closed errors) and a
+private native probe, `test/harness/capture_probe.py`, that runs the module
+inside the accepted Geth, BSC and Bor block import. Executed source `cd60d53`:
+preparation 08 passed in 467.473 seconds (unit tests with the race detector in
+the pinned compiler, 100.0% coverage) and measured run 03 passed all three
+families in 4.705 seconds of execution with complete cleanup. Five earlier
+preparations, run 01 (a Bor prefetcher reached the probe safe point) and four
+mutation records are retained as failures or superseded; see
+[the evidence](evidence/E01-02.owned_capture.md). Review 001 of `d2c51cc`:
+Spec PASS with notes, Standards REQUEST_CHANGES; the fixes are in `cd60d53`.
+All seven public profile slots stay NOT_RUN and no AC verdict is issued.
+
+BLOCKED_DECISION (owner), needed before #15 can close; independent work continues:
+
+1. Closure boundary for #15. The issue asks for every applicable mainnet and
+   testnet profile, and the corpus lists AC-CAP-05-01 and AC-CAP-06-02 for all
+   seven profiles in `local-e2e` mode. D96 set a private-fixture boundary only
+   for #12. This block's probe uses one Ethereum-style genesis with the ethash
+   faker for all three clients, so it runs each client's own interpreter and
+   `InsertChain` but not Parlia, Bor consensus, system transactions or
+   StateSync, and it writes no RunManifest. Options: a D96-style boundary for
+   #15 (private local probe evidence accepted for the seam, public slots
+   NOT_RUN with E06/E07, and whether the ethash-faker BSC and Bor runs count
+   for those families), or #15 stays open until family-native fixtures and
+   per-AC RunManifests exist.
+2. Owner of the product VM safe-point patch. TASK_DECOMPOSITION gives the
+   safe-point interface to E01-02.owned_capture and lists it as an input of
+   E04-04.import_pressure (`test/native_import`), but no adapter task names the
+   interpreter patch that calls it, or a wait inside the client's own block
+   loop. The probe's interpreter line is test-only.
+3. Owner of the raw spool writer. NATIVE_CAPTURE_PROTOCOL requires the
+   BEGIN_FIELD/CHUNK/END_FIELD raw spool; this block provides the in-memory
+   frames and leaves writing them to the worker. The module table assigns the
+   spool to `core/capture` and `core/normalization`. Confirm that the spool
+   encoder belongs to a later task (for example the AC-CAP-06-01 owner in E04)
+   and name it.
+
+Mutation record 05 of `4f1154a` (90 compiled, 89 killed, one equivalent
+survivor) completed before a host shutdown on 2026-11-10; work resumed
+afterwards without a new mutation run. Next: exact-head `bootstrap/ci`, Spec
+and Standards re-review of draft PR #134, then report READY to the
+coordinator, who merges.
+
+Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93`.
+Branch/worktree: `feat/e01-02-owned-capture` / `e01-02-owned-capture-157133`.
+
+## E01-01.harness — NATS settle check uses pinned raftz names
+
+Status: READY_FOR_REVIEW. This is the last open #12 item: the PR #128 follow-up
+in which the Go `settled()` polling filter read raftz `catchup` and
+`write_error`, while pinned NATS (`server/monitor.go` `RaftzGroup`) names them
+`catching_up` and `wal_error`. Executed source `803d468` read the pinned names
+and added direct Go controls; preparation and attempt 07 passed. Reviews of head
+`07c46d5` returned Spec and Standards PASS with P3 notes. Executed source
+`ed723a4` closes the Go notes (all queue fields, a follower naming another
+leader, agreed non-numeric or missing indexes, JSZ status, the native WAL error
+shape, the source path). Retained mutation record 09 compiles all 40
+mutants first (`go vet`) and the tests kill 38, with two pre-labeled equivalent
+survivors; record 08 counted 10 compile failures as kills and is superseded. Preparation 08 passed in 56.826 seconds and
+measured attempt 08 (new lineage, `attempt_index` 1) passed both topologies in
+9.064 seconds with complete cleanup. Next: exact-head CI, fresh Spec and
+Standards reviews, protected acceptance; after that, close #12 under D96 and
+start E01-02.
+
+Base: `c60591bba17fce65e02af4f577146e2374b938bf`.
+Branch/worktree: `feat/e01-harness-raftz-fields` / `e01-harness-raftz-fields`.
+
+Accepted prior block: PR #129 (local native-seam runner, D96) is accepted at
+merge `c60591bba17fce65e02af4f577146e2374b938bf` from reviewed head `b07e424`,
+after exact-head CI run 42688111514 and final Spec and Standards PASS. Executed
+source `f2b351e`; measured run 04 record
+`d60abc8f86dea93b675730d7c00808f2d51894de4fc51094a1170e65e6ddd919`.
+
 ## E01-01.harness — Unified local runner and runtime admission (D96)
 
-Status: READY_FOR_REVIEW for the repaired local runner. Review 001 (head
+Status: ACCEPTED in PR #129 (see the section above). Review 001 (head
 `36b1550`) returned REQUEST_CHANGES from Spec and Standards. The owner confirmed
 the D96 boundaries: local supporting services and Polygon own-L1 inputs move to
 E05-01, the harness writes no RunManifest, and the first `run_started: true`
