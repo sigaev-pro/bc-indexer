@@ -204,6 +204,23 @@ earlier preparation 01 and run 01 on `a32bc67` also passed and are kept.
 Next: none for this block; it is merged. The open #14 items are listed in
 the first E01-02.inputs section.
 
+Static manifest block (owner decision 2026-11-10, Part of #14): IN_PROGRESS
+on branch `feat/e01-02-inputs-bor-static`, draft PR. Roles: native-engineer
+(probe), qa (oracle), reviewer (Spec and Standards). Allowed paths: the same
+Bor-only files as above. The Bor capsule now holds every static item of
+NATIVE_CAPTURE_PROTOCOL: parent header, parent hash and root, known ancestor
+headers, the effective chain config with `stateSyncConfirmationDelay`, the
+EIP-2124 fork ID, native commit and normalization profile, next to the genesis
+and the sealed blocks. The driver computes every item independently with its
+own Keccak-256. The AC-CAP-04-02 fault now changes the delay after the seal;
+a new `control-capsule-items` scenario refuses each tampered derived item and
+a changed chain config. On clean `d128983`: preparation 03 PASS; run 03 PASS
+in 13.078 seconds (AC-CAP-04-01 to AC-CAP-04-03 PASS on the private local
+profile, public cells NOT_RUN); mutants Python 167 of 167 and Go 29 of 29
+killed. Next: independent Spec and Standards review and hosted
+`bootstrap/ci` on the exact head. Still missing for Bor: see "Still missing"
+in the evidence.
+
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
 Status: ACCEPTED in PR #132 at merge
