@@ -1,0 +1,508 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the independent checks in the BSC source inputs driver.",
+  "language": "python",
+  "root": "../../../..",
+  "copy": [
+    "test/harness/*",
+    "adapters/bsc/source_inputs/*",
+    "test/evidence/*"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/fixtures/source_inputs_bsc/test_bsc_source_inputs.py",
+    "-v"
+  ],
+  "import": [
+    "bsc_source_inputs"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "public credit",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(report.get(\"public_profile_credit\") is False,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "chain genesis",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(report.get(\"genesis_hash\") == genesis_hash and report.get(\"block_hashes\") == hashes,",
+      "replacement": "require(report.get(\"block_hashes\") == hashes,"
+    },
+    {
+      "name": "chain blocks",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(report.get(\"genesis_hash\") == genesis_hash and report.get(\"block_hashes\") == hashes,",
+      "replacement": "require(report.get(\"genesis_hash\") == genesis_hash,"
+    },
+    {
+      "name": "child killed",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(report[\"child\"].get(\"killed_by_sigkill\") is True,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "capsule sync order",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(syncs and (not writes or max(writes) < max(syncs)),",
+      "replacement": "require(syncs,"
+    },
+    {
+      "name": "capsule any sync",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(syncs and (not writes or max(writes) < max(syncs)),",
+      "replacement": "require(not writes or max(writes) < max(syncs or [-1]),"
+    },
+    {
+      "name": "read before execute",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(not any(event.get(\"event\") in (\"fetch\", \"handoff\") for event in events[:execute]",
+      "replacement": "require(not any(False for event in events[:execute]"
+    },
+    {
+      "name": "one execute",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(len(executes) == 1, f\"{observation}: expected one execute event\")",
+      "replacement": "require(len(executes) >= 1, f\"{observation}: expected one execute event\")"
+    },
+    {
+      "name": "handoff sequence",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(event.get(\"sequence\") == len(rows),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "handoff digest",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(hashlib.sha256(bytes.fromhex(event[\"response_hex\"])).hexdigest() == event.get(\"response_sha256\"),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "new starts with fetch",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(names[0] == \"fetch\" and set(names[1:-4]) == {\"put:entry-chunk\"} and",
+      "replacement": "require(set(names[1:-4]) == {\"put:entry-chunk\"} and"
+    },
+    {
+      "name": "new chunks only",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": " and set(names[1:-4]) == {\"put:entry-chunk\"} and",
+      "replacement": " and"
+    },
+    {
+      "name": "new tail order",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "names[-4:] == [\"put:entry\", \"sync\", \"put:frontier\", \"sync\"],",
+      "replacement": "set(names[-4:]) == {\"put:entry\", \"sync\", \"put:frontier\"},"
+    },
+    {
+      "name": "other observation write",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(all(item.get(\"observation\") == observation for item in between if item[\"event\"] == \"put\"),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "anchor moves",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        anchor = index\n",
+      "replacement": "        pass\n"
+    },
+    {
+      "name": "finish one",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(len(finished) == 1, f\"{observation}: expected one finished event\")",
+      "replacement": "require(len(finished) >= 1, f\"{observation}: expected one finished event\")"
+    },
+    {
+      "name": "close steps",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(names == ([] if closed_before else [\"put:closed\", \"sync\"]),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "block1 all new",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(first and all(row[\"kind\"] == \"new\" for row in first),",
+      "replacement": "require(first,"
+    },
+    {
+      "name": "block1 fetch count",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "== len(first), \"Block 1 has a fetch without a hand-off\")",
+      "replacement": ">= 0, \"Block 1 has a fetch without a hand-off\")"
+    },
+    {
+      "name": "block2 one new",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(len(second) == 1 and second[0][\"kind\"] == \"new\",",
+      "replacement": "require(len(second) >= 1,"
+    },
+    {
+      "name": "crash last",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(capture[-1] == {\"event\": \"crash\", \"observation\": OBSERVATIONS[1], \"sequence\": 0} and",
+      "replacement": "require(True and"
+    },
+    {
+      "name": "crash after handoff",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "capture[-2].get(\"event\") == \"handoff\", \"The crash is not the hand-off of block 2\")",
+      "replacement": "True, \"The crash is not the hand-off of block 2\")"
+    },
+    {
+      "name": "snapshot read",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(request.startswith(GET_TAG + b\"parlia-\"),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "stored snapshot status",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(saved[:1] == b\"\\x01\" and len(saved) > 1,",
+      "replacement": "require(len(saved) > 1,"
+    },
+    {
+      "name": "stored snapshot length",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(saved[:1] == b\"\\x01\" and len(saved) > 1,",
+      "replacement": "require(saved[:1] == b\"\\x01\","
+    },
+    {
+      "name": "after crash capsules",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        check_capsule(after[observation + \"_capsule\"], observation, items[index])\n",
+      "replacement": "        pass\n"
+    },
+    {
+      "name": "capsule identity",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(type(capsule) is dict and capsule.get(\"observation\") == observation,",
+      "replacement": "require(type(capsule) is dict,"
+    },
+    {
+      "name": "capsule items",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(capsule.get(\"items\") == rows,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "capsule digest",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(capsule.get(\"digest\") == source_inputs.capsule_digest(items).hex(),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "block1 manifest digest",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "first_consumed[\"digest\"] == consumed_digest(check_capsule_digest, first),",
+      "replacement": "True,"
+    },
+    {
+      "name": "block1 manifest count",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "first_consumed[\"count\"] == len(first) and",
+      "replacement": "True and"
+    },
+    {
+      "name": "block1 manifest capsule",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(first_consumed[\"capsule_digest\"] == check_capsule_digest and",
+      "replacement": "require(True and"
+    },
+    {
+      "name": "frontier block1",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(after[OBSERVATIONS[0] + \"_frontier\"] == len(first) and after[OBSERVATIONS[1] + \"_frontier\"] == 1,",
+      "replacement": "require(after[OBSERVATIONS[1] + \"_frontier\"] == 1,"
+    },
+    {
+      "name": "frontier block2",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(after[OBSERVATIONS[0] + \"_frontier\"] == len(first) and after[OBSERVATIONS[1] + \"_frontier\"] == 1,",
+      "replacement": "require(after[OBSERVATIONS[0] + \"_frontier\"] == len(first),"
+    },
+    {
+      "name": "saved digest",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(after[\"saved_response_sha256\"] == hashlib.sha256(saved).hexdigest(),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "resume error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(resume.get(\"error\") == \"\" and resume.get(\"frontier_at_start\") == 1,",
+      "replacement": "require(resume.get(\"frontier_at_start\") == 1,"
+    },
+    {
+      "name": "resume frontier",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(resume.get(\"error\") == \"\" and resume.get(\"frontier_at_start\") == 1,",
+      "replacement": "require(resume.get(\"error\") == \"\","
+    },
+    {
+      "name": "resume head number",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(resume[\"head_number\"] == 2 and resume[\"head_hash\"] == hashes[1] and",
+      "replacement": "require(resume[\"head_hash\"] == hashes[1] and"
+    },
+    {
+      "name": "resume head hash",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(resume[\"head_number\"] == 2 and resume[\"head_hash\"] == hashes[1] and",
+      "replacement": "require(resume[\"head_number\"] == 2 and"
+    },
+    {
+      "name": "resume head root",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "resume[\"head_root\"] == blocks[1][\"state_root\"], \"Resume did not import block 2\")",
+      "replacement": "True, \"Resume did not import block 2\")"
+    },
+    {
+      "name": "resume capsule",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    check_capsule(resume[\"capsule\"], OBSERVATIONS[1], items[1])\n",
+      "replacement": "    pass\n"
+    },
+    {
+      "name": "resume replay kind",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(resumed and resumed[0][\"kind\"] == \"replay\" and",
+      "replacement": "require(resumed and"
+    },
+    {
+      "name": "resume replay request",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "resumed[0][\"request_hex\"] == second[0][\"request_hex\"] and\n",
+      "replacement": "True and\n"
+    },
+    {
+      "name": "resume replay response",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "resumed[0][\"response_hex\"] == second[0][\"response_hex\"], \"Resume did not replay the saved response\")",
+      "replacement": "True, \"Resume did not replay the saved response\")"
+    },
+    {
+      "name": "resume later new",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(all(row[\"kind\"] == \"new\" for row in resumed[1:]) and",
+      "replacement": "require(True and"
+    },
+    {
+      "name": "resume fetch count",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "resume[\"fetches\"] == len(resumed) - 1 ==",
+      "replacement": "len(resumed) - 1 =="
+    },
+    {
+      "name": "resume trace fetches",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "sum(1 for event in trace if event.get(\"event\") == \"fetch\"), \"Resume fetched below the saved frontier\")",
+      "replacement": "len(resumed) - 1, \"Resume fetched below the saved frontier\")"
+    },
+    {
+      "name": "resume manifest equals trace",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(resume[\"consumed\"] == second_consumed and second_consumed[\"count\"] == len(resumed) and",
+      "replacement": "require(second_consumed[\"count\"] == len(resumed) and"
+    },
+    {
+      "name": "resume manifest count",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "second_consumed[\"count\"] == len(resumed) and\n",
+      "replacement": "True and\n"
+    },
+    {
+      "name": "resume manifest digest",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "second_consumed[\"digest\"] == consumed_digest(resume[\"capsule\"][\"digest\"], resumed),",
+      "replacement": "True,"
+    },
+    {
+      "name": "control error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(control.get(\"stage\") in (\"open\", \"insert\") and CONTROL_ERROR in control.get(\"error\", \"\"),",
+      "replacement": "require(control.get(\"stage\") in (\"open\", \"insert\"),"
+    },
+    {
+      "name": "control stage",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(control.get(\"stage\") in (\"open\", \"insert\") and CONTROL_ERROR in control.get(\"error\", \"\"),",
+      "replacement": "require(CONTROL_ERROR in control.get(\"error\", \"\"),"
+    },
+    {
+      "name": "control head",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(control.get(\"head_number\", 1) == 1, \"Control imported block 2\")",
+      "replacement": "require(True, \"Control imported block 2\")"
+    },
+    {
+      "name": "replay count",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(len(replay) == 2, \"Replay must cover both blocks\")",
+      "replacement": "require(len(replay) >= 1, \"Replay must cover both blocks\")"
+    },
+    {
+      "name": "replay no fetch or put",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(not any(event.get(\"event\") in (\"fetch\", \"put\") for event in trace), \"Replay fetched or wrote\")",
+      "replacement": "require(True, \"Replay fetched or wrote\")"
+    },
+    {
+      "name": "replay error",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(row.get(\"error\") == \"\" and row[\"fetches\"] == 0 and row[\"head_number\"] == index + 1 and",
+      "replacement": "require(row[\"fetches\"] == 0 and row[\"head_number\"] == index + 1 and"
+    },
+    {
+      "name": "replay fetches",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(row.get(\"error\") == \"\" and row[\"fetches\"] == 0 and row[\"head_number\"] == index + 1 and",
+      "replacement": "require(row.get(\"error\") == \"\" and row[\"head_number\"] == index + 1 and"
+    },
+    {
+      "name": "replay head number",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(row.get(\"error\") == \"\" and row[\"fetches\"] == 0 and row[\"head_number\"] == index + 1 and",
+      "replacement": "require(row.get(\"error\") == \"\" and row[\"fetches\"] == 0 and"
+    },
+    {
+      "name": "replay head hash",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "row[\"head_hash\"] == hashes[index] and row[\"head_root\"] == blocks[index][\"state_root\"],",
+      "replacement": "row[\"head_root\"] == blocks[index][\"state_root\"],"
+    },
+    {
+      "name": "replay head root",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "row[\"head_hash\"] == hashes[index] and row[\"head_root\"] == blocks[index][\"state_root\"],",
+      "replacement": "row[\"head_hash\"] == hashes[index],"
+    },
+    {
+      "name": "replay capsule",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        check_capsule(row[\"capsule\"], observation, items[index])\n",
+      "replacement": "        pass\n"
+    },
+    {
+      "name": "replay manifest",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(row[\"consumed\"] == finish_steps(trace, observation, True) ==",
+      "replacement": "require(finish_steps(trace, observation, True) =="
+    },
+    {
+      "name": "replay manifest trace",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(row[\"consumed\"] == finish_steps(trace, observation, True) ==\n                (first_consumed if index == 0 else second_consumed),",
+      "replacement": "require(row[\"consumed\"] == (first_consumed if index == 0 else second_consumed),"
+    },
+    {
+      "name": "malformed report",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "    except (KeyError, TypeError, ValueError, AttributeError, IndexError, StopIteration) as error:",
+      "replacement": "    except (ArithmeticError,) as error:"
+    },
+    {
+      "name": "rlp list prefix",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(first >= 0xc0, \"Block encoding is not an RLP list\")",
+      "replacement": "require(True, \"Block encoding is not an RLP list\")"
+    },
+    {
+      "name": "rlp short boundary",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "        if first <= 0xf7:",
+      "replacement": "        if first < 0xf7:"
+    },
+    {
+      "name": "rlp truncated",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(end <= len(data), \"Truncated block encoding\")",
+      "replacement": "require(True, \"Truncated block encoding\")"
+    },
+    {
+      "name": "test name duplicates",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(len(names) == len(set(names)), \"Duplicate Go test names\")",
+      "replacement": "require(True, \"Duplicate Go test names\")"
+    },
+    {
+      "name": "child test excluded",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "return sorted(name for name in names if name != CHILD_TEST)",
+      "replacement": "return sorted(names)"
+    },
+    {
+      "name": "install refuses existing",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(not target_dir.exists() and not target_dir.is_symlink(),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "table language",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(table.get(\"schema_version\") == 1 and table.get(\"language\") == \"go-native-bsc\",",
+      "replacement": "require(table.get(\"schema_version\") == 1,"
+    },
+    {
+      "name": "table unique",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(len(names) == len(set(names)) and names,",
+      "replacement": "require(names,"
+    },
+    {
+      "name": "table shape",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(row[\"file\"] in PROBE_FILES and set(row) <= {\"name\", \"file\", \"original\", \"replacement\", \"equivalent\"},",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "table once",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require((FIXTURE / row[\"file\"]).read_text().count(row[\"original\"]) == 1,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "table changes",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(row[\"original\"] != row[\"replacement\"],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "saved equals live",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(after[\"saved_equals_live\"] is True,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "replay tamper before",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(tamper[\"live_before_tamper_sha256\"] == hashlib.sha256(saved[1:]).hexdigest() and",
+      "replacement": "require(True and"
+    },
+    {
+      "name": "replay tamper changed",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "tamper[\"live_after_tamper_sha256\"] != tamper[\"live_before_tamper_sha256\"],\n",
+      "replacement": "True,\n"
+    },
+    {
+      "name": "control before",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(control[\"live_before_tamper_sha256\"] == tamper[\"live_before_tamper_sha256\"] and",
+      "replacement": "require(True and"
+    },
+    {
+      "name": "control after",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "control[\"live_after_tamper_sha256\"] == tamper[\"live_after_tamper_sha256\"],",
+      "replacement": "True,"
+    },
+    {
+      "name": "replay not tampered",
+      "file": "test/harness/bsc_source_inputs.py",
+      "original": "require(all(step[\"response_sha256\"] != tamper[\"live_after_tamper_response_sha256\"] for step in steps),",
+      "replacement": "require(True,"
+    }
+  ]
+}
