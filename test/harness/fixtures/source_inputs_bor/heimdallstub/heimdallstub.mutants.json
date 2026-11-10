@@ -170,8 +170,26 @@
     {
       "name": "snapshot returns tallies",
       "file": "stub.go",
-      "original": "\t\tuncounted[key] = r.uncounted[key]\n",
-      "replacement": "\t\tuncounted[key] = 0\n"
+      "original": "\t\tuncounted[key] = count\n",
+      "replacement": "\t\tuncounted[key] = count - 1\n"
+    },
+    {
+      "name": "stub status served",
+      "file": "stub.go",
+      "original": "\tcase u.Path == \"/status\":\n\t\tname = \"status.json\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "stub latest span served",
+      "file": "stub.go",
+      "original": "\tcase u.Path == \"/bor/spans/latest\":\n\t\tname = \"span-latest.json\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "stub span 0 served",
+      "file": "stub.go",
+      "original": "\tcase u.Path == \"/bor/spans/0\":\n\t\tname = \"span-0.json\"\n",
+      "replacement": ""
     }
   ]
 }

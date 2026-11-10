@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Single-check mutants of the E01-02.inputs Bor probe judge.",
+  "description": "Single-check mutants of the E01-02.inputs Bor probe driver and judge.",
   "language": "python",
   "root": "../..",
   "copy": [
@@ -10,8 +10,10 @@
     "test/harness/capture_probe.py",
     "test/harness/artifacts.py",
     "test/harness/native.py",
-    "test/harness/fixtures/bor_source_inputs/expected.json",
-    "test/harness/fixtures/bor_source_inputs/stub/*"
+    "test/harness/owned.py",
+    "test/harness/fixtures/source_inputs_bor/*",
+    "adapters/bor/source_inputs/inputs.go",
+    "adapters/bor/source_inputs/inputs_test.go"
   ],
   "test": [
     "{python}",
@@ -421,6 +423,168 @@
       "file": "test/harness/bor_source_inputs_probe.py",
       "original": "    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as error:",
       "replacement": "    except (AttributeError, IndexError, KeyError, ValueError) as error:"
+    },
+    {
+      "name": "prepare needs an actual build",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(manifest.get(\"evidence_kind\") == \"actual-build\" and manifest.get(\"task_id\") == \"E01-01.builds\",",
+      "replacement": "require(manifest.get(\"task_id\") == \"E01-01.builds\","
+    },
+    {
+      "name": "prepare output outside inputs",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    capture_probe.refuse_inside(output, (root, ROOT))\n",
+      "replacement": ""
+    },
+    {
+      "name": "prepare compiler pinned",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(re.fullmatch(r\"docker.io/library/golang@sha256:[0-9a-f]{64}\", compiler), \"Unpinned compiler\")",
+      "replacement": "require(True, \"Unpinned compiler\")"
+    },
+    {
+      "name": "prepare runtime pinned",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", runtime), \"Unpinned runtime image\")\n            record[\"compiler_image\"], record[\"runtime_image\"] = compiler, runtime",
+      "replacement": "            record[\"compiler_image\"], record[\"runtime_image\"] = compiler, runtime"
+    },
+    {
+      "name": "source closure commit",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(closure[\"source_commit\"] == manifest[\"builds\"][\"bor\"][\"source_commit\"], \"Source closure mismatch\")",
+      "replacement": "require(True, \"Source closure mismatch\")"
+    },
+    {
+      "name": "bor compiler matches",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(manifest[\"builds\"][\"bor\"][\"compiler_image\"] == compiler, \"Bor compiler mismatch\")",
+      "replacement": "require(True, \"Bor compiler mismatch\")"
+    },
+    {
+      "name": "both unit packages pass",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        require(f\"\\nok  \\t{PACKAGE}/{package}\".encode() in output_text,",
+      "replacement": "        require(True or output_text,"
+    },
+    {
+      "name": "stub sources copied",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    row[\"stub_sources\"] = capture_probe.copy_sources(STUB_FILES, FIXTURE / \"heimdallstub\", probe / \"heimdallstub\",\n                                                     deadline)\n",
+      "replacement": ""
+    },
+    {
+      "name": "rlp short string",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        start, length = offset + 1, first - 0x80\n",
+      "replacement": "        start, length = offset + 1, first - 0x81\n"
+    },
+    {
+      "name": "rlp long string",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        start, length = offset + 1 + size, int.from_bytes(data[offset + 1:offset + 1 + size], \"big\")\n    elif first < 0xf8:",
+      "replacement": "        start, length = offset + size, int.from_bytes(data[offset + 1:offset + 1 + size], \"big\")\n    elif first < 0xf8:"
+    },
+    {
+      "name": "rlp truncated item",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(end <= len(data), \"Truncated RLP\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "rlp truncated start",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(offset < len(data), \"Truncated RLP\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "rlp list end",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(position == end, \"Malformed RLP list\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "block shape",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(isinstance(block, list) and block and isinstance(block[0], list) and len(block[0]) > 11,",
+      "replacement": "require(isinstance(block, list) and block,"
+    },
+    {
+      "name": "header time field",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "\"timestamp\": int.from_bytes(header[11], \"big\"),",
+      "replacement": "\"timestamp\": int.from_bytes(header[10], \"big\"),"
+    },
+    {
+      "name": "blocks required",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(rows, \"No sealed blocks\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "generation record matches blocks",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require([{key: row[key] for key in (\"number\", \"timestamp\", \"state_root\")} for row in generated[\"blocks\"]] ==\n            headers, \"The generation record differs from the sealed blocks\")",
+      "replacement": "    require(True, \"The generation record differs from the sealed blocks\")"
+    },
+    {
+      "name": "run preparation kind",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(preparation.get(\"kind\") == \"bor-source-inputs-probe-preparation\" and preparation.get(\"result\") == \"PASS\"",
+      "replacement": "require(preparation.get(\"result\") == \"PASS\""
+    },
+    {
+      "name": "run preparation result",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(preparation.get(\"kind\") == \"bor-source-inputs-probe-preparation\" and preparation.get(\"result\") == \"PASS\"",
+      "replacement": "require(preparation.get(\"kind\") == \"bor-source-inputs-probe-preparation\""
+    },
+    {
+      "name": "run preparation cleanup",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            and preparation.get(\"cleanup_complete\") is True, \"A passing preparation is required\")",
+      "replacement": "            , \"A passing preparation is required\")"
+    },
+    {
+      "name": "run output outside inputs",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    capture_probe.refuse_inside(output, (preparation_path.parent, manifest_root, ROOT))\n",
+      "replacement": ""
+    },
+    {
+      "name": "one oracle",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(len(oracles) == 1, \"The preparation must retain exactly one oracle\")",
+      "replacement": "require(len(oracles) >= 1, \"The preparation must retain exactly one oracle\")"
+    },
+    {
+      "name": "run runtime pinned",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            runtime = preparation[\"runtime_image\"]\n            require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", runtime), \"Unpinned runtime image\")",
+      "replacement": "            runtime = preparation[\"runtime_image\"]"
+    },
+    {
+      "name": "binary verified",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            binary = artifact(bor[\"binary\"], 512 * 1024 * 1024, deadline=deadline)\n",
+      "replacement": "            binary = Path(bor[\"binary\"][\"path\"])\n"
+    },
+    {
+      "name": "scenario failures fail it",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "\"result\": \"PASS\" if not failures else \"FAIL\"}",
+      "replacement": "\"result\": \"PASS\"}"
+    },
+    {
+      "name": "run needs scenarios",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if record[\"scenarios\"] and all(row[\"result\"] == \"PASS\" for row in record[\"scenarios\"].values()):",
+      "replacement": "if all(row[\"result\"] == \"PASS\" for row in record[\"scenarios\"].values()):"
+    },
+    {
+      "name": "run needs every scenario to pass",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if record[\"scenarios\"] and all(row[\"result\"] == \"PASS\" for row in record[\"scenarios\"].values()):",
+      "replacement": "if record[\"scenarios\"]:"
     }
   ]
 }

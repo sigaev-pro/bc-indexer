@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -405,6 +406,9 @@ func attempt(args []string) (returned error) {
 	http.DefaultTransport = transport
 	stack, backend, err := backend(genesis, *dataDir)
 	if err != nil {
+		if store != nil {
+			store.Close()
+		}
 		return err
 	}
 	chain := backend.BlockChain()
@@ -418,7 +422,7 @@ func attempt(args []string) (returned error) {
 	shutdown(stack, backend)
 	result.Rows, result.Uncounted = transport.Snapshot()
 	for _, row := range result.Rows {
-		if row.Error != "" && regexp.MustCompile(regexp.QuoteMeta(sourceinputs.ErrPrefixConflict.Error())).MatchString(row.Error) {
+		if row.Error != "" && strings.Contains(row.Error, sourceinputs.ErrPrefixConflict.Error()) {
 			result.PrefixConflict = true
 		}
 	}

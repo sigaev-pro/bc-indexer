@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"sync"
 	"syscall"
 )
@@ -179,14 +178,9 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 func (r *Recorder) Snapshot() ([]Row, map[string]int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	keys := make([]string, 0, len(r.uncounted))
-	for key := range r.uncounted {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	uncounted := make(map[string]int, len(keys))
-	for _, key := range keys {
-		uncounted[key] = r.uncounted[key]
+	uncounted := make(map[string]int, len(r.uncounted))
+	for key, count := range r.uncounted {
+		uncounted[key] = count
 	}
 	return append([]Row(nil), r.rows...), uncounted
 }

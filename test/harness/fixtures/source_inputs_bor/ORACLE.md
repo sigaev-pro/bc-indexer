@@ -42,8 +42,12 @@ root would differ from the sealed chain, and the next request would ask for
 
 Counted calls are the calls through which Bor receives execution inputs:
 state sync event pages (`/clerk/time`) and spans by ID (`/bor/spans/<id>`).
-The latest-span and status polls of the span store run on a timer, carry no
-execution input, and are answered by the stub without the log. The saved bytes
+The latest-span and status calls (from the span store poll loop,
+`getLatestSpan` and `waitUntilHeimdallIsSynced`) are answered by the stub
+without the log. Their bytes do not enter execution directly, but the latest
+span chooses which span IDs Bor reads. A changed latest span would therefore
+change the counted span requests, and the log would refuse that change as a
+prefix conflict instead of silently replaying it. The saved bytes
 are the raw response body at the transport boundary, before Bor decodes it;
 the request identity is `GET <path>?<query>` exactly as Bor builds it.
 
@@ -73,6 +77,12 @@ consumed-manifest digest with the README formulas in
 file bytes; `blocks`: the sealed `blocks.rlp`; `bor-source-commit`: the commit
 string) and the expected requests and stub bodies above. It never reads these
 values from the probe.
+
+The header times (for `to_time`) and the state roots are decoded by the driver
+from `blocks.rlp` with its own RLP reader. Only the block hashes come from the
+generation record `generated.json` (Python's `hashlib` has no Keccak), and the
+driver refuses the run if that record's numbers, times or state roots differ
+from the decoded headers.
 
 ## Scenarios
 

@@ -1,27 +1,67 @@
 """Portable checks of the E01-02.inputs Bor probe judge: no Docker or native client."""
 
+import contextlib
 import copy
+import io
+import json
+import os
 from pathlib import Path
+import signal
 import sys
+import tarfile
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bor_source_inputs_probe as probe
+import capture_probe
+from artifacts import Rejected, reference
 import source_inputs
 
-FIXTURE = Path(__file__).with_name("fixtures") / "bor_source_inputs"
+FIXTURE = Path(__file__).with_name("fixtures") / "source_inputs_bor"
 COMMIT = "3a018e38467594508ca31ebeaf804837fb92834a"
 BASE_TIME = 1794317135
+
+
+TIMES = [BASE_TIME, BASE_TIME + 1, BASE_TIME + 2, BASE_TIME + 8, BASE_TIME + 9, BASE_TIME + 10, BASE_TIME + 11,
+         BASE_TIME + 17, BASE_TIME + 18]
+
+
+def rlp(value):
+    """A minimal RLP encoder for test blocks, written separately from the decoder under test."""
+    if isinstance(value, int):
+        value = value.to_bytes((value.bit_length() + 7) // 8, "big")
+    if isinstance(value, list):
+        payload, short, long = b"".join(rlp(item) for item in value), 0xc0, 0xf7
+    elif len(value) == 1 and value[0] < 0x80:
+        return value
+    else:
+        payload, short, long = value, 0x80, 0xb7
+    if len(payload) < 56:
+        return bytes([short + len(payload)]) + payload
+    size = len(payload).to_bytes((len(len(payload).to_bytes(8, "big").lstrip(b"\0"))), "big")
+    return bytes([long + len(size)]) + size + payload
+
+
+def sealed(times=TIMES):
+    """blocks.rlp bytes and the matching generation record for blocks 1 to len(times)."""
+    blocks, rows = b"", []
+    for number, moment in enumerate(times, 1):
+        root = bytes([number]) * 32
+        header = [b"\x11" * 32, b"\x22" * 32, b"\x33" * 20, root, b"\x44" * 32, b"\x55" * 32, b"\0" * 256, 1,
+                  number, 20000000, 0, moment, b"\x99" * 600, b"\0" * 32, b"\0" * 8]
+        blocks += rlp([header, [], []])
+        rows.append({"number": number, "hash": f"0x{number:064x}", "state_root": "0x" + root.hex(),
+                     "timestamp": moment})
+    return blocks, {"blocks": rows}
 
 
 def context():
     oracle = probe.load(FIXTURE / "expected.json")
     bodies = {path.name: path.read_bytes() for path in (FIXTURE / "stub").iterdir()}
-    times = [BASE_TIME, BASE_TIME + 1, BASE_TIME + 2, BASE_TIME + 8, BASE_TIME + 9, BASE_TIME + 10, BASE_TIME + 11,
-             BASE_TIME + 17, BASE_TIME + 18]
-    generated = {"blocks": [{"number": n, "hash": f"0x{n:064x}", "state_root": f"0x{n + 100:064x}", "timestamp": t}
-                            for n, t in enumerate(times, 1)]}
-    return probe.build_context(oracle, generated, bodies, b"genesis-bytes", b"blocks-bytes", COMMIT)
+    blocks, generated = sealed()
+    return probe.build_context(oracle, generated, bodies, b"genesis-bytes", blocks, COMMIT)
 
 
 def call_rows(ctx, origins, requests=None):
@@ -129,7 +169,7 @@ class OracleTests(unittest.TestCase):
 
     def test_expected_digests_use_the_readme_formulas(self):
         ctx = context()
-        items = (("genesis", b"genesis-bytes"), ("blocks", b"blocks-bytes"), ("bor-source-commit", COMMIT.encode()))
+        items = (("genesis", b"genesis-bytes"), ("blocks", sealed()[0]), ("bor-source-commit", COMMIT.encode()))
         capsule = source_inputs.capsule_digest(items)
         chain = source_inputs.chain_start(capsule)
         for sequence, row in enumerate(ctx["requests"]):
@@ -297,6 +337,324 @@ class CompareControls(unittest.TestCase):
         self.assertEqual(probe.entry_sequences(keys, "obs"), [0, 1])
         self.assertTrue(all(key.startswith(probe.LOG_PREFIX + "obs/") for key in keys))
         self.assertNotIn(probe.LOG_PREFIX + "ob/log/0000000000000000", probe.log_keys(dump("ob", 1), "obs"))
+
+
+class SealedHeaderTests(unittest.TestCase):
+    def test_decodes_number_time_and_root(self):
+        blocks, generated = sealed()
+        self.assertEqual(probe.sealed_headers(blocks),
+                         [{key: row[key] for key in ("number", "timestamp", "state_root")} for row in generated["blocks"]])
+
+    def test_short_and_long_items(self):
+        self.assertEqual(probe.rlp_item(b"\x05", 0), (b"\x05", 1))
+        self.assertEqual(probe.rlp_item(rlp(b"abc"), 0), (b"abc", 4))
+        self.assertEqual(probe.rlp_item(rlp(b"x" * 300), 0)[0], b"x" * 300)
+        self.assertEqual(probe.rlp_item(rlp([b"a", [b"b"]]), 0)[0], [b"a", [b"b"]])
+        self.assertEqual(probe.rlp_item(rlp([b"y" * 60]), 0)[0], [b"y" * 60])
+
+    def test_malformed_input_is_refused(self):
+        for data in (b"", b"\x83ab", b"\xb9\x01", b"\xc3\x01", rlp([b"a"])[:-1], b"\xc2\x82a", rlp([[1, 2], [], []]),
+                     rlp(b"not a list")):
+            with self.subTest(data=data), self.assertRaises(Rejected):
+                probe.sealed_headers(data)
+        # Direct item controls: an empty input, a string shorter than its length prefix,
+        # and a list whose last item runs past the list's own end.
+        for data in (b"", b"\x83ab", b"\xc2\x83abc"):
+            with self.subTest(item=data), self.assertRaises(Rejected):
+                probe.rlp_item(data, 0)
+
+    def test_generation_record_must_match_the_blocks(self):
+        oracle = probe.load(FIXTURE / "expected.json")
+        bodies = {path.name: path.read_bytes() for path in (FIXTURE / "stub").iterdir()}
+        blocks, generated = sealed()
+        for field, value in (("timestamp", 1), ("state_root", "0x" + "0" * 64), ("number", 99)):
+            changed = copy.deepcopy(generated)
+            changed["blocks"][3][field] = value
+            with self.subTest(field=field), self.assertRaises(Rejected):
+                probe.build_context(oracle, changed, bodies, b"g", blocks, COMMIT)
+        with self.assertRaises(Rejected):
+            probe.build_context(oracle, {"blocks": generated["blocks"][:-1]}, bodies, b"g", blocks, COMMIT)
+
+
+class FakeNative:
+    """Stands in for Docker at the Native boundary; writes what each command would write."""
+    interrupt = False
+    cleanup_complete = True
+    unit_stdout = (f"ok  \t{probe.PACKAGE}/sourceinputs\t1.0s\nok  \t{probe.PACKAGE}/heimdallstub\t1.0s\n")
+    context = None
+    broken = None
+
+    def __init__(self, output, deadline):
+        self.output, self.nonce, self.commands = output, "n", []
+        self.cleanup_complete = FakeNative.cleanup_complete
+        (output / "logs").mkdir()
+
+    def command(self, image, argv, mounts, **kwargs):
+        if FakeNative.interrupt:
+            os.kill(os.getpid(), signal.SIGTERM)  # the real handler turns it into Interrupted
+        self.commands.append(argv)
+        targets = {target: source for source, target, _ in mounts}
+        stdout = self.output / "logs" / f"{len(self.commands):03d}.stdout"
+        if argv[:2] == ["/probe/probe", "generate"]:
+            chain = targets["/chains"] / "a"
+            chain.mkdir()
+            blocks, generated = sealed()
+            (chain / "blocks.rlp").write_bytes(blocks)
+            (chain / "generated.json").write_text(json.dumps(generated))
+        elif argv[:2] == ["/probe/probe", "scenario"]:
+            name = argv[argv.index("-out") + 1].removeprefix("/out/")
+            directory = targets["/out"] / name
+            directory.mkdir()
+            observed = passing(FakeNative.context, name)
+            if FakeNative.broken == name:
+                observed["attempts"][-1]["status"]["exit_code"] = 1
+            rows = []
+            for index, row in enumerate(observed["attempts"]):
+                for key, file in (("result", f"attempt-{index}.json"), ("crash_result", f"attempt-{index}.json.crash.json")):
+                    if row[key] is not None:
+                        (directory / file).write_text(json.dumps(row[key]))
+                rows.append({key: row[key] for key in ("argv", "status", "store_before", "store_after")})
+            (directory / "scenario.json").write_text(json.dumps({"plan": observed["plan"], "attempts": rows}))
+        elif argv[1] == "build":
+            (targets["/work/bin"] / "probe").write_bytes(b"probe")
+        elif argv[1] == "test":
+            stdout.write_text("=== RUN TestX\n" + FakeNative.unit_stdout)
+        stdout.touch()
+        return stdout
+
+
+GOLANG = "docker.io/library/golang@sha256:" + "b" * 64
+DEBIAN = "docker.io/library/debian@sha256:" + "a" * 64
+
+
+class DriverFixture(unittest.TestCase):
+    """Temporary roots and fakes for prepare() and run(); it defines no tests of its own."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp()).resolve()
+        for target, value in ((capture_probe, "LOCK"), (probe, "Native")):
+            patcher = mock.patch.object(target, value, self.root / "lock" if value == "LOCK" else FakeNative)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        docker = mock.patch.object(capture_probe.subprocess, "run", side_effect=self.fake_subprocess)
+        docker.start()
+        self.addCleanup(docker.stop)
+        self.containers = ""
+        FakeNative.interrupt, FakeNative.cleanup_complete, FakeNative.broken = False, True, None
+        FakeNative.context = context()
+
+    def fake_subprocess(self, argv, **kwargs):
+        if argv[0] == "docker":
+            return mock.Mock(returncode=0, stdout=self.containers)
+        return mock.Mock(stdout="0" * 40 + "\n" if "rev-parse" in argv else "")
+
+    def build(self, compiler=GOLANG, runtime=DEBIAN, family_compiler=None, kind="actual-build", closure_commit="c" * 40):
+        root = self.root / "build"
+        root.mkdir(exist_ok=True)
+        archive = root / "bor.tar"
+        if not archive.exists():
+            with tarfile.open(archive, "w") as stream:
+                for name, data in (("go.mod", b"module github.com/ethereum/go-ethereum\n\ngo 1.25.0\n"),
+                                   ("tests/bor/testdata/genesis.json", b"genesis-bytes"),
+                                   ("tests/bor/helper.go", b"package bor\n")):
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    stream.addfile(info, io.BytesIO(data))
+        ref = reference(archive)
+        ref["path"] = archive.name
+        module = {}
+        for field in ("info", "mod", "zip"):
+            (root / f"bor.{field}").write_text(field)
+            module[field] = reference(root / f"bor.{field}")
+            module[field]["path"] = f"bor.{field}"
+        manifest = {"evidence_kind": kind, "task_id": "E01-01.builds",
+                    "builds": {"bor": {"source_commit": COMMIT, "compiler_image": family_compiler or compiler}},
+                    "module_closures": {"bor": {"source_commit": closure_commit if closure_commit != "c" * 40 else COMMIT,
+                                                "source_archive": ref, "artifacts": [module]}},
+                    "image_inputs": {"golang-build-image": {"reference": compiler},
+                                     "debian-runtime-image": {"reference": runtime}}}
+        path = root / f"manifest-{len(list(root.glob('manifest-*')))}.json"
+        path.write_text(json.dumps(manifest))
+        return path
+
+    def prepare(self, name="prepared", manifest=None):
+        manifest = manifest or self.build()
+        return probe.prepare(manifest, reference(manifest)["sha256"], self.root / name)
+
+    def prepared(self, change=None):
+        output, record = self.prepare("prep-" + str(len(list(self.root.glob("prep-*")))))
+        self.assertEqual(record["result"], "PASS", record.get("error"))
+        if change:
+            record = json.loads((output / "preparation.json").read_text())
+            change(record)
+            (output / "preparation.json").write_text(json.dumps(record))
+        return output / "preparation.json"
+
+    def run_probe(self, preparation, name="run"):
+        return probe.run(preparation, reference(preparation)["sha256"], self.root / name)
+
+
+class PrepareTests(DriverFixture):
+    def test_passing_preparation(self):
+        output, record = self.prepare()
+        self.assertEqual(record["result"], "PASS", record.get("error"))
+        source = output / "bor/source" / probe.PROBE_DIR
+        for path in ("main.go", "heimdallstub/stub.go", "heimdallstub/stub_test.go", "sourceinputs/inputs.go",
+                     "sourceinputs/inputs_test.go"):
+            self.assertTrue((source / path).is_file(), path)
+        self.assertEqual((source / "sourceinputs/inputs.go").read_bytes(),
+                         (probe.ROOT / "adapters/bor/source_inputs/inputs.go").read_bytes())
+        self.assertEqual((output / "bor/bin/genesis.json").read_bytes(), b"genesis-bytes")
+        self.assertEqual(record["chain"]["blocks"]["sha256"], reference(output / "chains/a/blocks.rlp")["sha256"])
+        self.assertEqual(json.loads((output / "preparation.json").read_text())["result"], "PASS")
+
+    def test_failures_still_write_the_record(self):
+        cases = {"compiler": dict(compiler="golang:latest"), "runtime": dict(runtime="debian:latest"),
+                 "family": dict(family_compiler="docker.io/library/golang@sha256:" + "d" * 64),
+                 "closure": dict(closure_commit="e" * 40)}
+        messages = {"compiler": "Unpinned compiler", "runtime": "Unpinned runtime image", "family": "compiler mismatch",
+                    "closure": "Source closure mismatch"}
+        for name, arguments in cases.items():
+            with self.subTest(name):
+                output, record = self.prepare(name, self.build(**arguments))
+                self.assertEqual(record["result"], "FAIL")
+                self.assertIn(messages[name], record["error"])
+                self.assertTrue((output / "preparation.json").exists())
+        self.addCleanup(setattr, FakeNative, "unit_stdout", FakeNative.unit_stdout)
+        for package in ("sourceinputs", "heimdallstub"):
+            with self.subTest(package):
+                FakeNative.unit_stdout = f"ok  \t{probe.PACKAGE}/{package}\t1.0s\n"
+                _, record = self.prepare("unit-" + package)
+                self.assertIn("tests did not pass", record["error"])
+        FakeNative.unit_stdout = (f"ok  \t{probe.PACKAGE}/sourceinputs\t1.0s\nok  \t{probe.PACKAGE}/heimdallstub\t1.0s\n")
+        FakeNative.cleanup_complete = False
+        _, record = self.prepare("cleanup")
+        self.assertEqual(record["result"], "FAIL")
+        FakeNative.cleanup_complete = True
+        FakeNative.interrupt = True
+        output, record = self.prepare("signal")
+        self.assertIn("Interrupted", json.loads((output / "preparation.json").read_text())["error"])
+
+    def test_refusals_create_no_output(self):
+        manifest = self.build()
+        with self.assertRaises(Rejected):
+            probe.prepare(manifest, "0" * 64, self.root / "digest")
+        not_built = self.build(kind="plan")
+        with self.assertRaises(Rejected):
+            probe.prepare(not_built, reference(not_built)["sha256"], self.root / "plan")
+        for output in (manifest.parent / "inside", probe.ROOT / "test/harness/prep-out"):
+            with self.subTest(output=output), self.assertRaises(Rejected):
+                probe.prepare(manifest, reference(manifest)["sha256"], output)
+            self.assertFalse(output.exists())
+        for name in ("digest", "plan"):
+            self.assertFalse((self.root / name).exists())
+
+
+class RunTests(DriverFixture):
+    def test_passing_run(self):
+        before = {number: signal.getsignal(number) for number in capture_probe.STOP_SIGNALS}
+        output, record = self.run_probe(self.prepared())
+        self.assertEqual(record["result"], "PASS", record.get("error"))
+        self.assertEqual(sorted(record["scenarios"]), sorted(FakeNative.context["plans"]))
+        self.assertEqual(record["expected"]["consumed"], FakeNative.context["expected"]["consumed"])
+        self.assertIn("admission_finished", record["phases"])
+        self.assertEqual(json.loads((output / "run-record.json").read_text())["result"], "PASS")
+        self.assertEqual({number: signal.getsignal(number) for number in capture_probe.STOP_SIGNALS}, before)
+
+    def test_one_failing_scenario_fails_the_run(self):
+        FakeNative.broken = "ac-cap-04-03"
+        _, record = self.run_probe(self.prepared())
+        self.assertEqual(record["scenarios"]["ac-cap-04-03"]["result"], "FAIL")
+        self.assertEqual(record["result"], "FAIL")
+
+    def test_an_oracle_without_scenarios_cannot_pass(self):
+        preparation = self.prepared()
+        oracle_row = [row for row in json.loads(preparation.read_text())["fixture"]
+                      if row["copy"]["path"].endswith("/expected.json")][0]["copy"]
+        oracle = json.loads(Path(oracle_row["path"]).read_text())
+        oracle["scenarios"] = []
+        Path(oracle_row["path"]).write_text(json.dumps(oracle))
+
+        def repin(record):
+            for row in record["fixture"]:
+                if row["copy"]["path"] == oracle_row["path"]:
+                    row["copy"] = reference(Path(oracle_row["path"]))
+        prepared = preparation.parent / "repinned.json"
+        record = json.loads(preparation.read_text())
+        repin(record)
+        prepared.write_text(json.dumps(record))
+        _, result = self.run_probe(prepared)
+        self.assertEqual(result["scenarios"], {})
+        self.assertEqual(result["result"], "FAIL")
+
+    def test_signal_and_cleanup_fail_the_run(self):
+        preparation = self.prepared()
+        FakeNative.interrupt = True
+        output, record = self.run_probe(preparation, "signal")
+        self.assertIn("signal", json.loads((output / "run-record.json").read_text())["error"])
+        FakeNative.interrupt = False
+        FakeNative.cleanup_complete = False
+        _, record = self.run_probe(preparation, "cleanup")
+        self.assertEqual(record["result"], "FAIL")
+
+    def test_preparation_gate(self):
+        for name, change in (("kind", lambda r: r.update(kind="other")), ("result", lambda r: r.update(result="FAIL")),
+                             ("cleanup", lambda r: r.update(cleanup_complete=False))):
+            with self.subTest(name), self.assertRaises(Rejected):
+                self.run_probe(self.prepared(change), name)
+            self.assertFalse((self.root / name).exists())
+
+    def test_run_inputs_are_checked(self):
+        _, record = self.run_probe(self.prepared(lambda r: r.update(runtime_image="debian:latest")), "unpinned")
+        self.assertIn("Unpinned runtime image", record["error"])
+        _, record = self.run_probe(self.prepared(lambda r: r.update(fixture=[])), "no-oracle")
+        self.assertIn("exactly one oracle", record["error"])
+        _, record = self.run_probe(self.prepared(lambda r: r.update(fixture=r["fixture"] + r["fixture"][:1])), "two")
+        self.assertIn("exactly one oracle", record["error"])
+        preparation = self.prepared()
+        Path(json.loads(preparation.read_text())["bor"]["binary"]["path"]).write_bytes(b"changed")
+        _, record = self.run_probe(preparation, "changed")
+        self.assertIn("changed", record["error"])
+
+    def test_refusals_create_no_output(self):
+        preparation = self.prepared()
+        with self.assertRaises(Rejected):
+            probe.run(preparation, "0" * 64, self.root / "digest")
+        self.containers = "abc\n"
+        with self.assertRaises(Rejected):
+            self.run_probe(preparation, "foreign")
+        self.containers = ""
+        with open(self.root / "lock", "w") as holder:
+            capture_probe.fcntl.flock(holder, capture_probe.fcntl.LOCK_EX)
+            with self.assertRaises(Rejected):
+                self.run_probe(preparation, "locked")
+        for output in (preparation.parent / "inside", probe.ROOT / "test/harness/run-out"):
+            with self.subTest(output=output), self.assertRaises(Rejected):
+                probe.run(preparation, reference(preparation)["sha256"], output)
+            self.assertFalse(output.exists())
+        for name in ("digest", "foreign", "locked"):
+            self.assertFalse((self.root / name).exists())
+
+    def test_existing_output_is_never_written(self):
+        preparation = self.prepared()
+        (self.root / "taken").mkdir()
+        (self.root / "taken" / "keep").write_text("x")
+        with self.assertRaises(OSError):
+            self.run_probe(preparation, "taken")
+        self.assertEqual(os.listdir(self.root / "taken"), ["keep"])
+
+    def test_main_exit_codes(self):
+        preparation = self.prepared()
+        quiet = contextlib.redirect_stdout(io.StringIO())
+        quiet.__enter__()
+        self.addCleanup(quiet.__exit__, None, None, None)
+        self.assertEqual(probe.main(["run", str(preparation), "--sha256", reference(preparation)["sha256"],
+                                     "--output", str(self.root / "main-pass")]), 0)
+        self.assertEqual(probe.main(["run", str(preparation), "--sha256", "0" * 64, "--output",
+                                     str(self.root / "main-refused")]), 2)
+        FakeNative.broken = "control-delay"
+        self.assertEqual(probe.main(["run", str(preparation), "--sha256", reference(preparation)["sha256"],
+                                     "--output", str(self.root / "main-fail")]), 1)
 
 
 if __name__ == "__main__":

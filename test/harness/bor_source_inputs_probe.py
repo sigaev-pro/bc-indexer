@@ -30,7 +30,7 @@ from native import Native, new_output
 import source_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = Path(__file__).with_name("fixtures") / "bor_source_inputs"
+FIXTURE = Path(__file__).with_name("fixtures") / "source_inputs_bor"
 PROBE_FILES = ("main.go",)
 STUB_FILES = ("stub.go", "stub_test.go")
 CORE_FILES = ("inputs.go", "inputs_test.go")
@@ -363,8 +363,56 @@ def checked_compare(name, observed, context):
         return [f"{name}: malformed observation: {type(error).__name__}: {error}"]
 
 
+def rlp_item(data, offset):
+    """Return (item, next offset) of one RLP item: bytes, or a list of items."""
+    require(offset < len(data), "Truncated RLP")
+    first = data[offset]
+    if first < 0x80:
+        return data[offset:offset + 1], offset + 1
+    if first < 0xb8:
+        start, length = offset + 1, first - 0x80
+    elif first < 0xc0:
+        size = first - 0xb7
+        start, length = offset + 1 + size, int.from_bytes(data[offset + 1:offset + 1 + size], "big")
+    elif first < 0xf8:
+        start, length = offset + 1, first - 0xc0
+    else:
+        size = first - 0xf7
+        start, length = offset + 1 + size, int.from_bytes(data[offset + 1:offset + 1 + size], "big")
+    end = start + length
+    require(end <= len(data), "Truncated RLP")
+    if first < 0xc0:
+        return data[start:end], end
+    items, position = [], start
+    while position < end:
+        item, position = rlp_item(data, position)
+        items.append(item)
+    require(position == end, "Malformed RLP list")
+    return items, end
+
+
+def sealed_headers(blocks):
+    """Number, time and state root of each block in a blocks.rlp stream, decoded here."""
+    rows, offset = [], 0
+    while offset < len(blocks):
+        block, offset = rlp_item(blocks, offset)
+        require(isinstance(block, list) and block and isinstance(block[0], list) and len(block[0]) > 11,
+                "Malformed block")
+        header = block[0]
+        rows.append({"number": int.from_bytes(header[8], "big"), "timestamp": int.from_bytes(header[11], "big"),
+                     "state_root": "0x" + header[3].hex()})
+    require(rows, "No sealed blocks")
+    return rows
+
+
 def build_context(oracle, generated, bodies, genesis, blocks, commit):
-    timestamps = {row["number"]: row["timestamp"] for row in generated["blocks"]}
+    # Header times and state roots come from the sealed blocks, decoded here; only the
+    # block hashes (Keccak, not in hashlib) are taken from the generation record, which
+    # must agree with the decoded fields.
+    headers = sealed_headers(blocks)
+    require([{key: row[key] for key in ("number", "timestamp", "state_root")} for row in generated["blocks"]] ==
+            headers, "The generation record differs from the sealed blocks")
+    timestamps = {row["number"]: row["timestamp"] for row in headers}
     requests = expected_requests(oracle, timestamps)
     items = (("genesis", genesis), ("blocks", blocks), ("bor-source-commit", commit.encode()))
     return {"oracle": oracle, "generated": generated, "timestamps": timestamps, "requests": requests,
@@ -408,6 +456,8 @@ def run(preparation_path, expected_sha, output):
             require(len(oracles) == 1, "The preparation must retain exactly one oracle")
             _, oracle = json_artifact(oracles[0], 1024 * 1024, deadline=deadline)
             record["oracle"] = oracles[0]
+            runtime = preparation["runtime_image"]
+            require(re.fullmatch(r"docker.io/library/debian@sha256:[0-9a-f]{64}", runtime), "Unpinned runtime image")
             bodies = {}
             for row in preparation["stub_bodies"]:
                 path = artifact(row["copy"], 1024 * 1024, deadline=deadline)
@@ -421,6 +471,7 @@ def run(preparation_path, expected_sha, output):
             _, generated = json_artifact(preparation["chain"]["generated"], 16 * 1024 * 1024, deadline=deadline)
             context = build_context(oracle, generated, bodies, genesis, blocks, bor["source_commit"])
             record["expected"] = {"requests": context["requests"], **context["expected"]}
+            record["phases"]["admission_finished"] = time.time()
             plans = output / "plans"
             plans.mkdir()
             record["phases"]["execution_started"] = time.time()
@@ -429,7 +480,7 @@ def run(preparation_path, expected_sha, output):
                 plan_path = plans / f"{name}.json"
                 plan_path.write_text(json.dumps(plan, indent=2) + "\n")
                 scenario_started = time.monotonic()
-                native.command(preparation["runtime_image"],
+                native.command(runtime,
                                ["/probe/probe", "scenario", "-plan", f"/plans/{name}.json", "-genesis",
                                 "/probe/genesis.json", "-chains", "/chains", "-bodies", "/stub", "-commit",
                                 bor["source_commit"], "-out", f"/out/{name}"],
@@ -444,8 +495,8 @@ def run(preparation_path, expected_sha, output):
                                              "elapsed_seconds": time.monotonic() - scenario_started,
                                              "result": "PASS" if not failures else "FAIL"}
             record["phases"]["execution_finished"] = time.time()
-            if len(record["scenarios"]) == len(oracle["scenarios"]) and \
-                    all(row["result"] == "PASS" for row in record["scenarios"].values()):
+            # An oracle without scenarios proves nothing, so it cannot pass.
+            if record["scenarios"] and all(row["result"] == "PASS" for row in record["scenarios"].values()):
                 record["result"] = "PASS"
         except (Interrupted, Exception) as error:
             record["error"] = f"{type(error).__name__}: {error}"
