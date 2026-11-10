@@ -541,6 +541,9 @@ class CapsuleInputTests(unittest.TestCase):
         for data in (PARENT + b"\0", PARENT[:-1], rlp(fields[:12]), b"\xb8\x01a"):
             with self.subTest(data=data[-3:]), self.assertRaises(Rejected):
                 self.build(parent=data)
+        # A header without extra data that block 1 still links to.
+        with self.assertRaisesRegex(Rejected, "Malformed header"):
+            self.build(parent=rlp(fields[:12]), sealed_parent=rlp(fields[:12]))
         # A non-canonical length prefix decodes to the same fields and is still refused.
         payload = PARENT[3:]
         with self.assertRaisesRegex(Rejected, "Malformed header"):

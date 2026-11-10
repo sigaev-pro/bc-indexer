@@ -495,8 +495,9 @@ def keccak256(data):
 
 def decoded_header(data):
     """The fields of one encoded header; the encoding must be canonical."""
-    header, end = rlp_item(data, 0)
-    require(end == len(data) and isinstance(header, list) and len(header) > 12 and rlp_encode(header) == data,
+    # Re-encoding to the same bytes also rules out trailing bytes.
+    header, _ = rlp_item(data, 0)
+    require(isinstance(header, list) and len(header) > 12 and rlp_encode(header) == data,
             "Malformed header")
     return header
 

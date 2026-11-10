@@ -701,12 +701,6 @@
       "replacement": "return ((value << count) | (value >> (64 - count)))"
     },
     {
-      "name": "decoded header has no trailing bytes",
-      "file": "test/harness/bor_source_inputs_probe.py",
-      "original": "require(end == len(data) and isinstance(header, list)",
-      "replacement": "require(isinstance(header, list)"
-    },
-    {
       "name": "decoded header is canonical",
       "file": "test/harness/bor_source_inputs_probe.py",
       "original": " and len(header) > 12 and rlp_encode(header) == data,",
