@@ -66,6 +66,35 @@ Next: Spec and Standards review of the new head, then the coordinator asks the
 owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
 this core into each client; the Bor block adds the in-process Heimdall stub.
 
+## E01-02.inputs — Geth block
+
+Status: IN_PROGRESS in draft PR #138; not accepted until review, CI and the
+owner's merge permission. Part of #14, after block 0 (PR #137, merged at
+`a2fb163`). Role: native-engineer (D98 item 5). Base `a2fb163`.
+
+Allowed paths: `test/harness/source_inputs_geth.py`,
+`test/harness/fixtures/source_inputs_geth/**` (coordinator technical decision:
+Geth-only files cannot live in `adapters/geth/source_inputs/` because the
+block 0 identity check compares every file of the three copies),
+`.project/evidence/E01-02.inputs.geth.md` and this section. Shared core files
+are unchanged. Profiles: none; private local Geth import with the ethash
+faker, so no AC verdict (AC-CAP-04-0x are POLY only) and no public-profile
+credit (D96, D98).
+
+Output: a test-only probe built inside the accepted Geth tree runs the shared
+core on the chain's own Pebble database. The dependency source is the
+BLOCKHASH ancestor lookup of the serial state processor, through a test-only
+hook; the product patch belongs to E01-02.admission (D98).
+
+Checks at commit `27e0cac`: preparation 01 PASS (shared unit tests 20 PASS
+inside the native module, three native mutants built); measured run 01 PASS
+(13.436 seconds of execution; the probe passes and all three native mutants
+are killed); Python oracle mutants 60 killed, 0 survivors. Details and
+limits: [E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
+
+Next: independent Spec and Standards review of the exact head, exact-head
+`bootstrap/ci`, then the coordinator asks the owner for merge permission.
+
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
 Status: ACCEPTED in PR #132 at merge
