@@ -57,9 +57,10 @@ and marks the E01-01.harness section accepted. Because `capture_probe.py`
 changed, measured run 04 ran preparation 08 with the tool at `93c7470` and
 passed all three families in 6.147 seconds of execution. Review of `93c7470`
 returned Spec and Standards PASS; Standards reproduced a remaining stop window
-at the start of `finally`, now closed by retrying the record write. That tool
-change needs measured run 05. Next: run 05, re-review, exact-head CI, then
-READY to the coordinator.
+at the start of `finally`, now closed by retrying the record write. Measured
+run 05 of that tool at `4da6fec` passed all three families in 5.918 seconds of
+execution with complete cleanup. Next: re-review, exact-head CI, then READY to
+the coordinator.
 
 Base: `f8d3e67d2aa936adaa69316ed268523a549c7e93` (first block),
 `4c2abb20b3ef42f4388e93403b323cfd5277ff7f` (follow-up).
