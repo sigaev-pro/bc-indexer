@@ -66,6 +66,62 @@ Next: Spec and Standards review of the new head, then the coordinator asks the
 owner for merge permission. After merge, the Geth, BSC and Bor blocks wire
 this core into each client; the Bor block adds the in-process Heimdall stub.
 
+## E01-02.inputs — BSC block
+
+Status: IN_PROGRESS in draft PR #139 (part of #14). Base `a2fb163`, after
+block 0 (PR #137) merged. Role: native-engineer (D98). AC-CAP-04-01 to
+AC-CAP-04-03 apply to POLY only, so this block issues no AC verdict. It is
+private local evidence under D96 and D98; public cells stay NOT_RUN.
+
+Allowed paths: `test/harness/bsc_source_inputs.py`,
+`test/harness/fixtures/source_inputs_bsc/**`,
+`.project/evidence/E01-02.inputs.bsc.md` and this section.
+`adapters/bsc/source_inputs/**` was also allowed, but this block leaves it
+unchanged.
+
+Coordinator technical decision (2026-11-10), not an owner answer: BSC-only Go
+sources live in `test/harness/fixtures/source_inputs_bsc/`, and the driver
+copies them into the native tree. A BSC-only file in the shared package would
+fail the shared-file check. The Geth and Bor blocks use their own
+`source_inputs_<client>` directories.
+
+Output: `ParliaDB` wraps the database handle that `parlia.New` receives, so
+every Parlia read goes through the dependency log of the current observation.
+A private native probe on the accepted BSC Parlia fixture shows:
+
+- the capsule is synced before execution;
+- each new response is durable before Parlia receives it (SIGKILL at the
+  hand-off keeps it);
+- resume and native-only replay hand Parlia the saved bytes. A tampered live
+  snapshot breaks block 2 in the control but not in the replay.
+
+Main `9d14e96` (the Bor block, PR #140) was merged into this branch at
+`bd323fc`, as the coordinator asked. It adds only Bor files.
+
+Review 001 (heads `3ae655e` and `bd323fc`): Spec and Standards both returned
+REQUEST_CHANGES with no P1 finding. The findings were five P2 items (missing
+controls, the record of an interrupted mutant, unstated boundary limits, the
+replay wording) and P3 notes. Commit `0cce068` fixes the code and the
+evidence file fixes the documents.
+
+Evidence: [E01-02.inputs.bsc](evidence/E01-02.inputs.bsc.md). At `0cce068`,
+preparation 02 and measured run 02 PASS. Go mutant record 03 killed 35 of 35,
+and the Python driver mutants killed 98 of 98. The records at `943817f` and
+`03e058b` are kept, including Go mutant record 01 (FAIL: 2 BUILD_FAILED
+mutants from table bugs).
+
+Review 002 (head `b577212`): Standards PASS with two P3 notes. Spec
+REQUEST_CHANGES with one P2 on wording: the missing BSC capsule items (the
+parent header, the parent state root and the ancestor headers) stay open work
+of #14, not E01-02.admission. The evidence now says so.
+
+Main `b7c2679` (the Geth block, PR #138) was then merged into this branch.
+Remaining for #14 after this block: those BSC capsule items. The real
+EXEC_READY binding stays with E01-02.admission.
+
+Next: Spec review of the new head and hosted `bootstrap/ci`. The coordinator
+then asks the owner for merge permission.
+
 ## E01-02.inputs — Geth block
 
 Status: IN_PROGRESS in draft PR #138; not accepted until review, CI and the
