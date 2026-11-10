@@ -523,7 +523,7 @@
     {
       "name": "generation record matches blocks",
       "file": "test/harness/bor_source_inputs_probe.py",
-      "original": "    require([{key: row[key] for key in (\"number\", \"timestamp\", \"state_root\")} for row in generated[\"blocks\"]] ==\n            headers, \"The generation record differs from the sealed blocks\")",
+      "original": "    require([{key: row[key] for key in fields} for row in generated[\"blocks\"]] ==\n            [{key: row[key] for key in fields} for row in headers], \"The generation record differs from the sealed blocks\")",
       "replacement": "    require(True, \"The generation record differs from the sealed blocks\")"
     },
     {
@@ -609,6 +609,426 @@
       "file": "test/harness/bor_source_inputs_probe.py",
       "original": "            artifact(bor[\"key_source\"], 4 * 1024 * 1024, deadline=deadline)\n",
       "replacement": ""
+    },
+    {
+      "name": "rlp_encode single byte bound",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "elif len(value) == 1 and value[0] < 0x80:",
+      "replacement": "elif len(value) == 1 and value[0] <= 0x80:"
+    },
+    {
+      "name": "rlp_encode short payload bound",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    if len(payload) < 56:\n        return bytes([short + len(payload)]) + payload\n    size = len(payload).to_bytes((len(payload).bit_length() + 7) // 8, \"big\")",
+      "replacement": "    if len(payload) <= 56:\n        return bytes([short + len(payload)]) + payload\n    size = len(payload).to_bytes((len(payload).bit_length() + 7) // 8, \"big\")"
+    },
+    {
+      "name": "rlp_encode length of length",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "size = len(payload).to_bytes((len(payload).bit_length() + 7) // 8, \"big\")",
+      "replacement": "size = len(payload).to_bytes(8, \"big\")"
+    },
+    {
+      "name": "rlp_encode list prefix",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "payload, short, long = b\"\".join(rlp_encode(item) for item in value), 0xc0, 0xf7",
+      "replacement": "payload, short, long = b\"\".join(rlp_encode(item) for item in value), 0x80, 0xb7"
+    },
+    {
+      "name": "keccak padding is Keccak, not SHA3",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "padded = bytearray(data) + b\"\\x01\"",
+      "replacement": "padded = bytearray(data) + b\"\\x06\""
+    },
+    {
+      "name": "keccak final padding bit",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    padded[-1] |= 0x80\n",
+      "replacement": "    padded[-1] |= 0x00\n"
+    },
+    {
+      "name": "keccak rate",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    rate = 136\n",
+      "replacement": "    rate = 144\n"
+    },
+    {
+      "name": "keccak round constant",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "0x0000000000008082, 0x800000000000808A",
+      "replacement": "0x0000000000008083, 0x800000000000808A"
+    },
+    {
+      "name": "keccak rotation offset",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "(0, 36, 3, 41, 18)",
+      "replacement": "(0, 36, 3, 41, 19)"
+    },
+    {
+      "name": "keccak chi complement",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "(~moved[(x + 1) % 5][y] & moved[(x + 2) % 5][y])",
+      "replacement": "(moved[(x + 1) % 5][y] & moved[(x + 2) % 5][y])"
+    },
+    {
+      "name": "keccak theta neighbor",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "mix = [parity[(x - 1) % 5] ^ rotate(parity[(x + 1) % 5], 1) for x in range(5)]",
+      "replacement": "mix = [parity[(x - 1) % 5] ^ rotate(parity[(x + 1) % 5], 0) for x in range(5)]"
+    },
+    {
+      "name": "keccak iota",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        lanes[0][0] ^= constant\n",
+      "replacement": ""
+    },
+    {
+      "name": "keccak absorbs little-endian lanes",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "int.from_bytes(padded[offset:offset + 8], \"little\")",
+      "replacement": "int.from_bytes(padded[offset:offset + 8], \"big\")"
+    },
+    {
+      "name": "keccak squeezes four lanes",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "for index in range(4))",
+      "replacement": "for index in range(3))"
+    },
+    {
+      "name": "rotate masks 64 bits",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "return ((value << count) | (value >> (64 - count))) & LANE",
+      "replacement": "return ((value << count) | (value >> (64 - count)))"
+    },
+    {
+      "name": "decoded header has no trailing bytes",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(end == len(data) and isinstance(header, list)",
+      "replacement": "require(isinstance(header, list)"
+    },
+    {
+      "name": "decoded header is canonical",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": " and len(header) > 12 and rlp_encode(header) == data,",
+      "replacement": " and len(header) > 12,"
+    },
+    {
+      "name": "decoded header has extra data",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": " and len(header) > 12 and rlp_encode(header) == data,",
+      "replacement": " and rlp_encode(header) == data,"
+    },
+    {
+      "name": "sealed header hash is Keccak of the header",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "\"hash\": \"0x\" + keccak256(rlp_encode(header)).hex()",
+      "replacement": "\"hash\": \"0x\" + keccak256(rlp_encode(block)).hex()"
+    },
+    {
+      "name": "sealed header parent hash field",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "\"parent_hash\": \"0x\" + header[0].hex()",
+      "replacement": "\"parent_hash\": \"0x\" + header[1].hex()"
+    },
+    {
+      "name": "chain config sets the delay",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    config[\"bor\"][\"stateSyncConfirmationDelay\"] = {\"0\": delay}\n",
+      "replacement": ""
+    },
+    {
+      "name": "chain config keys are sorted",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "return json.dumps(config, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False).encode()",
+      "replacement": "return json.dumps(config, separators=(\",\", \":\"), ensure_ascii=False).encode()"
+    },
+    {
+      "name": "chain config has no spaces",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "return json.dumps(config, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False).encode()",
+      "replacement": "return json.dumps(config, sort_keys=True, ensure_ascii=False).encode()"
+    },
+    {
+      "name": "chain config refuses a preset delay",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(\"stateSyncConfirmationDelay\" not in config[\"bor\"], \"The fixture genesis already sets the delay\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "chain config needs a Bor object",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(isinstance(config, dict) and isinstance(config.get(\"bor\"), dict), \"The genesis has no Bor config\")",
+      "replacement": "require(isinstance(config, dict), \"The genesis has no Bor config\")"
+    },
+    {
+      "name": "fork ID skips block 0 forks",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if key.endswith(\"Block\") and type(value) is int and value > 0})",
+      "replacement": "if key.endswith(\"Block\") and type(value) is int and value >= 0})"
+    },
+    {
+      "name": "fork ID uses only Block keys",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if key.endswith(\"Block\") and type(value) is int and value > 0})",
+      "replacement": "if type(value) is int and value > 0})"
+    },
+    {
+      "name": "fork ID passed forks include the head",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        if fork > head:\n",
+      "replacement": "        if fork >= head:\n"
+    },
+    {
+      "name": "fork ID reports the next fork",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            following = fork\n",
+      "replacement": "            following = 0\n"
+    },
+    {
+      "name": "fork ID checksum is big-endian",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "checksum = zlib.crc32(fork.to_bytes(8, \"big\"), checksum)",
+      "replacement": "checksum = zlib.crc32(fork.to_bytes(8, \"little\"), checksum)"
+    },
+    {
+      "name": "fork ID starts from the genesis hash",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "checksum, following = zlib.crc32(genesis_hash), 0",
+      "replacement": "checksum, following = zlib.crc32(b\"\"), 0"
+    },
+    {
+      "name": "parent header number is 0",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(int.from_bytes(fields[8], \"big\") == 0 and \"0x\" + parent_hash.hex() == headers[0][\"parent_hash\"],",
+      "replacement": "require(\"0x\" + parent_hash.hex() == headers[0][\"parent_hash\"],"
+    },
+    {
+      "name": "parent header is the parent of block 1",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(int.from_bytes(fields[8], \"big\") == 0 and \"0x\" + parent_hash.hex() == headers[0][\"parent_hash\"],",
+      "replacement": "require(int.from_bytes(fields[8], \"big\") == 0,"
+    },
+    {
+      "name": "parent header time is the genesis time",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "require(int.from_bytes(fields[11], \"big\") == int(document[\"timestamp\"], 16) and\n",
+      "replacement": "require(\n"
+    },
+    {
+      "name": "parent header gas limit is the genesis gas limit",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            int.from_bytes(fields[9], \"big\") == int(document[\"gasLimit\"], 16) and\n",
+      "replacement": ""
+    },
+    {
+      "name": "parent header extra data is the genesis extra data",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            fields[12] == bytes.fromhex(extra.removeprefix(\"0x\")), \"The parent header differs",
+      "replacement": "            True, \"The parent header differs"
+    },
+    {
+      "name": "parent root item is the state root",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "(\"parent-root\", fields[3])",
+      "replacement": "(\"parent-root\", fields[4])"
+    },
+    {
+      "name": "ancestor headers item lists the parent",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "(\"ancestor-headers\", rlp_encode([fields]))",
+      "replacement": "(\"ancestor-headers\", rlp_encode(fields))"
+    },
+    {
+      "name": "fork ID item is at the last block",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "parent_hash, headers[-1][\"number\"])",
+      "replacement": "parent_hash, headers[0][\"number\"])"
+    },
+    {
+      "name": "chain config uses the oracle delay",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "config = chain_config(genesis, oracle[\"state_sync_delay\"])",
+      "replacement": "config = chain_config(genesis, 1)"
+    },
+    {
+      "name": "normalization profile item",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "(\"normalization-profile\", oracle[\"normalization_profile\"].encode())",
+      "replacement": "(\"normalization-profile\", b\"test-only-probe-v2\")"
+    },
+    {
+      "name": "oracle capsule item order",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require([name for name, _ in items] == oracle[\"capsule_items\"], \"The oracle capsule items differ\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "generation record hashes are checked",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    fields = (\"number\", \"timestamp\", \"state_root\", \"hash\")\n",
+      "replacement": "    fields = (\"number\", \"timestamp\", \"state_root\")\n"
+    },
+    {
+      "name": "sealed blocks are one chain",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    require(all(row[\"parent_hash\"] == previous[\"hash\"] for previous, row in zip(headers, headers[1:])),\n            \"The sealed blocks are not one chain\")",
+      "replacement": "    require(True, \"The sealed blocks are not one chain\")"
+    },
+    {
+      "name": "capsule item refs carry lengths",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "{\"name\": name, \"length\": len(data), \"sha256\"",
+      "replacement": "{\"name\": name, \"length\": 0, \"sha256\""
+    },
+    {
+      "name": "check_capsule compares the items",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if capsule.get(\"items\") != context[\"capsule_items\"] or capsule.get(\"digest\")",
+      "replacement": "if capsule.get(\"digest\")"
+    },
+    {
+      "name": "check_capsule compares the digest",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": " or capsule.get(\"digest\") != context[\"expected\"][\"capsule\"]:",
+      "replacement": ":"
+    },
+    {
+      "name": "check_capsule config match follows the fault",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if result.get(\"native_config_matches_capsule\") is not (step[\"fault_state_sync_delay\"] < 0):",
+      "replacement": "if result.get(\"native_config_matches_capsule\") is not True and step[\"fault_state_sync_delay\"] < 0:"
+    },
+    {
+      "name": "every logged attempt is checked",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        if step[\"log\"] and str(index) not in refusals:\n",
+      "replacement": "        if step[\"log\"] and str(index) not in refusals and index > 0:\n"
+    },
+    {
+      "name": "refused attempts exit with 1",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            if status.get(\"exit_code\") != 1 or status.get(\"signal\"):\n                fail(f\"attempt {index} exited with {status}, expected a refusal\")",
+      "replacement": "            if status.get(\"signal\"):\n                fail(f\"attempt {index} exited with {status}, expected a refusal\")"
+    },
+    {
+      "name": "refused attempts end without a signal",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            if status.get(\"exit_code\") != 1 or status.get(\"signal\"):",
+      "replacement": "            if status.get(\"exit_code\") != 1:"
+    },
+    {
+      "name": "refusal names the item",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "                if refusals[str(index)] not in (result.get(\"error\") or \"\"):\n",
+      "replacement": "                if not result.get(\"error\"):\n"
+    },
+    {
+      "name": "refusal seals nothing",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "                if result.get(\"capsule\") or result.get(\"counted_calls\")",
+      "replacement": "                if result.get(\"counted_calls\")"
+    },
+    {
+      "name": "refusal fetches nothing",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if result.get(\"capsule\") or result.get(\"counted_calls\") or result.get(\"inserted\")",
+      "replacement": "if result.get(\"capsule\") or result.get(\"inserted\")"
+    },
+    {
+      "name": "refusal imports nothing",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "or result.get(\"counted_calls\") or result.get(\"inserted\") or \\\n",
+      "replacement": "or result.get(\"counted_calls\") or \\\n"
+    },
+    {
+      "name": "refusal closes nothing",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "                        result.get(\"consumed\") or result.get(\"stand_in_marker\"):\n                    fail(f\"attempt {index} sealed",
+      "replacement": "                        result.get(\"stand_in_marker\"):\n                    fail(f\"attempt {index} sealed"
+    },
+    {
+      "name": "refusal writes no marker",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "                        result.get(\"consumed\") or result.get(\"stand_in_marker\"):\n                    fail(f\"attempt {index} sealed",
+      "replacement": "                        result.get(\"consumed\"):\n                    fail(f\"attempt {index} sealed"
+    },
+    {
+      "name": "refusal leaves the store",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "                if row[\"store_after\"] != row[\"store_before\"]:\n                    fail(f\"attempt {index} changed the store\")",
+      "replacement": "                pass"
+    },
+    {
+      "name": "clean control completes",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "                completed(result, generated, fail, f\"attempt {index}\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "clean control origins",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "origins = [\"fetch\"] * len(want) if result.get(\"frontier_at_open\") == 0 else [\"replay\"] * len(want)",
+      "replacement": "origins = [row.get(\"origin\") for row in result[\"counted_calls\"]]"
+    },
+    {
+      "name": "clean control binds the digest",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "                if result.get(\"stand_in_marker\") != {\"kind\": MARKER_KIND, \"observation\": observation,\n                                                     \"consumed_manifest_digest\": full[\"consumed\"]}:",
+      "replacement": "                if not result.get(\"stand_in_marker\"):"
+    },
+    {
+      "name": "first control is on an empty store",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if attempts[0][\"store_before\"] != [] or str(0) not in refusals:",
+      "replacement": "if str(0) not in refusals:"
+    },
+    {
+      "name": "first control is a refusal",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "if attempts[0][\"store_before\"] != [] or str(0) not in refusals:",
+      "replacement": "if attempts[0][\"store_before\"] != []:"
+    },
+    {
+      "name": "controls tamper every derived item",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        if [step[\"tamper\"] for step in plan[\"attempts\"] if step[\"tamper\"]] != plan[\"tampered\"]:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "conflict uses the fault delay",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "delayed = expected_requests(oracle, context[\"timestamps\"], plan[\"attempts\"][1][\"fault_state_sync_delay\"])",
+      "replacement": "delayed = expected_requests(oracle, context[\"timestamps\"], plan[\"attempts\"][1][\"state_sync_delay\"])"
+    },
+    {
+      "name": "generation records the parent header",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            \"parent_header\": reference(chains / \"a/parent-header.rlp\", deadline=deadline)}",
+      "replacement": "            }"
+    },
+    {
+      "name": "run reads the retained parent header",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "            context = build_context(oracle, generated, bodies, genesis, blocks, bor[\"source_commit\"], parent)",
+      "replacement": "            context = build_context(oracle, generated, bodies, genesis, blocks, bor[\"source_commit\"], parent[:-1])"
+    },
+    {
+      "name": "run records the expected capsule items",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "record[\"expected\"] = {\"requests\": context[\"requests\"], \"capsule_items\": context[\"capsule_items\"],",
+      "replacement": "record[\"expected\"] = {\"requests\": context[\"requests\"], \"capsule_items\": [],"
+    },
+    {
+      "name": "an attempt must leave a result",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "        if result is None and row.get(\"crash_result\") is None:\n            fail(f\"attempt {index} left no result\")",
+      "replacement": "        if False:\n            fail(f\"attempt {index} left no result\")"
+    },
+    {
+      "name": "attempt failures stop the judge",
+      "file": "test/harness/bor_source_inputs_probe.py",
+      "original": "    if failures:\n        return failures\n    for index, (step, row) in enumerate(zip(plan[\"attempts\"], attempts)):\n        if step[\"log\"]",
+      "replacement": "    for index, (step, row) in enumerate(zip(plan[\"attempts\"], attempts)):\n        if step[\"log\"]"
     }
   ]
 }

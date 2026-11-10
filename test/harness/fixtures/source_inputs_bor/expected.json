@@ -1,6 +1,20 @@
 {
   "schema_version": 1,
   "kind": "bor-source-inputs-oracle",
+  "state_sync_delay": 0,
+  "normalization_profile": "test-only-probe-v1",
+  "capsule_items": [
+    "genesis",
+    "blocks",
+    "parent-header",
+    "parent-hash",
+    "parent-root",
+    "ancestor-headers",
+    "chain-config",
+    "fork-id",
+    "native-commit",
+    "normalization-profile"
+  ],
   "requests": [
     {
       "request": "GET /bor/spans/0",
@@ -39,6 +53,8 @@
           "variant": "a",
           "log": true,
           "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": 2
         },
         {
@@ -46,6 +62,8 @@
           "variant": "b",
           "log": true,
           "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": -1
         }
       ]
@@ -62,13 +80,17 @@
           "variant": "a",
           "log": true,
           "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": 2
         },
         {
           "blocks": "a",
           "variant": "a",
           "log": true,
-          "state_sync_delay": 1,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": 1,
+          "tamper": "",
           "crash_after": -1
         },
         {
@@ -76,6 +98,8 @@
           "variant": "a",
           "log": true,
           "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": -1
         }
       ]
@@ -91,6 +115,8 @@
           "variant": "a",
           "log": true,
           "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": 1
         },
         {
@@ -98,6 +124,8 @@
           "variant": "a",
           "log": true,
           "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": -1
         }
       ]
@@ -114,6 +142,8 @@
           "variant": "b",
           "log": false,
           "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": -1
         }
       ]
@@ -129,6 +159,114 @@
           "variant": "a",
           "log": false,
           "state_sync_delay": 1,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
+          "crash_after": -1
+        }
+      ]
+    },
+    {
+      "name": "control-capsule-items",
+      "ac": "control",
+      "kind": "capsule-controls",
+      "observation": "control-capsule-items",
+      "tampered": [
+        "parent-root",
+        "parent-header",
+        "parent-hash",
+        "ancestor-headers",
+        "fork-id",
+        "normalization-profile"
+      ],
+      "refusals": {
+        "0": "capsule item parent-root disagrees with",
+        "2": "capsule item parent-header disagrees with",
+        "3": "capsule item parent-hash disagrees with",
+        "4": "capsule item ancestor-headers disagrees with",
+        "5": "capsule item fork-id disagrees with",
+        "6": "capsule item normalization-profile disagrees with",
+        "7": "conflicting input capsule"
+      },
+      "attempts": [
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "parent-root",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "parent-header",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "parent-hash",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "ancestor-headers",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "fork-id",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "normalization-profile",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 1,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
+          "crash_after": -1
+        },
+        {
+          "blocks": "a",
+          "variant": "a",
+          "log": true,
+          "state_sync_delay": 0,
+          "fault_state_sync_delay": -1,
+          "tamper": "",
           "crash_after": -1
         }
       ]
