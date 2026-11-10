@@ -20,12 +20,12 @@ hashes and the retained failed or stopped records are in
 `9a842ec` returned PASS in round 3 with P3 notes (a missing-profile-result
 control, a `source_commit` value check in a run test, the `FreezeLimit`
 comment for a zero limit, the preparation attempt-index meaning). The branch
-then merged main at `be258cb` (PRs #134 and #131); the merge changed none of
-the block's executed files and no harness file the driver imports. Next:
+then merged main up to `d40c6ea` (PRs #134, #131 and #135); the merges changed
+none of the block's executed files and no harness file the driver imports. Next:
 reviewer confirmation and exact-head CI of the merged head; the coordinator
 merges after the owner's permission (D97).
 
-Base: `be258cb` (main, merged into the branch). Branch/worktree: `feat/e01-02-pins` / `e01-02-pins-a2f23f`.
+Base: `d40c6ea` (main, merged into the branch). Branch/worktree: `feat/e01-02-pins` / `e01-02-pins-a2f23f`.
 
 BLOCKED_DECISION (owner): the closure boundary for #13. Its ACs list all seven
 public profiles in `local-e2e` and `harness` modes, while D96 keeps public
