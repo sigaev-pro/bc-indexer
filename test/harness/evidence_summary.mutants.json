@@ -212,8 +212,38 @@
     {
       "name": "unlinked later attempt",
       "file": "evidence_summary.py",
-      "original": "    elif summary[\"attempt_index\"] in (1, None):",
+      "original": "    elif summary[\"attempt_index\"] == 1:",
       "replacement": "    elif True:"
+    },
+    {
+      "name": "top-level run records",
+      "file": "evidence_summary.py",
+      "original": "\"run/run-record.json\", \"run-record.json\", \"run.json\")",
+      "replacement": "\"run/run-record.json\")"
+    },
+    {
+      "name": "flat phase marks",
+      "file": "evidence_summary.py",
+      "original": "    if phases and all(type(value) in (int, float) for value in phases.values()):\n        return mark_rows(phases)\n",
+      "replacement": ""
+    },
+    {
+      "name": "mark order check",
+      "file": "evidence_summary.py",
+      "original": "            if finished < started:\n                raise FormatError",
+      "replacement": "            if False:\n                raise FormatError"
+    },
+    {
+      "name": "mark pair required",
+      "file": "evidence_summary.py",
+      "original": "    if not rows:\n        raise FormatError(\"phase marks",
+      "replacement": "    if False:\n        raise FormatError(\"phase marks"
+    },
+    {
+      "name": "missing attempt index",
+      "file": "evidence_summary.py",
+      "original": "    elif summary[\"attempt_index\"] is None:",
+      "replacement": "    elif False:"
     }
   ]
 }

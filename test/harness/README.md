@@ -726,7 +726,8 @@ write; a refusal before that leaves no output. Portable tests in
 ## Evidence figures and mutation checks
 
 `evidence_summary.py RUN_DIR` reads one retained run (`image-fence.json`,
-`preparation.json` or `run/run-record.json`) and prints a Markdown block with
+`preparation.json`, `run/run-record.json`, `run-record.json` or `run.json`) and
+prints a Markdown block with
 the proof, tool and native-report SHA256 values, timings, exit codes, cleanup
 and process-group flags, Go and Python test counts, unique absolute references
 with total bytes, and the attempt lineage. It only reads. Before printing, it

@@ -311,6 +311,16 @@ class EvidenceSummaryTests(unittest.TestCase):
                 run = Fixture(temporary).runner(attempt=attempt)
                 self.assertEqual(run_tool(run)[0], 2)
 
+    def test_missing_attempt_index_is_not_called_a_new_lineage(self):
+        run = self.fixture.nats_run()
+        path = run / "image-fence.json"
+        proof = json.loads(path.read_text())
+        del proof["attempt_index"]
+        write_json(path, proof)
+        code, output, _ = run_tool(run)
+        self.assertEqual(code, 0)
+        self.assertIn("- Attempt index not recorded; the proof links no previous attempt", output)
+
     def test_unlinked_later_attempt_is_not_called_a_new_lineage(self):
         run = self.fixture.nats_run(attempt=3)
         code, output, _ = run_tool(run)
@@ -397,6 +407,28 @@ class EvidenceSummaryTests(unittest.TestCase):
                 self.assertEqual((code, output), (2, ""), errors)
                 self.assertTrue(errors.startswith("ERROR: "), errors)
         self.assertEqual(run_tool(self.fixture.root / "image-fence.json")[0], 2)
+
+    def test_top_level_run_records_and_flat_phase_marks(self):
+        for name in ("run-record.json", "run.json"):
+            with self.subTest(name), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(temporary)
+                run = fixture.nats_run()
+                proof = json.loads((run / "image-fence.json").read_text())
+                (run / "image-fence.json").unlink()
+                proof.update(kind="owned-capture-probe-run", phases={
+                    "admission_started": 100.0, "execution_started": 100.25, "execution_finished": 105.5})
+                write_json(run / name, proof)
+                code, output, errors = run_tool(run)
+                self.assertEqual((code, errors), (0, ""))
+                self.assertIn(f"- Proof `{name}` SHA256", output)
+                self.assertIn("| execution | 5.250 | n/a |", output)
+                self.assertIn("- Attempt index 1; new lineage", output)
+                self.assertNotIn("| admission |", output)
+        for marks, message in (({"execution_started": 5.0, "execution_finished": 4.0}, "finishes before"),
+                               ({"admission_started": 1.0}, "no matching")):
+            with self.subTest(marks=marks):
+                with self.assertRaisesRegex(evidence_summary.FormatError, message):
+                    evidence_summary.phase_rows({"phases": marks})
 
     def test_large_nested_documents_are_not_listed(self):
         run = self.fixture.nats_run()

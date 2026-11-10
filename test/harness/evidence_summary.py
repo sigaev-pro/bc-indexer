@@ -5,7 +5,9 @@ Usage: evidence_summary.py RUN_DIR [--test-log PATH ...]
 
 RUN_DIR is one retained run directory: a NATS image preparation or fence run
 (`preparation.json` or `image-fence.json`), a local native-seam runner run
-(`run/run-record.json`) or a family fixture preparation (`preparation.json`).
+(`run/run-record.json`), a family fixture preparation (`preparation.json`), or
+an E01-02 owned-capture or pins run (`run-record.json` or `run.json`). Phases
+are start and finish objects or flat epoch marks (`X_started`, `X_finished`).
 The tool only reads. It verifies every absolute artifact reference (an object
 with `path`, `sha256` and `size_bytes`) in the run proof, in each previous
 attempt the proof cites, among the top-level references of each JSON document
@@ -32,7 +34,7 @@ import re
 import stat
 import sys
 
-PROOF_FILES = ("image-fence.json", "preparation.json", "run/run-record.json")
+PROOF_FILES = ("image-fence.json", "preparation.json", "run/run-record.json", "run-record.json", "run.json")
 NESTED_LIMIT = 1 << 20
 GO_RESULT = re.compile(r"^(?P<indent>\s*)--- (?P<status>PASS|FAIL|SKIP): (?P<name>\S+) \((?P<seconds>[0-9.]+)s\)$")
 GO_PACKAGE = re.compile(r"^(?P<status>ok|FAIL)\s+(?P<package>\S+)\s+(?P<seconds>[0-9.]+)s")
@@ -316,6 +318,8 @@ def phase_rows(proof):
         return []
     if type(phases) is not dict:
         raise FormatError("phases is not an object")
+    if phases and all(type(value) in (int, float) for value in phases.values()):
+        return mark_rows(phases)
     rows = []
     for name, phase in phases.items():
         try:
@@ -323,6 +327,23 @@ def phase_rows(proof):
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise FormatError(f"phase {name} has no valid start and finish") from error
         rows.append({"name": name, "seconds": seconds, "deadline_seconds": phase.get("deadline_seconds")})
+    return rows
+
+
+def mark_rows(marks):
+    """Turn flat epoch marks such as execution_started/execution_finished into durations."""
+    rows = []
+    for name, started in marks.items():
+        if not name.endswith("_started"):
+            continue
+        phase = name[:-len("_started")]
+        finished = marks.get(phase + "_finished")
+        if finished is not None:
+            if finished < started:
+                raise FormatError(f"phase {phase} finishes before it starts")
+            rows.append({"name": phase, "seconds": finished - started, "deadline_seconds": None})
+    if not rows:
+        raise FormatError("phase marks have no matching _started and _finished pair")
     return rows
 
 
@@ -463,7 +484,9 @@ def render(summary):
         history = "; ".join(f"`{Path(entry['path']).parent.name}` {entry['result']} attempt {entry['attempt_index']} "
                             f"(`{entry['sha256']}`)" for entry in chain)
         lines.append(f"- Attempt index {summary['attempt_index']}; previous attempts, newest first: {history}")
-    elif summary["attempt_index"] in (1, None):
+    elif summary["attempt_index"] is None:
+        lines.append("- Attempt index not recorded; the proof links no previous attempt")
+    elif summary["attempt_index"] == 1:
         lines.append(f"- Attempt index {summary['attempt_index']}; new lineage (no previous attempt)")
     else:
         lines.append(f"- Attempt index {summary['attempt_index']}; the proof links no previous attempt")
@@ -491,7 +514,8 @@ def render(summary):
     if summary["phases"]:
         lines += ["", "| Phase | Seconds | Deadline |", "|---|---|---|"]
         for row in summary["phases"]:
-            lines.append(f"| {row['name']} | {number(row['seconds'])} | {row['deadline_seconds']} |")
+            deadline = row["deadline_seconds"] if row["deadline_seconds"] is not None else "n/a"
+            lines.append(f"| {row['name']} | {number(row['seconds'])} | {deadline} |")
     if summary["cases"]:
         # lower_sequence is an exclusive frontier: messages 1..5 have lower 0, upper 5.
         lines += ["", "| Case | Result | Native report SHA256 | Report bytes | Stored | Sequences | Groups |",
