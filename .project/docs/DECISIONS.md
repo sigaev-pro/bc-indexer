@@ -16,6 +16,7 @@ The coordinator asked the owner about the BLOCKED_DECISION items of #13 (E01-02.
 Recorded technical decisions, not owner answers:
 
 - GitHub closed #13 automatically when PR #133 merged, because its body said "It does not close #13", which GitHub reads as the closing keyword "close" followed by "#13". The coordinator reopened #13 the same day. Partial-block PR bodies use "Part of #N" and never a closing keyword followed by an issue number, even in a negative sentence.
+- TASK_DECOMPOSITION is a normative mirror of the accepted v3 specification, so this decision does not edit it. As with D96, existing TASK_DECOMPOSITION text is read through this decision: the E01-02.admission card also covers the retention and safe-point patches and the real EXEC_READY binding of the E01-02.inputs consumed-manifest digest, and the E04-04.import_pressure output also covers the raw spool encoder for AC-CAP-06-01.
 - This decision changes where #13 and #15 stop and which tasks own the patches and the spool encoder. It does not change product guarantees, acceptance cases or gates. E01-02.admission still requires the retention and safe-point patches before its own acceptance.
 
 ## D97 — Run independent work in parallel model sessions (2026-11-10)
