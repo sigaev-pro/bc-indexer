@@ -1,0 +1,382 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.inputs Geth probe oracle and tree install in test/harness/source_inputs_geth.py.",
+  "language": "python",
+  "root": "../../../..",
+  "copy": [
+    "test/harness/*.py",
+    "test/harness/fixtures/source_inputs_geth/*",
+    "adapters/geth/source_inputs/*"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/fixtures/source_inputs_geth/test_source_inputs_geth.py",
+    "-v"
+  ],
+  "import": [
+    "source_inputs_geth"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "chain family check",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "observation.get(\"family\") != oracle[\"family\"] or ",
+      "replacement": "False or "
+    },
+    {
+      "name": "chain observation check",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "observation.get(\"observation\") != oracle[\"observation\"] or \\\n",
+      "replacement": "False or \\\n"
+    },
+    {
+      "name": "chain target check",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "observation.get(\"target\") != oracle[\"target\"] or len(",
+      "replacement": "False or len("
+    },
+    {
+      "name": "chain hash count check",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or len(observation.get(\"generated_hashes\", [])) != oracle[\"target\"]:",
+      "replacement": " or False:"
+    },
+    {
+      "name": "scenario names",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if set(scenarios) != set(oracle[\"scenarios\"]) or len(",
+      "replacement": "if False or len("
+    },
+    {
+      "name": "scenario duplicates",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or len(scenarios) != len(observation[\"scenarios\"]):",
+      "replacement": " or False:"
+    },
+    {
+      "name": "attempt names",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "        if [row.get(\"name\") for row in attempts] != [want[\"name\"] for want in wants]:\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "complete exit code",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if attempt.get(\"exit_code\") != 0 or attempt.get(\"signal\")",
+      "replacement": "if attempt.get(\"signal\")"
+    },
+    {
+      "name": "complete signal",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or attempt.get(\"signal\") or not isinstance(result, dict):",
+      "replacement": " or not isinstance(result, dict):"
+    },
+    {
+      "name": "complete errors",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if result.get(\"errors\") or result.get(\"import_error\") is not None:",
+      "replacement": "if result.get(\"import_error\") is not None:"
+    },
+    {
+      "name": "complete import error",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if result.get(\"errors\") or result.get(\"import_error\") is not None:",
+      "replacement": "if result.get(\"errors\"):"
+    },
+    {
+      "name": "head number",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if result.get(\"head_number\") != target or result.get(\"head_hash\")",
+      "replacement": "if result.get(\"head_hash\")"
+    },
+    {
+      "name": "head hash",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or result.get(\"head_hash\") != hashes[target - 1]:",
+      "replacement": " or False:"
+    },
+    {
+      "name": "reader slots",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if result.get(\"reader_slots\") != [\"0x\" + response for _, response in log]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "capsule existed at open",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if result.get(\"capsule_existed\") is not want[\"capsule_existed\"] or \\\n",
+      "replacement": "if False or \\\n"
+    },
+    {
+      "name": "frontier at open",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            result.get(\"frontier_at_open\") != want[\"frontier_at_open\"]:",
+      "replacement": "            False:"
+    },
+    {
+      "name": "capsule item names",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    if [ref.get(\"name\") for ref in refs] != oracle[\"capsule_items\"]:\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "capsule fixed items",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "        if by_name[name].get(\"sha256\") != sha:\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "capsule observation",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if capsule.get(\"observation\") != oracle[\"observation\"] or capsule.get(\"digest\")",
+      "replacement": "if capsule.get(\"digest\")"
+    },
+    {
+      "name": "capsule digest",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or capsule.get(\"digest\") != capsule_digest(refs):",
+      "replacement": " or False:"
+    },
+    {
+      "name": "consumed digest",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "consumed.get(\"digest\") != expected_consumed(capsule, log) or",
+      "replacement": "False or"
+    },
+    {
+      "name": "consumed count",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "consumed.get(\"count\") != len(log) or consumed.get",
+      "replacement": "False or consumed.get"
+    },
+    {
+      "name": "consumed capsule",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or consumed.get(\"capsule_digest\") != capsule:",
+      "replacement": " or False:"
+    },
+    {
+      "name": "cursor",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if result.get(\"cursor\") != len(log) or \\\n",
+      "replacement": "if False or \\\n"
+    },
+    {
+      "name": "closed refusal",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            not str(result.get(\"extra_after_finish\", \"\")).startswith(oracle[\"closed_error_prefix\"]):",
+      "replacement": "            False:"
+    },
+    {
+      "name": "poisoned fetch",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "event.get(\"op\") == \"fetch\" and event.get(\"poisoned\") is not False",
+      "replacement": "False"
+    },
+    {
+      "name": "seal order opened before start",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "not opened < started",
+      "replacement": "False"
+    },
+    {
+      "name": "open sync",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "or \\\n            (\"sync\", None) not in rows[sealed:opened]:",
+      "replacement": "or \\\n            False:"
+    },
+    {
+      "name": "missing open",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if sealed is None or opened is None or started is None",
+      "replacement": "if sealed is None or started is None"
+    },
+    {
+      "name": "request identity",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "event.get(\"request\") != log[event[\"sequence\"]][0]",
+      "replacement": "False"
+    },
+    {
+      "name": "handoff bytes",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "event.get(\"response\") != log[event[\"sequence\"]][1]",
+      "replacement": "False"
+    },
+    {
+      "name": "close tail",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    if tail != ([(\"put\", \"closed\"), (\"sync\", None)] if want[\"closes\"] else []) + [(\"finished\", None)]:\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "seal once",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    if sealed is None:\n        fail(\"the attempt did not seal exactly once\")",
+      "replacement": "    if sealed is None:\n        return None\n        fail(\"the attempt did not seal exactly once\")"
+    },
+    {
+      "name": "reseal writes",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if any(row[0] == \"put\" for row in before) or (\"sync\", None) not in before:",
+      "replacement": "if (\"sync\", None) not in before:"
+    },
+    {
+      "name": "reseal sync",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if any(row[0] == \"put\" for row in before) or (\"sync\", None) not in before:",
+      "replacement": "if any(row[0] == \"put\" for row in before):"
+    },
+    {
+      "name": "manifest once",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if len(manifest) != 1 or not chunks or before[-1]",
+      "replacement": "if not chunks or before[-1]"
+    },
+    {
+      "name": "manifest has chunks",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if len(manifest) != 1 or not chunks or before[-1]",
+      "replacement": "if len(manifest) != 1 or before[-1]"
+    },
+    {
+      "name": "manifest synced",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or before[-1] != (\"sync\", None):\n        fail(\"the capsule manifest",
+      "replacement": " or False:\n        fail(\"the capsule manifest"
+    },
+    {
+      "name": "chunk sync",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    if not any(row == (\"sync\", None) for row in before[max(chunks) + 1:manifest[0]]):\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "request order",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if [rows[index][1] for index in requests] != list(range(count)) or",
+      "replacement": "if False or"
+    },
+    {
+      "name": "request after start",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or (requests and requests[0] < start):",
+      "replacement": " or False:"
+    },
+    {
+      "name": "handoff once",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "elif len(handoffs) != 1 or segment[handoffs[0]][1] != sequence:",
+      "replacement": "elif len(handoffs) != 1:"
+    },
+    {
+      "name": "handoff count",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "elif len(handoffs) != 1 or segment[handoffs[0]][1] != sequence:",
+      "replacement": "elif segment[handoffs[0]][1] != sequence:"
+    },
+    {
+      "name": "persist sequence",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            if between != want:\n",
+      "replacement": "            if False:\n"
+    },
+    {
+      "name": "replay writes nothing",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "        elif between:\n",
+      "replacement": "        elif False:\n"
+    },
+    {
+      "name": "crash signal",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if attempt.get(\"signal\") != \"killed\" or \"result\" in attempt:",
+      "replacement": "if \"result\" in attempt:"
+    },
+    {
+      "name": "crash no result",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if attempt.get(\"signal\") != \"killed\" or \"result\" in attempt:",
+      "replacement": "if attempt.get(\"signal\") != \"killed\":"
+    },
+    {
+      "name": "crash last event",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if not events or events[-1].get(\"op\") != \"crash\" or",
+      "replacement": "if not events or"
+    },
+    {
+      "name": "crash point",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or events[-1].get(\"point\") != want[\"point\"]:\n        fail(\"the last event",
+      "replacement": " or False:\n        fail(\"the last event"
+    },
+    {
+      "name": "crash after sealed",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if rows[-2:-1] != [(\"sealed\", None)] or check_seal",
+      "replacement": "if check_seal"
+    },
+    {
+      "name": "crash seal events",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or check_seal_events(rows, False, fail) is None:",
+      "replacement": " or False:"
+    },
+    {
+      "name": "crash started",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    if started is None:\n        fail(\"execution did not start before the crash\")\n        return\n",
+      "replacement": "    if started is None:\n        return\n"
+    },
+    {
+      "name": "control error",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "if oracle[\"control_error\"] not in str(result.get(\"import_error\")) or \\\n",
+      "replacement": "if False or \\\n"
+    },
+    {
+      "name": "control head",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "            result.get(\"head_number\") != oracle[\"target\"] - 1 or len(poisoned)",
+      "replacement": "            len(poisoned)"
+    },
+    {
+      "name": "control poison count",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": " or len(poisoned) != len(oracle[\"requested_numbers\"]):",
+      "replacement": " or False:"
+    },
+    {
+      "name": "malformed",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as error:\n",
+      "replacement": "    except ZeroDivisionError as error:\n"
+    },
+    {
+      "name": "install anchor once",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    require(before.count(ANCHOR) == 1, \"State processor anchor must occur exactly once\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "install no hook",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    require(\"extractorGetHash\" not in before, \"State processor already has the hook\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "mutant match once",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    require(before.count(mutant[\"original\"]) == 1, f\"Mutant {mutant['name']} must match exactly once\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "mutant restore",
+      "file": "test/harness/source_inputs_geth.py",
+      "original": "    return lambda: path.write_text(before)\n",
+      "replacement": "    return lambda: None\n"
+    }
+  ]
+}

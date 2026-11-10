@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "description": "Native probe mutants. Each must compile in the accepted Geth tree and must fail the oracle in the measured run.",
+  "mutants": [
+    {
+      "name": "hook_never_installed",
+      "file": "hook.go.txt",
+      "original": "\textractorGetHash = f\n",
+      "replacement": "\t_ = f\n",
+      "reason": "No BLOCKHASH lookup goes through the dependency log, so no request is recorded."
+    },
+    {
+      "name": "bypass_saved_bytes",
+      "file": "probe.go",
+      "original": "\t\t\treturn common.BytesToHash(response)\n",
+      "replacement": "\t\t\tanswer, _ := resolve(seq, number)\n\t\t\treturn answer\n",
+      "reason": "Native code receives the source answer instead of the saved bytes; poisoned replays then fail native validation."
+    },
+    {
+      "name": "crash_before_persist",
+      "file": "probe.go",
+      "original": "\t\t\tseq := input.Cursor()\n",
+      "replacement": "\t\t\tseq := input.Cursor()\n\t\t\tif spec.Crash == \"before_handoff\" && seq == spec.CrashSequence {\n\t\t\t\tcrash(log, spec.Crash)\n\t\t\t}\n",
+      "reason": "The crash happens before the response is persisted, so the retry sees a shorter durable frontier."
+    }
+  ]
+}
