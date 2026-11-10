@@ -155,7 +155,12 @@ accepted until review, CI and the owner's merge permission. Base `1cebde2`
   the saved header and body bytes and answers every BLOCKHASH lookup with
   the Keccak-256 of the saved header. The oracle decodes and checks every
   item with its own Keccak-256 and RLP decoder.
-- Checks: pending.
+- Checks at commit `04585a9`: preparation 03 PASS (shared unit tests 20
+  PASS inside the native module; eight native mutants built); measured run
+  03 PASS (75.559 seconds of execution; the probe passes and all eight
+  native mutants are killed); Python mutants 130 killed, 0 survivors; 47
+  portable tests. Details, the decision and limits:
+  [E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
 - Next: Spec and Standards review of the exact head and hosted
   `bootstrap/ci`; then the coordinator asks the owner for merge permission.
 
