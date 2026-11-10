@@ -677,17 +677,16 @@ func TestUnitBSCStaticItems(t *testing.T) {
 		t.Errorf("block 0: BlockItems = %v", err)
 	}
 
-	// ReadStatic accepts only the static item names, once each, in order.
+	// ReadStatic accepts only the static item names, in order. SealCapsule
+	// already refuses a duplicate name.
 	ordered := make([]Item, len(StaticItemNames))
 	for index, name := range StaticItemNames {
 		ordered[index] = Item{Name: name, Data: items[name]}
 	}
 	swapped := append([]Item{}, ordered...)
 	swapped[1], swapped[2] = swapped[2], swapped[1]
-	duplicated := append([]Item{}, ordered...)
-	duplicated[len(duplicated)-1] = ordered[0]
 	for name, capsule := range map[string][]Item{
-		"ordered": ordered, "swapped": swapped, "duplicated": duplicated,
+		"ordered": ordered, "swapped": swapped,
 		"short": ordered[:len(ordered)-1], "extra": append(append([]Item{}, ordered...), Item{Name: "extra"}),
 	} {
 		db := rawdb.NewMemoryDatabase()
