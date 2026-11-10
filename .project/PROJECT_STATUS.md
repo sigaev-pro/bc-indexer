@@ -74,7 +74,7 @@ oracle), reviewer (Spec and Standards). Allowed paths: new Bor-specific files
 `test/harness/bor_source_inputs_probe.py`,
 `test/harness/test_bor_source_inputs_probe.py`,
 `test/harness/bor_source_inputs_probe.mutants.json`,
-`test/harness/fixtures/bor_source_inputs/**`,
+`test/harness/fixtures/source_inputs_bor/**`,
 `.project/evidence/E01-02.inputs.bor.md` and this section.
 `adapters/bor/source_inputs` is unchanged, so the shared-file check still
 passes.
