@@ -96,7 +96,10 @@ mutants). `ab172ee` adds them, moves the fixture and fixes the P3 notes.
 Result on clean commit `8203955`: preparation 02 PASS; measured run 02 PASS
 in 5.473 seconds. Private local verdicts: AC-CAP-04-01 PASS, AC-CAP-04-02
 PASS, AC-CAP-04-03 PASS with the test-only stand-in marker; every public cell
-stays NOT_RUN (D96, D98). Mutants: Go 29 killed, Python 94 killed. The
+stays NOT_RUN (D96, D98). Mutants: Go 29 killed (`8203955`). Review 002
+(head `eba6992`): Spec PASS with a P3 wording note; Standards REQUEST_CHANGES
+(P2: four checks without a control). `170f85f` adds the controls and mutants
+without changing the driver or probe code: Python 98 of 98 killed. The
 earlier preparation 01 and run 01 on `a32bc67` also passed and are kept.
 
 Next: Spec and Standards review of the new head and hosted `bootstrap/ci`.
