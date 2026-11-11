@@ -182,9 +182,10 @@ for the coordinator.
 
 ## E01-02.admission — BSC block
 
-Status: part A merged in PR #148 at `4bf65f3`. Part B IN PROGRESS on branch
-`claude/e01-02-admission-bsc-parlia-inputs`, base main `4bf65f3`. Part of
-#16.
+Status: part A merged in PR #148 at `4bf65f3`, part B merged in PR #150 at
+`10cd2c6`. The qa AC verdict for the private BSC slot is IN PROGRESS on
+branch `claude/e01-02-admission-bsc-ac-verdict`, base main `10cd2c6`. Part
+of #16.
 
 Split: the coordinator approved on 2026-11-11 splitting the BSC block into
 PR A "bsc-import" and PR B "bsc-parlia-inputs", both "Part of #16", with no
@@ -283,6 +284,13 @@ inside the observation), Go mutants 04 PASS (81 killed, 2 labeled
 equivalents), Python mutants 06 PASS. Earlier attempts are kept under D83
 and listed in
 [E01-02.admission.bsc-parlia-inputs](evidence/E01-02.admission.bsc-parlia-inputs.md).
+
+BSC AC verdict (qa, 2026-11-11, from the accepted records only: part A
+run 03 at `e0b16c8` and part B run 06 at `7eb892c`). BSC private local:
+AC-CAP-02-01 PASS and AC-CAP-02-02 PASS. All eight scenarios PASS in both
+runs, and every public cell (`bsc-mainnet`, `bsc-testnet`) is NOT_RUN. The
+matrix is in
+[E01-02.admission.bsc-parlia-inputs](evidence/E01-02.admission.bsc-parlia-inputs.md#ac-matrix-bsc).
 
 Resume point: none (not paused).
 
