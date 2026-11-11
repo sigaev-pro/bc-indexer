@@ -53,15 +53,22 @@ def base_context():
                                SAMPLE["chain/genesis-header.rlp"], COMMIT, json.loads(SAMPLE["chain/generated.json"]))
 
 
-BASE = base_context()
-CONTEXTS = {plan["name"]: {**BASE, "checkpoints": probe.checkpoints(
-    json.loads(SAMPLE[f"scenarios/{plan['name']}/checkpoints.json"]))} for plan in ORACLE["plans"]}
+CACHE = {}
+
+
+def contexts():
+    """Built on first use, so a failure names the test that needed it."""
+    if not CACHE:
+        base = base_context()
+        CACHE.update({plan["name"]: {**base, "checkpoints": probe.checkpoints(
+            json.loads(SAMPLE[f"scenarios/{plan['name']}/checkpoints.json"]))} for plan in ORACLE["plans"]})
+    return CACHE
 SCENARIOS = {plan["name"]: scenario(plan["name"]) for plan in ORACLE["plans"]}
 
 
 def judge(name, change=None):
     observed = copy.deepcopy(SCENARIOS[name])
-    ctx = dict(CONTEXTS[name])
+    ctx = dict(contexts()[name])
     if change:
         change(observed, ctx)
     return probe.checked_compare(name, observed, ctx)
@@ -176,6 +183,16 @@ class JudgeTests(unittest.TestCase):
         def ready_digest(o, c):
             set_value(o["attempts"][1]["store_after"], "0000000000000004/exec-ready", lambda r: r.update(digest="00" * 32))
         self.assertFails("native-rejection", ready_digest, "EXEC_READY does not bind")
+
+        def exec_digest(o, c):
+            set_value(o["attempts"][1]["store_after"], "0000000000000004/exec-ready",
+                      lambda r: r.update(exec_digest="00" * 32))
+        self.assertFails("native-rejection", exec_digest, "EXEC_READY does not bind")
+
+        def not_ready(o, c):
+            dump = o["attempts"][1]["store_after"]
+            dump.remove(row_of(dump, "0000000000000005/exec-ready"))
+        self.assertFails("native-rejection", not_ready, "block 5 did not reach EXEC_READY")
 
         def closed(o, c):
             set_value(o["attempts"][1]["store_after"], "bor.run-1.0000000000000004/closed",
@@ -379,7 +396,7 @@ class JudgeTests(unittest.TestCase):
 
 class RuleTests(unittest.TestCase):
     def setUp(self):
-        self.ctx = CONTEXTS["checkpoint-rio"]
+        self.ctx = contexts()["checkpoint-rio"]
         self.config = self.ctx["config"]
 
     def test_sprint_rio_and_time(self):
@@ -417,7 +434,7 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(numbers(1040), [(1039).to_bytes(2, "big")])
 
     def test_checkpoint_snapshot(self):
-        ctx = CONTEXTS["checkpoint-rio"]
+        ctx = contexts()["checkpoint-rio"]
         items = {block: data for (block, _), data in ctx["checkpoints"].items()}
         self.assertTrue(probe.checkpoint_snapshot_ok(items[1025], ctx, 1025))
         self.assertTrue(probe.checkpoint_snapshot_ok(items[1021], ctx, 1021))
@@ -425,6 +442,9 @@ class RuleTests(unittest.TestCase):
         self.assertTrue(probe.checkpoint_snapshot_ok(b"", ctx, 1033))
         self.assertFalse(probe.checkpoint_snapshot_ok(items[1025], ctx, 1033))
         self.assertFalse(probe.checkpoint_snapshot_ok(b"not json", ctx, 1025))
+        other = json.loads(items[1025])
+        other["hash"] = "0x" + "00" * 32
+        self.assertFalse(probe.checkpoint_snapshot_ok(json.dumps(other).encode(), ctx, 1025))
         wrong = json.loads(items[1025])
         wrong["validatorSet"]["validators"][0]["signer"] = "0x" + "00" * 20
         self.assertFalse(probe.checkpoint_snapshot_ok(json.dumps(wrong).encode(), ctx, 1025))
@@ -463,6 +483,12 @@ class RuleTests(unittest.TestCase):
             probe.build_context({**ORACLE, "chain_blocks": 9}, *args[1:], generated)
         with self.assertRaises(probe.Rejected):
             probe.sealed_chain(SAMPLE["chain/blocks.rlp"], SAMPLE["chain/blocks.rlp"][3:600])
+        # Block 1 with another parent hash: the numbers still follow, the link does not.
+        blocks = SAMPLE["chain/blocks.rlp"]
+        first, end = probe.rlp_item(blocks, 0)
+        first[0][0] = b"\x01" * 32
+        with self.assertRaises(probe.Rejected):
+            probe.sealed_chain(probe.rlp_encode(first) + blocks[end:], SAMPLE["chain/genesis-header.rlp"])
 
     def test_go_test_passed(self):
         ok = "ok  \tgithub.com/ethereum/go-ethereum/extractor/a\t0.1s\nok  \tgithub.com/ethereum/go-ethereum/extractor/b\t1s\n"
@@ -532,6 +558,16 @@ class TreeTests(unittest.TestCase):
             self.assertNotEqual(row["sha256"], row["sha256_before"])
             with self.assertRaises(tree.TreeError):
                 tree.install(source)
+
+    def test_install_never_replaces_a_native_file(self):
+        patches = tree.load_patches()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            self.fake_tree(source, patches)
+            (source / "core/zz_extractor_observer.go").write_text("native\n")
+            with self.assertRaises(tree.TreeError):
+                tree.install(source)
+            self.assertEqual((source / "core/zz_extractor_observer.go").read_text(), "native\n")
 
     def test_install_refuses_a_changed_native_file(self):
         patches = tree.load_patches()
