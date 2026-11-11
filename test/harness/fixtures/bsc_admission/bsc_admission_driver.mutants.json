@@ -589,8 +589,8 @@
     {
       "name": "trusted chain record",
       "file": "test/harness/bsc_admission.py",
-      "original": "require(record[\"count\"] == TRUSTED_PARENT + 1 and record[\"sha256\"] == sha256, \"Chain record\")",
-      "replacement": "require(True, \"Chain record\")"
+      "original": "require(record[\"count\"] == TRUSTED_PARENT + 1 and record[\"sha256\"] == sha256 and",
+      "replacement": "require(True or"
     },
     {
       "name": "trusted chain length",

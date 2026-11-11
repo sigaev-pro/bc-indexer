@@ -406,14 +406,14 @@
     {
       "name": "rejected parent state",
       "file": "go/seam.go",
-      "original": "\tif errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) {",
-      "replacement": "\tif errors.Is(cause, parlia.ErrExtractorSystemCall) {"
+      "original": "\tif errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) ||",
+      "replacement": "\tif errors.Is(cause, parlia.ErrExtractorSystemCall) ||"
     },
     {
       "name": "rejected system call",
       "file": "go/seam.go",
-      "original": "\tif errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) {",
-      "replacement": "\tif errors.Is(cause, core.ErrExtractorParentState) {"
+      "original": "\tif errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) ||",
+      "replacement": "\tif errors.Is(cause, core.ErrExtractorParentState) ||"
     },
     {
       "name": "start ethapi",
