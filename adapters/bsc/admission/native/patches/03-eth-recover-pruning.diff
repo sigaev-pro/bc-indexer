@@ -1,0 +1,34 @@
+diff --git a/eth/backend.go b/eth/backend.go
+index ce0125c..3d82693 100644
+--- a/eth/backend.go
++++ b/eth/backend.go
+@@ -31,6 +31,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/ethereum/go-ethereum/common/hexutil"
++	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
+ 	"github.com/ethereum/go-ethereum/metrics"
+ 	"github.com/ethereum/go-ethereum/params"
+ 
+@@ -43,7 +44,6 @@ import (
+ 	"github.com/ethereum/go-ethereum/core/history"
+ 	"github.com/ethereum/go-ethereum/core/monitor"
+ 	"github.com/ethereum/go-ethereum/core/rawdb"
+-	"github.com/ethereum/go-ethereum/core/state/pruner"
+ 	"github.com/ethereum/go-ethereum/core/txpool"
+ 	"github.com/ethereum/go-ethereum/core/txpool/blobpool"
+ 	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
+@@ -217,8 +217,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+ 		"snapshot_cache", common.StorageSize(config.SnapshotCache)*1024*1024)
+ 	// Try to recover offline state pruning only in hash-based.
+ 	if config.StateScheme == rawdb.HashScheme {
+-		if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb, config.TriesInMemory); err != nil {
++		// Extractor patch: resume an interrupted prune only when no pin is
++		// live. Any error stops the node, so it never starts with a pending
++		// prune that would delete pinned state.
++		if err := stateprovider.RecoverPruning(chainDb, stack.ResolvePath("")); err != nil {
+ 			log.Error("Failed to recover state", "error", err)
++			return nil, err
+ 		}
+ 	}
+ 

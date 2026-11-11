@@ -1,0 +1,240 @@
+diff --git a/core/extractor_hook.go b/core/extractor_hook.go
+new file mode 100644
+index 0000000..3902e0d
+--- /dev/null
++++ b/core/extractor_hook.go
+@@ -0,0 +1,146 @@
++// Extractor patch (E01-02.admission, BSC block): the native import seam.
++//
++// This file is added to the BSC source tree by the extractor patch set. It
++// declares the hook that the capture adapter installs on a BlockChain and the
++// rewind guard of the pin ledger. The core package cannot import the adapter
++// (the adapter imports core), so both are interfaces or function variables.
++
++package core
++
++import (
++	"context"
++	"errors"
++	"fmt"
++
++	"github.com/ethereum/go-ethereum/core/state"
++	"github.com/ethereum/go-ethereum/core/types"
++	"github.com/ethereum/go-ethereum/ethdb"
++)
++
++// ExtractorRewindGuard, when set, runs before every native head rewind
++// (SetHead, SetHeadWithTimestamp, and the startup repair) with the requested
++// head number; an error refuses the rewind. A rewind by timestamp passes 0,
++// so with any pinned header the guard refuses it. The pin ledger sets it from
++// an init function, before any store is opened.
++var ExtractorRewindGuard func(db ethdb.Database, newHead uint64) error
++
++// ErrExtractorUnobserved refuses a block execution that no admitted
++// observation covers while an extractor hook is installed.
++var ErrExtractorUnobserved = errors.New("extractor: block execution outside an admitted observation")
++
++// ExtractorHook admits one native observation per imported block. While a
++// hook is installed, InsertChain takes the observation guard (Acquire) before
++// the chain mutex, imports one block per insertChain call and calls Begin
++// first, with both held.
++type ExtractorHook interface {
++	// Acquire takes the node's observation guard and returns its release.
++	// The lock order is guard, then native locks.
++	Acquire() (release func())
++	// Begin checks the block, pins its parent, seals its static inputs and
++	// admits the observation (or resumes the admitted obligation of the same
++	// block). It returns nil and no error when the block needs no
++	// observation because it is already in the chain with its state. Begin
++	// returns only after the closing ADMITTED sync, so no header
++	// verification, Process or capture hook runs before it.
++	Begin(chain *BlockChain, block *types.Block) (ExtractorObservation, error)
++}
++
++// ExtractorObservation is the admitted observation of one block.
++type ExtractorObservation interface {
++	// Hash is the hash of the observed block.
++	Hash() [32]byte
++	// Validated runs after native validation (ValidateState) and before the
++	// state and the block are written. It closes the dependency log and
++	// writes EXEC_READY; an error stops the import before any write.
++	Validated(block *types.Block, statedb *state.StateDB, res *ProcessResult) error
++	// Rejected runs where native validation reports a bad block. It closes
++	// the observation as NATIVE_REJECTED with the rejection evidence.
++	Rejected(block *types.Block, res *ProcessResult, cause error)
++	// End runs after insertChain returns, with its error. It detaches the
++	// observation and returns an error if the observation is still ADMITTED
++	// (the obligation stays for recovery) or if Validated or Rejected failed.
++	End(insertErr error) error
++}
++
++// SetExtractorHook installs hook, or removes it with nil. Install it before
++// the first import; an InsertChain that already read the old value finishes
++// with it.
++func (bc *BlockChain) SetExtractorHook(hook ExtractorHook) {
++	if hook == nil {
++		bc.extractorHook.Store(nil)
++		return
++	}
++	bc.extractorHook.Store(&hook)
++}
++
++// extractorHookValue returns the installed hook, or nil.
++func (bc *BlockChain) extractorHookValue() ExtractorHook {
++	if hook := bc.extractorHook.Load(); hook != nil {
++		return *hook
++	}
++	return nil
++}
++
++// extractorInsert imports chain one block at a time, each inside its own
++// observation. The chain mutex is held.
++func (bc *BlockChain) extractorInsert(hook ExtractorHook, chain types.Blocks) (int, error) {
++	for index, block := range chain {
++		observation, err := hook.Begin(bc, block)
++		if err != nil {
++			return index, err
++		}
++		if observation == nil {
++			// Known with state: the native path skips it without execution;
++			// an execution would fail with ErrExtractorUnobserved.
++			if _, _, err := bc.insertChain(context.Background(), types.Blocks{block}, true, false); err != nil {
++				return index, err
++			}
++			continue
++		}
++		bc.extractorObservation = observation
++		_, _, err = bc.insertChain(context.Background(), types.Blocks{block}, true, false)
++		bc.extractorObservation = nil
++		if endErr := observation.End(err); endErr != nil {
++			return index, endErr
++		}
++		if err != nil {
++			return index, err
++		}
++	}
++	return len(chain), nil
++}
++
++// extractorCheckExecution refuses an execution that the current observation
++// does not cover. It is called by ProcessBlock before execution.
++func (bc *BlockChain) extractorCheckExecution(block *types.Block) error {
++	if bc.extractorHookValue() == nil {
++		return nil
++	}
++	if bc.extractorObservation == nil || bc.extractorObservation.Hash() != block.Hash() {
++		return fmt.Errorf("%w: block %d %x", ErrExtractorUnobserved, block.NumberU64(), block.Hash())
++	}
++	return nil
++}
++
++// extractorValidated reports a block that passed native validation.
++func (bc *BlockChain) extractorValidated(block *types.Block, statedb *state.StateDB, res *ProcessResult) error {
++	if bc.extractorObservation == nil {
++		return nil
++	}
++	return bc.extractorObservation.Validated(block, statedb, res)
++}
++
++// extractorRejected reports a block that native validation refused.
++func (bc *BlockChain) extractorRejected(block *types.Block, res *ProcessResult, cause error) {
++	if bc.extractorObservation != nil && bc.extractorObservation.Hash() == block.Hash() {
++		bc.extractorObservation.Rejected(block, res, cause)
++	}
++}
++
++// extractorRewind runs the rewind guard.
++func (bc *BlockChain) extractorRewind(head uint64) error {
++	if ExtractorRewindGuard == nil {
++		return nil
++	}
++	return ExtractorRewindGuard(bc.db, head)
++}
+diff --git a/core/blockchain.go b/core/blockchain.go
+index 612b66f..56bee63 100644
+--- a/core/blockchain.go
++++ b/core/blockchain.go
+@@ -410,6 +410,11 @@ type BlockChain struct {
+ 	// Readers don't need to take it, they can just read the database.
+ 	chainmu *syncx.ClosableMutex
+ 
++	// Extractor patch: the installed import hook, and the observation of the
++	// block being imported (read and written with chainmu held).
++	extractorHook        atomic.Pointer[ExtractorHook]
++	extractorObservation ExtractorObservation
++
+ 	highestVerifiedHeader atomic.Pointer[types.Header]
+ 	highestVerifiedBlock  atomic.Pointer[types.Header]
+ 	currentBlock          atomic.Pointer[types.Header] // Current head of the chain
+@@ -1221,6 +1226,11 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
+ 	}
+ 	defer bc.chainmu.Unlock()
+ 
++	// Extractor patch: a rewind must not delete a pinned header.
++	if err := bc.extractorRewind(head); err != nil {
++		return 0, err
++	}
++
+ 	var (
+ 		// Track the block number of the requested root hash
+ 		rootNumber uint64 // (no root == always 0)
+@@ -2235,12 +2245,23 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+ 				prev.Hash().Bytes()[:4], i, block.NumberU64(), block.Hash().Bytes()[:4], block.ParentHash().Bytes()[:4])
+ 		}
+ 	}
++	// Extractor patch: with a hook installed, take the observation guard
++	// before the chain mutex; every block then gets its own admitted
++	// observation before it is verified or executed.
++	hook := bc.extractorHookValue()
++	if hook != nil {
++		release := hook.Acquire()
++		defer release()
++	}
+ 	// Pre-checks passed, start the full block imports
+ 	if !bc.chainmu.TryLock() {
+ 		return 0, errChainStopped
+ 	}
+ 	defer bc.chainmu.Unlock()
+ 
++	if hook != nil {
++		return bc.extractorInsert(hook, chain)
++	}
+ 	_, n, err := bc.insertChain(context.Background(), chain, true, false) // No witness collection for mass inserts (would get super large)
+ 	return n, err
+ }
+@@ -2624,6 +2645,12 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+ 	)
+ 	defer interrupt.Store(true) // terminate the prefetch at the end
+ 
++	// Extractor patch: with a hook installed, only the block of the current
++	// admitted observation may execute.
++	if err := bc.extractorCheckExecution(block); err != nil {
++		return nil, err
++	}
++
+ 	if bc.chainConfig.IsUBT(block.Number(), block.Time()) {
+ 		sdb = state.NewUBTDatabase(bc.triedb, bc.codedb)
+ 	} else {
+@@ -2753,6 +2780,12 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+ 	}
+ 	vtime := time.Since(vstart)
+ 
++	// Extractor patch: native validation passed; close the observation's
++	// dependency log and write EXEC_READY before any state or block write.
++	if err := bc.extractorValidated(block, statedb, res); err != nil {
++		return nil, err
++	}
++
+ 	// If witnesses was generated and stateless self-validation requested, do
+ 	// that now. Self validation should *never* run in production, it's more of
+ 	// a tight integration to enable running *all* consensus tests through the
+@@ -3423,6 +3456,9 @@ func (bc *BlockChain) reportBadBlock(block *types.Block, res *ProcessResult, err
+ 			"err", err)
+ 		return
+ 	}
++	// Extractor patch: an authoritative native rejection closes the
++	// observation of this block as NATIVE_REJECTED.
++	bc.extractorRejected(block, res, err)
+ 	var receipts types.Receipts
+ 	if res != nil {
+ 		receipts = res.Receipts

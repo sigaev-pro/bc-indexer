@@ -1,0 +1,40 @@
+diff --git a/core/vm/extractor_safepoint.go b/core/vm/extractor_safepoint.go
+new file mode 100644
+index 0000000..3feecfd
+--- /dev/null
++++ b/core/vm/extractor_safepoint.go
+@@ -0,0 +1,17 @@
++// Extractor patch (E01-02.admission, BSC block): the VM safe point.
++
++package vm
++
++import "github.com/ethereum/go-ethereum/core/tracing"
++
++var extractorSafePoint func(*tracing.Hooks, OpCode, *ScopeContext)
++
++// SetExtractorSafePoint installs f, or removes it with nil. The interpreter
++// calls f with the tracer of its EVM, on the native goroutine between VM
++// steps, before the opcode hook and before the opcode changes memory or
++// state, so the owned-capture seam (core/capture) may wait there for its
++// worker. f is never called inside a tracing hook, and only traced execution
++// calls it: prefetchers that clear the tracer never do. The tracer lets f
++// tell the import from other traced executions, such as an RPC trace. Set it
++// before execution starts; it is not synchronized with running interpreters.
++func SetExtractorSafePoint(f func(*tracing.Hooks, OpCode, *ScopeContext)) { extractorSafePoint = f }
+diff --git a/core/vm/interpreter.go b/core/vm/interpreter.go
+index a7c107a..e64eb19 100644
+--- a/core/vm/interpreter.go
++++ b/core/vm/interpreter.go
+@@ -236,6 +236,12 @@ func (evm *EVM) Run(contract *Contract, input []byte, readOnly bool) (ret []byte
+ 			}
+ 		}
+ 
++		// Extractor patch: the capture safe point, before the opcode hook and
++		// before the opcode changes memory or state. Only traced execution
++		// reaches it; prefetchers clear the tracer.
++		if debug && extractorSafePoint != nil {
++			extractorSafePoint(evm.Config.Tracer, op, callContext)
++		}
+ 		// Do tracing before potential memory expansion
+ 		if debug {
+ 			if evm.Config.Tracer.OnGasChange != nil {

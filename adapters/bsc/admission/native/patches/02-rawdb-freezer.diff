@@ -1,0 +1,42 @@
+diff --git a/core/rawdb/chain_freezer.go b/core/rawdb/chain_freezer.go
+index 9e72b1a..70e28a5 100644
+--- a/core/rawdb/chain_freezer.go
++++ b/core/rawdb/chain_freezer.go
+@@ -144,6 +144,12 @@ func (f *chainFreezer) Close() error {
+ //
+ // This functionality is deliberately broken off from block importing to avoid
+ // incurring additional data shuffling delays on block propagation.
++// ExtractorFreezeLimit, when set, returns the highest exclusive block number
++// that the chain freezer may freeze, given its own exclusive limit (extractor
++// patch, E01-02.admission). An error holds the freezer. The pin ledger sets it
++// from an init function, before any store is opened.
++var ExtractorFreezeLimit func(db ethdb.Database, limit uint64) (uint64, error)
++
+ func (f *chainFreezer) freeze(db ethdb.KeyValueStore, continueFreeze bool) {
+ 	var (
+ 		backoff   bool
+@@ -237,6 +243,24 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore, continueFreeze bool) {
+ 		if last-first+1 > freezerBatchLimit {
+ 			last = freezerBatchLimit + first - 1
+ 		}
++		// Extractor patch: never freeze past the fork point of a pinned
++		// side-branch header (the pin ledger's FreezeLimit, exclusive).
++		if ExtractorFreezeLimit != nil {
++			limit, err := ExtractorFreezeLimit(nfdb, last+1)
++			if err != nil {
++				log.Error("Extractor freeze limit failed", "err", err)
++				backoff = true
++				continue
++			}
++			if limit <= first {
++				log.Debug("Extractor pins hold the freezer", "frozen", frozen, "limit", limit)
++				backoff = true
++				continue
++			}
++			if limit-1 < last {
++				last = limit - 1
++			}
++		}
+ 		ancients, err := f.freezeRangeWithBlobs(nfdb, first, last)
+ 		if err != nil {
+ 			log.Error("Error in block freeze operation", "err", err)
