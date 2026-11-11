@@ -62,10 +62,12 @@ CHECKPOINT_INTERVAL = 1024
 
 
 def go_environment():
+    # The external linker writes its temporary files to TMPDIR; the container's
+    # /tmp is a small tmpfs, too small for the probe and bor binaries.
     return {"CGO_ENABLED": "1", "GOENV": "off", "GOOS": "linux", "GOARCH": "amd64",
             "GOCACHE": "/work/build-cache", "GOMODCACHE": "/modules", "GOPATH": "/work/gopath",
             "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local",
-            "GOTMPDIR": "/work/gotmp", "GOWORK": "off"}
+            "GOTMPDIR": "/work/gotmp", "TMPDIR": "/work/gotmp", "GOWORK": "off"}
 
 
 # ---------------------------------------------------------------------------
