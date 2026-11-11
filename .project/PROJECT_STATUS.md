@@ -114,6 +114,55 @@ observations above the low-water mark again, and fixes the wording.
 Next: review 003 of the head with record 03, hosted CI, then READY for the
 coordinator.
 
+## E01-02.admission — Bor block
+
+Status: IN_PROGRESS (Part of #16). Base `9046de9` (block 0 merged in PR #146).
+Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
+`e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
+`ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
+POLY AC matrix; two independent read-only reviewers. Allowed paths:
+`adapters/bor/admission/native/**`, `test/harness/fixtures/admission_bor/**`,
+`test/harness/bor_admission_probe.py`, `test/harness/test_bor_admission_probe.py`,
+`test/harness/bor_admission_probe.mutants.json`,
+`.project/evidence/E01-02.admission.bor.md` and this section. The shared copies
+of `adapters/*/admission` and `adapters/*/source_inputs` stay unchanged.
+
+Design (native-engineer), the Bor rows of the plan table:
+
+- Install: the preparation copies `source_inputs`, `admission`,
+  `state_provider` and `core/capture` under `extractor/` of the accepted Bor
+  tree, and the Bor glue of `adapters/bor/admission/native/` to
+  `extractor/borimport`. Native patches are anchored, exactly-once text edits
+  and new files, listed in `native/patches.json` and recorded with the file
+  digests before and after.
+- Import path: one observation per block on `processBlockForImport` to
+  `ProcessBlock`. Begin, pin of the parent root, sealed per-block capsule and
+  the closing ADMITTED sync come first; then the Heimdall caches are purged so
+  every Heimdall read of the block goes through the obligation's log; the
+  header seal is verified again from the capsule ancestors and the logged
+  span; then `ProcessBlock`. A native validation failure calls `Reject` with
+  the digest of the rejection evidence; success closes the log and calls
+  `ExecReady`. Preconfirmed results are not used while the observer runs, and
+  a batch is imported one block at a time, so no header verification of a
+  later block runs inside a window.
+- Ancestor rule: before Rio, the parent and the headers back to the nearest
+  1024-block checkpoint, with the stored checkpoint snapshot; from Rio on
+  (`getVeBlopSnapshot`), only the parent header, and the span comes from the
+  log. Latest-span and status calls inside a window are logged like spans and
+  state sync pages.
+- Retention patch (D98 item 2): the shipped `bor` binary routes `snapshot
+  prune-state`, the startup `RecoverPruning`, `SetHead` and the chain freezer
+  threshold through `PruneState`, `RecoverPruning`, `RequireRewindAllowed` and
+  `FreezeLimit`.
+- VM safe point (D98 item 4): the interpreter calls a tracer-scoped safe
+  point between steps; the Bor glue maps it to `core/capture` `Reserve`.
+- Pin adapter, recovery driver (RECOVERY_ONLY, re-execute each ADMITTED
+  obligation from its pin and capsule, then `ExecReady` or `Reject`, then
+  `GoLive`) and startup identity (`Preflight`, `Bind`, the saved producer run).
+
+Next: implement the glue and patches, then the probe, preparation, measured
+run, mutants, evidence and reviews.
+
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
 Status: ACCEPTED; #14 closes under D99 (2026-11-11) when this record merges.
