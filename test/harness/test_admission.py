@@ -57,7 +57,7 @@ class SharedCopies(unittest.TestCase):
     def test_native_directory_is_family_only(self):
         root = self.copy_tree()
         native = root / "adapters" / "bsc" / "admission" / "native"
-        native.mkdir()
+        native.mkdir(exist_ok=True)
         (native / "patch.diff").write_text("bsc only\n")
         self.assertEqual(sorted(admission.check_identical(root)), SHARED)
         (root / "adapters" / "geth" / "admission" / "native.go").write_text("package admission\n")
