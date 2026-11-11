@@ -79,6 +79,7 @@ type Reader struct {
 	mu      sync.Mutex
 	id      string
 	log     *sourceinputs.Log
+	served  map[string][]byte
 	err     error
 	emit    func(Event)
 	fetch   func()
@@ -89,7 +90,7 @@ type Reader struct {
 func newReader(id string, static Static, genesis *types.Header, log *sourceinputs.Log, emit func(Event),
 	fetch func(), handoff func(string, uint64, []byte)) *Reader {
 	r := &Reader{parent: static.Parent, genesis: genesis, byHash: map[common.Hash]*types.Header{},
-		id: id, log: log, emit: emit, fetch: fetch, handoff: handoff}
+		served: map[string][]byte{}, id: id, log: log, emit: emit, fetch: fetch, handoff: handoff}
 	for _, header := range append([]*types.Header{static.Parent}, static.Ancestors...) {
 		r.byHash[header.Hash()] = header
 	}
@@ -189,7 +190,10 @@ func (r *Reader) GetVerifiedBlockByHash(hash common.Hash) *types.Header {
 }
 
 // ExtractorSnapshot implements parlia.ExtractorSnapshotSource. Only the
-// snapshot of a capsule header may be requested.
+// snapshot of a capsule header may be requested. Parlia looks up the same
+// snapshot several times while it verifies and finalizes one block; the
+// first lookup is logged, and the later ones receive the same bytes without
+// a new log entry, on the first attempt and on a retry alike.
 func (r *Reader) ExtractorSnapshot(number uint64, hash common.Hash,
 	compute func(native consensus.ChainHeaderReader) ([]byte, error)) ([]byte, error) {
 	r.mu.Lock()
@@ -203,6 +207,9 @@ func (r *Reader) ExtractorSnapshot(number uint64, hash common.Hash,
 		return nil, err
 	}
 	request := SnapshotRequest(number, hash)
+	if response, ok := r.served[string(request)]; ok {
+		return response, nil
+	}
 	response, err := r.log.Next(request, func() ([]byte, error) {
 		r.fetch()
 		r.emit(Event{"event": "fetch", "observation": r.id, "tag": SnapshotTag, "number": number})
@@ -214,6 +221,7 @@ func (r *Reader) ExtractorSnapshot(number uint64, hash common.Hash,
 		r.stop(err)
 		return nil, err
 	}
+	r.served[string(request)] = response
 	sequence := r.log.Cursor() - 1
 	digest := sha256.Sum256(response)
 	r.emit(Event{"event": "handoff", "observation": r.id, "sequence": sequence,

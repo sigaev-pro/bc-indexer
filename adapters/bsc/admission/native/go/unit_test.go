@@ -6,12 +6,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/consensus/parlia"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -28,7 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/triedb"
 )
 
-// ---- Parlia handle ----
+// ---- observation reader ----
 
 func sealedLog(t *testing.T, db ethdb.Database, id string) *sourceinputs.Log {
 	t.Helper()
@@ -42,120 +45,108 @@ func sealedLog(t *testing.T, db ethdb.Database, id string) *sourceinputs.Log {
 	return log
 }
 
-func TestUnitParliaDBReadsOutsideAnObservationPassThrough(t *testing.T) {
-	db := rawdb.NewMemoryDatabase()
-	db.Put([]byte("parlia-a"), []byte("value"))
-	var events []Event
-	handle := NewParliaDB(db, func(e Event) { events = append(events, e) })
-	if value, err := handle.Get([]byte("parlia-a")); err != nil || string(value) != "value" {
-		t.Fatalf("get: %q %v", value, err)
-	}
-	if _, err := handle.Get([]byte("parlia-b")); err == nil {
-		t.Fatal("a missing key read outside an observation returned no error")
-	}
-	if ok, err := handle.Has([]byte("parlia-a")); err != nil || !ok {
-		t.Fatalf("has: %v %v", ok, err)
-	}
-	it := handle.NewIterator([]byte("parlia-"), nil)
-	it.Release()
-	if handle.Fetches() != 0 || len(events) != 0 || handle.Detach() != nil {
-		t.Fatalf("outside reads were logged: %d %v", handle.Fetches(), events)
-	}
-}
-
-func TestUnitParliaDBLogsDeclaredReads(t *testing.T) {
-	db := rawdb.NewMemoryDatabase()
-	db.Put([]byte("parlia-a"), []byte("value"))
-	var handoffs []string
-	handle := NewParliaDB(db, nil)
-	handle.Handoff = func(id string, seq uint64, response []byte) {
-		handoffs = append(handoffs, hex.EncodeToString(response))
-	}
-	log := sealedLog(t, db, "obs-1")
-	if err := handle.Attach("obs-1", log, [][]byte{[]byte("parlia-a"), []byte("parlia-b")}); err != nil {
-		t.Fatal(err)
-	}
-	if err := handle.Attach("obs-1", log, nil); !errors.Is(err, ErrWiring) {
-		t.Fatalf("second attach: %v", err)
-	}
-	if value, err := handle.Get([]byte("parlia-a")); err != nil || string(value) != "value" {
-		t.Fatalf("get: %q %v", value, err)
-	}
-	if _, err := handle.Get([]byte("parlia-b")); !errors.Is(err, ErrDependencyNotFound) {
-		t.Fatalf("missing: %v", err)
-	}
-	if ok, err := handle.Has([]byte("parlia-a")); err != nil || !ok {
-		t.Fatalf("has: %v %v", ok, err)
-	}
-	if handle.Fetches() != 3 || log.Frontier() != 3 {
-		t.Fatalf("fetches %d frontier %d", handle.Fetches(), log.Frontier())
-	}
-	want := []string{"0176616c7565", "00", "01"}
-	if strings.Join(handoffs, ",") != strings.Join(want, ",") {
-		t.Fatalf("handoffs %v", handoffs)
-	}
-	if err := handle.Detach(); err != nil {
-		t.Fatal(err)
-	}
-	// A retry on a reopened log hands over the saved bytes, not the live value.
-	db.Put([]byte("parlia-a"), []byte("changed"))
-	log, err := sourceinputs.OpenLog(db, "obs-1")
+func unitReader(t *testing.T, n int, log *sourceinputs.Log, fetches *int, handoffs *[]uint64) (*Reader, []*types.Header) {
+	t.Helper()
+	genesis, _ := unitGenesis(t)
+	headers := unitChain(genesis.Block.Header(), n)
+	static, err := DecodeStatic(unitItems(t, genesis, headers, n), genesis, "commit")
 	if err != nil {
 		t.Fatal(err)
 	}
-	handle.Attach("obs-1", log, [][]byte{[]byte("parlia-a"), []byte("parlia-b")})
-	if value, err := handle.Get([]byte("parlia-a")); err != nil || string(value) != "value" {
-		t.Fatalf("replay: %q %v", value, err)
-	}
-	if handle.Fetches() != 3 {
-		t.Fatalf("replay fetched: %d", handle.Fetches())
-	}
-	handle.Detach()
+	r := newReader("obs-1", static, genesis.Block.Header(), log, func(Event) {}, func() { *fetches++ },
+		func(_ string, sequence uint64, _ []byte) { *handoffs = append(*handoffs, sequence) })
+	return r, headers
 }
 
-func TestUnitParliaDBStopsTheObservation(t *testing.T) {
-	cases := map[string]func(*ParliaDB) error{
-		"undeclared": func(h *ParliaDB) error { _, err := h.Get([]byte("parlia-z")); return err },
-		"iterator": func(h *ParliaDB) error {
-			h.NewIterator(nil, nil).Release()
-			return nil
-		},
+func TestUnitReaderServesOnlyCapsuleHeaders(t *testing.T) {
+	var fetches int
+	var handoffs []uint64
+	r, headers := unitReader(t, 300, nil, &fetches, &handoffs)
+	parent := headers[299]
+	same := func(a, b *types.Header) bool { return a != nil && a.Hash() == b.Hash() }
+	if !same(r.GetHeader(parent.Hash(), 299), parent) || !same(r.GetHeaderByHash(headers[44].Hash()), headers[44]) ||
+		!same(r.GetHeaderByNumber(44), headers[44]) || !same(r.CurrentHeader(), parent) ||
+		r.GenesisHeader().Hash() != headers[0].Hash() || r.Err() != nil {
+		t.Fatalf("capsule headers not served: %v", r.Err())
 	}
-	for name, read := range cases {
-		db := rawdb.NewMemoryDatabase()
-		handle := NewParliaDB(db, nil)
-		handle.Attach("obs-1", sealedLog(t, db, "obs-1"), [][]byte{[]byte("parlia-a")})
-		read(handle)
-		if _, err := handle.Get([]byte("parlia-a")); err == nil {
-			t.Errorf("%s: a read after the stop succeeded", name)
+	refusals := map[string]struct {
+		read func(*Reader) bool
+		want error
+	}{
+		"below the window": {func(r *Reader) bool { return r.GetHeaderByNumber(43) == nil }, ErrUndeclaredHeader},
+		"hash below":       {func(r *Reader) bool { return r.GetHeaderByHash(headers[43].Hash()) == nil }, ErrUndeclaredHeader},
+		"wrong number":     {func(r *Reader) bool { return r.GetHeader(parent.Hash(), 298) == nil }, ErrUndeclaredHeader},
+		"the block itself": {func(r *Reader) bool { return r.GetHeader(headers[300].Hash(), 300) == nil }, ErrUndeclaredHeader},
+		"td":               {func(r *Reader) bool { return r.GetTd(parent.Hash(), 299) == nil }, ErrUndeclaredRead},
+		"highest verified": {func(r *Reader) bool { return r.GetHighestVerifiedHeader() == nil }, ErrUndeclaredRead},
+		"verified block":   {func(r *Reader) bool { return r.GetVerifiedBlockByHash(parent.Hash()) == nil }, ErrUndeclaredRead},
+	}
+	for name, c := range refusals {
+		r, _ := unitReader(t, 300, nil, &fetches, &handoffs)
+		if !c.read(r) || !errors.Is(r.Err(), c.want) {
+			t.Fatalf("%s: %v", name, r.Err())
 		}
-		err := handle.Detach()
-		if name == "undeclared" && !errors.Is(err, ErrUndeclaredRead) || name == "iterator" && !errors.Is(err, ErrUnloggedRead) {
-			t.Errorf("%s: detach %v", name, err)
-		}
-		// The next observation starts clean.
-		handle.Attach("obs-2", sealedLog(t, db, "obs-2"), [][]byte{[]byte("parlia-a")})
-		if _, err := handle.Get([]byte("parlia-a")); !errors.Is(err, ErrDependencyNotFound) || handle.Detach() != nil {
-			t.Errorf("%s: next observation: %v", name, err)
+		// The first error stays; later reads of capsule headers still work.
+		if !same(r.GetHeaderByNumber(299), parent) || !errors.Is(r.Err(), c.want) {
+			t.Fatalf("%s: error replaced: %v", name, r.Err())
 		}
 	}
 }
 
-func TestUnitParliaDBMalformedSavedResponse(t *testing.T) {
+func TestUnitReaderLogsSnapshots(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
-	handle := NewParliaDB(db, nil)
-	log := sealedLog(t, db, "obs-1")
-	if _, err := log.Next(ParliaRequest(ParliaGetTag, []byte("parlia-a")), func() ([]byte, error) { return []byte{7}, nil }); err != nil {
-		t.Fatal(err)
+	var fetches int
+	var handoffs []uint64
+	r, headers := unitReader(t, 300, sealedLog(t, db, "obs-1"), &fetches, &handoffs)
+	parent := headers[299]
+	compute := func(response string) func(consensus.ChainHeaderReader) ([]byte, error) {
+		return func(consensus.ChainHeaderReader) ([]byte, error) { return []byte(response), nil }
 	}
-	log, _ = sourceinputs.OpenLog(db, "obs-1")
-	handle.Attach("obs-1", log, [][]byte{[]byte("parlia-a")})
-	if _, err := handle.Get([]byte("parlia-a")); !errors.Is(err, ErrMalformedResponse) || !errors.Is(handle.Detach(), ErrMalformedResponse) {
-		t.Fatalf("malformed: %v", err)
+	got, err := r.ExtractorSnapshot(299, parent.Hash(), compute("first"))
+	if err != nil || string(got) != "first" || fetches != 1 || len(handoffs) != 1 || handoffs[0] != 0 {
+		t.Fatalf("first request: %q %v fetches %d handoffs %v", got, err, fetches, handoffs)
+	}
+	if got, err := r.ExtractorSnapshot(44, headers[44].Hash(), compute("second")); err != nil || string(got) != "second" || fetches != 2 {
+		t.Fatalf("second request: %q %v", got, err)
+	}
+	// A repeated request receives the first response, with no new entry.
+	if got, err := r.ExtractorSnapshot(299, parent.Hash(), compute("again")); err != nil || string(got) != "first" ||
+		fetches != 2 || len(handoffs) != 2 || r.log.Cursor() != 2 {
+		t.Fatalf("repeated request: %q %v fetches %d", got, err, fetches)
+	}
+	// A retry receives the saved bytes in order, without the native lookup.
+	replay, _ := unitReader(t, 300, func() *sourceinputs.Log {
+		log, err := sourceinputs.OpenLog(db, "obs-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return log
+	}(), &fetches, &handoffs)
+	if got, err := replay.ExtractorSnapshot(299, parent.Hash(), compute("changed")); err != nil || string(got) != "first" || fetches != 2 {
+		t.Fatalf("replay: %q %v fetches %d", got, err, fetches)
+	}
+	if !bytes.Equal(SnapshotRequest(299, parent.Hash())[:len(SnapshotTag)+1], append([]byte(SnapshotTag), 0)) ||
+		len(SnapshotRequest(299, parent.Hash())) != len(SnapshotTag)+1+8+32 {
+		t.Fatal("request layout")
+	}
+	// A snapshot of a header outside the capsule is refused before the lookup.
+	outside, _ := unitReader(t, 300, sealedLog(t, db, "obs-2"), &fetches, &handoffs)
+	if _, err := outside.ExtractorSnapshot(43, headers[43].Hash(), compute("x")); !errors.Is(err, ErrUndeclaredHeader) ||
+		fetches != 2 || !errors.Is(outside.Err(), ErrUndeclaredHeader) {
+		t.Fatalf("outside snapshot: %v fetches %d", err, fetches)
+	}
+	if _, err := outside.ExtractorSnapshot(299, parent.Hash(), compute("x")); !errors.Is(err, ErrUndeclaredHeader) || fetches != 2 {
+		t.Fatalf("a stopped reader looked up: %v", err)
+	}
+	// A failed native lookup stops the observation and saves nothing.
+	failing, _ := unitReader(t, 300, sealedLog(t, db, "obs-3"), &fetches, &handoffs)
+	lookup := errors.New("unknown ancestor")
+	if _, err := failing.ExtractorSnapshot(299, parent.Hash(), func(consensus.ChainHeaderReader) ([]byte, error) {
+		return nil, lookup
+	}); !errors.Is(err, lookup) || !errors.Is(failing.Err(), lookup) {
+		t.Fatalf("lookup error: %v", err)
 	}
 }
-
-// ---- static manifest ----
 
 const unitGenesisJSON = `{"config":{"chainId":714,"homesteadBlock":0,"eip150Block":0,"eip155Block":0,
  "eip158Block":0,"byzantiumBlock":0,"constantinopleBlock":0,"petersburgBlock":0,"istanbulBlock":0,
@@ -611,48 +602,56 @@ func TestUnitStaticKeepsBlobSidecars(t *testing.T) {
 
 // ---- observation exits and the safe point ----
 
+func stoppedReader() *Reader {
+	r := &Reader{emit: func(Event) {}}
+	r.refuse(fmt.Errorf("%w: number 1", ErrUndeclaredHeader))
+	return r
+}
+
 func TestUnitValidatedRefusesAWiringError(t *testing.T) {
-	db := rawdb.NewMemoryDatabase()
-	handle := NewParliaDB(db, nil)
-	handle.Attach("obs-1", sealedLog(t, db, "obs-1"), nil)
-	handle.Get([]byte("parlia-undeclared"))
 	header := &types.Header{Number: big.NewInt(1), Difficulty: big.NewInt(1)}
 	block := types.NewBlockWithHeader(header)
 	// The wiring error must stop Validated before it touches the log or the
 	// admission, which this observation does not have.
-	o := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-1", hash: block.Hash()}
-	if err := o.Validated(block, nil, nil); !errors.Is(err, ErrUndeclaredRead) {
+	o := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-1", hash: block.Hash(), reader: stoppedReader()}
+	if err := o.Validated(block, nil, nil); !errors.Is(err, ErrUndeclaredHeader) {
 		t.Fatalf("validated: %v", err)
 	}
-	if err := o.End(nil); !errors.Is(err, ErrUndeclaredRead) {
+	if err := o.End(nil); !errors.Is(err, ErrUndeclaredHeader) {
 		t.Fatalf("end after a failed validation: %v", err)
 	}
-	other := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-2", hash: block.Hash()}
+	other := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-2", hash: block.Hash(), reader: &Reader{}}
 	if err := other.Validated(types.NewBlockWithHeader(&types.Header{Number: big.NewInt(2)}), nil, nil); !errors.Is(err, ErrWiring) {
 		t.Fatalf("validation of another block: %v", err)
 	}
 }
 
 func TestUnitRejectedWithAWiringErrorStaysAdmitted(t *testing.T) {
-	db := rawdb.NewMemoryDatabase()
-	handle := NewParliaDB(db, nil)
-	handle.Attach("obs-1", sealedLog(t, db, "obs-1"), nil)
-	handle.Get([]byte("parlia-undeclared"))
 	block := types.NewBlockWithHeader(&types.Header{Number: big.NewInt(1)})
-	o := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-1", hash: block.Hash()}
+	o := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-1", hash: block.Hash(), reader: stoppedReader()}
 	o.Rejected(block, nil, errors.New("unauthorized validator"))
-	if o.resolved != "" || !errors.Is(o.End(nil), ErrUndeclaredRead) {
+	if o.resolved != "" || !errors.Is(o.End(nil), ErrUndeclaredHeader) {
 		t.Fatalf("a rejection after a wiring error was trusted: %q", o.resolved)
+	}
+	// Input failures marked by the patches are not authoritative either.
+	for _, cause := range []error{
+		fmt.Errorf("invalid merkle root (%w: missing trie node)", core.ErrExtractorParentState),
+		fmt.Errorf("verify validators: %w", parlia.ErrExtractorSystemCall),
+	} {
+		o := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-1", hash: block.Hash(), reader: &Reader{}}
+		o.Rejected(block, nil, cause)
+		if o.resolved != "" || !errors.Is(o.End(nil), cause) {
+			t.Fatalf("an input failure was trusted: %v", cause)
+		}
 	}
 }
 
 func TestUnitEndOfAnUnresolvedObservation(t *testing.T) {
-	handle := NewParliaDB(rawdb.NewMemoryDatabase(), nil)
-	o := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-1"}
+	o := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-1", reader: &Reader{}}
 	if err := o.End(nil); !errors.Is(err, ErrUnresolved) {
 		t.Fatalf("end without an exit: %v", err)
 	}
-	done := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-2", resolved: admission.ExecReady}
+	done := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-2", resolved: admission.ExecReady, reader: &Reader{}}
 	if err := done.End(nil); err != nil {
 		t.Fatalf("end after EXEC_READY: %v", err)
 	}
@@ -692,15 +691,20 @@ func TestUnitPinVerifyNeedsTheState(t *testing.T) {
 	}
 }
 
-func TestUnitStaticWindowAboveACheckpoint(t *testing.T) {
+func TestUnitStaticWindow(t *testing.T) {
 	genesis, _ := unitGenesis(t)
 	headers := unitChain(genesis.Block.Header(), 1100)
+	for n, want := range map[int]int{2: 1, 100: 99, 257: 255, 1100: 255} {
+		static, err := DecodeStatic(unitItems(t, genesis, headers, n), genesis, "commit")
+		if err != nil || len(static.Ancestors) != want {
+			t.Fatalf("window of %d: %d ancestors, %v", n, len(static.Ancestors), err)
+		}
+	}
 	items := unitItems(t, genesis, headers, 1100)
 	static, err := DecodeStatic(items, genesis, "commit")
-	if err != nil || len(static.Ancestors) != 1100-1-844 || static.Snapshot.Checkpoint != 1024 {
+	if err != nil || len(static.Ancestors) != 255 || static.Ancestors[254].Number.Uint64() != 1100-256 {
 		t.Fatalf("window of 1100: %d ancestors, %v", len(static.Ancestors), err)
 	}
-	// One header short: the checkpoint is still inside, the window is not full.
 	short, _ := rlp.EncodeToBytes(static.Ancestors[:len(static.Ancestors)-1])
 	changed := map[string][]byte{}
 	for k, v := range items {
@@ -714,8 +718,8 @@ func TestUnitStaticWindowAboveACheckpoint(t *testing.T) {
 	for k, v := range items {
 		changed[k] = v
 	}
-	changed["parlia-snapshot-keys"] = []byte(`{"checkpoint":1024,"keys":["7061726c69612d00"]}`)
-	if _, err := DecodeStatic(changed, genesis, "commit"); err == nil || !strings.Contains(err.Error(), "parlia-snapshot-keys") {
-		t.Fatalf("another snapshot key accepted: %v", err)
+	changed["parlia-snapshots"] = []byte(SnapshotTag + ";all")
+	if _, err := DecodeStatic(changed, genesis, "commit"); err == nil || !strings.Contains(err.Error(), "parlia-snapshots") {
+		t.Fatalf("another snapshot declaration accepted: %v", err)
 	}
 }

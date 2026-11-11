@@ -314,7 +314,6 @@ type node struct {
 	home    string
 	db      ethdb.Database
 	chain   *core.BlockChain
-	handle  *ParliaDB
 	seam    *Seam
 	store   *probeStore
 	system  map[string]int
@@ -339,13 +338,12 @@ func openDisk(t testing.TB, home string) ethdb.Database {
 }
 
 // startNode opens the home with the capture profile of E01-02.pins, the
-// Parlia engine on the wrapped handle and a tracer, installs the seam and
+// Parlia engine with the system-call ethAPI and a tracer, installs the seam and
 // returns before recovery. producer may be empty to open the saved run.
 func startNode(t testing.TB, fx fixture, home string, producer admission.Producer, model string, emit func(Event)) (*node, error) {
 	n := &node{t: t, home: home, system: map[string]int{}, emit: emit}
 	n.db = openDisk(t, home)
 	n.store = &probeStore{db: n.db, model: model, emit: emit, pending: map[string][]byte{}}
-	n.handle = NewParliaDB(n.db, emit)
 	hooks := &tracing.Hooks{OnSystemTxStart: func() {
 		n.mu.Lock()
 		defer n.mu.Unlock()
@@ -361,16 +359,18 @@ func startNode(t testing.TB, fx fixture, home string, producer admission.Produce
 	config := core.DefaultConfig()
 	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = rawdb.HashScheme, false, 0
 	config.VmConfig.Tracer = hooks
-	engine := parlia.New(fx.genesis.Config, n.handle, nil, fx.genesis.ToBlock().Hash())
+	api, backend := NewSystemCallAPI()
+	engine := parlia.New(fx.genesis.Config, n.db, api, fx.genesis.ToBlock().Hash())
 	chain, err := core.NewBlockChain(n.db, fx.genesis, engine, config)
 	if err != nil {
 		n.db.Close()
 		return nil, err
 	}
 	n.chain = chain
+	backend.Bind(chain, nil)
 	identity := stateprovider.StoreIdentity{StoreID: probeStoreID, ChainID: fx.genesis.Config.ChainID.String(),
 		GenesisHash: chain.Genesis().Hash(), StateScheme: rawdb.HashScheme}
-	seam, err := Start(admission.NewGuard(), n.db, chain, n.handle, Config{Producer: producer, Identity: identity,
+	seam, err := Start(admission.NewGuard(), n.db, chain, Config{Producer: producer, Identity: identity,
 		GenesisFile: fx.genesisFile, NativeCommit: fx.commit, Store: n.store, Emit: emit})
 	if err != nil {
 		n.close()
@@ -379,6 +379,7 @@ func startNode(t testing.TB, fx fixture, home string, producer admission.Produce
 	n.mu.Lock()
 	n.seam = seam
 	n.mu.Unlock()
+	backend.Bind(chain, seam)
 	chain.SetExtractorHook(seam)
 	return n, nil
 }
@@ -498,7 +499,7 @@ func (n *node) finish(sc *scenario) {
 	sc.SystemTxs, sc.OutsideTxs = n.system, n.outside
 	n.mu.Unlock()
 	sc.OutsideSafe = n.seam.SafePointsOutside()
-	sc.Fetches = n.handle.Fetches()
+	sc.Fetches = int(n.seam.Fetches())
 	head := n.chain.CurrentBlock()
 	sc.HeadNumber, sc.HeadHash, sc.HeadRoot = head.Number.Uint64(), head.Hash().Hex(), head.Root.Hex()
 }
@@ -556,7 +557,7 @@ func TestNativeBSCAdmissionChild(t *testing.T) {
 			}
 		}
 	case "first-handoff":
-		n.handle.Handoff = func(obs string, seq uint64, _ []byte) {
+		n.seam.Handoff = func(obs string, seq uint64, _ []byte) {
 			if obs == block2 && seq == 0 {
 				crash(mode)
 			}
@@ -854,6 +855,8 @@ type fakeObservation struct {
 
 func (o *fakeObservation) Hash() [32]byte { return o.hash }
 
+func (o *fakeObservation) Reader(native core.ExtractorReader) core.ExtractorReader { return native }
+
 func (o *fakeObservation) Validated(*types.Block, *state.StateDB, *core.ProcessResult) error {
 	o.validated++
 	return o.validatedErr
@@ -873,11 +876,13 @@ func plainChain(t *testing.T, fx fixture, home string) (*core.BlockChain, ethdb.
 	db := openDisk(t, home)
 	config := core.DefaultConfig()
 	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = rawdb.HashScheme, false, 0
-	engine := parlia.New(fx.genesis.Config, NewParliaDB(db, nil), nil, fx.genesis.ToBlock().Hash())
+	api, backend := NewSystemCallAPI()
+	engine := parlia.New(fx.genesis.Config, db, api, fx.genesis.ToBlock().Hash())
 	chain, err := core.NewBlockChain(db, fx.genesis, engine, config)
 	if err != nil {
 		t.Fatal(err)
 	}
+	backend.Bind(chain, nil)
 	return chain, db
 }
 
