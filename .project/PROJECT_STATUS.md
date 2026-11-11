@@ -14,10 +14,15 @@ before #16 closes:
   `bor snapshot prune-block` never deletes a pinned header, and only the
   import's own Heimdall reads enter an observation's log (D100 item 1). Its
   measured run repeats the POLY AC-CAP-02 and AC-CAP-04-03 cases on its head.
+- Geth removedb block (native-engineer, Geth session): `geth removedb` and
+  the other manual database commands refuse while live pins or open
+  obligations exist (D100 item 3).
 
-AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and BSC slots,
-and on POLY (Bor) until the hazards block repeats them. Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100
-names the owner of every other limit in the block evidence.
+AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and BSC slots.
+They also pass on POLY (Bor) at PR #149; under D100 the hazards block must
+show them again on its own head before that verdict counts. Every public
+cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100 names the owner of
+every other limit in the block evidence.
 
 Dependencies E01-02.pins (#13), E01-02.inputs (#14) and E01-02.owned_capture
 (#15) are accepted. Plan agreed with the owner on 2026-11-11, the same split
@@ -127,14 +132,14 @@ PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
 terminal record before the release, lets `Open` release the pins of closed
 observations above the low-water mark again, and fixes the wording.
 
-Next: the Bor hazards block (D100 item 1), then the acceptance record;
-#16 closes when that record merges.
+Next: the Bor hazards block and the Geth removedb block (D100), then the
+acceptance record; #16 closes when that record merges.
 
 ## E01-02.admission — Geth block
 
-Status: block ACCEPTED in PR #147 at merge `6f6eb2c` (part of #16). Base
-`9046de9`, after block 0 (PR #146) merged. Branch/worktree:
-`claude/e01-02-admission-geth-95b3ee` /
+Status: merged in PR #147 at `6f6eb2c` (part of #16). Open: the removedb
+block of D100 item 3. Base `9046de9`, after block 0 (PR #146) merged.
+Branch/worktree: `claude/e01-02-admission-geth-95b3ee` /
 `e01-02-admission-geth-95b3ee`. Role: native-engineer; reviewer for the Spec
 and Standards reviews. Allowed paths: `adapters/geth/admission/native/**`,
 `test/harness/fixtures/admission_geth/**`,
