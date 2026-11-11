@@ -2,28 +2,31 @@
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
-Status: IN_PROGRESS; #16 stays open. Merged: block 0 admission-core in PR
-#146 at `9046de9`, Geth in PR #147 at `6f6eb2c`, BSC part A in PR #148 at
-`4bf65f3`, Bor in PR #149 at `9f2a3d9`, and BSC part B in PR #150 at
-`10cd2c6`. The acceptance audit (Spec review of PR #151) found two Bor
-hazards and no AC-CAP-02 verdict for the BSC slot. D100 records the owner's
-answers. The qa BSC verdict merged in PR #152 at `06231d1`. Still open
-before #16 closes:
+Status: ACCEPTED (2026-11-12); #16 closes when this record merges. Merged
+blocks:
 
-- Bor hazards block (native-engineer and qa, Bor session):
-  `bor snapshot prune-block` never deletes a pinned header, and only the
-  import's own Heimdall reads enter an observation's log (D100 item 1). Its
-  measured run repeats the POLY AC-CAP-02 and AC-CAP-04-03 cases on its head.
-- Geth removedb block (native-engineer, Geth session): `geth removedb` and
-  the other manual database commands refuse while live pins or open
-  obligations exist (D100 item 3). Draft PR #154: records 05 PASS at
-  `b9fc992`; see the Geth block section below.
+- block 0 admission-core: PR #146 at `9046de9`;
+- Geth: PR #147 at `6f6eb2c`, and the removedb guard of D100 item 3 in PR
+  #154 at `cb94c88`;
+- BSC: part A in PR #148 at `4bf65f3`, part B in PR #150 at `10cd2c6`, and
+  the qa AC verdict in PR #152 at `06231d1`;
+- Bor: PR #149 at `9f2a3d9`, and the D100 item 1 blocks in PR #153 at
+  `ea1d6f6` (hazards) and PR #156 at `d62e1e0` (fetch race);
+- D100 and the acceptance audit: PR #151 at `9185107`.
 
-AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and BSC slots.
-They also pass on POLY (Bor) at PR #149; under D100 the hazards block must
-show them again on its own head before that verdict counts. Every public
-cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100 names the owner of
-every other limit in the block evidence.
+Every row of the plan table below is met by its block, or is marked "Not
+admission" with its owner. AC-CAP-02-01 and AC-CAP-02-02 pass on every
+applicable private local slot: ETH (Geth, PR #147), BSC (qa verdict, PR
+#152) and POLY (Bor, repeated with AC-CAP-04-03 on `670e5ca`, the measured
+head of PR #156, whose later commits change only docs, as D100 requires).
+Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100 names
+the owner of every other limit in the block evidence; the test-coverage
+notes that PRs #153, #154 and #156 add to their README limits are accepted
+as recorded there. One fail-closed operational limit of PR #156 is accepted
+and goes to the E06 operator documentation, like `geth removedb` in D100
+item 3: if an interrupted `bor snapshot prune-block` has already removed the
+old ancient directory, the guard refuses the native resumption, and the
+store needs the native repair without the guard.
 
 Dependencies E01-02.pins (#13), E01-02.inputs (#14) and E01-02.owned_capture
 (#15) are accepted. Plan agreed with the owner on 2026-11-11, the same split
@@ -133,13 +136,14 @@ PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
 terminal record before the release, lets `Open` release the pins of closed
 observations above the low-water mark again, and fixes the wording.
 
-Next: the Bor hazards block and the Geth removedb block (D100), then the
-acceptance record; #16 closes when that record merges.
+Next: none for E01-02.admission. Its dependent task E01-02.decision_bridge
+is unlocked when #16 closes.
 
 ## E01-02.admission — Geth block
 
-Status: merged in PR #147 at `6f6eb2c` (part of #16). Open: the removedb
-block of D100 item 3. Base `9046de9`, after block 0 (PR #146) merged.
+Status: block ACCEPTED in PR #147 at merge `6f6eb2c`, with the removedb
+block in PR #154 at `cb94c88` (part of #16). Base `9046de9`, after block 0
+(PR #146) merged.
 Branch/worktree: `claude/e01-02-admission-geth-95b3ee` /
 `e01-02-admission-geth-95b3ee`. Role: native-engineer; reviewer for the Spec
 and Standards reviews. Allowed paths: `adapters/geth/admission/native/**`,
@@ -204,7 +208,7 @@ passed. Merged in PR #147 at `6f6eb2c`.
 
 ### Removedb block (D100 item 3)
 
-Status: IN_PROGRESS (part of #16), draft PR #154. Branch
+Status: ACCEPTED in PR #154 at merge `cb94c88` (part of #16). Branch
 `claude/e01-02-admission-geth-removedb` from main `06231d1`, merged with main
 `9185107` (D100, PR #151). Same role, allowed paths and profile as above.
 
@@ -241,8 +245,8 @@ Evidence at `b9fc992`:
   them.
 - Python mutants: 71 of 71 killed.
 
-Resume point: review 003 of the evidence head, hosted CI, the final review
-comment, then READY for the coordinator.
+Review 003 at head `8efaebd`: Spec PASS and Standards PASS (one optional
+P3 on wording); hosted CI passed. Merged in PR #154 at `cb94c88`.
 
 ## E01-02.admission — BSC block
 
@@ -363,10 +367,9 @@ Merged in PR #152 at `06231d1`.
 
 ## E01-02.admission — Bor block
 
-Status: merged in PR #149 at `9f2a3d9` (part of #16). Base `9046de9` (block
-0 merged in PR #146). The hazards block of D100 item 1 merged in PR #153 at
-`ea1d6f6`; its fetch-race follow-up is in draft PR #156 (see the last
-subsection of this section).
+Status: block ACCEPTED in PR #149 at merge `9f2a3d9`, with the D100 item 1
+blocks in PR #153 at `ea1d6f6` (hazards) and PR #156 at `d62e1e0`
+(fetch race); part of #16. Base `9046de9` (block 0 merged in PR #146).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
@@ -450,7 +453,7 @@ passed. Merged in PR #149 at `9f2a3d9`.
 
 ### D100 hazards block (PR #153)
 
-Status: merged in PR #153 at `ea1d6f6` (Part of #16), branch
+Status: ACCEPTED in PR #153 at merge `ea1d6f6` (part of #16), branch
 `claude/e01-02-admission-bor-hazards`, base main `10cd2c6` with later main
 merged. Roles: native-engineer (`ed35bb98`) and qa (`4b479131`); two
 independent read-only reviewers. Same allowed paths as above.
@@ -481,12 +484,13 @@ Mutants: Go 69 of 69, Python 114 of 114 killed. Preparation 07 and run 04 on
 
 Review 002 (head `828cc07`, evidence of preparation 09 and run 06): Spec
 PASS and Standards PASS, P3 notes only; the detached-fetch counting race and
-the direct-child creator rule are recorded as README limits. Hosted CI
-passed. Merged in PR #153 at `ea1d6f6`.
+the direct-child creator rule are recorded as README limits. Final review
+at head `03caf94`: Spec PASS and Standards PASS (three optional P3 notes);
+hosted CI passed. Merged in PR #153 at `ea1d6f6`.
 
 ### D100 item 1 fetch-race block (PR #156)
 
-Status: IN_PROGRESS (Part of #16), draft PR #156, branch
+Status: ACCEPTED in PR #156 at merge `d62e1e0` (part of #16), branch
 `claude/e01-02-admission-bor-fetch-race`, base main `ea1d6f6`. Roles:
 native-engineer (`ed35bb98`) and qa (`4b479131`); two independent read-only
 reviewers. Same allowed paths as above. The Spec review of the acceptance
@@ -521,7 +525,8 @@ AC-CAP-04-03 PASS on that head; every public cell NOT_RUN. Mutants on
 images had been removed in a disk cleanup; they were pulled again by digest
 and tagged `extractor-pinned/*` (D83 records kept).
 
-Next: review confirmation on the final head, then READY for the coordinator.
+Final review at head `118bf02`: Spec PASS and Standards PASS (two optional
+P3 notes); hosted CI passed. Merged in PR #156 at `d62e1e0`.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
