@@ -1,5 +1,24 @@
+diff --git a/core/state/pruner/extractor.go b/core/state/pruner/extractor.go
+new file mode 100644
+index 0000000..a63a598
+--- /dev/null
++++ b/core/state/pruner/extractor.go
+@@ -0,0 +1,13 @@
++// Extractor patch (E01-02.admission, BSC block).
++
++package pruner
++
++// ExtractorPruningPending reports whether datadir holds the state bloom
++// filter of an interrupted offline prune, found exactly as RecoverPruning
++// finds it. The patched node calls the pin ledger's RecoverPruning, which
++// refuses while a pin is live, only in that case, so a node that holds pins
++// still starts when no prune is pending.
++func ExtractorPruningPending(datadir string) (bool, error) {
++	path, _, err := findBloomFilter(datadir)
++	return path != "", err
++}
 diff --git a/eth/backend.go b/eth/backend.go
-index ce0125c..3d82693 100644
+index ce0125c..cb1319a 100644
 --- a/eth/backend.go
 +++ b/eth/backend.go
 @@ -31,6 +31,7 @@ import (
@@ -10,23 +29,19 @@ index ce0125c..3d82693 100644
  	"github.com/ethereum/go-ethereum/metrics"
  	"github.com/ethereum/go-ethereum/params"
  
-@@ -43,7 +44,6 @@ import (
- 	"github.com/ethereum/go-ethereum/core/history"
- 	"github.com/ethereum/go-ethereum/core/monitor"
- 	"github.com/ethereum/go-ethereum/core/rawdb"
--	"github.com/ethereum/go-ethereum/core/state/pruner"
- 	"github.com/ethereum/go-ethereum/core/txpool"
- 	"github.com/ethereum/go-ethereum/core/txpool/blobpool"
- 	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
-@@ -217,8 +217,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+@@ -217,8 +218,16 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
  		"snapshot_cache", common.StorageSize(config.SnapshotCache)*1024*1024)
  	// Try to recover offline state pruning only in hash-based.
  	if config.StateScheme == rawdb.HashScheme {
 -		if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb, config.TriesInMemory); err != nil {
 +		// Extractor patch: resume an interrupted prune only when no pin is
-+		// live. Any error stops the node, so it never starts with a pending
-+		// prune that would delete pinned state.
-+		if err := stateprovider.RecoverPruning(chainDb, stack.ResolvePath("")); err != nil {
++		// live. A pending prune with a live pin, or any error, stops the
++		// node, so it never starts a prune that would delete pinned state.
++		pending, err := pruner.ExtractorPruningPending(stack.ResolvePath(""))
++		if err == nil && pending {
++			err = stateprovider.RecoverPruning(chainDb, stack.ResolvePath(""))
++		}
++		if err != nil {
  			log.Error("Failed to recover state", "error", err)
 +			return nil, err
  		}

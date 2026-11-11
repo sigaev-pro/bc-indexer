@@ -310,7 +310,7 @@ func (s *Seam) prepare(chain *core.BlockChain, key string, block *types.Block, p
 	for _, header := range static.Ancestors {
 		refs = append(refs, stateprovider.HeaderRef{Hash: header.Hash(), Number: header.Number.Uint64()})
 	}
-	pin := stateprovider.Pin{ID: key, Store: s.identity, Profile: StateProfile, ParentRoot: parent.Root,
+	pin := stateprovider.Pin{ID: key, Store: s.identity, Profile: ProfileDigest(), ParentRoot: parent.Root,
 		Headers: refs, Codes: []common.Hash{}}
 	if err := s.provider.Pin(pin); err != nil {
 		return err
@@ -321,6 +321,13 @@ func (s *Seam) prepare(chain *core.BlockChain, key string, block *types.Block, p
 	}
 	s.emit(Event{"event": "sealed", "observation": key})
 	return nil
+}
+
+// ProfileDigest is the profile field of every pin: the SHA-256 of the
+// state-profile item, as 64 lowercase hex digits.
+func ProfileDigest() string {
+	digest := sha256.Sum256([]byte(StateProfile))
+	return hex.EncodeToString(digest[:])
 }
 
 func itemMap(items []sourceinputs.Item) map[string][]byte {
