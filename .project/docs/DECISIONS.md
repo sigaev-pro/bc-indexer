@@ -2,7 +2,7 @@
 
 ## D100 — Bor hazards fixed in E01-02.admission; owners of the remaining admission limits (2026-11-11)
 
-After all five E01-02.admission blocks merged (PRs #146 to #150), the coordinator audited their evidence and native README limits for the acceptance record (PR #151). The Spec review of that record found limits that are neither owned nor accepted. The coordinator asked the owner two questions; for each, the owner selected the coordinator's proposed option (marked as recommended):
+After all five E01-02.admission blocks merged (PRs #146 to #150), the coordinator audited their evidence and native README limits for the acceptance record (PR #151). The Spec review of that record found limits that are neither owned nor accepted. The coordinator asked the owner three questions; for each, the owner selected the coordinator's proposed option (marked as recommended):
 
 1. Two Bor hazards: "Fix in #16 (Recommended)". `bor snapshot prune-block` (ancient block pruning) is not guarded and can delete pinned headers, and a Heimdall read that the import did not make (for example an RPC span or snapshot query) can enter the log of a live observation during an admission window. E01-02.admission fixes both in a further Bor block before #16 closes: prune-block never deletes a pinned header (or refuses while pins are live), and only the import's own Heimdall reads enter an observation's log.
 2. Owners of the other limits: "Agree (Recommended)". The coordinator's proposed assignments are accepted:
@@ -11,12 +11,14 @@ After all five E01-02.admission blocks merged (PRs #146 to #150), the coordinato
    - E06: the patched native binaries built with a plain `go build -trimpath` instead of the E01-01.builds release build.
    - E06 and E07: BSC blob sidecars of an obligation recovered after the native sidecar window, and the Bohr turn-length and Feynman breathe-block call marks that are checked by source review only.
    - E01-02.decision_bridge: deletion of the capsule and log records of closed observations.
+3. Manual database tools in Geth: "Accept as known hazard (Recommended)". The Spec review of the first version of this decision found that `geth removedb` and other manual database tools are not guarded and can delete pinned data without a refusal. They are operator tools outside the shipped import path, and the next start refuses a native store whose identity differs from the saved run. The owner accepted them as a known operator hazard; the E06 operator documentation must state it.
 
 Recorded technical decisions, not owner answers:
 
 - The Spec review also found that the BSC evidence gives no AC-CAP-02 verdict (`ac_verdict: null`), while the plan gives the AC matrix to qa. A qa block issues that verdict for the private BSC slot from the accepted part A and part B records before #16 closes. This is in scope and needs no owner decision.
+- The Bor hazards block changes the Bor import and logging path, so its measured run must show AC-CAP-02-01, AC-CAP-02-02 and AC-CAP-04-03 again on its own head before the POLY verdict counts for acceptance.
 - Limits that the block evidence already hands to an owner keep that owner: node wiring, the caller of `Start`, the BSC `ethAPI` over `SystemCallBackend` and the `bor server` profile check with E01-02.lifecycle_seams; closing EXEC_READY observations, the BSC finality result after EXEC_READY and one decision per twice-observed candidate with E01-02.decision_bridge (the native finality paths stay with E05-01.bsc_finality); the capture producer and the raw spool encoder with E04-04.import_pressure; the normalization profile and the record-corpus digest with E04-01.block_record; public profiles with E06 and E07 (D96, D98, D99).
-- Fail-closed limits stay as recorded in the evidence: native startup repair rewinds in Geth, which keep every pinned parent root on disk; unguarded manual database tools such as `geth removedb`; the refusal of a BSC rewind by timestamp while any header is pinned; the process-crash semantics of native chain data; and Parlia snapshot bytes from the trusted-checkpoint path, which only retries reuse byte for byte.
+- Fail-closed limits stay as recorded in the evidence: native startup repair rewinds in Geth, which keep every pinned parent root on disk; the refusal of a BSC rewind by timestamp while any header is pinned; the process-crash semantics of native chain data; and Parlia snapshot bytes from the trusted-checkpoint path, which only retries reuse byte for byte.
 - As with D96, D98 and D99, TASK_DECOMPOSITION is a normative mirror and is not edited; the cards named above are read through this decision. This decision assigns owners and does not change product guarantees, acceptance cases or gates. Every public cell stays NOT_RUN.
 
 ## D99 — Owners of the static manifest limits left by E01-02.inputs (2026-11-11)

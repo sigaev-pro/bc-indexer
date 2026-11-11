@@ -7,17 +7,16 @@ Status: IN_PROGRESS; #16 stays open. Merged: block 0 admission-core in PR
 `4bf65f3`, Bor in PR #149 at `9f2a3d9`, and BSC part B in PR #150 at
 `10cd2c6`. The acceptance audit (Spec review of PR #151) found two Bor
 hazards and no AC-CAP-02 verdict for the BSC slot. D100 records the owner's
-answers. Still open before #16 closes:
+answers. The qa BSC verdict merged in PR #152 at `06231d1`. Still open
+before #16 closes:
 
 - Bor hazards block (native-engineer and qa, Bor session):
   `bor snapshot prune-block` never deletes a pinned header, and only the
-  import's own Heimdall reads enter an observation's log (D100 item 1).
-- BSC AC verdict block (qa, BSC session): the AC-CAP-02-01 and
-  AC-CAP-02-02 matrix for the private BSC slot from part A run 03 and part B
-  run 06 (D100).
+  import's own Heimdall reads enter an observation's log (D100 item 1). Its
+  measured run repeats the POLY AC-CAP-02 and AC-CAP-04-03 cases on its head.
 
-AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and POLY (Bor)
-slots. Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100
+AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and BSC slots,
+and on POLY (Bor) until the hazards block repeats them. Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100
 names the owner of every other limit in the block evidence.
 
 Dependencies E01-02.pins (#13), E01-02.inputs (#14) and E01-02.owned_capture
@@ -128,8 +127,8 @@ PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
 terminal record before the release, lets `Open` release the pins of closed
 observations above the low-water mark again, and fixes the wording.
 
-Next: the Bor hazards block and the BSC AC verdict block (D100), then the
-acceptance record; #16 closes when that record merges.
+Next: the Bor hazards block (D100 item 1), then the acceptance record;
+#16 closes when that record merges.
 
 ## E01-02.admission — Geth block
 
@@ -199,10 +198,11 @@ passed. Merged in PR #147 at `6f6eb2c`.
 
 ## E01-02.admission — BSC block
 
-Status: part A merged in PR #148 at `4bf65f3`; part B merged in PR #150 at
-`10cd2c6` (branch `claude/e01-02-admission-bsc-parlia-inputs`, started on
-main `4bf65f3`, merged with main `9f2a3d9`). Part of #16. Open: the qa
-AC-CAP-02 verdict for the private BSC slot (D100).
+Status: block ACCEPTED (part of #16). Part A merged in PR #148 at
+`4bf65f3`; part B merged in PR #150 at `10cd2c6` (branch
+`claude/e01-02-admission-bsc-parlia-inputs`, started on main `4bf65f3`,
+merged with main `9f2a3d9`); the qa AC verdict merged in PR #152 at
+`06231d1`.
 
 Split: the coordinator approved on 2026-11-11 splitting the BSC block into
 PR A "bsc-import" and PR B "bsc-parlia-inputs", both "Part of #16", with no
@@ -305,11 +305,19 @@ and listed in
 Part B reviews at head `766a59a`: Spec PASS and Standards PASS; hosted CI
 passed. Merged in PR #150 at `10cd2c6`.
 
+BSC AC verdict (qa, 2026-11-11, from the accepted records only: part A
+run 03 at `e0b16c8` and part B run 06 at `7eb892c`). BSC private local:
+AC-CAP-02-01 PASS and AC-CAP-02-02 PASS. All eight scenarios PASS in both
+runs, and every public cell (`bsc-mainnet`, `bsc-testnet`) is NOT_RUN. The
+matrix is in
+[E01-02.admission.bsc-parlia-inputs](evidence/E01-02.admission.bsc-parlia-inputs.md#ac-matrix-bsc).
+Merged in PR #152 at `06231d1`.
+
 ## E01-02.admission — Bor block
 
 Status: merged in PR #149 at `9f2a3d9` (part of #16). Base `9046de9` (block
-0 merged in PR #146). Open: the hazards block of D100 item 1 (`bor snapshot
-prune-block` and Heimdall reads outside the import).
+0 merged in PR #146). Open: the hazards block of D100 item 1
+(`bor snapshot prune-block` and Heimdall reads outside the import).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
