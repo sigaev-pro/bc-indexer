@@ -12,8 +12,8 @@ mutant table are byte-identical for Geth (`geth`), BSC (`bsc`) and Bor
 `test/harness/test_source_inputs.py` (run by `bootstrap/ci`) refuse any
 difference. The package imports only the Go standard library and has no
 `go.mod`, so the same bytes compile inside each accepted native module graph
-and with a plain `go 1.25` module. Native wiring, the Bor Heimdall resolver and
-the real EXEC_READY binding are later blocks.
+and with a plain `go 1.25` module. Native wiring and the Bor Heimdall resolver
+are later blocks; the real EXEC_READY binding is in E01-02.admission.
 
 ## Design
 
@@ -122,9 +122,11 @@ every durable entry (`ErrUnconsumed` otherwise: an unconsumed durable response
 means the retry diverged from an earlier attempt). It writes the `/closed`
 record with the consumed-manifest digest and syncs. After that, `Next` still
 replays the saved prefix (for native-only replay) but refuses a new response
-(`ErrClosed`), and `Finish` returns the same manifest. The EXEC_READY marker
-references this digest; in this block a test-only stand-in marker binds it
-(AC-CAP-04-03, D98), and the real binding belongs to E01-02.admission.
+(`ErrClosed`), and `Finish` returns the same manifest. `Closed` returns the
+closed manifest of an opened log without replaying it. The EXEC_READY record
+of E01-02.admission (`adapters/<client>/admission`) binds this digest (D98
+item 7); the unit test of this package still binds it to a test-only stand-in
+marker, as block 0 of E01-02.inputs did (AC-CAP-04-03).
 
 ### Bounds and concurrency
 

@@ -627,11 +627,11 @@ func (a *Admission) Admit(t *Token, key string) (AdmittedRecord, error) {
 	}
 	pinDigest, err := a.pins.Verify(key, obs.Candidate.ParentRoot)
 	if err != nil {
-		return AdmittedRecord{}, fmt.Errorf("%w: pin of %s: %v", ErrBinding, key, err)
+		return AdmittedRecord{}, fmt.Errorf("%w: pin of %s: %w", ErrBinding, key, err)
 	}
 	capsuleDigest, err := a.inputs.CapsuleDigest(key)
 	if err != nil {
-		return AdmittedRecord{}, fmt.Errorf("%w: capsule of %s: %v", ErrBinding, key, err)
+		return AdmittedRecord{}, fmt.Errorf("%w: capsule of %s: %w", ErrBinding, key, err)
 	}
 	digest, err := AdmittedDigest(key, obs.Sequence, obs.Candidate, pinDigest, capsuleDigest)
 	if err != nil {
@@ -678,21 +678,21 @@ func (a *Admission) ExecReady(t *Token, key, execDigest string) (ExecReadyRecord
 	admitted := obs.Admitted
 	pinDigest, err := a.pins.Verify(key, admitted.Candidate.ParentRoot)
 	if err != nil {
-		return ExecReadyRecord{}, fmt.Errorf("%w: pin of %s: %v", ErrBinding, key, err)
+		return ExecReadyRecord{}, fmt.Errorf("%w: pin of %s: %w", ErrBinding, key, err)
 	}
 	if pinDigest != admitted.PinDigest {
 		return ExecReadyRecord{}, fmt.Errorf("%w: pin of %s changed after admission", ErrBinding, key)
 	}
 	capsuleDigest, err := a.inputs.CapsuleDigest(key)
 	if err != nil {
-		return ExecReadyRecord{}, fmt.Errorf("%w: capsule of %s: %v", ErrBinding, key, err)
+		return ExecReadyRecord{}, fmt.Errorf("%w: capsule of %s: %w", ErrBinding, key, err)
 	}
 	if capsuleDigest != admitted.CapsuleDigest {
 		return ExecReadyRecord{}, fmt.Errorf("%w: capsule of %s changed after admission", ErrBinding, key)
 	}
 	consumed, err := a.inputs.Consumed(key)
 	if err != nil {
-		return ExecReadyRecord{}, fmt.Errorf("%w: consumed manifest of %s: %v", ErrBinding, key, err)
+		return ExecReadyRecord{}, fmt.Errorf("%w: consumed manifest of %s: %w", ErrBinding, key, err)
 	}
 	want, err := ConsumedDigest(admitted.CapsuleDigest, consumed.Count, consumed.Chain)
 	if err != nil || consumed.Observation != key || consumed.CapsuleDigest != admitted.CapsuleDigest ||

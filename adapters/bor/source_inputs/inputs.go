@@ -527,6 +527,16 @@ func (l *Log) Frontier() uint64 { return l.durable.Count }
 // Cursor returns the number of entries this attempt consumed.
 func (l *Log) Cursor() uint64 { return l.cursor }
 
+// Closed returns the final consumed-input manifest if the log was closed,
+// as OpenLog read and checked it or as Finish wrote it. The EXEC_READY record
+// of E01-02.admission binds its digest.
+func (l *Log) Closed() (Consumed, bool) {
+	if l.closed == nil {
+		return Consumed{}, false
+	}
+	return *l.closed, true
+}
+
 func (l *Log) fail(err error) error {
 	l.err = err
 	return err

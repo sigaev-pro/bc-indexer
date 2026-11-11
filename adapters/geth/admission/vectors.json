@@ -1,5 +1,12 @@
 {
   "admitted_digest": "47ba07a6b3dfc5ea13215b222e1990797c582175a8a2cba165e7713d5782d0d7",
+  "binding": {
+    "admitted_digest": "919d19f827b141450371931bfcb654be717aa1a08cd4d5a956978a5c37665695",
+    "capsule_digest": "518f4f0eeac209903a9405c383f4e62d4a41d18435ceacc75ba7dd548d47304d",
+    "consumed_digest": "1a16a7e647843974f84e62f55b8ea6acd8d8e764af1edd004a4e5ff2f66a795b",
+    "exec_ready_digest": "02e42f59317ac38a8478b50886c5cdd05b0329913a5a6dea563ec770fcc1aa79",
+    "pin_digest": "e605f228f8c990b95ecb91e47db919f4876e8ac2102950422aef5a83849878a8"
+  },
   "candidate": {
     "hash": "bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3",
     "number": 7,

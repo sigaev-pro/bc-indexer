@@ -410,6 +410,18 @@
       "file": "inputs.go",
       "original": "\t\treturn nil, fmt.Errorf(\"fetch dependency %d of %s: %w\", l.cursor, l.id, err)",
       "replacement": "\t\treturn nil, l.fail(fmt.Errorf(\"fetch dependency %d of %s: %w\", l.cursor, l.id, err))"
+    },
+    {
+      "name": "closed reports an open log as closed",
+      "file": "inputs.go",
+      "original": "\tif l.closed == nil {\n\t\treturn Consumed{}, false\n\t}\n\treturn *l.closed, true",
+      "replacement": "\tif l.closed == nil {\n\t\treturn Consumed{}, true\n\t}\n\treturn *l.closed, true"
+    },
+    {
+      "name": "closed hides the manifest",
+      "file": "inputs.go",
+      "original": "\treturn *l.closed, true\n}",
+      "replacement": "\treturn Consumed{}, true\n}"
     }
   ]
 }

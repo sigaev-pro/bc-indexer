@@ -17,19 +17,20 @@ import (
 // test/harness/admission.py vectors` computes them from the README formulas;
 // test/harness/test_admission.py checks that the file matches.
 type vectorFile struct {
-	Producer        string    `json:"producer"`
-	Run             string    `json:"run"`
-	Sequence        uint64    `json:"sequence"`
-	Key             string    `json:"key"`
-	Candidate       Candidate `json:"candidate"`
-	PinDigest       string    `json:"pin_digest"`
-	CapsuleDigest   string    `json:"capsule_digest"`
-	ConsumedCount   uint64    `json:"consumed_count"`
-	ConsumedChain   string    `json:"consumed_chain"`
-	ExecDigest      string    `json:"exec_digest"`
-	AdmittedDigest  string    `json:"admitted_digest"`
-	ConsumedDigest  string    `json:"consumed_digest"`
-	ExecReadyDigest string    `json:"exec_ready_digest"`
+	Producer        string            `json:"producer"`
+	Run             string            `json:"run"`
+	Sequence        uint64            `json:"sequence"`
+	Key             string            `json:"key"`
+	Candidate       Candidate         `json:"candidate"`
+	PinDigest       string            `json:"pin_digest"`
+	CapsuleDigest   string            `json:"capsule_digest"`
+	ConsumedCount   uint64            `json:"consumed_count"`
+	ConsumedChain   string            `json:"consumed_chain"`
+	ExecDigest      string            `json:"exec_digest"`
+	AdmittedDigest  string            `json:"admitted_digest"`
+	ConsumedDigest  string            `json:"consumed_digest"`
+	ExecReadyDigest string            `json:"exec_ready_digest"`
+	Binding         map[string]string `json:"binding"`
 	Canonical       []struct {
 		Input string  `json:"input"`
 		Want  *string `json:"want"`

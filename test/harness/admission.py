@@ -20,6 +20,9 @@ import shutil
 import struct
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import source_inputs  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 FAMILIES = ("geth", "bsc", "bor")
 FAMILY_DIR = "native"
@@ -182,6 +185,18 @@ CANONICAL_INPUTS = (
 )
 
 
+def binding_vectors():
+    """Expected digests of the binding test, which uses the source_inputs vector capsule and log."""
+    key = observation_key(PRODUCER, RUN, SEQUENCE)
+    inputs = source_inputs.vectors()
+    # The test pin ledger stores the parent root as text; its record digest is the SHA-256 of that text.
+    pin = sha(CANDIDATE["parent_root"].encode()).hex()
+    admitted = admitted_digest(key, SEQUENCE, CANDIDATE, pin, inputs["CapsuleDigest"])
+    return {"pin_digest": pin, "capsule_digest": inputs["CapsuleDigest"], "consumed_digest": inputs["ConsumedDigest"],
+            "admitted_digest": admitted,
+            "exec_ready_digest": exec_ready_digest(admitted, inputs["ConsumedDigest"], EXEC_DIGEST)}
+
+
 def vectors():
     key = observation_key(PRODUCER, RUN, SEQUENCE)
     admitted = admitted_digest(key, SEQUENCE, CANDIDATE, PIN_DIGEST, CAPSULE_DIGEST)
@@ -198,7 +213,7 @@ def vectors():
         "pin_digest": PIN_DIGEST, "capsule_digest": CAPSULE_DIGEST, "consumed_count": CONSUMED_COUNT,
         "consumed_chain": CONSUMED_CHAIN, "exec_digest": EXEC_DIGEST, "admitted_digest": admitted,
         "consumed_digest": consumed, "exec_ready_digest": exec_ready_digest(admitted, consumed, EXEC_DIGEST),
-        "canonical": cases,
+        "canonical": cases, "binding": binding_vectors(),
     }
 
 
