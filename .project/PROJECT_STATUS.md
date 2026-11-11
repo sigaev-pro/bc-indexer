@@ -142,6 +142,12 @@ fresh-engine assumption, and the window and checkpoint rule.
 Design: [native README](../adapters/bsc/admission/native/README.md).
 Evidence: [E01-02.admission.bsc](evidence/E01-02.admission.bsc.md).
 
+Records at `e0b16c8` (2026-11-11): preparation 03, run 03, Go mutants 01
+(60 killed, 2 labeled equivalent) and Python mutants 02 (70 killed) all
+PASS. Earlier records are kept under D83: preparation 01 FAIL (harness
+source changed during the run), the superseded `5f1aa7c` records, and run
+02, cancelled before it started.
+
 Resume point: none (not paused).
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
