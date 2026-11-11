@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/parlia"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -84,7 +85,6 @@ type Seam struct {
 	provider  *stateprovider.Provider
 	pins      LedgerPins
 	adm       *admission.Admission
-	parlia    *ParliaDB
 	genesis   *Genesis
 	commit    string
 	identity  stateprovider.StoreIdentity
@@ -95,19 +95,26 @@ type Seam struct {
 
 	active  atomic.Pointer[observation]
 	outside atomic.Int64
+	fetches atomic.Int64
+
+	// Handoff, when set, runs after a snapshot response is durable and before
+	// Parlia receives it, with the reader's lock held, so it must not call
+	// the reader.
+	Handoff func(observation string, sequence uint64, response []byte)
 }
 
-// Start opens the seam on a native chain whose engine reads through parlia:
+// Start opens the seam on a native chain whose engine is the patched Parlia:
 // it binds or checks the store identity, opens the saved producer run (or
 // saves the configured one), opens the admission in RECOVERY_ONLY and
 // installs the VM safe point. The caller then installs the seam on the chain
 // (SetExtractorHook), runs Recover and only then imports new blocks.
-func Start(guard *admission.Guard, db ethdb.Database, chain *core.BlockChain, parlia *ParliaDB, cfg Config) (*Seam, error) {
-	if _, ok := chain.Engine().(interface{ ExtractorResetSnapshots() }); !ok {
+func Start(guard *admission.Guard, db ethdb.Database, chain *core.BlockChain, cfg Config) (*Seam, error) {
+	engine, ok := chain.Engine().(*parlia.Parlia)
+	if !ok {
 		return nil, ErrEngine
 	}
-	if parlia == nil || parlia.Database != db {
-		return nil, fmt.Errorf("%w: the Parlia handle does not wrap the native database", ErrWiring)
+	if !engine.ExtractorHasEthAPI() {
+		return nil, fmt.Errorf("%w: the engine has no ethAPI for system-contract calls", ErrEngine)
 	}
 	if _, bound, err := stateprovider.BoundIdentity(db); err != nil {
 		return nil, err
@@ -137,7 +144,7 @@ func Start(guard *admission.Guard, db ethdb.Database, chain *core.BlockChain, pa
 		emit = func(Event) {}
 	}
 	s := &Seam{guard: guard, db: db, store: store, provider: provider, pins: LedgerPins{DB: db, Provider: provider},
-		parlia: parlia, genesis: genesis, commit: cfg.NativeCommit, identity: cfg.Identity, producer: producer,
+		genesis: genesis, commit: cfg.NativeCommit, identity: cfg.Identity, producer: producer,
 		emit: emit, tracer: chain.GetVMConfig().Tracer, safePoint: cfg.SafePoint}
 	token := guard.Acquire()
 	defer token.Release()
@@ -330,15 +337,14 @@ func itemMap(items []sourceinputs.Item) map[string][]byte {
 	return out
 }
 
-// resume attaches an admitted observation of block to the Parlia handle.
-// The candidate, which the caller matched, holds the block hash, and Admit
+// Fetches returns how many snapshot requests went to the native lookup.
+func (s *Seam) Fetches() int64 { return s.fetches.Load() }
+
+// resume attaches an admitted observation of block: its reader serves the
+// capsule headers and the logged snapshots. The candidate, which the caller matched, holds the block hash, and Admit
 // bound the capsule digest, so the capsule holds this block.
 func (s *Seam) resume(chain *core.BlockChain, key string, block *types.Block) (core.ExtractorObservation, error) {
 	static, err := ReadStatic(s.store, key, s.genesis, s.commit)
-	if err != nil {
-		return nil, err
-	}
-	keys, err := static.Snapshot.KeyBytes()
 	if err != nil {
 		return nil, err
 	}
@@ -346,11 +352,13 @@ func (s *Seam) resume(chain *core.BlockChain, key string, block *types.Block) (c
 	if err != nil {
 		return nil, err
 	}
-	if err := s.parlia.Attach(key, log, keys); err != nil {
-		return nil, err
-	}
-	chain.Engine().(interface{ ExtractorResetSnapshots() }).ExtractorResetSnapshots()
-	o := &observation{seam: s, key: key, hash: block.Hash(), log: log}
+	reader := newReader(key, static, s.genesis.Block.Header(), log, s.emit, func() { s.fetches.Add(1) },
+		func(id string, sequence uint64, response []byte) {
+			if s.Handoff != nil {
+				s.Handoff(id, sequence, response)
+			}
+		})
+	o := &observation{seam: s, key: key, hash: block.Hash(), log: log, reader: reader}
 	s.active.Store(o)
 	s.emit(Event{"event": "execute", "observation": key, "number": block.NumberU64()})
 	return o, nil
@@ -362,6 +370,7 @@ type observation struct {
 	key        string
 	hash       [32]byte
 	log        *sourceinputs.Log
+	reader     *Reader
 	detached   bool
 	resolved   admission.State
 	err        error
@@ -371,23 +380,33 @@ type observation struct {
 // Hash implements core.ExtractorObservation.
 func (o *observation) Hash() [32]byte { return o.hash }
 
+// Reader implements core.ExtractorObservation.
+func (o *observation) Reader(native core.ExtractorReader) core.ExtractorReader {
+	return o.reader.bind(native)
+}
+
 func (o *observation) detach() error {
 	if o.detached {
 		return nil
 	}
 	o.detached = true
 	o.seam.active.CompareAndSwap(o, nil)
-	return o.seam.parlia.Detach()
+	return o.reader.Err()
 }
 
 // Validated implements core.ExtractorObservation.
-func (o *observation) Validated(block *types.Block, _ *state.StateDB, res *core.ProcessResult) error {
+// A parent state read error refuses EXEC_READY even when native validation
+// passed: the result may rest on the missing state.
+func (o *observation) Validated(block *types.Block, statedb *state.StateDB, res *core.ProcessResult) error {
 	s := o.seam
 	if block.Hash() != o.hash || o.resolved != "" || o.err != nil {
 		return o.fail(fmt.Errorf("%w: unexpected validation of block %x", ErrWiring, block.Hash()))
 	}
 	if err := o.detach(); err != nil {
 		return o.fail(err)
+	}
+	if statedb != nil && statedb.Error() != nil {
+		return o.fail(fmt.Errorf("%w: %w", core.ErrExtractorParentState, statedb.Error()))
 	}
 	consumed, err := o.log.Finish()
 	if err != nil {
@@ -408,8 +427,9 @@ func (o *observation) Validated(block *types.Block, _ *state.StateDB, res *core.
 }
 
 // Rejected implements core.ExtractorObservation. A rejection that may come
-// from a wiring error (a stopped Parlia handle makes Parlia regenerate its
-// snapshot) is not authoritative, so the observation stays ADMITTED.
+// from an input failure is not authoritative, so the observation stays
+// ADMITTED: the reader refused a read, a parent state read failed, a
+// system-contract call failed, or a snapshot response did not decode.
 func (o *observation) Rejected(block *types.Block, _ *core.ProcessResult, cause error) {
 	s := o.seam
 	if o.resolved != "" || o.err != nil {
@@ -417,6 +437,11 @@ func (o *observation) Rejected(block *types.Block, _ *core.ProcessResult, cause 
 	}
 	if err := o.detach(); err != nil {
 		o.fail(err)
+		return
+	}
+	if errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) ||
+		errors.Is(cause, parlia.ErrExtractorSnapshotResponse) {
+		o.fail(cause)
 		return
 	}
 	evidence := RejectionEvidence(block, cause)

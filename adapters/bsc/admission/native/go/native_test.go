@@ -314,7 +314,7 @@ type node struct {
 	home    string
 	db      ethdb.Database
 	chain   *core.BlockChain
-	handle  *ParliaDB
+	backend *SystemCallBackend
 	seam    *Seam
 	store   *probeStore
 	system  map[string]int
@@ -339,13 +339,12 @@ func openDisk(t testing.TB, home string) ethdb.Database {
 }
 
 // startNode opens the home with the capture profile of E01-02.pins, the
-// Parlia engine on the wrapped handle and a tracer, installs the seam and
+// Parlia engine with the system-call ethAPI and a tracer, installs the seam and
 // returns before recovery. producer may be empty to open the saved run.
 func startNode(t testing.TB, fx fixture, home string, producer admission.Producer, model string, emit func(Event)) (*node, error) {
 	n := &node{t: t, home: home, system: map[string]int{}, emit: emit}
 	n.db = openDisk(t, home)
 	n.store = &probeStore{db: n.db, model: model, emit: emit, pending: map[string][]byte{}}
-	n.handle = NewParliaDB(n.db, emit)
 	hooks := &tracing.Hooks{OnSystemTxStart: func() {
 		n.mu.Lock()
 		defer n.mu.Unlock()
@@ -361,16 +360,18 @@ func startNode(t testing.TB, fx fixture, home string, producer admission.Produce
 	config := core.DefaultConfig()
 	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = rawdb.HashScheme, false, 0
 	config.VmConfig.Tracer = hooks
-	engine := parlia.New(fx.genesis.Config, n.handle, nil, fx.genesis.ToBlock().Hash())
+	api, backend := NewSystemCallAPI()
+	engine := parlia.New(fx.genesis.Config, n.db, api, fx.genesis.ToBlock().Hash())
 	chain, err := core.NewBlockChain(n.db, fx.genesis, engine, config)
 	if err != nil {
 		n.db.Close()
 		return nil, err
 	}
-	n.chain = chain
+	n.chain, n.backend = chain, backend
+	backend.Bind(chain, nil)
 	identity := stateprovider.StoreIdentity{StoreID: probeStoreID, ChainID: fx.genesis.Config.ChainID.String(),
 		GenesisHash: chain.Genesis().Hash(), StateScheme: rawdb.HashScheme}
-	seam, err := Start(admission.NewGuard(), n.db, chain, n.handle, Config{Producer: producer, Identity: identity,
+	seam, err := Start(admission.NewGuard(), n.db, chain, Config{Producer: producer, Identity: identity,
 		GenesisFile: fx.genesisFile, NativeCommit: fx.commit, Store: n.store, Emit: emit})
 	if err != nil {
 		n.close()
@@ -379,6 +380,7 @@ func startNode(t testing.TB, fx fixture, home string, producer admission.Produce
 	n.mu.Lock()
 	n.seam = seam
 	n.mu.Unlock()
+	backend.Bind(chain, seam)
 	chain.SetExtractorHook(seam)
 	return n, nil
 }
@@ -498,7 +500,7 @@ func (n *node) finish(sc *scenario) {
 	sc.SystemTxs, sc.OutsideTxs = n.system, n.outside
 	n.mu.Unlock()
 	sc.OutsideSafe = n.seam.SafePointsOutside()
-	sc.Fetches = n.handle.Fetches()
+	sc.Fetches = int(n.seam.Fetches())
 	head := n.chain.CurrentBlock()
 	sc.HeadNumber, sc.HeadHash, sc.HeadRoot = head.Number.Uint64(), head.Hash().Hex(), head.Root.Hex()
 }
@@ -556,7 +558,7 @@ func TestNativeBSCAdmissionChild(t *testing.T) {
 			}
 		}
 	case "first-handoff":
-		n.handle.Handoff = func(obs string, seq uint64, _ []byte) {
+		n.seam.Handoff = func(obs string, seq uint64, _ []byte) {
 			if obs == block2 && seq == 0 {
 				crash(mode)
 			}
@@ -850,9 +852,40 @@ type fakeObservation struct {
 	validated    int
 	validatedErr error
 	endErr       error
+	hashCalls    int
+	reader       *recordingReader
 }
 
-func (o *fakeObservation) Hash() [32]byte { return o.hash }
+func (o *fakeObservation) Hash() [32]byte { o.hashCalls++; return o.hash }
+
+func (o *fakeObservation) Reader(native core.ExtractorReader) core.ExtractorReader {
+	if o.reader == nil {
+		return native
+	}
+	o.reader.ExtractorReader = native
+	return o.reader
+}
+
+// recordingReader counts the header reads that reach the observation's
+// reader; with refuse set it answers GetHeader with nil.
+type recordingReader struct {
+	core.ExtractorReader
+	refuse            bool
+	getHeader, byHash int
+}
+
+func (r *recordingReader) GetHeader(hash common.Hash, number uint64) *types.Header {
+	r.getHeader++
+	if r.refuse {
+		return nil
+	}
+	return r.ExtractorReader.GetHeader(hash, number)
+}
+
+func (r *recordingReader) GetHeaderByHash(hash common.Hash) *types.Header {
+	r.byHash++
+	return r.ExtractorReader.GetHeaderByHash(hash)
+}
 
 func (o *fakeObservation) Validated(*types.Block, *state.StateDB, *core.ProcessResult) error {
 	o.validated++
@@ -873,11 +906,13 @@ func plainChain(t *testing.T, fx fixture, home string) (*core.BlockChain, ethdb.
 	db := openDisk(t, home)
 	config := core.DefaultConfig()
 	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = rawdb.HashScheme, false, 0
-	engine := parlia.New(fx.genesis.Config, NewParliaDB(db, nil), nil, fx.genesis.ToBlock().Hash())
+	api, backend := NewSystemCallAPI()
+	engine := parlia.New(fx.genesis.Config, db, api, fx.genesis.ToBlock().Hash())
 	chain, err := core.NewBlockChain(db, fx.genesis, engine, config)
 	if err != nil {
 		t.Fatal(err)
 	}
+	backend.Bind(chain, nil)
 	return chain, db
 }
 
@@ -894,6 +929,8 @@ func TestNativeBSCHookContract(t *testing.T) {
 		{"validated-error", &fakeObservation{hash: fx.blocks[0].Hash(), validatedErr: errors.New("exec-ready failed")}, 0, nil},
 		{"end-error", &fakeObservation{hash: fx.blocks[0].Hash(), endErr: errors.New("unresolved")}, 1, nil},
 		{"unavailable-data", &fakeObservation{hash: fx.blocks[0].Hash()}, 0, nil},
+		{"reader-in-process", &fakeObservation{hash: fx.blocks[0].Hash(), reader: &recordingReader{}}, 1, nil},
+		{"reader-in-verify", &fakeObservation{hash: fx.blocks[0].Hash(), reader: &recordingReader{refuse: true}}, 0, nil},
 	}
 	for _, c := range cases {
 		chain, db := plainChain(t, fx, filepath.Join(work, c.name))
@@ -928,6 +965,18 @@ func TestNativeBSCHookContract(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "sidecars present in block body before cancun") ||
 				hook.begins != 0 || stored {
 				t.Errorf("%s: %v, begins %d, stored %v", c.name, err, hook.begins, stored)
+			}
+		case "reader-in-process":
+			// Process and Finalize read the parent by hash through the reader.
+			if err != nil || c.obs.reader.byHash == 0 || c.obs.validated != 1 {
+				t.Errorf("%s: %v, reads by hash %d", c.name, err, c.obs.reader.byHash)
+			}
+		case "reader-in-verify":
+			// Header verification reads the parent through the reader, so the
+			// refused read stops the block before ProcessBlock (the only Hash
+			// call is the rejection report's).
+			if err == nil || c.obs.reader.getHeader == 0 || c.obs.hashCalls != 1 || c.obs.validated != 0 {
+				t.Errorf("%s: %v, reads %d, hash calls %d", c.name, err, c.obs.reader.getHeader, c.obs.hashCalls)
 			}
 		}
 		if head != c.head {

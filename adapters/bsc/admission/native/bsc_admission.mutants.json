@@ -47,22 +47,10 @@
       "replacement": "\t\t_ = header"
     },
     {
-      "name": "seam reset snapshots",
-      "file": "go/seam.go",
-      "original": "\tchain.Engine().(interface{ ExtractorResetSnapshots() }).ExtractorResetSnapshots()\n",
-      "replacement": ""
-    },
-    {
-      "name": "seam declare keys",
-      "file": "go/seam.go",
-      "original": "\tif err := s.parlia.Attach(key, log, keys); err != nil {",
-      "replacement": "\tif err := s.parlia.Attach(key, log, keys[:0]); err != nil {"
-    },
-    {
       "name": "validated detach error",
       "file": "go/seam.go",
-      "original": "\tif err := o.detach(); err != nil {\n\t\treturn o.fail(err)\n\t}\n\tconsumed, err := o.log.Finish()",
-      "replacement": "\to.detach()\n\tconsumed, err := o.log.Finish()"
+      "original": "\tif err := o.detach(); err != nil {\n\t\treturn o.fail(err)\n\t}\n\tif statedb != nil",
+      "replacement": "\to.detach()\n\tif statedb != nil"
     },
     {
       "name": "validated finish",
@@ -221,36 +209,6 @@
       "replacement": "\tif false {"
     },
     {
-      "name": "static snapshot keys",
-      "file": "go/static.go",
-      "original": "\tif encoded, err := json.Marshal(dependency); err != nil || !bytes.Equal(encoded, items[\"parlia-snapshot-keys\"]) {",
-      "replacement": "\tif false {"
-    },
-    {
-      "name": "parlia undeclared",
-      "file": "go/parliadb.go",
-      "original": "\tif !d.declared[string(key)] {",
-      "replacement": "\tif false {"
-    },
-    {
-      "name": "parlia outside passthrough",
-      "file": "go/parliadb.go",
-      "original": "\tif d.log == nil {\n\t\treturn fetch()\n\t}",
-      "replacement": "\tif d.log == nil {\n\t\treturn nil, ErrWiring\n\t}"
-    },
-    {
-      "name": "parlia clear error",
-      "file": "go/parliadb.go",
-      "original": "\td.log, d.id, d.err = log, id, nil",
-      "replacement": "\td.log, d.id = log, id"
-    },
-    {
-      "name": "parlia iterator",
-      "file": "go/parliadb.go",
-      "original": "\t\td.stop(fmt.Errorf(\"%w: NewIterator\", ErrUnloggedRead))",
-      "replacement": ""
-    },
-    {
       "name": "retention rewind",
       "file": "go/retention/retention.go",
       "original": "\tcore.ExtractorRewindGuard = stateprovider.RequireRewindAllowed\n",
@@ -330,12 +288,6 @@
       "replacement": ""
     },
     {
-      "name": "parlia purge",
-      "file": "native/consensus/parlia/extractor.go",
-      "original": "func (p *Parlia) ExtractorResetSnapshots() { p.recentSnaps.Purge() }",
-      "replacement": "func (p *Parlia) ExtractorResetSnapshots() {}"
-    },
-    {
       "name": "eth pending prune",
       "file": "native/eth/backend.go",
       "original": "\t\tif err == nil && pending {",
@@ -378,6 +330,180 @@
       "file": "go/static.go",
       "original": "\tif err := rlp.DecodeBytes(items[\"blob-sidecars\"], &sidecars); err != nil {\n\t\treturn bad(\"blob sidecars: %v\", err)\n\t}\n",
       "replacement": "\t_ = rlp.DecodeBytes(items[\"blob-sidecars\"], &sidecars)\n"
+    },
+    {
+      "name": "reader header number",
+      "file": "go/reader.go",
+      "original": "\tif header := r.byHash[hash]; header != nil && header.Number.Uint64() == number {\n\t\treturn header\n\t}\n\tr.refuse(fmt.Errorf(\"%w: %d %x\"",
+      "replacement": "\tif header := r.byHash[hash]; header != nil {\n\t\treturn header\n\t}\n\tr.refuse(fmt.Errorf(\"%w: %d %x\""
+    },
+    {
+      "name": "reader by number refusal",
+      "file": "go/reader.go",
+      "original": "\tr.refuse(fmt.Errorf(\"%w: number %d\", ErrUndeclaredHeader, number))\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "reader by hash refusal",
+      "file": "go/reader.go",
+      "original": "\tr.refuse(fmt.Errorf(\"%w: %x\", ErrUndeclaredHeader, hash))\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "reader td refusal",
+      "file": "go/reader.go",
+      "original": "\tr.refuse(fmt.Errorf(\"%w: GetTd %d\", ErrUndeclaredRead, number))\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "reader first error",
+      "file": "go/reader.go",
+      "original": "\tif r.err == nil {\n\t\tr.err = err",
+      "replacement": "\tif true {\n\t\tr.err = err"
+    },
+    {
+      "name": "reader current header",
+      "file": "go/reader.go",
+      "original": "func (r *Reader) CurrentHeader() *types.Header { return r.parent }",
+      "replacement": "func (r *Reader) CurrentHeader() *types.Header { return r.native.CurrentHeader() }"
+    },
+    {
+      "name": "snapshot capsule header",
+      "file": "go/reader.go",
+      "original": "\tif header := r.byHash[hash]; header == nil || header.Number.Uint64() != number {\n\t\terr := fmt.Errorf(\"%w: snapshot",
+      "replacement": "\tif header := r.byHash[hash]; header == nil {\n\t\terr := fmt.Errorf(\"%w: snapshot"
+    },
+    {
+      "name": "snapshot stopped reader",
+      "file": "go/reader.go",
+      "original": "\tif r.err != nil {\n\t\treturn nil, r.err\n\t}\n\tif header := r.byHash[hash]; header == nil ||",
+      "replacement": "\tif header := r.byHash[hash]; header == nil ||"
+    },
+    {
+      "name": "snapshot served once",
+      "file": "go/reader.go",
+      "original": "\tif response, ok := r.served[string(request)]; ok {",
+      "replacement": "\tif response, ok := r.served[string(request)]; ok && false {"
+    },
+    {
+      "name": "snapshot lookup error",
+      "file": "go/reader.go",
+      "original": "\t\t// it is an input failure, not a native decision about the block.\n\t\tr.stop(err)\n",
+      "replacement": "\t\t// it is an input failure, not a native decision about the block.\n"
+    },
+    {
+      "name": "snapshot request number",
+      "file": "go/reader.go",
+      "original": "\trequest = binary.BigEndian.AppendUint64(request, number)",
+      "replacement": "\trequest = binary.BigEndian.AppendUint64(request, number+1)"
+    },
+    {
+      "name": "validated state error",
+      "file": "go/seam.go",
+      "original": "\tif statedb != nil && statedb.Error() != nil {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "rejected parent state",
+      "file": "go/seam.go",
+      "original": "\tif errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) ||",
+      "replacement": "\tif errors.Is(cause, parlia.ErrExtractorSystemCall) ||"
+    },
+    {
+      "name": "rejected system call",
+      "file": "go/seam.go",
+      "original": "\tif errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) ||",
+      "replacement": "\tif errors.Is(cause, core.ErrExtractorParentState) ||"
+    },
+    {
+      "name": "start ethapi",
+      "file": "go/seam.go",
+      "original": "\tif !engine.ExtractorHasEthAPI() {",
+      "replacement": "\tif false && !engine.ExtractorHasEthAPI() {"
+    },
+    {
+      "name": "detach reader error",
+      "file": "go/seam.go",
+      "original": "\to.seam.active.CompareAndSwap(o, nil)\n\treturn o.reader.Err()",
+      "replacement": "\to.seam.active.CompareAndSwap(o, nil)\n\treturn nil"
+    },
+    {
+      "name": "system call parent",
+      "file": "go/systemcall.go",
+      "original": "\t\tif o := b.seam.active.Load(); o != nil && o.reader.parent.Hash() != hash {",
+      "replacement": "\t\tif o := b.seam.active.Load(); false && o != nil {"
+    },
+    {
+      "name": "system call stops reader",
+      "file": "go/systemcall.go",
+      "original": "\t\t\to.reader.refuse(err)\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "static ancestor floor",
+      "file": "go/static.go",
+      "original": "\t\treturn n - BlockHashWindow",
+      "replacement": "\t\treturn n - BlockHashWindow + 1"
+    },
+    {
+      "name": "static snapshot declaration",
+      "file": "go/static.go",
+      "original": "\tif !bytes.Equal(items[\"parlia-snapshots\"], []byte(SnapshotDeclaration)) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "core verify reader",
+      "file": "native/core/blockchain.go",
+      "original": "\t\tverifyChain = reader\n",
+      "replacement": "\t\t_ = reader\n"
+    },
+    {
+      "name": "core process reader",
+      "file": "native/core/blockchain.go",
+      "original": "bc.processor.Process(bc.extractorContext(pctx), block,",
+      "replacement": "bc.processor.Process(pctx, block,"
+    },
+    {
+      "name": "core parent state mark",
+      "file": "native/core/extractor_hook.go",
+      "original": "\tif dbErr := statedb.Error(); dbErr != nil {\n\t\treturn fmt.Errorf(",
+      "replacement": "\tif dbErr := statedb.Error(); false && dbErr != nil {\n\t\treturn fmt.Errorf("
+    },
+    {
+      "name": "process chain reader",
+      "file": "native/core/state_processor.go",
+      "original": "\tchain := extractorChain(ctx, p.chain)\n",
+      "replacement": "\tchain := extractorChain(context.Background(), p.chain)\n"
+    },
+    {
+      "name": "parlia snapshot source",
+      "file": "native/consensus/parlia/parlia.go",
+      "original": "\tif source, ok := chain.(ExtractorSnapshotSource); ok {",
+      "replacement": "\tif source, ok := chain.(ExtractorSnapshotSource); ok && false {"
+    },
+    {
+      "name": "parlia decode block check",
+      "file": "native/consensus/parlia/extractor.go",
+      "original": "\tif snap.Number != number || snap.Hash != hash {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "parlia system call mark",
+      "file": "native/consensus/parlia/extractor.go",
+      "original": "\treturn fmt.Errorf(\"%w: %w\", ErrExtractorSystemCall, err)",
+      "replacement": "\treturn err"
+    },
+    {
+      "name": "parlia snapshot response mark",
+      "file": "native/consensus/parlia/extractor.go",
+      "original": "\t\treturn nil, fmt.Errorf(\"%w: %w\", ErrExtractorSnapshotResponse, err)",
+      "replacement": "\t\treturn nil, err"
+    },
+    {
+      "name": "rejected snapshot response",
+      "file": "go/seam.go",
+      "original": "||\n\t\terrors.Is(cause, parlia.ErrExtractorSnapshotResponse) {",
+      "replacement": "{"
     }
   ]
 }

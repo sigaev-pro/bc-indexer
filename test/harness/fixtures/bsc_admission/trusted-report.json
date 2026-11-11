@@ -1,0 +1,15 @@
+{
+ "checkpoint_hash": "0x5550aeeb3d22d1fcf3785874794dc8c50a651c7aff55cb1595b0eb2ed76fe013",
+ "checkpoint_stored_before": false,
+ "copy_seconds": 0.340857176,
+ "deleted_snapshots": 588,
+ "entered_at": 1200,
+ "fetches": 1,
+ "observed_hash": "0xcf178bee08c34ba9e1155bfb41776ae6c334c05be9184df578a439052f322fcd",
+ "observed_number": 601251,
+ "observed_seconds": 38.470731498,
+ "parent": 601250,
+ "threshold": 600000,
+ "trusted_snapshot_recents": 0,
+ "trusted_snapshot_sha256": "286bda8ff590dfb27c29a3d99c7d2bf05e31cb36a1e7dc13760e7c3e306a271b"
+}
