@@ -116,9 +116,12 @@ coordinator.
 
 ## E01-02.admission — BSC block
 
-Status: IN PROGRESS, draft PR #148 (part A of two; split proposed to the
-coordinator on 2026-11-11). Part of #16. Branch
+Status: IN PROGRESS, draft PR #148 (part A of two). Part of #16. Branch
 `claude/e01-02-admission-bsc-14da6e`, base main `9046de9`.
+
+Split: the coordinator approved on 2026-11-11 splitting the BSC block into
+PR A "bsc-import" and PR B "bsc-parlia-inputs", both "Part of #16", with no
+item deferred. PR B starts on main after the coordinator merges PR A.
 
 Part A (this PR) covers these plan rows for BSC: the product import path
 and per-block observations (import seam, with the Parlia system
