@@ -428,6 +428,29 @@ class JudgeTests(unittest.TestCase):
             calls.append({**calls[0], "sequence": len(calls)})
         self.assertFails("rpc-window", foreign, "block 1035: 4 counted calls, expected 3")
 
+        def before(o):
+            return result(o)["rpc_before_window"]
+
+        def not_in_flight(o, c):
+            before(o)["held_at_observe"] = False
+        self.assertFails("rpc-window", not_in_flight, "no counted Heimdall read was in flight")
+
+        def uncounted(o, c):
+            before(o)["held_request"] = "GET /milestones/latest"
+        self.assertFails("rpc-window", uncounted, "no counted Heimdall read was in flight")
+
+        def before_block(o, c):
+            before(o)["block"] = 1036
+        self.assertFails("rpc-window", before_block, "no counted Heimdall read was in flight")
+
+        def before_snapshot(o, c):
+            before(o)["snapshot_hash"] = "0x" + "00" * 32
+        self.assertFails("rpc-window", before_snapshot, "in flight at the window of block 1037 did not return")
+
+        def before_error(o, c):
+            before(o)["error"] = "boom"
+        self.assertFails("rpc-window", before_error, "in flight at the window of block 1037 did not return")
+
         def uncovered(o, c):
             result(o)["replays"].pop()
         self.assertFails("rpc-window", uncovered, "do not cover every EXEC_READY")

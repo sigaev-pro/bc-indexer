@@ -139,7 +139,7 @@ func (w *world) OpenLog(key string) (Log, error) {
 func (w *world) OpenWindow(admission.Candidate) {
 	open := w.router != nil && w.router.open
 	w.windows++
-	w.calls = append(w.calls, fmt.Sprintf("purge window=%t", open))
+	w.calls = append(w.calls, fmt.Sprintf("purge routed=%t", open))
 }
 func (w *world) CloseWindow() {
 	w.windows--
@@ -343,7 +343,7 @@ func TestObserveAdmitsBeforeExecutionAndBindsExecReady(t *testing.T) {
 	if obs.Key() != key0 {
 		t.Fatalf("key %s", obs.Key())
 	}
-	want := []string{"pin " + key0, "seal " + key0, "open " + key0, "purge window=true", "verify " + key0}
+	want := []string{"pin " + key0, "seal " + key0, "open " + key0, "purge routed=false", "verify " + key0}
 	if !slices.Equal(f.world.calls, want) {
 		t.Fatalf("calls %v, want %v", f.world.calls, want)
 	}
@@ -1011,6 +1011,22 @@ func requireGuardFree(t *testing.T, f *fixture) {
 	}
 }
 
+func TestAFailedRouterEnterClosesTheWindow(t *testing.T) {
+	f := newFixture(t)
+	f.driver.Router.open = true
+	if _, err := f.driver.Observe(candidate(1)); !errors.Is(err, ErrWindow) {
+		t.Fatalf("expected the router misuse, got %v", err)
+	}
+	f.driver.Router.open = false
+	if f.world.windows != 0 || !slices.Contains(f.world.calls, "close window") {
+		t.Fatalf("the window stayed open: windows %d calls %v", f.world.windows, f.world.calls)
+	}
+	// The obligation stays ADMITTED and resolves before the next observation.
+	if f.states()[key0] != admission.Admitted {
+		t.Fatalf("states %v", f.states())
+	}
+}
+
 func TestReplayExecReadyFromItsSavedInputs(t *testing.T) {
 	f := newFixture(t)
 	result := ResultDigest("h", "s", "r", "2")
@@ -1040,7 +1056,7 @@ func TestReplayExecReadyFromItsSavedInputs(t *testing.T) {
 	if !slices.Equal(f.stub.calls[stubCalls:], []string{"/milestones/latest"}) {
 		t.Fatalf("replay reached Heimdall: %v", f.stub.calls[stubCalls:])
 	}
-	if !slices.Equal(f.world.calls, []string{"open " + key0, "purge window=true", "verify " + key0, "close window"}) ||
+	if !slices.Equal(f.world.calls, []string{"open " + key0, "purge routed=false", "verify " + key0, "close window"}) ||
 		f.world.windows != 0 || !slices.Equal(r.keys, []string{key0}) {
 		t.Fatalf("calls %v windows %d keys %v", f.world.calls, f.world.windows, r.keys)
 	}
@@ -1144,7 +1160,7 @@ func TestReplayRefusesWhatItCannotCheck(t *testing.T) {
 	execReady(t, f, ResultDigest("h", "s", "r", "2"))
 	f.world.plainLog = true
 	f.world.calls = nil
-	if err := f.driver.Replay(key0, &reexec{}); !errors.Is(err, ErrReplay) || slices.Contains(f.world.calls, "purge window=true") {
+	if err := f.driver.Replay(key0, &reexec{}); !errors.Is(err, ErrReplay) || slices.Contains(f.world.calls, "purge routed=false") {
 		t.Fatalf("log without progress: %v %v", err, f.world.calls)
 	}
 	f.world.plainLog = false

@@ -119,18 +119,28 @@ router never logs.
 The import passes. `ExtractorOpenWindow` takes the hash of the observed
 block (`OpenWindow` gets the candidate); the goroutine that opened the
 window passes its own gated calls, and `Finalize` of the observed block
-passes on whatever goroutine runs it (edit `window-gate-finalize` calls
-`extractorBlockGate(header)`): native `ProcessBlock` runs its serial (and
-parallel) processor on goroutines it starts, so the import's `Finalize` is
-recognized by the block it finalizes. Calls nested in it (`CommitStates`,
-`FetchAndCommitSpan`) pass too. No other path finalizes the observed block
-during its window: the block is written only after the window closes, block
-production finalizes its own new header (`FinalizeAndAssemble`, gated), and
-tracing and simulation do not call `Finalize`. A goroutine already inside a
-gated call passes nested ones (`GetCurrentProposer` calls `GetSnapshot`),
-so the gate never waits for itself. The goroutine identity is the first line
-of `runtime.Stack`. `ExtractorGateWaiting` reports the callers waiting at
-the gate.
+passes on that goroutine or on a goroutine it started (edit
+`window-gate-finalize` calls `extractorBlockGate(header)`): native
+`ProcessBlock` runs its serial (and parallel) processor on goroutines it
+starts. Calls nested in it (`CommitStates`, `FetchAndCommitSpan`) pass too.
+`Finalize` of the observed block on any other goroutine is not the import
+and waits: state regeneration for tracing (`eth/state_accessor.go`, through
+`Processor().Process`) can finalize a stored block, including the observed
+block of a replay or of a re-imported side-chain block. A goroutine already
+inside a gated call passes nested ones (`GetCurrentProposer` calls
+`GetSnapshot`), so the gate never waits for itself. The goroutine identity
+is the first line of `runtime.Stack`, and its creator the `created by ... in
+goroutine <id>` line at its end. `ExtractorGateWaiting` reports the callers
+waiting at the gate.
+
+Order of a window start (`ExtractorOpenWindow`, then `Router.Enter`): the
+gate waits for every gated call in progress, the purge stops the span
+store poll loop and range warmup, and then the window waits for the
+detached span range fetches still in flight (`fetchSpanRange` runs on the
+span store lifetime, not on its caller's context, and retries until it
+succeeds; edit `window-gate-detached-fetch` counts them). Only then does the
+driver route counted reads to the log, so no read that another reader
+started before the window can land in it.
 
 Lock order: the observation guard is taken inside `processBlockForImport`,
 with the native chain lock (`chainmu`) already held. NATIVE_CAPTURE_PROTOCOL
@@ -325,7 +335,13 @@ adapter, and the native tests drive them with a real EVM run.
   for its own window: a stopped import, never a foreign read in the log. The
   capture profile excludes the pipelined and stateless paths.
 - Held-back callers (an RPC call, the miner) wait for up to one window, the
-  execution of one block.
+  execution of one block. A window waits for the detached span range fetches
+  in flight; while Heimdall fails, such a fetch keeps retrying, so the window
+  and the import wait until Heimdall answers (a stalled import, never a
+  foreign read in the log).
+- The gate itself is covered by native tests in the Bor graph and by the
+  probe scenarios; its Go code has no mutant table, because a mutant run
+  would need the full Bor build per mutant.
 - `bor snapshot prune-block` refuses while any pin is live, EXEC_READY pins
   that the decision bridge still holds included; pruning ancient blocks
   needs every obligation resolved first. The probe chain (1,040 blocks) is

@@ -184,8 +184,9 @@ func loadInputs(genesisPath, configPath string) (inputs, error) {
 // rpc set, the first request in the window of rpc.block starts the RPC call
 // and answers only once the call waits at the window gate.
 type stubTransport struct {
-	stub heimdallstub.Stub
-	rpc  *rpcInWindow
+	stub  heimdallstub.Stub
+	rpc   *rpcInWindow
+	delay *delayOnce
 }
 
 func (s stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -196,6 +197,7 @@ func (s stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("unexpected host %q", req.URL.Host)
 	}
 	s.rpc.trigger(req)
+	s.delay.hold(req)
 	body, status := s.stub.Serve(req.URL)
 	return &http.Response{Status: http.StatusText(status), StatusCode: status, Proto: "HTTP/1.1", ProtoMajor: 1,
 		ProtoMinor: 1, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(bytes.NewReader(body)),
@@ -546,6 +548,7 @@ type attemptResult struct {
 	Passed         map[string]int     `json:"passed_heimdall_calls"`
 	Crashed        bool               `json:"crashed"`
 	RPC            *RPCCheck          `json:"rpc_in_window,omitempty"`
+	RPCBefore      *RPCBefore         `json:"rpc_before_window,omitempty"`
 	Replays        []ReplayRow        `json:"replays,omitempty"`
 	RPCControl     *RPCControl        `json:"rpc_control,omitempty"`
 }
@@ -569,6 +572,7 @@ func attempt(args []string) (returned error) {
 	store := flags.String("store-id", storeID, "producer binding of the native store")
 	unobserved := flags.Bool("unobserved", false, "import the range without observations")
 	rpcDuring := flags.Uint64("rpc-during", 0, "send bor_getSnapshot of the parent while this block's window is open")
+	rpcBeforeBlock := flags.Uint64("rpc-before", 0, "have bor_getSnapshot of the parent inside a Heimdall read when this block's window starts")
 	replay := flags.Bool("replay", false, "after the import, replay every saved EXEC_READY observation")
 	control := flags.Uint64("rpc-control", 0, "finally send bor_getSnapshot of this block with cold caches outside every window")
 	output := flags.String("out", "", "result JSON")
@@ -631,7 +635,16 @@ func attempt(args []string) (returned error) {
 		result.RPC = &RPCCheck{Block: *rpcDuring, Target: *rpcDuring - 1}
 		inWindow = &rpcInWindow{check: result.RPC, done: make(chan struct{})}
 	}
-	http.DefaultTransport = stubTransport{stub: heimdallstub.Stub{Bodies: *bodies, Variant: *variant}, rpc: inWindow}
+	var before *rpcBefore
+	if *rpcBeforeBlock > 0 {
+		result.RPCBefore = &RPCBefore{Block: *rpcBeforeBlock, Target: *rpcBeforeBlock - 1}
+		before = &rpcBefore{check: result.RPCBefore, delay: &delayOnce{}, done: make(chan struct{})}
+	}
+	transport := stubTransport{stub: heimdallstub.Stub{Bodies: *bodies, Variant: *variant}, rpc: inWindow}
+	if before != nil {
+		transport.delay = before.delay
+	}
+	http.DefaultTransport = transport
 	eth, err := backend(stack, in.genesis)
 	if err != nil {
 		stack.Close()
@@ -642,6 +655,10 @@ func attempt(args []string) (returned error) {
 	if inWindow != nil {
 		inWindow.engine, inWindow.chain = engine, chain
 		rec.rpc = inWindow
+	}
+	if before != nil {
+		before.engine, before.chain = engine, chain
+		rec.before = before
 	}
 	db := &crashDB{Database: eth.ChainDb(), crash: crash}
 	node, err := borimport.Start(cfg, db, chain)
@@ -746,6 +763,16 @@ func attempt(args []string) (returned error) {
 			return errors.New("the RPC call did not return after the window closed")
 		}
 	}
+	if before != nil {
+		if result.RPCBefore.HeldRequest == "" {
+			return fmt.Errorf("block %d was not imported with an RPC call in flight", *rpcBeforeBlock)
+		}
+		select {
+		case <-before.done:
+		case <-time.After(2 * time.Minute):
+			return errors.New("the RPC call started before the window did not return")
+		}
+	}
 	head := chain.CurrentBlock()
 	result.HeadNumber, result.HeadHash = head.Number.Uint64(), head.Hash().Hex()
 	if err = describe(node, db, &result); err != nil {
@@ -803,8 +830,10 @@ type RPCCheck struct {
 	Target uint64 `json:"target"`
 	// TriggerRequest is the Heimdall request of the window that started the call.
 	TriggerRequest string `json:"trigger_request"`
-	// Waiting is true once the call was seen waiting at the window gate.
-	Waiting bool `json:"waiting_at_gate"`
+	// WaitingBefore is the number of callers waiting at the gate just before
+	// the call started; Waiting is true once that number grew.
+	WaitingBefore int  `json:"waiting_before"`
+	Waiting       bool `json:"waiting_at_gate"`
 	// ReturnedInWindow is true if the call had returned when the window's
 	// observation closed.
 	ReturnedInWindow bool   `json:"returned_in_window"`
@@ -828,6 +857,8 @@ func (r *rpcInWindow) trigger(req *http.Request) {
 		return
 	}
 	r.check.TriggerRequest = req.Method + " " + req.URL.RequestURI()
+	before := bor.ExtractorGateWaiting()
+	r.check.WaitingBefore = before
 	go func() {
 		defer close(r.done)
 		number, hash, err := rpcCall(r.engine, r.chain, r.check.Target)
@@ -838,7 +869,7 @@ func (r *rpcInWindow) trigger(req *http.Request) {
 	}()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		if bor.ExtractorGateWaiting() > 0 {
+		if bor.ExtractorGateWaiting() > before {
 			r.check.Waiting = true
 			return
 		}
@@ -857,6 +888,87 @@ func (r *rpcInWindow) returned() bool {
 	default:
 		return false
 	}
+}
+
+// RPCBefore records the bor RPC call that is inside a Heimdall read when
+// the window of Block starts: the probe purges the caches, starts the call,
+// holds the first counted Heimdall request that follows for a second, and
+// begins the import of Block while that request is in flight.
+type RPCBefore struct {
+	Block          uint64 `json:"block"`
+	Target         uint64 `json:"target"`
+	HeldRequest    string `json:"held_request"`
+	HeldAtObserve  bool   `json:"held_at_observe"`
+	Number         uint64 `json:"snapshot_number"`
+	Hash           string `json:"snapshot_hash"`
+	Error          string `json:"error,omitempty"`
+	ReturnedByDone bool   `json:"returned_by_done"`
+}
+
+// delayOnce holds the first counted Heimdall request after arm for a second.
+type delayOnce struct {
+	mu       sync.Mutex
+	armed    bool
+	request  string
+	held     chan struct{}
+	inFlight atomic.Bool
+}
+
+func (d *delayOnce) arm() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.armed, d.held = true, make(chan struct{})
+}
+
+func (d *delayOnce) hold(req *http.Request) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	if !d.armed || !obligation.Counted(req.URL) {
+		d.mu.Unlock()
+		return
+	}
+	d.armed, d.request = false, req.Method+" "+req.URL.RequestURI()
+	held := d.held
+	d.inFlight.Store(true)
+	d.mu.Unlock()
+	close(held)
+	time.Sleep(time.Second)
+	d.inFlight.Store(false)
+}
+
+// rpcBefore starts the RPC call so that it is inside a Heimdall read when
+// the window of its block starts.
+type rpcBefore struct {
+	engine *bor.Bor
+	chain  *core.BlockChain
+	delay  *delayOnce
+	check  *RPCBefore
+	done   chan struct{}
+}
+
+func (r *rpcBefore) start() error {
+	r.engine.ExtractorPurgeInputs()
+	r.delay.arm()
+	go func() {
+		defer close(r.done)
+		number, hash, err := rpcCall(r.engine, r.chain, r.check.Target)
+		r.check.Number, r.check.Hash = number, hash
+		if err != nil {
+			r.check.Error = err.Error()
+		}
+	}()
+	select {
+	case <-r.delay.held:
+	case <-time.After(30 * time.Second):
+		return errors.New("no Heimdall request followed the RPC call")
+	}
+	r.delay.mu.Lock()
+	r.check.HeldRequest = r.delay.request
+	r.delay.mu.Unlock()
+	r.check.HeldAtObserve = r.delay.inFlight.Load()
+	return nil
 }
 
 // ReplayRow is the replay of one saved EXEC_READY observation.
@@ -924,6 +1036,7 @@ func rpcControl(engine *bor.Bor, chain *core.BlockChain, router *obligation.Rout
 type recorder struct {
 	node   *borimport.Node
 	rpc    *rpcInWindow
+	before *rpcBefore
 	mu     sync.Mutex
 	result *attemptResult
 	window []obligation.Row // counted calls of the open window, for crash points
@@ -940,6 +1053,12 @@ func (r *recorder) Observe(block *types.Block, parent *types.Header) (core.Extra
 	r.result.Observations = append(r.result.Observations, Observed{Block: block.NumberU64()})
 	r.window = nil
 	r.mu.Unlock()
+	if r.before != nil && r.before.check.Block == block.NumberU64() {
+		if err := r.before.start(); err != nil {
+			r.finish(err)
+			return nil, err
+		}
+	}
 	inner, err := r.node.Observe(block, parent)
 	if err != nil {
 		r.finish(err)
@@ -963,6 +1082,13 @@ func (o recorded) Done(block *types.Block, receipts types.Receipts, usedGas uint
 	if r := o.recorder.rpc; r != nil && r.check.Block == block.NumberU64() && r.started.Load() {
 		// The window is still open here.
 		r.check.ReturnedInWindow = r.returned()
+	}
+	if b := o.recorder.before; b != nil && b.check.Block == block.NumberU64() {
+		select {
+		case <-b.done:
+			b.check.ReturnedByDone = true
+		default:
+		}
 	}
 	err = o.inner.Done(block, receipts, usedGas, err)
 	o.recorder.finish(err)
@@ -1117,6 +1243,7 @@ type Step struct {
 	StoreID    string `json:"store_id"`
 	Unobserved bool   `json:"unobserved"`
 	RPCDuring  uint64 `json:"rpc_during"`
+	RPCBefore  uint64 `json:"rpc_before"`
 	Replay     bool   `json:"replay"`
 	RPCControl uint64 `json:"rpc_control"`
 }
@@ -1188,6 +1315,7 @@ func scenario(args []string) error {
 				"-base", fmt.Sprint(step.Base), "-from", fmt.Sprint(step.From), "-to", fmt.Sprint(step.To),
 				"-crash=" + step.Crash, "-store-id", storeIDOf(step), "-set-head", fmt.Sprint(step.SetHead), "-walk-check", fmt.Sprint(step.Walk), fmt.Sprintf("-batch=%t", step.Batch),
 				fmt.Sprintf("-unobserved=%t", step.Unobserved), "-rpc-during", fmt.Sprint(step.RPCDuring),
+				"-rpc-before", fmt.Sprint(step.RPCBefore),
 				fmt.Sprintf("-replay=%t", step.Replay), "-rpc-control", fmt.Sprint(step.RPCControl), "-out", out}
 			row["argv"] = argv
 			row["status"], err = runChild(os.Args[0], argv, filepath.Join(*output, fmt.Sprintf("attempt-%d.log", index)))

@@ -47,7 +47,8 @@ PROBE_DIR = "cmd/extractor-bor-admission-probe"
 NATIVE_TESTS = ("TestExtractorFreezeThreshold", "TestExtractorGoroutineIDs", "TestExtractorGateOwnerPassesOthersWait",
                 "TestExtractorGateOpenWaitsForGatedCalls", "TestExtractorGateNestedCallsDoNotWaitForAnOpeningWindow",
                 "TestExtractorGateMisuse", "TestExtractorGateFinalizeOfTheObservedBlockIsTheImport",
-                "TestExtractorBlockGateHashesTheHeader", "TestExtractorGateCoversEveryHeimdallEntryPoint")
+                "TestExtractorBlockGateHashesTheHeader", "TestExtractorCreator",
+                "TestExtractorGateWaitsForDetachedFetches", "TestExtractorGateCoversEveryHeimdallEntryPoint")
 PACKAGE = "github.com/ethereum/go-ethereum"
 BODY_FILES = ("span-0.json", "span-1.json", "span-latest.json", "status.json", "clerk-a-from-1.json",
               "clerk-b-from-1.json", "clerk-empty.json")
@@ -724,11 +725,13 @@ def request_path(request):
 
 def check_rpc_window(context, plan, attempts, block, fail):
     """D100 item 1: a bor RPC call sent while the window of `block` is open
-    waits at the window gate until the window closes, so the observation's log
-    holds only the import's own reads (check_completed binds them to the
-    independent consumed digest); every EXEC_READY then replays from its saved
-    inputs alone; and the same RPC call with cold caches outside every window
-    reads Heimdall through the native client."""
+    waits at the window gate until the window closes, and a reader already in
+    a Heimdall read when a window starts finishes before the window routes
+    reads to the log, so each observation's log holds only the import's own
+    reads (check_completed binds them to the independent consumed digest);
+    every EXEC_READY then replays from its saved inputs alone; and the same
+    RPC call with cold caches outside every window reads Heimdall through the
+    native client."""
     step, row = plan["attempts"][0], attempts[0]
     numbers = list(range(step["from"], step["to"] + 1))
     check_completed(context, row, numbers, "a", fail, "rpc attempt")
@@ -743,6 +746,18 @@ def check_rpc_window(context, plan, attempts, block, fail):
     if rpc.get("error") or rpc.get("snapshot_number") != block - 1 or \
             rpc.get("snapshot_hash") != "0x" + chain[block - 2]["hash"].hex():
         fail(f"the RPC call did not return the native snapshot of block {block - 1}: {rpc}")
+    # A reader already inside a Heimdall read when the window of `rpc_before`
+    # starts: the window waits for it, so none of its reads is in the log of
+    # that block (check_completed above).
+    before, at = result.get("rpc_before_window") or {}, step["rpc_before"]
+    rio_paths = {request_path(call["request"]) for call in oracle["requests"]["rio_header_check"]}
+    held = before.get("held_request") or ""
+    if before.get("block") != at or before.get("target") != at - 1 or before.get("held_at_observe") is not True or \
+            not held.startswith("GET ") or request_path(held) not in rio_paths:
+        fail(f"no counted Heimdall read was in flight when the window of block {at} started: {before}")
+    if before.get("error") or before.get("snapshot_number") != at - 1 or \
+            before.get("snapshot_hash") != "0x" + chain[at - 2]["hash"].hex():
+        fail(f"the RPC call in flight at the window of block {at} did not return the native snapshot: {before}")
     ready = sorted(int(seq, 16) for (seq, *rest) in records(row["store_after"]) if rest == ["exec-ready"])
     replays = result.get("replays") or []
     if [r.get("key") for r in replays] != [key_of(sequence) for sequence in ready] or len(ready) != len(numbers):

@@ -695,6 +695,30 @@
       "file": "test/harness/bor_admission_probe.py",
       "original": "                want[\"refusal\"] in tail(1) or want[\"native_error\"] not in tail(1):",
       "replacement": "                want[\"refusal\"] in tail(1):"
+    },
+    {
+      "name": "reader in flight at a window start",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if before.get(\"block\") != at or before.get(\"target\") != at - 1 or before.get(\"held_at_observe\") is not True or \\",
+      "replacement": "    if before.get(\"block\") != at or before.get(\"target\") != at - 1 or \\"
+    },
+    {
+      "name": "reader in flight is a counted read",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            not held.startswith(\"GET \") or request_path(held) not in rio_paths:",
+      "replacement": "            not held.startswith(\"GET \"):"
+    },
+    {
+      "name": "reader in flight returns its snapshot",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            before.get(\"snapshot_hash\") != \"0x\" + chain[at - 2][\"hash\"].hex():",
+      "replacement": "            False:"
+    },
+    {
+      "name": "reader in flight has no error",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if before.get(\"error\") or before.get(\"snapshot_number\") != at - 1 or \\",
+      "replacement": "    if before.get(\"snapshot_number\") != at - 1 or \\"
     }
   ]
 }

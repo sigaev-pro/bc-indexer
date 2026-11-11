@@ -227,8 +227,8 @@
     {
       "name": "window opens with the cache purge and gate",
       "file": "native/obligation/obligation.go",
-      "original": "\to.driver.Native.OpenWindow(o.cand)\n",
-      "replacement": ""
+      "original": "\to.driver.Native.OpenWindow(o.cand)\n\tif err := o.driver.Router.Enter(log); err != nil {",
+      "replacement": "\tif err := o.driver.Router.Enter(log); err != nil {"
     },
     {
       "name": "every finish closes the window",
@@ -365,14 +365,14 @@
     {
       "name": "replay router enter error",
       "file": "native/obligation/obligation.go",
-      "original": "\tif err := d.Router.Enter(log); err != nil {\n\t\treturn err\n\t}\n\td.Native.OpenWindow(obs.Candidate)\n\tvar result string",
-      "replacement": "\tif err := d.Router.Enter(log); err != nil && false {\n\t\treturn err\n\t}\n\td.Native.OpenWindow(obs.Candidate)\n\tvar result string"
+      "original": "\tif err := d.Router.Enter(log); err != nil {\n\t\td.Native.CloseWindow()\n\t\treturn err\n\t}\n\tvar result string",
+      "replacement": "\tif err := d.Router.Enter(log); err != nil && false {\n\t\td.Native.CloseWindow()\n\t\treturn err\n\t}\n\tvar result string"
     },
     {
       "name": "replay opens the window",
       "file": "native/obligation/obligation.go",
-      "original": "\td.Native.OpenWindow(obs.Candidate)\n\tvar result string",
-      "replacement": "\tvar result string"
+      "original": "\td.Native.OpenWindow(obs.Candidate)\n\tif err := d.Router.Enter(log); err != nil {",
+      "replacement": "\tif err := d.Router.Enter(log); err != nil {"
     },
     {
       "name": "replay re-executes only after the header check",
@@ -415,6 +415,24 @@
       "file": "native/obligation/obligation.go",
       "original": "\tdefer func() {\n\t\tif releaseErr := token.Release(); releaseErr != nil {",
       "replacement": "\tdefer func() {\n\t\tif releaseErr := error(nil); releaseErr != nil {"
+    },
+    {
+      "name": "the window drains other readers before the log routes reads",
+      "file": "native/obligation/obligation.go",
+      "original": "\to.driver.Native.OpenWindow(o.cand)\n\tif err := o.driver.Router.Enter(log); err != nil {\n\t\to.driver.Native.CloseWindow()\n\t\treturn err\n\t}\n\treturn nil",
+      "replacement": "\tif err := o.driver.Router.Enter(log); err != nil {\n\t\treturn err\n\t}\n\to.driver.Native.OpenWindow(o.cand)\n\treturn nil"
+    },
+    {
+      "name": "a failed router enter closes the window",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif err := o.driver.Router.Enter(log); err != nil {\n\t\to.driver.Native.CloseWindow()\n\t\treturn err",
+      "replacement": "\tif err := o.driver.Router.Enter(log); err != nil {\n\t\treturn err"
+    },
+    {
+      "name": "replay drains other readers before the log routes reads",
+      "file": "native/obligation/obligation.go",
+      "original": "\td.Native.OpenWindow(obs.Candidate)\n\tif err := d.Router.Enter(log); err != nil {\n\t\td.Native.CloseWindow()\n\t\treturn err\n\t}\n\tvar result string",
+      "replacement": "\tif err := d.Router.Enter(log); err != nil {\n\t\treturn err\n\t}\n\td.Native.OpenWindow(obs.Candidate)\n\tvar result string"
     }
   ]
 }

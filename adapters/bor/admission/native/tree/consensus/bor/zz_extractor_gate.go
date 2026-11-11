@@ -24,10 +24,17 @@ import (
 // inside it.
 //
 // The import is the goroutine that opened the window (the capsule header
-// check runs there) and every goroutine inside Finalize of the observed
-// block: native ProcessBlock runs its processors on goroutines of their own,
-// so Finalize is recognized by the block it finalizes. Calls nested in an
-// admitted call pass too.
+// check runs there) and Finalize of the observed block on that goroutine or
+// on a goroutine it started: native ProcessBlock runs its processors on
+// goroutines of their own. Finalize of the observed block on any other
+// goroutine (state regeneration for tracing) is not the import and waits.
+// Calls nested in an admitted call pass too.
+//
+// Span range fetches run detached from their callers (singleflight on the
+// span store lifetime), so a fetch can outlive the gated call that started
+// it. The window counts them (edit window-gate-detached-fetch) and opens
+// only once none is left; the purge has stopped the poll loop and the range
+// warmup by then.
 //
 // The gated entry points are every exported Bor and API method that can
 // reach a counted Heimdall read: header verification, Prepare, Finalize and
@@ -46,6 +53,7 @@ type extractorGateState struct {
 	holders   map[uint64]int // goroutines inside gated calls, by nesting depth
 	importers map[uint64]int // goroutines inside Finalize of the observed block
 	waiting   int            // goroutines waiting for a window to close
+	fetches   int            // detached span range fetches in flight
 }
 
 func newExtractorGate() *extractorGateState {
@@ -55,6 +63,36 @@ func newExtractorGate() *extractorGateState {
 }
 
 var extractorWindow = newExtractorGate()
+
+// extractorCreator returns the ID of the goroutine that started the calling
+// one, from the last line of its stack trace ("created by ... in goroutine
+// <id>"), or 0 if the trace names none.
+func extractorCreator() uint64 {
+	buf := make([]byte, 16<<10)
+	for {
+		n := runtime.Stack(buf, false)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	at := bytes.LastIndex(buf, []byte("\ncreated by "))
+	if at < 0 {
+		return 0
+	}
+	line, _, _ := bytes.Cut(buf[at+1:], []byte("\n"))
+	marker := []byte(" in goroutine ")
+	at = bytes.LastIndex(line, marker)
+	if at < 0 {
+		return 0
+	}
+	id, err := strconv.ParseUint(string(bytes.TrimSpace(line[at+len(marker):])), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return id
+}
 
 // extractorGoroutine returns the ID of the calling goroutine, the first line
 // of its stack trace ("goroutine <id> [...").
@@ -89,12 +127,13 @@ func (g *extractorGateState) enter(id uint64) func() {
 	return func() { g.leave(id) }
 }
 
-// enterBlock admits goroutine id to Finalize of block. Finalize of the
-// observed block of the open window is the import and passes; any other call
+// enterBlock admits goroutine id, started by goroutine creator, to Finalize
+// of block. Finalize of the observed block of the open window on the owner or
+// on a goroutine the owner started is the import and passes; any other call
 // enters like every gated call.
-func (g *extractorGateState) enterBlock(id uint64, block common.Hash) func() {
+func (g *extractorGateState) enterBlock(id, creator uint64, block common.Hash) func() {
 	g.mu.Lock()
-	if g.owner != 0 && block == g.block && g.holders[id] == 0 {
+	if g.owner != 0 && block == g.block && g.holders[id] == 0 && (id == g.owner || creator == g.owner) {
 		g.importers[id]++
 		g.mu.Unlock()
 		return func() { g.leaveImport(id) }
@@ -140,11 +179,35 @@ func (g *extractorGateState) open(id uint64, block common.Hash) {
 	g.changed.Broadcast()
 }
 
-func (g *extractorGateState) close() {
+// drainFetches waits until no detached span range fetch is in flight.
+func (g *extractorGateState) drainFetches() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.owner == 0 {
-		panic("extractor window gate: no open window")
+	for g.fetches != 0 {
+		g.changed.Wait()
+	}
+}
+
+// trackFetch counts one detached span range fetch until the returned
+// function runs.
+func (g *extractorGateState) trackFetch() func() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.fetches++
+	return func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		g.fetches--
+		g.changed.Broadcast()
+	}
+}
+
+// close ends the window of goroutine id, its owner.
+func (g *extractorGateState) close(id uint64) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.owner == 0 || g.owner != id {
+		panic("extractor window gate: the window is not open or not owned by the caller")
 	}
 	g.owner, g.block = 0, common.Hash{}
 	g.changed.Broadcast()
@@ -163,23 +226,30 @@ func (c *Bor) extractorGate() func() {
 }
 
 // extractorBlockGate is the gate of Finalize: Finalize of the observed block
-// is the import and passes.
+// by the import passes.
 func (c *Bor) extractorBlockGate(header *types.Header) func() {
-	return extractorWindow.enterBlock(extractorGoroutine(), header.Hash())
+	return extractorWindow.enterBlock(extractorGoroutine(), extractorCreator(), header.Hash())
 }
+
+// extractorTrackFetch counts a detached span range fetch (fetchSpanRange)
+// until the returned function runs.
+func extractorTrackFetch() func() { return extractorWindow.trackFetch() }
 
 // ExtractorOpenWindow starts the observation window of block, owned by the
 // calling goroutine: it waits for the gated calls in progress to return,
-// holds back every gated call other than the import of block, and drops the
-// cached Heimdall data and snapshots.
+// holds back every gated call other than the import of block, drops the
+// cached Heimdall data and snapshots (which stops the poll loop and the
+// range warmup), and then waits for the detached span range fetches still in
+// flight. Only then may the caller route counted reads to the log.
 func (c *Bor) ExtractorOpenWindow(block common.Hash) {
 	extractorWindow.open(extractorGoroutine(), block)
 	c.ExtractorPurgeInputs()
+	extractorWindow.drainFetches()
 }
 
-// ExtractorCloseWindow ends the window that ExtractorOpenWindow started and
+// ExtractorCloseWindow ends the window that the calling goroutine opened and
 // lets the held-back calls continue.
-func (c *Bor) ExtractorCloseWindow() { extractorWindow.close() }
+func (c *Bor) ExtractorCloseWindow() { extractorWindow.close(extractorGoroutine()) }
 
 // ExtractorGateWaiting returns the number of goroutines that wait at the gate
 // for the open window to close.

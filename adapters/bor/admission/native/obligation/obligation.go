@@ -146,9 +146,11 @@ type Native interface {
 	Seal(key string, c admission.Candidate) error
 	// OpenLog opens the dependency log of key.
 	OpenLog(key string) (Log, error)
-	// OpenWindow drops the native Heimdall and snapshot caches, so every
-	// Heimdall read of the window reaches the router, and holds back every
-	// Heimdall reader other than the import of candidate c until CloseWindow.
+	// OpenWindow holds back every Heimdall reader other than the import of
+	// candidate c until CloseWindow, waits for the reads in progress, and
+	// drops the native Heimdall and snapshot caches, so every Heimdall read
+	// of the window reaches the router. The driver routes counted reads to
+	// the log only after it returns.
 	OpenWindow(c admission.Candidate)
 	// CloseWindow ends what OpenWindow started.
 	CloseWindow()
@@ -258,10 +260,13 @@ func (o *Observation) open() error {
 		return err
 	}
 	o.log = log
+	// The window first holds back and drains every other Heimdall reader;
+	// only then are counted reads routed to the log.
+	o.driver.Native.OpenWindow(o.cand)
 	if err := o.driver.Router.Enter(log); err != nil {
+		o.driver.Native.CloseWindow()
 		return err
 	}
-	o.driver.Native.OpenWindow(o.cand)
 	return nil
 }
 
@@ -442,10 +447,11 @@ func (d *Driver) Replay(key string, r Reexecutor) (err error) {
 	if !ok {
 		return fmt.Errorf("%w: the log of %s does not report its progress", ErrReplay, key)
 	}
+	d.Native.OpenWindow(obs.Candidate)
 	if err := d.Router.Enter(log); err != nil {
+		d.Native.CloseWindow()
 		return err
 	}
-	d.Native.OpenWindow(obs.Candidate)
 	var result string
 	nativeErr, failure := d.Native.Verify(key)
 	if nativeErr == nil && failure == nil {

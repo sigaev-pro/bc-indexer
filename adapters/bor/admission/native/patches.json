@@ -273,6 +273,13 @@
       "mode": "before",
       "anchor": "\terr = c.validateAgainstSnapshot(node, dbHandles)\n",
       "text": "\t// Extractor patch: prune ancient blocks only while no pin is live (D100 item 1).\n\tif err := extractorRequirePruneBlock(node, c.cache, dbHandles, c.datadirAncient); err != nil {\n\t\tc.UI.Error(err.Error())\n\t\treturn 1\n\t}\n\n"
+    },
+    {
+      "name": "window-gate-detached-fetch",
+      "file": "consensus/bor/span_store_lookup.go",
+      "mode": "after",
+      "anchor": "func (s *SpanStore) fetchSpanRange(gen uint64, id uint64) (val any, err error) {\n",
+      "text": "\tdefer extractorTrackFetch()()\n"
     }
   ]
 }
