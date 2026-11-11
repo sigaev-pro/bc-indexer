@@ -215,6 +215,18 @@
       "file": "test/harness/admission.py",
       "original": "            if not args.target:\n                raise ValueError(\"assemble needs a target directory\")",
       "replacement": "            pass"
+    },
+    {
+      "name": "rejected tag",
+      "file": "test/harness/admission.py",
+      "original": "tag(\"extractor-admission-rejected-v1\")",
+      "replacement": "tag(\"extractor-admission-rejected-v2\")"
+    },
+    {
+      "name": "rejected drops evidence",
+      "file": "test/harness/admission.py",
+      "original": "raw(admitted) + raw(evidence)).hex()",
+      "replacement": "raw(admitted)).hex()"
     }
   ]
 }

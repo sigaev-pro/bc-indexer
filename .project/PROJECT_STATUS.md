@@ -41,6 +41,10 @@ Design (architect), in full in the package README
 - Modes: `Open` starts in RECOVERY_ONLY; `GoLive` and `Begin` are refused
   while an observation is in INPUT_PREPARING or ADMITTED, so an ADMITTED
   obligation keeps its pin and cannot be passed over by a new H.
+- Exits before EXEC_READY: `Abandon` for INPUT_PREPARING and `Reject`
+  (NATIVE_REJECTED, with the digest of the native rejection evidence) for an
+  ADMITTED observation that native validation refused. Both release the pin
+  and advance the low-water mark; only this package writes its keys.
 - One observation guard with tokens; nested native calls pass the token.
 - Shared canonical JSON rule (D99 item 3): integers only, kept as written;
   sorted keys; minimal escaping; Go and Python agree byte for byte.
@@ -70,6 +74,11 @@ E07 (D96, D98, D99). Family-only files go under
 | Parlia system-contract calls (`ethAPI`) | D99 item 2 | BSC |
 | Read order of concurrent Parlia reads of different keys; snapshot-key declaration without the fresh-engine assumption | D99 technical decisions | BSC |
 | Window and checkpoint rule on the real import path | D99 item 5 | BSC defines and proves it (stored checkpoint snapshot above genesis, trusted-checkpoint path, window above a checkpoint); Geth proves the full 256-header BLOCKHASH window; Bor proves its checkpoint interval |
+| Native validation failure after ADMITTED: call `Reject` with the rejection evidence, never `ExecReady` | Spec review 001 of block 0; NATIVE_CAPTURE_PROTOCOL NATIVE_REJECTED | 0 adds `Reject`; Geth, BSC and Bor call it on their import path |
+| Closing EXEC_READY observations after the native decision, and the low-water mark past them, through a step added to this package (never by writing its keys) | TASK_DECOMPOSITION decision_bridge card | Not admission: E01-02.decision_bridge |
+| Pin adapter: maps `state_provider` `ErrUnknownPin` to nil in `Release`, returns the ledger-record SHA-256 from `Verify`, tests an `Abandon` without a pin | Spec review 001 of block 0 | Geth, BSC, Bor |
+| Recovery driver: at startup in RECOVERY_ONLY, re-execute each ADMITTED obligation from its pin and capsule (replaying the log), then `ExecReady` or `Reject`, then `GoLive` | AC-CAP-02-02 | Geth, BSC, Bor |
+| Startup identity: refuse a native store of another identity and open the saved producer run, so `Open` sees its obligations (`Preflight` of E01-02.pins plus the run record) | NATIVE_CAPTURE_PROTOCOL startup | Geth, BSC, Bor wire it; the caller map and live boundary H stay with E01-02.lifecycle_seams |
 | Normalization profile | D99 item 4 | Not admission: E04-01.block_record |
 | Raw spool encoder | D98 item 4 | Not admission: E04-04.import_pressure |
 
