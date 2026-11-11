@@ -1,0 +1,22 @@
+{
+ "prune": {
+  "exit": 1,
+  "output_lines": [
+   "ERROR[11-11|06:31:45.215] Failed to prune state                    err=\"live pins forbid this native deletion: 2 live, first bsc-probe.run-1.0000000000000000\"",
+   "live pins forbid this native deletion: 2 live, first bsc-probe.run-1.0000000000000000"
+  ]
+ },
+ "start": {
+  "exit": 0,
+  "output_lines": [
+   "2"
+  ]
+ },
+ "bloom": {
+  "exit": 1,
+  "output_lines": [
+   "ERROR[11-11|06:31:55.161] Failed to recover state                  error=\"live pins forbid this native deletion: 2 live, first bsc-probe.run-1.0000000000000000\"",
+   "Fatal: Failed to register the Ethereum service: live pins forbid this native deletion: 2 live, first bsc-probe.run-1.0000000000000000"
+  ]
+ }
+}

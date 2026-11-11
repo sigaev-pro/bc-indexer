@@ -1,0 +1,383 @@
+{
+  "schema_version": 1,
+  "language": "go-native-bsc-admission",
+  "description": "Single-check mutants of the BSC admission package and of the patched BSC files; each must be killed by the native probe, the unit tests or the driver's checks.",
+  "mutants": [
+    {
+      "name": "seam guard",
+      "file": "go/seam.go",
+      "original": "\tif s.token == nil {\n\t\treturn nil, ErrGuard\n\t}\n\tn := block.NumberU64()",
+      "replacement": "\tn := block.NumberU64()"
+    },
+    {
+      "name": "seam known block",
+      "file": "go/seam.go",
+      "original": "\tif chain.HasBlockAndState(block.Hash(), n) {\n\t\treturn nil, nil\n\t}",
+      "replacement": "\tif false && chain.HasBlockAndState(block.Hash(), n) {\n\t\treturn nil, nil\n\t}"
+    },
+    {
+      "name": "seam parent state",
+      "file": "go/seam.go",
+      "original": "if parent == nil || !chain.HasState(parent.Root) {",
+      "replacement": "if parent == nil {",
+      "equivalent": "The head check refuses every block whose parent is not the current head, and the native chain keeps the head's state (NewBlockChain rewinds a head without state at startup), so a parent without state is refused by the head check first."
+    },
+    {
+      "name": "seam other candidate",
+      "file": "go/seam.go",
+      "original": "\t\tif obs.Candidate != candidate {",
+      "replacement": "\t\tif false && obs.Candidate != candidate {"
+    },
+    {
+      "name": "seam admit",
+      "file": "go/seam.go",
+      "original": "\tif _, err := s.adm.Admit(s.token, key); err != nil {\n\t\treturn nil, err\n\t}",
+      "replacement": ""
+    },
+    {
+      "name": "seam pin",
+      "file": "go/seam.go",
+      "original": "\tif err := s.provider.Pin(pin); err != nil {\n\t\treturn err\n\t}",
+      "replacement": "\t_ = pin"
+    },
+    {
+      "name": "seam pin ancestors",
+      "file": "go/seam.go",
+      "original": "\t\trefs = append(refs, stateprovider.HeaderRef{Hash: header.Hash(), Number: header.Number.Uint64()})",
+      "replacement": "\t\t_ = header"
+    },
+    {
+      "name": "seam reset snapshots",
+      "file": "go/seam.go",
+      "original": "\tchain.Engine().(interface{ ExtractorResetSnapshots() }).ExtractorResetSnapshots()\n",
+      "replacement": ""
+    },
+    {
+      "name": "seam declare keys",
+      "file": "go/seam.go",
+      "original": "\tif err := s.parlia.Attach(key, log, keys); err != nil {",
+      "replacement": "\tif err := s.parlia.Attach(key, log, keys[:0]); err != nil {"
+    },
+    {
+      "name": "validated detach error",
+      "file": "go/seam.go",
+      "original": "\tif err := o.detach(); err != nil {\n\t\treturn o.fail(err)\n\t}\n\tconsumed, err := o.log.Finish()",
+      "replacement": "\to.detach()\n\tconsumed, err := o.log.Finish()"
+    },
+    {
+      "name": "validated finish",
+      "file": "go/seam.go",
+      "original": "\tconsumed, err := o.log.Finish()\n\tif err != nil {\n\t\treturn o.fail(err)\n\t}",
+      "replacement": "\tconsumed, _ := o.log.Closed()"
+    },
+    {
+      "name": "validated exec digest",
+      "file": "go/seam.go",
+      "original": "\trecord, err := s.adm.ExecReady(s.token, o.key, digest)",
+      "replacement": "\trecord, err := s.adm.ExecReady(s.token, o.key, ProfileDigest())"
+    },
+    {
+      "name": "rejected resolves",
+      "file": "go/seam.go",
+      "original": "\to.resolved = admission.Rejected\n",
+      "replacement": ""
+    },
+    {
+      "name": "rejected evidence",
+      "file": "go/seam.go",
+      "original": "\tevidence := RejectionEvidence(block, cause)",
+      "replacement": "\tevidence := RejectionEvidence(block, errors.New(\"x\"))"
+    },
+    {
+      "name": "end unresolved",
+      "file": "go/seam.go",
+      "original": "\tif o.resolved == \"\" {\n\t\to.seam.emit(Event{\"event\": \"unresolved\", \"observation\": o.key})\n\t\treturn fmt.Errorf(\"%w: %s: %v\", ErrUnresolved, o.key, insertErr)\n\t}",
+      "replacement": ""
+    },
+    {
+      "name": "safe point count",
+      "file": "go/seam.go",
+      "original": "\to.safePoints.Add(1)\n",
+      "replacement": ""
+    },
+    {
+      "name": "safe point outside",
+      "file": "go/seam.go",
+      "original": "\t\ts.outside.Add(1)\n",
+      "replacement": ""
+    },
+    {
+      "name": "exec digest receipts",
+      "file": "go/seam.go",
+      "original": "\t\tdata = append(data, str(encoded)...)",
+      "replacement": "\t\t_ = encoded"
+    },
+    {
+      "name": "exec digest root",
+      "file": "go/seam.go",
+      "original": "\tdata = append(data, block.Root().Bytes()...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "rejection digest cause",
+      "file": "go/seam.go",
+      "original": "\tdata = append(data, str([]byte(cause.Error()))...)",
+      "replacement": "\t_ = cause"
+    },
+    {
+      "name": "recover golive",
+      "file": "go/seam.go",
+      "original": "\tif err := s.adm.GoLive(s.token); err != nil {\n\t\treturn errors.Join(append(failures, err)...)\n\t}\n\ts.emit(Event{\"event\": \"live\"})",
+      "replacement": "\ts.emit(Event{\"event\": \"live\"})"
+    },
+    {
+      "name": "run record store",
+      "file": "go/seam.go",
+      "original": "\t\tif saved.StoreID != cfg.Identity.StoreID {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "run record producer",
+      "file": "go/seam.go",
+      "original": "\t\tif cfg.Producer != (admission.Producer{}) && cfg.Producer != run {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "start bind",
+      "file": "go/seam.go",
+      "original": "\t} else if !bound {",
+      "replacement": "\t} else if false && !bound {"
+    },
+    {
+      "name": "profile digest",
+      "file": "go/seam.go",
+      "original": "\tdigest := sha256.Sum256([]byte(StateProfile))",
+      "replacement": "\tdigest := sha256.Sum256([]byte(NormalizationProfile))"
+    },
+    {
+      "name": "pin root",
+      "file": "go/adapters.go",
+      "original": "\t\tif hex.EncodeToString(pin.ParentRoot.Bytes()) != parentRoot {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "pin verify",
+      "file": "go/adapters.go",
+      "original": "\t\tif err := stateprovider.Verify(p.DB, pin); err != nil {\n\t\t\treturn \"\", err\n\t\t}",
+      "replacement": ""
+    },
+    {
+      "name": "pin record digest",
+      "file": "go/adapters.go",
+      "original": "\t\tdigest := sha256.Sum256(record)",
+      "replacement": "\t\tdigest := sha256.Sum256(append([]byte(id), record[:0]...))"
+    },
+    {
+      "name": "release unknown",
+      "file": "go/adapters.go",
+      "original": "&& !errors.Is(err, stateprovider.ErrUnknownPin)",
+      "replacement": ""
+    },
+    {
+      "name": "consumed open",
+      "file": "go/adapters.go",
+      "original": "\tif !ok {\n\t\treturn admission.Consumed{}, fmt.Errorf(\"%w: %s\", ErrNotClosed, observation)\n\t}",
+      "replacement": "\tif false && !ok {\n\t\treturn admission.Consumed{}, fmt.Errorf(\"%w: %s\", ErrNotClosed, observation)\n\t}"
+    },
+    {
+      "name": "static genesis item",
+      "file": "go/static.go",
+      "original": "\tif !bytes.Equal(items[\"genesis-json\"], genesis.Canonical) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "static fork item",
+      "file": "go/static.go",
+      "original": "\tif err != nil || !bytes.Equal(items[\"fork-id\"], fork) {",
+      "replacement": "\tif err != nil || len(fork) == 0 {"
+    },
+    {
+      "name": "static commit item",
+      "file": "go/static.go",
+      "original": "\tif !bytes.Equal(items[\"native-commit\"], []byte(nativeCommit)) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "static canonical",
+      "file": "go/static.go",
+      "original": "\tcanonical, err := admission.CanonicalJSON(file)",
+      "replacement": "\tcanonical, err := append([]byte(admission.Live[:0]), file...), error(nil)"
+    },
+    {
+      "name": "static genesis block",
+      "file": "go/static.go",
+      "original": "\tif block == nil || genesis.ToBlock().Hash() != block.Hash() {",
+      "replacement": "\tif block == nil {"
+    },
+    {
+      "name": "static window",
+      "file": "go/static.go",
+      "original": "\tif uint64(len(static.Ancestors)) != want {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "static snapshot keys",
+      "file": "go/static.go",
+      "original": "\tif encoded, err := json.Marshal(dependency); err != nil || !bytes.Equal(encoded, items[\"parlia-snapshot-keys\"]) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "parlia undeclared",
+      "file": "go/parliadb.go",
+      "original": "\tif !d.declared[string(key)] {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "parlia outside passthrough",
+      "file": "go/parliadb.go",
+      "original": "\tif d.log == nil {\n\t\treturn fetch()\n\t}",
+      "replacement": "\tif d.log == nil {\n\t\treturn nil, ErrWiring\n\t}"
+    },
+    {
+      "name": "parlia clear error",
+      "file": "go/parliadb.go",
+      "original": "\td.log, d.id, d.err = log, id, nil",
+      "replacement": "\td.log, d.id = log, id"
+    },
+    {
+      "name": "parlia iterator",
+      "file": "go/parliadb.go",
+      "original": "\t\td.stop(fmt.Errorf(\"%w: NewIterator\", ErrUnloggedRead))",
+      "replacement": ""
+    },
+    {
+      "name": "retention rewind",
+      "file": "go/retention/retention.go",
+      "original": "\tcore.ExtractorRewindGuard = stateprovider.RequireRewindAllowed\n",
+      "replacement": "\t_ = core.ExtractorRewindGuard\n"
+    },
+    {
+      "name": "retention freeze",
+      "file": "go/retention/retention.go",
+      "original": "\trawdb.ExtractorFreezeLimit = stateprovider.FreezeLimit\n",
+      "replacement": "\t_ = rawdb.ExtractorFreezeLimit\n"
+    },
+    {
+      "name": "core one block per insert",
+      "file": "native/core/blockchain.go",
+      "original": "\tif hook != nil {\n\t\treturn bc.extractorInsert(hook, chain)\n\t}",
+      "replacement": "\tif hook != nil && len(chain) == 1 {\n\t\treturn bc.extractorInsert(hook, chain)\n\t}"
+    },
+    {
+      "name": "core exec ready before write",
+      "file": "native/core/blockchain.go",
+      "original": "\tif err := bc.extractorValidated(block, statedb, res); err != nil {\n\t\treturn nil, err\n\t}",
+      "replacement": "\tbc.extractorValidated(block, statedb, res)"
+    },
+    {
+      "name": "core unobserved check",
+      "file": "native/core/blockchain.go",
+      "original": "\tif err := bc.extractorCheckExecution(block); err != nil {\n\t\treturn nil, err\n\t}",
+      "replacement": ""
+    },
+    {
+      "name": "core reject",
+      "file": "native/core/blockchain.go",
+      "original": "\tbc.extractorRejected(block, res, err)\n",
+      "replacement": ""
+    },
+    {
+      "name": "core rewind guard",
+      "file": "native/core/blockchain.go",
+      "original": "\tif err := bc.extractorRewind(head); err != nil {\n\t\treturn 0, err\n\t}",
+      "replacement": ""
+    },
+    {
+      "name": "hook end error",
+      "file": "native/core/extractor_hook.go",
+      "original": "\t\tif endErr := observation.End(err); endErr != nil {\n\t\t\treturn index, endErr\n\t\t}",
+      "replacement": "\t\tobservation.End(err)"
+    },
+    {
+      "name": "hook observation hash",
+      "file": "native/core/extractor_hook.go",
+      "original": "\tif bc.extractorObservation == nil || bc.extractorObservation.Hash() != block.Hash() {",
+      "replacement": "\tif bc.extractorObservation == nil {"
+    },
+    {
+      "name": "hook guard",
+      "file": "native/core/blockchain.go",
+      "original": "\t\trelease := hook.Acquire()\n\t\tdefer release()\n",
+      "replacement": ""
+    },
+    {
+      "name": "freezer limit",
+      "file": "native/core/rawdb/chain_freezer.go",
+      "original": "\t\t\tif limit-1 < last {\n\t\t\t\tlast = limit - 1\n\t\t\t}",
+      "replacement": ""
+    },
+    {
+      "name": "freezer hold",
+      "file": "native/core/rawdb/chain_freezer.go",
+      "original": "\t\t\tif limit <= first {",
+      "replacement": "\t\t\tif false {",
+      "equivalent": "With limit <= first the patch sets last = limit - 1 < first; the native freezeRange then freezes nothing, or fails on the frozen canonical hash and backs off, so the freezer holds either way."
+    },
+    {
+      "name": "vm safe point",
+      "file": "native/core/vm/interpreter.go",
+      "original": "\t\t\textractorSafePoint(evm.Config.Tracer, op, callContext)\n",
+      "replacement": ""
+    },
+    {
+      "name": "parlia purge",
+      "file": "native/consensus/parlia/extractor.go",
+      "original": "func (p *Parlia) ExtractorResetSnapshots() { p.recentSnaps.Purge() }",
+      "replacement": "func (p *Parlia) ExtractorResetSnapshots() {}"
+    },
+    {
+      "name": "eth pending prune",
+      "file": "native/eth/backend.go",
+      "original": "\t\tif err == nil && pending {",
+      "replacement": "\t\tif err == nil && pending && false {",
+      "geth": true
+    },
+    {
+      "name": "geth prune guard",
+      "file": "native/cmd/geth/snapshot.go",
+      "original": "\tif err = stateprovider.PruneState(chaindb, prunerconfig.Datadir, prunerconfig.BloomSize, targetRoot); err != nil {",
+      "replacement": "\tif err = func() error { _, _, _ = targetRoot, prunerconfig, stateprovider.PruneState; return nil }(); err != nil {",
+      "geth": true
+    },
+    {
+      "name": "core data availability before begin",
+      "file": "native/core/extractor_hook.go",
+      "original": "\t\tif bc.chainConfig.IsInBSC() {\n\t\t\tif err := IsDataAvailable(bc, block); err != nil {\n\t\t\t\treturn index, err\n\t\t\t}\n\t\t}\n\t\tobservation, err := hook.Begin(bc, block)",
+      "replacement": "\t\tobservation, err := hook.Begin(bc, block)"
+    },
+    {
+      "name": "static sidecar item",
+      "file": "go/static.go",
+      "original": "{Name: \"blob-sidecars\", Data: sidecarsRLP},",
+      "replacement": "{Name: \"blob-sidecars\", Data: append(sidecarsRLP[:0:0], 0xc0)},"
+    },
+    {
+      "name": "static sidecar attach",
+      "file": "go/static.go",
+      "original": "\tstatic.Block = static.Block.WithSidecars(sidecars)\n",
+      "replacement": ""
+    },
+    {
+      "name": "static sidecar sanity",
+      "file": "go/static.go",
+      "original": "sidecar.SanityCheck(static.Block.Number(), static.Block.Hash()); err != nil {",
+      "replacement": "sidecar.SanityCheck(static.Block.Number(), static.Block.Hash()); false && err != nil {"
+    },
+    {
+      "name": "static sidecar decode",
+      "file": "go/static.go",
+      "original": "\tif err := rlp.DecodeBytes(items[\"blob-sidecars\"], &sidecars); err != nil {\n\t\treturn bad(\"blob sidecars: %v\", err)\n\t}\n",
+      "replacement": "\t_ = rlp.DecodeBytes(items[\"blob-sidecars\"], &sidecars)\n"
+    }
+  ]
+}

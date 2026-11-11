@@ -1,0 +1,54 @@
+diff --git a/cmd/geth/snapshot.go b/cmd/geth/snapshot.go
+index 5c499b8..1b53e5a 100644
+--- a/cmd/geth/snapshot.go
++++ b/cmd/geth/snapshot.go
+@@ -36,6 +36,7 @@ import (
+ 	"github.com/ethereum/go-ethereum/core/state/snapshot"
+ 	"github.com/ethereum/go-ethereum/core/types"
+ 	"github.com/ethereum/go-ethereum/crypto"
++	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
+ 	"github.com/ethereum/go-ethereum/log"
+ 	"github.com/ethereum/go-ethereum/rlp"
+ 	"github.com/ethereum/go-ethereum/trie"
+@@ -213,11 +214,13 @@ func pruneState(ctx *cli.Context) error {
+ 		log.Crit("Offline pruning is not required for path scheme")
+ 	}
+ 
+-	pruner, err := pruner.NewPruner(chaindb, prunerconfig, ctx.Uint64(utils.TriesInMemoryFlag.Name))
+-	if err != nil {
+-		log.Error("Failed to open snapshot tree", "err", err)
+-		return err
++	// Extractor patch: the pin ledger's PruneState refuses to prune while a
++	// pin is live. It runs the native pruner with 128, the native default of
++	// --triesInMemory, so another value is refused.
++	if tries := ctx.Uint64(utils.TriesInMemoryFlag.Name); tries != 128 {
++		return fmt.Errorf("extractor: prune-state needs --triesInMemory 128, have %d", tries)
+ 	}
++	var err error
+ 	if ctx.NArg() > 1 {
+ 		log.Error("Too many arguments given")
+ 		return errors.New("too many arguments")
+@@ -230,7 +233,7 @@ func pruneState(ctx *cli.Context) error {
+ 			return err
+ 		}
+ 	}
+-	if err = pruner.Prune(targetRoot); err != nil {
++	if err = stateprovider.PruneState(chaindb, prunerconfig.Datadir, prunerconfig.BloomSize, targetRoot); err != nil {
+ 		log.Error("Failed to prune state", "err", err)
+ 		return err
+ 	}
+diff --git a/cmd/geth/main.go b/cmd/geth/main.go
+index e77269d..a39cd23 100644
+--- a/cmd/geth/main.go
++++ b/cmd/geth/main.go
+@@ -18,6 +18,10 @@
+ package main
+ 
+ import (
++	// Extractor patch: registers the pin ledger guards of the native
++	// rewind and freezer paths before any store is opened.
++	_ "github.com/ethereum/go-ethereum/extractor/bsc/retention"
++
+ 	"fmt"
+ 	"os"
+ 	"slices"
