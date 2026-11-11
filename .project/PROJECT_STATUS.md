@@ -2,7 +2,7 @@
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
-Status: IN_PROGRESS, block 0 admission-core. Dependencies E01-02.pins (#13),
+Status: IN_PROGRESS, block 0 admission-core in draft PR #146. Dependencies E01-02.pins (#13),
 E01-02.inputs (#14) and E01-02.owned_capture (#15) are accepted. Plan agreed
 with the owner on 2026-11-11, the same split as #14 under D97 and D98: block
 0 core (architect, then native-engineer), then up to three parallel
@@ -85,7 +85,28 @@ E07 (D96, D98, D99). Family-only files go under
 #16 closes only when every client block is accepted and both AC-CAP-02
 cases pass for every applicable private slot under the D96 boundary.
 
-Next: implement block 0 (native-engineer), then the record, reviews and CI.
+Implementation (native-engineer): the package above, `Log.Closed` in
+`source_inputs`, the Python reference `test/harness/admission.py` with its
+portable test and mutant table, and the binding test with the real
+`source_inputs` log in `test/harness/fixtures/admission_core`. Evidence:
+[E01-02.admission](evidence/E01-02.admission.md). Retained record 02 of
+`752b739`: PASS; Go tests in all three copies and the assembled module, Go
+mutants 110 killed and 2 labeled equivalent, `source_inputs` mutants 68
+killed, Python mutants 35 and 11 killed. Record 01 of `648e8ed` (PASS) is
+superseded and kept.
+
+Review 001 (head `648e8ed`): Spec REQUEST_CHANGES (P2: an ADMITTED
+observation had no exit except EXEC_READY, so a native validation failure
+would block admissions; P3: the pin adapter contract, an unchecked fetch
+claim in the binding test, the recovery driver and startup identity owners)
+and Standards PASS with P3 notes (dead test code, a placeholder value, `Mode`
+without the guard, one Admission per producer). Commits `8a97f04` to
+`752b739` fix all of them: `Reject` (NATIVE_REJECTED) with tests and
+mutants, the counter re-read in `Begin`, `Mode` with the token, the fetch
+assertion, and plan rows for the rest.
+
+Next: review 002 of the head with this record, hosted CI, then READY for the
+coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
