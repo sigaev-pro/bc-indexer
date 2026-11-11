@@ -79,7 +79,9 @@ class Synthetic:
         return bytes.fromhex(self.headers[number - 1])
 
     def items(self, number, bad=False):
-        names = admission_geth.item_names(ORACLE, number)
+        names = ["header-rlp", "body-rlp", "encodings", "parent-header", "parent-hash", "parent-root"] + \
+            [f"ancestor-header-{n}" for n in range(max(0, number - 256), number - 1)] + \
+            ["chain-config", "fork-id", "native-commit", "normalization-profile"]
         config = admission.canonical(json.dumps(ORACLE["chain_config"]).encode())
         fork = json.dumps({"hash": f"{zlib.crc32(bytes.fromhex(self.hashes[0][2:])):08x}", "next": "0"},
                           separators=(",", ":")).encode()
@@ -98,11 +100,13 @@ class Synthetic:
         """Return (records, pins, capsule) of one observation in the given state."""
         key = admission_geth.key_of(ORACLE, sequence)
         prefix = f"extractor-admission-v1/{ORACLE['producer_id']}.{ORACLE['run_id']}/{sequence:016x}/"
-        cand = admission_geth.candidate(ORACLE, self.observation_base(), number, bad)
+        cand = {"number": number, "hash": (self.bad_hash if bad else self.hashes[number])[2:],
+                "parent_hash": self.hashes[number - 1][2:],
+                "parent_root": hashlib.sha256(b"root" + number_bytes(number - 1)).hexdigest()}
         records = {prefix + "preparing": {"observation": key, "sequence": sequence, "candidate": cand}}
         items = self.items(number, bad)
         refs = [{"name": name, "length": len(data), "sha256": sha(data)} for name, data in items]
-        capsule = {"capsule": {"observation": key, "items": refs, "digest": admission_geth.capsule_digest(refs)},
+        capsule = {"capsule": {"observation": key, "items": refs, "digest": source_inputs.capsule_digest(items).hex()},
                    "items": [{"name": name, "data": data.hex()} for name, data in items]}
         pin = json.dumps({"id": key, "store": {"store_id": ORACLE["store_id"]}, "profile": "0" * 64,
                           "parent_root": "0x" + cand["parent_root"],
@@ -132,9 +136,6 @@ class Synthetic:
                                                 "digest": admission.rejected_digest(admitted, evidence)}
         sealed = state in ("EXEC_READY", "ADMITTED", "NATIVE_REJECTED")
         return records, pins, ({key: capsule} if sealed else {}), key
-
-    def observation_base(self):
-        return {"generated_hashes": self.hashes, "generated_headers": self.headers, "bad_hash": self.bad_hash}
 
     def result(self, observations, counter, head, executed, mode="LIVE", items=False, **extra):
         records, pins, capsules = {}, {}, {}
@@ -267,6 +268,38 @@ def scenario(observation, name):
     return {row["name"]: row for row in observation["scenarios"]}[name]["attempts"]
 
 
+def reseal(result, sequence):
+    """Recompute the capsule, admitted and EXEC_READY digests of one observation after a test changed its items or
+    pin, so only the changed fact differs."""
+    key = admission_geth.key_of(ORACLE, sequence)
+    row = result["capsules"][key]
+    if "items" in row:
+        for ref, item in zip(row["capsule"]["items"], row["items"]):
+            data = bytes.fromhex(item["data"])
+            ref["sha256"], ref["length"] = sha(data), len(data)
+    pairs = [(ref["name"], None) for ref in row["capsule"]["items"]]
+    digest = hashlib.sha256(source_inputs.tag("extractor-source-inputs-capsule-v1") + source_inputs.u64(len(pairs)) +
+                            b"".join(source_inputs.u64(len(ref["name"])) + ref["name"].encode() +
+                                     source_inputs.u64(ref["length"]) + bytes.fromhex(ref["sha256"])
+                                     for ref in row["capsule"]["items"])).hexdigest()
+    row["capsule"]["digest"] = digest
+    prefix = [name for name in result["records"] if name.endswith(f"{sequence:016x}/admitted")][0][:-len("admitted")]
+    admitted = json.loads(result["records"][prefix + "admitted"])
+    pin = result["pins"].get(ORACLE["pin_prefix"] + key)
+    if pin is not None:
+        admitted["pin_digest"] = sha(pin.encode())
+    admitted["capsule_digest"] = digest
+    admitted["digest"] = admission.admitted_digest(key, sequence, admitted["candidate"], admitted["pin_digest"], digest)
+    result["records"][prefix + "admitted"] = json.dumps(admitted)
+    if prefix + "exec-ready" in result["records"]:
+        record = json.loads(result["records"][prefix + "exec-ready"])
+        chain_value = source_inputs.chain_start(bytes.fromhex(digest))
+        record["consumed_digest"] = source_inputs.consumed_digest(bytes.fromhex(digest), 0, chain_value).hex()
+        record["admitted_digest"] = admitted["digest"]
+        record["digest"] = admission.exec_ready_digest(admitted["digest"], record["consumed_digest"], record["exec_digest"])
+        result["records"][prefix + "exec-ready"] = json.dumps(record)
+
+
 def admitted_key(result, sequence):
     return [key for key in result["records"] if key.endswith(f"{sequence:016x}/admitted")][0]
 
@@ -366,40 +399,44 @@ class OracleTests(unittest.TestCase):
         capsule = list(result["capsules"].values())[0]
         capsule["capsule"]["items"].pop(6)
         self.assertFails(observation, "capsule differs from the independent layout")
-        for name, data in (("parent-header", "00"), ("chain-config", (b'{"chainId": 31337}').hex()),
+        hashes, headers = chain()
+        other_header = headers[100]
+        for name, data in (("parent-header", other_header), ("chain-config", (b'{"chainId": 31337}').hex()),
                            ("fork-id", b'{"hash":"00000000","next":"0"}'.hex()), ("native-commit", "61"),
-                           ("normalization-profile", "61"), ("ancestor-header-100", "c0"), ("parent-root", "00" * 32),
-                           ("encodings", "7b7d"), ("header-rlp", "c0"), ("parent-hash", "00" * 32)):
+                           ("normalization-profile", "61"), ("ancestor-header-100", other_header),
+                           ("parent-root", "00" * 32), ("encodings", "7b7d"), ("header-rlp", other_header),
+                           ("parent-hash", "00" * 32)):
             observation = fresh()
             result = scenario(observation, "clean")[0]["result"]
-            capsule = list(result["capsules"].values())[0]
-            row = [row for row in capsule["items"] if row["name"] == name][0]
+            row = [row for row in result["capsules"][admission_geth.key_of(ORACLE, 0)]["items"] if row["name"] == name][0]
             row["data"] = data
-            ref = [ref for ref in capsule["capsule"]["items"] if ref["name"] == name][0]
-            ref["sha256"], ref["length"] = sha(bytes.fromhex(data)), len(bytes.fromhex(data))
+            reseal(result, 0)
             with self.subTest(item=name):
-                failures = self.failures(observation)
-                self.assertTrue(any(f"capsule item {name} d" in failure or "ADMITTED digest" in failure
-                                    for failure in failures), failures)
+                self.assertFails(observation, f"capsule item {name} differs")
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        row = [row for row in result["capsules"][admission_geth.key_of(ORACLE, 0)]["items"]
+               if row["name"] == "parent-header"][0]
+        row["data"] = "00"
+        reseal(result, 0)
+        self.assertFails(observation, "capsule item parent-header does not decode")
         observation = fresh()
         result = scenario(observation, "clean")[0]["result"]
         capsule = list(result["capsules"].values())[0]
         capsule["items"][0]["data"] = "c0"
         self.assertFails(observation, "saved capsule bytes differ from the manifest")
 
-    def test_chain_config_must_keep_the_integer_literal(self):
-        observation = fresh()
-        result = scenario(observation, "clean")[0]["result"]
-        capsule = list(result["capsules"].values())[0]
-        config = dict(ORACLE["chain_config"])
-        config["terminalTotalDifficulty"] = 1
-        data = admission.canonical(json.dumps(config).encode())
-        self.assertNotIn(ORACLE["big_integer_literal"].encode(), data)
-        row = [row for row in capsule["items"] if row["name"] == "chain-config"][0]
-        row["data"] = data.hex()
-        ref = [ref for ref in capsule["capsule"]["items"] if ref["name"] == "chain-config"][0]
-        ref["sha256"], ref["length"] = sha(data), len(data)
-        self.assertFails(observation, "capsule item chain-config differs")
+    def test_chain_config_must_be_canonical_and_exact(self):
+        for data in (json.dumps(ORACLE["chain_config"]).encode(),
+                     admission.canonical(json.dumps(dict(ORACLE["chain_config"], terminalTotalDifficulty=1)).encode())):
+            observation = fresh()
+            result = scenario(observation, "clean")[0]["result"]
+            row = [row for row in result["capsules"][admission_geth.key_of(ORACLE, 0)]["items"]
+                   if row["name"] == "chain-config"][0]
+            row["data"] = data.hex()
+            reseal(result, 0)
+            with self.subTest(data=data[:40]):
+                self.assertFails(observation, "capsule item chain-config differs")
 
     def test_lookups_slots_and_safe_point(self):
         observation = fresh()
@@ -543,6 +580,101 @@ class OracleTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertFails(observation, "freezer-1")
 
+    def test_counter_and_sequences(self):
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        key = [key for key in result["records"] if key.endswith("/counter")][0]
+        result["records"][key] = json.dumps({"next": 3})
+        self.assertFails(observation, "counter 3")
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        result["records"][key.replace("counter", "0000000000000005/preparing")] = json.dumps({"observation": "x"})
+        self.assertFails(observation, "sequences [0, 1, 5]")
+
+    def test_extra_state_record(self):
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        key = [key for key in result["records"] if key.endswith("0000000000000000/exec-ready")][0]
+        result["records"][key.replace("exec-ready", "rejected")] = result["records"][key]
+        self.assertFails(observation, "for EXEC_READY")
+
+    def test_admitted_record_names_the_sealed_capsule(self):
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        key = admitted_key(result, 0)
+        record = json.loads(result["records"][key])
+        record["capsule_digest"] = "7" * 64
+        result["records"][key] = json.dumps(record)
+        self.assertFails(observation, "ADMITTED digest differs")
+
+    def test_capsule_layout_must_match_the_block(self):
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        row = result["capsules"][admission_geth.key_of(ORACLE, 1)]
+        row["capsule"]["items"].insert(6, dict(row["capsule"]["items"][6], name="ancestor-header-44"))
+        row["items"].insert(6, dict(row["items"][6], name="ancestor-header-44"))
+        reseal(result, 1)
+        self.assertFails(observation, "capsule differs from the independent layout")
+
+    def test_pin_record_digest_and_headers(self):
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        key = ORACLE["pin_prefix"] + admission_geth.key_of(ORACLE, 0)
+        result["pins"][key] = result["pins"][key].replace('"codes":[]', '"codes": []')
+        self.assertFails(observation, "pin record differs")
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        pin = json.loads(result["pins"][key])
+        pin["headers"][0]["number"] = 7
+        result["pins"][key] = json.dumps(pin, separators=(",", ":"))
+        reseal(result, 0)
+        self.assertFails(observation, "pin record differs")
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        result["pins"][ORACLE["pin_prefix"] + "other"] = "{}"
+        self.assertFails(observation, "live pins")
+
+    def test_exec_ready_record_digest(self):
+        observation = fresh()
+        result = scenario(observation, "clean")[0]["result"]
+        key = [key for key in result["records"] if key.endswith("0000000000000001/exec-ready")][0]
+        record = json.loads(result["records"][key])
+        record["digest"] = "8" * 64
+        result["records"][key] = json.dumps(record)
+        self.assertFails(observation, "EXEC_READY does not bind")
+
+    def test_lookup_order_and_head_hash(self):
+        observation = fresh()
+        first = scenario(observation, "clean")[0]
+        rows = [i for i, row in enumerate(first["events"]) if row.get("event") == "lookup"]
+        first["events"][rows[0]], first["events"][rows[1]] = first["events"][rows[1]], first["events"][rows[0]]
+        self.assertFails(observation, "BLOCKHASH lookups differ")
+        observation = fresh()
+        scenario(observation, "clean")[0]["result"]["head_hash"] = ZERO
+        self.assertFails(observation, "head 301, want block 301")
+
+    def test_seal_before_the_admitted_record(self):
+        observation = fresh()
+        events = scenario(observation, "clean")[0]["events"]
+        sealed = [i for i, row in enumerate(events) if row.get("event") == "sealed"][0]
+        row = events.pop(sealed)
+        put = [i for i, row in enumerate(events) if str(row.get("key", "")).endswith("/admitted")][0]
+        events.insert(put + 1, row)
+        self.assertFails(observation, "ADMITTED record was not synced after the seal")
+
+    def test_generated_chain_links(self):
+        observation = fresh()
+        header = bytearray(bytes.fromhex(observation["generated_headers"][0]))
+        header[3] ^= 1
+        observation["generated_headers"][0] = header.hex()
+        observation["generated_hashes"][1] = "0x" + keccak256(bytes(header)).hex()
+        self.assertFails(observation, "generated header 1")
+
+    def test_extra_scenario(self):
+        observation = fresh()
+        observation["scenarios"].append({"name": "extra", "attempts": []})
+        self.assertFails(observation, "scenarios")
+
     def test_malformed_observation_is_a_failure(self):
         observation = fresh()
         scenario(observation, "clean")[0]["result"]["records"] = {"x/y/0000000000000000/preparing": "not json"}
@@ -568,6 +700,18 @@ class DriverTests(unittest.TestCase):
                 self.assertIn(patch["replacement"], (tree / patch["file"]).read_text())
             for name, relative in table["files"].items():
                 self.assertEqual((tree / relative).read_bytes(), (admission_geth.NATIVE / name).read_bytes())
+            with self.assertRaises(Exception):
+                admission_geth.apply_patches(tree, admission_geth.NATIVE)
+
+    def test_patch_original_must_occur_exactly_once(self):
+        table = json.loads((admission_geth.NATIVE / "patches.json").read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Path(directory)
+            for patch in table["patches"]:
+                path = tree / patch["file"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                previous = path.read_text() if path.exists() else ""
+                path.write_text(previous + patch["original"] + patch["original"])
             with self.assertRaises(Exception):
                 admission_geth.apply_patches(tree, admission_geth.NATIVE)
 

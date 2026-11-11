@@ -49,7 +49,6 @@
     "ethash": {},
     "depositContractAddress": "0x0000000000000000000000000000000000000000"
   },
-  "big_integer_literal": "\"terminalTotalDifficulty\":1000000000000000000000000000000",
   "side_fork": 100,
   "control_errors": {
     "bad": "invalid merkle root"

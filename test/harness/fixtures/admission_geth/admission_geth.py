@@ -259,8 +259,8 @@ def check_capsule_items(c, label, oracle, observation, result, sequence, number,
         "parent-hash": "0x" + items["parent-hash"].hex() == hashes[number - 1],
         "parent-root": items["parent-root"] == parent_root,
         "encodings": items["encodings"] == oracle["encodings"].encode(),
-        "chain-config": canonical == config and json.loads(config) == oracle["chain_config"]
-        and oracle["big_integer_literal"].encode() in config,
+        # A canonical config keeps every integer literal, so value equality also fixes terminalTotalDifficulty.
+        "chain-config": canonical == config and json.loads(config) == oracle["chain_config"],
         "fork-id": items["fork-id"] == json.dumps(
             {"hash": f"{zlib.crc32(bytes.fromhex(hashes[0][2:])):08x}", "next": "0"}, separators=(",", ":")).encode(),
         "native-commit": items["native-commit"] == commit.encode(),

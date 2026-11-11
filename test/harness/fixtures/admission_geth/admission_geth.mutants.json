@@ -213,14 +213,8 @@
   {
    "name": "canonical config",
    "file": "test/harness/fixtures/admission_geth/admission_geth.py",
-   "original": "\"chain-config\": canonical == config and json.loads(config) == oracle[\"chain_config\"]",
-   "replacement": "\"chain-config\": json.loads(config) == oracle[\"chain_config\"]"
-  },
-  {
-   "name": "big integer literal",
-   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
-   "original": "        and oracle[\"big_integer_literal\"].encode() in config,",
-   "replacement": "        and True,"
+   "original": "\"chain-config\": canonical == config and json.loads(config) == oracle[\"chain_config\"],",
+   "replacement": "\"chain-config\": json.loads(config) == oracle[\"chain_config\"],"
   },
   {
    "name": "fork id",
