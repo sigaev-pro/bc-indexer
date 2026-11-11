@@ -1,5 +1,5 @@
 // Extractor patch (E01-02.admission, Bor block): the observation window gate
-// (D98, D100 item 2). The preparation adds this file to the accepted Bor
+// (D98, D100 item 1). The preparation adds this file to the accepted Bor
 // tree; see adapters/bor/admission/native/README.md.
 
 package bor

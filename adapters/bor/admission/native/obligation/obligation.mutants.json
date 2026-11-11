@@ -360,7 +360,7 @@
       "name": "replay needs the log progress",
       "file": "native/obligation/obligation.go",
       "original": "\tif !ok {\n\t\treturn fmt.Errorf(\"%w: the log of %s does not report its progress\"",
-      "replacement": "\tif false {\n\t\treturn fmt.Errorf(\"%w: the log of %s does not report its progress\""
+      "replacement": "\tif !ok && false {\n\t\treturn fmt.Errorf(\"%w: the log of %s does not report its progress\""
     },
     {
       "name": "replay router enter error",
@@ -396,7 +396,7 @@
       "name": "replay counts a log fault",
       "file": "native/obligation/obligation.go",
       "original": "\tif failed := errors.Join(failure, fault, source, nativeErr); failed != nil {",
-      "replacement": "\tif failed := errors.Join(failure, source, nativeErr); failed != nil {"
+      "replacement": "\t_ = fault\n\tif failed := errors.Join(failure, source, nativeErr); failed != nil {"
     },
     {
       "name": "replay consumes every saved entry",

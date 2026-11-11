@@ -1,5 +1,5 @@
 // Extractor patch test (E01-02.admission, Bor block): the observation window
-// gate (D100 item 2).
+// gate (D100 item 1).
 
 package bor
 

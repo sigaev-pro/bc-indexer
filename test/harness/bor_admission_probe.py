@@ -723,7 +723,7 @@ def request_path(request):
 
 
 def check_rpc_window(context, plan, attempts, block, fail):
-    """D100 item 2: a bor RPC call sent while the window of `block` is open
+    """D100 item 1: a bor RPC call sent while the window of `block` is open
     waits at the window gate until the window closes, so the observation's log
     holds only the import's own reads (check_completed binds them to the
     independent consumed digest); every EXEC_READY then replays from its saved

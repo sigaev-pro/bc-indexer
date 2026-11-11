@@ -1028,7 +1028,9 @@ func TestReplayExecReadyFromItsSavedInputs(t *testing.T) {
 			seen = append(seen, body)
 		}
 	}}
-	if err := f.driver.Replay(key0, r); err != nil {
+	err := f.driver.Replay(key0, r)
+	requireGuardFree(t, f)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(seen, []string{`{"span":1}`, `{"ok":true}`, `{"m":1}`}) {
@@ -1045,7 +1047,6 @@ func TestReplayExecReadyFromItsSavedInputs(t *testing.T) {
 	if f.states()[key0] != admission.ExecReady || f.world.pins[key0] == "" {
 		t.Fatalf("replay changed the observation: %v pins %v", f.states(), f.world.pins)
 	}
-	requireGuardFree(t, f)
 	if f.driver.Router.open {
 		t.Fatal("replay left the router window open")
 	}
@@ -1074,6 +1075,7 @@ func TestReplayDetectsADifferentInputHistory(t *testing.T) {
 				}
 			}}
 			err := f.driver.Replay(key0, r)
+			requireGuardFree(t, f)
 			if !errors.Is(err, ErrReplay) || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v, want %s", err, tc.want)
 			}
@@ -1083,7 +1085,6 @@ func TestReplayDetectsADifferentInputHistory(t *testing.T) {
 			if f.states()[key0] != admission.ExecReady || f.world.windows != 0 {
 				t.Fatalf("states %v windows %d", f.states(), f.world.windows)
 			}
-			requireGuardFree(t, f)
 		})
 	}
 }
@@ -1111,6 +1112,7 @@ func TestReplayDetectsAnotherResult(t *testing.T) {
 			r := &reexec{result: result, before: func() { _, _ = get(t, "/bor/spans/1") }}
 			tc.setup(f, r)
 			err := f.driver.Replay(key0, r)
+			requireGuardFree(t, f)
 			if !errors.Is(err, ErrReplay) || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v, want %s", err, tc.want)
 			}
@@ -1120,14 +1122,15 @@ func TestReplayDetectsAnotherResult(t *testing.T) {
 			if f.states()[key0] != admission.ExecReady || f.world.windows != 0 || f.driver.Router.open {
 				t.Fatalf("states %v windows %d", f.states(), f.world.windows)
 			}
-			requireGuardFree(t, f)
 		})
 	}
 }
 
 func TestReplayRefusesWhatItCannotCheck(t *testing.T) {
 	f := newFixture(t)
-	if err := f.driver.Replay(key0, &reexec{}); !errors.Is(err, ErrReplay) {
+	err := f.driver.Replay(key0, &reexec{})
+	requireGuardFree(t, f)
+	if !errors.Is(err, ErrReplay) {
 		t.Fatalf("unknown observation: %v", err)
 	}
 	leaveAdmitted(t, f)

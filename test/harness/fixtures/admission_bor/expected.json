@@ -648,7 +648,7 @@
     "AC-CAP-02-02",
     "AC-CAP-04-03"
    ],
-   "decision": "D100 item 2"
+   "decision": "D100 item 1"
   },
   {
    "name": "prune-block-live-pins",

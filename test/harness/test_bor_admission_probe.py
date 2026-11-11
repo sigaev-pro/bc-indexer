@@ -477,6 +477,10 @@ class JudgeTests(unittest.TestCase):
                 row[:] = [r for r in row if not r["key"].startswith(probe.PIN)]
         self.assertFails("prune-block-live-pins", no_pins, "no pin is live before the prune")
 
+        def unobserved(o, c):
+            o["attempts"][0]["result"]["observations"].pop(2)
+        self.assertFails("prune-block-live-pins", unobserved, "import: block 3 was not observed")
+
         def accepted_refused(o, c):
             tool(o, 2)["refused_live_pins"] = True
         self.assertFails("prune-block-live-pins", accepted_refused, "the accepted bor binary did not reach")
@@ -519,6 +523,10 @@ class RuleTests(unittest.TestCase):
     def setUp(self):
         self.ctx = contexts()["checkpoint-rio"]
         self.config = self.ctx["config"]
+
+    def test_request_path(self):
+        self.assertEqual(probe.request_path("GET /clerk/time?from_id=3&to_time=x"), "/clerk/time")
+        self.assertEqual(probe.request_path("GET /bor/spans/latest"), "/bor/spans/latest")
 
     def test_sprint_rio_and_time(self):
         self.assertEqual([probe.sprint(self.config, n) for n in (1, 31, 32, 1040)], [4, 4, 2, 2])

@@ -4,8 +4,8 @@ This directory is the Bor-only part of `adapters/bor/admission` (the shared
 core is described in [../README.md](../README.md)). It wires the admission
 core, the source inputs of E01-02.inputs, the pin ledger of E01-02.pins and
 the owned capture seam of E01-02.owned_capture into the accepted Bor import
-path, and adds the Bor native patch set of D98 items 2 and 4 and D100 items 1
-and 2 (the prune-block guard and the window gate for other Heimdall readers).
+path, and adds the Bor native patch set of D98 items 2 and 4 and D100 item 1
+(the prune-block guard and the window gate for other Heimdall readers).
 The plan rows
 it implements are in PROJECT_STATUS ("E01-02.admission", plan for the
 per-client blocks, every row that names Bor).
@@ -84,7 +84,7 @@ later block of the batch runs after the window of the earlier one closed.
 Header verification of other components (the block fetcher, a later batch)
 waits at the window gate.
 
-## Window gate (D98, D100 item 2)
+## Window gate (D98, D100 item 1)
 
 Only the import's own Heimdall reads may enter an observation's log; other
 readers use the native client. `consensus/bor/zz_extractor_gate.go` is the
