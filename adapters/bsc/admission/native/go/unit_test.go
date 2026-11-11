@@ -65,7 +65,9 @@ func TestUnitParliaDBLogsDeclaredReads(t *testing.T) {
 	db.Put([]byte("parlia-a"), []byte("value"))
 	var handoffs []string
 	handle := NewParliaDB(db, nil)
-	handle.Handoff = func(id string, seq uint64, response []byte) { handoffs = append(handoffs, hex.EncodeToString(response)) }
+	handle.Handoff = func(id string, seq uint64, response []byte) {
+		handoffs = append(handoffs, hex.EncodeToString(response))
+	}
 	log := sealedLog(t, db, "obs-1")
 	if err := handle.Attach("obs-1", log, [][]byte{[]byte("parlia-a"), []byte("parlia-b")}); err != nil {
 		t.Fatal(err)
