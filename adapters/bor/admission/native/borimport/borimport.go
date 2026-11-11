@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
@@ -233,19 +232,26 @@ type Node struct {
 	Router   *obligation.Router
 	// Run is the producer run that this start opened.
 	Run string
-	// current is the block of the open observation (under the guard).
+	// current and parent are the block of the observation being opened.
+	// Observe sets them before the driver takes the guard; the native chain
+	// lock (chainmu) already serializes every import, so no other Observe
+	// runs at the same time.
 	current *types.Block
 	parent  *types.Header
 }
 
 // Start wires the admission into a native Bor chain before any import runs:
-// it binds the store identity, opens the saved producer run, installs the
-// Heimdall router as the process transport, opens the admission in
-// RECOVERY_ONLY and returns the node. Recover must run before Attach.
+// it checks the Heimdall client, binds the store identity, opens the saved
+// producer run, installs the Heimdall router as the process transport, opens
+// the admission in RECOVERY_ONLY and returns the node. Recover then resolves
+// the saved obligations and installs the observer.
 func Start(cfg Config, db ethdb.Database, chain *core.BlockChain) (*Node, error) {
 	engine, ok := chain.Engine().(*bor.Bor)
 	if !ok {
 		return nil, fmt.Errorf("%w: the native engine is not Bor", ErrConfig)
+	}
+	if err := engine.ExtractorCheckHeimdall(cfg.HeimdallHost); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 	}
 	if err := checkConfig(cfg, chain.Config()); err != nil {
 		return nil, err
@@ -275,7 +281,7 @@ func Start(cfg Config, db ethdb.Database, chain *core.BlockChain) (*Node, error)
 	}
 	n.Router = &obligation.Router{Inner: http.DefaultTransport, Host: cfg.HeimdallHost}
 	http.DefaultTransport = n.Router
-	n.Driver = &obligation.Driver{Admission: adm, Guard: guard, Native: n, Router: n.Router}
+	n.Driver = &obligation.Driver{Admission: adm, Guard: guard, Native: n, Router: n.Router, Reexecutor: n}
 	return n, nil
 }
 
@@ -360,6 +366,9 @@ func (o observation) Done(block *types.Block, receipts types.Receipts, usedGas u
 	return o.obs.Done(result, err)
 }
 
+// Fail implements core.ExtractorObservation: the obligation stays ADMITTED.
+func (o observation) Fail(err error) error { return o.obs.Fail(err) }
+
 // ResultDigest binds the native result of a validated block: ValidateState
 // has checked the state root, receipt root and gas used against the header.
 func ResultDigest(block *types.Block, usedGas uint64) string {
@@ -443,10 +452,14 @@ func (n *Node) OpenLog(key string) (obligation.Log, error) {
 	return depLog{log: log}, nil
 }
 
-// Purge implements obligation.Native: it drops the span store caches and the
-// snapshot cache and stops the span poll loop, so every Heimdall read of the
-// window goes through the router.
-func (n *Node) Purge() { n.engine.ExtractorPurgeInputs() }
+// OpenWindow implements obligation.Native: it holds back header
+// verification of other blocks and drops the span store caches and the
+// snapshot cache (which also stops the span poll loop), so every Heimdall
+// read of the window belongs to this block and goes through the router.
+func (n *Node) OpenWindow() { n.engine.ExtractorOpenWindow() }
+
+// CloseWindow implements obligation.Native.
+func (n *Node) CloseWindow() { n.engine.ExtractorCloseWindow() }
 
 // Capsule holds the decoded capsule items of one observation.
 type Capsule struct {
@@ -498,11 +511,12 @@ func ReadCapsule(db sourceinputs.Store, key string) (Capsule, error) {
 
 // Verify implements obligation.Native: the header seal checked from the
 // capsule's ancestor headers and checkpoint snapshot, with every Heimdall
-// read through the open window.
-func (n *Node) Verify(key string) error {
+// read through the open window. A capsule that cannot be read or decoded is
+// not a native verdict.
+func (n *Node) Verify(key string) (error, error) {
 	c, err := ReadCapsule(n.db, key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return n.engine.ExtractorVerifySeal(c.Block.Header(), c.Ancestors, c.Checkpoint)
 }
@@ -526,17 +540,4 @@ func (n *Node) Reexecute(key string, cand admission.Candidate) (string, error, e
 		return "", nativeErr, nil
 	}
 	return ResultDigest(c.Block, usedGas), nil, nil
-}
-
-// ObservationKeys lists the observation keys of the admission prefix of a
-// store dump, for reports.
-func ObservationKeys(keys []string, producer, run string) []string {
-	prefix := "extractor-admission-v1/" + producer + "." + run + "/"
-	var out []string
-	for _, key := range keys {
-		if strings.HasPrefix(key, prefix) {
-			out = append(out, key)
-		}
-	}
-	return out
 }

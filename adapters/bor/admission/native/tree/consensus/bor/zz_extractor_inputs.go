@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
@@ -32,7 +34,55 @@ type extractorOverride struct {
 	snap   *Snapshot
 }
 
+// extractorSnapshots holds at most one override. The observation guard
+// allows one capsule header check at a time; each check removes only its
+// own override.
 var extractorSnapshots atomic.Pointer[extractorOverride]
+
+// extractorWindow holds back header verification of other blocks while an
+// observation window is open. The window takes it exclusively; VerifyHeader,
+// VerifyHeaders (per header) and VerifySeal take it shared. The capsule
+// check and Finalize of the observed block do not take it.
+var extractorWindow sync.RWMutex
+
+// extractorGate waits for the open window, if any, to close and returns the
+// release function. The patched exported verification entry points call it.
+func (c *Bor) extractorGate() func() {
+	extractorWindow.RLock()
+	return extractorWindow.RUnlock
+}
+
+// ExtractorOpenWindow starts an observation window: it waits for header
+// verification in progress to finish, holds back new verification of other
+// blocks, and drops the cached Heimdall data and snapshots.
+func (c *Bor) ExtractorOpenWindow() {
+	extractorWindow.Lock()
+	c.ExtractorPurgeInputs()
+}
+
+// ExtractorCloseWindow ends the window that ExtractorOpenWindow started.
+func (c *Bor) ExtractorCloseWindow() { extractorWindow.Unlock() }
+
+// ExtractorCheckHeimdall requires the single native HTTP Heimdall client at
+// host with the process transport, so the router sees every Heimdall read.
+// A gRPC client, a failover client over several endpoints, a client with its
+// own transport, a WebSocket client or no client is refused.
+func (c *Bor) ExtractorCheckHeimdall(host string) error {
+	client, ok := c.HeimdallClient.(*heimdall.HeimdallClient)
+	if !ok || client == nil {
+		return fmt.Errorf("extractor admission needs the native HTTP Heimdall client, not %T", c.HeimdallClient)
+	}
+	if got := client.ExtractorHost(); got != host {
+		return fmt.Errorf("extractor admission: Heimdall host %q, expected %q", got, host)
+	}
+	if !client.ExtractorProcessTransport() {
+		return errors.New("extractor admission: the Heimdall client has its own transport")
+	}
+	if c.HeimdallWSClient != nil {
+		return errors.New("extractor admission: a Heimdall WebSocket client is configured")
+	}
+	return nil
+}
 
 // extractorSnapshot returns the capsule snapshot for targetHeader, if any.
 // The patched snapshot method calls it first.
@@ -130,37 +180,39 @@ func (h extractorCapsuleChain) GetTd(common.Hash, uint64) *big.Int { return nil 
 // from capsule inputs only: the ancestor headers serve every header read, and
 // the snapshot is built from the stored checkpoint snapshot and those headers
 // before Rio, or from the span (read through the observation's dependency
-// log) from Rio on. The caller purges the caches first.
-func (c *Bor) ExtractorVerifySeal(header *types.Header, headers []*types.Header, checkpoint []byte) error {
+// log) from Rio on. The caller opens the window first. nativeErr is the
+// verifySeal result, a native validation failure; err is a capsule that does
+// not follow the ancestor rule or a snapshot that cannot be built, which is
+// not a verdict on the block.
+func (c *Bor) ExtractorVerifySeal(header *types.Header, headers []*types.Header, checkpoint []byte) (nativeErr, err error) {
 	if len(headers) == 0 || header.Number == nil || !header.Number.IsUint64() {
-		return errExtractorAncestors
+		return nil, errExtractorAncestors
 	}
 	parent := headers[len(headers)-1]
 	if parent.Hash() != header.ParentHash || parent.Number.Uint64()+1 != header.Number.Uint64() {
-		return errExtractorAncestors
+		return nil, errExtractorAncestors
 	}
 	for i := 1; i < len(headers); i++ {
 		if headers[i].ParentHash != headers[i-1].Hash() || headers[i].Number.Uint64() != headers[i-1].Number.Uint64()+1 {
-			return errExtractorAncestors
+			return nil, errExtractorAncestors
 		}
 	}
 	chain := extractorCapsuleChain{config: c.chainConfig, headers: headers}
 	var snap *Snapshot
-	var err error
 	if c.ExtractorIsRio(header.Number.Uint64()) {
 		if len(headers) != 1 || checkpoint != nil {
-			return errExtractorAncestors
+			return nil, errExtractorAncestors
 		}
 		snap, err = c.getVeBlopSnapshot(chain, header, nil, false)
 	} else {
 		first := headers[0]
 		if first.Number.Uint64()%checkpointInterval != 0 || parent.Number.Uint64()-first.Number.Uint64() >= checkpointInterval {
-			return errExtractorAncestors
+			return nil, errExtractorAncestors
 		}
 		db := rawdb.NewMemoryDatabase()
 		hash := first.Hash()
 		if err = db.Put(append([]byte("bor-"), hash[:]...), checkpoint); err != nil {
-			return err
+			return nil, err
 		}
 		snap, err = loadSnapshot(c.chainConfig, c.config, c.signatures, db, hash)
 		if err == nil && (snap.Number != first.Number.Uint64() || snap.Hash != hash) {
@@ -171,9 +223,10 @@ func (c *Bor) ExtractorVerifySeal(header *types.Header, headers []*types.Header,
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	extractorSnapshots.Store(&extractorOverride{target: header.Hash(), snap: snap})
-	defer extractorSnapshots.Store(nil)
-	return c.verifySeal(chain, header, nil)
+	override := &extractorOverride{target: header.Hash(), snap: snap}
+	extractorSnapshots.Store(override)
+	defer extractorSnapshots.CompareAndSwap(override, nil)
+	return c.verifySeal(chain, header, nil), nil
 }

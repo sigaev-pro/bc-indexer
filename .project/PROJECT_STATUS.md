@@ -116,14 +116,14 @@ coordinator.
 
 ## E01-02.admission — Bor block
 
-Status: IN_PROGRESS (Part of #16). Base `9046de9` (block 0 merged in PR #146).
+Status: IN_PROGRESS (Part of #16), draft PR #149. Base `9046de9` (block 0 merged in PR #146).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
 POLY AC matrix; two independent read-only reviewers. Allowed paths:
 `adapters/bor/admission/native/**`, `test/harness/fixtures/admission_bor/**`,
-`test/harness/bor_admission_probe.py`, `test/harness/test_bor_admission_probe.py`,
-`test/harness/bor_admission_probe.mutants.json`,
+`test/harness/bor_admission_probe.py`, `test/harness/bor_admission_tree.py`,
+`test/harness/test_bor_admission_probe.py`, `test/harness/bor_admission_probe.mutants.json`,
 `.project/evidence/E01-02.admission.bor.md` and this section. The shared copies
 of `adapters/*/admission` and `adapters/*/source_inputs` stay unchanged.
 
@@ -160,8 +160,24 @@ Design (native-engineer), the Bor rows of the plan table:
   obligation from its pin and capsule, then `ExecReady` or `Reject`, then
   `GoLive`) and startup identity (`Preflight`, `Bind`, the saved producer run).
 
-Next: implement the glue and patches, then the probe, preparation, measured
-run, mutants, evidence and reviews.
+Review 001 (head `2b251ea`, before the measured evidence): Spec and
+Standards REQUEST_CHANGES. P2 findings: recovery reported an input failure
+or a failed Reject write as a rejection; capsule and store errors were
+treated as native rejections; one Heimdall error stopped the window and the
+node until a restart; the Heimdall client type was not checked; header
+verification of other blocks (block fetcher, side-chain re-import) could
+read Heimdall inside a window. The fixes: a rejection only when the
+NATIVE_REJECTED record is written; native and other failures kept apart
+(`Fail`, `Verify` returns both); source errors retryable through the log; the
+next `Observe` resolves a saved obligation; `ExtractorCheckHeimdall`; a
+window gate on `VerifyHeader`, `VerifyHeaders` and `VerifySeal`; the batch
+split moved into `insertChainWithWitnesses`; and the P3 notes (README limits,
+lock order, safe point owner, `go list -deps ./cmd/cli` check, batch imports
+in the probe). Preparations 01 (no space left on the host disk at the probe
+link step) and 02 (stopped, superseded by these fixes) on `2b251ea` are kept
+(D83).
+
+Next: preparation and measured run on the fixed head, evidence, review 002.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 

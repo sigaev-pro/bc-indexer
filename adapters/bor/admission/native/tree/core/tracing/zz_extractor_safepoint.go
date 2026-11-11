@@ -6,10 +6,10 @@
 package tracing
 
 // ExtractorSafePointHook is the VM safe point. The interpreter calls it on
-// the native goroutine between VM steps, before the opcode hook and before
-// the opcode changes memory or state, and never inside another hook. Only
-// traced execution calls it: the prefetchers clear the tracer. The hook may
-// wait (for capture budget); it returns nothing, so it cannot change native
-// execution. A capture failure is recorded by the hook's owner and stops the
-// observation after native execution.
+// the native goroutine between VM steps, after the gas charge and memory
+// expansion of the opcode and before the opcode hook and the opcode itself
+// run, and never inside another hook. Only traced execution calls it: the
+// prefetchers clear the tracer. The hook may wait (for capture budget); it
+// returns nothing, so it cannot change native execution. The hook's owner
+// records a capture failure and reports it.
 type ExtractorSafePointHook = func(op byte, scope OpContext)

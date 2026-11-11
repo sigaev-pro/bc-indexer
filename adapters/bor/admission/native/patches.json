@@ -8,7 +8,8 @@
     "consensus/bor/zz_extractor_inputs.go": "tree/consensus/bor/zz_extractor_inputs.go",
     "extractor/retention/retention.go": "tree/extractor/retention/retention.go",
     "extractor/borwire/borwire.go": "tree/extractor/borwire/borwire.go",
-    "core/rawdb/zz_extractor_freeze_test.go": "tree/core/rawdb/zz_extractor_freeze_test.go"
+    "core/rawdb/zz_extractor_freeze_test.go": "tree/core/rawdb/zz_extractor_freeze_test.go",
+    "consensus/bor/heimdall/zz_extractor_client.go": "tree/consensus/bor/heimdall/zz_extractor_client.go"
   },
   "edits": [
     {
@@ -21,9 +22,9 @@
     {
       "name": "import-path-one-block-batches",
       "file": "core/blockchain.go",
-      "mode": "before",
-      "anchor": "\t// Pre-checks passed, start the full block imports\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\n\t_, n, err := bc.insertChainWithWitnesses(chain, true, makeWitness, witnesses)\n",
-      "text": "\tif len(chain) > 1 && bc.extractorObserver() != nil {\n\t\treturn bc.extractorInsertEach(chain, makeWitness, witnesses)\n\t}\n"
+      "mode": "after",
+      "anchor": "func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool, makeWitness bool, witnesses []*stateless.Witness) (*stateless.Witness, int, error) {\n",
+      "text": "\tif len(chain) > 1 && bc.extractorObserver() != nil {\n\t\treturn bc.extractorInsertEach(chain, setHead, makeWitness, witnesses)\n\t}\n"
     },
     {
       "name": "retention-set-head",
@@ -101,6 +102,27 @@
       "mode": "before",
       "anchor": "\t\t// Do tracing before potential memory expansion\n",
       "text": "\t\tif debug && evm.Config.Tracer.OnExtractorSafePoint != nil {\n\t\t\tevm.Config.Tracer.OnExtractorSafePoint(byte(op), callContext)\n\t\t}\n"
+    },
+    {
+      "name": "window-gate-verify-header",
+      "file": "consensus/bor/bor.go",
+      "mode": "replace",
+      "anchor": "func (c *Bor) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header) error {\n\treturn c.verifyHeader(chain, header, nil)\n}\n",
+      "text": "func (c *Bor) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header) error {\n\tdefer c.extractorGate()()\n\treturn c.verifyHeader(chain, header, nil)\n}\n"
+    },
+    {
+      "name": "window-gate-verify-headers",
+      "file": "consensus/bor/bor.go",
+      "mode": "replace",
+      "anchor": "\t\tfor i, header := range headers {\n\t\t\terr := c.verifyHeader(chain, header, headers[:i])\n",
+      "text": "\t\tfor i, header := range headers {\n\t\t\trelease := c.extractorGate()\n\t\t\terr := c.verifyHeader(chain, header, headers[:i])\n\t\t\trelease()\n"
+    },
+    {
+      "name": "window-gate-verify-seal",
+      "file": "consensus/bor/bor.go",
+      "mode": "replace",
+      "anchor": "func (c *Bor) VerifySeal(chain consensus.ChainHeaderReader, header *types.Header) error {\n\treturn c.verifySeal(chain, header, nil)\n}\n",
+      "text": "func (c *Bor) VerifySeal(chain consensus.ChainHeaderReader, header *types.Header) error {\n\tdefer c.extractorGate()()\n\treturn c.verifySeal(chain, header, nil)\n}\n"
     }
   ]
 }

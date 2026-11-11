@@ -12,13 +12,18 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/extractor/admission"
 )
 
 // memStore is a synced in-memory store; durability is the admission core's
 // own test subject, not this package's.
-type memStore struct{ data map[string][]byte }
+type memStore struct {
+	data map[string][]byte
+	// failSuffix makes a Put of a key with this suffix fail.
+	failSuffix string
+}
 
 func (m *memStore) Has(key []byte) (bool, error) { _, ok := m.data[string(key)]; return ok, nil }
 func (m *memStore) Get(key []byte) ([]byte, error) {
@@ -28,8 +33,14 @@ func (m *memStore) Get(key []byte) ([]byte, error) {
 	}
 	return bytes.Clone(value), nil
 }
-func (m *memStore) Put(key, value []byte) error { m.data[string(key)] = bytes.Clone(value); return nil }
-func (m *memStore) SyncKeyValue() error         { return nil }
+func (m *memStore) Put(key, value []byte) error {
+	if m.failSuffix != "" && strings.HasSuffix(string(key), m.failSuffix) {
+		return errors.New("store write failed")
+	}
+	m.data[string(key)] = bytes.Clone(value)
+	return nil
+}
+func (m *memStore) SyncKeyValue() error { return nil }
 
 var errUnknownPin = errors.New("unknown pin")
 
@@ -44,6 +55,8 @@ type world struct {
 	sealErr  error
 	openErr  error
 	verify   func(key string) error
+	failure  error
+	windows  int
 	router   *Router
 	readable error
 }
@@ -119,16 +132,24 @@ func (w *world) OpenLog(key string) (Log, error) {
 	log.cursor = 0
 	return log, nil
 }
-func (w *world) Purge() {
+func (w *world) OpenWindow() {
 	open := w.router != nil && w.router.open
+	w.windows++
 	w.calls = append(w.calls, fmt.Sprintf("purge window=%t", open))
 }
-func (w *world) Verify(key string) error {
+func (w *world) CloseWindow() {
+	w.windows--
+	w.calls = append(w.calls, "close window")
+}
+func (w *world) Verify(key string) (error, error) {
 	w.calls = append(w.calls, "verify "+key)
-	if w.verify != nil {
-		return w.verify(key)
+	if w.failure != nil {
+		return nil, w.failure
 	}
-	return nil
+	if w.verify != nil {
+		return w.verify(key), nil
+	}
+	return nil, nil
 }
 
 // fakeLog replays saved responses in order and appends new ones.
@@ -362,6 +383,14 @@ func TestObserveAbandonsBeforeAdmit(t *testing.T) {
 			if _, err := f.driver.Observe(candidate(1)); err == nil {
 				t.Fatal("expected an error")
 			}
+			acquired := make(chan *admission.Token, 1)
+			go func() { acquired <- f.guard.Acquire() }()
+			select {
+			case token := <-acquired:
+				token.Release()
+			case <-time.After(5 * time.Second):
+				t.Fatal("a failed Observe kept the observation guard")
+			}
 			if len(f.states()) != 0 {
 				t.Fatalf("observation left open: %v", f.states())
 			}
@@ -427,7 +456,33 @@ func TestDoneRejectsANativeValidationFailure(t *testing.T) {
 	}
 }
 
-func TestInputFailureKeepsTheObligation(t *testing.T) {
+func TestSourceFailureBeforeANativeFailureKeepsTheObligation(t *testing.T) {
+	f := newFixture(t)
+	useRouter(t, f.driver.Router)
+	obs, err := f.driver.Observe(candidate(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.stub.status = http.StatusServiceUnavailable
+	if _, err := get(t, "/bor/spans/1"); !errors.Is(err, ErrInput) {
+		t.Fatalf("first read: %v", err)
+	}
+	err = obs.Done("", errors.New("error while committing span"))
+	if !errors.Is(err, ErrInput) {
+		t.Fatalf("Done: %v", err)
+	}
+	if f.states()[key0] != admission.Admitted || f.world.pins[key0] == "" {
+		t.Fatalf("a source failure closed the obligation: %v", f.states())
+	}
+	if f.world.windows != 0 {
+		t.Fatalf("the window stayed open")
+	}
+	if _, err := f.driver.Observe(candidate(2)); !errors.Is(err, admission.ErrPending) {
+		t.Fatalf("a new observation passed over the ADMITTED one: %v", err)
+	}
+}
+
+func TestSourceFailureRetriedThroughTheLog(t *testing.T) {
 	f := newFixture(t)
 	useRouter(t, f.driver.Router)
 	obs, err := f.driver.Observe(candidate(1))
@@ -439,22 +494,94 @@ func TestInputFailureKeepsTheObligation(t *testing.T) {
 		t.Fatalf("first read: %v", err)
 	}
 	f.stub.status = 0
-	if _, err := get(t, "/status"); !errors.Is(err, ErrInput) {
-		t.Fatalf("a read after an input failure was not refused: %v", err)
+	if body, err := get(t, "/bor/spans/1"); err != nil || body != `{"span":1}` {
+		t.Fatalf("retry: %q %v", body, err)
 	}
-	err = obs.Done("", errors.New("error while committing span"))
-	if !errors.Is(err, ErrInput) {
+	if _, err := get(t, "/status"); err != nil {
+		t.Fatal(err)
+	}
+	rows := f.driver.Router.Rows()
+	if len(rows) != 3 || rows[0].Error == "" || rows[1].Sequence != 0 || rows[1].Origin != "fetch" || rows[2].Sequence != 1 {
+		t.Fatalf("rows %+v", rows)
+	}
+	if err := obs.Done(ResultDigest("a", "b", "c", "0"), nil); err != nil {
+		t.Fatalf("Done after a successful retry: %v", err)
+	}
+	if f.states()[key0] != admission.ExecReady || f.world.closed[key0].Count != 2 {
+		t.Fatalf("state %v, consumed %+v", f.states(), f.world.closed[key0])
+	}
+}
+
+func TestLogRefusalStopsTheWindow(t *testing.T) {
+	f := newFixture(t)
+	useRouter(t, f.driver.Router)
+	obs, err := f.driver.Observe(candidate(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.world.logs[key0].refuse = errors.New("dependency log prefix conflict")
+	if _, err := get(t, "/bor/spans/1"); !errors.Is(err, ErrInput) {
+		t.Fatalf("first read: %v", err)
+	}
+	f.world.logs[key0].refuse = nil
+	if _, err := get(t, "/status"); !errors.Is(err, ErrInput) {
+		t.Fatalf("a read after a log refusal was not refused: %v", err)
+	}
+	if err := obs.Done(ResultDigest("a", "b", "c", "0"), nil); !errors.Is(err, ErrInput) {
 		t.Fatalf("Done: %v", err)
 	}
-	if f.states()[key0] != admission.Admitted || f.world.pins[key0] == "" {
-		t.Fatalf("an input failure closed the obligation: %v", f.states())
-	}
-	if _, err := f.driver.Observe(candidate(2)); !errors.Is(err, admission.ErrPending) {
-		t.Fatalf("a new observation passed over the ADMITTED one: %v", err)
+	if f.states()[key0] != admission.Admitted {
+		t.Fatalf("state %v", f.states())
 	}
 	rows := f.driver.Router.Rows()
 	if len(rows) != 2 || rows[0].Error == "" || rows[1].Error == "" {
 		t.Fatalf("rows %+v", rows)
+	}
+}
+
+func TestInfrastructureFailuresKeepTheObligation(t *testing.T) {
+	f := newFixture(t)
+	f.world.failure = errors.New("capsule read failed")
+	if _, err := f.driver.Observe(candidate(1)); !errors.Is(err, f.world.failure) {
+		t.Fatalf("Observe: %v", err)
+	}
+	if f.states()[key0] != admission.Admitted || f.world.windows != 0 {
+		t.Fatalf("state %v, windows %d", f.states(), f.world.windows)
+	}
+	f.world.failure = nil
+	f.driver.Reexecutor = &reexec{result: ResultDigest("h", "s", "r", "1")}
+	obs, err := f.driver.Observe(candidate(2))
+	if err != nil {
+		t.Fatalf("the saved obligation was not resolved before Begin: %v", err)
+	}
+	missing := errors.New("parent state unavailable")
+	if err := obs.Fail(missing); !errors.Is(err, missing) {
+		t.Fatalf("Fail: %v", err)
+	}
+	if f.states()[key0] != admission.ExecReady {
+		t.Fatalf("the saved obligation was not resolved: %v", f.states())
+	}
+	if f.states()["bor.run-1.0000000000000001"] != admission.Admitted || f.world.windows != 0 {
+		t.Fatalf("Fail closed the obligation: %v", f.states())
+	}
+	if err := obs.Fail(nil); !errors.Is(err, ErrWindow) {
+		t.Fatalf("second Fail: %v", err)
+	}
+}
+
+func TestResolveFailureStopsTheNextObservation(t *testing.T) {
+	f := newFixture(t)
+	f.world.failure = errors.New("capsule read failed")
+	if _, err := f.driver.Observe(candidate(1)); err == nil {
+		t.Fatal("expected an error")
+	}
+	f.driver.Reexecutor = &reexec{err: errors.New("state unavailable")}
+	f.world.failure = nil
+	if _, err := f.driver.Observe(candidate(2)); err == nil || errors.Is(err, admission.ErrPending) {
+		t.Fatalf("Observe: %v", err)
+	}
+	if len(f.states()) != 1 || f.world.windows != 0 {
+		t.Fatalf("states %v windows %d", f.states(), f.world.windows)
 	}
 }
 
@@ -503,6 +630,7 @@ func leaveAdmitted(t *testing.T, f *fixture) {
 	}
 	// Lost before Done: the guard and window die with the process.
 	f.guard = admission.NewGuard()
+	f.world.windows = 0
 	f.reopen(false)
 	useRouter(t, f.driver.Router)
 }
@@ -575,6 +703,16 @@ func TestRecoverRejectsAFailedHeaderCheck(t *testing.T) {
 	}
 }
 
+func TestRecoverRejectWriteFailureIsNotARejection(t *testing.T) {
+	f := newFixture(t)
+	leaveAdmitted(t, f)
+	f.store.failSuffix = "/rejected"
+	report, err := f.driver.Recover(&reexec{native: errors.New("invalid gas used")})
+	if err == nil || len(report.Rejected) != 0 {
+		t.Fatalf("report %+v err %v", report, err)
+	}
+}
+
 func TestRecoverFailureStaysInRecovery(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -584,21 +722,27 @@ func TestRecoverFailureStaysInRecovery(t *testing.T) {
 		{"reexecution error", &reexec{err: errors.New("state unavailable")}, func(*fixture) {}},
 		{"open error", &reexec{}, func(f *fixture) { f.world.openErr = errors.New("corrupt log") }},
 		{"input failure", &reexec{}, func(f *fixture) { f.world.logs[key0].refuse = errors.New("prefix conflict") }},
+		{"input failure before a native failure", &reexec{native: errors.New("span commit failed")},
+			func(f *fixture) { f.world.logs[key0].refuse = errors.New("prefix conflict") }},
+		{"source failure before a native failure", &reexec{native: errors.New("state sync failed")},
+			func(f *fixture) { f.stub.status = http.StatusServiceUnavailable; f.world.logs[key0].order = nil }},
+		{"capsule failure", &reexec{}, func(f *fixture) { f.world.failure = errors.New("capsule read failed") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t)
 			leaveAdmitted(t, f)
 			tc.prep(f)
-			if tc.name == "input failure" {
+			if strings.Contains(tc.name, "failure before") || tc.name == "input failure" {
 				tc.r.before = func() { get(t, "/bor/spans/1") }
 			}
-			if _, err := f.driver.Recover(tc.r); err == nil {
-				t.Fatal("expected an error")
+			report, err := f.driver.Recover(tc.r)
+			if err == nil || len(report.Rejected) != 0 || len(report.ExecReady) != 0 {
+				t.Fatalf("report %+v err %v", report, err)
 			}
 			if f.mode() != admission.RecoveryOnly || f.states()[key0] != admission.Admitted {
 				t.Fatalf("mode %s states %v", f.mode(), f.states())
 			}
-			if f.driver.Router.open {
+			if f.driver.Router.open || f.world.windows != 0 {
 				t.Fatalf("window left open")
 			}
 		})
@@ -715,7 +859,7 @@ func TestRouter(t *testing.T) {
 	if body, err := get(t, "/bor/spans/1"); err != nil || body != "one" {
 		t.Fatalf("outside: %q %v", body, err)
 	}
-	if err := r.Leave(); !errors.Is(err, ErrWindow) {
+	if err, _ := r.Leave(); !errors.Is(err, ErrWindow) {
 		t.Fatalf("Leave without Enter: %v", err)
 	}
 	log := &fakeLog{world: newWorld(), saved: map[string][]byte{}}
@@ -736,7 +880,7 @@ func TestRouter(t *testing.T) {
 	if body, err := get(t, "/milestones/latest"); err != nil || body != "m" {
 		t.Fatalf("uncounted inside: %q %v", body, err)
 	}
-	if err := r.Leave(); err != nil {
+	if err, _ := r.Leave(); err != nil {
 		t.Fatal(err)
 	}
 	// A second window on the same log replays the saved bytes.
@@ -759,7 +903,7 @@ func TestRouter(t *testing.T) {
 	if log.fetched != 1 {
 		t.Fatalf("fetched %d", log.fetched)
 	}
-	if err := r.Leave(); err != nil {
+	if err, _ := r.Leave(); err != nil {
 		t.Fatal(err)
 	}
 	passed := r.Passed()
@@ -784,8 +928,8 @@ func TestRouterRefusesOversizeResponses(t *testing.T) {
 	if _, err := get(t, "/status"); !errors.Is(err, ErrInput) {
 		t.Fatalf("oversize: %v", err)
 	}
-	if err := r.Leave(); !errors.Is(err, ErrInput) {
-		t.Fatalf("Leave: %v", err)
+	if fault, source := r.Leave(); fault != nil || !errors.Is(source, ErrInput) {
+		t.Fatalf("Leave: %v %v", fault, source)
 	}
 	stub.bodies["/status"] = strings.Repeat("x", MaxResponseBytes)
 	if err := r.Enter(log); err != nil {
@@ -794,7 +938,7 @@ func TestRouterRefusesOversizeResponses(t *testing.T) {
 	if body, err := get(t, "/status"); err != nil || len(body) != MaxResponseBytes {
 		t.Fatalf("largest allowed response: %d %v", len(body), err)
 	}
-	if err := r.Leave(); err != nil {
+	if err, _ := r.Leave(); err != nil {
 		t.Fatal(err)
 	}
 }

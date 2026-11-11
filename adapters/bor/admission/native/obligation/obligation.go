@@ -143,12 +143,17 @@ type Native interface {
 	Seal(key string, c admission.Candidate) error
 	// OpenLog opens the dependency log of key.
 	OpenLog(key string) (Log, error)
-	// Purge drops the native Heimdall and snapshot caches, so every
-	// Heimdall read of the window reaches the router.
-	Purge()
+	// OpenWindow drops the native Heimdall and snapshot caches, so every
+	// Heimdall read of the window reaches the router, and holds back header
+	// verification of other blocks until CloseWindow.
+	OpenWindow()
+	// CloseWindow ends what OpenWindow started.
+	CloseWindow()
 	// Verify verifies the header seal of key again from the capsule's
-	// ancestor headers and the logged Heimdall reads.
-	Verify(key string) error
+	// ancestor headers and the logged Heimdall reads. nativeErr is a native
+	// validation failure; err is any other failure (a store read, a capsule
+	// that cannot be decoded), which leaves the obligation ADMITTED.
+	Verify(key string) (nativeErr error, err error)
 }
 
 // Reexecutor re-executes a saved ADMITTED obligation from its pin and capsule.
@@ -165,9 +170,12 @@ type Driver struct {
 	Guard     *admission.Guard
 	Native    Native
 	Router    *Router
+	// Reexecutor resolves an obligation that an input failure left ADMITTED
+	// before the next observation begins, without a restart.
+	Reexecutor Reexecutor
 }
 
-// Observation is one open observation. Done closes it.
+// Observation is one open observation. Done or Fail closes it.
 type Observation struct {
 	driver *Driver
 	token  *admission.Token
@@ -180,12 +188,14 @@ type Observation struct {
 // Key returns the observation key.
 func (o *Observation) Key() string { return o.key }
 
-// Observe opens the observation of candidate c: Begin, pin, seal and Admit,
-// then the log window, the cache purge and the header check from the
-// capsule. On a failure before Admit returns, the observation is abandoned
-// and the error returned; no capture exists. A failed header check after
-// Admit is a native validation failure: the observation is rejected and the
-// check error returned.
+// Observe opens the observation of candidate c. A saved INPUT_PREPARING or
+// ADMITTED observation is resolved first (as Recover does). Then: Begin,
+// pin, seal and Admit, the log window with the cache purge, and the header
+// check from the capsule. On a failure before Admit returns, the observation
+// is abandoned and the error returned; no capture exists. A failed header
+// check after Admit is a native validation failure: the observation is
+// rejected and the check error returned. Any other failure after Admit
+// leaves the obligation ADMITTED.
 func (d *Driver) Observe(c admission.Candidate) (*Observation, error) {
 	token := d.Guard.Acquire()
 	obs, err := d.observe(token, c)
@@ -199,6 +209,11 @@ func (d *Driver) Observe(c admission.Candidate) (*Observation, error) {
 }
 
 func (d *Driver) observe(token *admission.Token, c admission.Candidate) (*Observation, error) {
+	if d.Reexecutor != nil {
+		if _, err := d.resolveSaved(token, d.Reexecutor, &Report{}); err != nil {
+			return nil, err
+		}
+	}
 	begun, err := d.Admission.Begin(token, c)
 	if err != nil {
 		return nil, err
@@ -225,9 +240,11 @@ func (d *Driver) observe(token *admission.Token, c admission.Candidate) (*Observ
 	if err := obs.open(); err != nil {
 		return nil, err
 	}
-	if err := d.Native.Verify(key); err != nil {
+	nativeErr, err := d.Native.Verify(key)
+	if err != nil || nativeErr != nil {
 		obs.closed = true
-		return nil, obs.finish("", err)
+		_, finishErr := obs.finish("", nativeErr, err)
+		return nil, finishErr
 	}
 	return obs, nil
 }
@@ -241,7 +258,7 @@ func (o *Observation) open() error {
 	if err := o.driver.Router.Enter(log); err != nil {
 		return err
 	}
-	o.driver.Native.Purge()
+	o.driver.Native.OpenWindow()
 	return nil
 }
 
@@ -249,38 +266,58 @@ func (o *Observation) open() error {
 // nativeErr nil, it closes the log and writes EXEC_READY bound to
 // resultDigest. A native validation failure writes NATIVE_REJECTED and
 // returns nativeErr. A counted input failure in the window, or a failure to
-// close, leaves the obligation ADMITTED and returns the error; recovery
-// resolves it.
+// close, leaves the obligation ADMITTED and returns the error.
 func (o *Observation) Done(resultDigest string, nativeErr error) error {
+	return o.close(resultDigest, nativeErr, nil)
+}
+
+// Fail closes the window after a failure that is not a native validation
+// failure (for example local state that native code could not read). The
+// obligation stays ADMITTED with its pin.
+func (o *Observation) Fail(err error) error {
+	if err == nil {
+		err = ErrWindow
+	}
+	return o.close("", nil, err)
+}
+
+func (o *Observation) close(resultDigest string, nativeErr, failure error) error {
 	if o.closed {
 		return ErrWindow
 	}
 	o.closed = true
-	err := o.finish(resultDigest, nativeErr)
+	_, err := o.finish(resultDigest, nativeErr, failure)
 	if releaseErr := o.token.Release(); releaseErr != nil {
 		err = errors.Join(err, releaseErr)
 	}
 	return err
 }
 
-func (o *Observation) finish(resultDigest string, nativeErr error) error {
+// finish leaves the window and decides. It reports rejected only when the
+// NATIVE_REJECTED record was written; then the returned error is nativeErr.
+func (o *Observation) finish(resultDigest string, nativeErr, failure error) (bool, error) {
 	d := o.driver
-	fault := d.Router.Leave()
-	if fault != nil {
-		return errors.Join(fault, nativeErr)
+	fault, source := d.Router.Leave()
+	d.Native.CloseWindow()
+	if nativeErr == nil {
+		// Bor retried every source error successfully, or saw none.
+		source = nil
+	}
+	if failure != nil || fault != nil || source != nil {
+		return false, errors.Join(failure, fault, source, nativeErr)
 	}
 	if nativeErr != nil {
 		evidence := RejectionDigest(o.key, o.cand.Hash, nativeErr.Error())
 		if _, err := d.Admission.Reject(o.token, o.key, evidence); err != nil {
-			return errors.Join(nativeErr, err)
+			return false, errors.Join(nativeErr, err)
 		}
-		return nativeErr
+		return true, nativeErr
 	}
 	if err := o.log.Finish(); err != nil {
-		return err
+		return false, err
 	}
 	_, err := d.Admission.ExecReady(o.token, o.key, resultDigest)
-	return err
+	return false, err
 }
 
 // Report lists what the recovery driver did, by observation key.
@@ -300,40 +337,46 @@ type Report struct {
 func (d *Driver) Recover(r Reexecutor) (Report, error) {
 	report := Report{Abandoned: []string{}, ExecReady: []string{}, Rejected: []string{}, Kept: []string{}}
 	token := d.Guard.Acquire()
-	err := d.recover(token, r, &report)
+	_, err := d.resolveSaved(token, r, &report)
+	if err == nil {
+		err = d.Admission.GoLive(token)
+	}
 	if releaseErr := token.Release(); releaseErr != nil {
 		err = errors.Join(err, releaseErr)
 	}
 	return report, err
 }
 
-func (d *Driver) recover(token *admission.Token, r Reexecutor, report *Report) error {
+func (d *Driver) resolveSaved(token *admission.Token, r Reexecutor, report *Report) (int, error) {
 	saved, err := d.Admission.Observations(token)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	resolved := 0
 	for _, obs := range saved {
 		switch obs.State {
 		case admission.InputPreparing:
 			if err := d.Admission.Abandon(token, obs.Key); err != nil {
-				return err
+				return resolved, err
 			}
 			report.Abandoned = append(report.Abandoned, obs.Key)
+			resolved++
 		case admission.Admitted:
 			rejected, err := d.resolve(token, r, obs)
 			if err != nil {
-				return err
+				return resolved, err
 			}
 			if rejected {
 				report.Rejected = append(report.Rejected, obs.Key)
 			} else {
 				report.ExecReady = append(report.ExecReady, obs.Key)
 			}
+			resolved++
 		default:
 			report.Kept = append(report.Kept, obs.Key)
 		}
 	}
-	return d.Admission.GoLive(token)
+	return resolved, nil
 }
 
 func (d *Driver) resolve(token *admission.Token, r Reexecutor, saved admission.Observation) (bool, error) {
@@ -342,18 +385,15 @@ func (d *Driver) resolve(token *admission.Token, r Reexecutor, saved admission.O
 		return false, err
 	}
 	var result string
-	nativeErr := d.Native.Verify(saved.Key)
-	if nativeErr == nil {
-		var err error
-		result, nativeErr, err = r.Reexecute(saved.Key, saved.Candidate)
-		if err != nil {
-			return false, errors.Join(err, d.Router.Leave())
-		}
+	nativeErr, failure := d.Native.Verify(saved.Key)
+	if nativeErr == nil && failure == nil {
+		result, nativeErr, failure = r.Reexecute(saved.Key, saved.Candidate)
 	}
-	if err := obs.finish(result, nativeErr); err != nil && !errors.Is(err, nativeErr) {
-		return false, err
+	rejected, err := obs.finish(result, nativeErr, failure)
+	if rejected {
+		return true, nil
 	}
-	return nativeErr != nil, nil
+	return false, err
 }
 
 // Row is one counted Heimdall call of a window.
@@ -394,12 +434,14 @@ type Router struct {
 	// before Bor receives it (the probe's crash points).
 	AfterCounted func(Row)
 
-	mu     sync.Mutex
-	log    Log
-	open   bool
-	fault  error
-	rows   []Row
-	passed map[string]int
+	mu      sync.Mutex
+	log     Log
+	open    bool
+	fault   error
+	source  error
+	entries int
+	rows    []Row
+	passed  map[string]int
 }
 
 // Enter opens a window that routes counted requests through log.
@@ -409,19 +451,23 @@ func (r *Router) Enter(log Log) error {
 	if r.open || log == nil {
 		return ErrWindow
 	}
-	r.log, r.open, r.fault, r.rows = log, true, nil, nil
+	r.log, r.open, r.fault, r.source, r.entries, r.rows = log, true, nil, nil, 0, nil
 	return nil
 }
 
-// Leave closes the window and returns its first input failure.
-func (r *Router) Leave() error {
+// Leave closes the window. fault is the first refusal by the dependency log
+// (a prefix conflict or a store failure); it stops the window. source is the
+// last Heimdall failure that the log passed back to Bor as an explicit source
+// error; Bor may have retried it successfully, so it matters only when native
+// execution failed afterwards.
+func (r *Router) Leave() (fault, source error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.open {
-		return ErrWindow
+		return ErrWindow, nil
 	}
 	r.log, r.open = nil, false
-	return r.fault
+	return r.fault, r.source
 }
 
 // Rows returns the counted calls of the current or last window.
@@ -470,40 +516,52 @@ func response(req *http.Request, body []byte) *http.Response {
 
 // RoundTrip implements http.RoundTripper. A counted request in a window
 // holds the router lock until its response is durable, so counted requests
-// reach the log one at a time and in native order.
+// reach the log one at a time and in native order. A passed request does not
+// hold the lock while it waits for Heimdall.
 func (r *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.Host != r.Host {
 		return r.Inner.RoundTrip(req)
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if !r.open || !Counted(req.URL) {
 		if r.passed == nil {
 			r.passed = map[string]int{}
 		}
 		r.passed[req.URL.Path]++
+		r.mu.Unlock()
 		return r.Inner.RoundTrip(req)
 	}
+	defer r.mu.Unlock()
 	request := []byte(req.Method + " " + req.URL.RequestURI())
 	sum := sha256.Sum256(request)
-	row := Row{Sequence: len(r.rows), Request: string(request), RequestSHA256: hex.EncodeToString(sum[:]), Origin: "replay"}
+	row := Row{Sequence: r.entries, Request: string(request), RequestSHA256: hex.EncodeToString(sum[:]), Origin: "replay"}
 	if r.fault != nil {
 		row.Error = r.fault.Error()
 		r.rows = append(r.rows, row)
 		return nil, r.fault
 	}
+	var fetchErr error
 	body, err := r.log.Next(request, func() ([]byte, error) {
 		row.Origin = "fetch"
-		return r.fetch(req)
+		var body []byte
+		body, fetchErr = r.fetch(req)
+		return body, fetchErr
 	})
 	if err != nil {
-		r.fault = fmt.Errorf("%w: %s: %w", ErrInput, request, err)
 		row.Error = err.Error()
 		r.rows = append(r.rows, row)
+		if fetchErr != nil && errors.Is(err, fetchErr) {
+			// The log wrote nothing and stays usable: an explicit source
+			// error that Bor may retry through the log.
+			r.source = fmt.Errorf("%w: %s: %w", ErrInput, request, err)
+			return nil, r.source
+		}
+		r.fault = fmt.Errorf("%w: %s: %w", ErrInput, request, err)
 		return nil, r.fault
 	}
 	got := sha256.Sum256(body)
 	row.ResponseSHA256, row.ResponseLength = hex.EncodeToString(got[:]), len(body)
+	r.entries++
 	r.rows = append(r.rows, row)
 	if r.AfterCounted != nil {
 		r.AfterCounted(row)

@@ -39,29 +39,50 @@ One observation per block on the Bor product import path,
    capsule and `Admit`. A failure before `Admit` returns abandons the
    observation (no capture exists) and fails the import.
 3. After the closing ADMITTED sync, the driver opens the observation's
-   dependency log, installs it in the Heimdall router (the window), and drops
-   the Heimdall and snapshot caches (`ExtractorPurgeInputs`: the span store
-   caches, which also stops its poll loop and range warmup, and the snapshot
-   cache). Every Heimdall read of the block now goes through the log.
+   dependency log, installs it in the Heimdall router, and opens the window
+   (`ExtractorOpenWindow`): it waits for header verification in progress to
+   finish, holds back new header verification of other blocks
+   (`VerifyHeader`, `VerifyHeaders`, `VerifySeal`, edits `window-gate-*`),
+   and drops the Heimdall and snapshot caches (the span store caches, which
+   also stops its poll loop and range warmup, and the snapshot cache). Every
+   Heimdall read of the window now belongs to this block and goes through the
+   log.
 4. The header seal is verified again from capsule inputs only (see "Header
-   check from the capsule"). A failure is a native validation failure.
+   check from the capsule"). A `verifySeal` failure is a native validation
+   failure; a capsule that cannot be read or decoded, or a snapshot that
+   cannot be built from it, is not.
 5. `ProcessBlock` executes and validates the block (`ValidateState`).
 6. `Done`: with no error, the log is closed (`Log.Finish`) and `ExecReady`
    binds the closed consumed manifest and the native result digest. A native
    validation failure (header check or `ProcessBlock`) calls `Reject` with
-   the digest of the rejection evidence and never `ExecReady`. A counted
-   input failure (the log refused a request, or Heimdall failed) is not a
-   native validation failure: the obligation stays ADMITTED with its pin, the
-   import stops, and recovery resolves it.
+   the digest of the rejection evidence and never `ExecReady`.
+
+Failures that say nothing about the block keep the obligation ADMITTED with
+its pin: a refusal by the dependency log (prefix conflict, store failure,
+which also stops the window), a Heimdall failure before a native failure, a
+capsule read or decode failure, and local state that `ProcessBlock` could
+not read (`Fail`). A Heimdall failure is passed to Bor as an explicit source
+error and the log stays usable, so Bor's own retry goes through the log; if
+the retry succeeds, the block completes normally. The next `Observe`, or
+`Recover` at startup, resolves an ADMITTED obligation from its pin and
+capsule before any new `Begin`, so no restart is needed.
 
 The native steps after `ProcessBlock` (the milestone whitelist check
 `ValidateReorg` and the block write) are the native decision, which belongs
 to E01-02.decision_bridge.
 
-While an observer is installed, `InsertChainWithWitnesses` imports a batch
-one block at a time (edit `import-path-one-block-batches`), so no header
-verification of a later block, which may read Heimdall, runs inside the
-window of an earlier one.
+While an observer is installed, `insertChainWithWitnesses`, which every
+batch import passes (the side-chain re-import too), imports one block at a
+time (edit `import-path-one-block-batches`), so the header verification of a
+later block of the batch runs after the window of the earlier one closed.
+Header verification of other components (the block fetcher, a later batch)
+waits at the window gate.
+
+Lock order: the observation guard is taken inside `processBlockForImport`,
+with the native chain lock (`chainmu`) already held. NATIVE_CAPTURE_PROTOCOL
+puts the guard first; here no caller takes the guard and then `chainmu`.
+E01-02.lifecycle_seams and E01-02.decision_bridge must keep it that way (or
+take `chainmu` before the guard) when they add callers.
 
 Digests (SHA-256, tag followed by one zero byte, each field as an 8-byte
 big-endian length and its bytes):
@@ -142,6 +163,15 @@ fail with the same error.
 
 ## Recovery driver and startup identity
 
+`Start` first requires the single native HTTP Heimdall client at the
+configured host with the process transport (`ExtractorCheckHeimdall`): a
+gRPC client, a failover client, a client with its own transport or a
+WebSocket client would let Heimdall reads bypass the router. The effective
+`bor server` profile check (`state_provider.CheckProfile`: hash scheme,
+archive, no parallel, pipelined, stateless or preconf paths) runs where the
+server configuration exists, in the caller that E01-02.lifecycle_seams adds;
+the probe starts native Bor with that profile.
+
 `borimport.Preflight` refuses a stopped native store of another identity
 (`state_provider.Preflight`) before the node opens it. `Start` binds the store
 identity, reopens the saved producer run (`extractor-admission-run-v1/producer/<id>`),
@@ -193,11 +223,16 @@ The edit `safe-point-hook-field` adds `OnExtractorSafePoint` to
 on the native goroutine between VM steps, before the opcode hook and before
 the opcode changes memory or state. Only traced execution calls it: the
 prefetchers clear the tracer. The hook returns nothing, so it cannot change
-native execution. `borimport.SafePoint` maps it to `core/capture`: it reserves
+native execution. It runs after the gas charge and memory expansion of the
+opcode, before the opcode hook and the opcode itself. `borimport.SafePoint`
+maps it to `core/capture`: it reserves
 callback credit at the safe point (waiting for the worker when the budget is
 full) and the opcode hook notes the opcode from that credit inside the
 callback, where nothing may wait. A capture error stops the capture and is
-reported by `Stats`. The raw spool encoder belongs to E04-04.import_pressure.
+reported by `Stats`. Installing a capture producer (tracer hooks with the
+safe point) on the chain, together with the raw spool encoder, belongs to
+E04-04.import_pressure (D98 item 4); this block adds the patch and the
+adapter, and the native tests drive them with a real EVM run.
 
 ## Checks
 
@@ -217,9 +252,19 @@ reported by `Stats`. The raw spool encoder belongs to E04-04.import_pressure.
 
 - Private local evidence only (D96, D98, D99): test genesis, one validator,
   stub Heimdall. Public profiles stay with E06 and E07.
-- A Heimdall read by another component during a window (for example an RPC
-  span query) would enter the log; recovery then fails closed with a prefix
-  conflict or unconsumed entries instead of capturing different inputs.
+- Header verification is held back during a window, but other Heimdall
+  readers are not: an RPC query of the span or snapshot API during a window
+  would enter the log; recovery then fails closed with a prefix conflict or
+  unconsumed entries instead of capturing different inputs. The capture
+  profile runs no such RPC.
+- `bor snapshot prune-block` (ancient block pruning) is not guarded; D98
+  item 2 names four guards and this is not one of them. It can delete old
+  pinned headers and remains a known hazard, like the unguarded paths that
+  D98 listed before this block.
+- In the probe, `SetHead` and the startup prune recovery are refused inside
+  the probe process, which imports `borwire` like the shipped `bor`; the
+  shipped binary itself runs `snapshot prune-state`, and the preparation
+  records that `./cmd/cli` depends on `borwire`.
 - Process loss in the probe is a real SIGKILL right after a sync, not a power
   cut; a process kill keeps unsynced writes, so loss of unsynced writes is
   covered only by the unit tests of the shared core.

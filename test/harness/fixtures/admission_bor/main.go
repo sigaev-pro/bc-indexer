@@ -541,6 +541,7 @@ func attempt(args []string) (returned error) {
 	crashValue := flags.String("crash", "", "crash point STEP@BLOCK")
 	setHead := flags.Int64("set-head", -1, "after the import, ask native SetHead for this head (must be refused)")
 	walk := flags.Uint64("walk-check", 0, "check the native snapshot walk of this observed block from its capsule")
+	batch := flags.Bool("batch", false, "import the observed range with one native InsertChain call")
 	store := flags.String("store-id", storeID, "producer binding of the native store")
 	output := flags.String("out", "", "result JSON")
 	if err := flags.Parse(args); err != nil {
@@ -551,15 +552,15 @@ func attempt(args []string) (returned error) {
 	if err != nil {
 		return err
 	}
-	// windowRows are the counted calls of the current window, as the crash
-	// point sees them (the router lock is held while AfterCounted runs).
-	var windowRows []obligation.Row
+	rec := &recorder{result: &result}
 	if crash != nil {
 		crash.output = *output + ".crash.json"
 		crash.result = func() any {
+			rec.mu.Lock()
+			defer rec.mu.Unlock()
 			result.Crashed = true
 			if n := len(result.Observations); n > 0 {
-				result.Observations[n-1].Rows = append([]obligation.Row{}, windowRows...)
+				result.Observations[n-1].Rows = append([]obligation.Row{}, rec.window...)
 			}
 			return result
 		}
@@ -616,9 +617,12 @@ func attempt(args []string) (returned error) {
 		shutdown(stack, eth)
 	}()
 	router := node.Router
+	rec.node = node
 	result.Run = node.Run
 	router.AfterCounted = func(row obligation.Row) {
-		windowRows = append(windowRows, row)
+		rec.mu.Lock()
+		rec.window = append(rec.window, row)
+		rec.mu.Unlock()
 		crash.fire(fmt.Sprintf("log-%d", row.Sequence))
 	}
 	// RECOVERY_ONLY: with a saved obligation, GoLive and Begin are refused.
@@ -654,29 +658,39 @@ func attempt(args []string) (returned error) {
 		// Blocks below the observed range: a chain the node already had.
 		node.Detach()
 		result.BaseInserted, err = chain.InsertChain(blocks[:*base], false)
-		chain.SetExtractorObserver(node)
 		http.DefaultTransport = router
 		if err != nil {
 			return fmt.Errorf("base import: %w", err)
 		}
 	}
-	for number := *from; number <= *to; number++ {
-		block := blocks[number-1]
-		if chain.HasBlockAndState(block.Hash(), number) {
-			continue
+	chain.SetExtractorObserver(rec)
+	if *batch {
+		// One native batch: the patched import splits it into one block per
+		// observation window.
+		var pending []*types.Block
+		for number := *from; number <= *to; number++ {
+			if block := blocks[number-1]; !chain.HasBlockAndState(block.Hash(), number) {
+				pending = append(pending, block)
+			}
 		}
-		setObserving(number)
-		windowRows = nil
-		result.Observations = append(result.Observations, Observed{Block: number})
-		observed := &result.Observations[len(result.Observations)-1]
-		_, err := chain.InsertChain([]*types.Block{block}, false)
-		observed.Rows = router.Rows()
-		if err != nil {
-			observed.Error = err.Error()
-			result.ImportError = err.Error()
-			break
+		if len(pending) > 0 {
+			result.Inserted, err = chain.InsertChain(pending, false)
+			if err != nil {
+				result.ImportError = err.Error()
+			}
 		}
-		result.Inserted++
+	} else {
+		for number := *from; number <= *to; number++ {
+			block := blocks[number-1]
+			if chain.HasBlockAndState(block.Hash(), number) {
+				continue
+			}
+			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
+				result.ImportError = err.Error()
+				break
+			}
+			result.Inserted++
+		}
 	}
 	setObserving(0)
 	head := chain.CurrentBlock()
@@ -694,6 +708,57 @@ func attempt(args []string) (returned error) {
 		}
 	}
 	return nil
+}
+
+// recorder wraps the admission observer and keeps the counted calls and the
+// outcome of every observation, so a batch import is judged block by block.
+type recorder struct {
+	node   *borimport.Node
+	mu     sync.Mutex
+	result *attemptResult
+	window []obligation.Row // counted calls of the open window, for crash points
+}
+
+type recorded struct {
+	recorder *recorder
+	inner    core.ExtractorObservation
+}
+
+func (r *recorder) Observe(block *types.Block, parent *types.Header) (core.ExtractorObservation, error) {
+	setObserving(block.NumberU64())
+	r.mu.Lock()
+	r.result.Observations = append(r.result.Observations, Observed{Block: block.NumberU64()})
+	r.window = nil
+	r.mu.Unlock()
+	inner, err := r.node.Observe(block, parent)
+	if err != nil {
+		r.finish(err)
+		return nil, err
+	}
+	return recorded{recorder: r, inner: inner}, nil
+}
+
+func (r *recorder) finish(err error) {
+	rows := r.node.Router.Rows()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	last := &r.result.Observations[len(r.result.Observations)-1]
+	last.Rows = rows
+	if err != nil {
+		last.Error = err.Error()
+	}
+}
+
+func (o recorded) Done(block *types.Block, receipts types.Receipts, usedGas uint64, err error) error {
+	err = o.inner.Done(block, receipts, usedGas, err)
+	o.recorder.finish(err)
+	return err
+}
+
+func (o recorded) Fail(err error) error {
+	err = o.inner.Fail(err)
+	o.recorder.finish(err)
+	return err
 }
 
 // describe fills the observation keys and capsule summaries from the store.
@@ -829,6 +894,7 @@ type Step struct {
 	Crash     string `json:"crash"`
 	SetHead   int64  `json:"set_head"`
 	Walk      uint64 `json:"walk_check"`
+	Batch     bool   `json:"batch"`
 	PruneDir  string `json:"stale_prune_dir"`
 	PruneTool string `json:"prune_state"`
 	StoreID   string `json:"store_id"`
@@ -895,7 +961,7 @@ func scenario(args []string) error {
 			argv := []string{"attempt", "-genesis", *genesisPath, "-config", *configPath, "-blocks", *blocks,
 				"-bodies", *bodies, "-datadir", dataDir, "-commit", *commit, "-variant", step.Variant,
 				"-base", fmt.Sprint(step.Base), "-from", fmt.Sprint(step.From), "-to", fmt.Sprint(step.To),
-				"-crash=" + step.Crash, "-store-id", storeIDOf(step), "-set-head", fmt.Sprint(step.SetHead), "-walk-check", fmt.Sprint(step.Walk),
+				"-crash=" + step.Crash, "-store-id", storeIDOf(step), "-set-head", fmt.Sprint(step.SetHead), "-walk-check", fmt.Sprint(step.Walk), fmt.Sprintf("-batch=%t", step.Batch),
 				"-out", out}
 			row["argv"] = argv
 			row["status"], err = runChild(os.Args[0], argv, filepath.Join(*output, fmt.Sprintf("attempt-%d.log", index)))

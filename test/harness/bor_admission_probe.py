@@ -191,6 +191,10 @@ def prepare_bor(manifest, root, output, native, compiler, oracle, deadline):
     text = stdout.read_text(errors="replace")
     go_test_passed(text, ("core/rawdb",))
     require("--- PASS: TestExtractorFreezeThreshold" in text, "The freezer threshold test did not run")
+    stdout = go(["list", "-deps", "./cmd/cli"], 600)
+    row["shipped_binary_deps"] = reference(stdout)
+    require(f"{PACKAGE}/extractor/borwire" in stdout.read_text().split(),
+            "The shipped bor binary does not install the retention hooks")
     go(["build", "-p", "2", "-trimpath", "-o", "/work/bin/probe", f"./{PROBE_DIR}"], 1800)
     go(["build", "-p", "2", "-trimpath", "-o", "/work/bin/bor", "./cmd/cli"], 1800)
     bin_directory = directory / "bin"

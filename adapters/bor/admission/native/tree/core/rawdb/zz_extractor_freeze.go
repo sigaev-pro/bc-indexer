@@ -16,7 +16,8 @@ var errExtractorFreezeView = errors.New("extractor freeze limit needs the freeze
 
 // extractorFreezeThreshold lowers the inclusive native threshold to the pin
 // ledger limit. FreezeLimit takes and returns exclusive limits, so the
-// result is min(threshold, limit-1); a limit of 0 leaves nothing to freeze.
+// result is min(threshold, limit-1). A limit of 0 has no inclusive
+// threshold, so it is an error and the freezer freezes nothing.
 // FreezeLimit reads canonical hashes and headers that may already be frozen,
 // so it reads through the key-value store together with this freezer.
 func (f *chainFreezer) extractorFreezeThreshold(db ethdb.KeyValueReader, threshold uint64) (uint64, error) {
@@ -32,7 +33,7 @@ func (f *chainFreezer) extractorFreezeThreshold(db ethdb.KeyValueReader, thresho
 		return 0, err
 	}
 	if limit == 0 {
-		return 0, errors.New("freezing threshold is not available: a pinned side branch forks at genesis")
+		return 0, errors.New("freezing threshold is not available: the pin ledger limit is 0")
 	}
 	return min(threshold, limit-1), nil
 }

@@ -21,10 +21,13 @@ type ExtractorObserver interface {
 	Observe(block *types.Block, parent *types.Header) (ExtractorObservation, error)
 }
 
-// ExtractorObservation receives the native result of ProcessBlock: the
-// receipts, the gas used and the execution and validation error.
+// ExtractorObservation receives the native result of ProcessBlock. Done gets
+// the receipts, the gas used and the execution and validation error. Fail
+// gets an error that says nothing about the block (local state that native
+// code could not read); the obligation then stays open.
 type ExtractorObservation interface {
 	Done(block *types.Block, receipts types.Receipts, usedGas uint64, err error) error
+	Fail(err error) error
 }
 
 // extractorObservers maps a chain to its observer. A package map keeps the
@@ -48,21 +51,25 @@ func (bc *BlockChain) extractorObserver() ExtractorObserver {
 }
 
 // extractorInsertEach imports a batch one block at a time while an observer
-// is installed, so no header verification of a later block runs inside the
-// observation window of an earlier one. It keeps the native result shape:
-// the index of the failing block, or the batch length.
-func (bc *BlockChain) extractorInsertEach(chain types.Blocks, makeWitness bool, witnesses []*stateless.Witness) (int, error) {
+// is installed, so the header verification of a later block in the batch
+// never runs inside the observation window of an earlier one. Every batch
+// import passes here, the side-chain re-import too. It keeps the native
+// result shape: the index of the failing block, or the batch length.
+func (bc *BlockChain) extractorInsertEach(chain types.Blocks, setHead bool, makeWitness bool, witnesses []*stateless.Witness) (*stateless.Witness, int, error) {
+	var witness *stateless.Witness
 	for i := range chain {
 		var one []*stateless.Witness
 		if witnesses != nil {
 			one = witnesses[i : i+1]
 		}
-		n, err := bc.InsertChainWithWitnesses(chain[i:i+1], makeWitness, one)
+		var n int
+		var err error
+		witness, n, err = bc.insertChainWithWitnesses(chain[i:i+1], setHead, makeWitness, one)
 		if err != nil {
-			return i + n, err
+			return witness, i + n, err
 		}
 	}
-	return len(chain), nil
+	return witness, len(chain), nil
 }
 
 // extractorProcess runs one block inside its observation. Preconfirmed
@@ -74,8 +81,14 @@ func (bc *BlockChain) extractorProcess(observer ExtractorObserver, block *types.
 		return nil, nil, 0, nil, 0, err
 	}
 	receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent, witness, interrupt, pipeOpts)
-	if doneErr := observation.Done(block, receipts, usedGas, err); doneErr != nil {
-		err = doneErr
+	var closeErr error
+	if err != nil && isLocalStateUnavailable(err) {
+		closeErr = observation.Fail(err)
+	} else {
+		closeErr = observation.Done(block, receipts, usedGas, err)
+	}
+	if closeErr != nil {
+		err = closeErr
 	}
 	return receipts, logs, usedGas, statedb, vtime, err
 }

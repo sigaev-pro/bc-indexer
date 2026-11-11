@@ -75,30 +75,6 @@
       "replacement": "\tif _, err := d.Admission.Admit(token, key); err != nil {\n\t\treturn nil, err"
     },
     {
-      "name": "failed header check rejects",
-      "file": "native/obligation/obligation.go",
-      "original": "\t\treturn nil, obs.finish(\"\", err)",
-      "replacement": "\t\treturn nil, err"
-    },
-    {
-      "name": "window purges caches",
-      "file": "native/obligation/obligation.go",
-      "original": "\to.driver.Native.Purge()\n",
-      "replacement": ""
-    },
-    {
-      "name": "second Done is refused",
-      "file": "native/obligation/obligation.go",
-      "original": "\tif o.closed {\n\t\treturn ErrWindow\n\t}\n\to.closed = true",
-      "replacement": "\to.closed = true"
-    },
-    {
-      "name": "input failure keeps the obligation",
-      "file": "native/obligation/obligation.go",
-      "original": "\tif fault != nil {\n\t\treturn errors.Join(fault, nativeErr)",
-      "replacement": "\tif false {\n\t\treturn errors.Join(fault, nativeErr)"
-    },
-    {
       "name": "native failure rejects",
       "file": "native/obligation/obligation.go",
       "original": "\tif nativeErr != nil {\n\t\tevidence",
@@ -113,7 +89,7 @@
     {
       "name": "log closes before EXEC_READY",
       "file": "native/obligation/obligation.go",
-      "original": "\tif err := o.log.Finish(); err != nil {\n\t\treturn err\n\t}\n",
+      "original": "\tif err := o.log.Finish(); err != nil {\n\t\treturn false, err\n\t}\n",
       "replacement": "\t_ = o.log.Finish()\n"
     },
     {
@@ -125,7 +101,7 @@
     {
       "name": "recovery abandons INPUT_PREPARING",
       "file": "native/obligation/obligation.go",
-      "original": "\t\t\tif err := d.Admission.Abandon(token, obs.Key); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n",
+      "original": "\t\t\tif err := d.Admission.Abandon(token, obs.Key); err != nil {\n\t\t\t\treturn resolved, err\n\t\t\t}\n",
       "replacement": ""
     },
     {
@@ -133,36 +109,6 @@
       "file": "native/obligation/obligation.go",
       "original": "\t\t\treport.Abandoned = append(report.Abandoned, obs.Key)\n",
       "replacement": ""
-    },
-    {
-      "name": "recovery goes live",
-      "file": "native/obligation/obligation.go",
-      "original": "\treturn d.Admission.GoLive(token)",
-      "replacement": "\treturn nil"
-    },
-    {
-      "name": "recovery checks the header",
-      "file": "native/obligation/obligation.go",
-      "original": "\tnativeErr := d.Native.Verify(saved.Key)",
-      "replacement": "\tvar nativeErr error"
-    },
-    {
-      "name": "recovery closes the window on a failure",
-      "file": "native/obligation/obligation.go",
-      "original": "\t\t\treturn false, errors.Join(err, d.Router.Leave())",
-      "replacement": "\t\t\treturn false, err"
-    },
-    {
-      "name": "recovery reports a rejection",
-      "file": "native/obligation/obligation.go",
-      "original": "\treturn nativeErr != nil, nil",
-      "replacement": "\treturn false, nil"
-    },
-    {
-      "name": "recovery accepts a rejection",
-      "file": "native/obligation/obligation.go",
-      "original": "\tif err := obs.finish(result, nativeErr); err != nil && !errors.Is(err, nativeErr) {",
-      "replacement": "\tif err := obs.finish(result, nativeErr); err != nil {"
     },
     {
       "name": "status is counted",
@@ -277,6 +223,120 @@
       "file": "native/obligation/obligation.go",
       "original": "return digest(tagExec, blockHash, stateRoot, receiptRoot, gasUsed)",
       "replacement": "return digest(tagExec, blockHash, stateRoot, receiptRoot)"
+    },
+    {
+      "name": "window opens with the cache purge and gate",
+      "file": "native/obligation/obligation.go",
+      "original": "\to.driver.Native.OpenWindow()\n",
+      "replacement": ""
+    },
+    {
+      "name": "every finish closes the window",
+      "file": "native/obligation/obligation.go",
+      "original": "\td.Native.CloseWindow()\n",
+      "replacement": ""
+    },
+    {
+      "name": "failed header check rejects",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\t_, finishErr := obs.finish(\"\", nativeErr, err)",
+      "replacement": "\t\tfinishErr := nativeErr"
+    },
+    {
+      "name": "infrastructure failure keeps the obligation",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif failure != nil || fault != nil || source != nil {",
+      "replacement": "\tif fault != nil || source != nil {"
+    },
+    {
+      "name": "log refusal keeps the obligation",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif failure != nil || fault != nil || source != nil {",
+      "replacement": "\tif failure != nil || source != nil {"
+    },
+    {
+      "name": "source failure before a native failure keeps the obligation",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif failure != nil || fault != nil || source != nil {",
+      "replacement": "\tif failure != nil || fault != nil {"
+    },
+    {
+      "name": "a retried source failure is not an input failure",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif nativeErr == nil {\n\t\t// Bor retried",
+      "replacement": "\tif false {\n\t\t// Bor retried"
+    },
+    {
+      "name": "rejected only when Reject succeeded",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\treturn true, nativeErr",
+      "replacement": "\t\treturn false, nativeErr"
+    },
+    {
+      "name": "Reject failure is not a rejection",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\t\treturn false, errors.Join(nativeErr, err)",
+      "replacement": "\t\t\treturn true, errors.Join(nativeErr, err)"
+    },
+    {
+      "name": "second close is refused",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif o.closed {\n\t\treturn ErrWindow\n\t}\n\to.closed = true",
+      "replacement": "\to.closed = true"
+    },
+    {
+      "name": "Fail keeps the obligation",
+      "file": "native/obligation/obligation.go",
+      "original": "\treturn o.close(\"\", nil, err)",
+      "replacement": "\treturn o.close(\"\", err, nil)"
+    },
+    {
+      "name": "recovery goes live",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\terr = d.Admission.GoLive(token)",
+      "replacement": "\t\terr = nil"
+    },
+    {
+      "name": "recovery checks the header",
+      "file": "native/obligation/obligation.go",
+      "original": "\tnativeErr, failure := d.Native.Verify(saved.Key)",
+      "replacement": "\tvar nativeErr, failure error"
+    },
+    {
+      "name": "recovery reports a rejection",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif rejected {\n\t\treturn true, nil",
+      "replacement": "\tif rejected && false {\n\t\treturn true, nil"
+    },
+    {
+      "name": "saved obligations resolve before Begin",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif d.Reexecutor != nil {\n\t\tif _, err := d.resolveSaved(token, d.Reexecutor, &Report{}); err != nil {",
+      "replacement": "\tif false {\n\t\tif _, err := d.resolveSaved(token, d.Reexecutor, &Report{}); err != nil {"
+    },
+    {
+      "name": "a failed resolve stops the observation",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\tif _, err := d.resolveSaved(token, d.Reexecutor, &Report{}); err != nil {\n\t\t\treturn nil, err",
+      "replacement": "\t\tif _, err := d.resolveSaved(token, d.Reexecutor, &Report{}); err != nil {\n\t\t\t_ = err"
+    },
+    {
+      "name": "a source error stays retryable",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\tif fetchErr != nil && errors.Is(err, fetchErr) {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "row sequence is the log entry",
+      "file": "native/obligation/obligation.go",
+      "original": "\tr.entries++\n",
+      "replacement": ""
+    },
+    {
+      "name": "observe error releases the guard",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\tif releaseErr := token.Release(); releaseErr != nil {\n\t\t\terr = errors.Join(err, releaseErr)\n\t\t}\n\t\treturn nil, err",
+      "replacement": "\t\treturn nil, err"
     }
   ]
 }
