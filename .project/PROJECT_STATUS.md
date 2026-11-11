@@ -2,7 +2,7 @@
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
-Status: IN_PROGRESS, block 0 admission-core in draft PR #146. Dependencies E01-02.pins (#13),
+Status: IN_PROGRESS; block 0 admission-core ACCEPTED in PR #146 at merge `9046de9`. Dependencies E01-02.pins (#13),
 E01-02.inputs (#14) and E01-02.owned_capture (#15) are accepted. Plan agreed
 with the owner on 2026-11-11, the same split as #14 under D97 and D98: block
 0 core (architect, then native-engineer), then up to three parallel
@@ -111,8 +111,74 @@ PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
 terminal record before the release, lets `Open` release the pins of closed
 observations above the low-water mark again, and fixes the wording.
 
-Next: review 003 of the head with record 03, hosted CI, then READY for the
-coordinator.
+Next: none for block 0; it is merged (PR #146, merge `9046de9`). The Geth,
+BSC and Bor blocks run in parallel sessions, each with its own section
+below.
+
+## E01-02.admission — Geth block
+
+Status: IN_PROGRESS (part of #16). Base `9046de9`, after block 0 (PR #146)
+merged. Branch/worktree: `claude/e01-02-admission-geth-95b3ee` /
+`e01-02-admission-geth-95b3ee`. Role: native-engineer; reviewer for the Spec
+and Standards reviews. Allowed paths: `adapters/geth/admission/native/**`,
+`test/harness/fixtures/admission_geth/**`,
+`.project/evidence/E01-02.admission.geth.md` and this section, plus the
+block 0 status and "Next" lines above. The shared copies of `admission`
+and `source_inputs` are unchanged. Profile: private local ETH fixture
+(chain ID 31337) in the accepted Geth tree `1df30b18`; public cells stay
+NOT_RUN (D96, D98, D99).
+
+Scope: every Geth row of the plan table above. Design in
+[adapters/geth/admission/native/README.md](../adapters/geth/admission/native/README.md):
+
+- Product native patch set (`patches.json`, 20 anchored patches and two new
+  files): `ProcessBlock` calls `Begin` (INPUT_PREPARING, pin, seal, closing
+  ADMITTED sync) before `processor.Process`, `ExecReady` after validation
+  and before the block is written, and `Reject` on any native validation
+  failure; the import entry points take the observation guard before the
+  chain mutex.
+- Retention patch (D98 item 2): `geth snapshot prune-state` calls
+  `PruneState`, startup calls `RecoverPruning` through the guard, requested
+  rewinds call `RequireRewindAllowed` under the chain mutex, and the chain
+  freezer uses `FreezeLimit`.
+- VM safe-point patch (D98 item 4): the interpreter calls
+  `vm.Config.ExtractorSafePoint` between VM steps; an execution with a safe
+  point runs the table loop.
+- Pin adapter, recovery driver (RECOVERY_ONLY, re-execute every ADMITTED
+  obligation from its pin and capsule through the patched import, then
+  GoLive), startup identity (Preflight before the store opens, Bind, the
+  saved producer run record).
+- Capsule items `chain-config` and `fork-id` in the shared canonical JSON
+  form (D99 item 3); the capsule holds the full 256-header BLOCKHASH window,
+  which native execution reads from the saved headers (D99 item 5).
+
+Evidence: [E01-02.admission.geth](evidence/E01-02.admission.geth.md).
+
+Draft PR #147. Review 001 (head `3304991`): Spec REQUEST_CHANGES (P2:
+recovery moved the head, recovery did not check the static inputs, a bound
+store started without a config; P3: Begin after the prefetcher, the
+stateless self-check reached the safe point, an early evidence claim) and
+Standards REQUEST_CHANGES (P1: `debug_executionWitness` reached the
+admission without the guard; P2: recovery moved the head, the stateless
+self-check, a 3600-second run deadline, no coverage of the engine import
+path; P3 wording and docs). The next commit fixes all of them. Preparation
+01 at `3304991` waited for the host lock and was stopped before it started,
+because review 001 made it stale; its wait record is kept.
+
+Review 002 (head `07fec51`): Spec PASS with one P3 (the preparation 01
+wording) and Standards REQUEST_CHANGES (P2: `geth import` opened the chain
+without `eth.New` and could import into a capture store; P3: the same
+wording, a comment wrap). Commit `717cae6` refuses every state-writing
+import into a capture store when no admission is installed, adds the
+shipped `geth import` row and a mutant, and fixes the wording.
+
+Evidence at `717cae6`: preparation 03 PASS (64 unit tests, 21 native mutant
+builds), measured run 03 PASS (probe PASS, 21 of 21 native mutants killed,
+432 seconds), Python mutants 64 of 64 killed. Records 02 at `d438376`
+passed and are superseded and kept.
+
+Resume point: review 003 of the head with records 03, hosted CI, then READY
+for the coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 

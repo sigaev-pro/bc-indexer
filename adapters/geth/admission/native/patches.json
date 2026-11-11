@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "description": "Product native patch set of the E01-02.admission Geth block. Each original must occur exactly once in the accepted Geth tree; the preparation applies the replacements in order and records the file digests.",
+  "source_commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+  "files": {
+    "core_hook.go.txt": "core/extractor_admission.go",
+    "rawdb_hook.go.txt": "core/rawdb/extractor_retention.go"
+  },
+  "patches": [
+    {
+      "name": "vm_config_fields",
+      "file": "core/vm/interpreter.go",
+      "original": "\tDisableParallelExecution bool  // Disable parallel block processing\n}\n",
+      "replacement": "\tDisableParallelExecution bool  // Disable parallel block processing\n\n\t// ExtractorGetHash, when set, answers every BLOCKHASH lookup of the block\n\t// that the serial state processor executes with this config\n\t// (E01-02.admission: the saved ancestor headers of the capsule).\n\tExtractorGetHash GetHashFunc\n\t// ExtractorSafePoint, when set, is called on the native goroutine between\n\t// VM steps, before the opcode hook and before the opcode changes memory\n\t// or state. It is the VM safe point of the owned capture seam\n\t// (core/capture): it may wait for capture budget. It is never called\n\t// inside a tracing hook.\n\tExtractorSafePoint func(OpCode, *ScopeContext)\n}\n",
+      "reason": "Adds the BLOCKHASH answer function and the VM safe point to the per-execution VM config."
+    },
+    {
+      "name": "vm_safe_point",
+      "file": "core/vm/interpreter.go",
+      "original": "\t\t// Do tracing before potential memory expansion\n",
+      "replacement": "\t\tif evm.Config.ExtractorSafePoint != nil {\n\t\t\tevm.Config.ExtractorSafePoint(op, callContext)\n\t\t}\n\t\t// Do tracing before potential memory expansion\n",
+      "reason": "D98 item 4: the interpreter calls the owned capture safe point between VM steps."
+    },
+    {
+      "name": "vm_safe_point_loop",
+      "file": "core/vm/interpreter.go",
+      "original": "\tif evm.forceTableLoop || evm.chainRules.IsEIP4762 || len(evm.Config.ExtraEips) > 0 || evm.Config.Tracer != nil {\n",
+      "replacement": "\t// E01-02.admission: the VM safe point lives in the table loop, so an\n\t// execution with a safe point runs there.\n\tif evm.forceTableLoop || evm.chainRules.IsEIP4762 || len(evm.Config.ExtraEips) > 0 || evm.Config.Tracer != nil ||\n\t\tevm.Config.ExtractorSafePoint != nil {\n",
+      "reason": "D98 item 4: the generated untraced loop has no safe point, so an execution with a safe point uses the table loop, which the native differential test keeps equal to it."
+    },
+    {
+      "name": "state_processor_get_hash",
+      "file": "core/state_processor.go",
+      "original": "\tdefer evm.Release()\n",
+      "replacement": "\tdefer evm.Release()\n\tif cfg.ExtractorGetHash != nil {\n\t\tevm.Context.GetHash = cfg.ExtractorGetHash\n\t}\n",
+      "reason": "The serial state processor answers BLOCKHASH from the saved capsule headers."
+    },
+    {
+      "name": "blockchain_field",
+      "file": "core/blockchain.go",
+      "original": "type BlockChain struct {\n\tchainConfig *params.ChainConfig // Chain & network configuration\n",
+      "replacement": "type BlockChain struct {\n\textractor ExtractorAdmission // E01-02.admission seam; nil without an extractor\n\n\tchainConfig *params.ChainConfig // Chain & network configuration\n",
+      "reason": "Holds the admission seam."
+    },
+    {
+      "name": "insert_chain_guard",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {\n",
+      "replacement": "func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {\n\tdefer bc.extractorLock()()\n",
+      "reason": "An import entry point that reaches ProcessBlock takes the observation guard before the chain mutex."
+    },
+    {
+      "name": "insert_without_head_guard",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *types.Block, makeWitness bool) (witness *stateless.Witness, err error) {\n",
+      "replacement": "func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *types.Block, makeWitness bool) (witness *stateless.Witness, err error) {\n\tdefer bc.extractorLock()()\n",
+      "reason": "An import entry point that reaches ProcessBlock takes the observation guard before the chain mutex."
+    },
+    {
+      "name": "set_canonical_guard",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n",
+      "replacement": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tdefer bc.extractorLock()()\n",
+      "reason": "An import entry point that reaches ProcessBlock takes the observation guard before the chain mutex."
+    },
+    {
+      "name": "rewind_guard",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Hash, repair bool) (uint64, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n",
+      "replacement": "func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Hash, repair bool) (uint64, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\n\t// E01-02.admission retention patch (D98 item 2): a requested rewind\n\t// (SetHead, SetHeadWithTimestamp, debug_setHead) must not delete a pinned\n\t// header.\n\tif !repair {\n\t\tif err := bc.extractorRewindAllowed(head, time); err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t}\n",
+      "reason": "D98 item 2: RequireRewindAllowed guards every requested rewind under the chain mutex."
+    },
+    {
+      "name": "process_block_begin",
+      "file": "core/blockchain.go",
+      "original": "\tvmConfig := bc.overrideTracerActivation(config.EnableTracer)\n",
+      "replacement": "\tvmConfig := bc.overrideTracerActivation(config.EnableTracer)\n\n\t// E01-02.admission: an import that writes state starts its observation\n\t// before anything of the block runs: Begin, pin, seal and the closing\n\t// ADMITTED sync. Executions that write nothing (debug_executionWitness)\n\t// are not observed. An admitted block runs serially. A failure of\n\t// execution or validation below closes the observation as\n\t// NATIVE_REJECTED.\n\tvar extractorObservation ExtractorObservation\n\tif bc.extractor != nil && config.WriteState {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tdefer func() {\n\t\t\tif closeErr := observation.Close(blockEndErr); closeErr != nil {\n\t\t\t\tblockEndErr = errors.Join(blockEndErr, closeErr)\n\t\t\t}\n\t\t}()\n\t\tvmConfig.DisableParallelExecution = true\n\t\textractorObservation = observation\n\t} else if config.WriteState && ExtractorRequireNoCapture != nil {\n\t\t// Without an admission (geth import, or a node without its config),\n\t\t// a store of a capture producer never imports a block.\n\t\tif err := ExtractorRequireNoCapture(bc.db); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n",
+      "reason": "Product import path: the per-block observation of a state-writing import starts before setupExecutionState, the prefetcher and processor.Process. Without an admission, a state-writing import into a capture store is refused."
+    },
+    {
+      "name": "process_block_configure",
+      "file": "core/blockchain.go",
+      "original": "\t// Process block using the parent state as reference point\n\tpstart := time.Now()\n",
+      "replacement": "\t// E01-02.admission: the saved BLOCKHASH answers and the VM safe point\n\t// apply to this serial execution only; the prefetcher started above\n\t// holds its own copy of the config.\n\tif extractorObservation != nil {\n\t\textractorObservation.Configure(&vmConfig)\n\t}\n\n\t// Process block using the parent state as reference point\n\tpstart := time.Now()\n",
+      "reason": "The saved BLOCKHASH answers and the safe point reach processor.Process only."
+    },
+    {
+      "name": "stateless_self_check",
+      "file": "core/blockchain.go",
+      "original": "\t\tcrossStateRoot, crossReceiptRoot, err := ExecuteStateless(ctx, bc.chainConfig, vmConfig, task, witness)\n",
+      "replacement": "\t\t// E01-02.admission: the self-check is a second execution; it gets\n\t\t// neither the saved BLOCKHASH answers nor the VM safe point.\n\t\tstatelessConfig := vmConfig\n\t\tstatelessConfig.ExtractorGetHash, statelessConfig.ExtractorSafePoint = nil, nil\n\t\tcrossStateRoot, crossReceiptRoot, err := ExecuteStateless(ctx, bc.chainConfig, statelessConfig, task, witness)\n",
+      "reason": "The stateless self-check never reaches the capture safe point, so no CALL input is captured twice."
+    },
+    {
+      "name": "process_block_exec_ready",
+      "file": "core/blockchain.go",
+      "original": "\tvar (\n\t\txvtime   = time.Since(xvstart)\n",
+      "replacement": "\t// E01-02.admission: native validation passed; EXEC_READY is durable\n\t// before the block is written.\n\tif extractorObservation != nil {\n\t\tif err := extractorObservation.ExecReady(block, res); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\n\tvar (\n\t\txvtime   = time.Since(xvstart)\n",
+      "reason": "EXEC_READY after ValidateState and stateless self-validation."
+    },
+    {
+      "name": "freezer_limit",
+      "file": "core/rawdb/chain_freezer.go",
+      "original": "\t\tthreshold, err := f.freezeThreshold(nfdb)\n",
+      "replacement": "\t\tthreshold, err := f.freezeThreshold(nfdb)\n\t\tif err == nil {\n\t\t\t// E01-02.admission retention patch (D98 item 2): FreezeLimit.\n\t\t\tthreshold, err = extractorFreezeThreshold(nfdb, threshold)\n\t\t}\n",
+      "reason": "D98 item 2: the chain freezer stays below the fork point of every pinned side-branch header."
+    },
+    {
+      "name": "backend_import",
+      "file": "eth/backend.go",
+      "original": "\t\"github.com/ethereum/go-ethereum/core/state/pruner\"\n",
+      "replacement": "\textractorgeth \"github.com/ethereum/go-ethereum/extractor/admission/native\"\n",
+      "reason": "The node links the Geth admission wiring; the native pruner is reached through the guard."
+    },
+    {
+      "name": "backend_preflight",
+      "file": "eth/backend.go",
+      "original": "\tchainDb, err := stack.OpenDatabaseWithOptions(\"chaindata\", dbOptions)\n",
+      "replacement": "\t// E01-02.admission startup identity: refuse a native store of another\n\t// identity before native code opens it.\n\textractorConfig, err := extractorgeth.ConfigFromEnvironment()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif extractorConfig != nil {\n\t\tif err := extractorgeth.Preflight(stack.ResolvePath(\"\"), *extractorConfig); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tchainDb, err := stack.OpenDatabaseWithOptions(\"chaindata\", dbOptions)\n",
+      "reason": "Startup identity: Preflight of E01-02.pins before the store opens."
+    },
+    {
+      "name": "backend_recover_pruning",
+      "file": "eth/backend.go",
+      "original": "\t\tif err := pruner.RecoverPruning(stack.ResolvePath(\"\"), chainDb); err != nil {\n\t\t\tlog.Error(\"Failed to recover state\", \"error\", err)\n\t\t}\n",
+      "replacement": "\t\t// E01-02.admission retention patch (D98 item 2): an interrupted prune\n\t\t// resumes only without live pins; otherwise the node does not start.\n\t\tif err := extractorgeth.RecoverPruning(chainDb, stack.ResolvePath(\"\")); err != nil {\n\t\t\treturn nil, err\n\t\t}\n",
+      "reason": "D98 item 2: RecoverPruning from the shipped binary."
+    },
+    {
+      "name": "backend_attach",
+      "file": "eth/backend.go",
+      "original": "\teth.blockchain, err = core.NewBlockChain(chainDb, config.Genesis, eth.engine, options)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
+      "replacement": "\teth.blockchain, err = core.NewBlockChain(chainDb, config.Genesis, eth.engine, options)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\t// E01-02.admission: bind the store, open the saved producer run, run the\n\t// recovery driver and switch to LIVE before any import. Without a config,\n\t// refuse a store that belongs to a capture producer.\n\tif extractorConfig != nil {\n\t\tif _, err := extractorgeth.Attach(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{}); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t} else if err := extractorgeth.RequireNoCapture(chainDb); err != nil {\n\t\t// A store of a capture producer never starts without its admission.\n\t\treturn nil, err\n\t}\n",
+      "reason": "Startup identity, recovery driver and LIVE switch; a bound store without a config is refused."
+    },
+    {
+      "name": "snapshot_import",
+      "file": "cmd/geth/snapshot.go",
+      "original": "\t\"github.com/ethereum/go-ethereum/core/state/pruner\"\n",
+      "replacement": "\tstateprovider \"github.com/ethereum/go-ethereum/extractor/state_provider\"\n",
+      "reason": "The offline pruner command reaches the native pruner only through PruneState."
+    },
+    {
+      "name": "snapshot_prune_state",
+      "file": "cmd/geth/snapshot.go",
+      "original": "\tprunerconfig := pruner.Config{\n\t\tDatadir:   stack.ResolvePath(\"\"),\n\t\tBloomSize: ctx.Uint64(utils.BloomFilterSizeFlag.Name),\n\t}\n\tpruner, err := pruner.NewPruner(chaindb, prunerconfig)\n\tif err != nil {\n\t\tlog.Error(\"Failed to open snapshot tree\", \"err\", err)\n\t\treturn err\n\t}\n\tif ctx.NArg() > 1 {\n\t\tlog.Error(\"Too many arguments given\")\n\t\treturn errors.New(\"too many arguments\")\n\t}\n\tvar targetRoot common.Hash\n\tif ctx.NArg() == 1 {\n\t\ttargetRoot, err = parseRoot(ctx.Args().First())\n\t\tif err != nil {\n\t\t\tlog.Error(\"Failed to resolve state root\", \"err\", err)\n\t\t\treturn err\n\t\t}\n\t}\n\tif err = pruner.Prune(targetRoot); err != nil {\n\t\tlog.Error(\"Failed to prune state\", \"err\", err)\n\t\treturn err\n\t}\n\treturn nil\n}\n\n",
+      "replacement": "\tif ctx.NArg() > 1 {\n\t\tlog.Error(\"Too many arguments given\")\n\t\treturn errors.New(\"too many arguments\")\n\t}\n\tvar (\n\t\ttargetRoot common.Hash\n\t\terr        error\n\t)\n\tif ctx.NArg() == 1 {\n\t\ttargetRoot, err = parseRoot(ctx.Args().First())\n\t\tif err != nil {\n\t\t\tlog.Error(\"Failed to resolve state root\", \"err\", err)\n\t\t\treturn err\n\t\t}\n\t}\n\t// E01-02.admission retention patch (D98 item 2): the guarded pruner\n\t// refuses while an extractor pin is live.\n\tif err = stateprovider.PruneState(chaindb, stack.ResolvePath(\"\"), ctx.Uint64(utils.BloomFilterSizeFlag.Name), targetRoot); err != nil {\n\t\tlog.Error(\"Failed to prune state\", \"err\", err)\n\t\treturn err\n\t}\n\treturn nil\n}\n\n",
+      "reason": "D98 item 2: geth snapshot prune-state calls PruneState, which refuses while a pin is live."
+    }
+  ]
+}

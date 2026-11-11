@@ -1,0 +1,34 @@
+// This file is copied unchanged from adapters/geth/admission/native/rawdb_hook.go.txt
+// into the accepted Geth tree as core/rawdb/extractor_retention.go by the
+// E01-02.admission Geth preparation; edit it there. It is part of the product
+// native patch set of E01-02.admission (D98 item 2).
+
+package rawdb
+
+import (
+	"errors"
+
+	"github.com/ethereum/go-ethereum/ethdb"
+)
+
+// ExtractorFreezeLimit returns the exclusive block number up to which the
+// chain freezer may freeze, given its own exclusive limit, so that no pinned
+// side-branch header is deleted. extractor/admission/native sets it to the
+// pin ledger rule when it is linked into the binary.
+var ExtractorFreezeLimit func(db ethdb.Database, limit uint64) (uint64, error)
+
+// extractorFreezeThreshold lowers the inclusive freezer threshold to the pin
+// ledger limit. An error stops this freeze pass.
+func extractorFreezeThreshold(db ethdb.Database, threshold uint64) (uint64, error) {
+	if ExtractorFreezeLimit == nil {
+		return threshold, nil
+	}
+	limit, err := ExtractorFreezeLimit(db, threshold+1)
+	if err != nil {
+		return 0, err
+	}
+	if limit == 0 {
+		return 0, errors.New("extractor: a pinned side branch forbids freezing")
+	}
+	return min(threshold, limit-1), nil
+}
