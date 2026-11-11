@@ -585,14 +585,14 @@
     {
       "name": "rpc waits at the gate",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "    if rpc.get(\"waiting_at_gate\") is not True or rpc.get(\"returned_in_window\") is not False:",
-      "replacement": "    if rpc.get(\"returned_in_window\") is not False:"
+      "original": "    if rpc.get(\"waiting_at_gate\") is not True or not (rpc.get(\"waiting_goroutine\") or \"\").startswith(\"goroutine \") or \\",
+      "replacement": "    if not (rpc.get(\"waiting_goroutine\") or \"\").startswith(\"goroutine \") or \\"
     },
     {
       "name": "rpc does not return in the window",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "    if rpc.get(\"waiting_at_gate\") is not True or rpc.get(\"returned_in_window\") is not False:",
-      "replacement": "    if rpc.get(\"waiting_at_gate\") is not True:"
+      "original": "            rpc.get(\"returned_in_window\") is not False:\n        fail(f\"the RPC call did not wait",
+      "replacement": "            False:\n        fail(f\"the RPC call did not wait"
     },
     {
       "name": "rpc snapshot hash",
