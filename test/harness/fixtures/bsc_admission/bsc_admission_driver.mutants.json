@@ -1,0 +1,446 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the independent checks in the BSC admission driver.",
+  "language": "python",
+  "root": "../../../..",
+  "copy": [
+    "test/harness/*",
+    "test/harness/fixtures/bsc_admission/*",
+    "adapters/bsc/admission/*",
+    "adapters/bsc/admission/native/*",
+    "adapters/bsc/admission/native/go/*",
+    "adapters/bsc/admission/native/go/retention/*",
+    "adapters/bsc/admission/native/patches/*",
+    "adapters/bsc/source_inputs/*",
+    "adapters/geth/admission/*",
+    "adapters/bor/admission/*",
+    "adapters/geth/source_inputs/*",
+    "adapters/bor/source_inputs/*",
+    "test/evidence/*"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/fixtures/bsc_admission/test_bsc_admission.py",
+    "-v"
+  ],
+  "import": [
+    "bsc_admission"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "genesis hash",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(keccak(genesis_header).hex() == genesis_hash.removeprefix(\"0x\"),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "prepared hash",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(info[\"hash\"].hex() == prepared[number - 1][\"hash\"].removeprefix(\"0x\"), f\"Prepared hash {number}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "canonical genesis",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(bytes.fromhex(live[\"extra\"][\"genesis_canonical_hex\"]) == canonical, \"Canonical genesis differs\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "unknown config key",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(not unknown, f\"Genesis config has keys that ChainConfig does not know: {unknown}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "fork kind",
+      "file": "test/harness/bsc_admission.py",
+      "original": "(blocks if kind == \"block\" else times).add(value)",
+      "replacement": "blocks.add(value)"
+    },
+    {
+      "name": "fork integer",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(type(value) is int and value >= 0, f\"Fork {key} is not a non-negative integer\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "fork table kind time",
+      "file": "test/harness/bsc_admission.py",
+      "original": "                forks[key] = \"time\"",
+      "replacement": "                forks[key] = \"block\""
+    },
+    {
+      "name": "fork table time suffix",
+      "file": "test/harness/bsc_admission.py",
+      "original": "if name.endswith((\"Block\", \"Time\")):",
+      "replacement": "if name.endswith(\"Block\"):"
+    },
+    {
+      "name": "scenario set",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(sorted(scenarios) == sorted(TRACES), f\"Scenarios {sorted(scenarios)}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "abandoned records",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(set(kinds) == {\"preparing\", \"abandoned\"} and key not in scenario[\"pins\"],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "rejected pin",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(prep[\"candidate\"][\"hash\"] == alt_hash.hex() and key not in scenario[\"pins\"],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "rejected digest",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(record[\"evidence_digest\"] == evidence and",
+      "replacement": "require(True or"
+    },
+    {
+      "name": "reject scenario",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(len(reject[\"rejected\"]) == 1 and scenarios[\"reject\"][\"import_errors\"][1], \"Reject scenario\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "candidate",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(prep[\"candidate\"] == candidate(headers, number), f\"{name}/{key}: candidate\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "capsule refs",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(capsule == {\"observation\": key, \"items\": refs, \"digest\": capsule_digests[number]},",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "admitted capsule",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(admitted[\"capsule_digest\"] == capsule_digests[number], f\"{name}/{key}: admitted capsule digest\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "admitted digest",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(admitted[\"digest\"] == admission.admitted_digest(key, sequence, prep[\"candidate\"],",
+      "replacement": "require(True or admission.admitted_digest(key, sequence, prep[\"candidate\"],"
+    },
+    {
+      "name": "no exec ready",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"exec-ready\" in kinds, f\"{name}/{key}: no EXEC_READY\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "pin digest",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(hashlib.sha256(pin).hexdigest() == admitted[\"pin_digest\"], f\"{name}/{key}: pin digest\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "pin headers",
+      "file": "test/harness/bsc_admission.py",
+      "original": "pin_record[\"headers\"] == expected_headers and",
+      "replacement": "True and"
+    },
+    {
+      "name": "declared key",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(request.startswith(GET_TAG) and request[len(GET_TAG):] in declared,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "exec ready digests",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(record[\"consumed_digest\"] == consumed_digest and record[\"exec_digest\"] == execs[number] and",
+      "replacement": "require(True or"
+    },
+    {
+      "name": "exec ready blocks",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(sorted(result[\"exec_ready\"]) == [1, 2], f\"{name}: EXEC_READY blocks {sorted(result['exec_ready'])}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "pins equal exec ready",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(sorted(scenario[\"pins\"]) == sorted(row[\"key\"] for row in result[\"exec_ready\"].values()),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "head",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(scenario[\"head_number\"] == 2 and",
+      "replacement": "require(True or"
+    },
+    {
+      "name": "outside",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(scenario[\"safe_points_outside\"] == 0 and scenario[\"system_txs_outside\"] == 0,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "consumed equal",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(len({row[\"consumed_block_2\"] for row in summary[\"scenarios\"].values()}) == 1,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "safe points",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require([e[\"safe_points\"] > 0 for e in exec_events] == [True, False] and",
+      "replacement": "require(True or"
+    },
+    {
+      "name": "system txs",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(live[\"system_txs\"] == {key_of(0): SYSTEM_TXS_BLOCK_1}, f\"System transactions {live['system_txs']}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "before recovery",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"RECOVERY_ONLY\" in extra[\"import_before_recovery\"], \"Live import before recovery was not refused\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "unobserved",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"outside an admitted observation\" in extra[\"unobserved_execution\"], \"Unobserved execution was not refused\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "rewind",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(PRUNE_REFUSAL in extra[\"rewind_below_pin\"], \"Rewind below a pin was not refused\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "foreign run",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"saved producer run differs\" in extra[\"foreign_run\"], \"Foreign run was not refused\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "preflight",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"identity mismatch\" in extra[\"preflight_other_store\"], \"Preflight of another store was not refused\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "restart list",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(extra[\"restart_observations\"] == \"2\", \"Restart does not list the EXEC_READY observations\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "not on head",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"outside the sequential import profile\" in extra[\"not_on_head\"], \"A block off the head was admitted\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "known block",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(extra[\"known_block\"] == \";2\", \"A known block was observed again\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "states after restart",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require((1, \"EXEC_READY\") in before and (2, \"EXEC_READY\") not in before, f\"{mode}: states after restart {before}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "admitted after restart",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(admitted == ADMITTED_AFTER_RESTART[mode], f\"{mode}: block 2 ADMITTED after restart: {admitted}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "preparing kept",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(admitted or (2, \"INPUT_PREPARING\") in before, f\"{mode}: block 2 lost its INPUT_PREPARING record\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "go live refused",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(scenario[\"mode_at_start\"] == \"RECOVERY_ONLY\" and \"pending\" in scenario[\"go_live_error\"],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "alt refused",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"unresolved\" in scenario[\"alt_block_error\"], f\"{mode}: a new candidate passed the obligation\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "same obligation",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(summary[\"scenarios\"][mode][\"exec_ready\"][2][\"key\"] == key_of(1), f\"{mode}: another obligation\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "abandoned block",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(summary[\"scenarios\"][mode][\"abandoned\"] == [2], f\"{mode}: INPUT_PREPARING not abandoned\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "geth prune",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(geth[\"prune_exit\"] != 0 and PRUNE_REFUSAL in geth[\"prune_output\"], \"geth prune-state was not refused\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "geth start",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(geth[\"start_exit\"] == 0 and \"2\" in geth[\"start_output\"].splitlines(), \"geth did not start on pins\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "geth bloom",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(geth[\"bloom_exit\"] != 0 and START_REFUSAL in geth[\"bloom_output\"],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "order admitted sync",
+      "file": "test/harness/bsc_admission.py",
+      "original": "synced = [i for i in index[\"put:admitted\"] if names(events[i + 1:i + 2]) == [\"sync\"]]",
+      "replacement": "synced = index[\"put:admitted\"]"
+    },
+    {
+      "name": "order execution",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(all(i > admitted + 1 for i in executed), f\"{label}: execution before the closing ADMITTED sync\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "order unsynced",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(not executed, f\"{label}: executed without a synced ADMITTED record\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "order prepare",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(index[\"begin\"][0] < index[\"pinned\"][0] < index[\"sealed\"][0] < admitted,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "order capsule sync",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(capsule and \"sync\" in names(events[capsule[-1]:admitted]), f\"{label}: capsule not synced before ADMITTED\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "order exec ready sync",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(follow == [\"sync\"], f\"{label}: EXEC_READY record without its sync\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "order closed sync",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(\"sync\" in names(events[closed[-1]:put]), f\"{label}: log closed without a sync before EXEC_READY\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "child crash",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(events and events[-1].get(\"event\") == \"crash\" and events[-1].get(\"point\") == mode, f\"{mode}: no crash\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "child before put",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(not any(e.get(\"observation\") == block2 and e.get(\"record\") == \"admitted\" for e in events),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "child unsynced drop",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(names([last]) == [\"put:admitted\"] and last.get(\"observation\") == block2, f\"{mode}: {before}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "child keep",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(before == [\"put:admitted\", \"sync\"] and last.get(\"model\") == \"keep\" and",
+      "replacement": "require(True or"
+    },
+    {
+      "name": "child synced",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(before == [\"put:admitted\", \"sync\"], f\"{mode}: {before}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "child handoff",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(last.get(\"event\") == \"handoff\" and last.get(\"sequence\") == 0 and last.get(\"observation\") == block2,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "child exec ready",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(names([last]) == [\"put:exec-ready\"] and last.get(\"observation\") == block2, f\"{mode}: {before}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "handoff sequence",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require([row[\"sequence\"] for row in rows] == list(range(len(rows))), f\"{key}: hand-off sequence\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "handoff digest",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(hashlib.sha256(response).hexdigest() == row[\"response_sha256\"], \"Hand-off digest\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "patch context",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(original[begin:begin + len(old_lines)] == old_lines, f\"Patch context differs in {path} at {start}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "patch new exists",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(not target.exists(), f\"Patch creates an existing file {path}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "patch rename",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(old in (\"/dev/null\", \"a/\" + new), f\"Patch renames a file: {old} -> {new}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "patch unsafe path",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(not new.startswith(\"/\") and \"..\" not in Path(new).parts, f\"Unsafe patch path {new}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "patch no hunk",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(hunks, f\"No hunk for {new}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "malformed wrap",
+      "file": "test/harness/bsc_admission.py",
+      "original": "    except Rejected:\n        raise\n",
+      "replacement": ""
+    }
+  ]
+}

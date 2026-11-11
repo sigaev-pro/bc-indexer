@@ -614,10 +614,23 @@ func TestNativeBSCAdmission(t *testing.T) {
 		if err := n.seam.Recover(n.chain); err != nil {
 			t.Fatal(err)
 		}
+		// A block that is not on top of the head with its parent state is
+		// refused before anything is admitted.
+		_, err = n.chain.InsertChain(fx.blocks[1:])
+		sc.Extra["not_on_head"] = errText(err)
+		if !errors.Is(err, ErrImportProfile) || len(n.observations()) != 0 {
+			t.Fatalf("block 2 on the genesis: %v", err)
+		}
 		_, err = n.chain.InsertChain(fx.blocks)
 		sc.ImportErrors = []string{errText(err)}
 		if err != nil {
 			t.Fatal(err)
+		}
+		// A known block with its state needs no observation.
+		_, err = n.chain.InsertChain(fx.blocks[:1])
+		sc.Extra["known_block"] = fmt.Sprintf("%s;%d", errText(err), len(n.observations()))
+		if err != nil || len(n.observations()) != 2 {
+			t.Fatalf("known block: %v", err)
 		}
 		// An execution outside an observation is refused.
 		parent := n.chain.GetHeaderByNumber(1)

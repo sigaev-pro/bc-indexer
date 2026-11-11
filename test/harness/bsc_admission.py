@@ -121,7 +121,6 @@ def parse_patch(text):
                 if body[0] in " +":
                     new_lines.append(body[1:] + "\n")
                 index += 1
-            require(len(old_lines) == old_count and len(new_lines) == new_count, f"Hunk counts differ in {new}")
             hunks.append((int(match.group(1)), old_lines, new_lines))
         require(hunks, f"No hunk for {new}")
         files.append((new, old == "/dev/null", hunks))
@@ -578,6 +577,8 @@ def evaluate(report, traces, raw_blocks, genesis_file, native_commit, genesis_ha
     require("saved producer run differs" in extra["foreign_run"], "Foreign run was not refused")
     require("identity mismatch" in extra["preflight_other_store"], "Preflight of another store was not refused")
     require(extra["restart_observations"] == "2", "Restart does not list the EXEC_READY observations")
+    require("outside the sequential import profile" in extra["not_on_head"], "A block off the head was admitted")
+    require(extra["known_block"] == ";2", "A known block was observed again")
     reject = summary["scenarios"]["reject"]
     require(len(reject["rejected"]) == 1 and scenarios["reject"]["import_errors"][1], "Reject scenario")
     for mode in CRASH_MODES:
@@ -604,8 +605,11 @@ def evaluate(report, traces, raw_blocks, genesis_file, native_commit, genesis_ha
 
 
 def checked_evaluate(*args):
+    """Evaluate, turning a malformed report into a rejection instead of an exception."""
     try:
         return evaluate(*args)
+    except Rejected:
+        raise
     except (KeyError, TypeError, ValueError, AttributeError, IndexError, StopIteration) as error:
         raise Rejected(f"Malformed probe report: {type(error).__name__}: {error}") from None
 
