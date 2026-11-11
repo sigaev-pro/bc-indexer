@@ -1,0 +1,33 @@
+// This file is copied unchanged from adapters/geth/admission/native/utils_hook.go.txt
+// into the accepted Geth tree as cmd/utils/extractor_guard.go by the
+// E01-02.admission Geth preparation; edit it there. It is part of the product
+// native patch set of E01-02.admission (D100 item 3).
+
+package utils
+
+import (
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	extractorgeth "github.com/ethereum/go-ethereum/extractor/admission/native"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/urfave/cli/v2"
+)
+
+// ExtractorGuardChaindata is the manual database guard of the shipped geth
+// (D100 item 3). The pin ledger and the admission records live in chaindata,
+// so a command that deletes or rewrites chaindata must not run while an
+// extractor pin is live or an obligation is open. MakeChainDatabase calls it
+// before every writable open, and `geth removedb` before it deletes anything.
+//
+// It opens an existing store read-only with the database flags of ctx,
+// checks it with extractorgeth.RequireNoOpenCapture and closes it; it writes
+// nothing. A directory without a native store passes. The caller holds the
+// instance lock of the native node (makeConfigNode), so no other geth
+// process can add a pin before the command opens the store for writing.
+func ExtractorGuardChaindata(ctx *cli.Context, stack *node.Node) error {
+	if rawdb.PreexistingDatabase(stack.ResolvePath("chaindata")) == "" {
+		return nil
+	}
+	db := MakeChainDatabase(ctx, stack, true)
+	defer db.Close()
+	return extractorgeth.RequireNoOpenCapture(db)
+}

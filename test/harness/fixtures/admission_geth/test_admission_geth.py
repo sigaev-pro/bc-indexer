@@ -220,6 +220,8 @@ def synthetic_observation():
             s.admission_events([T])
         scenarios.append({"name": name, "attempts": [attempt(f"{label}-1-crash", events=crash_events, crash=point),
                                                      attempt(f"{label}-2-recover", retry, retry_events)]})
+    scenarios.append({"name": "removedb_allowed", "attempts": [
+        attempt("removedb-allowed-1-crash", events=opened, crash="before_sync/counter")]})
     held = s.result([(0, T, "ADMITTED", False)], 1, T - 1, [], mode="RECOVERY_ONLY",
                     new_h_error=ORACLE["messages"]["mode"] + ": block", go_live_error=ORACLE["messages"]["pending"] + ": x")
     recovered = s.result([(0, T, "EXEC_READY", False), (1, T + 1, "EXEC_READY", False)], 2, T + 1, [T, T + 1],
@@ -261,8 +263,17 @@ def synthetic_observation():
         attempt("without-set-head-1", without, opened + s.admission_events([T]))]})
     scenarios.append({"name": "freezer", "attempts": [attempt("freezer-1", {
         "frozen": ORACLE["side_fork"] + 1, "side_header_kept": True, "canonical_fork_kept": True})]})
-    shipped = [{"name": name, "exit_code": 1, "timed_out": False, "output_tail": "Fatal: " + ORACLE["messages"][kind]}
-               for name, kind in ORACLE["shipped"].items()]
+    store = ["000004.log 120 " + "ab" * 32, "CURRENT 16 " + "cd" * 32, "ancient/chain/headers.0000.cdat 9 " + "ef" * 32]
+    shipped = []
+    for name, kind in ORACLE["shipped"].items():
+        if kind == "deleted":
+            shipped.append({"name": name, "exit_code": 0, "timed_out": False, "output_tail": "Database successfully deleted",
+                            "store_before": list(store), "store_after": []})
+            continue
+        row = {"name": name, "exit_code": 1, "timed_out": False, "output_tail": "Fatal: " + ORACLE["messages"][kind]}
+        if name in ORACLE["store_unchanged"]:
+            row.update(store_before=list(store), store_after=list(store))
+        shipped.append(row)
     return {"family": "geth", "target": T, "lookbacks": ORACLE["lookbacks"], "generated_hashes": s.hashes,
             "generated_headers": s.headers, "bad_hash": s.bad_hash, "scenarios": scenarios, "shipped": shipped}
 
@@ -518,6 +529,34 @@ class OracleTests(unittest.TestCase):
         observation = fresh()
         observation["shipped"].pop()
         self.assertFails(observation, "shipped: runs")
+
+    def test_manual_database_guard(self):
+        rows = lambda observation: {row["name"]: row for row in observation["shipped"]}
+        # A refused command must leave every chaindata file as it was.
+        for change in (lambda row: row["store_after"].pop(), lambda row: row.update(store_before=[], store_after=[]),
+                       lambda row: row["store_after"].__setitem__(0, "000004.log 121 " + "ab" * 32),
+                       lambda row: row.pop("store_after")):
+            observation = fresh()
+            change(rows(observation)["admitted-removedb"])
+            self.assertFails(observation, "shipped/admitted-removedb: the refused command changed the chaindata files")
+        # The open obligation without a pin needs its own refusal text.
+        observation = fresh()
+        rows(observation)["removedb-open-obligation"]["output_tail"] = "Fatal: " + ORACLE["messages"]["live_pins"]
+        self.assertFails(observation, "shipped/removedb-open-obligation")
+        # Without pins or open obligations, removedb deletes the key-value store natively.
+        for field, value in (("exit_code", 1), ("timed_out", True), ("store_after", ["CURRENT 16 " + "cd" * 32]),
+                             ("store_before", ["ancient/chain/headers.0000.cdat 9 " + "ef" * 32])):
+            observation = fresh()
+            rows(observation)["removedb-allowed"][field] = value
+            with self.subTest(field=field):
+                self.assertFails(observation, "shipped/removedb-allowed")
+        observation = fresh()
+        scenario(observation, "removedb_allowed")[0]["events"][-1]["point"] = "after_sync/counter"
+        self.assertFails(observation, "removedb-allowed-1")
+        # geth import into a bound store without pins stops at the capture-store refusal of ProcessBlock.
+        observation = fresh()
+        rows(observation)["import-bound"]["output_tail"] = "Fatal: " + ORACLE["messages"]["live_pins"]
+        self.assertFails(observation, "shipped/import-bound")
 
     def test_crash_points(self):
         observation = fresh()

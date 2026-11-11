@@ -61,7 +61,8 @@
     "run": "store belongs to another producer run",
     "recovery": "admitted obligation was not resolved",
     "bound": "store is bound to capture producer store",
-    "bound_import": "store is bound to capture producer store"
+    "bound_import": "store is bound to capture producer store",
+    "open_obligation": "open admission obligations forbid this native database write"
   },
   "shipped": {
     "prune-state": "live_pins",
@@ -69,13 +70,46 @@
     "foreign-store": "identity",
     "other-producer": "run",
     "no-config": "bound",
-    "import": "bound_import"
+    "import": "live_pins",
+    "import-bound": "bound_import",
+    "removedb-open-obligation": "open_obligation",
+    "removedb-allowed": "deleted",
+    "admitted-removedb": "live_pins",
+    "admitted-init": "live_pins",
+    "admitted-import-admitted": "live_pins",
+    "admitted-import-history": "live_pins",
+    "admitted-import-preimages": "live_pins",
+    "admitted-prune-history": "live_pins",
+    "admitted-db-compact": "live_pins",
+    "admitted-db-delete": "live_pins",
+    "admitted-db-put": "live_pins",
+    "admitted-db-import": "live_pins",
+    "admitted-db-import-badblocks": "live_pins",
+    "admitted-bintrie-convert": "live_pins",
+    "admitted-snapshot-prune-state": "live_pins"
   },
+  "store_unchanged": [
+    "removedb-open-obligation",
+    "admitted-removedb",
+    "admitted-init",
+    "admitted-import-admitted",
+    "admitted-import-history",
+    "admitted-import-preimages",
+    "admitted-prune-history",
+    "admitted-db-compact",
+    "admitted-db-delete",
+    "admitted-db-put",
+    "admitted-db-import",
+    "admitted-db-import-badblocks",
+    "admitted-bintrie-convert",
+    "admitted-snapshot-prune-state"
+  ],
   "scenarios": [
     "clean",
     "begin_before_counter_sync",
     "begin_after_counter_sync",
     "admit_before_sync",
+    "removedb_allowed",
     "admit_after_sync",
     "exec_ready_before_sync",
     "reject_live",
@@ -123,6 +157,9 @@
     ],
     "without_set_head": [
       "without-set-head-1"
+    ],
+    "removedb_allowed": [
+      "removedb-allowed-1-crash"
     ]
   }
 }

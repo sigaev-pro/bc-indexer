@@ -42,6 +42,12 @@ digests.
 | `freezer_limit` | `core/rawdb/chain_freezer.go` | The chain freezer stays at or below `FreezeLimit` (D98 item 2) |
 | `backend_import`, `backend_preflight`, `backend_recover_pruning`, `backend_attach` | `eth/backend.go` | Startup: `Preflight` before the store opens, `RecoverPruning` through the guard, `Attach` after `NewBlockChain`, and `RequireNoCapture` without a config |
 | `snapshot_import`, `snapshot_prune_state` | `cmd/geth/snapshot.go` | `geth snapshot prune-state` calls `PruneState` (D98 item 2) |
+| `writable_database_guard` | `cmd/utils/flags.go` | `MakeChainDatabase` (and so `MakeChain`) runs the manual database guard before every writable open of an existing store (D100 item 3) |
+| `removedb_guard` | `cmd/geth/dbcmd.go` | `geth removedb` runs the manual database guard before any prompt or deletion (D100 item 3) |
+
+The preparation also installs `utils_hook.go.txt` as
+`cmd/utils/extractor_guard.go` (`ExtractorGuardChaindata`), next to
+`core_hook.go.txt` and `rawdb_hook.go.txt`.
 
 The guards of D98 item 2 and the capture-store refusal are active in every
 binary that links `extractor/admission/native`: its `init` sets
@@ -170,6 +176,56 @@ profile needs the hash state scheme (`--state.scheme hash`, E01-02.pins);
 Which producer and caller map own the live boundary H stay with
 E01-02.lifecycle_seams.
 
+## Manual database guard (D100 item 3)
+
+The pin ledger and the admission records live in chaindata. A manual `geth`
+command that deletes or rewrites chaindata would lose them silently: after
+`geth removedb`, the node starts as a new node, `Preflight` lets it pass, and
+the ADMITTED obligations are gone. `RequireNoOpenCapture` refuses while a pin
+is live (`stateprovider.RequireNoLivePins`, the ledger check of the other
+retention guards) or an observation of any producer run in the store is
+INPUT_PREPARING or ADMITTED (`OpenObligations`). `OpenObligations` reads the
+records as `admission.Open` does, between the low-water mark and the counter
+of each run, so an INPUT_PREPARING record beyond the counter (an interrupted
+`Begin`) is not an observation; a key under `extractor-admission-v1/` that
+does not fit the layout fails closed. An EXEC_READY observation is not open,
+but it keeps its pin until the decision bridge closes it, so its store stays
+refused.
+
+`ExtractorGuardChaindata` opens an existing store read-only with the
+database flags of the command, runs the check, closes it and writes
+nothing; a directory without a native store passes. Every caller already
+holds the instance lock of the native node (`makeConfigNode`), so no geth
+process can add a pin between the check and the writable open. A refused
+command exits with status 1 before it writes.
+
+Commands of the shipped `geth` (source `1df30b18`) that open chaindata for
+writing or delete it:
+
+| Command | Writes | Guard |
+|---|---|---|
+| `removedb` | Deletes the key-value store, the state freezers and the chain freezer | `removedb_guard`, before any prompt |
+| `init` | Writes the genesis block and the chain config | `MakeChainDatabase` |
+| `import` | Imports blocks | `MakeChain`; on a bound store without pins or open obligations, `RequireNoCapture` in `ProcessBlock` still refuses before any block is written |
+| `import-history` | Writes ancient bodies and receipts | `MakeChain` |
+| `import-preimages` | Writes preimages | `MakeChainDatabase` |
+| `prune-history` | Deletes history below the prune point | `MakeChain` |
+| `db compact` | Rewrites the key-value files | `MakeChainDatabase` |
+| `db delete`, `db put` | Delete or overwrite one key | `MakeChainDatabase` |
+| `db import` | Writes keys from a dump | `MakeChainDatabase` |
+| `db import-badblocks` | Writes the bad-block store | `MakeChainDatabase` |
+| `db inspect-trie` | Only reads, but opens the store writable natively | `MakeChainDatabase`; refused on a capture store as well |
+| `bintrie convert` | Writes a binary trie, and deletes the source state with `--delete-source` | `MakeChainDatabase` |
+| `snapshot prune-state` | Deletes state outside the target root | `MakeChainDatabase`, then `PruneState` (D98 item 2) |
+| `db pebble-upgrade` | Raises the format of a pebble v1 store | Not guarded: `pebble.Upgrade` returns without a write when the store already has a pebble v2 format, and a store with pins or admission records was written by this pebble v2 binary |
+| `snapshot generate-trie` | Opens the pebble store writable only to replay its write-ahead log and take a hard-linked checkpoint outside chaindata; the trie is generated in the checkpoint | Not guarded: no key of chaindata changes, as at any native start |
+
+Every other command opens chaindata read-only or not at all; the node
+itself (`geth`, `geth console`) starts through `eth.New` and its startup
+guards. Since `snapshot prune-state` now meets the manual database guard
+first, `PruneState` refuses there only as a second check; its own refusal is
+covered by the E01-02.pins unit tests.
+
 ## Pin and inputs adapters
 
 `Pins.Verify(id, parentRoot)` reads the ledger record of the observation,
@@ -201,7 +257,12 @@ runs under it too, so no pin appears between the check and a rewind.
   state, and every pinned parent root is committed to disk. The native
   chain-config compatibility rewind ignores the error of `SetHead`, so a
   refused rewind there leaves the head in place.
-- `geth removedb` and manual database tools are not guarded.
+- The manual database guard opens the store read-only with the
+  `--datadir.ancient` flag of the command, as `MakeChainDatabase` does, while
+  `geth removedb` deletes the freezer that the TOML config may also name.
+  The pins and the admission records are in the key-value store, so the
+  check does not depend on the freezer; if the read-only open fails, the
+  command is refused.
 - `SetCanonical` re-executes blocks only when the new head has no state
   (`recoverAncestors`); that path takes the guard and admits each block as a
   new observation, but no scenario exercises it.

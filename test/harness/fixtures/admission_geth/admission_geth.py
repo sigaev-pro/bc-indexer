@@ -39,7 +39,8 @@ from source_inputs_geth import STATE_ROOT, header_fields, keccak256  # noqa: E40
 
 NATIVE = ROOT / "adapters" / "geth" / "admission" / "native"
 FIXTURE_FILES = ("probe.go", "genesis.json", "expected.json", "ORACLE.md", "native_mutants.json")
-NATIVE_FILES = ("patches.json", "core_hook.go.txt", "rawdb_hook.go.txt", "geth.go", "geth_test.go", "README.md")
+NATIVE_FILES = ("patches.json", "core_hook.go.txt", "rawdb_hook.go.txt", "utils_hook.go.txt", "geth.go", "geth_test.go",
+                "README.md")
 PACKAGES = {
     "extractor/admission": (ROOT / "adapters" / "geth" / "admission",
                             ("admission.go", "admission_test.go", "canonical.go", "canonical_test.go", "vectors.json")),
@@ -346,8 +347,21 @@ def check_shipped(c, oracle, observation):
         return
     for name, message in want.items():
         row = rows[name]
+        if message == "deleted":
+            # Without a live pin or an open obligation, removedb deletes the key-value store natively: no file stays
+            # directly in chaindata.
+            before, after = row.get("store_before"), row.get("store_after")
+            if row.get("exit_code") != 0 or row.get("timed_out") or not isinstance(before, list) or \
+                    not isinstance(after, list) or not any("/" not in str(entry) for entry in before) or \
+                    any("/" not in str(entry) for entry in after):
+                c.fail(f"shipped/{name}", "removedb did not delete a store without pins or open obligations")
+            continue
         if row.get("exit_code") in (0, None) or row.get("timed_out") or oracle["messages"][message] not in str(row.get("output_tail")):
             c.fail(f"shipped/{name}", f"the shipped geth binary did not refuse with {oracle['messages'][message]!r}")
+    for name in oracle["store_unchanged"]:
+        before = rows[name].get("store_before")
+        if not isinstance(before, list) or not before or rows[name].get("store_after") != before:
+            c.fail(f"shipped/{name}", "the refused command changed the chaindata files")
 
 
 def scenario_crash_before_admission(name, point, abandoned, pinned):
@@ -511,6 +525,14 @@ def scenario_freezer(c, oracle, observation, attempts, commit):
                             f"{result.get('side_header_kept')}; want {oracle['side_fork'] + 1} and kept")
 
 
+def scenario_removedb_allowed(c, oracle, observation, attempts, commit):
+    """Power loss in the counter sync of Begin: no observation and no pin remain, so the manual database guard lets
+    removedb delete the store (checked with the shipped runs)."""
+    crash, = attempts
+    ended(c, "removedb-allowed-1", crash, "before_sync/counter")
+    check_trace(c, "removedb-allowed-1", crash, ["opened", "live"])
+
+
 CHECKS = {
     "clean": scenario_clean,
     "begin_before_counter_sync": scenario_crash_before_admission("begin-before-counter-sync", "before_sync/counter",
@@ -519,6 +541,7 @@ CHECKS = {
                                                                 abandoned=True, pinned=False),
     "admit_before_sync": scenario_crash_before_admission("admit-before-sync", "before_sync/admitted",
                                                          abandoned=True, pinned=True),
+    "removedb_allowed": scenario_removedb_allowed,
     "admit_after_sync": scenario_admit_after_sync,
     "reject_live": scenario_reject_live,
     "reject_after_admit": scenario_reject_after_admit,
@@ -729,7 +752,7 @@ def prepare(manifest_path, expected_sha, output):
             native.command(compiler, [go, "mod", "verify"], mounts, cap=300, memory="4g", cwd="/work/source",
                            environment=go_environment())
             vet = native.command(compiler, [go, "vet", "./extractor/...", "./core", "./core/vm", "./core/rawdb", "./eth",
-                                            "./cmd/geth"],
+                                            "./cmd/utils", "./cmd/geth"],
                                  mounts, cap=1800, memory="6g", cwd="/work/source", environment=go_environment())
             record["vet"] = reference(vet)
             probe_vet = native.command(compiler, [go, "vet", "./cmd/extractor-admission-probe"], mounts, cap=900,
