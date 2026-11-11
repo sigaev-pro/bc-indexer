@@ -1,0 +1,412 @@
+{
+ "schema_version": 1,
+ "description": "Single-check mutants of the E01-02.admission Geth probe oracle and driver in test/harness/fixtures/admission_geth/admission_geth.py.",
+ "language": "python",
+ "root": "../../../..",
+ "copy": [
+  "test/harness/*.py",
+  "test/harness/fixtures/admission_geth/*",
+  "adapters/geth/admission/native/*"
+ ],
+ "test": [
+  "{python}",
+  "-m",
+  "unittest",
+  "discover",
+  "-s",
+  "test/harness/fixtures/admission_geth",
+  "-p",
+  "test_*.py",
+  "-v"
+ ],
+ "import": [
+  "admission_geth"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "counter ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if sorted(found) != sorted(sequences) or next_sequence != counter:",
+   "replacement": "if sorted(found) != sorted(sequences):"
+  },
+  {
+   "name": "sequences ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if sorted(found) != sorted(sequences) or next_sequence != counter:",
+   "replacement": "if next_sequence != counter:"
+  },
+  {
+   "name": "candidate parent root",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "\"parent_hash\": hashes[number - 1][2:], \"parent_root\": header_fields(parent)[STATE_ROOT].hex()}",
+   "replacement": "\"parent_hash\": hashes[number - 1][2:], \"parent_root\": header_fields(parent)[3 + 1].hex()}"
+  },
+  {
+   "name": "candidate bad hash",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "(observation[\"bad_hash\"] if bad else hashes[number])[2:]",
+   "replacement": "hashes[number][2:]"
+  },
+  {
+   "name": "capsule digest count",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "source_inputs.u64(len(refs))\n    for ref in refs:",
+   "replacement": "source_inputs.u64(0)\n    for ref in refs:"
+  },
+  {
+   "name": "window start",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "start = max(0, number - 256)",
+   "replacement": "start = max(0, number - 255)"
+  },
+  {
+   "name": "preparing record",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if prep != {\"observation\": key, \"sequence\": sequence, \"candidate\": want}:",
+   "replacement": "if prep is None:"
+  },
+  {
+   "name": "state record set",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if set(rows) != kinds:",
+   "replacement": "if not kinds <= set(rows):"
+  },
+  {
+   "name": "capsule layout",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "[ref.get(\"name\") for ref in capsule[\"items\"]] != item_names(oracle, number):",
+   "replacement": "False:"
+  },
+  {
+   "name": "admitted digest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "record.get(\"digest\") != expected or record.get(\"observation\") != key:",
+   "replacement": "record.get(\"observation\") != key:"
+  },
+  {
+   "name": "admitted capsule digest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "record.get(\"capsule_digest\") != capsule[\"digest\"] or",
+   "replacement": ""
+  },
+  {
+   "name": "pin lost",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if pin is None:\n            c.fail(label, f\"{key} lost its pin while {state}\")",
+   "replacement": "        if pin is None:\n            pass"
+  },
+  {
+   "name": "pin digest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if hashlib.sha256(pin.encode()).hexdigest() != rows[\"admitted\"].get(\"pin_digest\") or",
+   "replacement": "if False or"
+  },
+  {
+   "name": "pin headers",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "parsed.get(\"headers\") != [{\"hash\": \"0x\" + want[\"parent_hash\"], \"number\": number - 1}] or",
+   "replacement": ""
+  },
+  {
+   "name": "pin kept",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    elif pin is not None:\n        c.fail(label, f\"{key} keeps its pin while {state}\")",
+   "replacement": "    elif False:\n        c.fail(label, f\"{key} keeps its pin while {state}\")"
+  },
+  {
+   "name": "consumed digest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if record.get(\"consumed_digest\") != consumed or record.get(\"admitted_digest\") != admitted or",
+   "replacement": "if record.get(\"admitted_digest\") != admitted or"
+  },
+  {
+   "name": "exec ready digest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "record.get(\"digest\") != admission.exec_ready_digest(admitted, consumed, record.get(\"exec_digest\", \"0\" * 64)):",
+   "replacement": "False:"
+  },
+  {
+   "name": "rejected digest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "record.get(\"digest\") != admission.rejected_digest(admitted, record.get(\"evidence_digest\", \"0\" * 64)):",
+   "replacement": "False:"
+  },
+  {
+   "name": "live pin set",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if sorted(result.get(\"pins\") or {}) != want:",
+   "replacement": "if not set(want) <= set(result.get(\"pins\") or {}):"
+  },
+  {
+   "name": "trace order",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if traces(attempt) != want:",
+   "replacement": "if sorted(traces(attempt)) != sorted(want):"
+  },
+  {
+   "name": "lookup numbers",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if [row.get(\"number\") for row in rows] != want or",
+   "replacement": "if len(rows) != len(want) or"
+  },
+  {
+   "name": "lookup hash",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "any(row.get(\"found\") is not True or \"0x\" + str(row.get(\"hash\")) != hashes[row[\"number\"]] for row in rows):",
+   "replacement": "any(row.get(\"found\") is not True for row in rows):"
+  },
+  {
+   "name": "lookup window",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "want = [n - back for n in numbers for back in oracle[\"lookbacks\"] if n - back >= max(0, n - 256)]",
+   "replacement": "want = [n - back for n in numbers for back in oracle[\"lookbacks\"] if n - back >= max(0, n - 257)]"
+  },
+  {
+   "name": "head hash",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if result.get(\"head_number\") != number or result.get(\"head_hash\") != hashes[number]:",
+   "replacement": "if result.get(\"head_number\") != number:"
+  },
+  {
+   "name": "reader slots",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if result.get(\"reader_slots\") != want:",
+   "replacement": "        if result.get(\"reader_slots\") is None:"
+  },
+  {
+   "name": "captured inputs",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if result.get(\"captured_inputs\") != want:",
+   "replacement": "if len(result.get(\"captured_inputs\") or []) < len(want) - 1:"
+  },
+  {
+   "name": "closing sync",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if not any(r.get(\"op\") == \"sync\" for r in later[:stop]) or \\",
+   "replacement": "if False or \\"
+  },
+  {
+   "name": "seal before admitted",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "                    not any(r.get(\"event\") == \"sealed\" for r in rows[:index]):",
+   "replacement": "                    False:"
+  },
+  {
+   "name": "capsule bytes manifest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if any(hashlib.sha256(items[ref[\"name\"]]).hexdigest() != ref[\"sha256\"] or len(items[ref[\"name\"]]) != ref[\"length\"]\n           for ref in refs):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "header item",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "\"header-rlp\": items[\"header-rlp\"].hex() == headers[number - 1]\n        and \"0x\" + keccak256(items[\"header-rlp\"]).hex() == hashes[number],",
+   "replacement": "\"header-rlp\": True,"
+  },
+  {
+   "name": "parent header item",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "\"parent-header\": items[\"parent-header\"].hex() == headers[number - 2],",
+   "replacement": "\"parent-header\": True,"
+  },
+  {
+   "name": "canonical config",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "\"chain-config\": canonical == config and json.loads(config) == oracle[\"chain_config\"],",
+   "replacement": "\"chain-config\": json.loads(config) == oracle[\"chain_config\"],"
+  },
+  {
+   "name": "fork id",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "\"fork-id\": items[\"fork-id\"] == json.dumps(",
+   "replacement": "\"fork-id\": True or items[\"fork-id\"] == json.dumps("
+  },
+  {
+   "name": "native commit item",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "\"native-commit\": items[\"native-commit\"] == commit.encode(),",
+   "replacement": "\"native-commit\": True,"
+  },
+  {
+   "name": "ancestor items",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "checks[f\"ancestor-header-{n}\"] = items[f\"ancestor-header-{n}\"].hex() == headers[n - 1] if n else \\",
+   "replacement": "checks[f\"ancestor-header-{n}\"] = True if n else \\"
+  },
+  {
+   "name": "crash point",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "events[-1].get(\"op\") != \"crash\" or events[-1].get(\"point\") != point:",
+   "replacement": "events[-1].get(\"op\") != \"crash\":"
+  },
+  {
+   "name": "clean exit attach error",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "            result.get(\"attach_error\") is not None:",
+   "replacement": "            False:"
+  },
+  {
+   "name": "live mode",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if result.get(\"mode\") != \"LIVE\" or (run and result.get(\"run\") != oracle[\"run_id\"]):",
+   "replacement": "if result.get(\"mode\") != \"LIVE\":"
+  },
+  {
+   "name": "restart unchanged",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if later.get(\"records\") != result.get(\"records\") or later.get(\"pins\") != result.get(\"pins\"):",
+   "replacement": "if later.get(\"records\") != result.get(\"records\"):"
+  },
+  {
+   "name": "rewind refused",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if oracle[\"messages\"][\"live_pins\"] not in str(later.get(\"rewind_error\")) or later.get(\"rewind_head\") != [t + 1, t + 1]:",
+   "replacement": "if later.get(\"rewind_head\") != [t + 1, t + 1]:"
+  },
+  {
+   "name": "rewind head",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if oracle[\"messages\"][\"live_pins\"] not in str(later.get(\"rewind_error\")) or later.get(\"rewind_head\") != [t + 1, t + 1]:",
+   "replacement": "if oracle[\"messages\"][\"live_pins\"] not in str(later.get(\"rewind_error\")):"
+  },
+  {
+   "name": "run record",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if result.get(\"run_record\") != {oracle[\"run_key\"]: json.dumps(",
+   "replacement": "if False and result.get(\"run_record\") != {oracle[\"run_key\"]: json.dumps("
+  },
+  {
+   "name": "shipped exit",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if row.get(\"exit_code\") in (0, None) or row.get(\"timed_out\") or oracle[\"messages\"][message] not in str(row.get(\"output_tail\")):",
+   "replacement": "if row.get(\"timed_out\") or oracle[\"messages\"][message] not in str(row.get(\"output_tail\")):"
+  },
+  {
+   "name": "shipped timeout",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if row.get(\"exit_code\") in (0, None) or row.get(\"timed_out\") or oracle[\"messages\"][message] not in str(row.get(\"output_tail\")):",
+   "replacement": "if row.get(\"exit_code\") in (0, None) or oracle[\"messages\"][message] not in str(row.get(\"output_tail\")):"
+  },
+  {
+   "name": "shipped message",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if row.get(\"exit_code\") in (0, None) or row.get(\"timed_out\") or oracle[\"messages\"][message] not in str(row.get(\"output_tail\")):",
+   "replacement": "if row.get(\"exit_code\") in (0, None) or row.get(\"timed_out\"):"
+  },
+  {
+   "name": "shipped set",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if sorted(rows) != sorted(want):\n        c.fail(\"shipped\",",
+   "replacement": "    if not rows and False:\n        c.fail(\"shipped\","
+  },
+  {
+   "name": "admitted before crash",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if any(row.get(\"event\") in (\"admitted\", \"exec_ready\") for row in crash.get(\"events\") or []):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "hold refusals",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if held.get(\"mode\") != \"RECOVERY_ONLY\" or oracle[\"messages\"][\"mode\"] not in str(held.get(\"new_h_error\")) or \\",
+   "replacement": "if held.get(\"mode\") != \"RECOVERY_ONLY\" or \\"
+  },
+  {
+   "name": "hold go live",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "                oracle[\"messages\"][\"pending\"] not in str(held.get(\"go_live_error\")):",
+   "replacement": "                False:"
+  },
+  {
+   "name": "hold executed",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if held.get(\"head_number\") != t - 1 or held.get(\"captured_inputs\") != []:",
+   "replacement": "if held.get(\"head_number\") != t - 1:"
+  },
+  {
+   "name": "same obligation",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if held and rows.get(\"admitted\") != records(held)[0].get(0, {}).get(\"admitted\"):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "recovered exec digest",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if clean_exec is None or rows.get(\"exec-ready\", {}).get(\"exec_digest\") != clean_exec:",
+   "replacement": "if clean_exec is None:"
+  },
+  {
+   "name": "reject import error",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if len(rows) != 2 or rows[0][0] != \"bad\" or oracle[\"control_errors\"][\"bad\"] not in str(rows[0][1]) or rows[1] != (\"target\", None):",
+   "replacement": "if len(rows) != 2 or rows[0][0] != \"bad\" or rows[1] != (\"target\", None):"
+  },
+  {
+   "name": "recovered reject state",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if states != [\"NATIVE_REJECTED\"]:",
+   "replacement": "if not states:"
+  },
+  {
+   "name": "freezer frozen",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if result and (result.get(\"frozen\") != oracle[\"side_fork\"] + 1 or result.get(\"side_header_kept\") is not True or",
+   "replacement": "if result and (result.get(\"side_header_kept\") is not True or"
+  },
+  {
+   "name": "freezer side header",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "result.get(\"side_header_kept\") is not True or\n",
+   "replacement": "False or\n"
+  },
+  {
+   "name": "generated header link",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "\"0x\" + header_fields(header)[0].hex() != observation[\"generated_hashes\"][number - 1]:",
+   "replacement": "False:"
+  },
+  {
+   "name": "scenario list",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if list(scenarios) != oracle[\"scenarios\"]:",
+   "replacement": "if not set(oracle[\"scenarios\"]) <= set(scenarios):"
+  },
+  {
+   "name": "attempt names",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if [row.get(\"name\") for row in attempts] != oracle[\"attempts\"][name]:",
+   "replacement": "if len(attempts) != len(oracle[\"attempts\"][name]):"
+  },
+  {
+   "name": "malformed guard",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as error:\n        return [f\"malformed observation",
+   "replacement": "    except ZeroDivisionError as error:\n        return [f\"malformed observation"
+  },
+  {
+   "name": "patch exactly once",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "require(before.count(patch[\"original\"]) == 1, f\"Patch {patch['name']} must match exactly once\")",
+   "replacement": "require(before.count(patch[\"original\"]) >= 0, f\"Patch {patch['name']} must match exactly once\")"
+  },
+  {
+   "name": "mutant target once",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "require(text.count(mutant[\"original\"]) == 1, f\"Mutant {mutant['name']} must match its patched text exactly once\")",
+   "replacement": "require(True, \"\")"
+  },
+  {
+   "name": "mutant binaries",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "require(set(mutant[\"binaries\"]) <= {\"probe\", \"geth\"} and mutant[\"binaries\"], f\"Mutant {mutant['name']} binaries\")",
+   "replacement": "require(True, \"\")"
+  },
+  {
+   "name": "mutant restore",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    return lambda: path.write_text(before)\n\n\ndef go_environment",
+   "replacement": "    return lambda: None\n\n\ndef go_environment"
+  }
+ ]
+}
