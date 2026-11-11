@@ -1,5 +1,21 @@
 # Дерево решений и журнал интервью
 
+## D99 — Owners of the static manifest limits left by E01-02.inputs (2026-11-11)
+
+After the three static manifest blocks of #14 (E01-02.inputs) merged in PRs #142, #143 and #144, the coordinator audited the "Still missing" and "Limits" sections of the Geth, BSC and Bor evidence against the static manifest list of NATIVE_CAPTURE_PROTOCOL. Every static item now has a capsule item for each client. Some limits had been handed on to later tasks without an owner decision. The coordinator listed them and proposed owners; the owner selected "D99 и закрыть #14 (Recommended)" ("D99 and close #14"), the proposed option. #14 closes on this boundary:
+
+1. Bor post-Rio ancestor rule. The capsule uses the pre-Rio Bor snapshot walk. Once Rio is active, the pinned Bor calls `getVeBlopSnapshot`, which reads the span and walks no ancestor headers, and `checkItems` would refuse the empty ancestor list. Polygon Mainnet and Amoy have Rio. E01-02.admission defines and proves the post-Rio rule; E06 and E07 exercise it on the public profiles.
+2. BSC reads outside the capsule window and parent-state completeness. The validator-switch lookback (`FindAncientHeader`) and the finalized header (`GetFinalizedHeader`) can read headers below the window; the first fails closed, the second silently returns finality 0. `CheckParentState` walks the whole parent state, which is not a workable per-block check on mainnet. Parlia system-contract calls (`ethAPI`) are not covered. E01-02.admission extends the window or makes these reads fail closed, replaces the parent-state check with a workable completeness check, and covers the system-contract calls; E06 and E07 exercise them on the public profiles.
+3. Canonical JSON. The Go and Python canonical JSON of the genesis and chain config agree only for the test genesis: Go escapes `<`, `>` and `&` and keeps number literals as written, while Python re-parses numbers. E01-02.admission defines one shared canonical JSON rule before a capsule holds a genesis or config outside that subset.
+4. Normalization profile. Every capsule holds the test-only name `test-only-probe-v1`. E04 normalization defines the product profile.
+5. Ancestor windows and checkpoints. No client exercises natively a full 256-header BLOCKHASH window, a window above a checkpoint, a stored Parlia checkpoint snapshot above genesis, the Parlia trusted-checkpoint path or a Bor checkpoint interval; the fixtures are shorter. E06 and E07 exercise them on the public profiles.
+
+Recorded technical decisions, not owner answers:
+
+- The #14 closing comment cites PRs #137 to #140 and #142 to #144 and the PROJECT_STATUS update of PR #141. D98 items 2, 4 and 7 (retention and safe-point patches, product import path, real EXEC_READY binding) and the per-block observations on the real import path stay with E01-02.admission as D98 recorded them.
+- As with D96 and D98, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.admission card is read through this decision as also covering items 1, 2 and 3, its E04 normalization output as also covering item 4, and its E06 and E07 public-profile work as also covering items 1, 2 and 5.
+- This decision assigns owners for limits of the private local evidence. It does not change product guarantees, acceptance cases or gates, and it gives no public-profile credit; every AC-CAP-04 public cell stays NOT_RUN.
+
 ## D98 — Closure boundaries and patch owners for E01-02 (2026-11-10)
 
 The coordinator asked the owner about the BLOCKED_DECISION items of #13 (E01-02.pins) and #15 (E01-02.owned_capture) and about the plan for #14 (E01-02.inputs). For each question the owner selected the coordinator's proposed option. The owner's selections are quoted, followed by the option they selected:

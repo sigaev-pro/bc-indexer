@@ -2,16 +2,18 @@
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
-Status: IN_PROGRESS; #14 stays open. Block 0 inputs-core merged in PR #137 at
-`a2fb163`; the Geth, BSC and Bor blocks merged in PRs #138, #139 and #140
-(sections below). The coordinator closed #14 too early on 2026-11-10 and
-reopened it the same day. Still open against the static manifest list in
-NATIVE_CAPTURE_PROTOCOL, per client: Geth, the known ancestor headers (its
-evidence had assigned their classification to E01-02.admission); BSC, the
-parent header, the parent state root and the ancestor headers; Bor, the parent
-hash and state root, the normalization profile and the in-memory
-`stateSyncConfirmationDelay`. On 2026-11-10 the owner chose to finish these
-items inside #14, in three per-client blocks. Dependencies
+Status: ACCEPTED; #14 closed under D99 (2026-11-11). Block 0 inputs-core
+merged in PR #137 at `a2fb163`; the Geth, BSC and Bor blocks merged in PRs
+#138, #139 and #140. The coordinator closed #14 too early on 2026-11-10 and
+reopened it the same day, because static manifest items of
+NATIVE_CAPTURE_PROTOCOL were still open. The owner chose to finish them inside
+#14 in three per-client blocks: Geth in PR #142 (merge `4b1b3b0`), Bor in
+PR #143 (merge `40c1114`) and BSC in PR #144 (merge `24e7a42`). Every static
+item now has a capsule item for each client. The limits that the evidence
+hands on (Bor post-Rio rule, BSC reads outside the window and parent-state
+check, canonical JSON, normalization profile, full windows and checkpoints)
+have owners under D99: E01-02.admission, E04 normalization, E06 and E07.
+Every AC-CAP-04 public cell stays NOT_RUN. Dependencies
 E01-02.pins and BOOT-09 are accepted (#13 closed under D98). Plan agreed with
 the owner under D97 and D98:
 
@@ -70,8 +72,7 @@ Commit `0fb3461` fixes them: the sync in `OpenLog` and on reseal, the
 enforced chunk layout, store read errors passed through, and one more
 mutant. Retained records and earlier attempts are in the evidence file.
 
-Next: none for this block; it is merged. The open #14 items are listed in
-the first E01-02.inputs section.
+Next: none for this block; it is merged. #14 is closed under D99.
 
 ## E01-02.inputs — BSC block
 
@@ -127,14 +128,13 @@ Main `b7c2679` (the Geth block, PR #138) was then merged into this branch.
 Remaining for #14 after this block: those BSC capsule items. The real
 EXEC_READY binding stays with E01-02.admission.
 
-Next: none for this block; it is merged. The open #14 items are listed in
-the first E01-02.inputs section.
+Next: none for this block; it is merged. #14 is closed under D99.
 
 The status line and "Next" above are for the merged block. A new block
 follows.
 
-Static manifest block (Part of #14): IN_PROGRESS in draft PR #144 on branch
-`claude/elegant-shirley-a32d31`. Role: native-engineer. Allowed
+Static manifest block (Part of #14): ACCEPTED in PR #144 at merge
+`24e7a42`. Role: native-engineer. Allowed
 paths: the same BSC-only files as above. The BSC capsule now holds every
 static item of NATIVE_CAPTURE_PROTOCOL: the block, parent hash, parent header,
 parent root, the ancestor headers down to the Parlia checkpoint and BLOCKHASH
@@ -153,9 +153,9 @@ duplicate item, which the shared core refuses; fixed in `43b215e`) and Go
 mutants 07 at `43b215e` (2 survivors on the parent header checks; fixed in
 `186ae16`). Review 001 of PR #144 (head `e168017`): Spec and Standards
 REQUEST_CHANGES with no P1; all P2 and P3 findings are fixed except two P3
-notes kept in the evidence. Next: Spec and Standards review and hosted
-`bootstrap/ci` on the exact head. Still missing for BSC: see "Still missing"
-in the evidence.
+notes kept in the evidence. Review 002 (head `bb854f5`): Spec and Standards
+PASS with P3 notes; hosted `bootstrap/ci` passed on that head. Next: none;
+the limits in "Still missing" of the evidence have owners under D99.
 
 ## E01-02.inputs — Geth block
 
@@ -163,8 +163,8 @@ Status: block ACCEPTED in PR #138 at merge `b7c2679` (part of #14), after
 block 0 (PR #137, merged at `a2fb163`). Role: native-engineer (D98 item 5).
 Base `a2fb163`.
 
-Static manifest follow-up (part of #14): IN_PROGRESS in draft PR #142; not
-accepted until review, CI and the owner's merge permission. Base `1cebde2`
+Static manifest follow-up (part of #14): ACCEPTED in PR #142 at merge
+`4b1b3b0`. Base `1cebde2`
 (main with PRs #137 to #141). Same role and allowed paths as below.
 
 - Coordinator technical decision (2026-11-10), not an owner answer, following
@@ -192,8 +192,8 @@ accepted until review, CI and the owner's merge permission. Base `1cebde2`
   native mutants are killed); Python mutants 136 killed, 0 survivors; 48
   portable tests. Superseded run 03 is kept. Details, the decision and limits:
   [E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
-- Next: Spec and Standards review of the exact head and hosted
-  `bootstrap/ci`; then the coordinator asks the owner for merge permission.
+- Next: none; it is merged. The limits in the evidence have owners under
+  D98 and D99.
 
 Allowed paths: `test/harness/source_inputs_geth.py`,
 `test/harness/fixtures/source_inputs_geth/**` (coordinator technical decision:
@@ -221,8 +221,7 @@ are killed); Python mutants 95 killed, 0 survivors; 39 portable tests.
 Superseded run 01 and the failed hosted CI run are kept. Details and limits:
 [E01-02.inputs.geth](evidence/E01-02.inputs.geth.md).
 
-Next: none for this block; it is merged. The open #14 items are listed in
-the first E01-02.inputs section.
+Next: none for this block; it is merged. #14 is closed under D99.
 
 ## E01-02.inputs — Bor block
 
@@ -260,11 +259,10 @@ stays NOT_RUN (D96, D98). Mutants: Go 29 killed (`8203955`). Review 002
 without changing the driver or probe code: Python 98 of 98 killed. The
 earlier preparation 01 and run 01 on `a32bc67` also passed and are kept.
 
-Next: none for this block; it is merged. The open #14 items are listed in
-the first E01-02.inputs section.
+Next: none for this block; it is merged. #14 is closed under D99.
 
-Static manifest block (owner decision 2026-11-10, Part of #14): IN_PROGRESS
-on branch `feat/e01-02-inputs-bor-static`, draft PR. Roles: native-engineer
+Static manifest block (owner decision 2026-11-10, Part of #14): ACCEPTED in
+PR #143 at merge `40c1114`. Roles: native-engineer
 (probe), qa (oracle), reviewer (Spec and Standards). Allowed paths: the same
 Bor-only files as above. The Bor capsule now holds every static item of
 NATIVE_CAPTURE_PROTOCOL: parent header, parent hash and root, known ancestor
@@ -276,9 +274,8 @@ a new `control-capsule-items` scenario refuses each tampered derived item and
 a changed chain config. On clean `d128983`: preparation 03 PASS; run 03 PASS
 in 13.078 seconds (AC-CAP-04-01 to AC-CAP-04-03 PASS on the private local
 profile, public cells NOT_RUN); mutants Python 167 of 167 and Go 29 of 29
-killed. Next: independent Spec and Standards review and hosted
-`bootstrap/ci` on the exact head. Still missing for Bor: see "Still missing"
-in the evidence.
+killed. Next: none; it is merged. The limits in "Still missing" of the
+evidence have owners under D99.
 
 ## Review tooling that cuts review rounds (D97 process improvements 1-3)
 
