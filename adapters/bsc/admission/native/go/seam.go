@@ -428,8 +428,8 @@ func (o *observation) Validated(block *types.Block, statedb *state.StateDB, res 
 
 // Rejected implements core.ExtractorObservation. A rejection that may come
 // from an input failure is not authoritative, so the observation stays
-// ADMITTED: the reader refused a read, a parent state read failed, or a
-// system-contract call failed.
+// ADMITTED: the reader refused a read, a parent state read failed, a
+// system-contract call failed, or a snapshot response did not decode.
 func (o *observation) Rejected(block *types.Block, _ *core.ProcessResult, cause error) {
 	s := o.seam
 	if o.resolved != "" || o.err != nil {
@@ -439,7 +439,8 @@ func (o *observation) Rejected(block *types.Block, _ *core.ProcessResult, cause 
 		o.fail(err)
 		return
 	}
-	if errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) {
+	if errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) ||
+		errors.Is(cause, parlia.ErrExtractorSnapshotResponse) {
 		o.fail(cause)
 		return
 	}

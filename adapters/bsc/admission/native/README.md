@@ -139,7 +139,8 @@ Any other header read, total difficulty, or a verified-block query stops
 the observation (`ErrUndeclaredHeader`, `ErrUndeclaredRead`). The
 observation stays ADMITTED: the import fails closed and is never recorded
 as NATIVE_REJECTED. Readers on other goroutines (RPC, the vote pool) keep
-the native chain and are never logged into the observation.
+the native chain and are never logged into the observation; the shared
+system-call backend is the one exception (see "System-contract calls").
 
 `GetFinalizedHeader` and the fork choice run after EXEC_READY. They do not
 feed the execution result. The finality decision belongs to
@@ -156,10 +157,26 @@ is a logged dependency response:
   cache, stored checkpoint snapshot, header walk), and the response is
   durable before Parlia receives it. A retry receives the saved bytes.
 
-The lookup's own reads are native, so they are not observation reads.
-These include `FindAncientHeader` at a validator-set switch, the quorum
-walk of a vote attestation, and the finality-reward walk. The response does
-not depend on what the engine holds in memory, so there is no engine reset.
+The lookup's own reads are native, so they are not observation reads. They
+include the header walk from the stored checkpoint and `FindAncientHeader`
+at a validator-set switch. Parlia reads some headers directly, and those go
+through the reader and request their snapshots as logged responses: the
+vote-attestation target and its quorum snapshot (`verifyVoteAttestation`),
+and the finality-reward headers and the justified-block snapshot
+(`distributeFinalityReward`).
+
+Determinism comes from the log: a retry receives the saved bytes, whatever
+the engine holds in memory, so there is no engine reset. The first
+attempt's bytes are the native lookup's result on the native store. A
+lookup that starts from a stored checkpoint, or from the engine's memory,
+gives the same snapshot. The trusted-checkpoint path builds its snapshot
+with empty recents, so its bytes can differ from a lookup that starts from
+a stored checkpoint.
+
+The native lookup may store a checkpoint snapshot (`snap.store`, at a
+multiple of 1024) in the native database while it runs. That is a Parlia
+cache entry for an accepted ancestor, not a write about the observed block.
+It is the one native write that can happen before EXEC_READY.
 
 Only the snapshot of a capsule header may be requested. Parlia looks up the
 same snapshot several times per block. The first lookup is logged, and the
@@ -181,6 +198,15 @@ without `ethAPI`, because the first epoch block would otherwise fail.
   observed parent. The parent pin keeps that state.
 - It runs the call without the import tracer: a system call is not block
   execution, so it is neither captured nor a VM safe point.
+
+The backend is shared by every user of the engine's `ethAPI`. While an
+observation is attached, a call on another block from another goroutine is
+refused and stops the observation, for example the bid or miner paths of a
+validator node. The import then fails closed and is retried. A call by
+number is always refused, so the stake hub's node-ID calls (Maxwell and
+later) fail with this backend. An extractor node therefore runs no miner,
+bid or node-ID path on this engine. That limit, and how the node wires the
+backend, belong to E01-02.lifecycle_seams.
 
 The node wiring (E01-02.lifecycle_seams) must pass this backend, not the
 node's RPC backend.
@@ -210,8 +236,9 @@ Parlia reads headers directly only for these:
 
 All of these are inside the window. Checkpoints do not widen it: a stored
 checkpoint snapshot is read by the native lookup, whose result is logged.
-The trusted-checkpoint path of `snapshot` runs only after a walk of 90,000
-headers without a stored checkpoint. It also runs inside the native lookup.
+The trusted-checkpoint path of `snapshot` runs only after a walk of more
+than 600,000 headers without a stored checkpoint. It also runs inside the
+native lookup.
 
 ## Static items
 
@@ -283,8 +310,8 @@ any store opens.
 
 `Start` (before any import) does the following, in order:
 
-1. It checks that the engine has the Parlia patch and that the handle wraps
-   the native database.
+1. It checks that the engine is the patched Parlia, and that the engine has
+   an `ethAPI` for system-contract calls.
 2. It binds the store identity on first use, then opens `state_provider.New`,
    which refuses a store of another identity. The read-only
    `stateprovider.Preflight` runs before the node opens the store.
@@ -320,7 +347,14 @@ side branch (control: without the limit, the freezer deletes it).
   (`TestNativeBSCStoppedImport`);
 - a missing parent state node: the obligation stays ADMITTED, and recovery
   resolves it once the node is back (`TestNativeBSCParentStateIncomplete`);
-- the system-call guard (`TestNativeBSCSystemCallGuard`).
+- the system-call guard and `Start` without `ethAPI`
+  (`TestNativeBSCSystemCallGuard`);
+- a failed system call: the mark on the mining path
+  (`TestNativeBSCSystemCallFailureIsMarked`), and an observed epoch block
+  whose call fails, which stays ADMITTED until a retry resolves it
+  (`TestNativeBSCSystemCallFailureStaysAdmitted`);
+- a snapshot response of another block, which is marked as an input failure
+  (`TestNativeBSCSnapshotResponseIsMarked`).
 
 `go/longchain_test.go` (`TestNativeBSCLongChain`) proves the window and
 checkpoint rule and the system-contract calls on the real import path. The
@@ -342,9 +376,27 @@ The test checks:
 - the warm and cold imports log the same snapshot bytes and reach the same
   exec digests.
 
-The fixture has one validator and no vote attestations, so the quorum and
-finality-reward walks and a validator-set switch with a lookback do not
-occur in it.
+Some paths do not occur in the fixture:
+- It has one validator and no vote attestations, so the attestation paths
+  (the quorum snapshot, and the justified-block snapshot of the finality
+  reward) do not run. The finality-reward header walk does run at block
+  1000.
+- There is no validator-set switch with a lookback.
+- The blocks are empty, so BLOCKHASH is never executed on the BSC import
+  path. The full BLOCKHASH window is proven by the Geth block.
+- The Bohr turn-length and Feynman breathe-block calls do not run. Their
+  error marks (patch 06) are checked by source review only.
+- The test compares the stored checkpoint snapshot at 1024 only by its
+  result. A cold lookup that walks from the genesis would give the same
+  bytes.
+
+`TestNativeBSCTrustedCheckpoint` runs only when
+`EXTRACTOR_ADMISSION_TRUSTED` is set, because it generates and imports
+more than 600,000 blocks (`params.FullImmutabilityThreshold` is 600,000).
+After the import, every stored Parlia snapshot is deleted. A cold observed
+import of the next block then walks down to block 1200, where Parlia takes
+the trusted-checkpoint path, stores that snapshot, and the block reaches
+EXEC_READY.
 
 The driver's `run` also starts the patched `geth` on a probe home that holds
 live pins, and re-checks every digest and the trace order with its own

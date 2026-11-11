@@ -12,6 +12,7 @@ package bsc
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/parlia"
 	"github.com/ethereum/go-ethereum/core"
@@ -34,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/extractor/admission"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
@@ -419,4 +422,151 @@ func TestNativeBSCSystemCallFailureIsMarked(t *testing.T) {
 			t.Fatalf("failed system call: %v", err)
 		}
 	})
+}
+
+// envTrusted enables TestNativeBSCTrustedCheckpoint, which generates and
+// imports more than 600,000 blocks; it is off unless set.
+const envTrusted = "EXTRACTOR_ADMISSION_TRUSTED"
+
+const (
+	// trustedCheckpoint is where a cold snapshot lookup of the observed
+	// block's parent takes Parlia's trusted-checkpoint path: the walk down
+	// from the parent has collected more than params.FullImmutabilityThreshold
+	// headers there, no checkpoint is stored, and 1200 % 1000 == 200.
+	trustedCheckpoint = 1200
+)
+
+func TestNativeBSCTrustedCheckpoint(t *testing.T) {
+	if os.Getenv(envTrusted) == "" {
+		t.Skip("set " + envTrusted + " to run")
+	}
+	fx := loadFixture(t)
+	work := probeEnv(t, envWork)
+	trustedParent := int(params.FullImmutabilityThreshold) + trustedCheckpoint + 50
+	blocks := generateLongChain(t, fx, validatorKey(t), trustedParent+1)
+	home := filepath.Join(work, "home-trusted")
+	chain, db := plainChain(t, fx, home)
+	for start := 0; start < trustedParent; start += 2048 {
+		end := min(start+2048, trustedParent)
+		if _, err := chain.InsertChain(blocks[start:end]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	chain.Stop()
+	// Drop every stored Parlia snapshot, so the cold lookup must walk.
+	var stored [][]byte
+	it := db.NewIterator([]byte("parlia-"), nil)
+	for it.Next() {
+		if len(it.Key()) == len("parlia-")+common.HashLength {
+			stored = append(stored, common.CopyBytes(it.Key()))
+		}
+	}
+	it.Release()
+	for _, key := range stored {
+		if err := db.Delete(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	tr := newTracer(t, filepath.Join(work, "trace-trusted.jsonl"))
+	n, err := startNode(t, fx, home, probeProducer, modelNative, tr.emit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer n.close()
+	if err := n.seam.Recover(n.chain); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.chain.InsertChain(blocks[trustedParent:]); err != nil {
+		t.Fatalf("observed block %d: %v", trustedParent+1, err)
+	}
+	rows := n.observations()
+	if len(rows) != 1 || rows[0].State != string(admission.ExecReady) {
+		t.Fatalf("observations %v", rows)
+	}
+	checkpoint := blocks[trustedCheckpoint-1]
+	blob, err := n.db.Get(append([]byte("parlia-"), checkpoint.Hash().Bytes()...))
+	if err != nil {
+		t.Fatalf("no trusted checkpoint snapshot at %d: %v", trustedCheckpoint, err)
+	}
+	var snap struct {
+		Number  uint64            `json:"number"`
+		Recents map[string]string `json:"recents"`
+	}
+	if err := json.Unmarshal(blob, &snap); err != nil || snap.Number != trustedCheckpoint {
+		t.Fatalf("trusted snapshot: %v", err)
+	}
+	report := map[string]any{"parent": trustedParent, "checkpoint": trustedCheckpoint, "deleted_snapshots": len(stored),
+		"checkpoint_hash": checkpoint.Hash().Hex(), "observed_hash": blocks[trustedParent].Hash().Hex(),
+		"trusted_snapshot_sha256": fmt.Sprintf("%x", sha256.Sum256(blob)), "trusted_snapshot_recents": len(snap.Recents)}
+	data, err := json.MarshalIndent(report, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "trusted-report.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNativeBSCSystemCallFailureStaysAdmitted(t *testing.T) {
+	fx := loadFixture(t)
+	work := probeEnv(t, envWork)
+	blocks := generateLongChain(t, fx, validatorKey(t), longChainEpochBlock/5)
+	home := filepath.Join(work, "home-system-call-admitted")
+	chain, db := plainChain(t, fx, home)
+	if _, err := chain.InsertChain(blocks[:len(blocks)-1]); err != nil {
+		t.Fatal(err)
+	}
+	chain.Stop()
+	db.Close()
+	other, otherDB := plainChain(t, fx, filepath.Join(work, "home-system-call-other"))
+	defer otherDB.Close()
+	defer other.Stop()
+	tr := newTracer(t, filepath.Join(work, "trace-system-call.jsonl"))
+	n, err := startNode(t, fx, home, probeProducer, modelNative, tr.emit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer n.close()
+	if err := n.seam.Recover(n.chain); err != nil {
+		t.Fatal(err)
+	}
+	// The epoch block's validator call reaches the backend for the observed
+	// parent, but the backend's chain does not know it: the call fails
+	// without a reader refusal, and the obligation stays ADMITTED.
+	n.backend.Bind(other, n.seam)
+	epoch := blocks[len(blocks)-1:]
+	if _, err := n.chain.InsertChain(epoch); !errors.Is(err, parlia.ErrExtractorSystemCall) {
+		t.Fatalf("failed system call: %v", err)
+	}
+	if rows := n.observations(); len(rows) != 1 || rows[0].State != string(admission.Admitted) {
+		t.Fatalf("after the failed call: %v", rows)
+	}
+	n.backend.Bind(n.chain, n.seam)
+	if _, err := n.chain.InsertChain(epoch); err != nil {
+		t.Fatal(err)
+	}
+	if rows := n.observations(); len(rows) != 1 || rows[0].State != string(admission.ExecReady) || rows[0].Key != ObservationKey(0) {
+		t.Fatalf("after the retry: %v", rows)
+	}
+}
+
+// wrongSnapshotChain answers every snapshot request with the snapshot JSON
+// of another block.
+type wrongSnapshotChain struct{ core.ExtractorReader }
+
+func (c wrongSnapshotChain) ExtractorSnapshot(number uint64, hash common.Hash,
+	compute func(consensus.ChainHeaderReader) ([]byte, error)) ([]byte, error) {
+	return []byte(`{"number":` + fmt.Sprint(number+1) + `,"hash":"` + hash.Hex() + `"}`), nil
+}
+
+func TestNativeBSCSnapshotResponseIsMarked(t *testing.T) {
+	fx := loadFixture(t)
+	chain, db := plainChain(t, fx, filepath.Join(probeEnv(t, envWork), "home-snapshot-response"))
+	defer db.Close()
+	defer chain.Stop()
+	engine := chain.Engine().(*parlia.Parlia)
+	if err := engine.VerifyHeader(wrongSnapshotChain{chain}, fx.blocks[0].Header()); !errors.Is(err, parlia.ErrExtractorSnapshotResponse) {
+		t.Fatalf("snapshot response of another block: %v", err)
+	}
 }

@@ -224,17 +224,19 @@ input that a BSC block import reads):
   parent and the 256-header BLOCKHASH window). A read of any other header
   stops the observation, which stays ADMITTED (fail closed, never
   NATIVE_REJECTED). Readers on other goroutines (RPC, vote pool) keep the
-  native chain and are never logged into the observation.
+  native chain and are never logged into the observation, except through
+  the shared system-call backend (below).
 - Logged Parlia snapshots. Through the scoped reader, Parlia gets each
   snapshot as a logged dependency response: the request is the block
   number and hash, the response is the snapshot's JSON. The first attempt
   computes it with the native engine (memory cache, stored checkpoint,
-  header walk); later attempts get the saved bytes. The snapshot walks,
-  including `FindAncientHeader` at a validator-set switch and the quorum and
-  finality-reward walks, therefore run inside the native computation and
-  are not observation reads. A snapshot is requested only for a capsule
+  header walk); later attempts get the saved bytes. The header walk from the
+  stored checkpoint and `FindAncientHeader` at a validator-set switch run
+  inside the native computation, so they are not observation reads. The
+  attestation and finality-reward headers go through the reader, and their
+  snapshots are logged responses. A snapshot is requested only for a capsule
   header. This replaces the logged `parlia-` key reads and the engine reset:
-  the response no longer depends on a fresh engine.
+  retries get the saved bytes, whatever the engine holds in memory.
 - Read order. One block per `insertChain`; header verification finishes
   before execution starts, and the logger serializes the requests, so the
   log order is the native order. Other goroutines do not use the scoped
@@ -258,9 +260,16 @@ input that a BSC block import reads):
   real import path: epoch blocks with system-contract calls, a stored
   checkpoint snapshot at 1024, a window above that checkpoint, and the same
   logged snapshot bytes from a cold and a warm engine. The trusted-checkpoint
-  path runs only after a walk of 90,000 headers without a stored checkpoint.
-  It runs inside the native snapshot computation, whose result is logged
-  like any other snapshot.
+  path runs only after a walk of more than 600,000 headers without a stored
+  checkpoint (`params.FullImmutabilityThreshold`). It runs inside the native
+  snapshot computation, whose result is logged like any other snapshot. Its
+  native proof (a gated test over a chain of about 601,250 blocks, about 3 h
+  under the runner lock) waits for a coordinator decision (2026-11-11).
+- Technical decision (native-engineer, not an owner answer): the finality
+  result of `GetFinalizedHeader` and the fork choice is not an execution
+  input. Both run after EXEC_READY, on the native home, where every header
+  exists, so the silent finality 0 of D99 item 2 cannot occur there. The
+  finality decision belongs to E01-02.decision_bridge.
 
 Resume point: none (not paused).
 

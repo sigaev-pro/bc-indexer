@@ -492,6 +492,18 @@
       "file": "native/consensus/parlia/extractor.go",
       "original": "\treturn fmt.Errorf(\"%w: %w\", ErrExtractorSystemCall, err)",
       "replacement": "\treturn err"
+    },
+    {
+      "name": "parlia snapshot response mark",
+      "file": "native/consensus/parlia/extractor.go",
+      "original": "\t\treturn nil, fmt.Errorf(\"%w: %w\", ErrExtractorSnapshotResponse, err)",
+      "replacement": "\t\treturn nil, err"
+    },
+    {
+      "name": "rejected snapshot response",
+      "file": "go/seam.go",
+      "original": "||\n\t\terrors.Is(cause, parlia.ErrExtractorSnapshotResponse) {",
+      "replacement": "{"
     }
   ]
 }

@@ -1,9 +1,9 @@
 diff --git a/consensus/parlia/extractor.go b/consensus/parlia/extractor.go
 new file mode 100644
-index 0000000..a84203b
+index 0000000..0b2f0f3
 --- /dev/null
 +++ b/consensus/parlia/extractor.go
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,87 @@
 +// Extractor patch (E01-02.admission, BSC block): Parlia snapshots as logged
 +// dependency responses.
 +
@@ -43,7 +43,11 @@ index 0000000..a84203b
 +	if err != nil {
 +		return nil, err
 +	}
-+	return p.ExtractorDecodeSnapshot(blob, number, hash)
++	snap, err := p.ExtractorDecodeSnapshot(blob, number, hash)
++	if err != nil {
++		return nil, fmt.Errorf("%w: %w", ErrExtractorSnapshotResponse, err)
++	}
++	return snap, nil
 +}
 +
 +// ExtractorDecodeSnapshot decodes a snapshot response as loadSnapshot decodes
@@ -69,6 +73,11 @@ index 0000000..a84203b
 +	snap.config, snap.sigCache, snap.ethAPI = p.config, p.signatures, p.ethAPI
 +	return snap, nil
 +}
++
++// ErrExtractorSnapshotResponse marks a snapshot response that does not
++// decode to the snapshot of the requested block: an input failure, not a
++// native decision about the block.
++var ErrExtractorSnapshotResponse = errors.New("parlia: snapshot response is not the requested snapshot")
 +
 +// ErrExtractorSystemCall marks a failed system-contract call (ethAPI) on the
 +// import path. The calls read the parent state; a failed call is an input

@@ -515,8 +515,6 @@ class Patches(unittest.TestCase):
         self.assertIn(driver.STORE_ID, go)
 
 
-
-
 def evaluate_long(report=None, traces=None, blocks=LONG_BLOCKS):
     return driver.checked_evaluate(report or copy.deepcopy(LONG_REPORT), traces or copy.deepcopy(EXTRA), blocks,
                                    bytes.fromhex(GENESIS_HASH[2:]), function=driver.evaluate_long)
@@ -565,7 +563,6 @@ class LongChain(unittest.TestCase):
         rows = [e for e in traces["long-cold"] if e.get("event") == "handoff"]
         rows[-1]["response_sha256"] = "00" * 32
         self.refused("snapshot digests differ from the report", traces=traces)
-
 
     def test_snapshot_requested_once(self):
         traces, report = copy.deepcopy(EXTRA), copy.deepcopy(LONG_REPORT)

@@ -652,6 +652,7 @@ func TestUnitRejectedWithAWiringErrorStaysAdmitted(t *testing.T) {
 	for _, cause := range []error{
 		fmt.Errorf("invalid merkle root (%w: missing trie node)", core.ErrExtractorParentState),
 		fmt.Errorf("verify validators: %w", parlia.ErrExtractorSystemCall),
+		fmt.Errorf("verify header: %w", parlia.ErrExtractorSnapshotResponse),
 	} {
 		o := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-1", hash: block.Hash(), reader: &Reader{}}
 		o.Rejected(block, nil, cause)
