@@ -451,6 +451,29 @@ class JudgeTests(unittest.TestCase):
             before(o)["error"] = "boom"
         self.assertFails("rpc-window", before_error, "in flight at the window of block 1037 did not return")
 
+        def expired(o):
+            return result(o)["expired_fetch"]
+
+        def expired_not_held(o, c):
+            expired(o)["held_at_observe"] = False
+        self.assertFails("rpc-window", expired_not_held, "no detached span fetch of an expired lookup")
+
+        def expired_other_read(o, c):
+            expired(o)["held_request"] = "GET /status"
+        self.assertFails("rpc-window", expired_other_read, "no detached span fetch of an expired lookup")
+
+        def expired_lookup_waited(o, c):
+            expired(o)["lookup_error"] = "<nil>"
+        self.assertFails("rpc-window", expired_lookup_waited, "no detached span fetch of an expired lookup")
+
+        def expired_block(o, c):
+            expired(o)["block"] = 1038
+        self.assertFails("rpc-window", expired_block, "no detached span fetch of an expired lookup")
+
+        def no_waiting_goroutine(o, c):
+            rpc(o)["waiting_goroutine"] = ""
+        self.assertFails("rpc-window", no_waiting_goroutine, "did not wait at the window gate")
+
         def uncovered(o, c):
             result(o)["replays"].pop()
         self.assertFails("rpc-window", uncovered, "do not cover every EXEC_READY")
@@ -535,6 +558,64 @@ class JudgeTests(unittest.TestCase):
         def elsewhere(o, c):
             tool(o, 1)["output_tail"] = ""
         self.assertFails("prune-block-no-pins", elsewhere, "did not reach the native pruner")
+
+    def test_prune_block_frozen(self):
+        name = "prune-block-frozen"
+
+        def frozen(o):
+            return o["attempts"][1]["result"]["pins_after_freeze"]
+
+        def tool(o, index):
+            return o["attempts"][index]["prune_state"]
+
+        def not_frozen(o, c):
+            frozen(o)["ancients"] = 30
+        self.assertFails(name, not_frozen, "did not move readable pinned headers")
+
+        def unreadable_before(o, c):
+            frozen(o)["pins"][3]["verify_error"] = "pinned native data is unavailable"
+        self.assertFails(name, unreadable_before, "did not move readable pinned headers")
+
+        def no_frozen_pin(o, c):
+            for pin in frozen(o)["pins"]:
+                pin["headers"] = [frozen(o)["ancients"] + 5]
+        self.assertFails(name, no_frozen_pin, "did not move readable pinned headers")
+
+        def not_refused(o, c):
+            tool(o, 2)["refused_live_pins"] = False
+        self.assertFails(name, not_refused, "did not refuse the live pins over a non-empty freezer")
+
+        def native_first(o, c):
+            tool(o, 2)["output_tail"] += "ancient chain segments already extracted"
+        self.assertFails(name, native_first, "did not refuse the live pins over a non-empty freezer")
+
+        def ancient_changed(o, c):
+            o["attempts"][2]["ancient_after"] = {}
+        self.assertFails(name, ancient_changed, "changed the store or the ancient directory")
+
+        def empty_freezer(o, c):
+            o["attempts"][2]["ancient_before"] = o["attempts"][2]["ancient_after"] = {}
+        self.assertFails(name, empty_freezer, "or the freezer was empty")
+
+        def accepted_refused(o, c):
+            tool(o, 3)["refused_live_pins"] = True
+        self.assertFails(name, accepted_refused, "did not stop at its native store open")
+
+        def accepted_elsewhere(o, c):
+            tool(o, 3)["output_tail"] = ""
+        self.assertFails(name, accepted_elsewhere, "did not stop at its native store open")
+
+        def accepted_pruned(o, c):
+            o["attempts"][3]["ancient_after"] = {}
+        self.assertFails(name, accepted_pruned, "did not stop at its native store open")
+
+        def lost_after(o, c):
+            o["attempts"][4]["result"]["pins_after_freeze"]["pins"][2]["verify_error"] = "pinned native data is unavailable"
+        self.assertFails(name, lost_after, "a pin is unreadable after the prune attempts")
+
+        def import_incomplete(o, c):
+            o["attempts"][0]["result"]["observations"].pop(5)
+        self.assertFails(name, import_incomplete, "import: block 6 was not observed")
 
     def test_malformed_observation(self):
         def broken(o, c):

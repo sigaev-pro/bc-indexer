@@ -12,7 +12,9 @@
     "consensus/bor/heimdall/zz_extractor_client.go": "tree/consensus/bor/heimdall/zz_extractor_client.go",
     "consensus/bor/zz_extractor_gate.go": "tree/consensus/bor/zz_extractor_gate.go",
     "consensus/bor/zz_extractor_gate_test.go": "tree/consensus/bor/zz_extractor_gate_test.go",
-    "internal/cli/zz_extractor_prune_block.go": "tree/internal/cli/zz_extractor_prune_block.go"
+    "internal/cli/zz_extractor_prune_block.go": "tree/internal/cli/zz_extractor_prune_block.go",
+    "consensus/bor/zz_extractor_gate_core.go": "tree/consensus/bor/zz_extractor_gate_core.go",
+    "consensus/bor/zz_extractor_gate_core_test.go": "tree/consensus/bor/zz_extractor_gate_core_test.go"
   },
   "edits": [
     {
@@ -277,9 +279,9 @@
     {
       "name": "window-gate-detached-fetch",
       "file": "consensus/bor/span_store_lookup.go",
-      "mode": "after",
-      "anchor": "func (s *SpanStore) fetchSpanRange(gen uint64, id uint64) (val any, err error) {\n",
-      "text": "\tdefer extractorTrackFetch()()\n"
+      "mode": "replace",
+      "anchor": "\tch := s.rangeFetches.DoChan(key, func() (any, error) {\n\t\treturn s.fetchSpanRange(gen, id)\n\t})\n\n\tselect {\n\tcase <-ctx.Done():\n\t\treturn spanRange{}, ctx.Err()\n\tcase res := <-ch:\n",
+      "text": "\t// Extractor patch: count the fetch before it can start, until its result\n\t// is delivered, so an observation window never opens while it runs.\n\tfetched := extractorTrackFetch()\n\tch := s.rangeFetches.DoChan(key, func() (any, error) {\n\t\treturn s.fetchSpanRange(gen, id)\n\t})\n\n\tselect {\n\tcase <-ctx.Done():\n\t\tgo func() {\n\t\t\t<-ch\n\t\t\tfetched()\n\t\t}()\n\t\treturn spanRange{}, ctx.Err()\n\tcase res := <-ch:\n\t\tfetched()\n"
     }
   ]
 }

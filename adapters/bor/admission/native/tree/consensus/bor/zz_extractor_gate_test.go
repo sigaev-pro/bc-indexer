@@ -1,9 +1,11 @@
 // Extractor patch test (E01-02.admission, Bor block): the observation window
-// gate (D100 item 1).
+// gate bound to the Bor engine (D100 item 1).
 
 package bor
 
 import (
+	"context"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,284 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
-
-var (
-	observedBlock = common.HexToHash("0x0a")
-	otherBlock    = common.HexToHash("0x0b")
-)
-
-// enterFrom enters g from a new goroutine and reports on the returned
-// channel once it is admitted; the goroutine leaves when release closes.
-func enterFrom(g *extractorGateState, release <-chan struct{}) <-chan struct{} {
-	admitted := make(chan struct{})
-	go func() {
-		leave := g.enter(extractorGoroutine())
-		close(admitted)
-		<-release
-		leave()
-	}()
-	return admitted
-}
-
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
-func isClosed(ch <-chan struct{}) bool {
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
-	}
-}
-
-func TestExtractorGoroutineIDs(t *testing.T) {
-	id := extractorGoroutine()
-	if id == 0 || extractorGoroutine() != id {
-		t.Fatalf("goroutine ID %d is not stable", id)
-	}
-	other := make(chan uint64)
-	go func() { other <- extractorGoroutine() }()
-	if got := <-other; got == id || got == 0 {
-		t.Fatalf("another goroutine has ID %d, this one %d", got, id)
-	}
-}
-
-func TestExtractorGateOwnerPassesOthersWait(t *testing.T) {
-	g := newExtractorGate()
-	owner := extractorGoroutine()
-	g.open(owner, observedBlock)
-	// The owner passes its own gated calls, nested too, without waiting.
-	leave := g.enter(owner)
-	g.enter(owner)()
-	leave()
-	release := make(chan struct{})
-	defer close(release)
-	admitted := enterFrom(g, release)
-	waitFor(t, "a waiting caller", func() bool { return g.waiters() == 1 })
-	time.Sleep(20 * time.Millisecond)
-	if isClosed(admitted) {
-		t.Fatal("another goroutine entered while the window was open")
-	}
-	g.close(owner)
-	waitFor(t, "the held-back caller", func() bool { return isClosed(admitted) })
-	if g.waiters() != 0 {
-		t.Fatalf("%d waiters after the window closed", g.waiters())
-	}
-}
-
-func TestExtractorGateOpenWaitsForGatedCalls(t *testing.T) {
-	g := newExtractorGate()
-	releaseFirst := make(chan struct{})
-	first := enterFrom(g, releaseFirst)
-	waitFor(t, "the first caller", func() bool { return isClosed(first) })
-
-	opened := make(chan struct{})
-	var opener uint64
-	go func() {
-		opener = extractorGoroutine()
-		g.open(opener, observedBlock)
-		close(opened)
-	}()
-	waitFor(t, "the window to start opening", func() bool {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		return g.opening
-	})
-	// A new caller waits while the window opens.
-	releaseLate := make(chan struct{})
-	late := enterFrom(g, releaseLate)
-	waitFor(t, "the late caller to wait", func() bool { return g.waiters() == 1 })
-	time.Sleep(20 * time.Millisecond)
-	if isClosed(opened) || isClosed(late) {
-		t.Fatalf("opened %t, late caller admitted %t while a gated call was in progress", isClosed(opened), isClosed(late))
-	}
-	close(releaseFirst)
-	waitFor(t, "the window", func() bool { return isClosed(opened) })
-	time.Sleep(20 * time.Millisecond)
-	if isClosed(late) {
-		t.Fatal("the late caller entered the open window")
-	}
-	g.close(opener)
-	waitFor(t, "the late caller", func() bool { return isClosed(late) })
-	close(releaseLate)
-}
-
-func TestExtractorGateNestedCallsDoNotWaitForAnOpeningWindow(t *testing.T) {
-	g := newExtractorGate()
-	nested := make(chan struct{})
-	release := make(chan struct{})
-	go func() {
-		id := extractorGoroutine()
-		leave := g.enter(id)
-		<-release
-		// A window now waits for this call; the nested call must pass.
-		g.enter(id)()
-		close(nested)
-		leave()
-	}()
-	waitFor(t, "the outer call", func() bool {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		return len(g.holders) == 1
-	})
-	opened := make(chan struct{})
-	var opener uint64
-	go func() {
-		opener = extractorGoroutine()
-		g.open(opener, observedBlock)
-		close(opened)
-	}()
-	waitFor(t, "the window to start opening", func() bool {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		return g.opening
-	})
-	close(release)
-	waitFor(t, "the nested call and the window", func() bool { return isClosed(nested) && isClosed(opened) })
-	g.close(opener)
-}
-
-func TestExtractorGateMisuse(t *testing.T) {
-	expectPanic := func(name string, f func()) {
-		t.Helper()
-		defer func() {
-			if recover() == nil {
-				t.Fatalf("%s did not panic", name)
-			}
-		}()
-		f()
-	}
-	g := newExtractorGate()
-	id := extractorGoroutine()
-	expectPanic("close without a window", func() { g.close(id) })
-	leave := g.enter(id)
-	expectPanic("open inside a gated call", func() { g.open(id, observedBlock) })
-	leave()
-	g.open(id, observedBlock)
-	expectPanic("a second open by the owner", func() { g.open(id, observedBlock) })
-	expectPanic("close by another goroutine", func() { g.close(id + 1) })
-	g.close(id)
-	g2 := newExtractorGate()
-	other := make(chan struct{})
-	var owner2 uint64
-	go func() {
-		defer close(other)
-		owner2 = extractorGoroutine()
-		g2.open(owner2, observedBlock)
-	}()
-	<-other
-	leaveImport := g2.enterBlock(id, owner2, observedBlock)
-	expectPanic("open inside the import", func() { g2.open(id, otherBlock) })
-	leaveImport()
-	g2.close(owner2)
-}
-
-func TestExtractorCreator(t *testing.T) {
-	parent := extractorGoroutine()
-	got := make(chan uint64)
-	go func() { got <- extractorCreator() }()
-	if creator := <-got; creator != parent {
-		t.Fatalf("creator %d, expected %d", creator, parent)
-	}
-	// A goroutine of a goroutine names its own creator, not the grandparent.
-	go func() {
-		child := extractorGoroutine()
-		inner := make(chan uint64)
-		go func() { inner <- extractorCreator() }()
-		got <- child - (<-inner) // 0 when the inner creator is the child
-	}()
-	if diff := <-got; diff != 0 {
-		t.Fatalf("grandchild creator differs from its parent by %d", diff)
-	}
-}
-
-func TestExtractorGateWaitsForDetachedFetches(t *testing.T) {
-	g := newExtractorGate()
-	done := g.trackFetch()
-	drained := make(chan struct{})
-	go func() {
-		g.drainFetches()
-		close(drained)
-	}()
-	time.Sleep(20 * time.Millisecond)
-	if isClosed(drained) {
-		t.Fatal("the window did not wait for a detached fetch")
-	}
-	done()
-	waitFor(t, "the drain", func() bool { return isClosed(drained) })
-	g.drainFetches()
-}
-
-func TestExtractorGateFinalizeOfTheObservedBlockIsTheImport(t *testing.T) {
-	g := newExtractorGate()
-	owner := extractorGoroutine()
-	g.open(owner, observedBlock)
-	// Native ProcessBlock finalizes on a goroutine of its own.
-	imported := make(chan struct{})
-	release := make(chan struct{})
-	go func() {
-		id := extractorGoroutine()
-		leave := g.enterBlock(id, owner, observedBlock)
-		// CommitStates and FetchAndCommitSpan nested in Finalize pass too.
-		g.enter(id)()
-		close(imported)
-		<-release
-		leave()
-	}()
-	waitFor(t, "the import's Finalize", func() bool { return isClosed(imported) })
-	// Finalize of another block, outside the import, waits.
-	other := make(chan struct{})
-	go func() {
-		leave := g.enterBlock(extractorGoroutine(), owner, otherBlock)
-		close(other)
-		leave()
-	}()
-	// Finalize of the observed block on a goroutine that the owner did not
-	// start (state regeneration for tracing) waits too.
-	foreign := make(chan struct{})
-	go func() {
-		leave := g.enterBlock(extractorGoroutine(), owner+1000, observedBlock)
-		close(foreign)
-		leave()
-	}()
-	waitFor(t, "the other Finalize calls to wait", func() bool { return g.waiters() == 2 })
-	time.Sleep(20 * time.Millisecond)
-	if isClosed(other) || isClosed(foreign) {
-		t.Fatalf("a non-import Finalize ran inside the window: other block %t, foreign goroutine %t",
-			isClosed(other), isClosed(foreign))
-	}
-	close(release)
-	waitFor(t, "the import to leave", func() bool {
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		return len(g.importers) == 0
-	})
-	// Once the import left, its goroutine is no longer the import.
-	g.close(owner)
-	waitFor(t, "the other Finalize calls", func() bool { return isClosed(other) && isClosed(foreign) })
-	// Without a window, Finalize of that block enters like any gated call.
-	id := extractorGoroutine()
-	leave := g.enterBlock(id, owner, observedBlock)
-	g.mu.Lock()
-	holders, importers := g.holders[id], len(g.importers)
-	g.mu.Unlock()
-	leave()
-	if holders != 1 || importers != 0 {
-		t.Fatalf("Finalize without a window: holders %d importers %d", holders, importers)
-	}
-}
 
 func TestExtractorBlockGateHashesTheHeader(t *testing.T) {
 	header := &types.Header{Number: big.NewInt(7)}
@@ -420,6 +146,20 @@ func TestExtractorGateCoversEveryHeimdallEntryPoint(t *testing.T) {
 			}
 		}
 	}
+	// The probe's test hook into the native lookup enters like any caller.
+	hook, err := parser.ParseFile(fset, "zz_extractor_gate.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hooked := false
+	for _, decl := range hook.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "ExtractorFetchSpanRange" {
+			hooked = len(fn.Body.List) > 0 && gateCall(fn.Body.List[0], "c")
+		}
+	}
+	if !hooked {
+		t.Errorf("ExtractorFetchSpanRange does not pass the gate first")
+	}
 	if len(methods["API"]) == 0 {
 		t.Fatal("no bor API methods found")
 	}
@@ -428,4 +168,75 @@ func TestExtractorGateCoversEveryHeimdallEntryPoint(t *testing.T) {
 			t.Errorf("API.%s does not pass the gate first", name)
 		}
 	}
+}
+
+// TestExtractorSpanRangeFetchIsCountedFromTheStart drives the native lookup
+// with an expired context, as waitForNewSpan does after its timeout: the
+// lookup returns at once, the detached fetch it started is already counted,
+// and a window cannot finish opening until its result is delivered.
+func TestExtractorSpanRangeFetchIsCountedFromTheStart(t *testing.T) {
+	saved := extractorWindow
+	extractorWindow = newExtractorGate()
+	defer func() { extractorWindow = saved }()
+	client := newCountingClient(lookupBase, 300*time.Millisecond)
+	client.entered = make(chan struct{})
+	store := NewSpanStore(client, nil, "1", big.NewInt(0))
+	defer store.Close()
+	store.stopPollLoop()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := store.spanRangeById(ctx, 2); !errors.Is(err, context.Canceled) {
+		t.Fatalf("lookup with an expired context: %v", err)
+	}
+	extractorWindow.mu.Lock()
+	counted := extractorWindow.fetches
+	extractorWindow.mu.Unlock()
+	if counted != 1 {
+		t.Fatalf("%d fetches counted when the lookup returned", counted)
+	}
+	drained := make(chan struct{})
+	go func() {
+		extractorWindow.drainFetches()
+		close(drained)
+	}()
+	<-client.entered
+	if isClosed(drained) {
+		t.Fatal("the window did not wait for the detached fetch")
+	}
+	waitFor(t, "the detached fetch", func() bool { return isClosed(drained) })
+	if client.callsFor(2) != 1 {
+		t.Fatalf("span 2 fetched %d times", client.callsFor(2))
+	}
+}
+
+// TestExtractorSpanRangeFetchCountPrecedesDoChan checks the patched source:
+// spanRangeById counts the fetch before its singleflight DoChan.
+func TestExtractorSpanRangeFetchCountPrecedesDoChan(t *testing.T) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "span_store_lookup.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, decl := range parsed.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "spanRangeById" {
+			continue
+		}
+		track, do := -1, -1
+		for i, stmt := range fn.Body.List {
+			ast.Inspect(stmt, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "DoChan" && do < 0 {
+					do = i
+				}
+				if id, ok := n.(*ast.Ident); ok && id.Name == "extractorTrackFetch" && track < 0 {
+					track = i
+				}
+				return true
+			})
+		}
+		if track < 0 || do < 0 || track >= do {
+			t.Fatalf("spanRangeById counts the fetch at statement %d and calls DoChan at %d", track, do)
+		}
+		return
+	}
+	t.Fatal("spanRangeById not found")
 }

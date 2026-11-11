@@ -10,16 +10,19 @@ blocks:
   #154 at `cb94c88`;
 - BSC: part A in PR #148 at `4bf65f3`, part B in PR #150 at `10cd2c6`, and
   the qa AC verdict in PR #152 at `06231d1`;
-- Bor: PR #149 at `9f2a3d9`, and the hazards block of D100 item 1 in PR
-  #153 at `ea1d6f6`;
+- Bor: PR #149 at `9f2a3d9`, and the D100 item 1 blocks in PR #153 at
+  `ea1d6f6` (hazards) and PR #156 at `d62e1e0` (fetch race);
 - D100 and the acceptance audit: PR #151 at `9185107`.
 
 Every row of the plan table below is met by its block, or is marked "Not
 admission" with its owner. AC-CAP-02-01 and AC-CAP-02-02 pass on every
 applicable private local slot: ETH (Geth, PR #147), BSC (qa verdict, PR
-#152) and POLY (Bor, repeated on the PR #153 head with AC-CAP-04-03, as D100
-requires). Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99).
-D100 names the owner of every other limit in the block evidence.
+#152) and POLY (Bor, repeated with AC-CAP-04-03 on `670e5ca`, the measured
+head of PR #156, whose later commits change only docs, as D100 requires).
+Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100 names
+the owner of every other limit in the block evidence; the test-coverage
+notes that PRs #153, #154 and #156 add to their README limits are accepted
+as recorded there.
 
 Dependencies E01-02.pins (#13), E01-02.inputs (#14) and E01-02.owned_capture
 (#15) are accepted. Plan agreed with the owner on 2026-11-11, the same split
@@ -360,9 +363,9 @@ Merged in PR #152 at `06231d1`.
 
 ## E01-02.admission — Bor block
 
-Status: block ACCEPTED in PR #149 at merge `9f2a3d9`, with the hazards
-block of D100 item 1 in PR #153 at `ea1d6f6` (part of #16). Base `9046de9`
-(block 0 merged in PR #146).
+Status: block ACCEPTED in PR #149 at merge `9f2a3d9`, with the D100 item 1
+blocks in PR #153 at `ea1d6f6` (hazards) and PR #156 at `d62e1e0`
+(fetch race) (part of #16). Base `9046de9` (block 0 merged in PR #146).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
@@ -478,10 +481,50 @@ Mutants: Go 69 of 69, Python 114 of 114 killed. Preparation 07 and run 04 on
 Review 002 (head `828cc07`, evidence of preparation 09 and run 06): Spec
 PASS and Standards PASS, P3 notes only; the detached-fetch counting race and
 the direct-child creator rule are recorded as README limits. Hosted CI
-passed.
+passed. Merged in PR #153 at `ea1d6f6`.
 
 Final review at head `03caf94`: Spec PASS and Standards PASS (three optional
 P3 notes); hosted CI passed. Merged in PR #153 at `ea1d6f6`.
+
+### D100 item 1 fetch-race block (PR #156)
+
+Status: ACCEPTED in PR #156 at merge `d62e1e0` (part of #16), branch
+`claude/e01-02-admission-bor-fetch-race`, base main `ea1d6f6`. Roles:
+native-engineer (`ed35bb98`) and qa (`4b479131`); two independent read-only
+reviewers. Same allowed paths as above. The Spec review of the acceptance
+record (PR #155) found the detached-fetch race of PR #153 open; the owner's
+"fix in #16" covers it.
+
+- `spanRangeById` counts each span range lookup before its singleflight
+  `DoChan` and releases it when the result is delivered, so a window never
+  opens while a started fetch is uncounted (native tests, including an AST
+  check; probe step `expired_fetch`).
+- (a) The gate state is a standard-library core with a 22-mutant table; the
+  Bor bindings stay covered by native tests and scenarios (each mutant there
+  would need a full Bor build).
+- (b) `prune-block-frozen` measures the refusal over a non-empty freezer
+  (blocks 0 to 30 frozen with pinned headers). Finding: the accepted
+  `OpenDatabaseWithFreezer` drops its ancient argument, so native
+  `prune-block` cannot open such a store and deletes nothing; the guard opens
+  the store with the ancient directory resolved.
+- (c) The probe identifies the waiting RPC goroutine by its stack.
+
+Review 001 (head `10436fc`): Spec PASS (P2: the probe step alone does not
+show the window waiting for the held fetch; the oracle and README now cite
+the native tests as that proof) and Standards PASS (P3 notes on the probe's
+held-request attribution and sampling time, recorded in the README limits).
+
+Evidence ([E01-02.admission.bor](evidence/E01-02.admission.bor.md), "D100
+item 1: fetch-race block"): preparation 14 and run 11 on clean `670e5ca`,
+PASS, all 13 scenarios; POLY private local AC-CAP-02-01, AC-CAP-02-02 and
+AC-CAP-04-03 PASS on that head; every public cell NOT_RUN. Mutants on
+`670e5ca`: gate 22 of 22, Go 69 of 69, Python 130 of 130. The commits after
+`670e5ca` change only docs. Preparation 13 failed because the pinned harness
+images had been removed in a disk cleanup; they were pulled again by digest
+and tagged `extractor-pinned/*` (D83 records kept).
+
+Final review at head `118bf02`: Spec PASS and Standards PASS (two optional
+P3 notes); hosted CI passed. Merged in PR #156 at `d62e1e0`.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
