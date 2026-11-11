@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the Bor obligation driver, pin adapter, recovery driver and Heimdall router (E01-02.admission, Bor block).",
+  "language": "go",
+  "root": "../..",
+  "copy": [
+    "admission.go",
+    "canonical.go",
+    "native/obligation/obligation.go",
+    "native/obligation/obligation_test.go"
+  ],
+  "go_module": "github.com/ethereum/go-ethereum/extractor/admission",
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout",
+    "120s",
+    "./native/obligation/"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "pin missing check",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif !found {\n\t\treturn \"\", fmt.Errorf(\"%w: %s\", ErrPinMissing, id)",
+      "replacement": "\tif !found && false {\n\t\treturn \"\", fmt.Errorf(\"%w: %s\", ErrPinMissing, id)"
+    },
+    {
+      "name": "pin root check",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif root != parentRoot {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "pin readable check",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif err := p.Ledger.Readable(id); err != nil {",
+      "replacement": "\tif err := p.Ledger.Readable(id); err != nil && false {"
+    },
+    {
+      "name": "pin digest is the ledger record digest",
+      "file": "native/obligation/obligation.go",
+      "original": "sum := sha256.Sum256(record)",
+      "replacement": "sum := sha256.Sum256(record[1:])"
+    },
+    {
+      "name": "absent pin release maps to nil",
+      "file": "native/obligation/obligation.go",
+      "original": "if err := p.Ledger.Release(id); err != nil && !errors.Is(err, p.Unknown) {",
+      "replacement": "if err := p.Ledger.Release(id); err != nil {"
+    },
+    {
+      "name": "release passes store errors",
+      "file": "native/obligation/obligation.go",
+      "original": "if err := p.Ledger.Release(id); err != nil && !errors.Is(err, p.Unknown) {",
+      "replacement": "if err := p.Ledger.Release(id); err != nil && errors.Is(err, nil) {"
+    },
+    {
+      "name": "pin failure abandons",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif err := d.Native.Pin(key, c); err != nil {\n\t\treturn nil, abandon(err)",
+      "replacement": "\tif err := d.Native.Pin(key, c); err != nil {\n\t\treturn nil, err"
+    },
+    {
+      "name": "seal failure abandons",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif err := d.Native.Seal(key, c); err != nil {\n\t\treturn nil, abandon(err)",
+      "replacement": "\tif err := d.Native.Seal(key, c); err != nil {\n\t\treturn nil, err"
+    },
+    {
+      "name": "admit failure abandons",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif _, err := d.Admission.Admit(token, key); err != nil {\n\t\treturn nil, abandon(err)",
+      "replacement": "\tif _, err := d.Admission.Admit(token, key); err != nil {\n\t\treturn nil, err"
+    },
+    {
+      "name": "failed header check rejects",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\treturn nil, obs.finish(\"\", err)",
+      "replacement": "\t\treturn nil, err"
+    },
+    {
+      "name": "window purges caches",
+      "file": "native/obligation/obligation.go",
+      "original": "\to.driver.Native.Purge()\n",
+      "replacement": ""
+    },
+    {
+      "name": "second Done is refused",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif o.closed {\n\t\treturn ErrWindow\n\t}\n\to.closed = true",
+      "replacement": "\to.closed = true"
+    },
+    {
+      "name": "input failure keeps the obligation",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif fault != nil {\n\t\treturn errors.Join(fault, nativeErr)",
+      "replacement": "\tif false {\n\t\treturn errors.Join(fault, nativeErr)"
+    },
+    {
+      "name": "native failure rejects",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif nativeErr != nil {\n\t\tevidence",
+      "replacement": "\tif false {\n\t\tevidence"
+    },
+    {
+      "name": "rejection evidence names the native error",
+      "file": "native/obligation/obligation.go",
+      "original": "RejectionDigest(o.key, o.cand.Hash, nativeErr.Error())",
+      "replacement": "RejectionDigest(o.key, o.cand.Hash, \"\")"
+    },
+    {
+      "name": "log closes before EXEC_READY",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif err := o.log.Finish(); err != nil {\n\t\treturn err\n\t}\n",
+      "replacement": "\t_ = o.log.Finish()\n"
+    },
+    {
+      "name": "EXEC_READY binds the result digest",
+      "file": "native/obligation/obligation.go",
+      "original": "d.Admission.ExecReady(o.token, o.key, resultDigest)",
+      "replacement": "d.Admission.ExecReady(o.token, o.key, ResultDigest(\"\", \"\", \"\", \"\"))"
+    },
+    {
+      "name": "recovery abandons INPUT_PREPARING",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\t\tif err := d.Admission.Abandon(token, obs.Key); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "recovery reports abandoned",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\t\treport.Abandoned = append(report.Abandoned, obs.Key)\n",
+      "replacement": ""
+    },
+    {
+      "name": "recovery goes live",
+      "file": "native/obligation/obligation.go",
+      "original": "\treturn d.Admission.GoLive(token)",
+      "replacement": "\treturn nil"
+    },
+    {
+      "name": "recovery checks the header",
+      "file": "native/obligation/obligation.go",
+      "original": "\tnativeErr := d.Native.Verify(saved.Key)",
+      "replacement": "\tvar nativeErr error"
+    },
+    {
+      "name": "recovery closes the window on a failure",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\t\treturn false, errors.Join(err, d.Router.Leave())",
+      "replacement": "\t\t\treturn false, err"
+    },
+    {
+      "name": "recovery reports a rejection",
+      "file": "native/obligation/obligation.go",
+      "original": "\treturn nativeErr != nil, nil",
+      "replacement": "\treturn false, nil"
+    },
+    {
+      "name": "recovery accepts a rejection",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif err := obs.finish(result, nativeErr); err != nil && !errors.Is(err, nativeErr) {",
+      "replacement": "\tif err := obs.finish(result, nativeErr); err != nil {"
+    },
+    {
+      "name": "status is counted",
+      "file": "native/obligation/obligation.go",
+      "original": "case u.Path == \"/clerk/time\", u.Path == \"/bor/spans/latest\", u.Path == \"/status\":",
+      "replacement": "case u.Path == \"/clerk/time\", u.Path == \"/bor/spans/latest\":"
+    },
+    {
+      "name": "latest span is counted",
+      "file": "native/obligation/obligation.go",
+      "original": "case u.Path == \"/clerk/time\", u.Path == \"/bor/spans/latest\", u.Path == \"/status\":",
+      "replacement": "case u.Path == \"/clerk/time\", u.Path == \"/status\":"
+    },
+    {
+      "name": "state sync pages are counted",
+      "file": "native/obligation/obligation.go",
+      "original": "case u.Path == \"/clerk/time\", u.Path == \"/bor/spans/latest\", u.Path == \"/status\":",
+      "replacement": "case u.Path == \"/bor/spans/latest\", u.Path == \"/status\":"
+    },
+    {
+      "name": "span IDs are numbers",
+      "file": "native/obligation/obligation.go",
+      "original": "regexp.MustCompile(`^/bor/spans/[0-9]+$`)",
+      "replacement": "regexp.MustCompile(`^/bor/spans/[0-9]*$`)"
+    },
+    {
+      "name": "span path is anchored",
+      "file": "native/obligation/obligation.go",
+      "original": "regexp.MustCompile(`^/bor/spans/[0-9]+$`)",
+      "replacement": "regexp.MustCompile(`^/bor/spans/[0-9]+`)"
+    },
+    {
+      "name": "only the Heimdall host is routed",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif req.URL.Host != r.Host {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "passed calls are counted",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\tr.passed[req.URL.Path]++\n",
+      "replacement": ""
+    },
+    {
+      "name": "an input failure stops the window",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif r.fault != nil {\n\t\trow.Error",
+      "replacement": "\tif false {\n\t\trow.Error"
+    },
+    {
+      "name": "a non-200 response is a source error",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif resp.StatusCode != http.StatusOK {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "response size bound",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif len(body) > MaxResponseBytes {",
+      "replacement": "\tif len(body) > MaxResponseBytes+1 {"
+    },
+    {
+      "name": "response read limit",
+      "file": "native/obligation/obligation.go",
+      "original": "io.LimitReader(resp.Body, MaxResponseBytes+1)",
+      "replacement": "io.LimitReader(resp.Body, MaxResponseBytes)"
+    },
+    {
+      "name": "crash hook runs after a counted response",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif r.AfterCounted != nil {\n\t\tr.AfterCounted(row)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "fetch origin",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\trow.Origin = \"fetch\"\n",
+      "replacement": ""
+    },
+    {
+      "name": "window opens once",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif r.open || log == nil {",
+      "replacement": "\tif log == nil {"
+    },
+    {
+      "name": "window needs a log",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif r.open || log == nil {",
+      "replacement": "\tif r.open {"
+    },
+    {
+      "name": "leave needs an open window",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif !r.open {\n\t\treturn ErrWindow",
+      "replacement": "\tif false {\n\t\treturn ErrWindow"
+    },
+    {
+      "name": "digest fields are length-prefixed",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\tout[i] = byte(length)\n",
+      "replacement": "\t\tout[i] = 0\n"
+    },
+    {
+      "name": "digest tag ends with a zero byte",
+      "file": "native/obligation/obligation.go",
+      "original": "func tagged(tag string) []byte { return append([]byte(tag), 0) }",
+      "replacement": "func tagged(tag string) []byte { return []byte(tag) }"
+    },
+    {
+      "name": "result digest covers the gas used",
+      "file": "native/obligation/obligation.go",
+      "original": "return digest(tagExec, blockHash, stateRoot, receiptRoot, gasUsed)",
+      "replacement": "return digest(tagExec, blockHash, stateRoot, receiptRoot)"
+    }
+  ]
+}

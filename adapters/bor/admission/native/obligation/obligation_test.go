@@ -341,7 +341,7 @@ func TestObserveAdmitsBeforeExecutionAndBindsExecReady(t *testing.T) {
 	if _, ok := f.world.pins[key0]; !ok {
 		t.Fatalf("EXEC_READY released the pin")
 	}
-	if err := obs.Done(result, nil); !errors.Is(err, ErrWindow) {
+	if err := obs.Done(result, nil); !errors.Is(err, ErrWindow) || errors.Is(err, admission.ErrGuard) {
 		t.Fatalf("second Done: %v", err)
 	}
 }
@@ -464,9 +464,10 @@ func TestFinishFailureKeepsTheObligation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.world.logs[key0].finish = errors.New("durable responses were not consumed")
-	if err := obs.Done(ResultDigest("a", "b", "c", "0"), nil); err == nil {
-		t.Fatal("expected an error")
+	unconsumed := errors.New("durable responses were not consumed")
+	f.world.logs[key0].finish = unconsumed
+	if err := obs.Done(ResultDigest("a", "b", "c", "0"), nil); !errors.Is(err, unconsumed) {
+		t.Fatalf("Done: %v", err)
 	}
 	if f.states()[key0] != admission.Admitted {
 		t.Fatalf("state %v", f.states())
@@ -509,6 +510,7 @@ func leaveAdmitted(t *testing.T, f *fixture) {
 func TestRecoverExecReadyFromSavedInputs(t *testing.T) {
 	f := newFixture(t)
 	leaveAdmitted(t, f)
+	f.world.calls = nil
 	f.stub.bodies["/bor/spans/1"] = `{"span":"changed"}`
 	var seen string
 	r := &reexec{result: ResultDigest("h", "s", "r", "2"), before: func() {
@@ -555,6 +557,21 @@ func TestRecoverRejectsAndAbandons(t *testing.T) {
 	report, err = f.driver.Recover(&reexec{})
 	if err != nil || !slices.Equal(report.Abandoned, []string{begun.Key}) || f.mode() != admission.Live {
 		t.Fatalf("report %+v err %v", report, err)
+	}
+}
+
+func TestRecoverRejectsAFailedHeaderCheck(t *testing.T) {
+	f := newFixture(t)
+	leaveAdmitted(t, f)
+	bad := errors.New("unauthorized signer")
+	f.world.verify = func(string) error { return bad }
+	r := &reexec{result: ResultDigest("h", "s", "r", "2")}
+	report, err := f.driver.Recover(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(report.Rejected, []string{key0}) || len(r.keys) != 0 || f.mode() != admission.Live {
+		t.Fatalf("report %+v, re-executed %v, mode %s", report, r.keys, f.mode())
 	}
 }
 
