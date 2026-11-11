@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -264,9 +265,17 @@ func TestNativeBSCLongChain(t *testing.T) {
 	if cold.Restarts != observed-1 {
 		t.Fatalf("restarts %d", cold.Restarts)
 	}
-	report := map[string]any{"length": longChainLength, "observed_from": longChainObservedFrom,
-		"hashes": map[string]string{"1000": blocks[999].Hash().Hex(), "1024": blocks[1023].Hash().Hex(), "1030": blocks[1029].Hash().Hex()},
-		"warm": warm, "cold": cold}
+	hashes := map[string]string{}
+	for _, number := range []int{longChainEpochBlock, longChainCheckpoint, longChainLength} {
+		hashes[fmt.Sprint(number)] = blocks[number-1].Hash().Hex()
+	}
+	report := map[string]any{
+		"length":        longChainLength,
+		"observed_from": longChainObservedFrom,
+		"hashes":        hashes,
+		"warm":          warm,
+		"cold":          cold,
+	}
 	data, err := json.MarshalIndent(report, "", " ")
 	if err != nil {
 		t.Fatal(err)
