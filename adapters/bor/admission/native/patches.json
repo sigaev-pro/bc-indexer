@@ -7,7 +7,8 @@
     "core/tracing/zz_extractor_safepoint.go": "tree/core/tracing/zz_extractor_safepoint.go",
     "consensus/bor/zz_extractor_inputs.go": "tree/consensus/bor/zz_extractor_inputs.go",
     "extractor/retention/retention.go": "tree/extractor/retention/retention.go",
-    "extractor/borwire/borwire.go": "tree/extractor/borwire/borwire.go"
+    "extractor/borwire/borwire.go": "tree/extractor/borwire/borwire.go",
+    "core/rawdb/zz_extractor_freeze_test.go": "tree/core/rawdb/zz_extractor_freeze_test.go"
   },
   "edits": [
     {

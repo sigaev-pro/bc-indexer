@@ -1,0 +1,364 @@
+{
+ "schema_version": 1,
+ "kind": "bor-admission-oracle",
+ "plans": [
+  {
+   "name": "ac-cap-02-01-begin",
+   "kind": "lost-before-admitted",
+   "crash_step": "begin",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "begin@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "ac-cap-02-01-pin",
+   "kind": "lost-before-admitted",
+   "crash_step": "pin",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "pin@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "ac-cap-02-01-seal",
+   "kind": "lost-before-admitted",
+   "crash_step": "seal",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "seal@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "ac-cap-02-02-admitted",
+   "kind": "lost-after-admitted",
+   "crash_step": "admitted",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "admitted@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "ac-cap-02-02-log",
+   "kind": "lost-after-admitted",
+   "crash_step": "log-2",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "log-2@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "b",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "ac-cap-02-02-finish",
+   "kind": "lost-after-admitted",
+   "crash_step": "finish",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "finish@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "b",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "ac-cap-02-02-exec-ready",
+   "kind": "lost-after-exec-ready",
+   "crash_step": "exec-ready",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "exec-ready@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "native-rejection",
+   "kind": "native-rejection",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "b",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    }
+   ]
+  },
+  {
+   "name": "checkpoint-rio",
+   "kind": "checkpoint-rio",
+   "block": 1033,
+   "attempts": [
+    {
+     "base": 1020,
+     "from": 1021,
+     "to": 1040,
+     "variant": "a",
+     "crash": "log-1@1033",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 1020,
+     "from": 1021,
+     "to": 1040,
+     "variant": "a",
+     "crash": "",
+     "set_head": 1000,
+     "walk_check": 1028,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 1020,
+     "from": 1021,
+     "to": 1040,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "fedcba9876543210fedcba9876543210"
+    },
+    {
+     "base": 1020,
+     "from": 1021,
+     "to": 1040,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "prune-leftover",
+     "prune_state": "",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "bor",
+     "store_id": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "accepted/bor",
+     "store_id": ""
+    }
+   ]
+  }
+ ]
+}
