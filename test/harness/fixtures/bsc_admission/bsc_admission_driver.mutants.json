@@ -149,12 +149,6 @@
       "replacement": "True and"
     },
     {
-      "name": "declared key",
-      "file": "test/harness/bsc_admission.py",
-      "original": "require(request.startswith(GET_TAG) and request[len(GET_TAG):] in declared,",
-      "replacement": "require(True,"
-    },
-    {
       "name": "exec ready digests",
       "file": "test/harness/bsc_admission.py",
       "original": "require(record[\"consumed_digest\"] == consumed_digest and record[\"exec_digest\"] == execs[number] and",
@@ -447,6 +441,114 @@
       "file": "test/harness/bsc_admission.py",
       "original": "EMPTY_RLP_LIST = b\"\\xc0\"",
       "replacement": "EMPTY_RLP_LIST = b\"\""
+    },
+    {
+      "name": "snapshot request tag",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(request.startswith(SNAPSHOT_TAG) and len(request) == len(SNAPSHOT_TAG) + 40,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "snapshot capsule header",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(capsule_headers.get(number) == block_hash,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "snapshot requested once",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(request not in seen,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "snapshot response block",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(snapshot[\"number\"] == number and snapshot[\"hash\"] == \"0x\" + block_hash.hex(),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "ancestor floor window",
+      "file": "test/harness/bsc_admission.py",
+      "original": "return max(0, number - BLOCKHASH_WINDOW)",
+      "replacement": "return max(0, number - BLOCKHASH_WINDOW + 1)"
+    },
+    {
+      "name": "long chain length",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(len(raw_blocks) == LONG_LENGTH, \"Long chain length\")",
+      "replacement": "require(True, \"Long chain length\")"
+    },
+    {
+      "name": "long chain link",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(info[\"number\"] == number and info[\"parent\"] == parent,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "long chain hashes",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(report[\"hashes\"][str(number)] == \"0x\" + keccak(headers[number]).hex(),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "long states",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(run[\"states\"] == {\"EXEC_READY\": len(observed)}, f\"{name}: states\")",
+      "replacement": "require(True, f\"{name}: states\")"
+    },
+    {
+      "name": "long system calls",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(run[\"system_calls_on_parent\"].keys() == {str(LONG_EPOCH_BLOCK)} and",
+      "replacement": "require(True or"
+    },
+    {
+      "name": "long stored checkpoint",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(run[\"stored_checkpoint_number\"] == LONG_CHECKPOINT,",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "long window",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(run[\"window_of_last_block\"] == [LONG_LENGTH - 1, LONG_LENGTH - BLOCKHASH_WINDOW],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "long restarts",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(run[\"restarts\"] == (len(observed) - 1 if name == \"cold\" else 0),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "long report digests",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require([row[\"response_sha256\"] for row in rows] == run[\"snapshot_response_sha256\"][str(number)],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "long warm and cold",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(runs[\"warm\"][\"snapshot_response_sha256\"] == runs[\"cold\"][\"snapshot_response_sha256\"] and",
+      "replacement": "require(True or"
+    },
+    {
+      "name": "parent state not rejected",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require((\"admitted\", key) in kinds and not any(kind == \"rejected\" for kind, _ in kinds),",
+      "replacement": "require((\"admitted\", key) in kinds,"
+    },
+    {
+      "name": "parent state error",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(errors_ and all(\"parent state read failed\" in error for error in errors_),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "parent state recovery",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require((\"exec-ready\", key) in kinds[first_error:] and (\"resume\", key) in kinds[first_error:],",
+      "replacement": "require(True,"
     }
   ]
 }

@@ -567,6 +567,19 @@ class LongChain(unittest.TestCase):
         self.refused("snapshot digests differ from the report", traces=traces)
 
 
+    def test_snapshot_requested_once(self):
+        traces, report = copy.deepcopy(EXTRA), copy.deepcopy(LONG_REPORT)
+        events = traces["long-warm"]
+        keys = [e["observation"] for e in events if e.get("event") == "begin"]
+        key = next(k for k in keys if sum(e.get("event") == "handoff" and e["observation"] == k for e in events) > 1)
+        rows = [e for e in events if e.get("event") == "handoff" and e["observation"] == key]
+        for field in ("request_hex", "response_hex", "response_sha256"):
+            rows[1][field] = rows[0][field]
+        number = str(next(e["number"] for e in events if e.get("event") == "begin" and e["observation"] == key))
+        report["warm"]["snapshot_response_sha256"][number][1] = rows[0]["response_sha256"]
+        self.refused("snapshot requested twice", report=report, traces=traces)
+
+
 class ParentState(unittest.TestCase):
     def evaluate(self, events):
         return driver.checked_evaluate(events, function=driver.evaluate_parent_state)
