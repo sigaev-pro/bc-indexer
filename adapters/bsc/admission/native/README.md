@@ -20,7 +20,7 @@ window and checkpoint rule) are part B (see PROJECT_STATUS).
 | Path | Installed at | Content |
 |---|---|---|
 | `patches/01-core-import-seam.diff` | `core/extractor_hook.go`, `core/blockchain.go` | Import seam, `Reject` point, EXEC_READY point, rewind guard |
-| `patches/02-rawdb-freezer.diff` | `core/rawdb/chain_freezer.go` | Freezer limit |
+| `patches/02-rawdb-freezer.diff` | `core/rawdb/extractor.go`, `core/rawdb/chain_freezer.go` | Freezer limit |
 | `patches/03-eth-recover-pruning.diff` | `core/state/pruner/extractor.go`, `eth/backend.go` | `RecoverPruning` through the pin ledger |
 | `patches/04-geth-prune-state.diff` | `cmd/geth/snapshot.go`, `cmd/geth/main.go` | `PruneState` through the pin ledger; guard registration |
 | `patches/05-vm-safe-point.diff` | `core/vm/extractor_safepoint.go`, `core/vm/interpreter.go` | VM safe point |
@@ -49,8 +49,10 @@ block it calls `Begin` before any header verification:
    and the native path skips it.
 2. An ADMITTED observation of the same candidate is resumed. An ADMITTED
    observation of another candidate refuses the block (`ErrUnresolved`), so
-   a new H never passes a saved obligation. An INPUT_PREPARING observation is
-   abandoned: it is not a capture.
+   a new H never passes a saved obligation. An INPUT_PREPARING observation
+   is left only by a restart (`Begin` abandons its own on error);
+   `admission.Begin` refuses a new block while it exists, and `Recover`
+   abandons it, because it is not a capture.
 3. Otherwise: `admission.Begin` (INPUT_PREPARING), the parent pin
    (`state_provider.Pin`: trie commit, sync, ledger record, sync), the static
    capsule (`SealCapsule`), and `admission.Admit` with its closing sync.
@@ -208,7 +210,10 @@ side branch (control: without the limit, the freezer deletes it).
 - NATIVE_REJECTED of a block whose seal fails;
 - six crash points of AC-CAP-02-01 and AC-CAP-02-02 under three store
   models, each followed by restart and recovery;
-- identity refusals, the rewind guard and the unobserved-execution refusal.
+- identity refusals, the rewind guard and the unobserved-execution refusal;
+- the hook contract with a fake hook (`TestNativeBSCHookContract`) and an
+  import stopped during execution, then recovered
+  (`TestNativeBSCStoppedImport`).
 
 The driver's `run` also starts the patched `geth` on a probe home that holds
 live pins, and re-checks every digest and the trace order with its own

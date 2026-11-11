@@ -167,7 +167,7 @@ func openRun(store sourceinputs.Store, cfg Config) (admission.Producer, error) {
 		return run, nil
 	}
 	if present, hasErr := store.Has([]byte(RunRecordKey)); hasErr != nil || present {
-		return admission.Producer{}, fmt.Errorf("run record read: %v", err)
+		return admission.Producer{}, fmt.Errorf("run record read: %w", errors.Join(err, hasErr))
 	}
 	if cfg.Producer == (admission.Producer{}) {
 		return admission.Producer{}, fmt.Errorf("%w: no saved run and none configured", ErrRunIdentity)

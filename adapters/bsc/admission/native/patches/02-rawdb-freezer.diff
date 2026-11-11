@@ -1,21 +1,25 @@
+diff --git a/core/rawdb/extractor.go b/core/rawdb/extractor.go
+new file mode 100644
+index 0000000..794eddb
+--- /dev/null
++++ b/core/rawdb/extractor.go
+@@ -0,0 +1,11 @@
++// Extractor patch (E01-02.admission, BSC block): the freezer limit.
++
++package rawdb
++
++import "github.com/ethereum/go-ethereum/ethdb"
++
++// ExtractorFreezeLimit, when set, returns the highest exclusive block number
++// that the chain freezer may freeze, given its own exclusive limit. An error
++// holds the freezer. The pin ledger sets it from an init function, before any
++// store is opened.
++var ExtractorFreezeLimit func(db ethdb.Database, limit uint64) (uint64, error)
 diff --git a/core/rawdb/chain_freezer.go b/core/rawdb/chain_freezer.go
-index 9e72b1a..70e28a5 100644
+index 9e72b1a..dafff83 100644
 --- a/core/rawdb/chain_freezer.go
 +++ b/core/rawdb/chain_freezer.go
-@@ -144,6 +144,12 @@ func (f *chainFreezer) Close() error {
- //
- // This functionality is deliberately broken off from block importing to avoid
- // incurring additional data shuffling delays on block propagation.
-+// ExtractorFreezeLimit, when set, returns the highest exclusive block number
-+// that the chain freezer may freeze, given its own exclusive limit (extractor
-+// patch, E01-02.admission). An error holds the freezer. The pin ledger sets it
-+// from an init function, before any store is opened.
-+var ExtractorFreezeLimit func(db ethdb.Database, limit uint64) (uint64, error)
-+
- func (f *chainFreezer) freeze(db ethdb.KeyValueStore, continueFreeze bool) {
- 	var (
- 		backoff   bool
-@@ -237,6 +243,24 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore, continueFreeze bool) {
+@@ -237,6 +237,24 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore, continueFreeze bool) {
  		if last-first+1 > freezerBatchLimit {
  			last = freezerBatchLimit + first - 1
  		}
