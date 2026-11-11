@@ -322,11 +322,13 @@ def capsule_items(context, number, checkpoint):
     row = chain[number - 1]
     parent = genesis_header if number == 1 else chain[number - 2]["header"]
     parent_fields = decoded_header(parent)
-    listed = ancestors(chain, genesis_header, context["config"], number)
+    cache = context.setdefault("encoded_ancestors", {})
+    if number not in cache:
+        cache[number] = rlp_encode([decoded_header(h) for h in ancestors(chain, genesis_header, context["config"], number)])
     oracle = context["oracle"]
     items = (("genesis", context["genesis"]), ("block", row["rlp"]), ("parent-header", parent),
              ("parent-hash", keccak256(parent)), ("parent-root", parent_fields[3]),
-             ("ancestor-headers", rlp_encode([decoded_header(h) for h in listed])),
+             ("ancestor-headers", cache[number]),
              ("checkpoint-snapshot", checkpoint), ("chain-config", context["chain_config"]),
              ("fork-id", fork_id(context["config"], context["genesis_hash"], number)),
              ("native-commit", context["commit"].encode()),
