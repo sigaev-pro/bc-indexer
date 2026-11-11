@@ -355,6 +355,21 @@ adapter, and the native tests drive them with a real EVM run.
   a full Bor build and probe run; the native tests (including an AST check
   that every entry point and the fetch count are in place) and the probe
   scenarios cover them.
+- The race of a detached span range fetch is closed by counting before
+  `DoChan`. The deterministic proof is the native AST check
+  (`TestExtractorSpanRangeFetchCountPrecedesDoChan`);
+  `TestExtractorSpanRangeFetchIsCountedFromTheStart` and the probe step
+  `expired_fetch` show an expired-context lookup counted, drained and kept
+  out of the log, but they cannot reproduce the old scheduling window, and
+  the probe's held request passes the router before the window opens, so it
+  would stay out of the log without the drain too. The probe holds the next
+  counted request after it arms, so a held request could also be another
+  reader's read of the same path, and `held_at_observe` is sampled before the
+  import starts, not when the window opens.
+- If an interrupted block prune already removed the old ancient directory,
+  the guard's read-only open fails, so the native `AncientDbReplacer`
+  resumption is refused too (fail closed); the store then needs the native
+  repair without the guard.
 - In the accepted Bor source, `node.OpenDatabaseWithFreezer` drops its
   ancient argument, so native `bor snapshot prune-block` cannot open a store
   whose freezer holds blocks (it stops with "ancient chain segments already
@@ -369,7 +384,7 @@ adapter, and the native tests drive them with a real EVM run.
   block 30 finalized and the native freezer freezes blocks 0 to 30 with their
   pinned headers; the refusal is measured over that non-empty freezer as
   well as over an empty one. No run exercises a native deletion: the
-  accepted pruner cannot open a store with frozen blocks (see below) and
+  accepted pruner cannot open a store with frozen blocks (see above) and
   stops at an empty freezer.
 - In the probe, `SetHead` and the startup prune recovery are refused inside
   the probe process, which imports `borwire` like the shipped `bor`; the

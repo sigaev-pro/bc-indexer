@@ -364,8 +364,9 @@ Merged in PR #152 at `06231d1`.
 ## E01-02.admission — Bor block
 
 Status: merged in PR #149 at `9f2a3d9` (part of #16). Base `9046de9` (block
-0 merged in PR #146). The hazards block of D100 item 1 is in draft PR #153
-(see "D100 hazards block" at the end of this section).
+0 merged in PR #146). The hazards block of D100 item 1 merged in PR #153 at
+`ea1d6f6`; its fetch-race follow-up is in draft PR #156 (see the last
+subsection of this section).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
@@ -449,7 +450,7 @@ passed. Merged in PR #149 at `9f2a3d9`.
 
 ### D100 hazards block (PR #153)
 
-Status: IN_PROGRESS (Part of #16), draft PR #153, branch
+Status: merged in PR #153 at `ea1d6f6` (Part of #16), branch
 `claude/e01-02-admission-bor-hazards`, base main `10cd2c6` with later main
 merged. Roles: native-engineer (`ed35bb98`) and qa (`4b479131`); two
 independent read-only reviewers. Same allowed paths as above.
@@ -481,9 +482,46 @@ Mutants: Go 69 of 69, Python 114 of 114 killed. Preparation 07 and run 04 on
 Review 002 (head `828cc07`, evidence of preparation 09 and run 06): Spec
 PASS and Standards PASS, P3 notes only; the detached-fetch counting race and
 the direct-child creator rule are recorded as README limits. Hosted CI
-passed.
+passed. Merged in PR #153 at `ea1d6f6`.
 
-Next: READY for the coordinator.
+### D100 item 1 fetch-race block (PR #156)
+
+Status: IN_PROGRESS (Part of #16), draft PR #156, branch
+`claude/e01-02-admission-bor-fetch-race`, base main `ea1d6f6`. Roles:
+native-engineer (`ed35bb98`) and qa (`4b479131`); two independent read-only
+reviewers. Same allowed paths as above. The Spec review of the acceptance
+record (PR #155) found the detached-fetch race of PR #153 open; the owner's
+"fix in #16" covers it.
+
+- `spanRangeById` counts each span range lookup before its singleflight
+  `DoChan` and releases it when the result is delivered, so a window never
+  opens while a started fetch is uncounted (native tests, including an AST
+  check; probe step `expired_fetch`).
+- (a) The gate state is a standard-library core with a 22-mutant table; the
+  Bor bindings stay covered by native tests and scenarios (each mutant there
+  would need a full Bor build).
+- (b) `prune-block-frozen` measures the refusal over a non-empty freezer
+  (blocks 0 to 30 frozen with pinned headers). Finding: the accepted
+  `OpenDatabaseWithFreezer` drops its ancient argument, so native
+  `prune-block` cannot open such a store and deletes nothing; the guard opens
+  the store with the ancient directory resolved.
+- (c) The probe identifies the waiting RPC goroutine by its stack.
+
+Review 001 (head `10436fc`): Spec PASS (P2: the probe step alone does not
+show the window waiting for the held fetch; the oracle and README now cite
+the native tests as that proof) and Standards PASS (P3 notes on the probe's
+held-request attribution and sampling time, recorded in the README limits).
+
+Evidence ([E01-02.admission.bor](evidence/E01-02.admission.bor.md), "D100
+item 1: fetch-race block"): preparation 14 and run 11 on clean `670e5ca`,
+PASS, all 13 scenarios; POLY private local AC-CAP-02-01, AC-CAP-02-02 and
+AC-CAP-04-03 PASS on that head; every public cell NOT_RUN. Mutants on
+`670e5ca`: gate 22 of 22, Go 69 of 69, Python 130 of 130. The commits after
+`670e5ca` change only docs. Preparation 13 failed because the pinned harness
+images had been removed in a disk cleanup; they were pulled again by digest
+and tagged `extractor-pinned/*` (D83 records kept).
+
+Next: review confirmation on the final head, then READY for the coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
