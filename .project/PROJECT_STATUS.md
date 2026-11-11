@@ -114,6 +114,33 @@ observations above the low-water mark again, and fixes the wording.
 Next: review 003 of the head with record 03, hosted CI, then READY for the
 coordinator.
 
+## E01-02.admission — BSC block
+
+Status: IN PROGRESS, draft PR #148 (part A of two; split proposed to the
+coordinator on 2026-11-11). Part of #16. Branch
+`claude/e01-02-admission-bsc-14da6e`, base main `9046de9`.
+
+Part A (this PR) covers these plan rows for BSC: the product import path
+and per-block observations (import seam, with the Parlia system
+transactions of `Parlia.applyTransaction` inside the observation);
+`Reject` on native validation failure; the retention patch (D98 item 2);
+the VM safe-point patch (D98 item 4); the pin adapter; the recovery driver;
+startup identity; the genesis and config items moved to the shared
+canonical JSON rule, with the key-suffix fork-id recompute dropped; and
+AC-CAP-02-01 and AC-CAP-02-02 private local for BSC (public cells NOT_RUN,
+D96, D98, D99).
+
+Part B (next PR, after A merges) covers the BSC Parlia input rows: reads
+below the window (`FindAncientHeader`, `GetFinalizedHeader`), the
+`CheckParentState` replacement, Parlia system-contract calls (`ethAPI`),
+the concurrent read order and a snapshot-key declaration without the
+fresh-engine assumption, and the window and checkpoint rule.
+
+Design: [native README](../adapters/bsc/admission/native/README.md).
+Evidence: [E01-02.admission.bsc](evidence/E01-02.admission.bsc.md).
+
+Resume point: none (not paused).
+
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
 Status: ACCEPTED; #14 closes under D99 (2026-11-11) when this record merges.
