@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "family": "geth",
+  "target": 300,
+  "lookbacks": [
+    1,
+    256,
+    257,
+    128
+  ],
+  "genesis_hash": "0x90dade1d286b41b01206b0d1103bf65f41e3b6e76ae98bb9455e8a5bfb9263a8",
+  "store_id": "0123456789abcdef0123456789abcdef",
+  "producer_id": "geth-probe",
+  "run_id": "r1",
+  "run_key": "extractor-admission-geth-run-v1",
+  "pin_prefix": "extractor-state-provider-pin-v1-",
+  "profile": "test-only-probe-v1",
+  "capsule_head": [
+    "header-rlp",
+    "body-rlp",
+    "encodings",
+    "parent-header",
+    "parent-hash",
+    "parent-root"
+  ],
+  "capsule_tail": [
+    "chain-config",
+    "fork-id",
+    "native-commit",
+    "normalization-profile"
+  ],
+  "encodings": "{\"ancestor-header\":\"rlp(types.Header)\",\"body-rlp\":\"rlp(types.Body)\",\"header-rlp\":\"rlp(types.Header)\",\"parent-header\":\"rlp(types.Header)\"}",
+  "chain_config": {
+    "chainId": 31337,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "muirGlacierBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
+    "arrowGlacierBlock": 0,
+    "grayGlacierBlock": 0,
+    "terminalTotalDifficulty": 1000000000000000000000000000000,
+    "ethash": {},
+    "depositContractAddress": "0x0000000000000000000000000000000000000000"
+  },
+  "big_integer_literal": "\"terminalTotalDifficulty\":1000000000000000000000000000000",
+  "side_fork": 100,
+  "control_errors": {
+    "bad": "invalid merkle root"
+  },
+  "messages": {
+    "live_pins": "live pins forbid this native deletion",
+    "mode": "admission mode forbids this step",
+    "pending": "an observation is still pending",
+    "identity": "native store identity mismatch: expected binding",
+    "run": "store belongs to another producer run"
+  },
+  "shipped": {
+    "prune-state": "live_pins",
+    "recover-pruning": "live_pins",
+    "foreign-store": "identity",
+    "other-producer": "run"
+  },
+  "scenarios": [
+    "clean",
+    "begin_before_counter_sync",
+    "begin_after_counter_sync",
+    "admit_before_sync",
+    "admit_after_sync",
+    "exec_ready_before_sync",
+    "reject_live",
+    "reject_after_admit",
+    "freezer"
+  ],
+  "attempts": {
+    "clean": [
+      "clean-1",
+      "clean-2-restart",
+      "clean-3-rewind"
+    ],
+    "begin_before_counter_sync": [
+      "begin-before-counter-sync-1-crash",
+      "begin-before-counter-sync-2-recover"
+    ],
+    "begin_after_counter_sync": [
+      "begin-after-counter-sync-1-crash",
+      "begin-after-counter-sync-2-recover"
+    ],
+    "admit_before_sync": [
+      "admit-before-sync-1-crash",
+      "admit-before-sync-2-recover"
+    ],
+    "admit_after_sync": [
+      "admit-after-sync-1-crash",
+      "admit-after-sync-2-hold",
+      "admit-after-sync-3-recover"
+    ],
+    "exec_ready_before_sync": [
+      "exec-ready-before-sync-1-crash",
+      "exec-ready-before-sync-2-recover"
+    ],
+    "reject_live": [
+      "reject-live-1"
+    ],
+    "reject_after_admit": [
+      "reject-after-admit-1-crash",
+      "reject-after-admit-2-recover"
+    ],
+    "freezer": [
+      "freezer-1"
+    ]
+  }
+}
