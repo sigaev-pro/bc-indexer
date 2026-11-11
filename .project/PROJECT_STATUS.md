@@ -165,9 +165,12 @@ path; P3 wording and docs). The next commit fixes all of them. Preparation
 01 at `3304991` waited for the host lock and was stopped before it started,
 because review 001 made it stale; its wait record is kept.
 
-Resume point: fixes of review 001 committed; next are the measured
-preparation and run under the host lock, the Python mutant record, the
-evidence figures and review 002.
+Evidence at `d438376`: preparation 02 PASS (64 unit tests, 20 native mutant
+builds), measured run 02 PASS (probe PASS, 20 of 20 native mutants killed,
+488 seconds), Python mutants 64 of 64 killed.
+
+Resume point: review 002 of the head with these records, hosted CI, then
+READY for the coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
