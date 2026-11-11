@@ -203,6 +203,16 @@
         "geth"
       ],
       "reason": "The shipped binary starts on a store of a capture producer without its admission config."
+    },
+    {
+      "name": "import_without_admission",
+      "file": "core/blockchain.go",
+      "original": "\t} else if config.WriteState && ExtractorRequireNoCapture != nil {\n",
+      "replacement": "\t} else if false && ExtractorRequireNoCapture != nil {\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "geth import executes and writes a block into a capture store without an admission."
     }
   ]
 }

@@ -691,13 +691,15 @@ func run(genesisPath, work, output, commit, geth string) {
 
 	// AC-CAP-02-01: power loss before the counter sync of Begin, right after
 	// it (no pin yet), and before the closing ADMITTED sync.
+	dirs := map[string]string{}
 	for _, row := range []struct{ name, before, after string }{
 		{"begin_before_counter_sync", "/counter", ""},
 		{"begin_after_counter_sync", "", "/counter"},
 		{"admit_before_sync", "/admitted", ""},
 	} {
+		dirs[row.name] = dir(row.name)
 		spec := with(base, func(s *Spec) {
-			s.Datadir = dir(row.name)
+			s.Datadir = dirs[row.name]
 			s.Imports = []string{"target"}
 			s.CrashBeforeSync, s.CrashAfterSync = row.before, row.after
 		})
@@ -705,6 +707,16 @@ func run(genesisPath, work, output, commit, geth string) {
 		prefix := strings.ReplaceAll(row.name, "_", "-")
 		scenario(row.name, runAttempt(work, prefix+"-1-crash", spec), runAttempt(work, prefix+"-2-recover", retry))
 	}
+
+	// geth import opens the chain without eth.New. On a capture store (head
+	// 300 after the scenario above) it must refuse to import block 301.
+	export := filepath.Join(work, "block-301.rlp")
+	file, err := os.Create(export)
+	check(err)
+	check(rlp.Encode(file, blocks[target]))
+	check(file.Close())
+	shippedRuns = append(shippedRuns, shipped(geth, "import", nil, "--datadir", dirs["admit_before_sync"], "--cache", "64",
+		"--state.scheme", "hash", "import", export))
 
 	// AC-CAP-02-02: power loss right after the closing ADMITTED sync. The
 	// restart holds RECOVERY_ONLY first, then recovers, then imports a new H.

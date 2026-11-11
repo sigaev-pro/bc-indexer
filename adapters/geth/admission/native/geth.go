@@ -47,10 +47,12 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-// The retention guards are active in every binary that links this package,
-// with or without an admission config: pins of an earlier run stay live.
+// The retention guards and the capture-store refusal are active in every
+// binary that links this package, with or without an admission config: pins
+// of an earlier run stay live.
 func init() {
 	core.ExtractorRewindAllowed = stateprovider.RequireRewindAllowed
+	core.ExtractorRequireNoCapture = RequireNoCapture
 	rawdb.ExtractorFreezeLimit = stateprovider.FreezeLimit
 }
 
@@ -472,8 +474,8 @@ func (a *Admission) trace(event string, fields map[string]any) {
 // re-executes every ADMITTED obligation through the patched import path
 // (InsertBlockWithoutSetHead, which writes the block but does not move the
 // head) from its saved capsule and pinned parent root; the import writes
-// EXEC_READY or NATIVE_REJECTED. Only then it switches to LIVE. An obligation that stays
-// ADMITTED stops startup.
+// EXEC_READY or NATIVE_REJECTED. Only then it switches to LIVE. An
+// obligation that stays ADMITTED stops startup.
 func (a *Admission) Recover() error {
 	token := a.guard.Acquire()
 	observations, err := a.core.Observations(token)

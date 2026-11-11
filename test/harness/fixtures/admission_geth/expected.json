@@ -60,14 +60,16 @@
     "identity": "native store identity mismatch: expected binding",
     "run": "store belongs to another producer run",
     "recovery": "admitted obligation was not resolved",
-    "bound": "store is bound to capture producer store"
+    "bound": "store is bound to capture producer store",
+    "bound_import": "store is bound to capture producer store"
   },
   "shipped": {
     "prune-state": "live_pins",
     "recover-pruning": "live_pins",
     "foreign-store": "identity",
     "other-producer": "run",
-    "no-config": "bound"
+    "no-config": "bound",
+    "import": "bound_import"
   },
   "scenarios": [
     "clean",

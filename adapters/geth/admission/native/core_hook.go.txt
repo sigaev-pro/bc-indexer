@@ -47,6 +47,12 @@ type ExtractorObservation interface {
 // extractor/admission/native sets it when it is linked into the binary.
 var ExtractorRewindAllowed func(db ethdb.Database, newHead uint64) error
 
+// ExtractorRequireNoCapture refuses a store that belongs to a capture
+// producer. ProcessBlock calls it for every state-writing import without an
+// admission seam, so no path (for example geth import) imports into such a
+// store unobserved. extractor/admission/native sets it when linked.
+var ExtractorRequireNoCapture func(db ethdb.Database) error
+
 // SetExtractorAdmission installs the admission seam. It must be called
 // before the first import.
 func (bc *BlockChain) SetExtractorAdmission(a ExtractorAdmission) { bc.extractor = a }

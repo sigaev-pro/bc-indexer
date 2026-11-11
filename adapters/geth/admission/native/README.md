@@ -43,9 +43,10 @@ digests.
 | `backend_import`, `backend_preflight`, `backend_recover_pruning`, `backend_attach` | `eth/backend.go` | Startup: `Preflight` before the store opens, `RecoverPruning` through the guard, `Attach` after `NewBlockChain`, and `RequireNoCapture` without a config |
 | `snapshot_import`, `snapshot_prune_state` | `cmd/geth/snapshot.go` | `geth snapshot prune-state` calls `PruneState` (D98 item 2) |
 
-The guards of D98 item 2 are active in every binary that links
-`extractor/admission/native`: its `init` sets `core.ExtractorRewindAllowed`
-and `rawdb.ExtractorFreezeLimit`, and `eth` imports it. They do not depend on
+The guards of D98 item 2 and the capture-store refusal are active in every
+binary that links `extractor/admission/native`: its `init` sets
+`core.ExtractorRewindAllowed`, `core.ExtractorRequireNoCapture` and
+`rawdb.ExtractorFreezeLimit`, and `eth` imports it. They do not depend on
 an admission config, because pins of an earlier run stay live.
 
 ## Per-block observation on the import path
@@ -147,8 +148,10 @@ The shipped binary reads the admission config from the file named by
 `chain_id`, `genesis_hash`, `native_commit`, `normalization_profile`).
 Without it, the node starts only on a store that does not belong to a
 capture producer: `RequireNoCapture` refuses a bound store, a live pin or a
-run record, so such a store never imports without its admission and
-recovery. The retention guards stay active in both cases. The capture
+run record. The same check runs in `ProcessBlock` for every state-writing
+import without an admission seam, so commands that open the chain without
+`eth.New` (for example `geth import`) cannot import into such a store
+either. The retention guards stay active in both cases. The capture
 profile needs the hash state scheme (`--state.scheme hash`, E01-02.pins);
 `Attach` refuses a store of another scheme. With the config:
 
