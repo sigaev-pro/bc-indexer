@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -287,7 +288,7 @@ func TestSafePointWaitsForTheWorkerOutsideCallbacks(t *testing.T) {
 	if err := c.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-done; !errors.Is(err, capture.ErrClosed) {
+	if err := <-done; !errors.Is(err, io.EOF) {
 		t.Fatalf("worker: %v", err)
 	}
 	calls, notes, err := sp.Stats()

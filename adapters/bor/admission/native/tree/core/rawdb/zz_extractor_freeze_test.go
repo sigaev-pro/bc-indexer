@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/extractor/retention"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -55,7 +56,8 @@ func TestExtractorFreezeThreshold(t *testing.T) {
 	if _, err := f.freezeThreshold(view); !errors.Is(err, failure) {
 		t.Fatalf("ledger error: %v", err)
 	}
-	if _, err := f.extractorFreezeThreshold(db, 10); !errors.Is(err, errExtractorFreezeView) {
+	// NewMemoryDatabase wraps its store in nofreezedb; a bare store is another view.
+	if _, err := f.extractorFreezeThreshold(memorydb.New(), 10); !errors.Is(err, errExtractorFreezeView) {
 		t.Fatalf("another view: %v", err)
 	}
 }

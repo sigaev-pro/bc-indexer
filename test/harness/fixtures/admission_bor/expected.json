@@ -1,6 +1,83 @@
 {
  "schema_version": 1,
  "kind": "bor-admission-oracle",
+ "genesis_time": "2020-05-15T13:36:30Z",
+ "state_sync_delay": 0,
+ "rio_block": 1032,
+ "chain_blocks": 1040,
+ "normalization_profile": "test-only-probe-v1",
+ "signer": "0x71562b71999873db5b286df957af199ec94617f7",
+ "capsule_items": [
+  "genesis",
+  "block",
+  "parent-header",
+  "parent-hash",
+  "parent-root",
+  "ancestor-headers",
+  "checkpoint-snapshot",
+  "chain-config",
+  "fork-id",
+  "native-commit",
+  "normalization-profile"
+ ],
+ "requests": {
+  "rio_header_check": [
+   {
+    "request": "GET /status",
+    "body": "status.json"
+   },
+   {
+    "request": "GET /bor/spans/latest",
+    "body": "span-latest.json"
+   },
+   {
+    "request": "GET /bor/spans/1",
+    "body": "span-1.json"
+   }
+  ],
+  "first_span_commit": 4,
+  "span_commit": [
+   {
+    "request": "GET /bor/spans/1",
+    "body": "span-1.json"
+   }
+  ],
+  "status": [
+   {
+    "request": "GET /status",
+    "body": "status.json"
+   }
+  ],
+  "first_state_sync_block": 4,
+  "first_state_sync": {
+   "a": [
+    {
+     "request": "GET /clerk/time?from_id=1&to_time={to_time}&pagination.limit=50",
+     "body": "clerk-a-from-1.json"
+    },
+    {
+     "request": "GET /clerk/time?from_id=3&to_time={to_time}&pagination.limit=50",
+     "body": "clerk-empty.json"
+    }
+   ],
+   "b": [
+    {
+     "request": "GET /clerk/time?from_id=1&to_time={to_time}&pagination.limit=50",
+     "body": "clerk-b-from-1.json"
+    },
+    {
+     "request": "GET /clerk/time?from_id=4&to_time={to_time}&pagination.limit=50",
+     "body": "clerk-empty.json"
+    }
+   ]
+  },
+  "later_state_sync": [
+   {
+    "request": "GET /clerk/time?from_id=3&to_time={to_time}&pagination.limit=50",
+    "body": "clerk-empty.json"
+   }
+  ]
+ },
  "plans": [
   {
    "name": "ac-cap-02-01-begin",
@@ -32,6 +109,9 @@
      "prune_state": "",
      "store_id": ""
     }
+   ],
+   "ac": [
+    "AC-CAP-02-01"
    ]
   },
   {
@@ -64,6 +144,9 @@
      "prune_state": "",
      "store_id": ""
     }
+   ],
+   "ac": [
+    "AC-CAP-02-01"
    ]
   },
   {
@@ -96,6 +179,9 @@
      "prune_state": "",
      "store_id": ""
     }
+   ],
+   "ac": [
+    "AC-CAP-02-01"
    ]
   },
   {
@@ -128,6 +214,10 @@
      "prune_state": "",
      "store_id": ""
     }
+   ],
+   "ac": [
+    "AC-CAP-02-02",
+    "AC-CAP-04-03"
    ]
   },
   {
@@ -172,7 +262,12 @@
      "prune_state": "",
      "store_id": ""
     }
-   ]
+   ],
+   "ac": [
+    "AC-CAP-02-02",
+    "AC-CAP-04-03"
+   ],
+   "changed_body": "clerk-b-from-1.json"
   },
   {
    "name": "ac-cap-02-02-finish",
@@ -216,7 +311,12 @@
      "prune_state": "",
      "store_id": ""
     }
-   ]
+   ],
+   "ac": [
+    "AC-CAP-02-02",
+    "AC-CAP-04-03"
+   ],
+   "changed_body": "clerk-b-from-1.json"
   },
   {
    "name": "ac-cap-02-02-exec-ready",
@@ -248,6 +348,9 @@
      "prune_state": "",
      "store_id": ""
     }
+   ],
+   "ac": [
+    "AC-CAP-02-02"
    ]
   },
   {
@@ -279,6 +382,9 @@
      "prune_state": "",
      "store_id": ""
     }
+   ],
+   "ac": [
+    "AC-CAP-02-02"
    ]
   },
   {
@@ -358,6 +464,16 @@
      "prune_state": "accepted/bor",
      "store_id": ""
     }
+   ],
+   "ac": [
+    "AC-CAP-02-02",
+    "AC-CAP-04-03"
+   ],
+   "refused": [
+    2,
+    3,
+    4,
+    5
    ]
   }
  ]

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -55,6 +56,7 @@ import (
 	"github.com/ethereum/go-ethereum/extractor/borimport"
 	_ "github.com/ethereum/go-ethereum/extractor/borwire"
 	"github.com/ethereum/go-ethereum/extractor/retention"
+	sourceinputs "github.com/ethereum/go-ethereum/extractor/source_inputs"
 	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
@@ -725,7 +727,7 @@ func describe(node *borimport.Node, db ethdb.Database, result *attemptResult) er
 	return nil
 }
 
-func capsuleKeys(db ethdb.Database) ([]string, error) {
+func capsuleKeys(db ethdb.KeyValueStore) ([]string, error) {
 	it := db.NewIterator([]byte("extractor-source-inputs-v1/"), nil)
 	defer it.Release()
 	var keys []string
@@ -906,7 +908,37 @@ func scenario(args []string) error {
 		}
 		rows = append(rows, row)
 	}
+	if err = saveCheckpoints(store, filepath.Join(*output, "checkpoints.json")); err != nil {
+		return err
+	}
 	return saveJSON(filepath.Join(*output, "scenario.json"), map[string]any{"plan": plan, "attempts": rows})
+}
+
+// saveCheckpoints writes the checkpoint-snapshot item of every sealed capsule
+// (native Bor data that the judge checks against the ancestor rule).
+func saveCheckpoints(path, output string) error {
+	db, err := openStore(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	keys, err := capsuleKeys(db)
+	if err != nil {
+		return err
+	}
+	items := []map[string]any{}
+	for _, key := range keys {
+		c, err := borimport.ReadCapsule(db, key)
+		if err != nil {
+			return err
+		}
+		data, err := sourceinputs.ReadItem(db, key, 6)
+		if err != nil {
+			return err
+		}
+		items = append(items, map[string]any{"key": key, "block": c.Block.NumberU64(), "data": hex.EncodeToString(data)})
+	}
+	return saveJSON(output, map[string]any{"checkpoint_items": items})
 }
 
 func storeIDOf(step Step) string {

@@ -25,8 +25,8 @@ PACKAGES = (
     ("adapters/bor/admission/native/obligation", ("obligation.go", "obligation_test.go"),
      "extractor/admission/native/obligation"),
     ("adapters/bor/source_inputs", ("inputs.go", "inputs_test.go"), "extractor/source_inputs"),
-    ("adapters/bor/state_provider", ("provider.go", "provider_test.go", "family.go", "family_test.go"),
-     "extractor/state_provider"),
+    # The state_provider tests need the E01-02.pins harness inputs (test/harness/pins.py runs them).
+    ("adapters/bor/state_provider", ("provider.go", "family.go"), "extractor/state_provider"),
     ("adapters/bor/state_provider/native_overlay/internal/cli/server", ("zz_extractor_effective.go",),
      "internal/cli/server"),
     ("core/capture", ("capture.go", "capture_test.go"), "extractor/capture"),
