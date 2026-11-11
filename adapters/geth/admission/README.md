@@ -182,7 +182,10 @@ release is `ErrGuard`. Every admission call takes the token and refuses a nil
 token, a released token, or a token of another guard (`ErrGuard`). The lock
 order is guard, then native locks. A nested native call passes the token it
 received; it never calls `Acquire` again, which would deadlock. An admission
-is bound to the guard of the token passed to `Open`.
+is bound to the guard of the token passed to `Open`. `Mode` also needs the
+token. Only one `Admission` may own a producer run at a time: `Begin` re-reads
+the durable counter and stops with `ErrConflict` if another instance advanced
+it, before it writes anything.
 
 ### Digests
 

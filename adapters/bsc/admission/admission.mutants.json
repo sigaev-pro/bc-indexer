@@ -201,7 +201,7 @@
     {
       "name": "open keeps abandoned observations",
       "file": "admission.go",
-      "original": "\t\tif obs.State != Abandoned {\n\t\t\ta.open[seq] = obs\n\t\t}",
+      "original": "\t\tif obs.State != Abandoned && obs.State != Rejected {\n\t\t\ta.open[seq] = obs\n\t\t}",
       "replacement": "\t\ta.open[seq] = obs"
     },
     {
@@ -232,20 +232,20 @@
     {
       "name": "load accepts abandoned with admitted",
       "file": "admission.go",
-      "original": "if hasAdmitted || hasReady || abandoned !=",
-      "replacement": "if hasReady || abandoned !="
+      "original": "if hasAdmitted || hasReady || hasRejected || abandoned !=",
+      "replacement": "if hasReady || hasRejected || abandoned !="
     },
     {
       "name": "load accepts abandoned with exec ready",
       "file": "admission.go",
-      "original": "if hasAdmitted || hasReady || abandoned !=",
-      "replacement": "if hasAdmitted || abandoned !="
+      "original": "if hasAdmitted || hasReady || hasRejected || abandoned !=",
+      "replacement": "if hasAdmitted || hasRejected || abandoned !="
     },
     {
       "name": "load ignores the abandoned content",
       "file": "admission.go",
-      "original": "\t\tif hasAdmitted || hasReady || abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {",
-      "replacement": "\t\tif hasAdmitted || hasReady {"
+      "original": "\t\tif hasAdmitted || hasReady || hasRejected || abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {",
+      "replacement": "\t\tif hasAdmitted || hasReady || hasRejected {"
     },
     {
       "name": "load ignores the admitted digest",
@@ -453,9 +453,9 @@
       "replacement": "\t_ = obs.State"
     },
     {
-      "name": "abandon keeps the pin",
+      "name": "terminate keeps the pin",
       "file": "admission.go",
-      "original": "\tif err := a.pins.Release(key); err != nil {\n\t\treturn a.fail(err)\n\t}",
+      "original": "\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}",
       "replacement": "\t_ = a.pins"
     },
     {
@@ -595,6 +595,102 @@
       "file": "canonical.go",
       "original": "\t\t\tif !p.literal(`\\u`) {\n\t\t\t\treturn \"\", p.errorf(\"lone surrogate escape\")\n\t\t\t}",
       "replacement": "\t\t\tif !p.literal(`\\u`) {\n\t\t\t\ttext = utf8.AppendRune(text, r)\n\t\t\t\tcontinue\n\t\t\t}"
+    },
+    {
+      "name": "rejected tag",
+      "file": "admission.go",
+      "original": "tagRejected  = \"extractor-admission-rejected-v1\"",
+      "replacement": "tagRejected  = \"extractor-admission-rejected-v2\""
+    },
+    {
+      "name": "rejected digest drops the evidence",
+      "file": "admission.go",
+      "original": "digestOf(tagged(tagRejected), raw[0], raw[1])",
+      "replacement": "digestOf(tagged(tagRejected), raw[0])"
+    },
+    {
+      "name": "load accepts abandoned with rejected",
+      "file": "admission.go",
+      "original": "if hasAdmitted || hasReady || hasRejected || abandoned !=",
+      "replacement": "if hasAdmitted || hasReady || abandoned !="
+    },
+    {
+      "name": "load accepts rejected with exec ready",
+      "file": "admission.go",
+      "original": "if !hasAdmitted || hasReady || err != nil || rejected.Observation != key",
+      "replacement": "if !hasAdmitted || err != nil || rejected.Observation != key"
+    },
+    {
+      "name": "load ignores the rejected digest",
+      "file": "admission.go",
+      "original": "\t\t\trejected.AdmittedDigest != admitted.Digest || rejected.Digest != want {",
+      "replacement": "\t\t\trejected.AdmittedDigest != admitted.Digest || (rejected.Digest != want && want == \"\") {"
+    },
+    {
+      "name": "load ignores the rejected admitted digest",
+      "file": "admission.go",
+      "original": "\t\t\trejected.AdmittedDigest != admitted.Digest || rejected.Digest != want {",
+      "replacement": "\t\t\trejected.Digest != want {"
+    },
+    {
+      "name": "load ignores the rejected key",
+      "file": "admission.go",
+      "original": "err != nil || rejected.Observation != key || rejected.Sequence != seq ||",
+      "replacement": "err != nil || rejected.Sequence != seq ||"
+    },
+    {
+      "name": "load ignores the rejected sequence",
+      "file": "admission.go",
+      "original": "err != nil || rejected.Observation != key || rejected.Sequence != seq ||",
+      "replacement": "err != nil || rejected.Observation != key ||"
+    },
+    {
+      "name": "load keeps a rejected observation listed",
+      "file": "admission.go",
+      "original": "\t\tobs.State = Rejected\n\t\treturn obs, nil",
+      "replacement": "\t\tobs.State = Admitted\n\t\treturn obs, nil"
+    },
+    {
+      "name": "open keeps rejected observations",
+      "file": "admission.go",
+      "original": "if obs.State != Abandoned && obs.State != Rejected {",
+      "replacement": "if obs.State != Abandoned {"
+    },
+    {
+      "name": "begin ignores a rejected record beyond the counter",
+      "file": "admission.go",
+      "original": "\"admitted\", \"exec-ready\", \"abandoned\", \"rejected\"}",
+      "replacement": "\"admitted\", \"exec-ready\", \"abandoned\"}"
+    },
+    {
+      "name": "begin ignores a moved counter",
+      "file": "admission.go",
+      "original": "\tif counter.Next != a.next {",
+      "replacement": "\tif counter.Next < a.next {"
+    },
+    {
+      "name": "mode skips the guard",
+      "file": "admission.go",
+      "original": "\tif err := a.enter(t); err != nil {\n\t\treturn \"\", err\n\t}\n\treturn a.mode, nil",
+      "replacement": "\treturn a.mode, nil"
+    },
+    {
+      "name": "reject skips the evidence check",
+      "file": "admission.go",
+      "original": "\tif !digestPattern.MatchString(evidenceDigest) {\n\t\treturn RejectedRecord{}, fmt.Errorf(\"%w: evidence digest %q\", ErrInvalid, evidenceDigest)\n\t}",
+      "replacement": "\t_ = evidenceDigest"
+    },
+    {
+      "name": "reject from any open state",
+      "file": "admission.go",
+      "original": "\tif obs.State != Admitted {\n\t\treturn RejectedRecord{}, fmt.Errorf(\"%w: Reject of %s in %s\", ErrState, key, obs.State)\n\t}",
+      "replacement": "\tif obs.State == InputPreparing {\n\t\treturn RejectedRecord{}, fmt.Errorf(\"%w: Reject of %s in %s\", ErrState, key, obs.State)\n\t}"
+    },
+    {
+      "name": "reject writes an abandoned record",
+      "file": "admission.go",
+      "original": "\tif err := a.terminate(obs, \"rejected\", record); err != nil {",
+      "replacement": "\tif err := a.terminate(obs, \"abandoned\", record); err != nil {"
     }
   ]
 }

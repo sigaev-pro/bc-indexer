@@ -76,7 +76,6 @@ type memStore struct {
 	crashAt   int
 	putErr    error
 	syncErr   error
-	getErr    error
 	hasErr    error
 	getErrFor string
 	writes    []string
@@ -103,9 +102,6 @@ func (s *memStore) Has(key []byte) (bool, error) {
 }
 
 func (s *memStore) Get(key []byte) ([]byte, error) {
-	if s.getErr != nil {
-		return nil, s.getErr
-	}
 	if s.getErrFor != "" && strings.HasSuffix(string(key), s.getErrFor) {
 		return nil, errDisk
 	}
@@ -265,6 +261,15 @@ func (f *fixture) reopen(db *memStore) {
 	f.a = a
 }
 
+func (f *fixture) mode() Mode {
+	f.t.Helper()
+	mode, err := f.a.Mode(f.token)
+	if err != nil {
+		f.t.Fatalf("mode: %v", err)
+	}
+	return mode
+}
+
 func (f *fixture) live() {
 	f.t.Helper()
 	if err := f.a.GoLive(f.token); err != nil {
@@ -344,8 +349,8 @@ func TestDigestVectors(t *testing.T) {
 // record against the independent vectors.
 func TestFullFlow(t *testing.T) {
 	f := newFixture(t)
-	if f.a.Mode() != RecoveryOnly || len(f.states()) != 0 {
-		t.Fatalf("fresh admission: mode %s, states %v", f.a.Mode(), f.states())
+	if f.mode() != RecoveryOnly || len(f.states()) != 0 {
+		t.Fatalf("fresh admission: mode %s, states %v", f.mode(), f.states())
 	}
 	f.live()
 	obs := f.begin()
@@ -428,8 +433,8 @@ func TestModesAndPending(t *testing.T) {
 		t.Fatalf("begin in recovery: %v", err)
 	}
 	f.live()
-	if f.a.Mode() != Live {
-		t.Fatalf("mode %s", f.a.Mode())
+	if f.mode() != Live {
+		t.Fatalf("mode %s", f.mode())
 	}
 	key := f.begin().Key
 	if _, err := f.a.Begin(f.token, f.v.Candidate); !errors.Is(err, ErrPending) {
@@ -441,8 +446,8 @@ func TestModesAndPending(t *testing.T) {
 		t.Fatalf("begin while ADMITTED: %v", err)
 	}
 	f.reopen(f.db)
-	if f.a.Mode() != RecoveryOnly {
-		t.Fatalf("reopened mode %s", f.a.Mode())
+	if f.mode() != RecoveryOnly {
+		t.Fatalf("reopened mode %s", f.mode())
 	}
 	if err := f.a.GoLive(f.token); !errors.Is(err, ErrPending) {
 		t.Fatalf("go live while ADMITTED: %v", err)
@@ -584,14 +589,13 @@ func TestBeginPowerLoss(t *testing.T) {
 // is recovered from the same inputs, keeps its pin and blocks a new H until
 // it reaches EXEC_READY.
 func TestAdmitPowerLoss(t *testing.T) {
-	want := AdmittedRecord{Observation: "", Sequence: 0}
 	for crash := 0; crash <= 3; crash++ {
 		for keep := uint(0); keep < 2; keep++ {
 			f := newFixture(t)
 			f.live()
 			key := f.begin().Key
 			f.prepare(key)
-			want = AdmittedRecord{Observation: key, Sequence: 0, Candidate: f.v.Candidate, PinDigest: f.v.PinDigest,
+			want := AdmittedRecord{Observation: key, Sequence: 0, Candidate: f.v.Candidate, PinDigest: f.v.PinDigest,
 				CapsuleDigest: f.v.CapsuleDigest, Digest: f.v.AdmittedDigest}
 			if crash > 0 {
 				f.db.crashAt = f.db.ops + crash
@@ -1092,6 +1096,7 @@ func TestGuard(t *testing.T) {
 		"exec ready":   func(tok *Token) error { _, err := f.a.ExecReady(tok, f.v.Key, f.v.ExecDigest); return err },
 		"abandon":      func(tok *Token) error { return f.a.Abandon(tok, f.v.Key) },
 		"reject":       func(tok *Token) error { _, err := f.a.Reject(tok, f.v.Key, f.v.EvidenceDigest); return err },
+		"mode":         func(tok *Token) error { _, err := f.a.Mode(tok); return err },
 	}
 	for name, call := range calls {
 		for label, tok := range map[string]*Token{"nil": nil, "other guard": other, "empty": {}} {
@@ -1270,5 +1275,36 @@ func TestRejectPowerLoss(t *testing.T) {
 				t.Fatalf("crash %d keep %b: next sequence %d", crash, keep, next.Sequence)
 			}
 		}
+	}
+}
+
+// TestOneAdmissionPerProducer: a second instance of the same producer run
+// that admitted behind this one is detected before Begin writes.
+func TestOneAdmissionPerProducer(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	stale, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs)
+	if err != nil {
+		t.Fatalf("second open: %v", err)
+	}
+	if err := stale.GoLive(f.token); err != nil {
+		t.Fatalf("second go live: %v", err)
+	}
+	f.begin()
+	writes := len(f.db.writes)
+	if _, err := stale.Begin(f.token, f.v.Candidate); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale begin: %v", err)
+	}
+	if len(f.db.writes) != writes {
+		t.Fatalf("a stale Begin wrote %v", f.db.writes[writes:])
+	}
+	if _, err := stale.Observations(f.token); !errors.Is(err, ErrFailed) {
+		t.Fatalf("the stale admission did not stop: %v", err)
+	}
+	f = newFixture(t)
+	f.live()
+	f.db.durable[string(f.a.key("counter"))] = []byte("[]")
+	if _, err := f.a.Begin(f.token, f.v.Candidate); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("malformed counter at Begin: %v", err)
 	}
 }

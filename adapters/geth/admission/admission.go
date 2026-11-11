@@ -564,7 +564,12 @@ func copyObservation(obs *Observation) Observation {
 }
 
 // Mode returns the current mode.
-func (a *Admission) Mode() Mode { return a.mode }
+func (a *Admission) Mode(t *Token) (Mode, error) {
+	if err := a.enter(t); err != nil {
+		return "", err
+	}
+	return a.mode, nil
+}
 
 // Observations lists every non-terminal observation in sequence order.
 func (a *Admission) Observations(t *Token) ([]Observation, error) {
@@ -609,6 +614,16 @@ func (a *Admission) Begin(t *Token, c Candidate) (Observation, error) {
 	}
 	if obs := a.pending(); obs != nil {
 		return Observation{}, fmt.Errorf("%w: %s is %s", ErrPending, obs.Key, obs.State)
+	}
+	// Only one Admission may own a producer run. A durable counter that moved
+	// means another instance admitted observations behind this one.
+	var counter counterRecord
+	if _, err := readRecord(a.db, a.key("counter"), &counter); err != nil {
+		return Observation{}, a.fail(err)
+	}
+	if counter.Next != a.next {
+		return Observation{}, a.fail(fmt.Errorf("%w: counter of %s is %d, this admission expects %d",
+			ErrConflict, a.owner, counter.Next, a.next))
 	}
 	seq := a.next
 	key := a.observationKey(seq)
