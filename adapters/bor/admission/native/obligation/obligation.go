@@ -36,6 +36,9 @@ var (
 	ErrInput = errors.New("counted Heimdall input failed")
 	// ErrWindow reports a window opened twice or closed without being open.
 	ErrWindow = errors.New("observation window misuse")
+	// ErrReplay reports an EXEC_READY observation that its saved inputs do
+	// not reproduce.
+	ErrReplay = errors.New("EXEC_READY replay differs")
 )
 
 // MaxResponseBytes bounds one Heimdall response body.
@@ -144,9 +147,9 @@ type Native interface {
 	// OpenLog opens the dependency log of key.
 	OpenLog(key string) (Log, error)
 	// OpenWindow drops the native Heimdall and snapshot caches, so every
-	// Heimdall read of the window reaches the router, and holds back header
-	// verification of other blocks until CloseWindow.
-	OpenWindow()
+	// Heimdall read of the window reaches the router, and holds back every
+	// Heimdall reader other than the import of candidate c until CloseWindow.
+	OpenWindow(c admission.Candidate)
 	// CloseWindow ends what OpenWindow started.
 	CloseWindow()
 	// Verify verifies the header seal of key again from the capsule's
@@ -258,7 +261,7 @@ func (o *Observation) open() error {
 	if err := o.driver.Router.Enter(log); err != nil {
 		return err
 	}
-	o.driver.Native.OpenWindow()
+	o.driver.Native.OpenWindow(o.cand)
 	return nil
 }
 
@@ -391,6 +394,76 @@ func (d *Driver) resolve(token *admission.Token, r Reexecutor, saved admission.O
 		return true, nil
 	}
 	return false, err
+}
+
+// Progress reports how far one attempt consumed a dependency log
+// (source_inputs.Log).
+type Progress interface {
+	// Cursor returns the number of entries this attempt consumed.
+	Cursor() uint64
+	// Frontier returns the number of durable entries.
+	Frontier() uint64
+}
+
+// Replay checks that a saved EXEC_READY observation replays from its saved
+// inputs alone: with its closed log in the router and the window open, it
+// verifies the header from the capsule and re-executes the block on the
+// pinned parent state. Every counted Heimdall read must be served from the
+// log (a read past the closed log stops the window), every saved entry must
+// be consumed, and the native result digest must equal the bound one. A read
+// that another component made during the window and that entered the log
+// would fail here, as a prefix conflict or an unconsumed entry. Replay
+// changes no record: the observation stays EXEC_READY with its pin.
+func (d *Driver) Replay(key string, r Reexecutor) (err error) {
+	token := d.Guard.Acquire()
+	defer func() {
+		if releaseErr := token.Release(); releaseErr != nil {
+			err = errors.Join(err, releaseErr)
+		}
+	}()
+	saved, err := d.Admission.Observations(token)
+	if err != nil {
+		return err
+	}
+	var obs *admission.Observation
+	for i := range saved {
+		if saved[i].Key == key {
+			obs = &saved[i]
+		}
+	}
+	if obs == nil || obs.State != admission.ExecReady || obs.ExecReady == nil {
+		return fmt.Errorf("%w: %s is not EXEC_READY", ErrReplay, key)
+	}
+	log, err := d.Native.OpenLog(key)
+	if err != nil {
+		return err
+	}
+	progress, ok := log.(Progress)
+	if !ok {
+		return fmt.Errorf("%w: the log of %s does not report its progress", ErrReplay, key)
+	}
+	if err := d.Router.Enter(log); err != nil {
+		return err
+	}
+	d.Native.OpenWindow(obs.Candidate)
+	var result string
+	nativeErr, failure := d.Native.Verify(key)
+	if nativeErr == nil && failure == nil {
+		result, nativeErr, failure = r.Reexecute(key, obs.Candidate)
+	}
+	// A replay fetches nothing, so any source error is a failure.
+	fault, source := d.Router.Leave()
+	d.Native.CloseWindow()
+	if failed := errors.Join(failure, fault, source, nativeErr); failed != nil {
+		return fmt.Errorf("%w: %s: %w", ErrReplay, key, failed)
+	}
+	if progress.Cursor() != progress.Frontier() {
+		return fmt.Errorf("%w: %s consumed %d of %d saved entries", ErrReplay, key, progress.Cursor(), progress.Frontier())
+	}
+	if result != obs.ExecReady.ExecDigest {
+		return fmt.Errorf("%w: %s result %s, bound %s", ErrReplay, key, result, obs.ExecReady.ExecDigest)
+	}
+	return nil
 }
 
 // Row is one counted Heimdall call of a window.

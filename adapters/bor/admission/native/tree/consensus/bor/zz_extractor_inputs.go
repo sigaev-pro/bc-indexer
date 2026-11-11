@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -38,30 +37,6 @@ type extractorOverride struct {
 // allows one capsule header check at a time; each check removes only its
 // own override.
 var extractorSnapshots atomic.Pointer[extractorOverride]
-
-// extractorWindow holds back header verification of other blocks while an
-// observation window is open. The window takes it exclusively; VerifyHeader,
-// VerifyHeaders (per header) and VerifySeal take it shared. The capsule
-// check and Finalize of the observed block do not take it.
-var extractorWindow sync.RWMutex
-
-// extractorGate waits for the open window, if any, to close and returns the
-// release function. The patched exported verification entry points call it.
-func (c *Bor) extractorGate() func() {
-	extractorWindow.RLock()
-	return extractorWindow.RUnlock
-}
-
-// ExtractorOpenWindow starts an observation window: it waits for header
-// verification in progress to finish, holds back new verification of other
-// blocks, and drops the cached Heimdall data and snapshots.
-func (c *Bor) ExtractorOpenWindow() {
-	extractorWindow.Lock()
-	c.ExtractorPurgeInputs()
-}
-
-// ExtractorCloseWindow ends the window that ExtractorOpenWindow started.
-func (c *Bor) ExtractorCloseWindow() { extractorWindow.Unlock() }
 
 // ExtractorCheckHeimdall requires the single native HTTP Heimdall client at
 // host with the process transport, so the router sees every Heimdall read.

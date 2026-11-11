@@ -43,6 +43,11 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).with_name("fixtures") / "admission_bor"
 STUB_SOURCES = Path(__file__).with_name("fixtures") / "source_inputs_bor" / "heimdallstub"
 PROBE_DIR = "cmd/extractor-bor-admission-probe"
+# Native tests of the patch set in the Bor packages (tree/**/zz_extractor_*_test.go).
+NATIVE_TESTS = ("TestExtractorFreezeThreshold", "TestExtractorGoroutineIDs", "TestExtractorGateOwnerPassesOthersWait",
+                "TestExtractorGateOpenWaitsForGatedCalls", "TestExtractorGateNestedCallsDoNotWaitForAnOpeningWindow",
+                "TestExtractorGateMisuse", "TestExtractorGateFinalizeOfTheObservedBlockIsTheImport",
+                "TestExtractorBlockGateHashesTheHeader", "TestExtractorGateCoversEveryHeimdallEntryPoint")
 PACKAGE = "github.com/ethereum/go-ethereum"
 BODY_FILES = ("span-0.json", "span-1.json", "span-latest.json", "status.json", "clerk-a-from-1.json",
               "clerk-b-from-1.json", "clerk-empty.json")
@@ -181,16 +186,17 @@ def prepare_bor(manifest, root, output, native, compiler, oracle, deadline):
                               cwd="/work/source", environment=environment)
 
     go(["mod", "verify"], 300)
-    go(["vet", "./extractor/...", f"./{PROBE_DIR}/..."], 1200)
+    go(["vet", "./extractor/...", "./consensus/bor", "./internal/cli", f"./{PROBE_DIR}/..."], 1200)
     stdout = go(["test", "-race", "-count=1", "-cover", *[f"./{name}" for name in TESTED_PACKAGES],
                  f"./{PROBE_DIR}/heimdallstub"], 1800)
     row["unit_tests"] = reference(stdout)
     go_test_passed(stdout.read_text(errors="replace"), (*TESTED_PACKAGES, f"{PROBE_DIR}/heimdallstub"))
-    stdout = go(["test", "-race", "-count=1", "-run", "^TestExtractor", "-v", "./core/rawdb"], 1200)
+    stdout = go(["test", "-race", "-count=1", "-run", "^TestExtractor", "-v", "./core/rawdb", "./consensus/bor"], 1200)
     row["rawdb_tests"] = reference(stdout)
     text = stdout.read_text(errors="replace")
-    go_test_passed(text, ("core/rawdb",))
-    require("--- PASS: TestExtractorFreezeThreshold" in text, "The freezer threshold test did not run")
+    go_test_passed(text, ("core/rawdb", "consensus/bor"))
+    for name in NATIVE_TESTS:
+        require(f"--- PASS: {name} " in text, f"The native test {name} did not pass")
     stdout = go(["list", "-deps", "./cmd/cli"], 600)
     row["shipped_binary_deps"] = reference(stdout)
     require(f"{PACKAGE}/extractor/borwire" in stdout.read_text().split(),
@@ -664,6 +670,10 @@ def compare(name, observed, context):
         check_completed(context, second, list(range(block, plan["attempts"][1]["to"] + 1)), variant(1), fail, "retry")
     elif kind == "checkpoint-rio":
         check_checkpoint_rio(context, plan, attempts, block, fail)
+    elif kind == "rpc-window":
+        check_rpc_window(context, plan, attempts, block, fail)
+    elif kind == "prune-block":
+        check_prune_block(context, plan, attempts, fail)
     else:
         fail(f"unknown scenario kind {kind}")
     return failures
@@ -705,6 +715,93 @@ def check_checkpoint_rio(context, plan, attempts, block, fail):
         fail("the patched bor snapshot prune-state did not refuse the live pins")
     if accepted.get("refused_live_pins") is not False:
         fail("the accepted bor binary refused the live pins, so the refusal does not prove the patch")
+
+
+def request_path(request):
+    """The URL path of a counted request identity `GET <path>?<query>`."""
+    return request.split(" ", 1)[1].split("?", 1)[0]
+
+
+def check_rpc_window(context, plan, attempts, block, fail):
+    """D100 item 2: a bor RPC call sent while the window of `block` is open
+    waits at the window gate until the window closes, so the observation's log
+    holds only the import's own reads (check_completed binds them to the
+    independent consumed digest); every EXEC_READY then replays from its saved
+    inputs alone; and the same RPC call with cold caches outside every window
+    reads Heimdall through the native client."""
+    step, row = plan["attempts"][0], attempts[0]
+    numbers = list(range(step["from"], step["to"] + 1))
+    check_completed(context, row, numbers, "a", fail, "rpc attempt")
+    result = row["result"] or {}
+    oracle, config, chain = context["oracle"], context["config"], context["chain"]
+    rpc = result.get("rpc_in_window") or {}
+    first = expected_requests(oracle, config, chain[block - 1], "a")[0]["request"]
+    if rpc.get("block") != block or rpc.get("target") != block - 1 or rpc.get("trigger_request") != first:
+        fail(f"the RPC call was not started by the first Heimdall read of the window of block {block}: {rpc}")
+    if rpc.get("waiting_at_gate") is not True or rpc.get("returned_in_window") is not False:
+        fail(f"the RPC call did not wait at the window gate until the window closed: {rpc}")
+    if rpc.get("error") or rpc.get("snapshot_number") != block - 1 or \
+            rpc.get("snapshot_hash") != "0x" + chain[block - 2]["hash"].hex():
+        fail(f"the RPC call did not return the native snapshot of block {block - 1}: {rpc}")
+    ready = sorted(int(seq, 16) for (seq, *rest) in records(row["store_after"]) if rest == ["exec-ready"])
+    replays = result.get("replays") or []
+    if [r.get("key") for r in replays] != [key_of(sequence) for sequence in ready] or len(ready) != len(numbers):
+        fail(f"the replays do not cover every EXEC_READY observation: {[r.get('key') for r in replays]}")
+    for replay in replays:
+        number = step["from"] + int(replay["key"].rsplit(".", 1)[1], 16)
+        if replay.get("error"):
+            fail(f"the EXEC_READY of block {number} does not replay: {replay['error']}")
+        want = expected_requests(oracle, config, chain[number - 1], "a")
+        check_rows(replay.get("counted_calls"), want, ["replay"] * len(want), fail, f"replay of block {number}",
+                   context["body_sha256"])
+    # Other non-import readers (the native block producer) may read the same
+    # paths in that interval, so each path must be read at least once.
+    control = result.get("rpc_control") or {}
+    target = step["rpc_control"]
+    want_paths = {request_path(call["request"]) for call in oracle["requests"]["rio_header_check"]}
+    passed = control.get("passed_heimdall_calls") or {}
+    if control.get("error") or control.get("snapshot_number") != target or \
+            control.get("snapshot_hash") != "0x" + chain[target - 1]["hash"].hex() or \
+            any(passed.get(path, 0) < 1 for path in want_paths):
+        fail(f"the RPC call with cold caches outside a window did not read {sorted(want_paths)} "
+             f"through the native client: {control}")
+
+
+def check_prune_block(context, plan, attempts, fail):
+    """D100 item 1: the patched `bor snapshot prune-block` refuses while a pin
+    is live, before any native step and without a store change; the accepted
+    binary does not refuse (it reaches the native pruner), so the refusal comes
+    from the patch; without live pins the patched binary reaches the native
+    pruner too."""
+    want = context["oracle"]["prune_block"]
+    first = attempts[0]
+    numbers = list(range(plan["attempts"][0]["from"], plan["attempts"][0]["to"] + 1))
+    tool = lambda index: attempts[index]["prune_state"]
+    tail = lambda index: tool(index).get("output_tail") or ""
+    if plan["pins"]:
+        check_completed(context, first, numbers, "a", fail, "import")
+        if not any(row["key"].startswith(PIN) for row in first["store_after"]):
+            fail("no pin is live before the prune")
+        patched = attempts[1]
+        if tool(1).get("command") != "prune-block" or tool(1).get("refused_live_pins") is not True or \
+                want["refusal"] not in tail(1) or want["native_error"] in tail(1):
+            fail(f"the patched bor snapshot prune-block did not refuse the live pins first: {tool(1)}")
+        if patched["store_before"] != first["store_after"] or patched["store_after"] != patched["store_before"] or \
+                patched["ancient_after"] != patched["ancient_before"]:
+            fail("the refused prune-block changed the store or the ancient directory")
+        if tool(2).get("command") != "prune-block" or tool(2).get("refused_live_pins") is not False or \
+                want["native_error"] not in tail(2):
+            fail(f"the accepted bor binary did not reach the native pruner, so the refusal does not prove the patch: "
+                 f"{tool(2)}")
+    else:
+        result = first["result"] or {}
+        if result.get("observations") or any(row["key"].startswith(PIN) for row in first["store_after"]) or \
+                result.get("inserted") != len(numbers) or \
+                result.get("head_hash") != "0x" + context["chain"][numbers[-1] - 1]["hash"].hex():
+            fail("the unobserved import left an observation or a pin, or did not import the range")
+        if tool(1).get("command") != "prune-block" or tool(1).get("refused_live_pins") is not False or \
+                want["refusal"] in tail(1) or want["native_error"] not in tail(1):
+            fail(f"without live pins the patched prune-block did not reach the native pruner: {tool(1)}")
 
 
 def checked_compare(name, observed, context):

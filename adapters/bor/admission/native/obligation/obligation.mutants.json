@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Single-check mutants of the Bor obligation driver, pin adapter, recovery driver and Heimdall router (E01-02.admission, Bor block).",
+  "description": "Single-check mutants of the Bor obligation driver, pin adapter, recovery driver, EXEC_READY replay and Heimdall router (E01-02.admission, Bor block).",
   "language": "go",
   "root": "../..",
   "copy": [
@@ -227,14 +227,14 @@
     {
       "name": "window opens with the cache purge and gate",
       "file": "native/obligation/obligation.go",
-      "original": "\to.driver.Native.OpenWindow()\n",
+      "original": "\to.driver.Native.OpenWindow(o.cand)\n",
       "replacement": ""
     },
     {
       "name": "every finish closes the window",
       "file": "native/obligation/obligation.go",
-      "original": "\td.Native.CloseWindow()\n",
-      "replacement": ""
+      "original": "\td.Native.CloseWindow()\n\tif nativeErr == nil {\n",
+      "replacement": "\tif nativeErr == nil {\n"
     },
     {
       "name": "failed header check rejects",
@@ -343,6 +343,78 @@
       "file": "native/obligation/obligation.go",
       "original": "\t\t\t\treturn response(req, status.status, status.body), nil",
       "replacement": "\t\t\t\treturn nil, r.source"
+    },
+    {
+      "name": "replay refuses an observation that is not EXEC_READY",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif obs == nil || obs.State != admission.ExecReady || obs.ExecReady == nil {",
+      "replacement": "\tif obs == nil {"
+    },
+    {
+      "name": "replay finds the observation by key",
+      "file": "native/obligation/obligation.go",
+      "original": "\t\tif saved[i].Key == key {",
+      "replacement": "\t\tif saved[i].Key != key {"
+    },
+    {
+      "name": "replay needs the log progress",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif !ok {\n\t\treturn fmt.Errorf(\"%w: the log of %s does not report its progress\"",
+      "replacement": "\tif false {\n\t\treturn fmt.Errorf(\"%w: the log of %s does not report its progress\""
+    },
+    {
+      "name": "replay router enter error",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif err := d.Router.Enter(log); err != nil {\n\t\treturn err\n\t}\n\td.Native.OpenWindow(obs.Candidate)\n\tvar result string",
+      "replacement": "\tif err := d.Router.Enter(log); err != nil && false {\n\t\treturn err\n\t}\n\td.Native.OpenWindow(obs.Candidate)\n\tvar result string"
+    },
+    {
+      "name": "replay opens the window",
+      "file": "native/obligation/obligation.go",
+      "original": "\td.Native.OpenWindow(obs.Candidate)\n\tvar result string",
+      "replacement": "\tvar result string"
+    },
+    {
+      "name": "replay re-executes only after the header check",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif nativeErr == nil && failure == nil {\n\t\tresult, nativeErr, failure = r.Reexecute(key, obs.Candidate)",
+      "replacement": "\tif true {\n\t\tresult, nativeErr, failure = r.Reexecute(key, obs.Candidate)"
+    },
+    {
+      "name": "replay closes the window",
+      "file": "native/obligation/obligation.go",
+      "original": "\td.Native.CloseWindow()\n\tif failed := errors.Join(failure, fault, source, nativeErr); failed != nil {",
+      "replacement": "\tif failed := errors.Join(failure, fault, source, nativeErr); failed != nil {"
+    },
+    {
+      "name": "replay fails on a native or input failure",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif failed := errors.Join(failure, fault, source, nativeErr); failed != nil {",
+      "replacement": "\tif failed := errors.Join(failure, fault, source, nativeErr); failed != nil && false {"
+    },
+    {
+      "name": "replay counts a log fault",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif failed := errors.Join(failure, fault, source, nativeErr); failed != nil {",
+      "replacement": "\tif failed := errors.Join(failure, source, nativeErr); failed != nil {"
+    },
+    {
+      "name": "replay consumes every saved entry",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif progress.Cursor() != progress.Frontier() {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "replay compares the result digest",
+      "file": "native/obligation/obligation.go",
+      "original": "\tif result != obs.ExecReady.ExecDigest {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "replay releases the guard",
+      "file": "native/obligation/obligation.go",
+      "original": "\tdefer func() {\n\t\tif releaseErr := token.Release(); releaseErr != nil {",
+      "replacement": "\tdefer func() {\n\t\tif releaseErr := error(nil); releaseErr != nil {"
     }
   ]
 }

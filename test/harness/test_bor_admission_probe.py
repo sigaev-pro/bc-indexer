@@ -74,6 +74,10 @@ def judge(name, change=None):
     return probe.checked_compare(name, observed, ctx)
 
 
+def observations_by_block(result):
+    return {o["block"]: o for o in result["observations"]}
+
+
 def row_of(dump, suffix):
     return next(row for row in dump if row["key"].endswith(suffix))
 
@@ -387,6 +391,123 @@ class JudgeTests(unittest.TestCase):
             set_value(o["attempts"][0]["store_after"], "bor.run-1.0000000000000004/capsule",
                       lambda r: r["items"][5].update(length=1))
         self.assertFails("checkpoint-rio", ancestors, "capsule differs from the independent items")
+
+    def test_rpc_window(self):
+        def result(o):
+            return o["attempts"][0]["result"]
+
+        def rpc(o):
+            return result(o)["rpc_in_window"]
+
+        def trigger(o, c):
+            rpc(o)["trigger_request"] = "GET /bor/spans/latest"
+        self.assertFails("rpc-window", trigger, "was not started by the first Heimdall read")
+
+        def target(o, c):
+            rpc(o)["target"] = 1033
+        self.assertFails("rpc-window", target, "was not started by the first Heimdall read")
+
+        def not_waiting(o, c):
+            rpc(o)["waiting_at_gate"] = False
+        self.assertFails("rpc-window", not_waiting, "did not wait at the window gate")
+
+        def returned(o, c):
+            rpc(o)["returned_in_window"] = True
+        self.assertFails("rpc-window", returned, "did not wait at the window gate")
+
+        def snapshot(o, c):
+            rpc(o)["snapshot_hash"] = "0x" + "00" * 32
+        self.assertFails("rpc-window", snapshot, "did not return the native snapshot")
+
+        def rpc_error(o, c):
+            rpc(o)["error"] = "boom"
+        self.assertFails("rpc-window", rpc_error, "did not return the native snapshot")
+
+        def foreign(o, c):
+            calls = observations_by_block(result(o))[1035]["counted_calls"]
+            calls.append({**calls[0], "sequence": len(calls)})
+        self.assertFails("rpc-window", foreign, "block 1035: 4 counted calls, expected 3")
+
+        def uncovered(o, c):
+            result(o)["replays"].pop()
+        self.assertFails("rpc-window", uncovered, "do not cover every EXEC_READY")
+
+        def replay_error(o, c):
+            result(o)["replays"][4]["error"] = "EXEC_READY replay differs"
+        self.assertFails("rpc-window", replay_error, "does not replay")
+
+        def replay_fetch(o, c):
+            result(o)["replays"][4]["counted_calls"][0]["origin"] = "fetch"
+        self.assertFails("rpc-window", replay_fetch, "replay of block 1035: call 0 origin fetch")
+
+        def control(o, c):
+            result(o)["rpc_control"]["passed_heimdall_calls"].pop("/status")
+        self.assertFails("rpc-window", control, "cold caches outside a window")
+
+        def control_hash(o, c):
+            result(o)["rpc_control"]["snapshot_number"] = 1039
+        self.assertFails("rpc-window", control_hash, "cold caches outside a window")
+
+    def test_prune_block(self):
+        def tool(o, index):
+            return o["attempts"][index]["prune_state"]
+
+        def not_refused(o, c):
+            tool(o, 1)["refused_live_pins"] = False
+        self.assertFails("prune-block-live-pins", not_refused, "did not refuse the live pins first")
+
+        def native_first(o, c):
+            tool(o, 1)["output_tail"] += "freezer is empty, abort"
+        self.assertFails("prune-block-live-pins", native_first, "did not refuse the live pins first")
+
+        def other_command(o, c):
+            tool(o, 1)["command"] = "prune-state"
+        self.assertFails("prune-block-live-pins", other_command, "did not refuse the live pins first")
+
+        def ancient(o, c):
+            o["attempts"][1]["ancient_after"] = {"chain/x": "00"}
+        self.assertFails("prune-block-live-pins", ancient, "changed the store or the ancient directory")
+
+        def store(o, c):
+            o["attempts"][1]["store_after"] = o["attempts"][1]["store_after"][1:]
+        self.assertFails("prune-block-live-pins", store, "changed the store or the ancient directory")
+
+        def no_pins(o, c):
+            for row in (o["attempts"][0]["store_after"], o["attempts"][1]["store_before"], o["attempts"][1]["store_after"]):
+                row[:] = [r for r in row if not r["key"].startswith(probe.PIN)]
+        self.assertFails("prune-block-live-pins", no_pins, "no pin is live before the prune")
+
+        def accepted_refused(o, c):
+            tool(o, 2)["refused_live_pins"] = True
+        self.assertFails("prune-block-live-pins", accepted_refused, "the accepted bor binary did not reach")
+
+        def accepted_elsewhere(o, c):
+            tool(o, 2)["output_tail"] = ""
+        self.assertFails("prune-block-live-pins", accepted_elsewhere, "the accepted bor binary did not reach")
+
+        def pinned(o, c):
+            o["attempts"][0]["store_after"].append({"key": probe.PIN + "x", "value_sha256": "00", "value_length": 1})
+        self.assertFails("prune-block-no-pins", pinned, "left an observation or a pin")
+
+        def observed(o, c):
+            o["attempts"][0]["result"]["observations"] = [{"block": 1}]
+        self.assertFails("prune-block-no-pins", observed, "left an observation or a pin")
+
+        def unimported(o, c):
+            o["attempts"][0]["result"]["inserted"] = 5
+        self.assertFails("prune-block-no-pins", unimported, "left an observation or a pin")
+
+        def refused(o, c):
+            tool(o, 1)["refused_live_pins"] = True
+        self.assertFails("prune-block-no-pins", refused, "did not reach the native pruner")
+
+        def guard_text(o, c):
+            tool(o, 1)["output_tail"] += "guarded block pruning: live pins forbid"
+        self.assertFails("prune-block-no-pins", guard_text, "did not reach the native pruner")
+
+        def elsewhere(o, c):
+            tool(o, 1)["output_tail"] = ""
+        self.assertFails("prune-block-no-pins", elsewhere, "did not reach the native pruner")
 
     def test_malformed_observation(self):
         def broken(o, c):
