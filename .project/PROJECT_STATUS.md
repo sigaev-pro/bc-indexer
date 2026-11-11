@@ -16,7 +16,8 @@ before #16 closes:
   measured run repeats the POLY AC-CAP-02 and AC-CAP-04-03 cases on its head.
 - Geth removedb block (native-engineer, Geth session): `geth removedb` and
   the other manual database commands refuse while live pins or open
-  obligations exist (D100 item 3).
+  obligations exist (D100 item 3). Draft PR #154: records 05 PASS at
+  `b9fc992`; see the Geth block section below.
 
 AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and BSC slots.
 They also pass on POLY (Bor) at PR #149; under D100 the hazards block must
@@ -200,6 +201,48 @@ passed and are superseded and kept.
 
 Review 003 at head `32e6a66`: Spec PASS and Standards PASS; hosted CI
 passed. Merged in PR #147 at `6f6eb2c`.
+
+### Removedb block (D100 item 3)
+
+Status: IN_PROGRESS (part of #16), draft PR #154. Branch
+`claude/e01-02-admission-geth-removedb` from main `06231d1`, merged with main
+`9185107` (D100, PR #151). Same role, allowed paths and profile as above.
+
+Scope: `geth removedb` refuses while a pin is live or an observation is
+INPUT_PREPARING or ADMITTED, with a read-only check
+(`RequireNoOpenCapture`: `RequireNoLivePins` plus `OpenObligations`).
+`MakeChainDatabase` (and so `MakeChain`) runs the same check before every
+writable open of an existing store, and so does `geth snapshot
+generate-trie` before its checkpoint. The native README lists every command
+of Geth `1df30b18` that writes chaindata with its guard; `download-era`
+and `db pebble-upgrade` stay unguarded, each with its reason. The patch set
+has 23 patches and three new files. `prune_state_skipped` is retired as
+equivalent on the shipped binary (ORACLE.md).
+
+Review 001 at head `e33d5b1`: Spec PASS and Standards PASS, each with three
+P3s:
+- `snapshot generate-trie` writes the source chain freezer (fixed by
+  guarding it);
+- `download-era` was not listed;
+- the retired mutant was not recorded;
+- the read-only claim needed a qualifier;
+- `import-bound` made `begin_before_counter_sync` depend on a writable open
+  (the row moved to the `removedb_allowed` store).
+
+Commit `b9fc992` fixes all of them. Preparation 04 at `e33d5b1` waited for
+the host lock and was stopped as stale; its wait record is kept. Review 002
+at `b9fc992`: Spec PASS and Standards PASS, no findings.
+
+Evidence at `b9fc992`:
+- Preparation 05 PASS: 65 unit tests and 26 native mutant builds.
+- Measured run 05 PASS in 500 seconds: probe PASS and 26 of 26 native
+  mutants killed. Fourteen manual commands are refused on the AC-CAP-02-02
+  store with every chaindata file unchanged, and recovery completes after
+  them.
+- Python mutants: 71 of 71 killed.
+
+Resume point: review 003 of the evidence head, hosted CI, the final review
+comment, then READY for the coordinator.
 
 ## E01-02.admission — BSC block
 

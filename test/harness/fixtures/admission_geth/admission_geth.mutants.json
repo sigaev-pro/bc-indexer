@@ -407,6 +407,48 @@
    "file": "test/harness/fixtures/admission_geth/admission_geth.py",
    "original": "    return lambda: path.write_text(before)\n\n\ndef go_environment",
    "replacement": "    return lambda: None\n\n\ndef go_environment"
+  },
+  {
+   "name": "deleted exit ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if row.get(\"exit_code\") != 0 or row.get(\"timed_out\") or not isinstance(before, list) or \\",
+   "replacement": "if row.get(\"timed_out\") or not isinstance(before, list) or \\"
+  },
+  {
+   "name": "deleted timeout ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if row.get(\"exit_code\") != 0 or row.get(\"timed_out\") or not isinstance(before, list) or \\",
+   "replacement": "if row.get(\"exit_code\") != 0 or not isinstance(before, list) or \\"
+  },
+  {
+   "name": "deleted store before ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "not isinstance(after, list) or not any(\"/\" not in str(entry) for entry in before) or \\",
+   "replacement": "not isinstance(after, list) or \\"
+  },
+  {
+   "name": "deleted store after ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "                    any(\"/\" not in str(entry) for entry in after):",
+   "replacement": "                    False:"
+  },
+  {
+   "name": "unchanged store ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if not isinstance(before, list) or not before or rows[name].get(\"store_after\") != before:",
+   "replacement": "if not isinstance(before, list) or not before:"
+  },
+  {
+   "name": "unchanged empty store accepted",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "if not isinstance(before, list) or not before or rows[name].get(\"store_after\") != before:",
+   "replacement": "if not isinstance(before, list) or rows[name].get(\"store_after\") != before:"
+  },
+  {
+   "name": "removedb allowed crash point ignored",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    ended(c, \"removedb-allowed-1\", crash, \"before_sync/counter\")\n",
+   "replacement": "    ended(c, \"removedb-allowed-1\", crash, None) if False else None\n"
   }
  ]
 }
