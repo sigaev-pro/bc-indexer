@@ -182,14 +182,20 @@ temporary files there; the driver now sets `TMPDIR` to the build directory,
 as the E01-02.pins harness does. Preparations 01 and 03 failed for this
 reason, not for lack of host disk.
 
+Review 002 (head `bcaa277`, evidence of preparation 04 and run 01 on
+`cd9e2ef`): Spec PASS with P3 notes; Standards REQUEST_CHANGES (P2: recovery
+re-execution rejected local-state errors that the live path keeps). Commit
+`e103f18` fixes it (`ExtractorLocalStateUnavailable` in recovery), passes a
+Heimdall error status to Bor as its native response (Spec P3), removes a dead
+return value and corrects README and status wording.
+
 Evidence ([E01-02.admission.bor](evidence/E01-02.admission.bor.md)):
-preparation 04 and measured run 01 on clean `cd9e2ef`, PASS (all nine
+preparation 06 and measured run 03 on clean `e103f18`, PASS (all nine
 scenarios). POLY private local: AC-CAP-02-01 PASS, AC-CAP-02-02 PASS,
 AC-CAP-04-03 real binding PASS; every public cell NOT_RUN. Mutants on
-`937d174`: Go 53 of 53, Python 86 of 86 killed. Preparation 05 and run 02 on
-`8dab2e2` (the copied probe path fix) are queued at the host lock.
+`e103f18`: Go 54 of 54, Python 86 of 86 killed.
 
-Next: review 002 on the head with this evidence, then READY for the
+Next: review 003 on the head with this evidence, then READY for the
 coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
