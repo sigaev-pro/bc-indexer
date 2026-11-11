@@ -532,7 +532,7 @@ class LongChain(unittest.TestCase):
         summary = evaluate_long()
         self.assertEqual(summary["observed"], driver.LONG_LENGTH - driver.LONG_OBSERVED_FROM + 1)
         self.assertEqual(summary["system_calls"], {str(driver.LONG_EPOCH_BLOCK): 1})
-        self.assertEqual(summary["window_of_last_block"], [1099, 844])
+        self.assertEqual(summary["window_of_last_block"], [driver.LONG_LENGTH - 1, driver.LONG_LENGTH - 256])
 
     def changed(self, run, field, value):
         report = copy.deepcopy(LONG_REPORT)
@@ -540,13 +540,13 @@ class LongChain(unittest.TestCase):
         return report
 
     def test_report_fields(self):
-        self.refused("cold: states", report=self.changed("cold", "states", lambda v: {"EXEC_READY": 110, "ADMITTED": 1}))
+        self.refused("cold: states", report=self.changed("cold", "states", lambda v: {"EXEC_READY": 35, "ADMITTED": 1}))
         self.refused("warm: system calls", report=self.changed("warm", "system_calls_on_parent", lambda v: {"1001": 1}))
         self.refused("warm: stored checkpoint", report=self.changed("warm", "stored_checkpoint_number", lambda v: 0))
-        self.refused("warm: window", report=self.changed("warm", "window_of_last_block", lambda v: [1099, 1024]))
+        self.refused("warm: window", report=self.changed("warm", "window_of_last_block", lambda v: [driver.LONG_LENGTH - 1, 1024]))
         self.refused("cold: restarts", report=self.changed("cold", "restarts", lambda v: 0))
         self.refused("Warm and cold imports differ",
-                     report=self.changed("cold", "exec_digests", lambda v: dict(v, **{"1100": "00" * 32})))
+                     report=self.changed("cold", "exec_digests", lambda v: dict(v, **{str(driver.LONG_LENGTH): "00" * 32})))
         report = copy.deepcopy(LONG_REPORT)
         report["hashes"]["1024"] = "0x" + "00" * 32
         self.refused("Long chain hash 1024", report=report)

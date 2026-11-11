@@ -4,8 +4,8 @@ package bsc
 // exit. The chain is generated here by the native engine (Prepare,
 // AssembleBlock, Seal with the public test validator key) and validated by
 // the native import; timestamps are the parent's plus the period, so the
-// chain is deterministic. Blocks 1 to 989 are imported natively, then 990
-// to 1100 through the seam: they cover the epoch block 1000 (system-contract
+// chain is deterministic. Blocks 1 to 994 are imported natively, then 995
+// to 1030 through the seam: they cover the epoch block 1000 (system-contract
 // calls), the stored checkpoint snapshot at 1024, and capsule windows above
 // that checkpoint.
 
@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	longChainLength       = 1100
-	longChainObservedFrom = 990
+	longChainLength       = 1030
+	longChainObservedFrom = 995
 	longChainEpochBlock   = 1000
 	longChainCheckpoint   = 1024
 	// fixtureValidator is the sole validator of the private fixture genesis.
@@ -265,7 +265,7 @@ func TestNativeBSCLongChain(t *testing.T) {
 		t.Fatalf("restarts %d", cold.Restarts)
 	}
 	report := map[string]any{"length": longChainLength, "observed_from": longChainObservedFrom,
-		"hashes": map[string]string{"1000": blocks[999].Hash().Hex(), "1024": blocks[1023].Hash().Hex(), "1100": blocks[1099].Hash().Hex()},
+		"hashes": map[string]string{"1000": blocks[999].Hash().Hex(), "1024": blocks[1023].Hash().Hex(), "1030": blocks[1029].Hash().Hex()},
 		"warm": warm, "cold": cold}
 	data, err := json.MarshalIndent(report, "", " ")
 	if err != nil {

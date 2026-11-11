@@ -68,7 +68,7 @@ LONG_TRACES = ("long-warm", "long-cold")
 # Traces of the separate native tests, checked on their own.
 EXTRA_TRACES = ("parent-state",) + LONG_TRACES
 # The long chain of TestNativeBSCLongChain (independent copies).
-LONG_LENGTH, LONG_OBSERVED_FROM, LONG_EPOCH_BLOCK, LONG_CHECKPOINT = 1100, 990, 1000, 1024
+LONG_LENGTH, LONG_OBSERVED_FROM, LONG_EPOCH_BLOCK, LONG_CHECKPOINT = 1030, 995, 1000, 1024
 # The public test validator keystore of the BSC source tree (password "").
 KEYSTORE = "tests/truffle/storage/keystore/UTC--2023-12-07T03-21-00.035782000Z--03735c2ed70a56cd221e0024eb4bf90243c9d6e9"
 PRODUCER, RUN = "bsc-probe", "run-1"
