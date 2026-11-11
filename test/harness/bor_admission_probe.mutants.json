@@ -1,0 +1,556 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.admission Bor driver, judge and tree installer.",
+  "language": "python",
+  "root": "../..",
+  "copy": [
+    "test/harness/bor_admission_probe.py",
+    "test/harness/bor_admission_tree.py",
+    "test/harness/test_bor_admission_probe.py",
+    "test/harness/bor_source_inputs_probe.py",
+    "test/harness/admission.py",
+    "test/harness/source_inputs.py",
+    "test/harness/capture_probe.py",
+    "test/harness/artifacts.py",
+    "test/harness/native.py",
+    "test/harness/owned.py",
+    "test/harness/fixtures/admission_bor/*",
+    "test/harness/fixtures/admission_bor/stub/*",
+    "adapters/bor/admission/*.go",
+    "adapters/bor/admission/vectors.json",
+    "adapters/bor/admission/native/patches.json",
+    "adapters/bor/admission/native/tree/*/*.go",
+    "adapters/bor/admission/native/tree/*/*/*.go",
+    "adapters/bor/admission/native/tree/*/*/*/*.go",
+    "adapters/bor/admission/native/obligation/*.go",
+    "adapters/bor/admission/native/borimport/*.go",
+    "adapters/bor/source_inputs/*.go",
+    "adapters/bor/state_provider/*.go",
+    "adapters/bor/state_provider/native_overlay/internal/cli/server/*.go",
+    "core/capture/*.go"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/test_bor_admission_probe.py",
+    "-v"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "result digest tag",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "TAG_RESULT = \"extractor-bor-native-result-v1\"",
+      "replacement": "TAG_RESULT = \"extractor-bor-native-result-v2\""
+    },
+    {
+      "name": "rejection digest tag",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "TAG_REJECTION = \"extractor-bor-native-rejection-v1\"",
+      "replacement": "TAG_REJECTION = \"extractor-bor-native-rejection-v2\""
+    },
+    {
+      "name": "digest fields are length-prefixed",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "return len(value).to_bytes(8, \"big\") + value",
+      "replacement": "return value"
+    },
+    {
+      "name": "result digest covers gas used",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "return tagged_digest(TAG_RESULT, block_hash, state_root, receipt_root, str(gas_used))",
+      "replacement": "return tagged_digest(TAG_RESULT, block_hash, state_root, receipt_root)"
+    },
+    {
+      "name": "rejection digest covers the error",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "return tagged_digest(TAG_REJECTION, key, block_hash, error)",
+      "replacement": "return tagged_digest(TAG_REJECTION, key, block_hash, \"\")"
+    },
+    {
+      "name": "sealed chain checks the parent link",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "require(number == len(rows) + 1 and block[0][0] == previous[\"hash\"], \"The sealed blocks are not one chain\")",
+      "replacement": "require(number == len(rows) + 1, \"The sealed blocks are not one chain\")"
+    },
+    {
+      "name": "sprint picks the highest key at or below",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "return config[\"bor\"][\"sprint\"][str(max(key for key in keys if key <= number))]",
+      "replacement": "return config[\"bor\"][\"sprint\"][str(min(keys))]"
+    },
+    {
+      "name": "Rio starts at the Rio block",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "return number >= config[\"bor\"][\"rioBlock\"]",
+      "replacement": "return number > config[\"bor\"][\"rioBlock\"]"
+    },
+    {
+      "name": "to_time subtracts the delay",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "datetime.fromtimestamp(timestamp - delay, tz=timezone.utc)",
+      "replacement": "datetime.fromtimestamp(timestamp, tz=timezone.utc)"
+    },
+    {
+      "name": "Rio header check reads the span",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if is_rio(config, number):\n        calls += rules[\"rio_header_check\"]\n",
+      "replacement": ""
+    },
+    {
+      "name": "sprint start reads state sync",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if number % sprint(config, number) == 0:",
+      "replacement": "    if number % 4 == 0:"
+    },
+    {
+      "name": "first span commit only before Rio",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if not is_rio(config, number) and number == rules[\"first_span_commit\"]:",
+      "replacement": "        if number == rules[\"first_span_commit\"] or is_rio(config, number):"
+    },
+    {
+      "name": "status before Rio state sync",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if not is_rio(config, number):\n            calls += rules[\"status\"]",
+      "replacement": "        if True:\n            calls += rules[\"status\"]"
+    },
+    {
+      "name": "first state sync block",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "pages = rules[\"first_state_sync\"][variant] if number == rules[\"first_state_sync_block\"] else \\",
+      "replacement": "pages = rules[\"first_state_sync\"][\"a\"] if number == rules[\"first_state_sync_block\"] else \\"
+    },
+    {
+      "name": "ancestor rule before Rio starts at the checkpoint",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "first = parent if is_rio(config, number) else parent - parent % CHECKPOINT_INTERVAL",
+      "replacement": "first = parent if is_rio(config, number) else max(parent - CHECKPOINT_INTERVAL, 0)"
+    },
+    {
+      "name": "ancestor rule from Rio is the parent",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "first = parent if is_rio(config, number) else parent - parent % CHECKPOINT_INTERVAL",
+      "replacement": "first = parent - parent % CHECKPOINT_INTERVAL"
+    },
+    {
+      "name": "checkpoint interval",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "CHECKPOINT_INTERVAL = 1024",
+      "replacement": "CHECKPOINT_INTERVAL = 512"
+    },
+    {
+      "name": "checkpoint snapshot empty from Rio",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if is_rio(context[\"config\"], number):\n        return data == b\"\"",
+      "replacement": "    if is_rio(context[\"config\"], number):\n        return True"
+    },
+    {
+      "name": "checkpoint snapshot names the first ancestor",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "snapshot.get(\"hash\") == \"0x\" + keccak256(first).hex()",
+      "replacement": "True"
+    },
+    {
+      "name": "checkpoint snapshot signer",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "and signers == [context[\"oracle\"][\"signer\"]]",
+      "replacement": ""
+    },
+    {
+      "name": "capsule item order and digest",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if capsule.get(\"items\") != refs or capsule.get(\"digest\") != digest or capsule.get(\"observation\") != key:",
+      "replacement": "if capsule.get(\"digest\") != digest or capsule.get(\"observation\") != key:"
+    },
+    {
+      "name": "admitted record binds the capsule",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if admitted.get(\"candidate\") != candidate or admitted.get(\"capsule_digest\") != digest:",
+      "replacement": "if admitted.get(\"candidate\") != candidate:"
+    },
+    {
+      "name": "pin digest is the ledger record digest",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if pin is not None and pin[\"value_sha256\"] != pin_digest:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "admitted digest recomputes",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if admitted.get(\"digest\") != admission.admitted_digest(key, sequence, candidate, pin_digest, digest):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "exec-ready binds consumed",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if ready.get(\"consumed_digest\") != consumed or ready.get(\"exec_digest\") != result or \\",
+      "replacement": "if ready.get(\"exec_digest\") != result or \\"
+    },
+    {
+      "name": "exec-ready binds the result",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if ready.get(\"consumed_digest\") != consumed or ready.get(\"exec_digest\") != result or \\",
+      "replacement": "if ready.get(\"consumed_digest\") != consumed or \\"
+    },
+    {
+      "name": "exec-ready digest recomputes",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                ready.get(\"digest\") != admission.exec_ready_digest(admitted[\"digest\"], consumed, result):",
+      "replacement": "                False:"
+    },
+    {
+      "name": "closed manifest digest",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if not closed or closed.get(\"digest\") != consumed:",
+      "replacement": "if not closed:"
+    },
+    {
+      "name": "exec-ready keeps the pin",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if pin is None:\n            fail(f\"{label}: {key} EXEC_READY lost its pin\")",
+      "replacement": "        if False:\n            fail(f\"{label}: {key} EXEC_READY lost its pin\")"
+    },
+    {
+      "name": "rejected releases the pin",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if rejected is not None and (ready is not None or pin is not None):",
+      "replacement": "if rejected is not None and ready is not None:"
+    },
+    {
+      "name": "candidate check",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if not preparing or preparing.get(\"candidate\") != candidate or preparing.get(\"observation\") != key:",
+      "replacement": "if not preparing or preparing.get(\"observation\") != key:"
+    },
+    {
+      "name": "rows request digest",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        elif row.get(\"request_sha256\") != hashlib.sha256(call[\"request\"].encode()).hexdigest():",
+      "replacement": "        elif False:"
+    },
+    {
+      "name": "rows error",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        elif row.get(\"error\"):",
+      "replacement": "        elif False:"
+    },
+    {
+      "name": "rows response bytes",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        elif row.get(\"response_sha256\") != bodies_sha[call[\"body\"]]:",
+      "replacement": "        elif False:"
+    },
+    {
+      "name": "rows origin",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        elif row.get(\"origin\") != origin:",
+      "replacement": "        elif False:"
+    },
+    {
+      "name": "rows count",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if len(rows) != len(want) or len(origins) != len(want):",
+      "replacement": "    if len(origins) != len(want):"
+    },
+    {
+      "name": "completed head",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if result.get(\"head_hash\") != \"0x\" + last[\"hash\"].hex():",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "completed requires EXEC_READY",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "!= \"EXEC_READY\":\n            fail(f\"{label}: block {number} did not reach EXEC_READY\")",
+      "replacement": "== \"\":\n            fail(f\"{label}: block {number} did not reach EXEC_READY\")"
+    },
+    {
+      "name": "GoLive refused before recovery",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if \"still pending\" not in (result.get(\"golive_before_recovery\") or \"\"):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "Begin refused before recovery",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if \"RECOVERY_ONLY\" not in (result.get(\"begin_before_recovery\") or \"\"):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "crash attempts are killed",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if status.get(\"signal\") != \"killed\" or not row.get(\"crash_result\"):",
+      "replacement": "            if not row.get(\"crash_result\"):"
+    },
+    {
+      "name": "refused attempts exit 1",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if status.get(\"exit_code\") != 1 or status.get(\"signal\"):",
+      "replacement": "            if status.get(\"signal\"):"
+    },
+    {
+      "name": "normal attempts exit 0",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        elif status.get(\"exit_code\") != 0 or status.get(\"signal\"):",
+      "replacement": "        elif status.get(\"signal\"):"
+    },
+    {
+      "name": "plan must match",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "if observed.get(\"plan\", {}).get(\"attempts\") != plan[\"attempts\"] or len(attempts) != len(plan[\"attempts\"]):",
+      "replacement": "if len(attempts) != len(plan[\"attempts\"]):"
+    },
+    {
+      "name": "lost state",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if state != want_state:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "lost pin and capsule",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if (pinned, sealed) != {\"begin\": (False, False), \"pin\": (True, False), \"seal\": (True, True)}.get(step, (True, True)):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "lost log entries",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if saved != want_saved:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "restart reopens the run",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if result.get(\"pending_at_open\") != pending:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "recovery abandons only",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if recovery.get(\"abandoned\") != [key] or recovery.get(\"exec_ready\") or recovery.get(\"rejected\"):",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "abandoned keeps nothing",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if state_of(records(after), sequence) != \"ABANDONED\" or has(after, PIN + key) or log_entries(after, key):",
+      "replacement": "            if state_of(records(after), sequence) != \"ABANDONED\":"
+    },
+    {
+      "name": "recovery resolves to EXEC_READY",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if recovery.get(\"exec_ready\") != [key] or recovery.get(\"abandoned\") or recovery.get(\"rejected\"):",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "recovery replays the saved prefix",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            origins = [\"replay\"] * len(want_saved) + [\"fetch\"] * (len(want) - len(want_saved))",
+      "replacement": "            origins = [\"fetch\"] * len(want)"
+    },
+    {
+      "name": "changed response never reaches recovery",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if changed and any(r.get(\"response_sha256\") == changed for r in result.get(\"recovery_counted_calls\") or []):",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "ADMITTED record is unchanged",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if records(after).get((f\"{sequence:016x}\", \"admitted\")) != records(dump).get((f\"{sequence:016x}\", \"admitted\")):",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "EXEC_READY kept for the bridge",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if recovery.get(\"exec_ready\") or recovery.get(\"abandoned\") or key not in (recovery.get(\"kept\") or []):",
+      "replacement": "            if recovery.get(\"abandoned\"):"
+    },
+    {
+      "name": "re-import rejection evidence",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                    rejected.get(\"evidence_digest\") != rejection_digest(key_of(new), context[\"chain\"][block - 1][\"hash\"].hex(),",
+      "replacement": "                    False and rejection_digest(key_of(new), context[\"chain\"][block - 1][\"hash\"].hex(),"
+    },
+    {
+      "name": "rejection refuses the block",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if \"invalid merkle root\" not in (obs.get(\"error\") or \"\") or result.get(\"inserted\") != block - 1:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "rejection evidence digest",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if not rejected or rejected.get(\"evidence_digest\") != rejection_digest(key, context[\"chain\"][block - 1][\"hash\"].hex(),",
+      "replacement": "        if not rejected or False and rejection_digest(key, context[\"chain\"][block - 1][\"hash\"].hex(),"
+    },
+    {
+      "name": "rejected keeps no pin or closed log",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if has(dump, PIN + key) or has(dump, INPUTS + key + \"/closed\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "post-Rio lost state",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if state_of(records(dump), sequence) != \"ADMITTED\" or log_entries(dump, key) != [0, 1]:",
+      "replacement": "    if state_of(records(dump), sequence) != \"ADMITTED\":"
+    },
+    {
+      "name": "post-Rio recovery replays",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "               \"recovery\", context[\"body_sha256\"])\n    if (result.get(\"recovery\") or {}).get(\"exec_ready\") != [key] or \\",
+      "replacement": "               \"recovery\", context[\"body_sha256\"])\n    if False or \\"
+    },
+    {
+      "name": "walk passes with the complete list",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "walk.get(\"complete_list_error\") != \"<nil>\" or \\",
+      "replacement": "False or \\"
+    },
+    {
+      "name": "walk fails without the checkpoint headers",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            \"unknown ancestor\" not in (walk.get(\"truncated_list_error\") or \"\"):",
+      "replacement": "            False:"
+    },
+    {
+      "name": "SetHead refused",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if \"live pins forbid\" not in (result.get(\"set_head_error\") or \"\"):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "refusals leave the store",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if reason not in ((row[\"result\"] or {}).get(\"error\") or \"\") or row[\"store_after\"] != final:",
+      "replacement": "        if reason not in ((row[\"result\"] or {}).get(\"error\") or \"\"):"
+    },
+    {
+      "name": "patched prune-state refuses",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if patched.get(\"refused_live_pins\") is not True or patched.get(\"exit_code\") != 1 or attempts[4][\"store_after\"] != final:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "accepted binary does not refuse",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if accepted.get(\"refused_live_pins\") is not False:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "chain-config is the genesis config",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    require(document[\"config\"] == config, \"The chain-config item is not the genesis config\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "generation record agrees",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    require([row[\"hash\"].hex() for row in chain] == [b[\"hash\"].removeprefix(\"0x\") for b in generated[\"blocks\"]],",
+      "replacement": "    require(True or [row[\"hash\"].hex() for row in chain] == [b[\"hash\"].removeprefix(\"0x\") for b in generated[\"blocks\"]],"
+    },
+    {
+      "name": "chain length",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    require(len(chain) == oracle[\"chain_blocks\"], \"The sealed chain length differs from the oracle\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "derived Rio block",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    config[\"bor\"][\"rioBlock\"] = oracle[\"rio_block\"]",
+      "replacement": "    config[\"bor\"][\"rioBlock\"] = oracle[\"rio_block\"] + 1"
+    },
+    {
+      "name": "derived timestamp",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    document[\"timestamp\"] = hex(moment)",
+      "replacement": "    document[\"timestamp\"] = hex(moment + 1)"
+    },
+    {
+      "name": "derived refuses a preset Rio",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    require(\"stateSyncConfirmationDelay\" not in config[\"bor\"] and \"rioBlock\" not in config[\"bor\"],",
+      "replacement": "    require(\"stateSyncConfirmationDelay\" not in config[\"bor\"],"
+    },
+    {
+      "name": "go test requires every package",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    require(not missing, f\"Go tests did not pass in the Bor module graph: {missing}\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "go test refuses a failure",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    require(not any(line.startswith(\"--- FAIL\") or line.startswith(\"FAIL\") for line in lines), \"A Go test failed\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "anchor must occur once",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "    if count != 1:",
+      "replacement": "    if count == 0:"
+    },
+    {
+      "name": "before mode",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "{\"before\": insert + anchor,",
+      "replacement": "{\"before\": anchor + insert,"
+    },
+    {
+      "name": "after mode",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "\"after\": anchor + insert,",
+      "replacement": "\"after\": insert + anchor,"
+    },
+    {
+      "name": "new file never replaces a native one",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "    if target.exists() or target.is_symlink():",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "edited file must be a native file",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "            if not path.is_file() or path.is_symlink():",
+      "replacement": "            if False:"
+    },
+    {
+      "name": "record the edited digest",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "        rows.append({\"kind\": \"edited\", \"path\": name, \"sha256_before\": sha(row[\"before\"]), \"sha256\": sha(after),",
+      "replacement": "        rows.append({\"kind\": \"edited\", \"path\": name, \"sha256_before\": sha(row[\"before\"]), \"sha256\": sha(row[\"before\"]),"
+    },
+    {
+      "name": "unsafe paths",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "    if not value or path.is_absolute() or \"..\" in path.parts or \"\\\\\" in value:",
+      "replacement": "    if not value or path.is_absolute():"
+    },
+    {
+      "name": "edit fields",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "        if set(edit) != {\"name\", \"file\", \"mode\", \"anchor\", \"text\"} or edit[\"mode\"] not in MODES or \\",
+      "replacement": "        if edit[\"mode\"] not in MODES or \\"
+    },
+    {
+      "name": "edit names unique",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "                not edit[\"anchor\"] or edit[\"name\"] in names:",
+      "replacement": "                not edit[\"anchor\"]:"
+    },
+    {
+      "name": "empty anchor refused",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "                not edit[\"anchor\"] or edit[\"name\"] in names:",
+      "replacement": "                edit[\"name\"] in names:"
+    },
+    {
+      "name": "schema version",
+      "file": "test/harness/bor_admission_tree.py",
+      "original": "    if data.get(\"schema_version\") != 1 or not isinstance(data.get(\"files\"), dict) or \\",
+      "replacement": "    if not isinstance(data.get(\"files\"), dict) or \\"
+    }
+  ]
+}
