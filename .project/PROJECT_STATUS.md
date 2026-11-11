@@ -182,14 +182,15 @@ for the coordinator.
 
 ## E01-02.admission — BSC block
 
-Status: IN PROGRESS, draft PR #148 (part A of two). Part of #16. Branch
-`claude/e01-02-admission-bsc-14da6e`, base main `9046de9`.
+Status: part A merged in PR #148 at `4bf65f3`. Part B IN PROGRESS on branch
+`claude/e01-02-admission-bsc-parlia-inputs`, base main `4bf65f3`. Part of
+#16.
 
 Split: the coordinator approved on 2026-11-11 splitting the BSC block into
 PR A "bsc-import" and PR B "bsc-parlia-inputs", both "Part of #16", with no
 item deferred. PR B starts on main after the coordinator merges PR A.
 
-Part A (this PR) covers these plan rows for BSC: the product import path
+Part A (PR #148) covers these plan rows for BSC: the product import path
 and per-block observations (import seam, with the Parlia system
 transactions of `Parlia.applyTransaction` inside the observation);
 `Reject` on native validation failure; the retention patch (D98 item 2);
@@ -199,7 +200,7 @@ canonical JSON rule, with the key-suffix fork-id recompute dropped; and
 AC-CAP-02-01 and AC-CAP-02-02 private local for BSC (public cells NOT_RUN,
 D96, D98, D99).
 
-Part B (next PR, after A merges) covers the BSC Parlia input rows: reads
+Part B covers the BSC Parlia input rows: reads
 below the window (`FindAncientHeader`, `GetFinalizedHeader`), the
 `CheckParentState` replacement, Parlia system-contract calls (`ethAPI`),
 the concurrent read order and a snapshot-key declaration without the
@@ -213,6 +214,53 @@ Records at `e0b16c8` (2026-11-11): preparation 03, run 03, Go mutants 01
 PASS. Earlier records are kept under D83: preparation 01 FAIL (harness
 source changed during the run), the superseded `5f1aa7c` records, and run
 02, cancelled before it started.
+
+Part B design (2026-11-11, native-engineer, from a read-only map of every
+input that a BSC block import reads):
+
+- Header reads in an observation. Header verification, `Process`,
+  `Finalize` and BLOCKHASH receive a scoped chain reader while an
+  observation is attached. The reader serves only the capsule headers (the
+  parent and the 256-header BLOCKHASH window). A read of any other header
+  stops the observation, which stays ADMITTED (fail closed, never
+  NATIVE_REJECTED). Readers on other goroutines (RPC, vote pool) keep the
+  native chain and are never logged into the observation.
+- Logged Parlia snapshots. Through the scoped reader, Parlia gets each
+  snapshot as a logged dependency response: the request is the block
+  number and hash, the response is the snapshot's JSON. The first attempt
+  computes it with the native engine (memory cache, stored checkpoint,
+  header walk); later attempts get the saved bytes. The snapshot walks,
+  including `FindAncientHeader` at a validator-set switch and the quorum and
+  finality-reward walks, therefore run inside the native computation and
+  are not observation reads. A snapshot is requested only for a capsule
+  header. This replaces the logged `parlia-` key reads and the engine reset:
+  the response no longer depends on a fresh engine.
+- Read order. One block per `insertChain`; header verification finishes
+  before execution starts, and the logger serializes the requests, so the
+  log order is the native order. Other goroutines do not use the scoped
+  reader.
+- `GetFinalizedHeader` and the fork choice run after EXEC_READY. They do not
+  feed the execution result; the finality decision belongs to
+  E01-02.decision_bridge.
+- System-contract calls (`ethAPI`). They run in `Finalize` on epoch,
+  turn-length and breathe blocks, and read the parent state by its hash.
+  The probe wires a real `ethapi.BlockChainAPI`. Its backend refuses a
+  state lookup other than the observed parent while an observation is
+  attached.
+- Parent-state completeness, replacing `CheckParentState`. `Begin`
+  requires the parent state root, and the pin keeps the state. A state read
+  error during execution (a missing trie node or code) is not
+  authoritative: the observation stays ADMITTED, and is never recorded as
+  NATIVE_REJECTED.
+- Window and checkpoint rule. The capsule holds the parent and the 256
+  BLOCKHASH ancestors, plus a declaration of the parent snapshot. A new
+  private Parlia fixture of more than 1,024 blocks proves the rule on the
+  real import path: epoch blocks with system-contract calls, a stored
+  checkpoint snapshot at 1024, a window above that checkpoint, and the same
+  logged snapshot bytes from a cold and a warm engine. The trusted-checkpoint
+  path runs only after a walk of 90,000 headers without a stored checkpoint.
+  It runs inside the native snapshot computation, whose result is logged
+  like any other snapshot.
 
 Resume point: none (not paused).
 
