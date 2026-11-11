@@ -598,5 +598,82 @@ class ParentState(unittest.TestCase):
             self.assertIn(message, str(caught.exception))
 
 
+class FakeFrames:
+    """The trusted chain's frames that the checks read, with the full length."""
+
+    def __init__(self, frames, length):
+        self.frames, self.length = frames, length
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        number = (self.length + index if index < 0 else index) + 1
+        return self.frames[number]
+
+
+TRUSTED_FRAMES = FakeFrames({int(k): bytes.fromhex(v) for k, v in json.loads(
+    gzip.decompress((HERE / "trusted-frames.json.gz").read_bytes())).items()}, driver.TRUSTED_PARENT + 1)
+TRUSTED_REPORT = json.loads((HERE / "trusted-report.json").read_text())
+TRUSTED_TRACE = [json.loads(line) for line in (HERE / "trace-trusted.jsonl").read_text().splitlines()]
+TRUSTED_CHAIN = json.loads((HERE / "trusted-chain.json").read_text())
+
+
+class Trusted(unittest.TestCase):
+    def evaluate(self, report=None, events=None, frames=TRUSTED_FRAMES):
+        return driver.checked_evaluate(report or copy.deepcopy(TRUSTED_REPORT), events or copy.deepcopy(TRUSTED_TRACE),
+                                       frames, function=driver.evaluate_trusted)
+
+    def refused(self, message, **changes):
+        with self.assertRaises(Rejected) as caught:
+            self.evaluate(**changes)
+        self.assertIn(message, str(caught.exception))
+
+    def test_baseline_passes(self):
+        summary = self.evaluate()
+        self.assertEqual(summary["entered_at"], driver.TRUSTED_CHECKPOINT)
+        self.assertGreater(summary["deleted_snapshots"], 0)
+
+    def test_report_refusals(self):
+        for message, field, value in (
+                ("Trusted path entered elsewhere", "entered_at", 2200),
+                ("Trusted path entered elsewhere", "checkpoint_hash", "0x" + "00" * 32),
+                ("Trusted bounds", "threshold", 90000),
+                ("Observed block", "observed_number", driver.TRUSTED_PARENT),
+                ("Trusted snapshot", "trusted_snapshot_recents", 1),
+                ("Trusted snapshot", "deleted_snapshots", 0)):
+            report = copy.deepcopy(TRUSTED_REPORT)
+            report[field] = value
+            self.refused(message, report=report)
+
+    def test_trace_refusals(self):
+        self.refused("Trusted observation", events=TRUSTED_TRACE + [{"event": "rejected", "observation": driver.key_of(0)}])
+        self.refused("Trusted observation", events=[e for e in TRUSTED_TRACE if e.get("event") != "exec-ready"])
+        events = copy.deepcopy(TRUSTED_TRACE)
+        for event in events:
+            if event.get("event") == "handoff":
+                request = bytes.fromhex(event["request_hex"])
+                tag = len(driver.SNAPSHOT_TAG)
+                number = int.from_bytes(request[tag:tag + 8], "big") - 1
+                block_hash = driver.keccak(probe14.rlp_list(TRUSTED_FRAMES[number - 1])[0])
+                event["request_hex"] = (request[:tag] + number.to_bytes(8, "big") + block_hash).hex()
+                event["response_hex"] = json.dumps({"number": number, "hash": "0x" + block_hash.hex()}).encode().hex()
+        self.refused("No logged parent snapshot", events=events)
+
+    def test_chain_record(self):
+        check = lambda record, sha=TRUSTED_CHAIN["sha256"], frames=TRUSTED_FRAMES: driver.checked_evaluate(
+            record, sha, frames, function=driver.check_trusted_chain)
+        self.assertEqual(check(dict(TRUSTED_CHAIN))["count"], driver.TRUSTED_PARENT + 1)
+        for message, record, sha, frames in (
+                ("Chain record", dict(TRUSTED_CHAIN, count=1), TRUSTED_CHAIN["sha256"], TRUSTED_FRAMES),
+                ("Chain record", dict(TRUSTED_CHAIN), "00" * 32, TRUSTED_FRAMES),
+                ("Chain head", dict(TRUSTED_CHAIN, last_hash="0x" + "00" * 32), TRUSTED_CHAIN["sha256"], TRUSTED_FRAMES),
+                ("Chain length", dict(TRUSTED_CHAIN), TRUSTED_CHAIN["sha256"],
+                 FakeFrames(TRUSTED_FRAMES.frames, driver.TRUSTED_PARENT))):
+            with self.assertRaises(Rejected) as caught:
+                check(record, sha, frames)
+            self.assertIn(message, str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

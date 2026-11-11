@@ -57,6 +57,14 @@ VET = ("./extractor/...", "./core", "./core/vm", "./core/rawdb", "./core/state/p
 HARNESS = ("bsc_admission.py", "bsc_source_inputs.py", "admission.py", "pins.py", "artifacts.py", "native.py",
            "owned.py", "source_inputs.py", "profile_manifest.py")
 CHILD_TEST = "TestNativeBSCAdmissionChild"
+# Gated tests that only the trusted-checkpoint commands run (D99 item 5).
+GENERATE_TEST, TRUSTED_TEST = "TestNativeBSCGenerateTrustedChain", "TestNativeBSCTrustedCheckpoint"
+NOT_IN_RUN = (CHILD_TEST, GENERATE_TEST, TRUSTED_TEST)
+# Independent copies: Parlia takes its trusted-checkpoint path after a walk of
+# more than FullImmutabilityThreshold headers, at a number % 1000 == 200.
+TRUSTED_THRESHOLD, TRUSTED_CHECKPOINT = 600000, 1200
+TRUSTED_PARENT = TRUSTED_THRESHOLD + TRUSTED_CHECKPOINT + 50
+TRUSTED_SECONDS, TRUSTED_CAP = 5 * 3600, 4 * 3600
 CRASH_MODES = ("before-admitted-put-drop", "admitted-unsynced-drop", "admitted-unsynced-keep", "admitted-synced",
                "first-handoff", "exec-ready-unsynced-drop")
 # Whether block 2 is ADMITTED after the restart of each crash point.
@@ -272,7 +280,8 @@ def prepare(manifest_path, expected_sha, output):
         tool = {"schema_version": 1, "kind": "bsc-admission-tool", "build_manifest": manifest_ref,
                 "native_source_commit": closure["source_commit"], "source_archive": copied, "compiler": compiler,
                 "patched": patched, "installed": installed, "source_root": str(source), "chain_config": forks,
-                "tests": [name for name in tests if name != CHILD_TEST],
+                "tests": [name for name in tests if name not in NOT_IN_RUN],
+                "gated_tests": sorted(name for name in tests if name in (GENERATE_TEST, TRUSTED_TEST)),
                 "test_binary": reference(root / "generated/bsc.test", deadline=deadline),
                 "geth_binary": reference(root / "generated/geth", deadline=deadline),
                 "validator_keystore": reference(keystore, deadline=deadline),
@@ -739,7 +748,8 @@ def probe_run(tool, fixture, genesis_hash, output, runner, deadline, binary=None
            "EXTRACTOR_ADMISSION_NATIVE_COMMIT": tool["native_source_commit"], "TMPDIR": "/scratch", "HOME": "/scratch"}
     started = time.monotonic()
     stdout = runner.command(tool["compiler"], ["/tool/" + binary.name, "-test.v", "-test.count=1", "-test.run", "^Test",
-                                               "-test.skip", f"^{CHILD_TEST}$", "-test.timeout", f"{TEST_CAP - 60}s"],
+                                               "-test.skip", "^(" + "|".join(NOT_IN_RUN) + ")$",
+                                               "-test.timeout", f"{TEST_CAP - 60}s"],
                             mounts, cap=TEST_CAP, memory="2g", cwd="/scratch", environment=env)
     elapsed = round(time.monotonic() - started, 3)
     passed = pins.parse_go_test(read_bytes(stdout, 8 * 1024 * 1024, deadline).decode(), tool["tests"])
@@ -797,6 +807,138 @@ def run(tool_path, tool_sha, manifest_path, manifest_sha, output):
         artifact(tool["geth_binary"], 1024 * 1024 * 1024, deadline=deadline)
 
     return pins.owned_attempt(output, started, deadline, proof, "run.json", body)
+
+
+# ---- trusted-checkpoint record ----
+
+def gated_test(tool, fixture, root, runner, deadline, test, chain_dir, writable, environment):
+    """Run one gated probe test with the chain directory mounted; return its stdout path."""
+    require(test in tool.get("gated_tests", ()), f"The tool has no {test}")
+    for name in ("inputs", "work", "temp"):
+        (root / name).mkdir(parents=True)
+    for name, ref in fixture["inputs"].items():
+        copy_artifact(Path(ref["path"]), root / "inputs" / name, ref, 64 * 1024 * 1024, deadline)
+    copy_artifact(Path(tool["validator_keystore"]["path"]), root / "inputs/validator-keystore.json",
+                  tool["validator_keystore"], 1024 * 1024, deadline)
+    binary = artifact(tool["test_binary"], 1024 * 1024 * 1024, deadline=deadline)
+    mounts = [(binary.parent, "/tool", True), (root / "inputs", "/inputs", True), (root / "work", "/work", False),
+              (root / "temp", "/scratch", False), (chain_dir, "/chain", not writable)]
+    env = {"EXTRACTOR_ADMISSION_INPUTS": "/inputs", "EXTRACTOR_ADMISSION_WORK": "/work",
+           "EXTRACTOR_ADMISSION_NATIVE_COMMIT": tool["native_source_commit"], "TMPDIR": "/scratch", "HOME": "/scratch",
+           **environment}
+    stdout = runner.command(tool["compiler"], ["/tool/" + binary.name, "-test.v", "-test.count=1", "-test.run", f"^{test}$",
+                                               "-test.timeout", f"{TRUSTED_CAP - 60}s"],
+                            mounts, cap=TRUSTED_CAP, memory="4g", cwd="/scratch", environment=env)
+    require(pins.parse_go_test(read_bytes(stdout, 8 * 1024 * 1024, deadline).decode(), [test]) == [test],
+            f"{test} did not pass")
+    return stdout
+
+
+def chain_frames(path, deadline):
+    """The raw blocks of a chain file, read in one pass."""
+    return probe14.split_rlp_list_items(read_bytes(path, 1024 * 1024 * 1024, deadline))
+
+
+def check_trusted_chain(record, sha256, frames):
+    """The generated chain is complete and matches its record."""
+    require(record["count"] == TRUSTED_PARENT + 1 and record["sha256"] == sha256, "Chain record")
+    require(len(frames) == TRUSTED_PARENT + 1, "Chain length")
+    last = header_fields(probe14.rlp_list(frames[-1])[0])
+    require(last["number"] == TRUSTED_PARENT + 1 and "0x" + last["hash"].hex() == record["last_hash"], "Chain head")
+    return {"count": record["count"], "sha256": sha256}
+
+
+def generate_trusted(tool_path, tool_sha, manifest_path, manifest_sha, chain_dir, output):
+    """Generate (or resume) the private chain of the trusted-checkpoint record in chain_dir."""
+    started = time.monotonic()
+    deadline = started + TRUSTED_SECONDS
+    require(tool_path.is_absolute() and output.is_absolute() and chain_dir.is_absolute(), "Paths must be absolute")
+    require(not chain_dir.is_relative_to(ROOT) and not chain_dir.is_relative_to(output), "Chain directory placement")
+    tool_ref, tool = pinned_json(tool_path, tool_sha, deadline=deadline)
+    require(tool.get("kind") == "bsc-admission-tool", "Not a BSC admission tool")
+    fixture, _ = probe14.load_inputs(manifest_path, manifest_sha, tool, deadline)
+    proof = {"schema_version": 1, "kind": "bsc-admission-trusted-chain", "result": "FAIL", "tool": tool_ref,
+             "source_commit": pins.source_commit(), "run_id": uuid.uuid4().hex, "native_owner_nonce": None,
+             "deadline_seconds": TRUSTED_SECONDS, "chain_dir": str(chain_dir), "error": None}
+
+    def body(output, runner):
+        chain_dir.mkdir(parents=True, exist_ok=True)
+        before = (chain_dir / "blocks.rlp").stat().st_size if (chain_dir / "blocks.rlp").exists() else 0
+        proof["file_bytes_before"] = before
+        began = time.monotonic()
+        stdout = gated_test(tool, fixture, output / "bsc", runner, deadline, GENERATE_TEST, chain_dir, True,
+                            {"EXTRACTOR_ADMISSION_TRUSTED_GENERATE": "/chain"})
+        proof["generation_seconds"] = round(time.monotonic() - began, 3)
+        record = load(chain_dir / "chain.json", 1024 * 1024, deadline)
+        blocks = reference(chain_dir / "blocks.rlp", 1024 * 1024 * 1024, deadline)
+        checked_evaluate(record, blocks["sha256"], chain_frames(chain_dir / "blocks.rlp", deadline),
+                         function=check_trusted_chain)
+        proof.update(chain={"blocks": blocks, "record": record}, stdout=reference(stdout, deadline=deadline))
+
+    return pins.owned_attempt(output, started, deadline, proof, "trusted-chain.json", body)
+
+
+def evaluate_trusted(report, events, frames):
+    """Check the trusted-checkpoint record against the chain and the trace."""
+    require(len(frames) == TRUSTED_PARENT + 1, "Trusted chain length")
+    headers = {number: probe14.rlp_list(frames[number - 1])[0]
+               for number in range(TRUSTED_PARENT + 1 - BLOCKHASH_WINDOW, TRUSTED_PARENT + 2)}
+    checkpoint = probe14.rlp_list(frames[TRUSTED_CHECKPOINT - 1])[0]
+    require(TRUSTED_CHECKPOINT % 1000 == 200 and TRUSTED_PARENT - TRUSTED_CHECKPOINT > TRUSTED_THRESHOLD,
+            "Trusted constants")
+    require(report["parent"] == TRUSTED_PARENT and report["threshold"] == TRUSTED_THRESHOLD, "Trusted bounds")
+    require(report["entered_at"] == TRUSTED_CHECKPOINT and
+            report["checkpoint_hash"] == "0x" + keccak(checkpoint).hex(), "Trusted path entered elsewhere")
+    observed = header_fields(headers[TRUSTED_PARENT + 1])
+    require(report["observed_number"] == TRUSTED_PARENT + 1 and report["observed_hash"] == "0x" + observed["hash"].hex(),
+            "Observed block")
+    require(report["deleted_snapshots"] > 0 and report["trusted_snapshot_recents"] == 0, "Trusted snapshot")
+    key = key_of(0)
+    kinds = [(event["event"], event.get("observation")) for event in events]
+    require(("admitted", key) in kinds and ("exec-ready", key) in kinds and
+            not any(kind in ("rejected", "observation-error") for kind, _ in kinds), "Trusted observation")
+    rows = attempt_handoffs(events, key)
+    capsule = {number: keccak(headers[number]) for number in range(TRUSTED_PARENT + 1 - BLOCKHASH_WINDOW, TRUSTED_PARENT + 1)}
+    check_snapshots(rows, capsule, "trusted")
+    parent_request = SNAPSHOT_TAG + TRUSTED_PARENT.to_bytes(8, "big") + capsule[TRUSTED_PARENT]
+    require(any(bytes.fromhex(row["request_hex"]) == parent_request for row in rows), "No logged parent snapshot")
+    return {"entered_at": report["entered_at"], "import_seconds": report["import_seconds"],
+            "observed_seconds": report["observed_seconds"], "deleted_snapshots": report["deleted_snapshots"],
+            "snapshot_responses": len(rows)}
+
+
+def trusted(tool_path, tool_sha, manifest_path, manifest_sha, chain_path, chain_sha, output):
+    """Import the generated chain and observe the block whose snapshot lookup takes the trusted path."""
+    started = time.monotonic()
+    deadline = started + TRUSTED_SECONDS
+    require(tool_path.is_absolute() and output.is_absolute() and chain_path.is_absolute(), "Paths must be absolute")
+    tool_ref, tool = pinned_json(tool_path, tool_sha, deadline=deadline)
+    require(tool.get("kind") == "bsc-admission-tool", "Not a BSC admission tool")
+    fixture, _ = probe14.load_inputs(manifest_path, manifest_sha, tool, deadline)
+    proof = {"schema_version": 1, "kind": "bsc-admission-trusted", "result": "FAIL", "tool": tool_ref,
+             "source_commit": pins.source_commit(), "run_id": uuid.uuid4().hex, "native_owner_nonce": None,
+             "deadline_seconds": TRUSTED_SECONDS, "public_profile_credit": False, "ac_verdict": None, "error": None}
+
+    def body(output, runner):
+        origins, proof["harness_sources"] = source_snapshot(output, HARNESS, deadline)
+        chain = reference(chain_path, 1024 * 1024 * 1024, deadline)
+        require(chain["sha256"] == chain_sha, "Trusted chain digest mismatch")
+        root = output / "bsc"
+        began = time.monotonic()
+        stdout = gated_test(tool, fixture, root, runner, deadline, TRUSTED_TEST, chain_path.parent, False,
+                            {"EXTRACTOR_ADMISSION_TRUSTED": "/chain/" + chain_path.name})
+        proof["test_seconds"] = round(time.monotonic() - began, 3)
+        require(reference(chain_path, 1024 * 1024 * 1024, deadline) == chain, "Trusted chain changed during the run")
+        report_path, trace_path = root / "work/trusted-report.json", root / "work/trace-trusted.jsonl"
+        proof["summary"] = checked_evaluate(load(report_path, 1024 * 1024, deadline),
+                                            probe14.read_jsonl(trace_path, deadline),
+                                            chain_frames(chain_path, deadline), function=evaluate_trusted)
+        proof.update(chain=chain, stdout=reference(stdout, deadline=deadline),
+                     report=reference(report_path, 1024 * 1024, deadline),
+                     trace=reference(trace_path, 64 * 1024 * 1024, deadline))
+        sources_unchanged(origins, deadline)
+
+    return pins.owned_attempt(output, started, deadline, proof, "trusted.json", body)
 
 
 # ---- mutants ----
@@ -896,7 +1038,7 @@ def main():
     prep.add_argument("--build-manifest", type=Path, required=True)
     prep.add_argument("--sha256", required=True)
     prep.add_argument("--output", type=Path, required=True)
-    for name in ("run", "mutants"):
+    for name in ("run", "mutants", "generate-trusted", "trusted"):
         command = commands.add_parser(name)
         command.add_argument("tool", type=Path)
         command.add_argument("--sha256", required=True)
@@ -905,6 +1047,10 @@ def main():
         if name == "mutants":
             command.add_argument("--table", type=Path, default=NATIVE / "bsc_admission.mutants.json")
             command.add_argument("--only", nargs="*", default=())
+        if name == "generate-trusted":
+            command.add_argument("--chain-dir", type=Path, required=True)
+        if name == "trusted":
+            command.add_argument("--chain", nargs=2, metavar=("PATH", "SHA256"), required=True)
     args = parser.parse_args()
 
     def interrupt(number, _frame):
@@ -918,6 +1064,10 @@ def main():
             manifest = (Path(args.profile_manifest[0]), args.profile_manifest[1])
             if args.command == "run":
                 proof = run(args.tool, args.sha256, *manifest, args.output)
+            elif args.command == "generate-trusted":
+                proof = generate_trusted(args.tool, args.sha256, *manifest, args.chain_dir, args.output)
+            elif args.command == "trusted":
+                proof = trusted(args.tool, args.sha256, *manifest, Path(args.chain[0]), args.chain[1], args.output)
             else:
                 proof = mutants(args.tool, args.sha256, *manifest, args.table.resolve(), args.output, set(args.only))
     except pins.FAILURES as error:

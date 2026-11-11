@@ -390,13 +390,25 @@ Some paths do not occur in the fixture:
   result. A cold lookup that walks from the genesis would give the same
   bytes.
 
-`TestNativeBSCTrustedCheckpoint` runs only when
-`EXTRACTOR_ADMISSION_TRUSTED` is set, because it generates and imports
-more than 600,000 blocks (`params.FullImmutabilityThreshold` is 600,000).
-After the import, every stored Parlia snapshot is deleted. A cold observed
-import of the next block then walks down to block 1200, where Parlia takes
-the trusted-checkpoint path, stores that snapshot, and the block reaches
-EXEC_READY.
+The trusted-checkpoint path has its own two driver commands, because it
+needs more than 600,000 blocks (`params.FullImmutabilityThreshold` is
+600,000). Their tests are skipped unless their variable is set, and `run`
+and the mutant runs leave them out.
+- `generate-trusted` runs `TestNativeBSCGenerateTrustedChain`
+  (`EXTRACTOR_ADMISSION_TRUSTED_GENERATE`). It generates the 601,251-block
+  private chain into a persistent directory outside the working tree, with
+  an on-disk generator home. A cut-off attempt resumes from that home and
+  its block file and never regenerates. The step writes `chain.json`
+  (count, SHA-256, last hash).
+- `trusted` runs `TestNativeBSCTrustedCheckpoint`
+  (`EXTRACTOR_ADMISSION_TRUSTED`) on that chain, checked by its digest and
+  mounted read-only. The test imports blocks 1 to 601,250 natively and then
+  deletes every stored Parlia snapshot. A cold observed import of block
+  601,251 then walks down: at block 1200 it has passed the threshold, and
+  1200 % 1000 == 200, so Parlia takes the trusted-checkpoint path, stores
+  that snapshot, and the block reaches EXEC_READY. The driver checks that
+  1200 is the only candidate block with a stored snapshot, and checks the
+  logged parent snapshot against the chain.
 
 The driver's `run` also starts the patched `geth` on a probe home that holds
 live pins, and re-checks every digest and the trace order with its own

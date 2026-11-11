@@ -10,12 +10,14 @@ package bsc
 // that checkpoint.
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -34,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/params"
@@ -70,13 +73,18 @@ func validatorKey(t *testing.T) *keystore.Key {
 	return key
 }
 
-func generateLongChain(t *testing.T, fx fixture, key *keystore.Key, count int,
-	after ...func(*core.BlockChain, *parlia.Parlia, *SystemCallBackend)) []*types.Block {
+// generator seals and imports blocks of the private chain one by one.
+type generator struct {
+	fx      fixture
+	chain   *core.BlockChain
+	engine  *parlia.Parlia
+	backend *SystemCallBackend
+}
+
+func newGenerator(t *testing.T, fx fixture, key *keystore.Key, db ethdb.Database) *generator {
 	t.Helper()
-	db := rawdb.NewMemoryDatabase()
 	api, backend := NewSystemCallAPI()
 	engine := parlia.New(fx.genesis.Config, db, api, fx.genesis.ToBlock().Hash())
-	defer engine.Close()
 	engine.Authorize(key.Address,
 		func(account accounts.Account, mime string, data []byte) ([]byte, error) {
 			return crypto.Sign(crypto.Keccak256(data), key.PrivateKey)
@@ -90,48 +98,65 @@ func generateLongChain(t *testing.T, fx fixture, key *keystore.Key, count int,
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer chain.Stop()
 	backend.Bind(chain, nil)
+	return &generator{fx: fx, chain: chain, engine: engine, backend: backend}
+}
+
+func (g *generator) close() {
+	g.chain.Stop()
+	g.engine.Close()
+}
+
+// next seals the child of the current head and imports it.
+func (g *generator) next(t *testing.T) *types.Block {
+	t.Helper()
+	parent := g.chain.CurrentBlock()
+	header := &types.Header{ParentHash: parent.Hash(), Number: new(big.Int).Add(parent.Number, big.NewInt(1)),
+		GasLimit: parent.GasLimit, Time: parent.Time + 3, Difficulty: big.NewInt(1)}
+	if err := g.engine.Prepare(g.chain, header); err != nil {
+		t.Fatal(err)
+	}
+	header.Time = parent.Time + 3
+	// The base fee that the miner sets from London on; this BSC version has
+	// no withdrawals before Cancun, which the fixture does not reach.
+	if g.fx.genesis.Config.IsLondon(header.Number) {
+		header.BaseFee = eip1559.CalcBaseFee(g.fx.genesis.Config, parent)
+	}
+	statedb, err := g.chain.StateAt(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _, err := core.AssembleBlock(g.engine, g.chain, header, statedb, &types.Body{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, stop := make(chan *types.Block, 1), make(chan struct{})
+	if err := g.engine.Seal(g.chain, block, result, stop); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case block = <-result:
+	case <-time.After(30 * time.Second):
+		t.Fatal("seal deadline")
+	}
+	close(stop)
+	if _, err := g.chain.InsertChain(types.Blocks{block}); err != nil {
+		t.Fatalf("generated block %d: %v", block.NumberU64(), err)
+	}
+	return block
+}
+
+func generateLongChain(t *testing.T, fx fixture, key *keystore.Key, count int,
+	after ...func(*core.BlockChain, *parlia.Parlia, *SystemCallBackend)) []*types.Block {
+	t.Helper()
+	g := newGenerator(t, fx, key, rawdb.NewMemoryDatabase())
+	defer g.close()
 	var blocks []*types.Block
-	for number := 1; number <= count; number++ {
-		parent := chain.CurrentBlock()
-		header := &types.Header{ParentHash: parent.Hash(), Number: big.NewInt(int64(number)),
-			GasLimit: parent.GasLimit, Time: parent.Time + 3, Difficulty: big.NewInt(1)}
-		if err := engine.Prepare(chain, header); err != nil {
-			t.Fatal(err)
-		}
-		header.Time = parent.Time + 3
-		// The base fee that the miner sets from London on; this BSC version
-		// has no withdrawals before Cancun, which the fixture does not reach.
-		body := &types.Body{}
-		if fx.genesis.Config.IsLondon(header.Number) {
-			header.BaseFee = eip1559.CalcBaseFee(fx.genesis.Config, parent)
-		}
-		statedb, err := chain.StateAt(parent)
-		if err != nil {
-			t.Fatal(err)
-		}
-		block, _, err := core.AssembleBlock(engine, chain, header, statedb, body, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		result, stop := make(chan *types.Block, 1), make(chan struct{})
-		if err := engine.Seal(chain, block, result, stop); err != nil {
-			t.Fatal(err)
-		}
-		select {
-		case block = <-result:
-		case <-time.After(30 * time.Second):
-			t.Fatal("seal deadline")
-		}
-		close(stop)
-		if _, err := chain.InsertChain(types.Blocks{block}); err != nil {
-			t.Fatalf("generated block %d: %v", number, err)
-		}
-		blocks = append(blocks, block)
+	for len(blocks) < count {
+		blocks = append(blocks, g.next(t))
 	}
 	for _, f := range after {
-		f(chain, engine, backend)
+		f(g.chain, g.engine, g.backend)
 	}
 	return blocks
 }
@@ -424,11 +449,15 @@ func TestNativeBSCSystemCallFailureIsMarked(t *testing.T) {
 	})
 }
 
-// envTrusted enables TestNativeBSCTrustedCheckpoint, which generates and
-// imports more than 600,000 blocks; it is off unless set.
-const envTrusted = "EXTRACTOR_ADMISSION_TRUSTED"
-
+// The trusted-checkpoint record (D99 item 5). Both tests are off unless
+// their variable is set; the driver runs them in their own records.
 const (
+	// envGenerate names the persistent directory of the generated chain.
+	// TestNativeBSCGenerateTrustedChain resumes from what it holds.
+	envGenerate = "EXTRACTOR_ADMISSION_TRUSTED_GENERATE"
+	// envTrusted names the generated chain file that
+	// TestNativeBSCTrustedCheckpoint imports.
+	envTrusted = "EXTRACTOR_ADMISSION_TRUSTED"
 	// trustedCheckpoint is where a cold snapshot lookup of the observed
 	// block's parent takes Parlia's trusted-checkpoint path: the walk down
 	// from the parent has collected more than params.FullImmutabilityThreshold
@@ -436,21 +465,162 @@ const (
 	trustedCheckpoint = 1200
 )
 
+// trustedParent is the parent of the observed block of the trusted record.
+func trustedParent() int { return int(params.FullImmutabilityThreshold) + trustedCheckpoint + 50 }
+
+// blockOffsets returns the end offset of each complete block in an RLP
+// block file; a truncated tail is ignored.
+func blockOffsets(t *testing.T, path string) []int64 {
+	t.Helper()
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	stream := rlp.NewStream(bufio.NewReaderSize(file, 1<<20), 0)
+	var offsets []int64
+	var end int64
+	for {
+		kind, size, err := stream.Kind()
+		if err != nil || kind != rlp.List {
+			return offsets
+		}
+		if _, err := stream.Raw(); err != nil {
+			return offsets
+		}
+		end += int64(rlp.ListSize(size))
+		offsets = append(offsets, end)
+	}
+}
+
+func TestNativeBSCGenerateTrustedChain(t *testing.T) {
+	dir := os.Getenv(envGenerate)
+	if dir == "" {
+		t.Skip("set " + envGenerate + " to run")
+	}
+	started := time.Now()
+	fx := loadFixture(t)
+	length := trustedParent() + 1
+	db := openDisk(t, filepath.Join(dir, "home"))
+	defer db.Close()
+	g := newGenerator(t, fx, validatorKey(t), db)
+	defer g.close()
+	// The file and the generator home may disagree after a cut: keep the
+	// common prefix, then rewrite the blocks that only the home holds.
+	path := filepath.Join(dir, "blocks.rlp")
+	offsets := blockOffsets(t, path)
+	head := int(g.chain.CurrentBlock().Number.Uint64())
+	keep := min(len(offsets), head)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	var size int64
+	if keep > 0 {
+		size = offsets[keep-1]
+	}
+	if err := file.Truncate(size); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Seek(size, 0); err != nil {
+		t.Fatal(err)
+	}
+	writer := bufio.NewWriterSize(file, 1<<20)
+	flush := func() {
+		if err := writer.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Sync(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for number := keep + 1; number <= head; number++ {
+		if err := rlp.Encode(writer, g.chain.GetBlockByNumber(uint64(number))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for number := head + 1; number <= length; number++ {
+		if err := rlp.Encode(writer, g.next(t)); err != nil {
+			t.Fatal(err)
+		}
+		if number%10000 == 0 {
+			flush()
+		}
+	}
+	flush()
+	digest := sha256.New()
+	if _, err := file.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(digest, file); err != nil {
+		t.Fatal(err)
+	}
+	last := g.chain.CurrentBlock()
+	if int(last.Number.Uint64()) != length || len(blockOffsets(t, path)) != length {
+		t.Fatalf("generated %d blocks, want %d", last.Number.Uint64(), length)
+	}
+	record := map[string]any{"count": length, "sha256": fmt.Sprintf("%x", digest.Sum(nil)), "last_hash": last.Hash().Hex(),
+		"genesis_hash": fx.genesis.ToBlock().Hash().Hex(), "resumed_from": head, "kept_in_file": keep,
+		"session_seconds": time.Since(started).Seconds()}
+	data, err := json.MarshalIndent(record, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "chain.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNativeBSCTrustedCheckpoint(t *testing.T) {
-	if os.Getenv(envTrusted) == "" {
+	path := os.Getenv(envTrusted)
+	if path == "" {
 		t.Skip("set " + envTrusted + " to run")
 	}
 	fx := loadFixture(t)
 	work := probeEnv(t, envWork)
-	trustedParent := int(params.FullImmutabilityThreshold) + trustedCheckpoint + 50
-	blocks := generateLongChain(t, fx, validatorKey(t), trustedParent+1)
+	parent := trustedParent()
 	home := filepath.Join(work, "home-trusted")
 	chain, db := plainChain(t, fx, home)
-	for start := 0; start < trustedParent; start += 2048 {
-		end := min(start+2048, trustedParent)
-		if _, err := chain.InsertChain(blocks[start:end]); err != nil {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	stream := rlp.NewStream(bufio.NewReaderSize(file, 1<<20), 0)
+	read := func() *types.Block {
+		block := new(types.Block)
+		if err := stream.Decode(block); err != nil {
 			t.Fatal(err)
 		}
+		return block
+	}
+	// Native import of the parent chain, keeping the hashes of the blocks
+	// where the trusted-checkpoint path can start.
+	candidates := map[uint64]common.Hash{}
+	started := time.Now()
+	var batch types.Blocks
+	for number := 1; number <= parent; number++ {
+		block := read()
+		if block.NumberU64() != uint64(number) {
+			t.Fatalf("block %d at position %d", block.NumberU64(), number)
+		}
+		if number%1000 == 200 {
+			candidates[block.NumberU64()] = block.Hash()
+		}
+		if batch = append(batch, block); len(batch) == 2048 || number == parent {
+			if _, err := chain.InsertChain(batch); err != nil {
+				t.Fatal(err)
+			}
+			batch = nil
+		}
+	}
+	importSeconds := time.Since(started).Seconds()
+	observed := read()
+	if err := stream.Decode(new(types.Block)); !errors.Is(err, io.EOF) {
+		t.Fatalf("chain file longer than %d blocks: %v", parent+1, err)
 	}
 	chain.Stop()
 	// Drop every stored Parlia snapshot, so the cold lookup must walk.
@@ -477,28 +647,48 @@ func TestNativeBSCTrustedCheckpoint(t *testing.T) {
 	if err := n.seam.Recover(n.chain); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := n.chain.InsertChain(blocks[trustedParent:]); err != nil {
-		t.Fatalf("observed block %d: %v", trustedParent+1, err)
+	observedStarted := time.Now()
+	if _, err := n.chain.InsertChain(types.Blocks{observed}); err != nil {
+		t.Fatalf("observed block %d: %v", observed.NumberU64(), err)
 	}
+	observedSeconds := time.Since(observedStarted).Seconds()
 	rows := n.observations()
 	if len(rows) != 1 || rows[0].State != string(admission.ExecReady) {
 		t.Fatalf("observations %v", rows)
 	}
-	checkpoint := blocks[trustedCheckpoint-1]
-	blob, err := n.db.Get(append([]byte("parlia-"), checkpoint.Hash().Bytes()...))
-	if err != nil {
-		t.Fatalf("no trusted checkpoint snapshot at %d: %v", trustedCheckpoint, err)
+	// The trusted-checkpoint path stores the snapshot it builds; it must be
+	// the only candidate block with a stored snapshot.
+	var entered []uint64
+	var blob []byte
+	for number, hash := range candidates {
+		if data, err := n.db.Get(append([]byte("parlia-"), hash.Bytes()...)); err == nil {
+			entered, blob = append(entered, number), data
+		}
+	}
+	if len(entered) != 1 || entered[0] != trustedCheckpoint {
+		t.Fatalf("trusted checkpoint entered at %v, want [%d]", entered, trustedCheckpoint)
 	}
 	var snap struct {
 		Number  uint64            `json:"number"`
+		Hash    common.Hash       `json:"hash"`
 		Recents map[string]string `json:"recents"`
 	}
-	if err := json.Unmarshal(blob, &snap); err != nil || snap.Number != trustedCheckpoint {
+	if err := json.Unmarshal(blob, &snap); err != nil || snap.Number != trustedCheckpoint || snap.Hash != candidates[trustedCheckpoint] {
 		t.Fatalf("trusted snapshot: %v", err)
 	}
-	report := map[string]any{"parent": trustedParent, "checkpoint": trustedCheckpoint, "deleted_snapshots": len(stored),
-		"checkpoint_hash": checkpoint.Hash().Hex(), "observed_hash": blocks[trustedParent].Hash().Hex(),
-		"trusted_snapshot_sha256": fmt.Sprintf("%x", sha256.Sum256(blob)), "trusted_snapshot_recents": len(snap.Recents)}
+	report := map[string]any{
+		"parent":                   parent,
+		"threshold":                params.FullImmutabilityThreshold,
+		"entered_at":               entered[0],
+		"checkpoint_hash":          candidates[trustedCheckpoint].Hex(),
+		"observed_number":          observed.NumberU64(),
+		"observed_hash":            observed.Hash().Hex(),
+		"deleted_snapshots":        len(stored),
+		"trusted_snapshot_sha256":  fmt.Sprintf("%x", sha256.Sum256(blob)),
+		"trusted_snapshot_recents": len(snap.Recents),
+		"import_seconds":           importSeconds,
+		"observed_seconds":         observedSeconds,
+	}
 	data, err := json.MarshalIndent(report, "", " ")
 	if err != nil {
 		t.Fatal(err)
