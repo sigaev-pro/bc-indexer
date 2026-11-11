@@ -66,7 +66,8 @@ func validatorKey(t *testing.T) *keystore.Key {
 	return key
 }
 
-func generateLongChain(t *testing.T, fx fixture, key *keystore.Key, count int) []*types.Block {
+func generateLongChain(t *testing.T, fx fixture, key *keystore.Key, count int,
+	after ...func(*core.BlockChain, *parlia.Parlia, *SystemCallBackend)) []*types.Block {
 	t.Helper()
 	db := rawdb.NewMemoryDatabase()
 	api, backend := NewSystemCallAPI()
@@ -124,6 +125,9 @@ func generateLongChain(t *testing.T, fx fixture, key *keystore.Key, count int) [
 			t.Fatalf("generated block %d: %v", number, err)
 		}
 		blocks = append(blocks, block)
+	}
+	for _, f := range after {
+		f(chain, engine, backend)
 	}
 	return blocks
 }
@@ -387,4 +391,23 @@ func TestNativeBSCSystemCallGuard(t *testing.T) {
 		NativeCommit: fx.commit}); !errors.Is(err, ErrEngine) {
 		t.Fatalf("start without ethAPI: %v", err)
 	}
+}
+
+func TestNativeBSCSystemCallFailureIsMarked(t *testing.T) {
+	fx := loadFixture(t)
+	other, otherDB := plainChain(t, fx, filepath.Join(probeEnv(t, envWork), "home-system-call-failure"))
+	defer otherDB.Close()
+	defer other.Stop()
+	generateLongChain(t, fx, validatorKey(t), longChainEpochBlock/5-1, func(chain *core.BlockChain, engine *parlia.Parlia,
+		backend *SystemCallBackend) {
+		parent := chain.CurrentBlock()
+		header := &types.Header{ParentHash: parent.Hash(), Number: big.NewInt(int64(longChainEpochBlock / 5)),
+			GasLimit: parent.GasLimit, Time: parent.Time + 3, Difficulty: big.NewInt(1)}
+		// The epoch block calls the validator contract on the parent; the
+		// backend's chain does not know the parent, so the call fails.
+		backend.Bind(other, nil)
+		if err := engine.Prepare(chain, header); !errors.Is(err, parlia.ErrExtractorSystemCall) {
+			t.Fatalf("failed system call: %v", err)
+		}
+	})
 }

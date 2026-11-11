@@ -88,9 +88,18 @@ func TestUnitReaderServesOnlyCapsuleHeaders(t *testing.T) {
 		if !c.read(r) || !errors.Is(r.Err(), c.want) {
 			t.Fatalf("%s: %v", name, r.Err())
 		}
-		// The first error stays; later reads of capsule headers still work.
+		// The first error stays; later reads of capsule headers still work,
+		// and a later refusal of another kind does not replace it.
 		if !same(r.GetHeaderByNumber(299), parent) || !errors.Is(r.Err(), c.want) {
 			t.Fatalf("%s: error replaced: %v", name, r.Err())
+		}
+		if c.want == ErrUndeclaredHeader {
+			r.GetTd(parent.Hash(), 299)
+		} else {
+			r.GetHeaderByNumber(43)
+		}
+		if !errors.Is(r.Err(), c.want) {
+			t.Fatalf("%s: first error replaced: %v", name, r.Err())
 		}
 	}
 }
@@ -127,15 +136,19 @@ func TestUnitReaderLogsSnapshots(t *testing.T) {
 	if got, err := replay.ExtractorSnapshot(299, parent.Hash(), compute("changed")); err != nil || string(got) != "first" || fetches != 2 {
 		t.Fatalf("replay: %q %v fetches %d", got, err, fetches)
 	}
-	if !bytes.Equal(SnapshotRequest(299, parent.Hash())[:len(SnapshotTag)+1], append([]byte(SnapshotTag), 0)) ||
-		len(SnapshotRequest(299, parent.Hash())) != len(SnapshotTag)+1+8+32 {
-		t.Fatal("request layout")
+	want := append(append([]byte(SnapshotTag), 0, 0, 0, 0, 0, 0, 0, 1, 0x2b), parent.Hash().Bytes()...)
+	if !bytes.Equal(SnapshotRequest(299, parent.Hash()), want) {
+		t.Fatalf("request layout %x", SnapshotRequest(299, parent.Hash()))
 	}
 	// A snapshot of a header outside the capsule is refused before the lookup.
 	outside, _ := unitReader(t, 300, sealedLog(t, db, "obs-2"), &fetches, &handoffs)
 	if _, err := outside.ExtractorSnapshot(43, headers[43].Hash(), compute("x")); !errors.Is(err, ErrUndeclaredHeader) ||
 		fetches != 2 || !errors.Is(outside.Err(), ErrUndeclaredHeader) {
 		t.Fatalf("outside snapshot: %v fetches %d", err, fetches)
+	}
+	wrong, _ := unitReader(t, 300, sealedLog(t, db, "obs-4"), &fetches, &handoffs)
+	if _, err := wrong.ExtractorSnapshot(298, parent.Hash(), compute("x")); !errors.Is(err, ErrUndeclaredHeader) || fetches != 2 {
+		t.Fatalf("snapshot of a capsule hash with another number: %v", err)
 	}
 	if _, err := outside.ExtractorSnapshot(299, parent.Hash(), compute("x")); !errors.Is(err, ErrUndeclaredHeader) || fetches != 2 {
 		t.Fatalf("a stopped reader looked up: %v", err)
