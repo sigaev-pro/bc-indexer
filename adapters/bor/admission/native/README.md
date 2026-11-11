@@ -339,6 +339,17 @@ adapter, and the native tests drive them with a real EVM run.
   in flight; while Heimdall fails, such a fetch keeps retrying, so the window
   and the import wait until Heimdall answers (a stalled import, never a
   foreign read in the log).
+- A detached span range fetch is counted when its singleflight goroutine
+  starts running, not when `DoChan` is called. A gated caller whose context
+  had already expired could start one and leave the gate at once; if the
+  window opened before that goroutine ran its first statement, its read
+  would enter the log, and only a replay (`Replay`, recovery) would detect it
+  (a prefix conflict or an unconsumed entry). Counting in `spanRangeById`
+  before `DoChan` would close this; it is not done in this block.
+- The creator rule admits `Finalize` of the observed block only on the
+  window owner or a goroutine it started directly. A native version that
+  finalized on a grandchild goroutine would stall the import, never log a
+  foreign read.
 - The gate itself is covered by native tests in the Bor graph and by the
   probe scenarios; its Go code has no mutant table, because a mutant run
   would need the full Bor build per mutant.

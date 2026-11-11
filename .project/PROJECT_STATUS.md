@@ -478,8 +478,12 @@ AC-CAP-02-01, AC-CAP-02-02 and AC-CAP-04-03 PASS; every public cell NOT_RUN.
 Mutants: Go 69 of 69, Python 114 of 114 killed. Preparation 07 and run 04 on
 `83f5929` are kept (D83).
 
-Next: review 002 on the head with this evidence, then READY for the
-coordinator.
+Review 002 (head `828cc07`, evidence of preparation 09 and run 06): Spec
+PASS and Standards PASS, P3 notes only; the detached-fetch counting race and
+the direct-child creator rule are recorded as README limits. Hosted CI
+passed.
+
+Next: READY for the coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
