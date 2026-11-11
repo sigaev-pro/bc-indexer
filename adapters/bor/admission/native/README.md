@@ -4,7 +4,9 @@ This directory is the Bor-only part of `adapters/bor/admission` (the shared
 core is described in [../README.md](../README.md)). It wires the admission
 core, the source inputs of E01-02.inputs, the pin ledger of E01-02.pins and
 the owned capture seam of E01-02.owned_capture into the accepted Bor import
-path, and adds the Bor native patch set of D98 items 2 and 4. The plan rows
+path, and adds the Bor native patch set of D98 items 2 and 4 and D100 item 1
+(the prune-block guard and the window gate for other Heimdall readers).
+The plan rows
 it implements are in PROJECT_STATUS ("E01-02.admission", plan for the
 per-client blocks, every row that names Bor).
 
@@ -40,13 +42,13 @@ One observation per block on the Bor product import path,
    observation (no capture exists) and fails the import.
 3. After the closing ADMITTED sync, the driver opens the observation's
    dependency log, installs it in the Heimdall router, and opens the window
-   (`ExtractorOpenWindow`): it waits for header verification in progress to
-   finish, holds back new header verification of other blocks
-   (`VerifyHeader`, `VerifyHeaders`, `VerifySeal`, edits `window-gate-*`),
-   and drops the Heimdall and snapshot caches (the span store caches, which
-   also stops its poll loop and range warmup, and the snapshot cache). Every
-   Heimdall read of the window now belongs to this block and goes through the
-   log.
+   (`ExtractorOpenWindow`): it waits for every gated call in progress to
+   return, holds back every other caller of the gated entry points (header
+   verification, the bor RPC API, block production and every other path to a
+   counted Heimdall read; see "Window gate"), and drops the Heimdall and
+   snapshot caches (the span store caches, which also stops its poll loop and
+   range warmup, and the snapshot cache). Every counted Heimdall read of the
+   window now belongs to this block's import and goes through the log.
 4. The header seal is verified again from capsule inputs only (see "Header
    check from the capsule"). A `verifySeal` failure is a native validation
    failure; a capsule that cannot be read or decoded, or a snapshot that
@@ -81,6 +83,64 @@ time (edit `import-path-one-block-batches`), so the header verification of a
 later block of the batch runs after the window of the earlier one closed.
 Header verification of other components (the block fetcher, a later batch)
 waits at the window gate.
+
+## Window gate (D98, D100 item 1)
+
+Only the import's own Heimdall reads may enter an observation's log; other
+readers use the native client. `consensus/bor/zz_extractor_gate.go` is the
+gate. The goroutine that opens a window owns it; while it is open, every
+other goroutine that enters a gated engine entry point waits until the
+window closes, and the window opens only after every gated call in progress
+has returned. A held-back reader therefore reads Heimdall after the window,
+through the router outside every window, which passes it to the native
+client unlogged; a reader that started before the window finished before it,
+and the window's cache purge comes after it, so nothing it cached reaches
+the import.
+
+The gated entry points (edits `window-gate-*`, each first statement
+`defer c.extractorGate()()`) are every exported `Bor` method that can reach
+a counted read (span by ID, latest span, status, state sync page):
+`VerifyHeader`, `VerifyHeaders` (per header), `VerifySeal`, `Prepare`,
+`Finalize`, `FinalizeAndAssemble`, `FinalizeAndAssembleForSimulation`,
+`FinalizeForPipeline`, `IsAuthorizedSigner`, `SealWithStopHook` (and so
+`Seal`), `CalcDifficulty`, `CommitStates` and `FetchAndCommitSpan`; and every
+method of the `bor` RPC API (`GetSnapshot`, `GetSnapshotAtHash`,
+`GetSigners`, `GetCurrentProposer`, `GetCurrentValidators`, ...). The native
+test `TestExtractorGateCoversEveryHeimdallEntryPoint` parses `bor.go` and
+`api.go`: every exported `Bor` method must be classified as gated or not, and
+every gated method and every API method must pass the gate first, so a new
+native entry point fails the preparation until it is classified. The
+ungated ones read no counted endpoint: `Author`, `Seal` (delegates),
+`AssembleBlock`, `GetCurrentValidators` of `Bor` (the validator contract),
+`EarliestAnnounceTime` and the accessors. Bor reads Heimdall elsewhere only
+through uncounted endpoints (checkpoints and milestones in `eth`), which the
+router never logs.
+
+The import passes. `ExtractorOpenWindow` takes the hash of the observed
+block (`OpenWindow` gets the candidate); the goroutine that opened the
+window passes its own gated calls, and `Finalize` of the observed block
+passes on that goroutine or on a goroutine it started (edit
+`window-gate-finalize` calls `extractorBlockGate(header)`): native
+`ProcessBlock` runs its serial (and parallel) processor on goroutines it
+starts. Calls nested in it (`CommitStates`, `FetchAndCommitSpan`) pass too.
+`Finalize` of the observed block on any other goroutine is not the import
+and waits: state regeneration for tracing (`eth/state_accessor.go`, through
+`Processor().Process`) can finalize a stored block, including the observed
+block of a replay or of a re-imported side-chain block. A goroutine already
+inside a gated call passes nested ones (`GetCurrentProposer` calls
+`GetSnapshot`), so the gate never waits for itself. The goroutine identity
+is the first line of `runtime.Stack`, and its creator the `created by ... in
+goroutine <id>` line at its end. `ExtractorGateWaiting` reports the callers
+waiting at the gate.
+
+Order of a window start (`ExtractorOpenWindow`, then `Router.Enter`): the
+gate waits for every gated call in progress, the purge stops the span
+store poll loop and range warmup, and then the window waits for the
+detached span range fetches still in flight (`fetchSpanRange` runs on the
+span store lifetime, not on its caller's context, and retries until it
+succeeds; edit `window-gate-detached-fetch` counts them). Only then does the
+driver route counted reads to the log, so no read that another reader
+started before the window can land in it.
 
 Lock order: the observation guard is taken inside `processBlockForImport`,
 with the native chain lock (`chainmu`) already held. NATIVE_CAPTURE_PROTOCOL
@@ -155,7 +215,8 @@ Heimdall reads suffice to verify its seal.
 The Heimdall HTTP client uses the process transport; `Start` installs the
 `obligation.Router` as that transport. Counted requests are state sync event
 pages (`/clerk/time`), spans by ID (`/bor/spans/<id>`), the latest span and the
-status. Inside a window each goes through `Log.Next` with the request identity
+status. Inside a window, where only the import reads (see "Window gate"), each goes
+through `Log.Next` with the request identity
 `GET <path>?<query>`, so the raw response body is durable before Bor receives
 it, and a retry replays the saved bytes. The latest span bounds the span IDs
 that Bor reads and the status decides whether Bor waits, so both are logged
@@ -188,7 +249,16 @@ install the observer. Any other failure leaves the admission in
 RECOVERY_ONLY. EXEC_READY observations stay for the decision bridge.
 Re-execution in recovery writes no block: a later native import of the same
 block opens a new observation, and the decision bridge decides once per
-candidate. Which caller starts the node with `Start`, and the live boundary
+candidate.
+
+`Replay` (`obligation.Driver.Replay`, `borimport.Node.Replay`) checks a saved
+EXEC_READY observation without changing it: with its closed log in the
+router, it opens the window, verifies the header from the capsule and
+re-executes the block on the pinned parent state. Every counted read must be
+served from the log (a read past the closed log stops the window), every
+saved entry must be consumed, and the native result digest must equal the
+bound one. A foreign read that had entered the log would fail it as a prefix
+conflict or an unconsumed entry. Which caller starts the node with `Start`, and the live boundary
 H, belong to E01-02.lifecycle_seams.
 
 ## Pin adapter
@@ -210,6 +280,7 @@ keeps the native behavior, which only binaries without the wiring see.
 | Native path | Edit | Guard |
 |---|---|---|
 | `bor snapshot prune-state` (`internal/cli/snapshot.go`) | `retention-prune-state` | `state_provider.PruneState`: refuses while a pin is live |
+| `bor snapshot prune-block` (`internal/cli/snapshot.go`, D100 item 1) | `retention-prune-block` | `extractorRequirePruneBlock` (`internal/cli/zz_extractor_prune_block.go`): `state_provider.RequireNoLivePins` on the store opened read-only, before every path of the command (a new prune, the resumption of an interrupted one, the replacement of the ancient directory); an unreadable ledger refuses too |
 | Startup prune recovery (`eth/backend.go`) | `retention-recover-pruning` | With a pending state bloom filter, `state_provider.RecoverPruning` (refuses while a pin is live); the error stops the node instead of being logged |
 | `SetHead`, `SetHeadWithTimestamp` (`debug_setHead`) | `retention-set-head*` | `RequireRewindAllowed` for the new head |
 | Chain freezer threshold (`core/rawdb/chain_freezer.go`) | `retention-freeze-threshold` | `min(threshold, FreezeLimit(threshold+1)-1)`, read through the key-value store and the freezer |
@@ -243,11 +314,13 @@ adapter, and the native tests drive them with a real EVM run.
 - `obligation`: unit tests on the real admission core with an in-memory store
   and fakes for the native side (`go test` in a `go 1.25` module and in the
   Bor graph), and `obligation.mutants.json` (`test/mutate.py`).
-- `borimport` and the rawdb freezer test: native Go tests in the Bor module
+- `borimport`, the rawdb freezer test and the window gate tests
+  (`consensus/bor`, `TestExtractorGate*`): native Go tests in the Bor module
   graph during the preparation (`test/harness/bor_admission_probe.py`):
   retention hooks on the real ledger, the safe point with a real EVM run and
-  a slow worker, the pin adapter on the native ledger, the run record and the
-  config check.
+  a slow worker, the pin adapter on the native ledger, the run record, the
+  config check, the gate (owner, waiting callers, nested calls, a window that
+  waits for calls in progress) and its coverage of every entry point.
 - The probe (`test/harness/fixtures/admission_bor`) runs native Bor with the
   patched import path on a private fixture chain; the qa oracle is
   [ORACLE.md](../../../../test/harness/fixtures/admission_bor/ORACLE.md).
@@ -256,16 +329,38 @@ adapter, and the native tests drive them with a real EVM run.
 
 - Private local evidence only (D96, D98, D99): test genesis, one validator,
   stub Heimdall. Public profiles stay with E06 and E07.
-- Header verification is held back during a window, but other Heimdall
-  readers are not: an RPC query of the span or snapshot API during a window
-  would enter the log. A live EXEC_READY can then bind a read that the import
-  did not consume; only a later replay detects it, and recovery then fails
-  closed with a prefix conflict or unconsumed entries. The capture profile
-  runs no such RPC.
-- `bor snapshot prune-block` (ancient block pruning) is not guarded; D98
-  item 2 names four guards and this is not one of them. It can delete old
-  pinned headers and remains a known hazard, like the unguarded paths that
-  D98 listed before this block.
+- The window gate identifies the import by the goroutine that opened the
+  window and by `Finalize` of the observed block. An import path that read
+  Heimdall from another gated entry point on another goroutine would wait
+  for its own window: a stopped import, never a foreign read in the log. The
+  capture profile excludes the pipelined and stateless paths.
+- Held-back callers (an RPC call, the miner) wait for up to one window, the
+  execution of one block. A window waits for the detached span range fetches
+  in flight; while Heimdall fails, such a fetch keeps retrying, so the window
+  and the import wait until Heimdall answers (a stalled import, never a
+  foreign read in the log).
+- A detached span range fetch is counted when its singleflight goroutine
+  starts running, not when `DoChan` is called. A gated caller whose context
+  had already expired could start one and leave the gate at once; if the
+  window opened before that goroutine ran its first statement, its read
+  would enter the log, and only a replay (`Replay`, recovery) would detect it
+  (a prefix conflict or an unconsumed entry). Counting in `spanRangeById`
+  before `DoChan` would close this; it is not done in this block.
+- The creator rule admits `Finalize` of the observed block only on the
+  window owner or a goroutine it started directly. A native version that
+  finalized on a grandchild goroutine would stall the import, never log a
+  foreign read.
+- The gate itself is covered by native tests in the Bor graph and by the
+  probe scenarios; its Go code has no mutant table, because a mutant run
+  would need the full Bor build per mutant.
+- `bor snapshot prune-block` refuses while any pin is live, EXEC_READY pins
+  that the decision bridge still holds included; pruning ancient blocks
+  needs every obligation resolved first. The probe chain (1,040 blocks) is
+  shorter than the freezer threshold (90,000), so the measured refusal and
+  its controls run against an empty freezer: the refusal precedes every
+  native step, and the accepted binary and the unpinned run stop in the
+  native pruner at its empty-freezer check. The deletion itself is not
+  exercised.
 - In the probe, `SetHead` and the startup prune recovery are refused inside
   the probe process, which imports `borwire` like the shipped `bor`; the
   shipped binary itself runs `snapshot prune-state`, and the preparation

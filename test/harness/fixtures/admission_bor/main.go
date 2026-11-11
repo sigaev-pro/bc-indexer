@@ -12,6 +12,13 @@
 // points lose the process with SIGKILL at one admission step.
 // scenario: run a plan of attempts as child processes on one instance
 // directory and record the store between them.
+//
+// An attempt can also send a bor RPC call through the native JSON-RPC server
+// while the window of one observed block is open (it must wait at the window
+// gate and stay out of the dependency log), replay every saved EXEC_READY
+// observation from its saved inputs, and send the same RPC call with cold
+// caches outside every window (it then reads Heimdall through the native
+// client).
 package main
 
 import (
@@ -34,6 +41,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -63,6 +71,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 const (
@@ -171,8 +180,14 @@ func loadInputs(genesisPath, configPath string) (inputs, error) {
 	return inputs{genesisBytes: genesisBytes, configBytes: configBytes, genesis: &genesis}, nil
 }
 
-// stubTransport answers every Heimdall request from the stub files.
-type stubTransport struct{ stub heimdallstub.Stub }
+// stubTransport answers every Heimdall request from the stub files. With
+// rpc set, the first request in the window of rpc.block starts the RPC call
+// and answers only once the call waits at the window gate.
+type stubTransport struct {
+	stub  heimdallstub.Stub
+	rpc   *rpcInWindow
+	delay *delayOnce
+}
 
 func (s stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Body != nil {
@@ -181,6 +196,8 @@ func (s stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.Host != heimdallstub.Host {
 		return nil, fmt.Errorf("unexpected host %q", req.URL.Host)
 	}
+	s.rpc.trigger(req)
+	s.delay.hold(req)
 	body, status := s.stub.Serve(req.URL)
 	return &http.Response{Status: http.StatusText(status), StatusCode: status, Proto: "HTTP/1.1", ProtoMajor: 1,
 		ProtoMinor: 1, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(bytes.NewReader(body)),
@@ -387,6 +404,12 @@ func setObserving(number uint64) {
 	observing.Unlock()
 }
 
+func observingBlock() uint64 {
+	observing.Lock()
+	defer observing.Unlock()
+	return observing.block
+}
+
 func (c *crashPoint) fire(step string) {
 	if c == nil || c.step != step {
 		return
@@ -524,6 +547,10 @@ type attemptResult struct {
 	RetentionHooks bool               `json:"retention_hooks_installed"`
 	Passed         map[string]int     `json:"passed_heimdall_calls"`
 	Crashed        bool               `json:"crashed"`
+	RPC            *RPCCheck          `json:"rpc_in_window,omitempty"`
+	RPCBefore      *RPCBefore         `json:"rpc_before_window,omitempty"`
+	Replays        []ReplayRow        `json:"replays,omitempty"`
+	RPCControl     *RPCControl        `json:"rpc_control,omitempty"`
 }
 
 func attempt(args []string) (returned error) {
@@ -543,6 +570,11 @@ func attempt(args []string) (returned error) {
 	walk := flags.Uint64("walk-check", 0, "check the native snapshot walk of this observed block from its capsule")
 	batch := flags.Bool("batch", false, "import the observed range with one native InsertChain call")
 	store := flags.String("store-id", storeID, "producer binding of the native store")
+	unobserved := flags.Bool("unobserved", false, "import the range without observations")
+	rpcDuring := flags.Uint64("rpc-during", 0, "send bor_getSnapshot of the parent while this block's window is open")
+	rpcBeforeBlock := flags.Uint64("rpc-before", 0, "have bor_getSnapshot of the parent inside a Heimdall read when this block's window starts")
+	replay := flags.Bool("replay", false, "after the import, replay every saved EXEC_READY observation")
+	control := flags.Uint64("rpc-control", 0, "finally send bor_getSnapshot of this block with cold caches outside every window")
 	output := flags.String("out", "", "result JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -598,13 +630,36 @@ func attempt(args []string) (returned error) {
 		stack.Close()
 		return err
 	}
-	http.DefaultTransport = stubTransport{stub: heimdallstub.Stub{Bodies: *bodies, Variant: *variant}}
+	var inWindow *rpcInWindow
+	if *rpcDuring > 0 {
+		result.RPC = &RPCCheck{Block: *rpcDuring, Target: *rpcDuring - 1}
+		inWindow = &rpcInWindow{check: result.RPC, done: make(chan struct{})}
+	}
+	var before *rpcBefore
+	if *rpcBeforeBlock > 0 {
+		result.RPCBefore = &RPCBefore{Block: *rpcBeforeBlock, Target: *rpcBeforeBlock - 1}
+		before = &rpcBefore{check: result.RPCBefore, delay: &delayOnce{}, done: make(chan struct{})}
+	}
+	transport := stubTransport{stub: heimdallstub.Stub{Bodies: *bodies, Variant: *variant}, rpc: inWindow}
+	if before != nil {
+		transport.delay = before.delay
+	}
+	http.DefaultTransport = transport
 	eth, err := backend(stack, in.genesis)
 	if err != nil {
 		stack.Close()
 		return err
 	}
 	chain := eth.BlockChain()
+	engine := eth.Engine().(*bor.Bor)
+	if inWindow != nil {
+		inWindow.engine, inWindow.chain = engine, chain
+		rec.rpc = inWindow
+	}
+	if before != nil {
+		before.engine, before.chain = engine, chain
+		rec.before = before
+	}
 	db := &crashDB{Database: eth.ChainDb(), crash: crash}
 	node, err := borimport.Start(cfg, db, chain)
 	if err != nil {
@@ -663,7 +718,12 @@ func attempt(args []string) (returned error) {
 			return fmt.Errorf("base import: %w", err)
 		}
 	}
-	chain.SetExtractorObserver(rec)
+	if *unobserved {
+		node.Detach()
+		http.DefaultTransport = router
+	} else {
+		chain.SetExtractorObserver(rec)
+	}
 	if *batch {
 		// One native batch: the patched import splits it into one block per
 		// observation window.
@@ -693,6 +753,26 @@ func attempt(args []string) (returned error) {
 		}
 	}
 	setObserving(0)
+	if inWindow != nil {
+		if !inWindow.started.Load() {
+			return fmt.Errorf("no Heimdall request in the window of block %d started the RPC call", *rpcDuring)
+		}
+		select {
+		case <-inWindow.done:
+		case <-time.After(2 * time.Minute):
+			return errors.New("the RPC call did not return after the window closed")
+		}
+	}
+	if before != nil {
+		if result.RPCBefore.HeldRequest == "" {
+			return fmt.Errorf("block %d was not imported with an RPC call in flight", *rpcBeforeBlock)
+		}
+		select {
+		case <-before.done:
+		case <-time.After(2 * time.Minute):
+			return errors.New("the RPC call started before the window did not return")
+		}
+	}
 	head := chain.CurrentBlock()
 	result.HeadNumber, result.HeadHash = head.Number.Uint64(), head.Hash().Hex()
 	if err = describe(node, db, &result); err != nil {
@@ -707,13 +787,256 @@ func attempt(args []string) (returned error) {
 			return err
 		}
 	}
+	if *replay {
+		if result.Replays, err = replayAll(node); err != nil {
+			return err
+		}
+	}
+	if *control > 0 {
+		result.RPCControl = rpcControl(engine, chain, router, *control)
+	}
 	return nil
+}
+
+// rpcCall sends bor_getSnapshot for block number through the native bor RPC
+// service on an in-process JSON-RPC server, created as the node creates its
+// in-process endpoint (node.New).
+func rpcCall(engine *bor.Bor, chain *core.BlockChain, number uint64) (uint64, string, error) {
+	server := rpc.NewServer("", 0, 0)
+	defer server.Stop()
+	for _, api := range engine.APIs(chain) {
+		if err := server.RegisterName(api.Namespace, api.Service); err != nil {
+			return 0, "", err
+		}
+	}
+	client := rpc.DialInProc(server)
+	defer client.Close()
+	var snap struct {
+		Number uint64      `json:"number"`
+		Hash   common.Hash `json:"hash"`
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := client.CallContext(ctx, &snap, "bor_getSnapshot", rpc.BlockNumber(number)); err != nil {
+		return 0, "", err
+	}
+	return snap.Number, snap.Hash.Hex(), nil
+}
+
+// RPCCheck records the bor RPC call sent inside the window of Block.
+type RPCCheck struct {
+	Block uint64 `json:"block"`
+	// Target is the block whose snapshot the call asks for.
+	Target uint64 `json:"target"`
+	// TriggerRequest is the Heimdall request of the window that started the call.
+	TriggerRequest string `json:"trigger_request"`
+	// WaitingBefore is the number of callers waiting at the gate just before
+	// the call started; Waiting is true once that number grew.
+	WaitingBefore int  `json:"waiting_before"`
+	Waiting       bool `json:"waiting_at_gate"`
+	// ReturnedInWindow is true if the call had returned when the window's
+	// observation closed.
+	ReturnedInWindow bool   `json:"returned_in_window"`
+	Number           uint64 `json:"snapshot_number"`
+	Hash             string `json:"snapshot_hash"`
+	Error            string `json:"error,omitempty"`
+}
+
+// rpcInWindow starts the RPC call from the first Heimdall request of the
+// window of its block.
+type rpcInWindow struct {
+	engine  *bor.Bor
+	chain   *core.BlockChain
+	check   *RPCCheck
+	started atomic.Bool
+	done    chan struct{}
+}
+
+func (r *rpcInWindow) trigger(req *http.Request) {
+	if r == nil || observingBlock() != r.check.Block || !r.started.CompareAndSwap(false, true) {
+		return
+	}
+	r.check.TriggerRequest = req.Method + " " + req.URL.RequestURI()
+	before := bor.ExtractorGateWaiting()
+	r.check.WaitingBefore = before
+	go func() {
+		defer close(r.done)
+		number, hash, err := rpcCall(r.engine, r.chain, r.check.Target)
+		r.check.Number, r.check.Hash = number, hash
+		if err != nil {
+			r.check.Error = err.Error()
+		}
+	}()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if bor.ExtractorGateWaiting() > before {
+			r.check.Waiting = true
+			return
+		}
+		select {
+		case <-r.done:
+			return
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+func (r *rpcInWindow) returned() bool {
+	select {
+	case <-r.done:
+		return true
+	default:
+		return false
+	}
+}
+
+// RPCBefore records the bor RPC call that is inside a Heimdall read when
+// the window of Block starts: the probe purges the caches, starts the call,
+// holds the first counted Heimdall request that follows for a second, and
+// begins the import of Block while that request is in flight.
+type RPCBefore struct {
+	Block          uint64 `json:"block"`
+	Target         uint64 `json:"target"`
+	HeldRequest    string `json:"held_request"`
+	HeldAtObserve  bool   `json:"held_at_observe"`
+	Number         uint64 `json:"snapshot_number"`
+	Hash           string `json:"snapshot_hash"`
+	Error          string `json:"error,omitempty"`
+	ReturnedByDone bool   `json:"returned_by_done"`
+}
+
+// delayOnce holds the first counted Heimdall request after arm for a second.
+type delayOnce struct {
+	mu       sync.Mutex
+	armed    bool
+	request  string
+	held     chan struct{}
+	inFlight atomic.Bool
+}
+
+func (d *delayOnce) arm() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.armed, d.held = true, make(chan struct{})
+}
+
+func (d *delayOnce) hold(req *http.Request) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	if !d.armed || !obligation.Counted(req.URL) {
+		d.mu.Unlock()
+		return
+	}
+	d.armed, d.request = false, req.Method+" "+req.URL.RequestURI()
+	held := d.held
+	d.inFlight.Store(true)
+	d.mu.Unlock()
+	close(held)
+	time.Sleep(time.Second)
+	d.inFlight.Store(false)
+}
+
+// rpcBefore starts the RPC call so that it is inside a Heimdall read when
+// the window of its block starts.
+type rpcBefore struct {
+	engine *bor.Bor
+	chain  *core.BlockChain
+	delay  *delayOnce
+	check  *RPCBefore
+	done   chan struct{}
+}
+
+func (r *rpcBefore) start() error {
+	r.engine.ExtractorPurgeInputs()
+	r.delay.arm()
+	go func() {
+		defer close(r.done)
+		number, hash, err := rpcCall(r.engine, r.chain, r.check.Target)
+		r.check.Number, r.check.Hash = number, hash
+		if err != nil {
+			r.check.Error = err.Error()
+		}
+	}()
+	select {
+	case <-r.delay.held:
+	case <-time.After(30 * time.Second):
+		return errors.New("no Heimdall request followed the RPC call")
+	}
+	r.delay.mu.Lock()
+	r.check.HeldRequest = r.delay.request
+	r.delay.mu.Unlock()
+	r.check.HeldAtObserve = r.delay.inFlight.Load()
+	return nil
+}
+
+// ReplayRow is the replay of one saved EXEC_READY observation.
+type ReplayRow struct {
+	Key   string           `json:"key"`
+	Rows  []obligation.Row `json:"counted_calls"`
+	Error string           `json:"error,omitempty"`
+}
+
+// RPCControl is the same RPC call with cold caches outside every window.
+type RPCControl struct {
+	Target uint64         `json:"target"`
+	Number uint64         `json:"snapshot_number"`
+	Hash   string         `json:"snapshot_hash"`
+	Error  string         `json:"error,omitempty"`
+	Passed map[string]int `json:"passed_heimdall_calls"`
+}
+
+// replayAll replays every saved EXEC_READY observation of the admission.
+func replayAll(node *borimport.Node) ([]ReplayRow, error) {
+	token := node.Driver.Guard.Acquire()
+	saved, err := node.Driver.Admission.Observations(token)
+	if releaseErr := token.Release(); err == nil {
+		err = releaseErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	rows := []ReplayRow{}
+	for _, obs := range saved {
+		if obs.State != admission.ExecReady {
+			continue
+		}
+		row := ReplayRow{Key: obs.Key}
+		if err := node.Replay(obs.Key); err != nil {
+			row.Error = err.Error()
+		}
+		row.Rows = node.Router.Rows()
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+// rpcControl purges the Heimdall caches and sends the RPC call outside every
+// window; its Heimdall reads pass through the router to the native client.
+func rpcControl(engine *bor.Bor, chain *core.BlockChain, router *obligation.Router, target uint64) *RPCControl {
+	before := router.Passed()
+	engine.ExtractorPurgeInputs()
+	control := &RPCControl{Target: target, Passed: map[string]int{}}
+	number, hash, err := rpcCall(engine, chain, target)
+	control.Number, control.Hash = number, hash
+	if err != nil {
+		control.Error = err.Error()
+	}
+	for path, count := range router.Passed() {
+		if count != before[path] {
+			control.Passed[path] = count - before[path]
+		}
+	}
+	return control
 }
 
 // recorder wraps the admission observer and keeps the counted calls and the
 // outcome of every observation, so a batch import is judged block by block.
 type recorder struct {
 	node   *borimport.Node
+	rpc    *rpcInWindow
+	before *rpcBefore
 	mu     sync.Mutex
 	result *attemptResult
 	window []obligation.Row // counted calls of the open window, for crash points
@@ -730,6 +1053,12 @@ func (r *recorder) Observe(block *types.Block, parent *types.Header) (core.Extra
 	r.result.Observations = append(r.result.Observations, Observed{Block: block.NumberU64()})
 	r.window = nil
 	r.mu.Unlock()
+	if r.before != nil && r.before.check.Block == block.NumberU64() {
+		if err := r.before.start(); err != nil {
+			r.finish(err)
+			return nil, err
+		}
+	}
 	inner, err := r.node.Observe(block, parent)
 	if err != nil {
 		r.finish(err)
@@ -750,6 +1079,17 @@ func (r *recorder) finish(err error) {
 }
 
 func (o recorded) Done(block *types.Block, receipts types.Receipts, usedGas uint64, err error) error {
+	if r := o.recorder.rpc; r != nil && r.check.Block == block.NumberU64() && r.started.Load() {
+		// The window is still open here.
+		r.check.ReturnedInWindow = r.returned()
+	}
+	if b := o.recorder.before; b != nil && b.check.Block == block.NumberU64() {
+		select {
+		case <-b.done:
+			b.check.ReturnedByDone = true
+		default:
+		}
+	}
 	err = o.inner.Done(block, receipts, usedGas, err)
 	o.recorder.finish(err)
 	return err
@@ -897,7 +1237,15 @@ type Step struct {
 	Batch     bool   `json:"batch"`
 	PruneDir  string `json:"stale_prune_dir"`
 	PruneTool string `json:"prune_state"`
-	StoreID   string `json:"store_id"`
+	// Command is the `bor snapshot` command that PruneTool runs: prune-state
+	// (the default) or prune-block.
+	Command    string `json:"tool_command"`
+	StoreID    string `json:"store_id"`
+	Unobserved bool   `json:"unobserved"`
+	RPCDuring  uint64 `json:"rpc_during"`
+	RPCBefore  uint64 `json:"rpc_before"`
+	Replay     bool   `json:"replay"`
+	RPCControl uint64 `json:"rpc_control"`
 }
 
 // Plan is the attempt list of one scenario, fixed in the oracle.
@@ -933,6 +1281,7 @@ func scenario(args []string) error {
 	}
 	dataDir := filepath.Join(*output, "data")
 	store := filepath.Join(dataDir, instanceName, "chaindata")
+	ancient := filepath.Join(store, "ancient")
 	rows := make([]map[string]any, 0, len(plan.Attempts))
 	for index, step := range plan.Attempts {
 		before, err := dumpStore(store)
@@ -940,6 +1289,9 @@ func scenario(args []string) error {
 			return err
 		}
 		row := map[string]any{"store_before": before}
+		if row["ancient_before"], err = dumpAncient(ancient); err != nil {
+			return err
+		}
 		if step.PruneDir != "" {
 			// A leftover state bloom filter in a subdirectory: the node-level
 			// check sees only the instance directory, the native pruner walks it all.
@@ -952,7 +1304,7 @@ func scenario(args []string) error {
 			}
 		}
 		if step.PruneTool != "" {
-			row["prune_state"], err = runTool(filepath.Join(*tools, step.PruneTool), dataDir, *output, index)
+			row["prune_state"], err = runTool(filepath.Join(*tools, step.PruneTool), step.Command, dataDir, *output, index)
 			if err != nil {
 				return err
 			}
@@ -962,7 +1314,9 @@ func scenario(args []string) error {
 				"-bodies", *bodies, "-datadir", dataDir, "-commit", *commit, "-variant", step.Variant,
 				"-base", fmt.Sprint(step.Base), "-from", fmt.Sprint(step.From), "-to", fmt.Sprint(step.To),
 				"-crash=" + step.Crash, "-store-id", storeIDOf(step), "-set-head", fmt.Sprint(step.SetHead), "-walk-check", fmt.Sprint(step.Walk), fmt.Sprintf("-batch=%t", step.Batch),
-				"-out", out}
+				fmt.Sprintf("-unobserved=%t", step.Unobserved), "-rpc-during", fmt.Sprint(step.RPCDuring),
+				"-rpc-before", fmt.Sprint(step.RPCBefore),
+				fmt.Sprintf("-replay=%t", step.Replay), "-rpc-control", fmt.Sprint(step.RPCControl), "-out", out}
 			row["argv"] = argv
 			row["status"], err = runChild(os.Args[0], argv, filepath.Join(*output, fmt.Sprintf("attempt-%d.log", index)))
 			if err != nil {
@@ -970,6 +1324,9 @@ func scenario(args []string) error {
 			}
 		}
 		if row["store_after"], err = dumpStore(store); err != nil {
+			return err
+		}
+		if row["ancient_after"], err = dumpAncient(ancient); err != nil {
 			return err
 		}
 		rows = append(rows, row)
@@ -1037,12 +1394,19 @@ func runChild(binary string, argv []string, logPath string) (map[string]any, err
 	return status, nil
 }
 
-// runTool runs `bor snapshot prune-state` of one binary on the scenario data
-// directory and keeps its output. Each binary file is named bor, because the
-// native node derives the instance directory from the program name.
-func runTool(binary, dataDir, output string, index int) (map[string]any, error) {
+// runTool runs `bor snapshot <command>` (prune-state when command is empty)
+// of one binary on the scenario data directory and keeps its output. Each
+// binary file is named bor, because the native node derives the instance
+// directory from the program name.
+func runTool(binary, command, dataDir, output string, index int) (map[string]any, error) {
+	if command == "" {
+		command = "prune-state"
+	}
+	if command != "prune-state" && command != "prune-block" {
+		return nil, fmt.Errorf("unknown tool command %q", command)
+	}
 	logPath := filepath.Join(output, fmt.Sprintf("attempt-%d.log", index))
-	status, err := runChild(binary, []string{"snapshot", "prune-state", "--datadir", dataDir}, logPath)
+	status, err := runChild(binary, []string{"snapshot", command, "--datadir", dataDir}, logPath)
 	if err != nil {
 		return nil, err
 	}
@@ -1051,8 +1415,38 @@ func runTool(binary, dataDir, output string, index int) (map[string]any, error) 
 		return nil, err
 	}
 	status["binary"] = binary
+	status["command"] = command
 	status["refused_live_pins"] = bytes.Contains(text, []byte(stateprovider.ErrLivePins.Error()))
+	status["output_sha256"] = heimdallstub.HexSum(text)
+	if len(text) > 8192 {
+		text = text[len(text)-8192:]
+	}
+	status["output_tail"] = string(text)
 	return status, nil
+}
+
+// dumpAncient lists every file under the ancient directory with its digest.
+func dumpAncient(dir string) (map[string]string, error) {
+	files := map[string]string{}
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if errors.Is(err, os.ErrNotExist) && path == dir {
+			return filepath.SkipDir
+		}
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		data, err := readBounded(path, 1<<30)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		files[rel] = heimdallstub.HexSum(data)
+		return nil
+	})
+	return files, err
 }
 
 func main() {

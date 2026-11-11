@@ -96,7 +96,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -109,7 +115,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -133,7 +145,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -146,7 +164,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -170,7 +194,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -183,7 +213,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -207,7 +243,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -220,7 +262,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -245,7 +293,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -258,7 +312,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -271,7 +331,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": true
+     "batch": true,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -297,7 +363,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -310,7 +382,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -323,7 +401,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -349,7 +433,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -362,7 +452,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -385,7 +481,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -398,7 +500,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": true
+     "batch": true,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -421,7 +529,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 1020,
@@ -434,7 +548,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
-     "batch": true
+     "batch": true,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 1020,
@@ -447,7 +567,13 @@
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "fedcba9876543210fedcba9876543210",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 1020,
@@ -460,7 +586,13 @@
      "stale_prune_dir": "prune-leftover",
      "prune_state": "",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -473,7 +605,13 @@
      "stale_prune_dir": "",
      "prune_state": "bor",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     },
     {
      "base": 0,
@@ -486,7 +624,13 @@
      "stale_prune_dir": "",
      "prune_state": "accepted/bor",
      "store_id": "",
-     "batch": false
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
     }
    ],
    "ac": [
@@ -499,6 +643,165 @@
     4,
     5
    ]
+  },
+  {
+   "name": "rpc-window",
+   "kind": "rpc-window",
+   "block": 1035,
+   "attempts": [
+    {
+     "base": 1030,
+     "from": 1031,
+     "to": 1040,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 1035,
+     "replay": true,
+     "rpc_control": 1040,
+     "rpc_before": 1037
+    }
+   ],
+   "ac": [
+    "AC-CAP-02-02",
+    "AC-CAP-04-03"
+   ],
+   "decision": "D100 item 1"
+  },
+  {
+   "name": "prune-block-live-pins",
+   "kind": "prune-block",
+   "pins": true,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "bor",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "prune-block",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "accepted/bor",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "prune-block",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
+    }
+   ],
+   "ac": [
+    "AC-CAP-02-02"
+   ],
+   "decision": "D100 item 1",
+   "refused": [
+    1,
+    2
+   ]
+  },
+  {
+   "name": "prune-block-no-pins",
+   "kind": "prune-block",
+   "pins": false,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": true,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "bor",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "prune-block",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0
+    }
+   ],
+   "ac": [
+    "AC-CAP-02-02"
+   ],
+   "decision": "D100 item 1",
+   "refused": [
+    1
+   ]
   }
- ]
+ ],
+ "prune_block": {
+  "refusal": "guarded block pruning: live pins forbid",
+  "native_error": "freezer is empty, abort"
+ }
 }

@@ -9,7 +9,10 @@
     "extractor/retention/retention.go": "tree/extractor/retention/retention.go",
     "extractor/borwire/borwire.go": "tree/extractor/borwire/borwire.go",
     "core/rawdb/zz_extractor_freeze_test.go": "tree/core/rawdb/zz_extractor_freeze_test.go",
-    "consensus/bor/heimdall/zz_extractor_client.go": "tree/consensus/bor/heimdall/zz_extractor_client.go"
+    "consensus/bor/heimdall/zz_extractor_client.go": "tree/consensus/bor/heimdall/zz_extractor_client.go",
+    "consensus/bor/zz_extractor_gate.go": "tree/consensus/bor/zz_extractor_gate.go",
+    "consensus/bor/zz_extractor_gate_test.go": "tree/consensus/bor/zz_extractor_gate_test.go",
+    "internal/cli/zz_extractor_prune_block.go": "tree/internal/cli/zz_extractor_prune_block.go"
   },
   "edits": [
     {
@@ -123,6 +126,160 @@
       "mode": "replace",
       "anchor": "func (c *Bor) VerifySeal(chain consensus.ChainHeaderReader, header *types.Header) error {\n\treturn c.verifySeal(chain, header, nil)\n}\n",
       "text": "func (c *Bor) VerifySeal(chain consensus.ChainHeaderReader, header *types.Header) error {\n\tdefer c.extractorGate()()\n\treturn c.verifySeal(chain, header, nil)\n}\n"
+    },
+    {
+      "name": "window-gate-prepare",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, waitOnPrepare bool) error {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-finalize",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, wrappedState vm.StateDB, body *types.Body, receipts []*types.Receipt) ([]*types.Receipt, error) {\n",
+      "text": "\tdefer c.extractorBlockGate(header)()\n"
+    },
+    {
+      "name": "window-gate-finalize-and-assemble",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body, receipts []*types.Receipt) (*types.Block, []*types.Receipt, time.Duration, error) {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-finalize-and-assemble-for-simulation",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) FinalizeAndAssembleForSimulation(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body, receipts []*types.Receipt) (*types.Block, []*types.Receipt, time.Duration, error) {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-finalize-for-pipeline",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) FinalizeForPipeline(chain consensus.ChainHeaderReader, header *types.Header, statedb *state.StateDB, body *types.Body, receipts []*types.Receipt) ([]*types.StateSyncData, error) {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-is-authorized-signer",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) IsAuthorizedSigner(chain consensus.ChainHeaderReader, header *types.Header) bool {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-seal-with-stop-hook",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) SealWithStopHook(chain consensus.ChainHeaderReader, block *types.Block, witness *stateless.Witness, results chan<- *consensus.NewSealedBlockEvent, stop <-chan struct{}, onStopExit func()) error {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-calc-difficulty",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) CalcDifficulty(chain consensus.ChainHeaderReader, _ uint64, parent *types.Header) *big.Int {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-fetch-and-commit-span",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) FetchAndCommitSpan(\n\tctx context.Context,\n\tnewSpanID uint64,\n\tstate vm.StateDB,\n\theader *types.Header,\n\tchain core.ChainContext,\n) error {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-commit-states",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) CommitStates(\n\tstate vm.StateDB,\n\theader *types.Header,\n\tchain statefull.ChainContext,\n) ([]*types.StateSyncData, error) {\n",
+      "text": "\tdefer c.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-snapshot",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-snapshot-proposer-sequence",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetSnapshotProposerSequence(blockNrOrHash *rpc.BlockNumberOrHash) (BlockSigners, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-snapshot-proposer",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetSnapshotProposer(blockNrOrHash *rpc.BlockNumberOrHash) (common.Address, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-author",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetAuthor(blockNrOrHash *rpc.BlockNumberOrHash) (*common.Address, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-snapshot-at-hash",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetSnapshotAtHash(hash common.Hash) (*Snapshot, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-signers",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetSigners(number *rpc.BlockNumber) ([]common.Address, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-signers-at-hash",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetSignersAtHash(hash common.Hash) ([]common.Address, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-current-proposer",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetCurrentProposer() (common.Address, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-current-validators",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetCurrentValidators() ([]*valset.Validator, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "window-gate-api-get-root-hash",
+      "file": "consensus/bor/api.go",
+      "mode": "after",
+      "anchor": "func (api *API) GetRootHash(start uint64, end uint64) (string, error) {\n",
+      "text": "\tdefer api.bor.extractorGate()()\n"
+    },
+    {
+      "name": "retention-prune-block",
+      "file": "internal/cli/snapshot.go",
+      "mode": "before",
+      "anchor": "\terr = c.validateAgainstSnapshot(node, dbHandles)\n",
+      "text": "\t// Extractor patch: prune ancient blocks only while no pin is live (D100 item 1).\n\tif err := extractorRequirePruneBlock(node, c.cache, dbHandles, c.datadirAncient); err != nil {\n\t\tc.UI.Error(err.Error())\n\t\treturn 1\n\t}\n\n"
+    },
+    {
+      "name": "window-gate-detached-fetch",
+      "file": "consensus/bor/span_store_lookup.go",
+      "mode": "after",
+      "anchor": "func (s *SpanStore) fetchSpanRange(gen uint64, id uint64) (val any, err error) {\n",
+      "text": "\tdefer extractorTrackFetch()()\n"
     }
   ]
 }

@@ -220,6 +220,10 @@ func (d depLog) Finish() error {
 	return err
 }
 
+// Cursor and Frontier report the replay progress (obligation.Progress).
+func (d depLog) Cursor() uint64   { return d.log.Cursor() }
+func (d depLog) Frontier() uint64 { return d.log.Frontier() }
+
 // Node is the admission of one running Bor node.
 type Node struct {
 	cfg      Config
@@ -322,6 +326,10 @@ func (n *Node) Recover() (obligation.Report, error) {
 	n.chain.SetExtractorObserver(n)
 	return report, nil
 }
+
+// Replay checks a saved EXEC_READY observation against its saved inputs
+// (obligation.Driver.Replay); it changes no record.
+func (n *Node) Replay(key string) error { return n.Driver.Replay(key, n) }
 
 // Detach removes the observer and restores the process transport.
 func (n *Node) Detach() {
@@ -452,11 +460,14 @@ func (n *Node) OpenLog(key string) (obligation.Log, error) {
 	return depLog{log: log}, nil
 }
 
-// OpenWindow implements obligation.Native: it holds back header
-// verification of other blocks and drops the span store caches and the
-// snapshot cache (which also stops the span poll loop), so every Heimdall
-// read of the window belongs to this block and goes through the router.
-func (n *Node) OpenWindow() { n.engine.ExtractorOpenWindow() }
+// OpenWindow implements obligation.Native: it holds back every Heimdall
+// reader other than the import of candidate c at the window gate and drops
+// the span store caches and the snapshot cache (which also stops the span
+// poll loop), so every counted Heimdall read of the window belongs to this
+// block's import and goes through the router.
+func (n *Node) OpenWindow(c admission.Candidate) {
+	n.engine.ExtractorOpenWindow(common.HexToHash(c.Hash))
+}
 
 // CloseWindow implements obligation.Native.
 func (n *Node) CloseWindow() { n.engine.ExtractorCloseWindow() }

@@ -551,6 +551,174 @@
       "file": "test/harness/bor_admission_tree.py",
       "original": "    if data.get(\"schema_version\") != 1 or not isinstance(data.get(\"files\"), dict) or \\",
       "replacement": "    if not isinstance(data.get(\"files\"), dict) or \\"
+    },
+    {
+      "name": "rpc-window kind is judged",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    elif kind == \"rpc-window\":\n        check_rpc_window(context, plan, attempts, block, fail)",
+      "replacement": "    elif kind == \"rpc-window\":\n        pass"
+    },
+    {
+      "name": "prune-block kind is judged",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    elif kind == \"prune-block\":\n        check_prune_block(context, plan, attempts, fail)",
+      "replacement": "    elif kind == \"prune-block\":\n        pass"
+    },
+    {
+      "name": "rpc window observations are completed",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    check_completed(context, row, numbers, \"a\", fail, \"rpc attempt\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "rpc trigger is the first window read",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "or rpc.get(\"trigger_request\") != first:",
+      "replacement": "or False:"
+    },
+    {
+      "name": "rpc target is the parent",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if rpc.get(\"block\") != block or rpc.get(\"target\") != block - 1 or",
+      "replacement": "    if rpc.get(\"block\") != block or"
+    },
+    {
+      "name": "rpc waits at the gate",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if rpc.get(\"waiting_at_gate\") is not True or rpc.get(\"returned_in_window\") is not False:",
+      "replacement": "    if rpc.get(\"returned_in_window\") is not False:"
+    },
+    {
+      "name": "rpc does not return in the window",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if rpc.get(\"waiting_at_gate\") is not True or rpc.get(\"returned_in_window\") is not False:",
+      "replacement": "    if rpc.get(\"waiting_at_gate\") is not True:"
+    },
+    {
+      "name": "rpc snapshot hash",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            rpc.get(\"snapshot_hash\") != \"0x\" + chain[block - 2][\"hash\"].hex():",
+      "replacement": "            False:"
+    },
+    {
+      "name": "replays cover every EXEC_READY",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if [r.get(\"key\") for r in replays] != [key_of(sequence) for sequence in ready] or len(ready) != len(numbers):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "replay error fails",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if replay.get(\"error\"):\n            fail(f\"the EXEC_READY of block {number} does not replay",
+      "replacement": "        if False:\n            fail(f\"the EXEC_READY of block {number} does not replay"
+    },
+    {
+      "name": "replay calls come from the log",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "[\"replay\"] * len(want), fail, f\"replay of block {number}\"",
+      "replacement": "[\"fetch\"] * len(want), fail, f\"replay of block {number}\""
+    },
+    {
+      "name": "control reads every rio path",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            any(passed.get(path, 0) < 1 for path in want_paths):",
+      "replacement": "            False:"
+    },
+    {
+      "name": "control snapshot target",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if control.get(\"error\") or control.get(\"snapshot_number\") != target or",
+      "replacement": "    if control.get(\"error\") or"
+    },
+    {
+      "name": "request path drops the query",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    return request.split(\" \", 1)[1].split(\"?\", 1)[0]",
+      "replacement": "    return request.split(\" \", 1)[1]"
+    },
+    {
+      "name": "prune-block import is completed",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        check_completed(context, first, numbers, \"a\", fail, \"import\")",
+      "replacement": "        pass"
+    },
+    {
+      "name": "prune-block needs a live pin",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if not any(row[\"key\"].startswith(PIN) for row in first[\"store_after\"]):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "patched prune-block refuses live pins",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if tool(1).get(\"command\") != \"prune-block\" or tool(1).get(\"refused_live_pins\") is not True or \\",
+      "replacement": "        if tool(1).get(\"command\") != \"prune-block\" or \\"
+    },
+    {
+      "name": "patched refusal precedes the native pruner",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                want[\"refusal\"] not in tail(1) or want[\"native_error\"] in tail(1):",
+      "replacement": "                want[\"refusal\"] not in tail(1):"
+    },
+    {
+      "name": "refused prune-block changes no store",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if patched[\"store_before\"] != first[\"store_after\"] or patched[\"store_after\"] != patched[\"store_before\"] or \\",
+      "replacement": "        if patched[\"store_before\"] != first[\"store_after\"] or \\"
+    },
+    {
+      "name": "refused prune-block changes no ancient file",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                patched[\"ancient_after\"] != patched[\"ancient_before\"]:",
+      "replacement": "                False:"
+    },
+    {
+      "name": "accepted prune-block reaches the native pruner",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                want[\"native_error\"] not in tail(2):",
+      "replacement": "                False:"
+    },
+    {
+      "name": "accepted prune-block does not refuse",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if tool(2).get(\"command\") != \"prune-block\" or tool(2).get(\"refused_live_pins\") is not False or \\",
+      "replacement": "        if tool(2).get(\"command\") != \"prune-block\" or \\"
+    },
+    {
+      "name": "unpinned import has no observation",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if result.get(\"observations\") or any(row[\"key\"].startswith(PIN) for row in first[\"store_after\"]) or \\",
+      "replacement": "        if any(row[\"key\"].startswith(PIN) for row in first[\"store_after\"]) or \\"
+    },
+    {
+      "name": "unpinned prune-block reaches the native pruner",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                want[\"refusal\"] in tail(1) or want[\"native_error\"] not in tail(1):",
+      "replacement": "                want[\"refusal\"] in tail(1):"
+    },
+    {
+      "name": "reader in flight at a window start",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if before.get(\"block\") != at or before.get(\"target\") != at - 1 or before.get(\"held_at_observe\") is not True or \\",
+      "replacement": "    if before.get(\"block\") != at or before.get(\"target\") != at - 1 or \\"
+    },
+    {
+      "name": "reader in flight is a counted read",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            not held.startswith(\"GET \") or request_path(held) not in rio_paths:",
+      "replacement": "            not held.startswith(\"GET \"):"
+    },
+    {
+      "name": "reader in flight returns its snapshot",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            before.get(\"snapshot_hash\") != \"0x\" + chain[at - 2][\"hash\"].hex():",
+      "replacement": "            False:"
+    },
+    {
+      "name": "reader in flight has no error",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if before.get(\"error\") or before.get(\"snapshot_number\") != at - 1 or \\",
+      "replacement": "    if before.get(\"snapshot_number\") != at - 1 or \\"
     }
   ]
 }

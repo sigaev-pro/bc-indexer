@@ -59,6 +59,7 @@ type world struct {
 	windows  int
 	router   *Router
 	readable error
+	plainLog bool
 }
 
 func newWorld() *world {
@@ -130,12 +131,15 @@ func (w *world) OpenLog(key string) (Log, error) {
 		w.logs[key] = log
 	}
 	log.cursor = 0
+	if w.plainLog {
+		return struct{ Log }{log}, nil
+	}
 	return log, nil
 }
-func (w *world) OpenWindow() {
+func (w *world) OpenWindow(admission.Candidate) {
 	open := w.router != nil && w.router.open
 	w.windows++
-	w.calls = append(w.calls, fmt.Sprintf("purge window=%t", open))
+	w.calls = append(w.calls, fmt.Sprintf("purge routed=%t", open))
 }
 func (w *world) CloseWindow() {
 	w.windows--
@@ -154,14 +158,15 @@ func (w *world) Verify(key string) (error, error) {
 
 // fakeLog replays saved responses in order and appends new ones.
 type fakeLog struct {
-	world   *world
-	key     string
-	order   []string
-	saved   map[string][]byte
-	cursor  int
-	refuse  error
-	finish  error
-	fetched int
+	world    *world
+	key      string
+	order    []string
+	saved    map[string][]byte
+	cursor   int
+	refuse   error
+	finish   error
+	fetched  int
+	finished bool
 }
 
 func (l *fakeLog) Next(request []byte, fetch func() ([]byte, error)) ([]byte, error) {
@@ -174,6 +179,9 @@ func (l *fakeLog) Next(request []byte, fetch func() ([]byte, error)) ([]byte, er
 		}
 		l.cursor++
 		return l.saved[string(request)], nil
+	}
+	if l.finished {
+		return nil, errors.New("log closed")
 	}
 	body, err := fetch()
 	if err != nil {
@@ -199,8 +207,12 @@ func (l *fakeLog) Finish() error {
 	}
 	l.world.closed[l.key] = admission.Consumed{Observation: l.key, CapsuleDigest: capsule, Count: uint64(len(l.order)),
 		Chain: chain, Digest: digest}
+	l.finished = true
 	return nil
 }
+
+func (l *fakeLog) Cursor() uint64   { return uint64(l.cursor) }
+func (l *fakeLog) Frontier() uint64 { return uint64(len(l.order)) }
 
 func hexOf(text string) string {
 	sum := sha256.Sum256([]byte(text))
@@ -331,7 +343,7 @@ func TestObserveAdmitsBeforeExecutionAndBindsExecReady(t *testing.T) {
 	if obs.Key() != key0 {
 		t.Fatalf("key %s", obs.Key())
 	}
-	want := []string{"pin " + key0, "seal " + key0, "open " + key0, "purge window=true", "verify " + key0}
+	want := []string{"pin " + key0, "seal " + key0, "open " + key0, "purge routed=false", "verify " + key0}
 	if !slices.Equal(f.world.calls, want) {
 		t.Fatalf("calls %v, want %v", f.world.calls, want)
 	}
@@ -967,4 +979,200 @@ func TestRouterRefusesOversizeResponses(t *testing.T) {
 	if err, _ := r.Leave(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// execReady leaves key0 EXEC_READY after the counted reads of paths.
+func execReady(t *testing.T, f *fixture, result string, paths ...string) {
+	t.Helper()
+	useRouter(t, f.driver.Router)
+	obs, err := f.driver.Observe(candidate(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		if _, err := get(t, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := obs.Done(result, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func requireGuardFree(t *testing.T, f *fixture) {
+	t.Helper()
+	acquired := make(chan *admission.Token, 1)
+	go func() { acquired <- f.guard.Acquire() }()
+	select {
+	case token := <-acquired:
+		token.Release()
+	case <-time.After(5 * time.Second):
+		t.Fatal("Replay kept the observation guard")
+	}
+}
+
+func TestAFailedRouterEnterClosesTheWindow(t *testing.T) {
+	f := newFixture(t)
+	f.driver.Router.open = true
+	if _, err := f.driver.Observe(candidate(1)); !errors.Is(err, ErrWindow) {
+		t.Fatalf("expected the router misuse, got %v", err)
+	}
+	f.driver.Router.open = false
+	if f.world.windows != 0 || !slices.Contains(f.world.calls, "close window") {
+		t.Fatalf("the window stayed open: windows %d calls %v", f.world.windows, f.world.calls)
+	}
+	// The obligation stays ADMITTED and resolves before the next observation.
+	if f.states()[key0] != admission.Admitted {
+		t.Fatalf("states %v", f.states())
+	}
+}
+
+func TestReplayExecReadyFromItsSavedInputs(t *testing.T) {
+	f := newFixture(t)
+	result := ResultDigest("h", "s", "r", "2")
+	execReady(t, f, result, "/bor/spans/1", "/status")
+	f.stub.bodies["/bor/spans/1"] = `{"span":"changed"}`
+	stubCalls := len(f.stub.calls)
+	f.world.calls = nil
+	var seen []string
+	r := &reexec{result: result, before: func() {
+		for _, path := range []string{"/bor/spans/1", "/status", "/milestones/latest"} {
+			body, err := get(t, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen = append(seen, body)
+		}
+	}}
+	err := f.driver.Replay(key0, r)
+	requireGuardFree(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(seen, []string{`{"span":1}`, `{"ok":true}`, `{"m":1}`}) {
+		t.Fatalf("replay read %q, not the saved responses", seen)
+	}
+	// Only the uncounted milestone read reached Heimdall.
+	if !slices.Equal(f.stub.calls[stubCalls:], []string{"/milestones/latest"}) {
+		t.Fatalf("replay reached Heimdall: %v", f.stub.calls[stubCalls:])
+	}
+	if !slices.Equal(f.world.calls, []string{"open " + key0, "purge routed=false", "verify " + key0, "close window"}) ||
+		f.world.windows != 0 || !slices.Equal(r.keys, []string{key0}) {
+		t.Fatalf("calls %v windows %d keys %v", f.world.calls, f.world.windows, r.keys)
+	}
+	if f.states()[key0] != admission.ExecReady || f.world.pins[key0] == "" {
+		t.Fatalf("replay changed the observation: %v pins %v", f.states(), f.world.pins)
+	}
+	if f.driver.Router.open {
+		t.Fatal("replay left the router window open")
+	}
+}
+
+func TestReplayDetectsADifferentInputHistory(t *testing.T) {
+	result := ResultDigest("h", "s", "r", "2")
+	for _, tc := range []struct {
+		name  string
+		saved []string
+		reads []string
+		want  string
+	}{
+		// A read of another component entered the log during the window.
+		{"unconsumed entry", []string{"/bor/spans/1", "/status"}, []string{"/bor/spans/1"}, "consumed 1 of 2"},
+		{"prefix conflict", []string{"/status", "/bor/spans/1"}, []string{"/bor/spans/1", "/status"}, "prefix conflict"},
+		{"read past the closed log", []string{"/bor/spans/1"}, []string{"/bor/spans/1", "/status"}, "log closed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			execReady(t, f, result, tc.saved...)
+			stubCalls := len(f.stub.calls)
+			r := &reexec{result: result, before: func() {
+				for _, path := range tc.reads {
+					_, _ = get(t, path)
+				}
+			}}
+			err := f.driver.Replay(key0, r)
+			requireGuardFree(t, f)
+			if !errors.Is(err, ErrReplay) || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+			if len(f.stub.calls) != stubCalls {
+				t.Fatalf("replay fetched %v", f.stub.calls[stubCalls:])
+			}
+			if f.states()[key0] != admission.ExecReady || f.world.windows != 0 {
+				t.Fatalf("states %v windows %d", f.states(), f.world.windows)
+			}
+		})
+	}
+}
+
+func TestReplayDetectsAnotherResult(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(*fixture, *reexec)
+		want  string
+		exec  bool
+	}{
+		{"result digest", func(f *fixture, r *reexec) { r.result = ResultDigest("x", "s", "r", "2") }, "result", true},
+		{"native failure", func(f *fixture, r *reexec) { r.native = errors.New("invalid gas used") }, "invalid gas used", true},
+		{"other failure", func(f *fixture, r *reexec) { r.err = errors.New("missing trie node") }, "missing trie node", true},
+		{"header check", func(f *fixture, r *reexec) {
+			f.world.verify = func(string) error { return errors.New("unauthorized signer") }
+		}, "unauthorized signer", false},
+		{"header check failure", func(f *fixture, r *reexec) { f.world.failure = errors.New("capsule unreadable") },
+			"capsule unreadable", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			result := ResultDigest("h", "s", "r", "2")
+			execReady(t, f, result, "/bor/spans/1")
+			r := &reexec{result: result, before: func() { _, _ = get(t, "/bor/spans/1") }}
+			tc.setup(f, r)
+			err := f.driver.Replay(key0, r)
+			requireGuardFree(t, f)
+			if !errors.Is(err, ErrReplay) || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %s", err, tc.want)
+			}
+			if (len(r.keys) == 1) != tc.exec {
+				t.Fatalf("re-executed %v", r.keys)
+			}
+			if f.states()[key0] != admission.ExecReady || f.world.windows != 0 || f.driver.Router.open {
+				t.Fatalf("states %v windows %d", f.states(), f.world.windows)
+			}
+		})
+	}
+}
+
+func TestReplayRefusesWhatItCannotCheck(t *testing.T) {
+	f := newFixture(t)
+	err := f.driver.Replay(key0, &reexec{})
+	requireGuardFree(t, f)
+	if !errors.Is(err, ErrReplay) {
+		t.Fatalf("unknown observation: %v", err)
+	}
+	leaveAdmitted(t, f)
+	f.world.calls = nil
+	if err := f.driver.Replay(key0, &reexec{}); !errors.Is(err, ErrReplay) || len(f.world.calls) != 0 {
+		t.Fatalf("ADMITTED observation: %v %v", err, f.world.calls)
+	}
+	requireGuardFree(t, f)
+
+	f = newFixture(t)
+	execReady(t, f, ResultDigest("h", "s", "r", "2"))
+	f.world.plainLog = true
+	f.world.calls = nil
+	if err := f.driver.Replay(key0, &reexec{}); !errors.Is(err, ErrReplay) || slices.Contains(f.world.calls, "purge routed=false") {
+		t.Fatalf("log without progress: %v %v", err, f.world.calls)
+	}
+	f.world.plainLog = false
+	f.world.openErr = errors.New("store closed")
+	if err := f.driver.Replay(key0, &reexec{}); !errors.Is(err, f.world.openErr) {
+		t.Fatalf("open failure: %v", err)
+	}
+	f.world.openErr = nil
+	f.driver.Router.open = true
+	if err := f.driver.Replay(key0, &reexec{}); !errors.Is(err, ErrWindow) || f.world.windows != 0 {
+		t.Fatalf("router misuse: %v windows %d", err, f.world.windows)
+	}
+	f.driver.Router.open = false
+	requireGuardFree(t, f)
 }
