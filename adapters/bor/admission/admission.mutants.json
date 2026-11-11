@@ -201,8 +201,8 @@
     {
       "name": "open keeps abandoned observations",
       "file": "admission.go",
-      "original": "\t\tif obs.State != Abandoned && obs.State != Rejected {\n\t\t\ta.open[seq] = obs\n\t\t}",
-      "replacement": "\t\ta.open[seq] = obs"
+      "original": "\t\tif obs.State == Abandoned || obs.State == Rejected {",
+      "replacement": "\t\tif obs.State == Rejected {"
     },
     {
       "name": "open starts live",
@@ -653,8 +653,8 @@
     {
       "name": "open keeps rejected observations",
       "file": "admission.go",
-      "original": "if obs.State != Abandoned && obs.State != Rejected {",
-      "replacement": "if obs.State != Abandoned {"
+      "original": "\t\tif obs.State == Abandoned || obs.State == Rejected {",
+      "replacement": "\t\tif obs.State == Abandoned {"
     },
     {
       "name": "begin ignores a rejected record beyond the counter",
@@ -691,6 +691,36 @@
       "file": "admission.go",
       "original": "\tif err := a.terminate(obs, \"rejected\", record); err != nil {",
       "replacement": "\tif err := a.terminate(obs, \"abandoned\", record); err != nil {"
+    },
+    {
+      "name": "open skips the release of closed observations",
+      "file": "admission.go",
+      "original": "\t\tif err := pins.Release(obs.Key); err != nil {\n\t\t\treturn nil, err\n\t\t}",
+      "replacement": "\t\t_ = obs"
+    },
+    {
+      "name": "open ignores a release error",
+      "file": "admission.go",
+      "original": "\t\tif err := pins.Release(obs.Key); err != nil {\n\t\t\treturn nil, err\n\t\t}",
+      "replacement": "\t\t_ = pins.Release(obs.Key)"
+    },
+    {
+      "name": "open does not advance the low-water mark",
+      "file": "admission.go",
+      "original": "\tif err := a.advance(); err != nil {\n\t\treturn nil, err\n\t}\n\treturn a, nil",
+      "replacement": "\treturn a, nil"
+    },
+    {
+      "name": "terminate releases before the record",
+      "file": "admission.go",
+      "original": "\tif err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tdelete(a.open, obs.Sequence)\n\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}",
+      "replacement": "\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tdelete(a.open, obs.Sequence)"
+    },
+    {
+      "name": "terminate ignores a release error",
+      "file": "admission.go",
+      "original": "\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}\n\treturn a.advance()",
+      "replacement": "\t_ = a.pins.Release(obs.Key)\n\treturn a.advance()"
     }
   ]
 }

@@ -721,7 +721,10 @@ func TestAbandonAndLowWater(t *testing.T) {
 	if err != nil || len(list) != 1 || list[0].Key != second || list[0].State != ExecReady {
 		t.Fatalf("observations after abandon %+v %v", list, err)
 	}
-	if !slices.Equal(f.pins.released, []string{first, third}) {
+	// The third observation is closed but above the low-water mark, behind the
+	// open EXEC_READY one, so Open released its pin again; the first is below
+	// the mark and is not read.
+	if !slices.Equal(f.pins.released, []string{first, third, third}) {
 		t.Fatalf("released %v", f.pins.released)
 	}
 }
@@ -752,6 +755,9 @@ func TestAbandonPowerLoss(t *testing.T) {
 				if err := f.a.Abandon(f.token, key); err != nil {
 					t.Fatalf("crash %d: retry abandon: %v", crash, err)
 				}
+			}
+			if _, err := f.pins.Verify(key, f.v.Candidate.ParentRoot); !errors.Is(err, errNoPin) {
+				t.Fatalf("crash %d keep %b: pin of the abandoned observation: %v", crash, keep, err)
 			}
 			f.live()
 			if next := f.begin(); next.Sequence != 1 {
@@ -1261,18 +1267,22 @@ func TestRejectPowerLoss(t *testing.T) {
 				t.Fatalf("crash %d: completed reject reopened as %v", crash, got)
 			}
 			if len(got) == 1 {
-				// The pin was released before the record: EXEC_READY is refused
-				// and the repeated Reject completes.
+				// The record did not survive: the obligation keeps its pin and
+				// the repeated Reject completes.
 				if got[0] != Admitted {
 					t.Fatalf("crash %d keep %b: %v", crash, keep, got)
 				}
-				f.closeLog(key)
-				if _, err := f.a.ExecReady(f.token, key, f.v.ExecDigest); !errors.Is(err, ErrBinding) {
-					t.Fatalf("crash %d: EXEC_READY without the pin: %v", crash, err)
+				if _, err := f.pins.Verify(key, f.v.Candidate.ParentRoot); err != nil {
+					t.Fatalf("crash %d keep %b: ADMITTED lost its pin: %v", crash, keep, err)
 				}
 				if _, err := f.a.Reject(f.token, key, f.v.EvidenceDigest); err != nil {
 					t.Fatalf("crash %d: retry reject: %v", crash, err)
 				}
+			}
+			// The closed observation has no pin, whether Reject or Open
+			// released it.
+			if _, err := f.pins.Verify(key, f.v.Candidate.ParentRoot); !errors.Is(err, errNoPin) {
+				t.Fatalf("crash %d keep %b: pin of the rejected observation: %v", crash, keep, err)
 			}
 			f.live()
 			if next := f.begin(); next.Sequence != 1 {
@@ -1310,5 +1320,47 @@ func TestOneAdmissionPerProducer(t *testing.T) {
 	f.db.durable[string(f.a.key("counter"))] = []byte("[]")
 	if _, err := f.a.Begin(f.token, f.v.Candidate); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("malformed counter at Begin: %v", err)
+	}
+}
+
+// TestOpenFinishesAnInterruptedClose: the terminal record is durable but the
+// release failed. The obligation is closed; Open releases the pin again and
+// advances the low-water mark, and a failing release stops Open.
+func TestOpenFinishesAnInterruptedClose(t *testing.T) {
+	for _, step := range []string{"reject", "abandon"} {
+		f := newFixture(t)
+		f.live()
+		key := f.begin().Key
+		f.prepare(key)
+		f.pins.releaseErr = errDisk
+		var err error
+		if step == "reject" {
+			f.admit(key)
+			_, err = f.a.Reject(f.token, key, f.v.EvidenceDigest)
+		} else {
+			err = f.a.Abandon(f.token, key)
+		}
+		if !errors.Is(err, errDisk) {
+			t.Fatalf("%s with a failing release: %v", step, err)
+		}
+		if _, err := f.pins.Verify(key, f.v.Candidate.ParentRoot); err != nil {
+			t.Fatalf("%s: the pin went away without a release: %v", step, err)
+		}
+		if _, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs); !errors.Is(err, errDisk) {
+			t.Fatalf("%s: open with a failing release: %v", step, err)
+		}
+		f.pins.releaseErr = nil
+		f.reopen(f.db)
+		if len(f.states()) != 0 || !slices.Equal(f.pins.released, []string{key}) {
+			t.Fatalf("%s: states %v, released %v", step, f.states(), f.pins.released)
+		}
+		var low lowwaterRecord
+		if ok, err := readRecord(f.db, f.a.key("lowwater"), &low); !ok || err != nil || low.Sequence != 1 {
+			t.Fatalf("%s: low-water %+v %v %v, want 1", step, low, ok, err)
+		}
+		f.reopen(f.db)
+		if !slices.Equal(f.pins.released, []string{key}) {
+			t.Fatalf("%s: a closed observation below the low-water mark was released again: %v", step, f.pins.released)
+		}
 	}
 }

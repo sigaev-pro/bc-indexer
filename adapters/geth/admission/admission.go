@@ -399,8 +399,10 @@ func (a *Admission) recordKey(seq uint64, kind string) []byte {
 
 func (a *Admission) observationKey(seq uint64) string { return fmt.Sprintf("%s.%016x", a.owner, seq) }
 
-// Open syncs the store, reads every non-terminal observation and checks its
-// records. It starts in RECOVERY_ONLY.
+// Open syncs the store, reads every observation above the low-water mark and
+// checks its records. It releases the pin of every closed observation there
+// again, which finishes an interrupted close, and advances the low-water
+// mark. It starts in RECOVERY_ONLY.
 func Open(t *Token, db Store, p Producer, pins Pins, inputs Inputs) (*Admission, error) {
 	if t == nil || t.guard == nil {
 		return nil, ErrGuard
@@ -434,14 +436,28 @@ func Open(t *Token, db Store, p Producer, pins Pins, inputs Inputs) (*Admission,
 		return nil, fmt.Errorf("%w: low-water %d above counter %d", ErrCorrupt, low.Sequence, counter.Next)
 	}
 	a.next, a.lowwater = counter.Next, low.Sequence
+	var closed []*Observation
 	for seq := low.Sequence; seq < counter.Next; seq++ {
 		obs, err := a.load(seq)
 		if err != nil {
 			return nil, err
 		}
-		if obs.State != Abandoned && obs.State != Rejected {
+		if obs.State == Abandoned || obs.State == Rejected {
+			closed = append(closed, obs)
+		} else {
 			a.open[seq] = obs
 		}
+	}
+	// Finish closes that a power loss or a release error interrupted after
+	// the terminal record was synced: release the pin again, then advance the
+	// low-water mark.
+	for _, obs := range closed {
+		if err := pins.Release(obs.Key); err != nil {
+			return nil, err
+		}
+	}
+	if err := a.advance(); err != nil {
+		return nil, err
 	}
 	return a, nil
 }
@@ -772,8 +788,8 @@ func (a *Admission) ExecReady(t *Token, key, execDigest string) (ExecReadyRecord
 	return record, nil
 }
 
-// Abandon cleans an INPUT_PREPARING observation: it releases the pin, writes
-// the ABANDONED record and syncs, then advances the low-water mark past
+// Abandon cleans an INPUT_PREPARING observation: it writes the ABANDONED
+// record and syncs, releases the pin, then advances the low-water mark past
 // terminal sequences. An ADMITTED or later observation is never abandoned.
 func (a *Admission) Abandon(t *Token, key string) error {
 	if err := a.enter(t); err != nil {
@@ -791,7 +807,7 @@ func (a *Admission) Abandon(t *Token, key string) error {
 
 // Reject closes an ADMITTED observation that native validation refused
 // (NATIVE_REJECTED). evidenceDigest is the digest of the native rejection
-// evidence. It releases the pin, writes the record and syncs, then advances
+// evidence. It writes the record and syncs, releases the pin, then advances
 // the low-water mark. It is allowed in RECOVERY_ONLY. An EXEC_READY
 // observation passed native validation and is closed by the decision bridge.
 func (a *Admission) Reject(t *Token, key, evidenceDigest string) (RejectedRecord, error) {
@@ -820,16 +836,13 @@ func (a *Admission) Reject(t *Token, key, evidenceDigest string) (RejectedRecord
 	return record, nil
 }
 
-// terminate releases the pin of an observation, writes its terminal record
-// and syncs, then advances the low-water mark past terminal sequences. The
-// pin is released first: after a power loss in between, the observation
-// reopens in its earlier state without a pin, EXEC_READY is refused
-// (ErrBinding), and repeating the step completes it, because Release of an
+// terminate writes the terminal record of an observation and syncs it, then
+// releases the pin, then advances the low-water mark. The record comes first:
+// an ADMITTED obligation keeps its pin until its closing record is durable
+// (NATIVE_CAPTURE_PROTOCOL). After a power loss or a release error between
+// the record and the release, Open releases the pin again; Release of an
 // absent pin returns nil.
 func (a *Admission) terminate(obs *Observation, kind string, record any) error {
-	if err := a.pins.Release(obs.Key); err != nil {
-		return a.fail(err)
-	}
 	if err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {
 		return a.fail(err)
 	}
@@ -837,6 +850,15 @@ func (a *Admission) terminate(obs *Observation, kind string, record any) error {
 		return a.fail(err)
 	}
 	delete(a.open, obs.Sequence)
+	if err := a.pins.Release(obs.Key); err != nil {
+		return a.fail(err)
+	}
+	return a.advance()
+}
+
+// advance moves the low-water mark past the closed sequences at its front.
+// Every closed sequence above the mark has had its pin released.
+func (a *Admission) advance() error {
 	low := a.lowwater
 	for low < a.next {
 		if _, open := a.open[low]; open {

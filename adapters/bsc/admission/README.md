@@ -23,10 +23,10 @@ Native wiring, the retention and VM safe-point patches, the per-block
 observations on the product import path, and every client-specific input
 rule are later blocks; the plan is in PROJECT_STATUS ("E01-02.admission").
 The native decision marker, NATIVE_DECIDED and the delivery states belong to
-E01-02.decision_bridge; this package only gives it the `Reject` exit for an
-ADMITTED observation that native validation refused (NATIVE_REJECTED). The live boundary H and the caller
-map belong to E01-02.lifecycle_seams. This block runs no native client and
-gives no AC verdict.
+E01-02.decision_bridge. This package only adds `Reject`, the NATIVE_REJECTED
+exit for an ADMITTED observation that native validation refused. The live
+boundary H and the caller map belong to E01-02.lifecycle_seams. This block
+runs no native client and gives no AC verdict.
 
 ## Design
 
@@ -119,12 +119,15 @@ Two steps close an observation before EXEC_READY; both work in either mode:
   `Process`). `evidenceDigest` is the digest of the native rejection
   evidence. No EXEC_READY, no Applied and no public result follows.
 
-Both call `Pins.Release(key)`, then write the terminal record and sync, then
-advance `/lowwater` past terminal sequences. The pin is released first: after
-a power loss in between, the observation reopens in its earlier state
-without a pin, `ExecReady` refuses it (`ErrBinding`), and repeating the step
-completes it, because `Release` of an absent pin returns nil. No other step
-releases a pin; an EXEC_READY observation passed native validation and stays
+Both write the terminal record and sync, then call `Pins.Release(key)`, then
+advance `/lowwater` past terminal sequences. The record comes first, so an
+ADMITTED obligation keeps its pin until its closing record is durable. After
+a power loss before that sync, the observation reopens in its earlier state
+with its pin, and repeating the step completes it. After a power loss or a
+`Release` error between the sync and the release, `Open` releases the pin of
+every closed observation above `/lowwater` again (`Release` of an absent pin
+returns nil) and only then advances `/lowwater`. No other step releases a
+pin; an EXEC_READY observation passed native validation and stays
 with its pin for the decision bridge. Capsule and log records of a closed
 observation stay in the store; no record points to them.
 
@@ -133,8 +136,10 @@ from its own view of open observations. The decision bridge therefore closes
 EXEC_READY observations through a step it adds to this package (see the
 plan), never by writing these keys directly.
 
-Repeating a completed step with the same arguments returns the stored record;
-different arguments are `ErrConflict`. A pin, capsule or consumed manifest
+Repeating a completed `Admit` or `ExecReady` with the same arguments returns
+the stored record; different arguments are `ErrConflict`. A closed
+observation is no longer listed, so repeating `Abandon` or `Reject` is
+`ErrUnknown`. A pin, capsule or consumed manifest
 that is missing or does not match is `ErrBinding`, which also wraps the error
 of `Pins` or `Inputs`; nothing is written. A store error, or an error of
 `Pins.Release`, stops the admission (`ErrFailed` afterwards); the caller
@@ -146,8 +151,9 @@ reopens it.
 and checks every record in `[lowwater, counter)`: a missing INPUT_PREPARING
 record, an EXEC_READY or NATIVE_REJECTED without ADMITTED, a NATIVE_REJECTED
 together with EXEC_READY, an ABANDONED together with any later record, or a
-digest that does not recompute is `ErrCorrupt`. `Observations` lists
-every non-terminal observation with its state.
+digest that does not recompute is `ErrCorrupt`. Then it releases the pins of
+the closed observations in that range again and advances `/lowwater`.
+`Observations` lists every non-terminal observation with its state.
 
 In RECOVERY_ONLY, `ExecReady` and `Reject` resolve saved obligations and
 `Abandon` cleans INPUT_PREPARING; `Begin` and `Admit` are refused (`ErrMode`).
@@ -170,7 +176,8 @@ Crash points of one observation (AC-CAP-02-01 and AC-CAP-02-02, unit form):
 | In `Begin`, before the counter sync | No observation, or INPUT_PREPARING | Nothing accepted; an orphan `/preparing` beyond the counter is overwritten |
 | After `Begin`, before the closing ADMITTED sync | INPUT_PREPARING, or ADMITTED if the record write survived | Never EXEC_READY. INPUT_PREPARING is not a capture: `Abandon` releases its pin. A surviving ADMITTED record is complete, because the pin and capsule were durable before it was written |
 | After the ADMITTED sync | ADMITTED with the same candidate, pin digest and capsule digest | The same obligation is recovered; `GoLive` and `Begin` are refused until `ExecReady` or `Reject` |
-| In `Reject` or `Abandon`, before the record sync | The earlier state, maybe without its pin | Repeating the step completes it; `ExecReady` without the pin is refused |
+| In `Reject` or `Abandon`, before the record sync | The earlier state, with its pin | Repeating the step completes it |
+| In `Reject` or `Abandon`, after the record sync | Closed; `Open` releases the pin again and advances `/lowwater` | Nothing to repeat |
 | In `ExecReady`, before its sync | ADMITTED (or EXEC_READY if the write survived) | Retry replays the closed log and writes the same EXEC_READY |
 | After the EXEC_READY sync | EXEC_READY | Listed for the decision bridge |
 
