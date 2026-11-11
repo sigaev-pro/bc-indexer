@@ -2,12 +2,33 @@
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
-Status: IN_PROGRESS; block 0 admission-core ACCEPTED in PR #146 at merge `9046de9`. Dependencies E01-02.pins (#13),
-E01-02.inputs (#14) and E01-02.owned_capture (#15) are accepted. Plan agreed
-with the owner on 2026-11-11, the same split as #14 under D97 and D98: block
-0 core (architect, then native-engineer), then up to three parallel
-per-client blocks (native-engineer each) with qa for the AC matrix; reviewer
-for the Spec and Standards reviews.
+Status: IN_PROGRESS; #16 stays open. Merged: block 0 admission-core in PR
+#146 at `9046de9`, Geth in PR #147 at `6f6eb2c`, BSC part A in PR #148 at
+`4bf65f3`, Bor in PR #149 at `9f2a3d9`, and BSC part B in PR #150 at
+`10cd2c6`. The acceptance audit (Spec review of PR #151) found two Bor
+hazards and no AC-CAP-02 verdict for the BSC slot. D100 records the owner's
+answers. The qa BSC verdict merged in PR #152 at `06231d1`. Still open
+before #16 closes:
+
+- Bor hazards block (native-engineer and qa, Bor session):
+  `bor snapshot prune-block` never deletes a pinned header, and only the
+  import's own Heimdall reads enter an observation's log (D100 item 1). Its
+  measured run repeats the POLY AC-CAP-02 and AC-CAP-04-03 cases on its head.
+- Geth removedb block (native-engineer, Geth session): `geth removedb` and
+  the other manual database commands refuse while live pins or open
+  obligations exist (D100 item 3).
+
+AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and BSC slots.
+They also pass on POLY (Bor) at PR #149; under D100 the hazards block must
+show them again on its own head before that verdict counts. Every public
+cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100 names the owner of
+every other limit in the block evidence.
+
+Dependencies E01-02.pins (#13), E01-02.inputs (#14) and E01-02.owned_capture
+(#15) are accepted. Plan agreed with the owner on 2026-11-11, the same split
+as #14 under D97 and D98: block 0 core (architect, then native-engineer),
+then up to three parallel per-client blocks (native-engineer each) with qa
+for the AC matrix; reviewer for the Spec and Standards reviews.
 
 ### Block 0: admission-core
 
@@ -111,14 +132,14 @@ PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
 terminal record before the release, lets `Open` release the pins of closed
 observations above the low-water mark again, and fixes the wording.
 
-Next: none for block 0; it is merged (PR #146, merge `9046de9`). The Geth,
-BSC and Bor blocks run in parallel sessions, each with its own section
-below.
+Next: the Bor hazards block and the Geth removedb block (D100), then the
+acceptance record; #16 closes when that record merges.
 
 ## E01-02.admission — Geth block
 
-Status: IN_PROGRESS (part of #16). Base `9046de9`, after block 0 (PR #146)
-merged. Branch/worktree: `claude/e01-02-admission-geth-95b3ee` /
+Status: merged in PR #147 at `6f6eb2c` (part of #16). Open: the removedb
+block of D100 item 3. Base `9046de9`, after block 0 (PR #146) merged.
+Branch/worktree: `claude/e01-02-admission-geth-95b3ee` /
 `e01-02-admission-geth-95b3ee`. Role: native-engineer; reviewer for the Spec
 and Standards reviews. Allowed paths: `adapters/geth/admission/native/**`,
 `test/harness/fixtures/admission_geth/**`,
@@ -177,14 +198,16 @@ builds), measured run 03 PASS (probe PASS, 21 of 21 native mutants killed,
 432 seconds), Python mutants 64 of 64 killed. Records 02 at `d438376`
 passed and are superseded and kept.
 
-Resume point: review 003 of the head with records 03, hosted CI, then READY
-for the coordinator.
+Review 003 at head `32e6a66`: Spec PASS and Standards PASS; hosted CI
+passed. Merged in PR #147 at `6f6eb2c`.
 
 ## E01-02.admission — BSC block
 
-Status: part A merged in PR #148 at `4bf65f3`. Part B IN PROGRESS on branch
-`claude/e01-02-admission-bsc-parlia-inputs`, base main `4bf65f3`. Part of
-#16.
+Status: block ACCEPTED (part of #16). Part A merged in PR #148 at
+`4bf65f3`; part B merged in PR #150 at `10cd2c6` (branch
+`claude/e01-02-admission-bsc-parlia-inputs`, started on main `4bf65f3`,
+merged with main `9f2a3d9`); the qa AC verdict merged in PR #152 at
+`06231d1`.
 
 Split: the coordinator approved on 2026-11-11 splitting the BSC block into
 PR A "bsc-import" and PR B "bsc-parlia-inputs", both "Part of #16", with no
@@ -284,11 +307,22 @@ equivalents), Python mutants 06 PASS. Earlier attempts are kept under D83
 and listed in
 [E01-02.admission.bsc-parlia-inputs](evidence/E01-02.admission.bsc-parlia-inputs.md).
 
-Resume point: none (not paused).
+Part B reviews at head `766a59a`: Spec PASS and Standards PASS; hosted CI
+passed. Merged in PR #150 at `10cd2c6`.
+
+BSC AC verdict (qa, 2026-11-11, from the accepted records only: part A
+run 03 at `e0b16c8` and part B run 06 at `7eb892c`). BSC private local:
+AC-CAP-02-01 PASS and AC-CAP-02-02 PASS. All eight scenarios PASS in both
+runs, and every public cell (`bsc-mainnet`, `bsc-testnet`) is NOT_RUN. The
+matrix is in
+[E01-02.admission.bsc-parlia-inputs](evidence/E01-02.admission.bsc-parlia-inputs.md#ac-matrix-bsc).
+Merged in PR #152 at `06231d1`.
 
 ## E01-02.admission — Bor block
 
-Status: IN_PROGRESS (Part of #16), draft PR #149. Base `9046de9` (block 0 merged in PR #146).
+Status: merged in PR #149 at `9f2a3d9` (part of #16). Base `9046de9` (block
+0 merged in PR #146). Open: the hazards block of D100 item 1
+(`bor snapshot prune-block` and Heimdall reads outside the import).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
@@ -367,8 +401,8 @@ scenarios). POLY private local: AC-CAP-02-01 PASS, AC-CAP-02-02 PASS,
 AC-CAP-04-03 real binding PASS; every public cell NOT_RUN. Mutants on
 `e103f18`: Go 54 of 54, Python 86 of 86 killed.
 
-Next: review 003 on the head with this evidence, then READY for the
-coordinator.
+Review 003 at head `6c0b799`: Spec PASS and Standards PASS; hosted CI
+passed. Merged in PR #149 at `9f2a3d9`.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
