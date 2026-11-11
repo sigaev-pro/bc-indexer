@@ -138,7 +138,12 @@ gate waits for every gated call in progress, the purge stops the span
 store poll loop and range warmup, and then the window waits for the
 detached span range fetches still in flight (`fetchSpanRange` runs on the
 span store lifetime, not on its caller's context, and retries until it
-succeeds; edit `window-gate-detached-fetch` counts them). Only then does the
+succeeds). Edit `window-gate-detached-fetch` counts each lookup in
+`spanRangeById` before its singleflight `DoChan`, so a fetch is counted
+before it can start, and releases it when the result is delivered: to the
+caller, or, when the caller left on its context (as `waitForNewSpan` does
+after its timeout), to a goroutine that waits for the result. A window can
+therefore never open while a started fetch is uncounted. Only then does the
 driver route counted reads to the log, so no read that another reader
 started before the window can land in it.
 
@@ -339,28 +344,33 @@ adapter, and the native tests drive them with a real EVM run.
   in flight; while Heimdall fails, such a fetch keeps retrying, so the window
   and the import wait until Heimdall answers (a stalled import, never a
   foreign read in the log).
-- A detached span range fetch is counted when its singleflight goroutine
-  starts running, not when `DoChan` is called. A gated caller whose context
-  had already expired could start one and leave the gate at once; if the
-  window opened before that goroutine ran its first statement, its read
-  would enter the log, and only a replay (`Replay`, recovery) would detect it
-  (a prefix conflict or an unconsumed entry). Counting in `spanRangeById`
-  before `DoChan` would close this; it is not done in this block.
 - The creator rule admits `Finalize` of the observed block only on the
   window owner or a goroutine it started directly. A native version that
   finalized on a grandchild goroutine would stall the import, never log a
   foreign read.
-- The gate itself is covered by native tests in the Bor graph and by the
-  probe scenarios; its Go code has no mutant table, because a mutant run
-  would need the full Bor build per mutant.
+- The gate state (`zz_extractor_gate_core.go`, standard library only) has a
+  mutant table (`gate.mutants.json`) that compiles each mutant in a small
+  module. The Bor bindings of the gate (`zz_extractor_gate.go`, the patched
+  span store and entry points) have no mutant table: each mutant would need
+  a full Bor build and probe run; the native tests (including an AST check
+  that every entry point and the fetch count are in place) and the probe
+  scenarios cover them.
+- In the accepted Bor source, `node.OpenDatabaseWithFreezer` drops its
+  ancient argument, so native `bor snapshot prune-block` cannot open a store
+  whose freezer holds blocks (it stops with "ancient chain segments already
+  extracted"); on such a store the native pruner deletes nothing. The guard
+  opens the store with `OpenDatabaseWithOptions`, which resolves the ancient
+  directory, so it refuses for the live pins before that native step, and it
+  stays in front of the pruner if a later source fixes the open.
 - `bor snapshot prune-block` refuses while any pin is live, EXEC_READY pins
   that the decision bridge still holds included; pruning ancient blocks
   needs every obligation resolved first. The probe chain (1,040 blocks) is
-  shorter than the freezer threshold (90,000), so the measured refusal and
-  its controls run against an empty freezer: the refusal precedes every
-  native step, and the accepted binary and the unpinned run stop in the
-  native pruner at its empty-freezer check. The deletion itself is not
-  exercised.
+  shorter than the freezer threshold (90,000), so `prune-block-frozen` marks
+  block 30 finalized and the native freezer freezes blocks 0 to 30 with their
+  pinned headers; the refusal is measured over that non-empty freezer as
+  well as over an empty one. No run exercises a native deletion: the
+  accepted pruner cannot open a store with frozen blocks (see below) and
+  stops at an empty freezer.
 - In the probe, `SetHead` and the startup prune recovery are refused inside
   the probe process, which imports `borwire` like the shipped `bor`; the
   shipped binary itself runs `snapshot prune-state`, and the preparation

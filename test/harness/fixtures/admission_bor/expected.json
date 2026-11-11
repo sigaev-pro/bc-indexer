@@ -102,7 +102,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -121,7 +126,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -151,7 +161,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -170,7 +185,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -200,7 +220,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -219,7 +244,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -249,7 +279,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -268,7 +303,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -299,7 +339,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -318,7 +363,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -337,7 +387,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -369,7 +424,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -388,7 +448,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -407,7 +472,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -439,7 +509,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -458,7 +533,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -487,7 +567,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -506,7 +591,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -535,7 +625,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 1020,
@@ -554,7 +649,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 1020,
@@ -573,7 +673,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 1020,
@@ -592,7 +697,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -611,7 +721,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -630,7 +745,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -666,7 +786,12 @@
      "rpc_during": 1035,
      "replay": true,
      "rpc_control": 1040,
-     "rpc_before": 1037
+     "rpc_before": 1037,
+     "expired_fetch": 1039,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -697,7 +822,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -716,7 +846,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -735,7 +870,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -769,7 +909,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     },
     {
      "base": 0,
@@ -788,7 +933,12 @@
      "rpc_during": 0,
      "replay": false,
      "rpc_control": 0,
-     "rpc_before": 0
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
     }
    ],
    "ac": [
@@ -798,10 +948,146 @@
    "refused": [
     1
    ]
+  },
+  {
+   "name": "prune-block-frozen",
+   "kind": "prune-block-frozen",
+   "finalize": 30,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 40,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 30,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": ""
+    },
+    {
+     "base": 0,
+     "from": 40,
+     "to": 40,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 30,
+     "verify_pins": false,
+     "tool_args": ""
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "bor",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "prune-block",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "--block-amount-reserved 2"
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "accepted/bor",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "prune-block",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "--block-amount-reserved 2"
+    },
+    {
+     "base": 0,
+     "from": 40,
+     "to": 40,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": true,
+     "tool_args": ""
+    }
+   ],
+   "ac": [
+    "AC-CAP-02-02"
+   ],
+   "decision": "D100 item 1",
+   "refused": [
+    2,
+    3
+   ]
   }
  ],
  "prune_block": {
   "refusal": "guarded block pruning: live pins forbid",
-  "native_error": "freezer is empty, abort"
+  "native_error": "freezer is empty, abort",
+  "native_frozen_open_error": "ancient chain segments already extracted"
  }
 }

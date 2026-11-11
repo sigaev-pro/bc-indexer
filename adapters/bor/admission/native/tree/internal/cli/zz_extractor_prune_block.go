@@ -15,13 +15,16 @@ import (
 // pin ledger is live: the pruner deletes every frozen block below the
 // reserved amount, pinned headers included. It runs before every path of the
 // command (a new prune, the resumption of an interrupted one, and the
-// replacement of the ancient directory). It opens the store read-only the
-// way the native command does, with the freezer and freezing disabled; the
-// node instance lock that the command holds keeps a native node from adding
-// a pin between the check and the prune. A ledger that cannot be read
-// refuses too.
+// replacement of the ancient directory). It opens the store read-only with
+// freezing disabled and the ancient directory resolved as the node resolves
+// it (OpenDatabaseWithOptions; the native OpenDatabaseWithFreezer of this
+// source drops its ancient argument and cannot open a store whose freezer
+// holds blocks). The node instance lock that the command holds keeps a
+// native node from adding a pin between the check and the prune. A ledger
+// that cannot be read refuses too.
 func extractorRequirePruneBlock(stack *node.Node, cache, handles int, ancient string) error {
-	db, err := stack.OpenDatabaseWithFreezer(chaindataPath, cache, handles, ancient, "", true, true, false, false, false, false)
+	db, err := stack.OpenDatabaseWithOptions(chaindataPath, node.DatabaseOptions{AncientsDirectory: ancient,
+		Cache: cache, Handles: handles, ReadOnly: true, DisableFreeze: true})
 	if err != nil {
 		return fmt.Errorf("guarded block pruning: open the pin ledger: %w", err)
 	}
