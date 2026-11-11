@@ -2,7 +2,41 @@
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
-Status: IN_PROGRESS; block 0 admission-core ACCEPTED in PR #146 at merge `9046de9`. Dependencies E01-02.pins (#13),
+Status: ACCEPTED (2026-11-11); #16 closes when this record merges. Every
+block is merged: block 0 admission-core in PR #146 at `9046de9`, Geth in PR
+#147 at `6f6eb2c`, BSC part A in PR #148 at `4bf65f3`, Bor in PR #149 at
+`9f2a3d9`, and BSC part B in PR #150 at `10cd2c6`. Every row of the plan
+table below is met by its block, or is marked "Not admission" with its
+owner. AC-CAP-02-01 and AC-CAP-02-02 pass on every applicable private local
+slot: ETH (Geth), BSC (BSC part A) and POLY (Bor). Every public cell stays
+NOT_RUN for E06 and E07 (D96, D98, D99).
+
+The limits that the block evidence lists go to their owners:
+
+- E01-02.lifecycle_seams: node wiring of the seams (which flag installs
+  them, the caller of `Start`, where the live boundary H is read), the BSC
+  `ethAPI` over `SystemCallBackend`, the Bor `bor server` profile check, and
+  the side-chain, reorg and known-branch callers.
+- E01-02.decision_bridge: the step that closes EXEC_READY observations and
+  releases their pins, the BSC finality result of `GetFinalizedHeader` and
+  the fork choice, and one decision per candidate when a block is observed
+  twice after a recovery.
+- E04-04.import_pressure: the capture producer on the chain and the raw
+  spool encoder (D98 item 4).
+- E04-01.block_record: the normalization profile (D99 item 4) and the
+  record-corpus digest, which replaces the stand-in execution digest.
+- E06 and E07: public profiles, and the native exercise of what the private
+  fixtures cannot reach (BSC vote attestations, validator-set switches, the
+  Bohr, Feynman, Lorentz and Maxwell transitions, blob blocks; Bor with real
+  Heimdall and L1).
+
+The other limits are accepted as recorded in the evidence of each block:
+the native behavior of startup repair rewinds and manual database tools in
+Geth, the fail-closed refusal of a BSC rewind by timestamp while any header
+is pinned, and the process-crash semantics of native chain data. No limit
+moves scope without an owner decision.
+
+Dependencies E01-02.pins (#13),
 E01-02.inputs (#14) and E01-02.owned_capture (#15) are accepted. Plan agreed
 with the owner on 2026-11-11, the same split as #14 under D97 and D98: block
 0 core (architect, then native-engineer), then up to three parallel
@@ -111,14 +145,14 @@ PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
 terminal record before the release, lets `Open` release the pins of closed
 observations above the low-water mark again, and fixes the wording.
 
-Next: none for block 0; it is merged (PR #146, merge `9046de9`). The Geth,
-BSC and Bor blocks run in parallel sessions, each with its own section
-below.
+Next: none for E01-02.admission. Its dependent task E01-02.decision_bridge
+is unlocked when #16 closes.
 
 ## E01-02.admission — Geth block
 
-Status: IN_PROGRESS (part of #16). Base `9046de9`, after block 0 (PR #146)
-merged. Branch/worktree: `claude/e01-02-admission-geth-95b3ee` /
+Status: block ACCEPTED in PR #147 at merge `6f6eb2c` (part of #16). Base
+`9046de9`, after block 0 (PR #146) merged. Branch/worktree:
+`claude/e01-02-admission-geth-95b3ee` /
 `e01-02-admission-geth-95b3ee`. Role: native-engineer; reviewer for the Spec
 and Standards reviews. Allowed paths: `adapters/geth/admission/native/**`,
 `test/harness/fixtures/admission_geth/**`,
@@ -177,14 +211,14 @@ builds), measured run 03 PASS (probe PASS, 21 of 21 native mutants killed,
 432 seconds), Python mutants 64 of 64 killed. Records 02 at `d438376`
 passed and are superseded and kept.
 
-Resume point: review 003 of the head with records 03, hosted CI, then READY
-for the coordinator.
+Review 003 at head `32e6a66`: Spec PASS and Standards PASS; hosted CI
+passed. Merged in PR #147 at `6f6eb2c`.
 
 ## E01-02.admission — BSC block
 
-Status: part A merged in PR #148 at `4bf65f3`. Part B IN PROGRESS on branch
-`claude/e01-02-admission-bsc-parlia-inputs`, base main `4bf65f3`. Part of
-#16.
+Status: block ACCEPTED (part of #16). Part A merged in PR #148 at
+`4bf65f3`; part B merged in PR #150 at `10cd2c6` (branch
+`claude/e01-02-admission-bsc-parlia-inputs`, base main `9f2a3d9`).
 
 Split: the coordinator approved on 2026-11-11 splitting the BSC block into
 PR A "bsc-import" and PR B "bsc-parlia-inputs", both "Part of #16", with no
@@ -284,11 +318,13 @@ equivalents), Python mutants 06 PASS. Earlier attempts are kept under D83
 and listed in
 [E01-02.admission.bsc-parlia-inputs](evidence/E01-02.admission.bsc-parlia-inputs.md).
 
-Resume point: none (not paused).
+Part B reviews at head `766a59a`: Spec PASS and Standards PASS; hosted CI
+passed. Merged in PR #150 at `10cd2c6`.
 
 ## E01-02.admission — Bor block
 
-Status: IN_PROGRESS (Part of #16), draft PR #149. Base `9046de9` (block 0 merged in PR #146).
+Status: block ACCEPTED in PR #149 at merge `9f2a3d9` (part of #16). Base
+`9046de9` (block 0 merged in PR #146).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
@@ -367,8 +403,8 @@ scenarios). POLY private local: AC-CAP-02-01 PASS, AC-CAP-02-02 PASS,
 AC-CAP-04-03 real binding PASS; every public cell NOT_RUN. Mutants on
 `e103f18`: Go 54 of 54, Python 86 of 86 killed.
 
-Next: review 003 on the head with this evidence, then READY for the
-coordinator.
+Review 003 at head `6c0b799`: Spec PASS and Standards PASS; hosted CI
+passed. Merged in PR #149 at `9f2a3d9`.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
