@@ -148,7 +148,7 @@
       "name": "the goroutine ID is the second field",
       "file": "zz_extractor_gate_core.go",
       "original": "\tid, err := strconv.ParseUint(string(fields[1]), 10, 64)",
-      "replacement": "\tid, err := strconv.ParseUint(string(fields[1][1:]), 10, 64)"
+      "replacement": "\tid, err := strconv.ParseUint(string(fields[0]), 10, 64)"
     }
   ]
 }
