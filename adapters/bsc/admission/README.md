@@ -22,8 +22,9 @@ accepted native module graph and with a plain `go 1.25` module.
 Native wiring, the retention and VM safe-point patches, the per-block
 observations on the product import path, and every client-specific input
 rule are later blocks; the plan is in PROJECT_STATUS ("E01-02.admission").
-The native decision marker, NATIVE_DECIDED, NATIVE_REJECTED and the delivery
-states belong to E01-02.decision_bridge. The live boundary H and the caller
+The native decision marker, NATIVE_DECIDED and the delivery states belong to
+E01-02.decision_bridge; this package only gives it the `Reject` exit for an
+ADMITTED observation that native validation refused (NATIVE_REJECTED). The live boundary H and the caller
 map belong to E01-02.lifecycle_seams. This block runs no native client and
 gives no AC verdict.
 
@@ -39,7 +40,10 @@ through two small interfaces, so the same bytes compile in every client:
   root and is readable, and returns the SHA-256 of its ledger record;
   `Release(id)` durably removes it and returns nil for an absent pin. The pin
   ID of an observation is its observation key, so a pin can belong to only
-  one observation.
+  one observation. The native `state_provider` differs on purpose: its
+  `Release` returns `ErrUnknownPin` for an absent pin and its `Verify` returns
+  no digest, so each client block's pin adapter maps `ErrUnknownPin` to nil,
+  returns the ledger-record digest, and tests an `Abandon` without a pin.
 - `Inputs` (E01-02.inputs, `adapters/<client>/source_inputs`):
   `CapsuleDigest(key)` returns the digest of the sealed static capsule;
   `Consumed(key)` returns the durable closed consumed-input manifest
@@ -74,6 +78,7 @@ deletes one.
 | `/<seq>/admitted` | ADMITTED: candidate, pin digest, capsule digest, admitted digest. Commit point of `Admit` |
 | `/<seq>/exec-ready` | EXEC_READY: admitted digest, consumed digest, exec digest, record digest. Commit point of `ExecReady` |
 | `/<seq>/abandoned` | Terminal cleanup of an INPUT_PREPARING observation |
+| `/<seq>/rejected` | NATIVE_REJECTED: admitted digest, evidence digest, record digest. Terminal |
 
 The candidate block is `{number, hash, parent_hash, parent_root}`; hashes
 are 64 lowercase hex digits.
@@ -105,12 +110,28 @@ one observation, in protocol order:
    is the digest of the immutable record corpus, which the capture side
    computes. The decision bridge references the EXEC_READY record digest.
 
-`Abandon(key)` (either mode) is the only cleanup: for an INPUT_PREPARING
-observation it calls `Pins.Release(key)`, then writes `/<n>/abandoned` and
-syncs, then advances `/lowwater` past terminal sequences. An ADMITTED or
-EXEC_READY observation is never abandoned and its pin is never released here.
-Capsule and log records of an abandoned observation stay in the store; no
-record points to them.
+Two steps close an observation before EXEC_READY; both work in either mode:
+
+- `Abandon(key)` cleans an INPUT_PREPARING observation, which is not a
+  capture.
+- `Reject(key, evidenceDigest)` closes an ADMITTED observation that native
+  validation refused (NATIVE_REJECTED, for example a failed state check after
+  `Process`). `evidenceDigest` is the digest of the native rejection
+  evidence. No EXEC_READY, no Applied and no public result follows.
+
+Both call `Pins.Release(key)`, then write the terminal record and sync, then
+advance `/lowwater` past terminal sequences. The pin is released first: after
+a power loss in between, the observation reopens in its earlier state
+without a pin, `ExecReady` refuses it (`ErrBinding`), and repeating the step
+completes it, because `Release` of an absent pin returns nil. No other step
+releases a pin; an EXEC_READY observation passed native validation and stays
+with its pin for the decision bridge. Capsule and log records of a closed
+observation stay in the store; no record points to them.
+
+Only this package writes keys under its prefix, and `/lowwater` is computed
+from its own view of open observations. The decision bridge therefore closes
+EXEC_READY observations through a step it adds to this package (see the
+plan), never by writing these keys directly.
 
 Repeating a completed step with the same arguments returns the stored record;
 different arguments are `ErrConflict`. A pin, capsule or consumed manifest
@@ -123,18 +144,24 @@ reopens it.
 
 `Open` starts in RECOVERY_ONLY. It syncs, reads `/counter` and `/lowwater`,
 and checks every record in `[lowwater, counter)`: a missing INPUT_PREPARING
-record, an EXEC_READY without ADMITTED, an ADMITTED together with ABANDONED,
-or a digest that does not recompute is `ErrCorrupt`. `Observations` lists
+record, an EXEC_READY or NATIVE_REJECTED without ADMITTED, a NATIVE_REJECTED
+together with EXEC_READY, an ABANDONED together with any later record, or a
+digest that does not recompute is `ErrCorrupt`. `Observations` lists
 every non-terminal observation with its state.
 
-In RECOVERY_ONLY, `ExecReady` completes saved obligations and `Abandon`
-cleans INPUT_PREPARING; `Begin` and `Admit` are refused (`ErrMode`).
+In RECOVERY_ONLY, `ExecReady` and `Reject` resolve saved obligations and
+`Abandon` cleans INPUT_PREPARING; `Begin` and `Admit` are refused (`ErrMode`).
 `GoLive` switches to LIVE only when no observation is in INPUT_PREPARING or
 ADMITTED (`ErrPending`). In LIVE, `Begin` is also refused while one is. So an
 ADMITTED obligation can never be passed over by a new H: it stays in the
-store, keeps its pin, and blocks new admissions until it reaches EXEC_READY.
-EXEC_READY observations stay listed for the decision bridge, which adds the
-later terminal states and advances `/lowwater` past them.
+store, keeps its pin, and blocks new admissions until it reaches EXEC_READY
+or NATIVE_REJECTED. EXEC_READY observations stay listed for the decision
+bridge.
+
+`Open` sees only its own `(producer_id, run_id)` prefix. Which run a restart
+opens, and the refusal of a native store of another identity, belong to the
+startup preflight (E01-02.pins `Preflight`) and E01-02.lifecycle_seams; see
+the plan.
 
 Crash points of one observation (AC-CAP-02-01 and AC-CAP-02-02, unit form):
 
@@ -142,7 +169,8 @@ Crash points of one observation (AC-CAP-02-01 and AC-CAP-02-02, unit form):
 |---|---|---|
 | In `Begin`, before the counter sync | No observation, or INPUT_PREPARING | Nothing accepted; an orphan `/preparing` beyond the counter is overwritten |
 | After `Begin`, before the closing ADMITTED sync | INPUT_PREPARING, or ADMITTED if the record write survived | Never EXEC_READY. INPUT_PREPARING is not a capture: `Abandon` releases its pin. A surviving ADMITTED record is complete, because the pin and capsule were durable before it was written |
-| After the ADMITTED sync | ADMITTED with the same candidate, pin digest and capsule digest | The same obligation is recovered; `GoLive` and `Begin` are refused until `ExecReady` |
+| After the ADMITTED sync | ADMITTED with the same candidate, pin digest and capsule digest | The same obligation is recovered; `GoLive` and `Begin` are refused until `ExecReady` or `Reject` |
+| In `Reject` or `Abandon`, before the record sync | The earlier state, maybe without its pin | Repeating the step completes it; `ExecReady` without the pin is refused |
 | In `ExecReady`, before its sync | ADMITTED (or EXEC_READY if the write survived) | Retry replays the closed log and writes the same EXEC_READY |
 | After the EXEC_READY sync | EXEC_READY | Listed for the decision bridge |
 
@@ -171,6 +199,8 @@ digest input is its 32 raw bytes.
   u64(count) || chain)`.
 - EXEC_READY digest: `H(tag("extractor-admission-exec-ready-v1") ||
   admitted_digest || consumed_digest || exec_digest)`.
+- NATIVE_REJECTED digest: `H(tag("extractor-admission-rejected-v1") ||
+  admitted_digest || evidence_digest)`.
 
 The EXEC_READY digest therefore covers the candidate, the pin record, the
 static capsule, every consumed request and response in order (through the
@@ -204,7 +234,7 @@ from JSON keys that end in `Block` or `Time`.
 
 The guard serializes all calls. `Open` reads the records of every
 non-terminal observation; with sequential import that is a few records, but
-until the decision bridge adds terminal states, EXEC_READY observations
+until the decision bridge adds its closing step, EXEC_READY observations
 accumulate. `CanonicalJSON` holds the parsed value once; its recursion is
 bounded by the depth limit.
 

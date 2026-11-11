@@ -65,6 +65,7 @@ const keyPrefix = "extractor-admission-v1/"
 const (
 	tagAdmitted  = "extractor-admission-admitted-v1"
 	tagExecReady = "extractor-admission-exec-ready-v1"
+	tagRejected  = "extractor-admission-rejected-v1"
 	tagConsumed  = "extractor-source-inputs-consumed-v1"
 )
 
@@ -107,6 +108,7 @@ const (
 	Admitted       State = "ADMITTED"
 	ExecReady      State = "EXEC_READY"
 	Abandoned      State = "ABANDONED"
+	Rejected       State = "NATIVE_REJECTED"
 )
 
 // Mode is the admission mode of the node.
@@ -158,6 +160,17 @@ type ExecReadyRecord struct {
 	AdmittedDigest string `json:"admitted_digest"`
 	ConsumedDigest string `json:"consumed_digest"`
 	ExecDigest     string `json:"exec_digest"`
+	Digest         string `json:"digest"`
+}
+
+// RejectedRecord is the NATIVE_REJECTED record of an admitted observation
+// that native validation refused. It binds the admitted observation and the
+// digest of the native rejection evidence.
+type RejectedRecord struct {
+	Observation    string `json:"observation"`
+	Sequence       uint64 `json:"sequence"`
+	AdmittedDigest string `json:"admitted_digest"`
+	EvidenceDigest string `json:"evidence_digest"`
 	Digest         string `json:"digest"`
 }
 
@@ -312,6 +325,15 @@ func ExecReadyDigest(admittedDigest, consumedDigest, execDigest string) (string,
 	return digestOf(tagged(tagExecReady), raw[0], raw[1], raw[2]), nil
 }
 
+// RejectedDigest returns the digest of a NATIVE_REJECTED record.
+func RejectedDigest(admittedDigest, evidenceDigest string) (string, error) {
+	raw, err := hashes(admittedDigest, evidenceDigest)
+	if err != nil {
+		return "", err
+	}
+	return digestOf(tagged(tagRejected), raw[0], raw[1]), nil
+}
+
 func strictDecode(data []byte, value any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -417,7 +439,7 @@ func Open(t *Token, db Store, p Producer, pins Pins, inputs Inputs) (*Admission,
 		if err != nil {
 			return nil, err
 		}
-		if obs.State != Abandoned {
+		if obs.State != Abandoned && obs.State != Rejected {
 			a.open[seq] = obs
 		}
 	}
@@ -451,8 +473,13 @@ func (a *Admission) load(seq uint64) (*Observation, error) {
 	if err != nil {
 		return nil, err
 	}
+	var rejected RejectedRecord
+	hasRejected, err := readRecord(a.db, a.recordKey(seq, "rejected"), &rejected)
+	if err != nil {
+		return nil, err
+	}
 	if hasAbandoned {
-		if hasAdmitted || hasReady || abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {
+		if hasAdmitted || hasReady || hasRejected || abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {
 			return nil, fmt.Errorf("%w: ABANDONED record of %s", ErrCorrupt, key)
 		}
 		obs.State = Abandoned
@@ -465,6 +492,15 @@ func (a *Admission) load(seq uint64) (*Observation, error) {
 			return nil, fmt.Errorf("%w: ADMITTED record of %s", ErrCorrupt, key)
 		}
 		obs.State, obs.Admitted = Admitted, &admitted
+	}
+	if hasRejected {
+		want, err := RejectedDigest(admitted.Digest, rejected.EvidenceDigest)
+		if !hasAdmitted || hasReady || err != nil || rejected.Observation != key || rejected.Sequence != seq ||
+			rejected.AdmittedDigest != admitted.Digest || rejected.Digest != want {
+			return nil, fmt.Errorf("%w: NATIVE_REJECTED record of %s", ErrCorrupt, key)
+		}
+		obs.State = Rejected
+		return obs, nil
 	}
 	if hasReady {
 		if !hasAdmitted {
@@ -578,7 +614,7 @@ func (a *Admission) Begin(t *Token, c Candidate) (Observation, error) {
 	key := a.observationKey(seq)
 	// A record beyond the counter can only be an orphan INPUT_PREPARING of an
 	// interrupted Begin; any later record there means the store is damaged.
-	for _, kind := range []string{"admitted", "exec-ready", "abandoned"} {
+	for _, kind := range []string{"admitted", "exec-ready", "abandoned", "rejected"} {
 		ok, err := a.db.Has(a.recordKey(seq, kind))
 		if err != nil {
 			return Observation{}, a.fail(err)
@@ -735,11 +771,51 @@ func (a *Admission) Abandon(t *Token, key string) error {
 	if obs.State != InputPreparing {
 		return fmt.Errorf("%w: Abandon of %s in %s", ErrState, key, obs.State)
 	}
-	if err := a.pins.Release(key); err != nil {
+	return a.terminate(obs, "abandoned", abandonedRecord{Observation: key, Sequence: obs.Sequence})
+}
+
+// Reject closes an ADMITTED observation that native validation refused
+// (NATIVE_REJECTED). evidenceDigest is the digest of the native rejection
+// evidence. It releases the pin, writes the record and syncs, then advances
+// the low-water mark. It is allowed in RECOVERY_ONLY. An EXEC_READY
+// observation passed native validation and is closed by the decision bridge.
+func (a *Admission) Reject(t *Token, key, evidenceDigest string) (RejectedRecord, error) {
+	if err := a.enter(t); err != nil {
+		return RejectedRecord{}, err
+	}
+	if !digestPattern.MatchString(evidenceDigest) {
+		return RejectedRecord{}, fmt.Errorf("%w: evidence digest %q", ErrInvalid, evidenceDigest)
+	}
+	obs, err := a.find(key)
+	if err != nil {
+		return RejectedRecord{}, err
+	}
+	if obs.State != Admitted {
+		return RejectedRecord{}, fmt.Errorf("%w: Reject of %s in %s", ErrState, key, obs.State)
+	}
+	digest, err := RejectedDigest(obs.Admitted.Digest, evidenceDigest)
+	if err != nil {
+		return RejectedRecord{}, err
+	}
+	record := RejectedRecord{Observation: key, Sequence: obs.Sequence, AdmittedDigest: obs.Admitted.Digest,
+		EvidenceDigest: evidenceDigest, Digest: digest}
+	if err := a.terminate(obs, "rejected", record); err != nil {
+		return RejectedRecord{}, err
+	}
+	return record, nil
+}
+
+// terminate releases the pin of an observation, writes its terminal record
+// and syncs, then advances the low-water mark past terminal sequences. The
+// pin is released first: after a power loss in between, the observation
+// reopens in its earlier state without a pin, EXEC_READY is refused
+// (ErrBinding), and repeating the step completes it, because Release of an
+// absent pin returns nil.
+func (a *Admission) terminate(obs *Observation, kind string, record any) error {
+	if err := a.pins.Release(obs.Key); err != nil {
 		return a.fail(err)
 	}
-	if err := putRecord(a.db, a.recordKey(obs.Sequence, "abandoned"),
-		abandonedRecord{Observation: key, Sequence: obs.Sequence}); err != nil {
+	if err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {
 		return a.fail(err)
 	}
 	if err := a.db.SyncKeyValue(); err != nil {

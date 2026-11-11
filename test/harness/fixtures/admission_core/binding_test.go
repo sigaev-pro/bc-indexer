@@ -316,7 +316,7 @@ func TestPowerLossAtEveryStep(t *testing.T) {
 		t.Fatalf("clean run %+v %v, %d fetches", want, err, cleanFetches)
 	}
 	total := clean.db.ops
-	admittedSeen, preparingSeen := 0, 0
+	admittedSeen, preparingSeen, durableSeen := 0, 0, 0
 	for crash := 2; crash <= total; crash++ {
 		for _, keep := range []uint64{0, 1, 0x5555555555555555, ^uint64(0)} {
 			db := newStore()
@@ -370,10 +370,21 @@ func TestPowerLossAtEveryStep(t *testing.T) {
 				Digest: v.Binding["admitted_digest"]}) {
 				t.Fatalf("crash %d: recovered %+v", crash, *obs.Admitted)
 			}
+			saved, err := sourceinputs.OpenLog(reopened, obs.Key)
+			if err != nil {
+				t.Fatalf("crash %d keep %x: open log: %v", crash, keep, err)
+			}
+			durable := int(saved.Frontier())
 			fetches = 0
 			ready, err := n.execute(obs.Key, &fetches)
 			if err != nil {
 				t.Fatalf("crash %d keep %x: recovery: %v", crash, keep, err)
+			}
+			if fetches != 2-durable {
+				t.Fatalf("crash %d keep %x: recovery fetched %d responses with %d durable", crash, keep, fetches, durable)
+			}
+			if durable > 0 {
+				durableSeen++
 			}
 			if ready != want {
 				t.Fatalf("crash %d keep %x: recovered EXEC_READY %+v, want %+v", crash, keep, ready, want)
@@ -383,7 +394,8 @@ func TestPowerLossAtEveryStep(t *testing.T) {
 			}
 		}
 	}
-	if admittedSeen == 0 || preparingSeen == 0 {
-		t.Fatalf("crash points reached ADMITTED %d times and INPUT_PREPARING %d times", admittedSeen, preparingSeen)
+	if admittedSeen == 0 || preparingSeen == 0 || durableSeen == 0 {
+		t.Fatalf("crash points reached ADMITTED %d times (%d with durable responses) and INPUT_PREPARING %d times",
+			admittedSeen, durableSeen, preparingSeen)
 	}
 }

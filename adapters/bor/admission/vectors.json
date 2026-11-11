@@ -175,11 +175,13 @@
   "consumed_chain": "9414886b1ebf025db067a4cbd13a0903fbd9733a5372bba1b58bd72c1699b798",
   "consumed_count": 2,
   "consumed_digest": "6ff10a232a563b1e985d5a80ee76fdc14fd88ff387fbf395f1f649abe85c12dd",
+  "evidence_digest": "582c788fdf7df04c87c3c006ac2bb7f7952cda72d189e559e7f241fc4bacf27b",
   "exec_digest": "ff309099ddf13366ad0ee3dd176868524efc9f7337de353bd1f8d07f3914c9d0",
   "exec_ready_digest": "be04ea7933f4525724a493bd84c1a516eb17f22701c00c7fc097f7d5b09d00ae",
   "key": "producer-1.run-1.0000000000000000",
   "pin_digest": "022fe700356893e0ee1099343405230282fc333df1b9603ab065e551b1480078",
   "producer": "producer-1",
+  "rejected_digest": "e4e386f65504542d3361b8ea4416861a2cf414c332dd0b633ecb1d05a7537a05",
   "run": "run-1",
   "sequence": 0
 }

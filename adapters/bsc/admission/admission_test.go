@@ -30,6 +30,8 @@ type vectorFile struct {
 	AdmittedDigest  string            `json:"admitted_digest"`
 	ConsumedDigest  string            `json:"consumed_digest"`
 	ExecReadyDigest string            `json:"exec_ready_digest"`
+	EvidenceDigest  string            `json:"evidence_digest"`
+	RejectedDigest  string            `json:"rejected_digest"`
 	Binding         map[string]string `json:"binding"`
 	Canonical       []struct {
 		Input string  `json:"input"`
@@ -826,6 +828,39 @@ func TestOpenRejectsCorruptRecords(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
+	// A rejected observation: the record needs ADMITTED, no EXEC_READY and a
+	// digest that recomputes.
+	rejectedKey := string(base.a.recordKey(0, "rejected"))
+	rejectedBase := maps.Clone(base.db.durable)
+	delete(rejectedBase, ready)
+	rejectedDigest, _ := RejectedDigest(base.v.AdmittedDigest, base.v.EvidenceDigest)
+	rejectedBase[rejectedKey], _ = json.Marshal(RejectedRecord{Observation: key, Sequence: 0,
+		AdmittedDigest: base.v.AdmittedDigest, EvidenceDigest: base.v.EvidenceDigest, Digest: rejectedDigest})
+	if a, err := Open(base.token, &memStore{durable: maps.Clone(rejectedBase)}, base.producer(), base.pins, base.inputs); err != nil {
+		t.Fatalf("clean rejected copy: %v", err)
+	} else if list, _ := a.Observations(base.token); len(list) != 0 {
+		t.Fatalf("a rejected observation is still open: %+v", list)
+	}
+	rejectedCases := map[string]func(map[string][]byte){
+		"rejected without admitted": func(db map[string][]byte) { delete(db, admitted) },
+		"rejected and exec ready":   func(db map[string][]byte) { db[ready] = base.db.durable[ready] },
+		"rejected and abandoned": func(db map[string][]byte) {
+			db[abandoned] = []byte(`{"observation":"` + key + `","sequence":0}`)
+		},
+		"rejected digest":    edit(rejectedKey, func(v map[string]any) { v["digest"] = other }),
+		"rejected evidence":  edit(rejectedKey, func(v map[string]any) { v["evidence_digest"] = other }),
+		"rejected admitted":  edit(rejectedKey, func(v map[string]any) { v["admitted_digest"] = other }),
+		"rejected key":       edit(rejectedKey, func(v map[string]any) { v["observation"] = "x" }),
+		"rejected sequence":  edit(rejectedKey, func(v map[string]any) { v["sequence"] = 1 }),
+		"rejected malformed": edit(rejectedKey, func(v map[string]any) { v["evidence_digest"] = "x" }),
+	}
+	for name, damage := range rejectedCases {
+		db := &memStore{durable: maps.Clone(rejectedBase)}
+		damage(db.durable)
+		if _, err := Open(base.token, db, base.producer(), base.pins, base.inputs); !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
 	// A damaged candidate of an observation that is still INPUT_PREPARING.
 	for _, field := range []string{"hash", "parent_hash", "parent_root"} {
 		db := &memStore{durable: maps.Clone(base.db.durable)}
@@ -843,7 +878,7 @@ func TestOpenRejectsCorruptRecords(t *testing.T) {
 }
 
 func TestBeginRefusesRecordBeyondCounter(t *testing.T) {
-	for _, kind := range []string{"admitted", "exec-ready", "abandoned"} {
+	for _, kind := range []string{"admitted", "exec-ready", "abandoned", "rejected"} {
 		f := newFixture(t)
 		f.live()
 		f.db.durable[string(f.a.recordKey(0, kind))] = []byte("{}")
@@ -868,13 +903,15 @@ func TestStoreErrorsStopTheAdmission(t *testing.T) {
 	admit := func(f *fixture) error { _, err := f.a.Admit(f.token, f.v.Key); return err }
 	ready := func(f *fixture) error { _, err := f.a.ExecReady(f.token, f.v.Key, f.v.ExecDigest); return err }
 	abandon := func(f *fixture) error { return f.a.Abandon(f.token, f.v.Key) }
+	reject := func(f *fixture) error { _, err := f.a.Reject(f.token, f.v.Key, f.v.EvidenceDigest); return err }
 	setups := map[string]func(f *fixture){
 		"begin":   func(f *fixture) {},
 		"admit":   func(f *fixture) { f.begin(); f.prepare(f.v.Key) },
 		"ready":   func(f *fixture) { f.begin(); f.prepare(f.v.Key); f.admit(f.v.Key); f.closeLog(f.v.Key) },
 		"abandon": func(f *fixture) { f.begin() },
+		"reject":  func(f *fixture) { f.begin(); f.prepare(f.v.Key); f.admit(f.v.Key) },
 	}
-	steps := map[string]step{"begin": begin, "admit": admit, "ready": ready, "abandon": abandon}
+	steps := map[string]step{"begin": begin, "admit": admit, "ready": ready, "abandon": abandon, "reject": reject}
 	for name, setup := range setups {
 		for _, fault := range []string{"put", "sync", "has"} {
 			if fault == "has" && name != "begin" {
@@ -967,11 +1004,12 @@ func TestOpenChecksArgumentsAndStoreErrors(t *testing.T) {
 	f := newFixture(t)
 	f.live()
 	f.begin()
-	for _, suffix := range []string{"counter", "lowwater", "preparing", "admitted", "exec-ready", "abandoned"} {
+	for _, suffix := range []string{"counter", "lowwater", "preparing", "admitted", "exec-ready", "abandoned", "rejected"} {
 		f.db.durable[string(f.a.key("lowwater"))] = []byte(`{"sequence":0}`)
 		f.db.durable[string(f.a.recordKey(0, "admitted"))] = []byte("{}")
 		f.db.durable[string(f.a.recordKey(0, "exec-ready"))] = []byte("{}")
 		f.db.durable[string(f.a.recordKey(0, "abandoned"))] = []byte("{}")
+		f.db.durable[string(f.a.recordKey(0, "rejected"))] = []byte("{}")
 		db := &memStore{durable: maps.Clone(f.db.durable), getErrFor: suffix}
 		if _, err := Open(f.token, db, f.producer(), f.pins, f.inputs); !errors.Is(err, errDisk) {
 			t.Fatalf("get error on %s: %v", suffix, err)
@@ -1053,6 +1091,7 @@ func TestGuard(t *testing.T) {
 		"admit":        func(tok *Token) error { _, err := f.a.Admit(tok, f.v.Key); return err },
 		"exec ready":   func(tok *Token) error { _, err := f.a.ExecReady(tok, f.v.Key, f.v.ExecDigest); return err },
 		"abandon":      func(tok *Token) error { return f.a.Abandon(tok, f.v.Key) },
+		"reject":       func(tok *Token) error { _, err := f.a.Reject(tok, f.v.Key, f.v.EvidenceDigest); return err },
 	}
 	for name, call := range calls {
 		for label, tok := range map[string]*Token{"nil": nil, "other guard": other, "empty": {}} {
@@ -1134,5 +1173,102 @@ func TestObservationsReturnCopies(t *testing.T) {
 	if again[0].Admitted.Digest != f.v.AdmittedDigest || again[0].ExecReady.Digest != f.v.ExecReadyDigest ||
 		again[0].State != ExecReady {
 		t.Fatalf("a caller changed the stored observation: %+v", again[0])
+	}
+}
+
+// TestRejectClosesAnAdmittedObservation: native validation refused an
+// ADMITTED observation. Reject records NATIVE_REJECTED, releases the pin and
+// unblocks new admissions, also in RECOVERY_ONLY after a restart.
+func TestRejectClosesAnAdmittedObservation(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	key := f.begin().Key
+	if _, err := f.a.Reject(f.token, key, f.v.EvidenceDigest); !errors.Is(err, ErrState) {
+		t.Fatalf("reject of INPUT_PREPARING: %v", err)
+	}
+	f.prepare(key)
+	f.admit(key)
+	f.reopen(f.db)
+	for _, bad := range []string{"", "x", strings.ToUpper(f.v.EvidenceDigest), f.v.EvidenceDigest + "0"} {
+		if _, err := f.a.Reject(f.token, key, bad); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("evidence digest %q: %v", bad, err)
+		}
+	}
+	if len(f.pins.released) != 0 {
+		t.Fatalf("a refused Reject released %v", f.pins.released)
+	}
+	record, err := f.a.Reject(f.token, key, f.v.EvidenceDigest)
+	want := RejectedRecord{Observation: key, Sequence: 0, AdmittedDigest: f.v.AdmittedDigest,
+		EvidenceDigest: f.v.EvidenceDigest, Digest: f.v.RejectedDigest}
+	if err != nil || record != want {
+		t.Fatalf("reject %+v %v, want %+v", record, err, want)
+	}
+	if got, err := RejectedDigest(f.v.AdmittedDigest, f.v.EvidenceDigest); err != nil || got != f.v.RejectedDigest {
+		t.Fatalf("rejected digest %s %v", got, err)
+	}
+	if !slices.Equal(f.pins.released, []string{key}) || len(f.states()) != 0 {
+		t.Fatalf("released %v, states %v", f.pins.released, f.states())
+	}
+	if _, err := f.a.Reject(f.token, key, f.v.EvidenceDigest); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("reject twice: %v", err)
+	}
+	var low lowwaterRecord
+	if ok, err := readRecord(f.db, f.a.key("lowwater"), &low); !ok || err != nil || low.Sequence != 1 {
+		t.Fatalf("low-water %+v %v %v, want 1", low, ok, err)
+	}
+	f.reopen(f.db)
+	if len(f.states()) != 0 {
+		t.Fatalf("reopened states %v", f.states())
+	}
+	f.live()
+	next := f.begin()
+	f.prepare(next.Key)
+	f.admit(next.Key)
+	f.closeLog(next.Key)
+	f.execReady(next.Key)
+	if _, err := f.a.Reject(f.token, next.Key, f.v.EvidenceDigest); !errors.Is(err, ErrState) {
+		t.Fatalf("reject of EXEC_READY: %v", err)
+	}
+}
+
+func TestRejectPowerLoss(t *testing.T) {
+	for crash := 0; crash <= 4; crash++ {
+		for keep := uint(0); keep < 2; keep++ {
+			f := newFixture(t)
+			f.live()
+			key := f.begin().Key
+			f.prepare(key)
+			f.admit(key)
+			if crash > 0 {
+				f.db.crashAt = f.db.ops + crash
+			}
+			_, err := f.a.Reject(f.token, key, f.v.EvidenceDigest)
+			if err != nil && !errors.Is(err, errCrash) {
+				t.Fatalf("crash %d: %v", crash, err)
+			}
+			f.reopen(f.db.powerLoss(keep))
+			got := f.states()
+			if err == nil && len(got) != 0 {
+				t.Fatalf("crash %d: completed reject reopened as %v", crash, got)
+			}
+			if len(got) == 1 {
+				// The pin was released before the record: EXEC_READY is refused
+				// and the repeated Reject completes.
+				if got[0] != Admitted {
+					t.Fatalf("crash %d keep %b: %v", crash, keep, got)
+				}
+				f.closeLog(key)
+				if _, err := f.a.ExecReady(f.token, key, f.v.ExecDigest); !errors.Is(err, ErrBinding) {
+					t.Fatalf("crash %d: EXEC_READY without the pin: %v", crash, err)
+				}
+				if _, err := f.a.Reject(f.token, key, f.v.EvidenceDigest); err != nil {
+					t.Fatalf("crash %d: retry reject: %v", crash, err)
+				}
+			}
+			f.live()
+			if next := f.begin(); next.Sequence != 1 {
+				t.Fatalf("crash %d keep %b: next sequence %d", crash, keep, next.Sequence)
+			}
+		}
 	}
 }

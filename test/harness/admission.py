@@ -71,6 +71,10 @@ def consumed_digest(capsule_digest, count, chain):
     return sha(tag("extractor-source-inputs-consumed-v1") + raw(capsule_digest) + u64(count) + raw(chain)).hex()
 
 
+def rejected_digest(admitted, evidence):
+    return sha(tag("extractor-admission-rejected-v1") + raw(admitted) + raw(evidence)).hex()
+
+
 def exec_ready_digest(admitted, consumed, execution):
     return sha(tag("extractor-admission-exec-ready-v1") + raw(admitted) + raw(consumed) + raw(execution)).hex()
 
@@ -167,6 +171,7 @@ PIN_DIGEST = sha(b"pin-record").hex()
 CAPSULE_DIGEST = sha(b"capsule").hex()
 CONSUMED_COUNT, CONSUMED_CHAIN = 2, sha(b"chain").hex()
 EXEC_DIGEST = sha(b"record-corpus").hex()
+EVIDENCE_DIGEST = sha(b"rejection-evidence").hex()
 CANONICAL_INPUTS = (
     b'{"b":1,"a":[true,false,null],"c":{"z":"x","y":-12}}',
     b' { "a" : 1 ,\t"b" : [ 1 , 2 ] }\r\n',
@@ -212,6 +217,7 @@ def vectors():
         "pin_digest": PIN_DIGEST, "capsule_digest": CAPSULE_DIGEST, "consumed_count": CONSUMED_COUNT,
         "consumed_chain": CONSUMED_CHAIN, "exec_digest": EXEC_DIGEST, "admitted_digest": admitted,
         "consumed_digest": consumed, "exec_ready_digest": exec_ready_digest(admitted, consumed, EXEC_DIGEST),
+        "evidence_digest": EVIDENCE_DIGEST, "rejected_digest": rejected_digest(admitted, EVIDENCE_DIGEST),
         "canonical": cases, "binding": binding_vectors(),
     }
 
