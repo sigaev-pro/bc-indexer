@@ -89,11 +89,11 @@ Implementation (native-engineer): the package above, `Log.Closed` in
 `source_inputs`, the Python reference `test/harness/admission.py` with its
 portable test and mutant table, and the binding test with the real
 `source_inputs` log in `test/harness/fixtures/admission_core`. Evidence:
-[E01-02.admission](evidence/E01-02.admission.md). Retained record 02 of
-`752b739`: PASS; Go tests in all three copies and the assembled module, Go
-mutants 110 killed and 2 labeled equivalent, `source_inputs` mutants 68
-killed, Python mutants 35 and 11 killed. Record 01 of `648e8ed` (PASS) is
-superseded and kept.
+[E01-02.admission](evidence/E01-02.admission.md). Retained record 03 of
+`9f6bbe4`: PASS; Go tests in all three copies and the assembled module, Go
+mutants 115 killed and 2 labeled equivalent, `source_inputs` mutants 68
+killed, Python mutants 35 and 11 killed. Records 01 (`648e8ed`) and 02
+(`752b739`) passed and are superseded and kept.
 
 Review 001 (head `648e8ed`): Spec REQUEST_CHANGES (P2: an ADMITTED
 observation had no exit except EXEC_READY, so a native validation failure
@@ -105,7 +105,13 @@ without the guard, one Admission per producer). Commits `8a97f04` to
 mutants, the counter re-read in `Begin`, `Mode` with the token, the fetch
 assertion, and plan rows for the rest.
 
-Next: review 002 of the head with this record, hosted CI, then READY for the
+Review 002 (head `1ebedb3`): Spec REQUEST_CHANGES (P2: `Reject` released the
+pin of an ADMITTED obligation before its record was durable) and Standards
+PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
+terminal record before the release, lets `Open` release the pins of closed
+observations above the low-water mark again, and fixes the wording.
+
+Next: review 003 of the head with record 03, hosted CI, then READY for the
 coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
