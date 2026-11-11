@@ -165,12 +165,20 @@ path; P3 wording and docs). The next commit fixes all of them. Preparation
 01 at `3304991` waited for the host lock and was stopped before it started,
 because review 001 made it stale; its wait record is kept.
 
-Evidence at `d438376`: preparation 02 PASS (64 unit tests, 20 native mutant
-builds), measured run 02 PASS (probe PASS, 20 of 20 native mutants killed,
-488 seconds), Python mutants 64 of 64 killed.
+Review 002 (head `07fec51`): Spec PASS with one P3 (the preparation 01
+wording) and Standards REQUEST_CHANGES (P2: `geth import` opened the chain
+without `eth.New` and could import into a capture store; P3: the same
+wording, a comment wrap). Commit `717cae6` refuses every state-writing
+import into a capture store when no admission is installed, adds the
+shipped `geth import` row and a mutant, and fixes the wording.
 
-Resume point: review 002 of the head with these records, hosted CI, then
-READY for the coordinator.
+Evidence at `717cae6`: preparation 03 PASS (64 unit tests, 21 native mutant
+builds), measured run 03 PASS (probe PASS, 21 of 21 native mutants killed,
+432 seconds), Python mutants 64 of 64 killed. Records 02 at `d438376`
+passed and are superseded and kept.
+
+Resume point: review 003 of the head with records 03, hosted CI, then READY
+for the coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
