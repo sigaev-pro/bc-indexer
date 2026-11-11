@@ -364,8 +364,8 @@ Merged in PR #152 at `06231d1`.
 ## E01-02.admission — Bor block
 
 Status: merged in PR #149 at `9f2a3d9` (part of #16). Base `9046de9` (block
-0 merged in PR #146). Open: the hazards block of D100 item 1
-(`bor snapshot prune-block` and Heimdall reads outside the import).
+0 merged in PR #146). The hazards block of D100 item 1 is in draft PR #153
+(see "D100 hazards block" at the end of this section).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
@@ -446,6 +446,40 @@ AC-CAP-04-03 real binding PASS; every public cell NOT_RUN. Mutants on
 
 Review 003 at head `6c0b799`: Spec PASS and Standards PASS; hosted CI
 passed. Merged in PR #149 at `9f2a3d9`.
+
+### D100 hazards block (PR #153)
+
+Status: IN_PROGRESS (Part of #16), draft PR #153, branch
+`claude/e01-02-admission-bor-hazards`, base main `10cd2c6` with later main
+merged. Roles: native-engineer (`ed35bb98`) and qa (`4b479131`); two
+independent read-only reviewers. Same allowed paths as above.
+
+- `bor snapshot prune-block` refuses while a pin is live, before every
+  native path (edit `retention-prune-block`).
+- Only the import's own Heimdall reads enter an observation's log: an
+  owner-aware window gate holds back every other entry point that can reach
+  a counted read (the bor RPC API, block production, header verification,
+  `Finalize` of other blocks or on other goroutines), waits for detached
+  span range fetches, and opens before the driver routes reads to the log.
+- `Driver.Replay` checks a saved EXEC_READY against its closed log.
+
+Review 001 (head `8b92ab5`): Standards PASS with P3 notes; Spec
+REQUEST_CHANGES (P1: the router log was entered before the gate drained
+other readers; P2: detached span range fetches; P2: `Finalize` of the
+observed block on a foreign goroutine passed as the import). Commit
+`1998a2f` fixes them and adds a scenario step with a counted read in flight
+when a window starts.
+
+Evidence ([E01-02.admission.bor](evidence/E01-02.admission.bor.md), "D100
+item 1"): preparation 09 and run 06 on clean `1998a2f`, PASS, all twelve
+scenarios (the nine AC scenarios again on this head, plus `rpc-window`,
+`prune-block-live-pins` and `prune-block-no-pins`). POLY private local:
+AC-CAP-02-01, AC-CAP-02-02 and AC-CAP-04-03 PASS; every public cell NOT_RUN.
+Mutants: Go 69 of 69, Python 114 of 114 killed. Preparation 07 and run 04 on
+`83f5929` are kept (D83).
+
+Next: review 002 on the head with this evidence, then READY for the
+coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
