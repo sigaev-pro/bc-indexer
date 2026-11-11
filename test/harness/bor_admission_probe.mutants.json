@@ -719,6 +719,102 @@
       "file": "test/harness/bor_admission_probe.py",
       "original": "    if before.get(\"error\") or before.get(\"snapshot_number\") != at - 1 or \\",
       "replacement": "    if before.get(\"snapshot_number\") != at - 1 or \\"
+    },
+    {
+      "name": "prune-block-frozen kind is judged",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    elif kind == \"prune-block-frozen\":\n        check_prune_block_frozen(context, plan, attempts, fail)",
+      "replacement": "    elif kind == \"prune-block-frozen\":\n        pass"
+    },
+    {
+      "name": "expired lookup returns at once",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if expired.get(\"block\") != at or \"context canceled\" not in (expired.get(\"lookup_error\") or \"\") or \\",
+      "replacement": "    if expired.get(\"block\") != at or \\"
+    },
+    {
+      "name": "expired fetch is the span read",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            expired.get(\"held_request\") != \"GET /bor/spans/1\" or expired.get(\"held_at_observe\") is not True:",
+      "replacement": "            expired.get(\"held_at_observe\") is not True:"
+    },
+    {
+      "name": "expired fetch is in flight at the window start",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            expired.get(\"held_request\") != \"GET /bor/spans/1\" or expired.get(\"held_at_observe\") is not True:",
+      "replacement": "            expired.get(\"held_request\") != \"GET /bor/spans/1\":"
+    },
+    {
+      "name": "the waiting goroutine is identified",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if rpc.get(\"waiting_at_gate\") is not True or not (rpc.get(\"waiting_goroutine\") or \"\").startswith(\"goroutine \") or \\",
+      "replacement": "    if rpc.get(\"waiting_at_gate\") is not True or \\"
+    },
+    {
+      "name": "frozen import is completed",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    check_completed(context, first, list(range(steps[0][\"from\"], steps[0][\"to\"] + 1)), \"a\", fail, \"import\")\n    frozen =",
+      "replacement": "    frozen ="
+    },
+    {
+      "name": "the freezer froze past the finalized block",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if ancients <= plan[\"finalize\"] or not any(min(p.get(\"headers\") or [ancients]) < ancients for p in pins) or \\",
+      "replacement": "    if not any(min(p.get(\"headers\") or [ancients]) < ancients for p in pins) or \\"
+    },
+    {
+      "name": "a pinned header is frozen",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if ancients <= plan[\"finalize\"] or not any(min(p.get(\"headers\") or [ancients]) < ancients for p in pins) or \\",
+      "replacement": "    if ancients <= plan[\"finalize\"] or \\"
+    },
+    {
+      "name": "frozen pins stay readable",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            any(p.get(\"verify_error\") for p in pins):\n        fail(f\"the native freezer",
+      "replacement": "            False:\n        fail(f\"the native freezer"
+    },
+    {
+      "name": "patched refusal over the frozen store",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if tool(2).get(\"command\") != \"prune-block\" or tool(2).get(\"refused_live_pins\") is not True or \\",
+      "replacement": "    if tool(2).get(\"command\") != \"prune-block\" or \\"
+    },
+    {
+      "name": "patched refusal precedes the native open",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            want[\"refusal\"] not in tail(2) or want[\"native_frozen_open_error\"] in tail(2):",
+      "replacement": "            want[\"refusal\"] not in tail(2):"
+    },
+    {
+      "name": "frozen refusal changes no ancient file",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if patched[\"store_after\"] != patched[\"store_before\"] or patched[\"ancient_after\"] != patched[\"ancient_before\"] or \\\n            not patched[\"ancient_before\"]:",
+      "replacement": "    if patched[\"store_after\"] != patched[\"store_before\"] or \\\n            not patched[\"ancient_before\"]:"
+    },
+    {
+      "name": "the freezer is not empty",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            not patched[\"ancient_before\"]:\n        fail(\"the refused prune-block changed",
+      "replacement": "            False:\n        fail(\"the refused prune-block changed"
+    },
+    {
+      "name": "accepted stops at the native open",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if tool(3).get(\"refused_live_pins\") is not False or want[\"native_frozen_open_error\"] not in tail(3) or \\",
+      "replacement": "    if tool(3).get(\"refused_live_pins\") is not False or \\"
+    },
+    {
+      "name": "accepted prunes nothing",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            accepted[\"ancient_after\"] != accepted[\"ancient_before\"]:",
+      "replacement": "            False:"
+    },
+    {
+      "name": "pins stay readable after the prune attempts",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if not after.get(\"pins\") or any(p.get(\"verify_error\") for p in after[\"pins\"]):",
+      "replacement": "    if not after.get(\"pins\"):"
     }
   ]
 }
