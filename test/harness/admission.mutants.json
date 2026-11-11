@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.admission identity check, Python digest and canonical JSON reference, and module assembly.",
+  "language": "python",
+  "root": "../..",
+  "copy": [
+    "test/harness/admission.py",
+    "test/harness/source_inputs.py",
+    "test/harness/test_admission.py",
+    "adapters/*/admission/*",
+    "adapters/*/source_inputs/*",
+    "test/harness/fixtures/admission_core/*"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/test_admission.py",
+    "-v"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "missing package",
+      "file": "test/harness/admission.py",
+      "original": "    if not base.is_dir():\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "native directory compared",
+      "file": "test/harness/admission.py",
+      "original": "if path.is_file() and path.relative_to(base).parts[0] != FAMILY_DIR}",
+      "replacement": "if path.is_file()}"
+    },
+    {
+      "name": "only files are compared",
+      "file": "test/harness/admission.py",
+      "original": "for path in sorted(base.rglob(\"*\"))\n            if path.is_file() and",
+      "replacement": "for path in sorted(base.rglob(\"*\"))\n            if True and"
+    },
+    {
+      "name": "empty package accepted",
+      "file": "test/harness/admission.py",
+      "original": "    if not names[FAMILIES[0]]:\n        raise ValueError(\"the shared package has no files\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "file names not compared",
+      "file": "test/harness/admission.py",
+      "original": "        if names[family] != names[FAMILIES[0]]:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "bytes not compared",
+      "file": "test/harness/admission.py",
+      "original": "        if len(set(values.values())) != 1:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "tag without zero byte",
+      "file": "test/harness/admission.py",
+      "original": "    return name.encode() + b\"\\x00\"",
+      "replacement": "    return name.encode()"
+    },
+    {
+      "name": "u64 little endian",
+      "file": "test/harness/admission.py",
+      "original": "    return struct.pack(\">Q\", value)",
+      "replacement": "    return struct.pack(\"<Q\", value)"
+    },
+    {
+      "name": "text without length",
+      "file": "test/harness/admission.py",
+      "original": "    return u64(len(value.encode())) + value.encode()",
+      "replacement": "    return value.encode()"
+    },
+    {
+      "name": "raw accepts uppercase",
+      "file": "test/harness/admission.py",
+      "original": "    if not re.fullmatch(r\"[0-9a-f]{64}\", digest):",
+      "replacement": "    if not re.fullmatch(r\"[0-9a-fA-F]{64}\", digest):"
+    },
+    {
+      "name": "admitted tag",
+      "file": "test/harness/admission.py",
+      "original": "tag(\"extractor-admission-admitted-v1\")",
+      "replacement": "tag(\"extractor-admission-admitted-v2\")"
+    },
+    {
+      "name": "admitted drops sequence",
+      "file": "test/harness/admission.py",
+      "original": "text(key) + u64(sequence) + u64(candidate[\"number\"])",
+      "replacement": "text(key) + u64(candidate[\"number\"])"
+    },
+    {
+      "name": "admitted drops capsule",
+      "file": "test/harness/admission.py",
+      "original": "               + raw(pin_digest) + raw(capsule_digest)).hex()",
+      "replacement": "               + raw(pin_digest)).hex()"
+    },
+    {
+      "name": "consumed drops count",
+      "file": "test/harness/admission.py",
+      "original": "raw(capsule_digest) + u64(count) + raw(chain)",
+      "replacement": "raw(capsule_digest) + raw(chain)"
+    },
+    {
+      "name": "exec ready drops corpus",
+      "file": "test/harness/admission.py",
+      "original": "raw(admitted) + raw(consumed) + raw(execution)",
+      "replacement": "raw(admitted) + raw(consumed)"
+    },
+    {
+      "name": "key without padding",
+      "file": "test/harness/admission.py",
+      "original": "return f\"{producer}.{run}.{sequence:016x}\"",
+      "replacement": "return f\"{producer}.{run}.{sequence:x}\""
+    },
+    {
+      "name": "negative zero accepted",
+      "file": "test/harness/admission.py",
+      "original": "    if literal == \"-0\":",
+      "replacement": "    if literal == \"+0\":"
+    },
+    {
+      "name": "float accepted",
+      "file": "test/harness/admission.py",
+      "original": "def _reject_float(literal):\n    raise CanonicalError(f\"number {literal} is not an integer\")",
+      "replacement": "def _reject_float(literal):\n    return Integer(literal)"
+    },
+    {
+      "name": "constant accepted",
+      "file": "test/harness/admission.py",
+      "original": "def _reject_constant(name):\n    raise CanonicalError(f\"constant {name}\")",
+      "replacement": "def _reject_constant(name):\n    return Integer(name)"
+    },
+    {
+      "name": "surrogate accepted",
+      "file": "test/harness/admission.py",
+      "original": "    if re.search(\"[\\ud800-\\udfff]\", value):",
+      "replacement": "    if re.search(\"[\\ud800-\\udbff]\", value):"
+    },
+    {
+      "name": "duplicate key accepted",
+      "file": "test/harness/admission.py",
+      "original": "        if key in out:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "depth off by one",
+      "file": "test/harness/admission.py",
+      "original": "    if _depth(value) > MAX_DEPTH:",
+      "replacement": "    if _depth(value) > MAX_DEPTH + 1:"
+    },
+    {
+      "name": "depth ignores objects",
+      "file": "test/harness/admission.py",
+      "original": "        return 1 + max((_depth(v) for v in value.values()), default=0)",
+      "replacement": "        return max((_depth(v) for v in value.values()), default=0)"
+    },
+    {
+      "name": "quote not escaped",
+      "file": "test/harness/admission.py",
+      "original": "        if char in '\"\\\\':",
+      "replacement": "        if char in '\\\\':"
+    },
+    {
+      "name": "control limit",
+      "file": "test/harness/admission.py",
+      "original": "        elif ord(char) < 0x20:",
+      "replacement": "        elif ord(char) < 0x10:"
+    },
+    {
+      "name": "uppercase escape",
+      "file": "test/harness/admission.py",
+      "original": "out.append(f\"\\\\u{ord(char):04x}\")",
+      "replacement": "out.append(f\"\\\\u{ord(char):04X}\")"
+    },
+    {
+      "name": "keys not sorted",
+      "file": "test/harness/admission.py",
+      "original": "for k in sorted(value)) + \"}\"",
+      "replacement": "for k in value) + \"}\""
+    },
+    {
+      "name": "invalid UTF-8 accepted",
+      "file": "test/harness/admission.py",
+      "original": "        source = data.decode(\"utf-8\")",
+      "replacement": "        source = data.decode(\"utf-8\", \"replace\")"
+    },
+    {
+      "name": "assemble overwrites",
+      "file": "test/harness/admission.py",
+      "original": "    if target.exists():\n        raise ValueError(f\"target exists: {target}\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "assemble skips the identity check",
+      "file": "test/harness/admission.py",
+      "original": "    check_identical(root)\n    packages",
+      "replacement": "    packages"
+    },
+    {
+      "name": "assemble module name",
+      "file": "test/harness/admission.py",
+      "original": "(target / \"go.mod\").write_text(f\"module {MODULE}\\n\\ngo {GO_VERSION}\\n\")",
+      "replacement": "(target / \"go.mod\").write_text(f\"module extractor\\n\\ngo {GO_VERSION}\\n\")"
+    },
+    {
+      "name": "binding uses the vector pin",
+      "file": "test/harness/admission.py",
+      "original": "    admitted = admitted_digest(key, SEQUENCE, CANDIDATE, pin, inputs[\"CapsuleDigest\"])",
+      "replacement": "    admitted = admitted_digest(key, SEQUENCE, CANDIDATE, PIN_DIGEST, inputs[\"CapsuleDigest\"])"
+    },
+    {
+      "name": "assemble needs no target",
+      "file": "test/harness/admission.py",
+      "original": "            if not args.target:\n                raise ValueError(\"assemble needs a target directory\")",
+      "replacement": "            pass"
+    }
+  ]
+}

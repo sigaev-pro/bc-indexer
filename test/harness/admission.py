@@ -102,7 +102,6 @@ def _no_surrogate(value):
 def _pairs(pairs):
     out = {}
     for key, value in pairs:
-        _no_surrogate(key)
         if key in out:
             raise CanonicalError(f"duplicate key {key!r}")
         out[key] = value
