@@ -1,0 +1,82 @@
+// This file is copied unchanged from adapters/geth/admission/native/core_hook.go.txt
+// into the accepted Geth tree as core/extractor_admission.go by the
+// E01-02.admission Geth preparation; edit it there. It is part of the product
+// native patch set of E01-02.admission (D98, D99).
+
+package core
+
+import (
+	"errors"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/ethdb"
+)
+
+// ExtractorAdmission is the extractor admission seam on the block import
+// path. extractor/admission/native implements it.
+type ExtractorAdmission interface {
+	// Lock takes the observation guard. Every import entry point calls it
+	// before it takes the chain mutex, so the lock order is the guard, then
+	// native locks. The returned function releases the guard.
+	Lock() func()
+	// Begin is called by ProcessBlock before processor.Process, with the
+	// guard and the chain mutex held. In LIVE it records INPUT_PREPARING,
+	// pins the parent root, seals the static capsule and closes the ADMITTED
+	// sync; in RECOVERY_ONLY it resumes the saved ADMITTED obligation of this
+	// block. An error refuses the block before execution.
+	Begin(block *types.Block, parentRoot common.Hash) (ExtractorObservation, error)
+}
+
+// ExtractorObservation is one admitted observation during ProcessBlock.
+type ExtractorObservation interface {
+	// Configure installs the saved BLOCKHASH answers and the VM safe point
+	// into the configuration of the serial execution of this block.
+	Configure(cfg *vm.Config)
+	// ExecReady closes the dependency log and writes EXEC_READY after
+	// native validation passed and before the block is written.
+	ExecReady(block *types.Block, res *ProcessResult) error
+	// Close ends the observation when ProcessBlock returns. A cause from
+	// native execution or validation before ExecReady is a native
+	// validation failure: Close writes NATIVE_REJECTED, never EXEC_READY.
+	Close(cause error) error
+}
+
+// ExtractorRewindAllowed is the pin ledger check for a native head rewind.
+// extractor/admission/native sets it when it is linked into the binary.
+var ExtractorRewindAllowed func(db ethdb.Database, newHead uint64) error
+
+// SetExtractorAdmission installs the admission seam. It must be called
+// before the first import.
+func (bc *BlockChain) SetExtractorAdmission(a ExtractorAdmission) { bc.extractor = a }
+
+// extractorLock takes the observation guard if a seam is installed.
+func (bc *BlockChain) extractorLock() func() {
+	if bc.extractor == nil {
+		return func() {}
+	}
+	return bc.extractor.Lock()
+}
+
+// extractorRewindAllowed refuses a requested rewind that would delete a
+// pinned header. In timestamp mode (head 0, time not 0) the target is the
+// newest header of the current chain at or below the time, as in
+// setHeadBeyondRoot. The caller holds the chain mutex, under which every
+// pin is written.
+func (bc *BlockChain) extractorRewindAllowed(head, time uint64) error {
+	if ExtractorRewindAllowed == nil {
+		return nil
+	}
+	if head == 0 && time != 0 {
+		header := bc.CurrentHeader()
+		for header != nil && header.Number.Uint64() > 0 && header.Time > time {
+			header = bc.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+		}
+		if header == nil {
+			return errors.New("extractor: rewind target header is missing")
+		}
+		head = header.Number.Uint64()
+	}
+	return ExtractorRewindAllowed(bc.db, head)
+}
