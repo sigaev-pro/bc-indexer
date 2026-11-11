@@ -188,7 +188,7 @@
       "name": "resume_inputs_unchecked",
       "file": "geth.go",
       "original": "\t\tif err := sameItems(items, current); err != nil {\n",
-      "replacement": "\t\tif err := error(nil); err != nil {\n",
+      "replacement": "\t\tif err := sameItems(items, append(current[:0:0], items...)); err != nil {\n",
       "binaries": [
         "probe"
       ],
