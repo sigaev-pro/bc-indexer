@@ -851,6 +851,10 @@ func TestOpenRejectsCorruptRecords(t *testing.T) {
 		"rejected and abandoned": func(db map[string][]byte) {
 			db[abandoned] = []byte(`{"observation":"` + key + `","sequence":0}`)
 		},
+		"rejected and abandoned without admitted": func(db map[string][]byte) {
+			delete(db, admitted)
+			db[abandoned] = []byte(`{"observation":"` + key + `","sequence":0}`)
+		},
 		"rejected digest":    edit(rejectedKey, func(v map[string]any) { v["digest"] = other }),
 		"rejected evidence":  edit(rejectedKey, func(v map[string]any) { v["evidence_digest"] = other }),
 		"rejected admitted":  edit(rejectedKey, func(v map[string]any) { v["admitted_digest"] = other }),
