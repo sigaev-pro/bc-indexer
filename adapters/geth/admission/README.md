@@ -58,12 +58,13 @@ writes; after a process crash, unsynced writes may still be visible. `Open`
 syncs before it reads, so nothing it trusts can be lost later. Every step
 writes its data, syncs, and only then writes one commit record and syncs.
 
-A producer is `(producer_id, run_id)`; each matches `^[0-9a-z][0-9a-z-]{0,39}$`.
-The observation key is `<producer_id>.<run_id>.<sequence>`, with the sequence
-as 16 lowercase hex digits; it matches the ID pattern of `source_inputs` and
-of the pin ledger. Keys start with `extractor-admission-v1/<producer_id>.<run_id>/`;
-every key is longer than 33 bytes and starts with `e`, so the native offline
-pruner never deletes one.
+A producer is `(producer_id, run_id)`; each matches
+`^[0-9a-z][0-9a-z-]{0,39}$`. The observation key is
+`<producer_id>.<run_id>.<sequence>`, with the sequence as 16 lowercase hex
+digits; it matches the ID pattern of `source_inputs` and of the pin ledger.
+Keys start with `extractor-admission-v1/<producer_id>.<run_id>/`; every key is
+longer than 33 bytes and starts with `e`, so the native offline pruner never
+deletes one.
 
 | Key suffix | Value (JSON, strict decode) |
 |---|---|
@@ -89,8 +90,9 @@ one observation, in protocol order:
    (`state_provider.Pin`: trie commit, sync, ledger record, sync) and seals
    the static capsule (`source_inputs.SealCapsule`). Both are durable when
    they return.
-3. `Admit(key)` (LIVE only): `Pins.Verify(key, parent_root)` and `Inputs.CapsuleDigest(key)`
-   must succeed; then it writes `/<n>/admitted` with both digests and syncs.
+3. `Admit(key)` (LIVE only): `Pins.Verify(key, parent_root)` and
+   `Inputs.CapsuleDigest(key)` must succeed; then it writes `/<n>/admitted`
+   with both digests and syncs.
    This sync is the closing ADMITTED sync: the obligation is discoverable from
    here on, and no capture hook or `Process` may run before it returns.
 4. Native execution consumes dependencies through the `source_inputs` log and
@@ -111,8 +113,11 @@ Capsule and log records of an abandoned observation stay in the store; no
 record points to them.
 
 Repeating a completed step with the same arguments returns the stored record;
-different arguments are `ErrConflict`. A store error stops the admission
-(`ErrFailed` afterwards); the caller reopens it.
+different arguments are `ErrConflict`. A pin, capsule or consumed manifest
+that is missing or does not match is `ErrBinding`, which also wraps the error
+of `Pins` or `Inputs`; nothing is written. A store error, or an error of
+`Pins.Release`, stops the admission (`ErrFailed` afterwards); the caller
+reopens it.
 
 ### Modes and recovery
 
