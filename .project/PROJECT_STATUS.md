@@ -2,7 +2,7 @@
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
-Status: ACCEPTED (2026-11-11); #16 closes when this record merges. Merged
+Status: ACCEPTED (2026-11-12); #16 closes when this record merges. Merged
 blocks:
 
 - block 0 admission-core: PR #146 at `9046de9`;
@@ -22,7 +22,11 @@ head of PR #156, whose later commits change only docs, as D100 requires).
 Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100 names
 the owner of every other limit in the block evidence; the test-coverage
 notes that PRs #153, #154 and #156 add to their README limits are accepted
-as recorded there.
+as recorded there. One fail-closed operational limit of PR #156 is accepted
+and goes to the E06 operator documentation, like `geth removedb` in D100
+item 3: if an interrupted `bor snapshot prune-block` has already removed the
+old ancient directory, the guard refuses the native resumption, and the
+store needs the native repair without the guard.
 
 Dependencies E01-02.pins (#13), E01-02.inputs (#14) and E01-02.owned_capture
 (#15) are accepted. Plan agreed with the owner on 2026-11-11, the same split
@@ -365,7 +369,7 @@ Merged in PR #152 at `06231d1`.
 
 Status: block ACCEPTED in PR #149 at merge `9f2a3d9`, with the D100 item 1
 blocks in PR #153 at `ea1d6f6` (hazards) and PR #156 at `d62e1e0`
-(fetch race) (part of #16). Base `9046de9` (block 0 merged in PR #146).
+(fetch race); part of #16. Base `9046de9` (block 0 merged in PR #146).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
@@ -480,11 +484,9 @@ Mutants: Go 69 of 69, Python 114 of 114 killed. Preparation 07 and run 04 on
 
 Review 002 (head `828cc07`, evidence of preparation 09 and run 06): Spec
 PASS and Standards PASS, P3 notes only; the detached-fetch counting race and
-the direct-child creator rule are recorded as README limits. Hosted CI
-passed. Merged in PR #153 at `ea1d6f6`.
-
-Final review at head `03caf94`: Spec PASS and Standards PASS (three optional
-P3 notes); hosted CI passed. Merged in PR #153 at `ea1d6f6`.
+the direct-child creator rule are recorded as README limits. Final review
+at head `03caf94`: Spec PASS and Standards PASS (three optional P3 notes);
+hosted CI passed. Merged in PR #153 at `ea1d6f6`.
 
 ### D100 item 1 fetch-race block (PR #156)
 
