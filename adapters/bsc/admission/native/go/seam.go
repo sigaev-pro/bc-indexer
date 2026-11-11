@@ -95,9 +95,6 @@ type Seam struct {
 
 	active  atomic.Pointer[observation]
 	outside atomic.Int64
-	// closed holds the terminal state that this process gave each
-	// observation; Observations no longer lists closed ones.
-	closed map[string]admission.State
 }
 
 // Start opens the seam on a native chain whose engine reads through parlia:
@@ -141,8 +138,7 @@ func Start(guard *admission.Guard, db ethdb.Database, chain *core.BlockChain, pa
 	}
 	s := &Seam{guard: guard, db: db, store: store, provider: provider, pins: LedgerPins{DB: db, Provider: provider},
 		parlia: parlia, genesis: genesis, commit: cfg.NativeCommit, identity: cfg.Identity, producer: producer,
-		emit: emit, tracer: chain.GetVMConfig().Tracer, safePoint: cfg.SafePoint,
-		closed: map[string]admission.State{}}
+		emit: emit, tracer: chain.GetVMConfig().Tracer, safePoint: cfg.SafePoint}
 	token := guard.Acquire()
 	defer token.Release()
 	if s.adm, err = admission.Open(token, store, producer, s.pins, Inputs{DB: store}); err != nil {
@@ -258,22 +254,18 @@ func (s *Seam) Begin(chain *core.BlockChain, block *types.Block) (core.Extractor
 	if err != nil {
 		return nil, err
 	}
+	// An INPUT_PREPARING observation is left only by a restart (Begin
+	// abandons its own on error); admission.Begin refuses it and Recover
+	// abandons it.
 	for _, obs := range observations {
-		switch obs.State {
-		case admission.Admitted:
-			if obs.Candidate != candidate {
-				return nil, fmt.Errorf("%w: %s (block %d) blocks block %d", ErrUnresolved, obs.Key, obs.Candidate.Number, n)
-			}
-			s.emit(Event{"event": "resume", "observation": obs.Key, "number": n})
-			return s.resume(chain, obs.Key, block)
-		case admission.InputPreparing:
-			// An earlier Begin of this process failed before ADMITTED; it is
-			// not a capture.
-			if err := s.adm.Abandon(s.token, obs.Key); err != nil {
-				return nil, err
-			}
-			s.emit(Event{"event": "abandon", "observation": obs.Key})
+		if obs.State != admission.Admitted {
+			continue
 		}
+		if obs.Candidate != candidate {
+			return nil, fmt.Errorf("%w: %s (block %d) blocks block %d", ErrUnresolved, obs.Key, obs.Candidate.Number, n)
+		}
+		s.emit(Event{"event": "resume", "observation": obs.Key, "number": n})
+		return s.resume(chain, obs.Key, block)
 	}
 	obs, err := s.adm.Begin(s.token, candidate)
 	if err != nil {
@@ -339,13 +331,12 @@ func itemMap(items []sourceinputs.Item) map[string][]byte {
 }
 
 // resume attaches an admitted observation of block to the Parlia handle.
+// The candidate, which the caller matched, holds the block hash, and Admit
+// bound the capsule digest, so the capsule holds this block.
 func (s *Seam) resume(chain *core.BlockChain, key string, block *types.Block) (core.ExtractorObservation, error) {
 	static, err := ReadStatic(s.store, key, s.genesis, s.commit)
 	if err != nil {
 		return nil, err
-	}
-	if static.Block.Hash() != block.Hash() {
-		return nil, fmt.Errorf("%w: capsule of %s holds another block", ErrStaticInput, key)
 	}
 	keys, err := static.Snapshot.KeyBytes()
 	if err != nil {
@@ -435,7 +426,6 @@ func (o *observation) Rejected(block *types.Block, _ *core.ProcessResult, cause 
 		return
 	}
 	o.resolved = admission.Rejected
-	s.closed[o.key] = admission.Rejected
 	s.emit(Event{"event": "rejected", "observation": o.key, "evidence_digest": evidence, "digest": record.Digest,
 		"cause": cause.Error()})
 }
@@ -508,13 +498,15 @@ func RejectionEvidence(block *types.Block, cause error) string {
 // INPUT_PREPARING observations, re-executes each ADMITTED obligation from its
 // pin and capsule through the native import (the seam resumes it and its log
 // replays the saved responses), so it reaches EXEC_READY or NATIVE_REJECTED,
-// and then switches the admission to LIVE. The seam must be installed on the
-// chain.
+// and then switches the admission to LIVE. GoLive refuses while any
+// obligation is still open, so an obligation that recovery could not resolve
+// keeps the node in RECOVERY_ONLY. The seam must be installed on the chain.
 func (s *Seam) Recover(chain *core.BlockChain) error {
 	observations, err := s.Observations()
 	if err != nil {
 		return err
 	}
+	var failures []error
 	for _, obs := range observations {
 		switch obs.State {
 		case admission.InputPreparing:
@@ -524,7 +516,6 @@ func (s *Seam) Recover(chain *core.BlockChain) error {
 			if err != nil {
 				return err
 			}
-			s.closed[obs.Key] = admission.Abandoned
 			s.emit(Event{"event": "abandon", "observation": obs.Key})
 		case admission.Admitted:
 			static, err := ReadStatic(s.store, obs.Key, s.genesis, s.commit)
@@ -532,39 +523,18 @@ func (s *Seam) Recover(chain *core.BlockChain) error {
 				return err
 			}
 			s.emit(Event{"event": "recover", "observation": obs.Key, "number": static.Block.NumberU64()})
-			_, insertErr := chain.InsertChain(types.Blocks{static.Block})
-			state, err := s.state(obs.Key)
-			if err != nil {
-				return err
-			}
-			if state != admission.ExecReady && state != admission.Rejected {
-				return fmt.Errorf("%w: recovery of %s: %v", ErrUnresolved, obs.Key, insertErr)
+			if _, err := chain.InsertChain(types.Blocks{static.Block}); err != nil {
+				// A native rejection closes the obligation and still returns
+				// the native error; GoLive below decides.
+				failures = append(failures, fmt.Errorf("recovery of %s: %w", obs.Key, err))
 			}
 		}
 	}
 	release := s.Acquire()
 	defer release()
 	if err := s.adm.GoLive(s.token); err != nil {
-		return err
+		return errors.Join(append(failures, err)...)
 	}
 	s.emit(Event{"event": "live"})
 	return nil
-}
-
-// state returns the state of an observation. Observations no longer lists a
-// closed one, so its state is the one this process gave it.
-func (s *Seam) state(key string) (admission.State, error) {
-	observations, err := s.Observations()
-	if err != nil {
-		return "", err
-	}
-	for _, obs := range observations {
-		if obs.Key == key {
-			return obs.State, nil
-		}
-	}
-	if state, ok := s.closed[key]; ok {
-		return state, nil
-	}
-	return "", fmt.Errorf("%w: %s is closed by another process", ErrWiring, key)
 }

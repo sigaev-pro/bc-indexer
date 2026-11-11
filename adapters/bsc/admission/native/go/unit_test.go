@@ -14,7 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/bsc/retention"
@@ -552,5 +554,116 @@ func TestUnitBlockItemsRefuseBadInputs(t *testing.T) {
 	rlp.DecodeBytes(items["ancestor-headers-rlp"], &ancestors)
 	if len(ancestors) != 2 || ancestors[1].Number.Uint64() != 0 {
 		t.Fatalf("window of block 3: %d", len(ancestors))
+	}
+}
+
+// ---- observation exits and the safe point ----
+
+func TestUnitValidatedRefusesAWiringError(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	handle := NewParliaDB(db, nil)
+	handle.Attach("obs-1", sealedLog(t, db, "obs-1"), nil)
+	handle.Get([]byte("parlia-undeclared"))
+	header := &types.Header{Number: big.NewInt(1), Difficulty: big.NewInt(1)}
+	block := types.NewBlockWithHeader(header)
+	// The wiring error must stop Validated before it touches the log or the
+	// admission, which this observation does not have.
+	o := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-1", hash: block.Hash()}
+	if err := o.Validated(block, nil, nil); !errors.Is(err, ErrUndeclaredRead) {
+		t.Fatalf("validated: %v", err)
+	}
+	if err := o.End(nil); !errors.Is(err, ErrUndeclaredRead) {
+		t.Fatalf("end after a failed validation: %v", err)
+	}
+	other := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-2", hash: block.Hash()}
+	if err := other.Validated(types.NewBlockWithHeader(&types.Header{Number: big.NewInt(2)}), nil, nil); !errors.Is(err, ErrWiring) {
+		t.Fatalf("validation of another block: %v", err)
+	}
+}
+
+func TestUnitRejectedWithAWiringErrorStaysAdmitted(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	handle := NewParliaDB(db, nil)
+	handle.Attach("obs-1", sealedLog(t, db, "obs-1"), nil)
+	handle.Get([]byte("parlia-undeclared"))
+	block := types.NewBlockWithHeader(&types.Header{Number: big.NewInt(1)})
+	o := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-1", hash: block.Hash()}
+	o.Rejected(block, nil, errors.New("unauthorized validator"))
+	if o.resolved != "" || !errors.Is(o.End(nil), ErrUndeclaredRead) {
+		t.Fatalf("a rejection after a wiring error was trusted: %q", o.resolved)
+	}
+}
+
+func TestUnitEndOfAnUnresolvedObservation(t *testing.T) {
+	handle := NewParliaDB(rawdb.NewMemoryDatabase(), nil)
+	o := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-1"}
+	if err := o.End(nil); !errors.Is(err, ErrUnresolved) {
+		t.Fatalf("end without an exit: %v", err)
+	}
+	done := &observation{seam: &Seam{parlia: handle, emit: func(Event) {}}, key: "obs-2", resolved: admission.ExecReady}
+	if err := done.End(nil); err != nil {
+		t.Fatalf("end after EXEC_READY: %v", err)
+	}
+}
+
+func TestUnitSafePointsCountOnlyTheImportTracer(t *testing.T) {
+	importTracer, rpcTracer := &tracing.Hooks{}, &tracing.Hooks{}
+	var forwarded int
+	s := &Seam{tracer: importTracer, safePoint: func(vm.OpCode, *vm.ScopeContext) { forwarded++ }}
+	s.onSafePoint(rpcTracer, vm.ADD, nil)
+	s.onSafePoint(nil, vm.ADD, nil)
+	if s.SafePointsOutside() != 0 || forwarded != 0 {
+		t.Fatalf("another tracer counted: %d %d", s.SafePointsOutside(), forwarded)
+	}
+	s.onSafePoint(importTracer, vm.ADD, nil)
+	if s.SafePointsOutside() != 1 || forwarded != 0 {
+		t.Fatalf("outside an observation: %d %d", s.SafePointsOutside(), forwarded)
+	}
+	o := &observation{seam: s}
+	s.active.Store(o)
+	s.onSafePoint(importTracer, vm.ADD, nil)
+	if o.safePoints.Load() != 1 || forwarded != 1 || s.SafePointsOutside() != 1 {
+		t.Fatalf("inside an observation: %d %d", o.safePoints.Load(), forwarded)
+	}
+}
+
+func TestUnitPinVerifyNeedsTheState(t *testing.T) {
+	genesis, db, provider, identity := unitProvider(t)
+	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: ProfileDigest(),
+		ParentRoot: genesis.Block.Root(), Headers: []stateprovider.HeaderRef{{Hash: genesis.Block.Hash(), Number: 0}}}
+	if err := provider.Pin(pin); err != nil {
+		t.Fatal(err)
+	}
+	rawdb.DeleteLegacyTrieNode(db, genesis.Block.Root())
+	if _, err := (LedgerPins{DB: db, Provider: provider}).Verify(pin.ID, hexHash(genesis.Block.Root())); !errors.Is(err, stateprovider.ErrPinUnavailable) {
+		t.Fatalf("a pin without its state verified: %v", err)
+	}
+}
+
+func TestUnitStaticWindowAboveACheckpoint(t *testing.T) {
+	genesis, _ := unitGenesis(t)
+	headers := unitChain(genesis.Block.Header(), 1100)
+	items := unitItems(t, genesis, headers, 1100)
+	static, err := DecodeStatic(items, genesis, "commit")
+	if err != nil || len(static.Ancestors) != 1100-1-844 || static.Snapshot.Checkpoint != 1024 {
+		t.Fatalf("window of 1100: %d ancestors, %v", len(static.Ancestors), err)
+	}
+	// One header short: the checkpoint is still inside, the window is not full.
+	short, _ := rlp.EncodeToBytes(static.Ancestors[:len(static.Ancestors)-1])
+	changed := map[string][]byte{}
+	for k, v := range items {
+		changed[k] = v
+	}
+	changed["ancestor-headers-rlp"] = short
+	if _, err := DecodeStatic(changed, genesis, "commit"); err == nil || !strings.Contains(err.Error(), "ancestor headers, want") {
+		t.Fatalf("short window accepted: %v", err)
+	}
+	changed = map[string][]byte{}
+	for k, v := range items {
+		changed[k] = v
+	}
+	changed["parlia-snapshot-keys"] = []byte(`{"checkpoint":1024,"keys":["7061726c69612d00"]}`)
+	if _, err := DecodeStatic(changed, genesis, "commit"); err == nil || !strings.Contains(err.Error(), "parlia-snapshot-keys") {
+		t.Fatalf("another snapshot key accepted: %v", err)
 	}
 }

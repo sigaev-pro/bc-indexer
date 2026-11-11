@@ -22,9 +22,11 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/parlia"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -605,6 +607,10 @@ func TestNativeBSCAdmission(t *testing.T) {
 			t.Fatal(err)
 		}
 		sc := &scenario{Name: "live", ModeAtStart: string(n.mode()), Extra: map[string]string{}}
+		// A seam call without the observation guard is refused.
+		if _, err := n.seam.Begin(n.chain, fx.blocks[0]); !errors.Is(err, ErrGuard) {
+			t.Fatalf("begin without the guard: %v", err)
+		}
 		// A live import before recovery is refused.
 		_, err = n.chain.InsertChain(fx.blocks[:1])
 		sc.Extra["import_before_recovery"] = errText(err)
@@ -704,7 +710,7 @@ func TestNativeBSCAdmission(t *testing.T) {
 		_, err2 := n.chain.InsertChain(types.Blocks{fx.altBlock()})
 		_, err3 := n.chain.InsertChain(fx.blocks[1:])
 		sc.ImportErrors = []string{errText(err1), errText(err2), errText(err3)}
-		if err1 != nil || err2 == nil || err3 != nil {
+		if err1 != nil || err2 == nil || errors.Is(err2, ErrUnresolved) || err3 != nil {
 			t.Fatalf("reject imports: %v", sc.ImportErrors)
 		}
 		sc.Extra["alt_hash"] = fx.altBlock().Hash().Hex()
@@ -822,4 +828,128 @@ func keysOf(m map[string]json.RawMessage) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// ---- the core seam contract, with a fake hook ----
+
+type fakeHook struct{ obs *fakeObservation }
+
+func (h *fakeHook) Acquire() func() { return func() {} }
+
+func (h *fakeHook) Begin(*core.BlockChain, *types.Block) (core.ExtractorObservation, error) {
+	return h.obs, nil
+}
+
+type fakeObservation struct {
+	hash         common.Hash
+	validated    int
+	validatedErr error
+	endErr       error
+}
+
+func (o *fakeObservation) Hash() [32]byte { return o.hash }
+
+func (o *fakeObservation) Validated(*types.Block, *state.StateDB, *core.ProcessResult) error {
+	o.validated++
+	return o.validatedErr
+}
+
+func (o *fakeObservation) Rejected(*types.Block, *core.ProcessResult, error) {}
+
+func (o *fakeObservation) End(err error) error {
+	if o.endErr != nil {
+		return o.endErr
+	}
+	return err
+}
+
+func plainChain(t *testing.T, fx fixture, home string) (*core.BlockChain, ethdb.Database) {
+	t.Helper()
+	db := openDisk(t, home)
+	config := core.DefaultConfig()
+	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = rawdb.HashScheme, false, 0
+	engine := parlia.New(fx.genesis.Config, NewParliaDB(db, nil), nil, fx.genesis.ToBlock().Hash())
+	chain, err := core.NewBlockChain(db, fx.genesis, engine, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return chain, db
+}
+
+func TestNativeBSCHookContract(t *testing.T) {
+	fx := loadFixture(t)
+	work := t.TempDir()
+	cases := []struct {
+		name string
+		obs  *fakeObservation
+		head uint64
+		err  error
+	}{
+		{"another-block", &fakeObservation{hash: fx.blocks[1].Hash()}, 0, core.ErrExtractorUnobserved},
+		{"validated-error", &fakeObservation{hash: fx.blocks[0].Hash(), validatedErr: errors.New("exec-ready failed")}, 0, nil},
+		{"end-error", &fakeObservation{hash: fx.blocks[0].Hash(), endErr: errors.New("unresolved")}, 1, nil},
+	}
+	for _, c := range cases {
+		chain, db := plainChain(t, fx, filepath.Join(work, c.name))
+		chain.SetExtractorHook(&fakeHook{obs: c.obs})
+		_, err := chain.InsertChain(fx.blocks[:1])
+		head := chain.CurrentBlock().Number.Uint64()
+		stored := chain.HasBlock(fx.blocks[0].Hash(), 1)
+		chain.Stop()
+		db.Close()
+		switch c.name {
+		case "another-block":
+			if !errors.Is(err, c.err) || c.obs.validated != 0 {
+				t.Errorf("%s: %v, validated %d", c.name, err, c.obs.validated)
+			}
+		case "validated-error":
+			if err == nil || !strings.Contains(err.Error(), "exec-ready failed") || stored {
+				t.Errorf("%s: %v, block stored %v", c.name, err, stored)
+			}
+		case "end-error":
+			if err == nil || err.Error() != "unresolved" || c.obs.validated != 1 {
+				t.Errorf("%s: %v, validated %d", c.name, err, c.obs.validated)
+			}
+		}
+		if head != c.head {
+			t.Errorf("%s: head %d, want %d", c.name, head, c.head)
+		}
+	}
+}
+
+// An import that stops before execution (the chain is stopping) leaves the
+// obligation ADMITTED and reports it; a restart recovers it.
+func TestNativeBSCStoppedImport(t *testing.T) {
+	fx := loadFixture(t)
+	home := filepath.Join(t.TempDir(), "home")
+	n, err := startNode(t, fx, home, probeProducer, modelNative, func(Event) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := n.seam.Recover(n.chain); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.chain.InsertChain(fx.blocks[:1]); err != nil {
+		t.Fatal(err)
+	}
+	n.chain.InterruptInsert(true)
+	_, err = n.chain.InsertChain(fx.blocks[1:])
+	rows := n.observations()
+	n.close()
+	if !errors.Is(err, ErrUnresolved) || len(rows) != 2 || rows[1].State != string(admission.Admitted) {
+		t.Fatalf("stopped import: %v, %+v", err, rows)
+	}
+	n, err = startNode(t, fx, home, admission.Producer{}, modelNative, func(Event) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer n.close()
+	if err := n.seam.Recover(n.chain); err != nil {
+		t.Fatal(err)
+	}
+	rows = n.observations()
+	if n.chain.CurrentBlock().Number.Uint64() != 2 || len(rows) != 2 || rows[1].State != string(admission.ExecReady) ||
+		rows[1].Key != ObservationKey(1) {
+		t.Fatalf("after recovery: %+v", rows)
+	}
 }

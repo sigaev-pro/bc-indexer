@@ -19,19 +19,14 @@
       "name": "seam parent state",
       "file": "go/seam.go",
       "original": "if parent == nil || !chain.HasState(parent.Root) {",
-      "replacement": "if parent == nil {"
+      "replacement": "if parent == nil {",
+      "equivalent": "The head check refuses every block whose parent is not the current head, and the native chain keeps the head's state (NewBlockChain rewinds a head without state at startup), so a parent without state is refused by the head check first."
     },
     {
       "name": "seam other candidate",
       "file": "go/seam.go",
       "original": "\t\t\tif obs.Candidate != candidate {",
       "replacement": "\t\t\tif false && obs.Candidate != candidate {"
-    },
-    {
-      "name": "seam abandon preparing",
-      "file": "go/seam.go",
-      "original": "\t\t\tif err := s.adm.Abandon(s.token, obs.Key); err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t\ts.emit(Event{\"event\": \"abandon\", \"observation\": obs.Key})\n\t\t}",
-      "replacement": "\t\t\ts.emit(Event{\"event\": \"abandon\", \"observation\": obs.Key})\n\t\t}"
     },
     {
       "name": "seam admit",
@@ -55,12 +50,6 @@
       "name": "seam reset snapshots",
       "file": "go/seam.go",
       "original": "\tchain.Engine().(interface{ ExtractorResetSnapshots() }).ExtractorResetSnapshots()\n",
-      "replacement": ""
-    },
-    {
-      "name": "seam resume hash",
-      "file": "go/seam.go",
-      "original": "\tif static.Block.Hash() != block.Hash() {\n\t\treturn nil, fmt.Errorf(\"%w: capsule of %s holds another block\", ErrStaticInput, key)\n\t}",
       "replacement": ""
     },
     {
@@ -140,12 +129,6 @@
       "file": "go/seam.go",
       "original": "\tif err := s.adm.GoLive(s.token); err != nil {\n\t\treturn err\n\t}\n\ts.emit(Event{\"event\": \"live\"})",
       "replacement": "\ts.emit(Event{\"event\": \"live\"})"
-    },
-    {
-      "name": "recover state check",
-      "file": "go/seam.go",
-      "original": "\t\t\tif state != admission.ExecReady && state != admission.Rejected {",
-      "replacement": "\t\t\tif false && state != admission.ExecReady && state != admission.Rejected {"
     },
     {
       "name": "run record store",
@@ -337,7 +320,8 @@
       "name": "freezer hold",
       "file": "native/core/rawdb/chain_freezer.go",
       "original": "\t\t\tif limit <= first {",
-      "replacement": "\t\t\tif false {"
+      "replacement": "\t\t\tif false {",
+      "equivalent": "With limit <= first the patch sets last = limit - 1 < first; the native freezeRange then freezes nothing, or fails on the frozen canonical hash and backs off, so the freezer holds either way."
     },
     {
       "name": "vm safe point",
