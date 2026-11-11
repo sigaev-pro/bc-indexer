@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/bsc/retention"
@@ -554,6 +555,57 @@ func TestUnitBlockItemsRefuseBadInputs(t *testing.T) {
 	rlp.DecodeBytes(items["ancestor-headers-rlp"], &ancestors)
 	if len(ancestors) != 2 || ancestors[1].Number.Uint64() != 0 {
 		t.Fatalf("window of block 3: %d", len(ancestors))
+	}
+}
+
+// The block encoding drops the blob sidecars, so the capsule keeps them as an
+// item and the decoded block carries them again; a sidecar of another block
+// is refused.
+func TestUnitStaticKeepsBlobSidecars(t *testing.T) {
+	genesis, _ := unitGenesis(t)
+	headers := unitChain(genesis.Block.Header(), 3)
+	lookup := func(number uint64) *types.Header { return headers[number] }
+	plain := types.NewBlockWithHeader(headers[3])
+	sidecar := func(hash common.Hash) *types.BlobSidecar {
+		return &types.BlobSidecar{
+			BlobTxSidecar: types.BlobTxSidecar{Blobs: []kzg4844.Blob{{1}}, Commitments: []kzg4844.Commitment{{2}},
+				Proofs: []kzg4844.Proof{{3}}},
+			BlockNumber: big.NewInt(3), BlockHash: hash, TxIndex: 0, TxHash: common.Hash{4}}
+	}
+	block := plain.WithSidecars(types.BlobSidecars{sidecar(plain.Hash())})
+	items, err := BlockItems(block, lookup, genesis, "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeStatic(itemMap(items), genesis, "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := rlp.EncodeToBytes(block.Sidecars())
+	got, _ := rlp.EncodeToBytes(decoded.Block.Sidecars())
+	if len(decoded.Block.Sidecars()) != 1 || !bytes.Equal(got, want) || decoded.Block.Hash() != block.Hash() {
+		t.Fatalf("decoded sidecars %x, want %x", got, want)
+	}
+	// Control: the block item alone has no sidecars.
+	var bare types.Block
+	if err := rlp.DecodeBytes(itemMap(items)["block-rlp"], &bare); err != nil || len(bare.Sidecars()) != 0 {
+		t.Fatalf("block-rlp carries %d sidecars: %v", len(bare.Sidecars()), err)
+	}
+	// No sidecars: an empty list.
+	if empty := unitItems(t, genesis, headers, 3)["blob-sidecars"]; !bytes.Equal(empty, []byte{0xc0}) {
+		t.Errorf("no sidecars encoded as %x", empty)
+	}
+	foreign, err := BlockItems(plain.WithSidecars(types.BlobSidecars{sidecar(common.Hash{5})}), lookup, genesis, "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeStatic(itemMap(foreign), genesis, "c"); !errors.Is(err, ErrStaticInput) {
+		t.Errorf("a sidecar of another block was accepted: %v", err)
+	}
+	broken := itemMap(items)
+	broken["blob-sidecars"] = []byte{0x01}
+	if _, err := DecodeStatic(broken, genesis, "c"); !errors.Is(err, ErrStaticInput) {
+		t.Errorf("a malformed sidecar item was accepted: %v", err)
 	}
 }
 

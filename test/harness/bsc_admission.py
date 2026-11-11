@@ -75,8 +75,9 @@ GET_TAG = b"bsc-parlia-db-get-v1\x00"
 SNAPSHOT_PREFIX = b"parlia-"
 CHECKPOINT_INTERVAL = 1024
 BLOCKHASH_WINDOW = 256
-ITEM_NAMES = ("block-rlp", "parent-hash", "parent-header-rlp", "parent-root", "ancestor-headers-rlp", "genesis-json",
+ITEM_NAMES = ("block-rlp", "blob-sidecars", "parent-hash", "parent-header-rlp", "parent-root", "ancestor-headers-rlp", "genesis-json",
               "fork-id", "parlia-snapshot-keys", "native-commit", "normalization-profile", "state-profile")
+EMPTY_RLP_LIST = b"\xc0"
 SYSTEM_TXS_BLOCK_1 = 9  # fixture ORACLE: seven init calls and two fee transfers
 PRUNE_REFUSAL = "live pins forbid this native deletion"
 START_REFUSAL = "Failed to register the Ethereum service: live pins forbid this native deletion"
@@ -340,7 +341,8 @@ def expected_items(number, headers, raw_blocks, genesis_canonical, native_commit
     snapshot = json.dumps({"checkpoint": checkpoint, "keys": [(SNAPSHOT_PREFIX + keccak(headers[checkpoint])).hex()]},
                           separators=(",", ":")).encode()
     info = header_fields(headers[number])
-    return [("block-rlp", raw_blocks[number - 1]), ("parent-hash", keccak(parent)), ("parent-header-rlp", parent),
+    # The fixture blocks carry no blob sidecars: an empty RLP list.
+    return [("block-rlp", raw_blocks[number - 1]), ("blob-sidecars", EMPTY_RLP_LIST), ("parent-hash", keccak(parent)), ("parent-header-rlp", parent),
             ("parent-root", header_fields(parent)["root"]), ("ancestor-headers-rlp", probe14.rlp_encode_list(ancestors)),
             ("genesis-json", genesis_canonical),
             ("fork-id", fork_id(genesis_canonical, keccak(headers[0]), number, info["time"], chain_config)),

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -832,11 +833,15 @@ func keysOf(m map[string]json.RawMessage) []string {
 
 // ---- the core seam contract, with a fake hook ----
 
-type fakeHook struct{ obs *fakeObservation }
+type fakeHook struct {
+	obs    *fakeObservation
+	begins int
+}
 
 func (h *fakeHook) Acquire() func() { return func() {} }
 
 func (h *fakeHook) Begin(*core.BlockChain, *types.Block) (core.ExtractorObservation, error) {
+	h.begins++
 	return h.obs, nil
 }
 
@@ -888,11 +893,20 @@ func TestNativeBSCHookContract(t *testing.T) {
 		{"another-block", &fakeObservation{hash: fx.blocks[1].Hash()}, 0, core.ErrExtractorUnobserved},
 		{"validated-error", &fakeObservation{hash: fx.blocks[0].Hash(), validatedErr: errors.New("exec-ready failed")}, 0, nil},
 		{"end-error", &fakeObservation{hash: fx.blocks[0].Hash(), endErr: errors.New("unresolved")}, 1, nil},
+		{"unavailable-data", &fakeObservation{hash: fx.blocks[0].Hash()}, 0, nil},
 	}
 	for _, c := range cases {
 		chain, db := plainChain(t, fx, filepath.Join(work, c.name))
-		chain.SetExtractorHook(&fakeHook{obs: c.obs})
-		_, err := chain.InsertChain(fx.blocks[:1])
+		hook := &fakeHook{obs: c.obs}
+		chain.SetExtractorHook(hook)
+		blocks := fx.blocks[:1]
+		if c.name == "unavailable-data" {
+			// The fixture is before Cancun, so a sidecar fails the native
+			// data-availability check.
+			blocks = types.Blocks{fx.blocks[0].WithSidecars(types.BlobSidecars{{BlockNumber: big.NewInt(1),
+				BlockHash: fx.blocks[0].Hash()}})}
+		}
+		_, err := chain.InsertChain(blocks)
 		head := chain.CurrentBlock().Number.Uint64()
 		stored := chain.HasBlock(fx.blocks[0].Hash(), 1)
 		chain.Stop()
@@ -909,6 +923,11 @@ func TestNativeBSCHookContract(t *testing.T) {
 		case "end-error":
 			if err == nil || err.Error() != "unresolved" || c.obs.validated != 1 {
 				t.Errorf("%s: %v, validated %d", c.name, err, c.obs.validated)
+			}
+		case "unavailable-data":
+			if err == nil || !strings.Contains(err.Error(), "sidecars present in block body before cancun") ||
+				hook.begins != 0 || stored {
+				t.Errorf("%s: %v, begins %d, stored %v", c.name, err, hook.begins, stored)
 			}
 		}
 		if head != c.head {

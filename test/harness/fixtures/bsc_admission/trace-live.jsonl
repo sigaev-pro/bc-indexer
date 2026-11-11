@@ -25,6 +25,7 @@
 {"event":"put","observation":"bsc-probe.run-1.0000000000000000","record":"capsule-chunk"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000000","record":"capsule-chunk"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000000","record":"capsule-chunk"}
+{"event":"put","observation":"bsc-probe.run-1.0000000000000000","record":"capsule-chunk"}
 {"event":"sync"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000000","record":"capsule"}
 {"event":"sync"}
@@ -55,13 +56,14 @@
 {"event":"sync"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000000","record":"exec-ready"}
 {"event":"sync"}
-{"consumed_digest":"e1c3a6939de0131cb5b72c8726761cbcb05991621ece1b492f3f8962bf3a5df9","digest":"ad0e2317ffd434601a25b295e2d6f56c8b3a7df5e0b99887b586f15b7255a2aa","event":"exec-ready","exec_digest":"9dd9a5dd70a25ede17e08eab901a867ccc2b2f4edf542dc670440a7585c3a49d","observation":"bsc-probe.run-1.0000000000000000","safe_points":8474}
+{"consumed_digest":"4fbcd36ecf70c9e890cc5b9d3ed9cc45e2541377afe0ea7c3e34b490102e4415","digest":"1f89c06e546f3b5d99dfc76e46ea4e51afb381a93d99d80a84661c4b660f2984","event":"exec-ready","exec_digest":"9dd9a5dd70a25ede17e08eab901a867ccc2b2f4edf542dc670440a7585c3a49d","observation":"bsc-probe.run-1.0000000000000000","safe_points":8474}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000001","record":"preparing"}
 {"event":"sync"}
 {"event":"put","observation":"","record":"counter"}
 {"event":"sync"}
 {"event":"begin","number":2,"observation":"bsc-probe.run-1.0000000000000001"}
 {"event":"pinned","observation":"bsc-probe.run-1.0000000000000001"}
+{"event":"put","observation":"bsc-probe.run-1.0000000000000001","record":"capsule-chunk"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000001","record":"capsule-chunk"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000001","record":"capsule-chunk"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000001","record":"capsule-chunk"}
@@ -99,6 +101,6 @@
 {"event":"sync"}
 {"event":"put","observation":"bsc-probe.run-1.0000000000000001","record":"exec-ready"}
 {"event":"sync"}
-{"consumed_digest":"f7b18d870afda80714945ec43177eae537ca1bcd42f790e6aff10318edf90e6b","digest":"3699d305309455d12bb9bce8ac70fa0f1e299722cf5c24bfeb2dc341bf0b45f2","event":"exec-ready","exec_digest":"0739ef737afc1136d59c49c0fac77be642aca9e496ddab61dde25ae0d20e74a1","observation":"bsc-probe.run-1.0000000000000001","safe_points":0}
+{"consumed_digest":"fb0f9d04e283366e7e2d518072ef881c81d9de077702f224ec93859c3c449d0d","digest":"78456a0d58d04bca8739cb6637fe130fa76874e946f0a111eb5d97338e264d31","event":"exec-ready","exec_digest":"0739ef737afc1136d59c49c0fac77be642aca9e496ddab61dde25ae0d20e74a1","observation":"bsc-probe.run-1.0000000000000001","safe_points":0}
 {"event":"sync"}
 {"event":"start","producer_id":"bsc-probe","run_id":"run-1"}

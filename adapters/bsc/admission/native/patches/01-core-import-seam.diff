@@ -1,9 +1,9 @@
 diff --git a/core/extractor_hook.go b/core/extractor_hook.go
 new file mode 100644
-index 0000000..3902e0d
+index 0000000..e664857
 --- /dev/null
 +++ b/core/extractor_hook.go
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,157 @@
 +// Extractor patch (E01-02.admission, BSC block): the native import seam.
 +//
 +// This file is added to the BSC source tree by the extractor patch set. It
@@ -89,8 +89,19 @@ index 0000000..3902e0d
 +
 +// extractorInsert imports chain one block at a time, each inside its own
 +// observation. The chain mutex is held.
++//
++// The native data-availability check runs before Begin. insertChain refuses a
++// block that fails it without reportBadBlock, so after Begin the failure would
++// leave an obligation that no exit resolves. Before Begin it is refused with
++// no observation, and the sidecars that Begin saves in the capsule are the
++// checked ones, which recovery attaches again.
 +func (bc *BlockChain) extractorInsert(hook ExtractorHook, chain types.Blocks) (int, error) {
 +	for index, block := range chain {
++		if bc.chainConfig.IsInBSC() {
++			if err := IsDataAvailable(bc, block); err != nil {
++				return index, err
++			}
++		}
 +		observation, err := hook.Begin(bc, block)
 +		if err != nil {
 +			return index, err

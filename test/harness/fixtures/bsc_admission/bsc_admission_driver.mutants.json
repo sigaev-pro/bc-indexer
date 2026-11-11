@@ -441,6 +441,12 @@
       "file": "test/harness/bsc_admission.py",
       "original": "    except Rejected:\n        raise\n",
       "replacement": ""
+    },
+    {
+      "name": "empty sidecar item",
+      "file": "test/harness/bsc_admission.py",
+      "original": "EMPTY_RLP_LIST = b\"\\xc0\"",
+      "replacement": "EMPTY_RLP_LIST = b\"\""
     }
   ]
 }

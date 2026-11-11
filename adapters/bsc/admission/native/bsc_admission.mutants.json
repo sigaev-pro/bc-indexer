@@ -25,8 +25,8 @@
     {
       "name": "seam other candidate",
       "file": "go/seam.go",
-      "original": "\t\t\tif obs.Candidate != candidate {",
-      "replacement": "\t\t\tif false && obs.Candidate != candidate {"
+      "original": "\t\tif obs.Candidate != candidate {",
+      "replacement": "\t\tif false && obs.Candidate != candidate {"
     },
     {
       "name": "seam admit",
@@ -127,7 +127,7 @@
     {
       "name": "recover golive",
       "file": "go/seam.go",
-      "original": "\tif err := s.adm.GoLive(s.token); err != nil {\n\t\treturn err\n\t}\n\ts.emit(Event{\"event\": \"live\"})",
+      "original": "\tif err := s.adm.GoLive(s.token); err != nil {\n\t\treturn errors.Join(append(failures, err)...)\n\t}\n\ts.emit(Event{\"event\": \"live\"})",
       "replacement": "\ts.emit(Event{\"event\": \"live\"})"
     },
     {
@@ -348,6 +348,36 @@
       "original": "\tif err = stateprovider.PruneState(chaindb, prunerconfig.Datadir, prunerconfig.BloomSize, targetRoot); err != nil {",
       "replacement": "\tif err = func() error { _, _, _ = targetRoot, prunerconfig, stateprovider.PruneState; return nil }(); err != nil {",
       "geth": true
+    },
+    {
+      "name": "core data availability before begin",
+      "file": "native/core/extractor_hook.go",
+      "original": "\t\tif bc.chainConfig.IsInBSC() {\n\t\t\tif err := IsDataAvailable(bc, block); err != nil {\n\t\t\t\treturn index, err\n\t\t\t}\n\t\t}\n\t\tobservation, err := hook.Begin(bc, block)",
+      "replacement": "\t\tobservation, err := hook.Begin(bc, block)"
+    },
+    {
+      "name": "static sidecar item",
+      "file": "go/static.go",
+      "original": "{Name: \"blob-sidecars\", Data: sidecarsRLP},",
+      "replacement": "{Name: \"blob-sidecars\", Data: append(sidecarsRLP[:0:0], 0xc0)},"
+    },
+    {
+      "name": "static sidecar attach",
+      "file": "go/static.go",
+      "original": "\tstatic.Block = static.Block.WithSidecars(sidecars)\n",
+      "replacement": ""
+    },
+    {
+      "name": "static sidecar sanity",
+      "file": "go/static.go",
+      "original": "sidecar.SanityCheck(static.Block.Number(), static.Block.Hash()); err != nil {",
+      "replacement": "sidecar.SanityCheck(static.Block.Number(), static.Block.Hash()); false && err != nil {"
+    },
+    {
+      "name": "static sidecar decode",
+      "file": "go/static.go",
+      "original": "\tif err := rlp.DecodeBytes(items[\"blob-sidecars\"], &sidecars); err != nil {\n\t\treturn bad(\"blob sidecars: %v\", err)\n\t}\n",
+      "replacement": "\t_ = rlp.DecodeBytes(items[\"blob-sidecars\"], &sidecars)\n"
     }
   ]
 }

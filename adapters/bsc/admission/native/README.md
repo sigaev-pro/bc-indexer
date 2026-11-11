@@ -41,8 +41,15 @@ builds the probe test binary and the patched `geth`.
 While a hook is installed, `BlockChain.InsertChain` takes the observation
 guard (`Acquire`) before the chain mutex, so the lock order is guard, then
 native locks. It then imports one block per `insertChain` call. For each
-block it calls `Begin` before any header verification:
+block it first runs the native data-availability check (`IsDataAvailable`)
+and then calls `Begin`, before any header verification:
 
+0. A block that fails the data-availability check is refused with no
+   observation. `insertChain` refuses such a block without `reportBadBlock`,
+   so after `Begin` the failure would leave an obligation that no exit
+   resolves. The check also settles the block's blob sidecars (an old block's
+   sidecars are dropped), and `Begin` saves the checked sidecars in the
+   capsule.
 1. `Begin` refuses a block outside the supported profile: the parent must be
    the current head and its state must be present (`ErrImportProfile`). A
    block that is already in the chain with its state needs no observation,
@@ -125,7 +132,16 @@ the next observation attaches.
 
 ## Static items
 
-Same item list as the E01-02.inputs BSC block. Two changes:
+Same item list as the E01-02.inputs BSC block, with three changes:
+
+- A new item, `blob-sidecars`, follows `block-rlp`. It holds the RLP list of
+  the block's blob sidecars (an empty list when there are none), because the
+  block encoding drops them while the native import checks and writes them.
+  `DecodeStatic` decodes the list, checks that each sidecar names the block
+  (`SanityCheck`) and attaches it to the decoded block (`WithSidecars`), so
+  recovery imports the block with the sidecars it was admitted with. The
+  private fixture is before Cancun, so its sidecar items are empty lists; a
+  unit test covers a block that carries a sidecar.
 
 - `genesis-json` is now `admission.CanonicalJSON` of the genesis file (D99
   item 3). `LoadGenesis` refuses a genesis that does not build the home's
@@ -192,7 +208,7 @@ any store opens.
 
 `Recover` then resolves every saved obligation. It abandons INPUT_PREPARING
 observations. It re-executes each ADMITTED obligation from its capsule
-block through the native import; the seam resumes it, and the log replays
+block, with the capsule's blob sidecars, through the native import; the seam resumes it, and the log replays
 the saved responses, so the obligation reaches EXEC_READY or NATIVE_REJECTED.
 Then it calls `GoLive`. While the admission is RECOVERY_ONLY, a live import
 of any other block is refused (`ErrMode`).

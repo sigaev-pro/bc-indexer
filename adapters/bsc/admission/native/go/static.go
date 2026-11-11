@@ -25,7 +25,7 @@ import (
 
 // StaticItemNames lists the static capsule items of one BSC block
 // observation, in their sealed order.
-var StaticItemNames = []string{"block-rlp", "parent-hash", "parent-header-rlp", "parent-root",
+var StaticItemNames = []string{"block-rlp", "blob-sidecars", "parent-hash", "parent-header-rlp", "parent-root",
 	"ancestor-headers-rlp", "genesis-json", "fork-id", "parlia-snapshot-keys", "native-commit",
 	"normalization-profile", "state-profile"}
 
@@ -148,6 +148,12 @@ func BlockItems(block *types.Block, header func(uint64) *types.Header, genesis *
 	if err != nil {
 		return nil, err
 	}
+	// The block encoding has no sidecars; the native import checks them and
+	// writes them, so the capsule holds them (an empty list when none).
+	sidecarsRLP, err := rlp.EncodeToBytes(block.Sidecars())
+	if err != nil {
+		return nil, err
+	}
 	parent := header(n - 1)
 	if parent == nil {
 		return nil, fmt.Errorf("%w: no parent header of block %d", ErrStaticInput, n)
@@ -186,6 +192,7 @@ func BlockItems(block *types.Block, header func(uint64) *types.Header, genesis *
 	}
 	return []sourceinputs.Item{
 		{Name: "block-rlp", Data: blockRLP},
+		{Name: "blob-sidecars", Data: sidecarsRLP},
 		{Name: "parent-hash", Data: parent.Hash().Bytes()},
 		{Name: "parent-header-rlp", Data: parentRLP},
 		{Name: "parent-root", Data: parent.Root.Bytes()},
@@ -260,6 +267,16 @@ func DecodeStatic(items map[string][]byte, genesis *Genesis, nativeCommit string
 	if static.Block.NumberU64() != n || static.Block.ParentHash() != static.Parent.Hash() {
 		return bad("block %d is not the child of the parent header", static.Block.NumberU64())
 	}
+	var sidecars types.BlobSidecars
+	if err := rlp.DecodeBytes(items["blob-sidecars"], &sidecars); err != nil {
+		return bad("blob sidecars: %v", err)
+	}
+	for index, sidecar := range sidecars {
+		if err := sidecar.SanityCheck(static.Block.Number(), static.Block.Hash()); err != nil {
+			return bad("blob sidecar %d: %v", index, err)
+		}
+	}
+	static.Block = static.Block.WithSidecars(sidecars)
 	if err := rlp.DecodeBytes(items["ancestor-headers-rlp"], &static.Ancestors); err != nil {
 		return bad("ancestor headers: %v", err)
 	}
