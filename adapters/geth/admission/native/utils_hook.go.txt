@@ -16,11 +16,14 @@ import (
 // (D100 item 3). The pin ledger and the admission records live in chaindata,
 // so a command that deletes or rewrites chaindata must not run while an
 // extractor pin is live or an obligation is open. MakeChainDatabase calls it
-// before every writable open, and `geth removedb` before it deletes anything.
+// before every writable open, `geth removedb` before it deletes anything, and
+// `geth snapshot generate-trie` before its writable checkpoint.
 //
 // It opens an existing store read-only with the database flags of ctx,
-// checks it with extractorgeth.RequireNoOpenCapture and closes it; it writes
-// nothing. A directory without a native store passes. The caller holds the
+// checks it with extractorgeth.RequireNoOpenCapture and closes it. It writes
+// no key; as at any read-only open, the native freezer creates its directory
+// and lock file if they are missing. A directory without a native store
+// passes. The caller holds the
 // instance lock of the native node (makeConfigNode), so no other geth
 // process can add a pin before the command opens the store for writing.
 func ExtractorGuardChaindata(ctx *cli.Context, stack *node.Node) error {

@@ -253,6 +253,16 @@
         "geth"
       ],
       "reason": "An INPUT_PREPARING record beyond the counter (an interrupted Begin, not an observation) blocks removedb and geth import of a store without pins."
+    },
+    {
+      "name": "generate_trie_unguarded",
+      "file": "cmd/geth/snapshot.go",
+      "original": "\tif err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\treturn err\n\t}\n\tlog.Info(\"creating pebble checkpoint\"",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\treturn err\n\t}\n\tlog.Info(\"creating pebble checkpoint\"",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "geth snapshot generate-trie opens the source store and its chain freezer for writing while a pin is live and an obligation is ADMITTED."
     }
   ]
 }

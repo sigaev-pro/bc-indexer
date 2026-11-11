@@ -44,6 +44,7 @@ digests.
 | `snapshot_import`, `snapshot_prune_state` | `cmd/geth/snapshot.go` | `geth snapshot prune-state` calls `PruneState` (D98 item 2) |
 | `writable_database_guard` | `cmd/utils/flags.go` | `MakeChainDatabase` (and so `MakeChain`) runs the manual database guard before every writable open of an existing store (D100 item 3) |
 | `removedb_guard` | `cmd/geth/dbcmd.go` | `geth removedb` runs the manual database guard before any prompt or deletion (D100 item 3) |
+| `generate_trie_guard` | `cmd/geth/snapshot.go` | `geth snapshot generate-trie` runs the manual database guard before it opens the source store and the source chain freezer for writing (D100 item 3) |
 
 The preparation also installs `utils_hook.go.txt` as
 `cmd/utils/extractor_guard.go` (`ExtractorGuardChaindata`), next to
@@ -193,8 +194,10 @@ but it keeps its pin until the decision bridge closes it, so its store stays
 refused.
 
 `ExtractorGuardChaindata` opens an existing store read-only with the
-database flags of the command, runs the check, closes it and writes
-nothing; a directory without a native store passes. Every caller already
+database flags of the command, runs the check and closes it. It writes no
+key; as at any read-only open, the native freezer creates its directory and
+lock file if they are missing at the flag path. A directory without a native
+store passes. Every caller already
 holds the instance lock of the native node (`makeConfigNode`), so no geth
 process can add a pin between the check and the writable open. A refused
 command exits with status 1 before it writes.
@@ -217,10 +220,11 @@ writing or delete it:
 | `db inspect-trie` | Only reads, but opens the store writable natively | `MakeChainDatabase`; refused on a capture store as well |
 | `bintrie convert` | Writes a binary trie, and deletes the source state with `--delete-source` | `MakeChainDatabase` |
 | `snapshot prune-state` | Deletes state outside the target root | `MakeChainDatabase`, then `PruneState` (D98 item 2) |
+| `download-era` | Writes downloaded era1 files into `chaindata/ancient/chain/era` (or the `--era.dir` directory) without opening the store | Not guarded: it checks each file against the era1 checksums of a public network and changes no key, no freezer table and no admission or pin record |
 | `db pebble-upgrade` | Raises the format of a pebble v1 store | Not guarded: `pebble.Upgrade` returns without a write when the store already has a pebble v2 format, and a store with pins or admission records was written by this pebble v2 binary |
-| `snapshot generate-trie` | Opens the pebble store writable only to replay its write-ahead log and take a hard-linked checkpoint outside chaindata; the trie is generated in the checkpoint | Not guarded: no key of chaindata changes, as at any native start |
+| `snapshot generate-trie` | Opens the source pebble store writable to take a hard-linked checkpoint outside chaindata, then opens the checkpoint with the source chain freezer writable, so the native freezer may append blocks to the source freezer | `generate_trie_guard`, before the checkpoint |
 
-Every other command opens chaindata read-only or not at all; the node
+Every other command opens chaindata read-only or does not touch it; the node
 itself (`geth`, `geth console`) starts through `eth.New` and its startup
 guards. Since `snapshot prune-state` now meets the manual database guard
 first, `PruneState` refuses there only as a second check; its own refusal is

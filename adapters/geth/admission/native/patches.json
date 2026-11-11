@@ -161,6 +161,13 @@
       "original": "func removeDB(ctx *cli.Context) error {\n\tstack, config := makeConfigNode(ctx)\n",
       "replacement": "func removeDB(ctx *cli.Context) error {\n\tstack, config := makeConfigNode(ctx)\n\n\t// E01-02.admission manual database guard (D100 item 3): refuse before\n\t// any prompt or deletion while an extractor pin is live or an obligation\n\t// is open.\n\tif err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\treturn err\n\t}\n",
       "reason": "D100 item 3: geth removedb deletes chaindata without opening it, so it calls the read-only guard itself before any prompt."
+    },
+    {
+      "name": "generate_trie_guard",
+      "file": "cmd/geth/snapshot.go",
+      "original": "\tlog.Info(\"creating pebble checkpoint\", \"src\", srcDir, \"dst\", ckpt)\n",
+      "replacement": "\t// E01-02.admission manual database guard (D100 item 3): the checkpoint\n\t// opens the source pebble store and the source chain freezer for writing.\n\tif err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\treturn err\n\t}\n\tlog.Info(\"creating pebble checkpoint\", \"src\", srcDir, \"dst\", ckpt)\n",
+      "reason": "D100 item 3: geth snapshot generate-trie opens the source pebble store writable and shares the source chain freezer writable, so it calls the read-only guard first."
     }
   ]
 }

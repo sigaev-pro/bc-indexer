@@ -750,15 +750,7 @@ func run(genesisPath, work, output, commit, geth string) {
 		retry := with(spec, func(s *Spec) { s.CrashBeforeSync, s.CrashAfterSync = "", "" })
 		prefix := strings.ReplaceAll(row.name, "_", "-")
 		crash := runAttempt(work, prefix+"-1-crash", spec)
-		switch row.name {
-		case "begin_before_counter_sync":
-			// No observation and no pin, only an INPUT_PREPARING record
-			// beyond the counter: the manual database guard passes, and
-			// geth import of block 300 stops at the capture-store refusal
-			// of ProcessBlock.
-			shippedRuns = append(shippedRuns, onStore(geth, "import-bound", dirs[row.name], "--cache", "64",
-				"--state.scheme", "hash", "import", exportBlock(work, "block-300.rlp", blocks[target-1])))
-		case "begin_after_counter_sync":
+		if row.name == "begin_after_counter_sync" {
 			// An INPUT_PREPARING observation without a pin: removedb is
 			// refused before any prompt and the store stays unchanged.
 			shippedRuns = append(shippedRuns, onStore(geth, "removedb-open-obligation", dirs[row.name],
@@ -767,14 +759,19 @@ func run(genesisPath, work, output, commit, geth string) {
 		scenario(row.name, crash, runAttempt(work, prefix+"-2-recover", retry))
 	}
 
-	// The same interrupted Begin on a store of its own: without a live pin or
-	// an open obligation, removedb deletes the store natively.
+	// An interrupted Begin on a store of its own leaves no observation and no
+	// pin, only an INPUT_PREPARING record beyond the counter. The manual
+	// database guard passes there: geth import of block 300 stops at the
+	// capture-store refusal of ProcessBlock, and removedb then deletes the
+	// store natively.
 	allowed := with(base, func(s *Spec) {
 		s.Datadir = dir("removedb_allowed")
 		s.Imports = []string{"target"}
 		s.CrashBeforeSync = "/counter"
 	})
 	scenario("removedb_allowed", runAttempt(work, "removedb-allowed-1-crash", allowed))
+	shippedRuns = append(shippedRuns, onStore(geth, "import-bound", allowed.Datadir, "--cache", "64",
+		"--state.scheme", "hash", "import", exportBlock(work, "block-300.rlp", blocks[target-1])))
 	shippedRuns = append(shippedRuns, onStore(geth, "removedb-allowed", allowed.Datadir,
 		"removedb", "--remove.state", "--remove.chain"))
 
@@ -793,7 +790,7 @@ func run(genesisPath, work, output, commit, geth string) {
 	})
 	admittedCrash := runAttempt(work, "admit-after-sync-1-crash", admitted)
 	// D100 item 3: with the ADMITTED obligation and its live pin, every
-	// manual geth command that deletes or rewrites chaindata is refused
+	// guarded manual geth command that deletes or rewrites chaindata is refused
 	// before it writes, and the store stays unchanged; recovery then
 	// completes below.
 	empty := filepath.Join(work, "empty-input")
@@ -815,6 +812,7 @@ func run(genesisPath, work, output, commit, geth string) {
 		{"db-import-badblocks", "db", "import-badblocks", empty},
 		{"bintrie-convert", "bintrie", "convert"},
 		{"snapshot-prune-state", "snapshot", "prune-state"},
+		{"snapshot-generate-trie", "snapshot", "generate-trie"},
 	} {
 		shippedRuns = append(shippedRuns, onStore(geth, "admitted-"+command[0], admitted.Datadir, command[1:]...))
 	}

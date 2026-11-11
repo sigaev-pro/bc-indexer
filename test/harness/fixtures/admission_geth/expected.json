@@ -86,7 +86,8 @@
     "admitted-db-import": "live_pins",
     "admitted-db-import-badblocks": "live_pins",
     "admitted-bintrie-convert": "live_pins",
-    "admitted-snapshot-prune-state": "live_pins"
+    "admitted-snapshot-prune-state": "live_pins",
+    "admitted-snapshot-generate-trie": "live_pins"
   },
   "store_unchanged": [
     "removedb-open-obligation",
@@ -102,7 +103,8 @@
     "admitted-db-import",
     "admitted-db-import-badblocks",
     "admitted-bintrie-convert",
-    "admitted-snapshot-prune-state"
+    "admitted-snapshot-prune-state",
+    "admitted-snapshot-generate-trie"
   ],
   "scenarios": [
     "clean",
