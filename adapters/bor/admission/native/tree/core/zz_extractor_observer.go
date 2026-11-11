@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/extractor/retention"
 )
 
 // ExtractorObserver opens one observation per imported block. Observe runs
@@ -77,4 +78,26 @@ func (bc *BlockChain) extractorProcess(observer ExtractorObserver, block *types.
 		err = doneErr
 	}
 	return receipts, logs, usedGas, statedb, vtime, err
+}
+
+// extractorRequireRewind refuses a head rewind to head that would delete a
+// pinned header (D98 item 2).
+func (bc *BlockChain) extractorRequireRewind(head uint64) error {
+	if retention.RequireRewindAllowed == nil {
+		return nil
+	}
+	return retention.RequireRewindAllowed(bc.db, head)
+}
+
+// extractorRewindTarget returns the number of the newest canonical header at
+// or below timestamp, the head that SetHeadWithTimestamp rewinds to.
+func (bc *BlockChain) extractorRewindTarget(timestamp uint64) uint64 {
+	header := bc.CurrentBlock()
+	for header != nil && header.Number.Uint64() > 0 && header.Time > timestamp {
+		header = bc.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	}
+	if header == nil {
+		return 0
+	}
+	return header.Number.Uint64()
 }

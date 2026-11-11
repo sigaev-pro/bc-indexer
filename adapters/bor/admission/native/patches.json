@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "description": "Bor native patch set of E01-02.admission: new files (tree/) and anchored edits. Each anchor occurs exactly once in the accepted Bor source; 'before' and 'after' insert the text next to the anchor, 'replace' replaces it.",
+  "files": {
+    "core/zz_extractor_observer.go": "tree/core/zz_extractor_observer.go",
+    "core/rawdb/zz_extractor_freeze.go": "tree/core/rawdb/zz_extractor_freeze.go",
+    "core/tracing/zz_extractor_safepoint.go": "tree/core/tracing/zz_extractor_safepoint.go",
+    "consensus/bor/zz_extractor_inputs.go": "tree/consensus/bor/zz_extractor_inputs.go",
+    "extractor/retention/retention.go": "tree/extractor/retention/retention.go",
+    "extractor/borwire/borwire.go": "tree/extractor/borwire/borwire.go"
+  },
+  "edits": [
+    {
+      "name": "import-path-observation",
+      "file": "core/blockchain.go",
+      "mode": "before",
+      "anchor": "\tcached, validationTime, claimed := bc.claimPreconf(block, requireWitness, pipeOpts == nil && preconfCompatible, witness == nil)\n",
+      "text": "\tif observer := bc.extractorObserver(); observer != nil {\n\t\treturn bc.extractorProcess(observer, block, parent, witness, interrupt, pipeOpts)\n\t}\n"
+    },
+    {
+      "name": "import-path-one-block-batches",
+      "file": "core/blockchain.go",
+      "mode": "before",
+      "anchor": "\t// Pre-checks passed, start the full block imports\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\n\t_, n, err := bc.insertChainWithWitnesses(chain, true, makeWitness, witnesses)\n",
+      "text": "\tif len(chain) > 1 && bc.extractorObserver() != nil {\n\t\treturn bc.extractorInsertEach(chain, makeWitness, witnesses)\n\t}\n"
+    },
+    {
+      "name": "retention-set-head",
+      "file": "core/blockchain.go",
+      "mode": "after",
+      "anchor": "func (bc *BlockChain) SetHead(head uint64) error {\n",
+      "text": "\tif err := bc.extractorRequireRewind(head); err != nil {\n\t\treturn err\n\t}\n"
+    },
+    {
+      "name": "retention-set-head-timestamp",
+      "file": "core/blockchain.go",
+      "mode": "after",
+      "anchor": "func (bc *BlockChain) SetHeadWithTimestamp(timestamp uint64) error {\n",
+      "text": "\tif err := bc.extractorRequireRewind(bc.extractorRewindTarget(timestamp)); err != nil {\n\t\treturn err\n\t}\n"
+    },
+    {
+      "name": "retention-freeze-threshold",
+      "file": "core/rawdb/chain_freezer.go",
+      "mode": "replace",
+      "anchor": "\tif final > headLimit {\n\t\treturn final, nil\n\t}\n\treturn headLimit, nil\n}\n",
+      "text": "\tthreshold := headLimit\n\tif final > headLimit {\n\t\tthreshold = final\n\t}\n\treturn f.extractorFreezeThreshold(db, threshold)\n}\n"
+    },
+    {
+      "name": "retention-recover-pruning",
+      "file": "eth/backend.go",
+      "mode": "replace",
+      "anchor": "\t\tif err := pruner.RecoverPruning(stack.ResolvePath(\"\"), chainDb); err != nil {\n",
+      "text": "\t\tif retention.RecoverPruning != nil {\n\t\t\tif err := retention.RecoverPruning(stack.ResolvePath(\"\"), chainDb); err != nil {\n\t\t\t\treturn nil, fmt.Errorf(\"guarded state pruning recovery: %w\", err)\n\t\t\t}\n\t\t} else if err := pruner.RecoverPruning(stack.ResolvePath(\"\"), chainDb); err != nil {\n"
+    },
+    {
+      "name": "retention-recover-pruning-import",
+      "file": "eth/backend.go",
+      "mode": "after",
+      "anchor": "\t\"github.com/ethereum/go-ethereum/core/state/pruner\"\n",
+      "text": "\t\"github.com/ethereum/go-ethereum/extractor/retention\"\n"
+    },
+    {
+      "name": "retention-prune-state",
+      "file": "internal/cli/snapshot.go",
+      "mode": "replace",
+      "anchor": "\tpruner, err := pruner.NewPruner(chaindb, prunerconfig)\n\tif err != nil {\n\t\tlog.Error(\"Failed to open snapshot tree\", \"err\", err)\n\t\treturn 1\n\t}\n\n\tif err = pruner.Prune(common.Hash{}); err != nil {\n\t\tlog.Error(\"Failed to prune state\", \"err\", err)\n\t\treturn 1\n\t}\n",
+      "text": "\t// Extractor patch: prune only through the pin ledger guard (D98 item 2).\n\tif err = stateprovider.PruneState(chaindb, prunerconfig.Datadir, prunerconfig.BloomSize, common.Hash{}); err != nil {\n\t\tlog.Error(\"Failed to prune state\", \"err\", err)\n\t\treturn 1\n\t}\n"
+    },
+    {
+      "name": "retention-prune-state-import",
+      "file": "internal/cli/snapshot.go",
+      "mode": "after",
+      "anchor": "\t\"github.com/ethereum/go-ethereum/core/state/snapshot\"\n",
+      "text": "\tstateprovider \"github.com/ethereum/go-ethereum/extractor/state_provider\"\n"
+    },
+    {
+      "name": "retention-shipped-binary",
+      "file": "cmd/cli/main.go",
+      "mode": "after",
+      "anchor": "\t\"github.com/ethereum/go-ethereum/internal/cli\"\n",
+      "text": "\t_ \"github.com/ethereum/go-ethereum/extractor/borwire\"\n"
+    },
+    {
+      "name": "ancestor-rule-snapshot-override",
+      "file": "consensus/bor/bor.go",
+      "mode": "after",
+      "anchor": "func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.Header, parents []*types.Header, checkNewSpan bool) (snap *Snapshot, err error) {\n",
+      "text": "\tif override := c.extractorSnapshot(targetHeader); override != nil {\n\t\treturn override, nil\n\t}\n"
+    },
+    {
+      "name": "safe-point-hook-field",
+      "file": "core/tracing/hooks.go",
+      "mode": "after",
+      "anchor": "\tOnOpcode    OpcodeHook\n\tOnFault     FaultHook\n\tOnGasChange GasChangeHook\n",
+      "text": "\n\t// OnExtractorSafePoint is the extractor VM safe point (zz_extractor_safepoint.go).\n\tOnExtractorSafePoint ExtractorSafePointHook\n\n"
+    },
+    {
+      "name": "safe-point-interpreter-call",
+      "file": "core/vm/interpreter.go",
+      "mode": "before",
+      "anchor": "\t\t// Do tracing before potential memory expansion\n",
+      "text": "\t\tif debug && evm.Config.Tracer.OnExtractorSafePoint != nil {\n\t\t\tevm.Config.Tracer.OnExtractorSafePoint(byte(op), callContext)\n\t\t}\n"
+    }
+  ]
+}
