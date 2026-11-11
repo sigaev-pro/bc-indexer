@@ -138,7 +138,7 @@
       "name": "recover_pruning_unguarded",
       "file": "geth.go",
       "original": "\tif len(matches) == 0 {\n\t\treturn nil\n",
-      "replacement": "\tif true {\n\t\treturn nil\n",
+      "replacement": "\tif true || len(matches) == 0 {\n\t\treturn nil\n",
       "binaries": [
         "geth"
       ],
