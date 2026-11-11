@@ -51,9 +51,11 @@ func loadVectors(t *testing.T) vectorFile {
 }
 
 var (
-	errCrash = errors.New("injected power loss")
-	errDisk  = errors.New("injected disk error")
-	errNoPin = errors.New("no such pin")
+	errCrash     = errors.New("injected power loss")
+	errDisk      = errors.New("injected disk error")
+	errNoPin     = errors.New("no such pin")
+	errNoCapsule = errors.New("capsule is not sealed")
+	errNotClosed = errors.New("log is not closed")
 )
 
 type write struct {
@@ -216,7 +218,7 @@ func newInputs() *fakeInputs {
 func (f *fakeInputs) CapsuleDigest(id string) (string, error) {
 	digest, ok := f.capsules[id]
 	if !ok {
-		return "", errors.New("capsule is not sealed")
+		return "", errNoCapsule
 	}
 	return digest, nil
 }
@@ -224,7 +226,7 @@ func (f *fakeInputs) CapsuleDigest(id string) (string, error) {
 func (f *fakeInputs) Consumed(id string) (Consumed, error) {
 	manifest, ok := f.consumed[id]
 	if !ok {
-		return Consumed{}, errors.New("log is not closed")
+		return Consumed{}, errNotClosed
 	}
 	return manifest, nil
 }
@@ -457,7 +459,7 @@ func TestAdmitNeedsPinAndCapsule(t *testing.T) {
 	f.live()
 	key := f.begin().Key
 	before := f.db.snapshot()
-	if _, err := f.a.Admit(f.token, key); !errors.Is(err, ErrBinding) {
+	if _, err := f.a.Admit(f.token, key); !errors.Is(err, ErrBinding) || !errors.Is(err, errNoPin) {
 		t.Fatalf("admit without pin: %v", err)
 	}
 	f.pins.pin(key, strings.Repeat("3", 64), f.v.PinDigest)
@@ -465,7 +467,7 @@ func TestAdmitNeedsPinAndCapsule(t *testing.T) {
 		t.Fatalf("admit with a pin of another root: %v", err)
 	}
 	f.pins.pin(key, f.v.Candidate.ParentRoot, f.v.PinDigest)
-	if _, err := f.a.Admit(f.token, key); !errors.Is(err, ErrBinding) {
+	if _, err := f.a.Admit(f.token, key); !errors.Is(err, ErrBinding) || !errors.Is(err, errNoCapsule) {
 		t.Fatalf("admit without capsule: %v", err)
 	}
 	f.inputs.capsules[key] = "not-a-digest"
@@ -533,7 +535,7 @@ func TestExecReadyBinding(t *testing.T) {
 
 func TestBeginPowerLoss(t *testing.T) {
 	for crash := 1; crash <= 5; crash++ {
-		for keep := uint(0); keep < 2; keep++ {
+		for keep := uint(0); keep < 4; keep++ {
 			f := newFixture(t)
 			f.live()
 			f.db.crashAt = f.db.ops + crash
@@ -805,6 +807,10 @@ func TestOpenRejectsCorruptRecords(t *testing.T) {
 			delete(db, ready)
 			db[abandoned] = []byte(`{"observation":"x","sequence":0}`)
 		},
+		"abandoned and admitted only": func(db map[string][]byte) {
+			delete(db, ready)
+			db[abandoned] = []byte(`{"observation":"` + key + `","sequence":0}`)
+		},
 		"abandoned and ready": func(db map[string][]byte) {
 			delete(db, admitted)
 			db[abandoned] = []byte(`{"observation":"` + key + `","sequence":0}`)
@@ -818,6 +824,16 @@ func TestOpenRejectsCorruptRecords(t *testing.T) {
 		damage(db.durable)
 		if _, err := Open(base.token, db, base.producer(), base.pins, base.inputs); !errors.Is(err, ErrCorrupt) {
 			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	// A damaged candidate of an observation that is still INPUT_PREPARING.
+	for _, field := range []string{"hash", "parent_hash", "parent_root"} {
+		db := &memStore{durable: maps.Clone(base.db.durable)}
+		delete(db.durable, admitted)
+		delete(db.durable, ready)
+		edit(prep, func(v map[string]any) { v["candidate"].(map[string]any)[field] = "x" })(db.durable)
+		if _, err := Open(base.token, db, base.producer(), base.pins, base.inputs); !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("INPUT_PREPARING %s: %v", field, err)
 		}
 	}
 	// A clean copy opens.
@@ -1061,6 +1077,12 @@ func TestGuard(t *testing.T) {
 	for name, call := range calls {
 		if err := call(f.token); !errors.Is(err, ErrGuard) {
 			t.Fatalf("%s with a released token: %v", name, err)
+		}
+	}
+	// A nil token is refused also while the guard is free.
+	for name, call := range calls {
+		if err := call(nil); !errors.Is(err, ErrGuard) {
+			t.Fatalf("%s with a nil token on a free guard: %v", name, err)
 		}
 	}
 	// A new holder of the same guard may use the admission.

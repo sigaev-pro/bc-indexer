@@ -174,13 +174,14 @@ func (p *parser) str() (string, error) {
 			return "", err
 		}
 		if utf16.IsSurrogate(r) {
-			if r >= 0xdc00 || !p.literal(`\u`) {
+			if !p.literal(`\u`) {
 				return "", p.errorf("lone surrogate escape")
 			}
 			low, err := p.hex4()
 			if err != nil {
 				return "", err
 			}
+			// DecodeRune refuses a low surrogate first and an unpaired high one.
 			if r = utf16.DecodeRune(r, low); r == utf8.RuneError {
 				return "", p.errorf("lone surrogate escape")
 			}

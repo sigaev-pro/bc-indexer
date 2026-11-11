@@ -230,7 +230,7 @@ func (t *Token) Release() error {
 }
 
 func (g *Guard) check(t *Token) error {
-	if t == nil || t.guard != g {
+	if t == nil {
 		return ErrGuard
 	}
 	g.state.Lock()

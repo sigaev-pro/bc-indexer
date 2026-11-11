@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -63,5 +64,20 @@ func TestCanonicalDepthLimit(t *testing.T) {
 	objects = append([]byte(`{"a":`), append(objects, '}')...)
 	if _, err := CanonicalJSON(objects); !errors.Is(err, ErrCanonical) {
 		t.Fatalf("depth %d objects: %v", MaxJSONDepth+1, err)
+	}
+}
+
+// TestCanonicalRefusalReasons checks that each refusal names its rule.
+func TestCanonicalRefusalReasons(t *testing.T) {
+	cases := map[string]string{
+		"1.0": "not an integer", "[1e3]": "not an integer", "1E3": "not an integer", "-0": "negative zero",
+		"01": "leading zero", "-": "without digits", `"\udc00\udc00"`: "lone surrogate", `"\ud800"`: "lone surrogate",
+		`{"a":1,"a":2}`: "duplicate key", "\"\x01\"": "raw control character", "{} 1": "data after the value",
+	}
+	for input, reason := range cases {
+		_, err := CanonicalJSON([]byte(input))
+		if !errors.Is(err, ErrCanonical) || !strings.Contains(err.Error(), reason) {
+			t.Fatalf("%q: %v, want %q", input, err, reason)
+		}
 	}
 }

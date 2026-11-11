@@ -1,0 +1,600 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the shared E01-02.admission core. The table is shared byte for byte by the geth, bsc and bor copies.",
+  "language": "go",
+  "copy": [
+    "admission.go",
+    "admission_test.go",
+    "canonical.go",
+    "canonical_test.go",
+    "vectors.json"
+  ],
+  "go_module": "extractor/admission",
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "."
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "guard acquire does not record the holder",
+      "file": "admission.go",
+      "original": "\tg.current = token\n",
+      "replacement": "\tg.current = nil\n"
+    },
+    {
+      "name": "release accepts a stale token",
+      "file": "admission.go",
+      "original": "\tif g.current != t {\n\t\tg.state.Unlock()\n\t\treturn ErrGuard\n\t}",
+      "replacement": "\tif g.current == nil {\n\t\tg.state.Unlock()\n\t\treturn ErrGuard\n\t}"
+    },
+    {
+      "name": "release keeps the holder",
+      "file": "admission.go",
+      "original": "\tg.current = nil\n\tg.state.Unlock()\n\tg.lock.Unlock()",
+      "replacement": "\tg.state.Unlock()\n\tg.lock.Unlock()"
+    },
+    {
+      "name": "check accepts a released token",
+      "file": "admission.go",
+      "original": "\tif g.current != t {\n\t\treturn ErrGuard\n\t}\n\treturn nil",
+      "replacement": "\treturn nil"
+    },
+    {
+      "name": "open skips the guard check",
+      "file": "admission.go",
+      "original": "\tif err := t.guard.check(t); err != nil {\n\t\treturn nil, err\n\t}",
+      "replacement": "\t_ = t.guard.check(t)"
+    },
+    {
+      "name": "enter skips the guard",
+      "file": "admission.go",
+      "original": "\tif err := a.guard.check(t); err != nil {\n\t\treturn err\n\t}\n\tif a.err",
+      "replacement": "\tif a.err"
+    },
+    {
+      "name": "enter ignores a stopped admission",
+      "file": "admission.go",
+      "original": "\tif a.err != nil {\n\t\treturn fmt.Errorf(\"%w: %v\", ErrFailed, a.err)\n\t}",
+      "replacement": "\t_ = a.err"
+    },
+    {
+      "name": "fail does not stop",
+      "file": "admission.go",
+      "original": "\ta.err = err\n\treturn err",
+      "replacement": "\treturn err"
+    },
+    {
+      "name": "admitted tag",
+      "file": "admission.go",
+      "original": "tagAdmitted  = \"extractor-admission-admitted-v1\"",
+      "replacement": "tagAdmitted  = \"extractor-admission-admitted-v2\""
+    },
+    {
+      "name": "exec ready tag",
+      "file": "admission.go",
+      "original": "tagExecReady = \"extractor-admission-exec-ready-v1\"",
+      "replacement": "tagExecReady = \"extractor-admission-exec-ready-v2\""
+    },
+    {
+      "name": "consumed tag",
+      "file": "admission.go",
+      "original": "tagConsumed  = \"extractor-source-inputs-consumed-v1\"",
+      "replacement": "tagConsumed  = \"extractor-source-inputs-consumed-v2\""
+    },
+    {
+      "name": "tag without zero byte",
+      "file": "admission.go",
+      "original": "func tagged(tag string) []byte { return append([]byte(tag), 0) }",
+      "replacement": "func tagged(tag string) []byte { return []byte(tag) }"
+    },
+    {
+      "name": "string without length",
+      "file": "admission.go",
+      "original": "func str(value string) []byte { return append(u64(uint64(len(value))), value...) }",
+      "replacement": "func str(value string) []byte { return []byte(value) }"
+    },
+    {
+      "name": "u64 little endian",
+      "file": "admission.go",
+      "original": "binary.BigEndian.AppendUint64",
+      "replacement": "binary.LittleEndian.AppendUint64"
+    },
+    {
+      "name": "admitted digest drops the sequence",
+      "file": "admission.go",
+      "original": "str(key), u64(sequence), u64(c.Number),",
+      "replacement": "str(key), u64(c.Number),"
+    },
+    {
+      "name": "admitted digest drops the number",
+      "file": "admission.go",
+      "original": "str(key), u64(sequence), u64(c.Number),",
+      "replacement": "str(key), u64(sequence),"
+    },
+    {
+      "name": "admitted digest drops the capsule",
+      "file": "admission.go",
+      "original": "raw[0], raw[1], raw[2], raw[3], raw[4]), nil",
+      "replacement": "raw[0], raw[1], raw[2], raw[3]), nil"
+    },
+    {
+      "name": "admitted digest swaps pin and capsule",
+      "file": "admission.go",
+      "original": "raw[0], raw[1], raw[2], raw[3], raw[4]), nil",
+      "replacement": "raw[0], raw[1], raw[2], raw[4], raw[3]), nil"
+    },
+    {
+      "name": "consumed digest drops the count",
+      "file": "admission.go",
+      "original": "digestOf(tagged(tagConsumed), raw[0], u64(count), raw[1])",
+      "replacement": "digestOf(tagged(tagConsumed), raw[0], raw[1])"
+    },
+    {
+      "name": "exec ready digest drops the corpus",
+      "file": "admission.go",
+      "original": "digestOf(tagged(tagExecReady), raw[0], raw[1], raw[2])",
+      "replacement": "digestOf(tagged(tagExecReady), raw[0], raw[1])"
+    },
+    {
+      "name": "digest pattern unanchored",
+      "file": "admission.go",
+      "original": "digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)",
+      "replacement": "digestPattern = regexp.MustCompile(`[0-9a-f]{64}`)"
+    },
+    {
+      "name": "part pattern unanchored",
+      "file": "admission.go",
+      "original": "partPattern   = regexp.MustCompile(`^[0-9a-z][0-9a-z-]{0,39}$`)",
+      "replacement": "partPattern   = regexp.MustCompile(`[0-9a-z][0-9a-z-]{0,39}`)"
+    },
+    {
+      "name": "part pattern length",
+      "file": "admission.go",
+      "original": "`^[0-9a-z][0-9a-z-]{0,39}$`",
+      "replacement": "`^[0-9a-z][0-9a-z-]{0,40}$`"
+    },
+    {
+      "name": "candidate check skips the parent root",
+      "file": "admission.go",
+      "original": "for _, value := range []string{c.Hash, c.ParentHash, c.ParentRoot} {",
+      "replacement": "for _, value := range []string{c.Hash, c.ParentHash} {"
+    },
+    {
+      "name": "strict decode allows unknown fields",
+      "file": "admission.go",
+      "original": "\tdecoder.DisallowUnknownFields()\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "strict decode allows trailing data",
+      "file": "admission.go",
+      "original": "\tif _, err := decoder.Token(); err != io.EOF {\n\t\treturn errors.New(\"trailing data\")\n\t}",
+      "replacement": "\tif _, err := decoder.Token(); errors.Is(err, io.ErrUnexpectedEOF) {\n\t\treturn errors.New(\"trailing data\")\n\t}"
+    },
+    {
+      "name": "open does not sync first",
+      "file": "admission.go",
+      "original": "\tif err := db.SyncKeyValue(); err != nil {\n\t\treturn nil, err\n\t}\n\towner",
+      "replacement": "\towner"
+    },
+    {
+      "name": "open allows nil pins",
+      "file": "admission.go",
+      "original": "if db == nil || pins == nil || inputs == nil {",
+      "replacement": "if db == nil || inputs == nil {"
+    },
+    {
+      "name": "open allows a low-water mark above the counter",
+      "file": "admission.go",
+      "original": "\tif low.Sequence > counter.Next {",
+      "replacement": "\tif low.Sequence > counter.Next+1 {"
+    },
+    {
+      "name": "open reads from zero",
+      "file": "admission.go",
+      "original": "\tfor seq := low.Sequence; seq < counter.Next; seq++ {",
+      "replacement": "\tfor seq := uint64(0); seq < counter.Next; seq++ {"
+    },
+    {
+      "name": "open keeps abandoned observations",
+      "file": "admission.go",
+      "original": "\t\tif obs.State != Abandoned {\n\t\t\ta.open[seq] = obs\n\t\t}",
+      "replacement": "\t\ta.open[seq] = obs"
+    },
+    {
+      "name": "open starts live",
+      "file": "admission.go",
+      "original": "pins: pins, inputs: inputs, mode: RecoveryOnly,",
+      "replacement": "pins: pins, inputs: inputs, mode: Live,"
+    },
+    {
+      "name": "load accepts a missing preparing record",
+      "file": "admission.go",
+      "original": "\tif !ok || prep.Observation != key",
+      "replacement": "\tif (!ok && ok) || prep.Observation != key",
+      "equivalent": "A missing record decodes to an empty observation, which the key check refuses; the explicit check only names the cause."
+    },
+    {
+      "name": "load ignores the preparing sequence",
+      "file": "admission.go",
+      "original": "prep.Observation != key || prep.Sequence != seq || validCandidate",
+      "replacement": "prep.Observation != key || validCandidate"
+    },
+    {
+      "name": "load ignores the preparing candidate",
+      "file": "admission.go",
+      "original": "prep.Sequence != seq || validCandidate(prep.Candidate) != nil {",
+      "replacement": "prep.Sequence != seq {"
+    },
+    {
+      "name": "load accepts abandoned with admitted",
+      "file": "admission.go",
+      "original": "if hasAdmitted || hasReady || abandoned !=",
+      "replacement": "if hasReady || abandoned !="
+    },
+    {
+      "name": "load accepts abandoned with exec ready",
+      "file": "admission.go",
+      "original": "if hasAdmitted || hasReady || abandoned !=",
+      "replacement": "if hasAdmitted || abandoned !="
+    },
+    {
+      "name": "load ignores the abandoned content",
+      "file": "admission.go",
+      "original": "\t\tif hasAdmitted || hasReady || abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {",
+      "replacement": "\t\tif hasAdmitted || hasReady {"
+    },
+    {
+      "name": "load ignores the admitted digest",
+      "file": "admission.go",
+      "original": "\t\t\tadmitted.Candidate != prep.Candidate || admitted.Digest != want {",
+      "replacement": "\t\t\tadmitted.Candidate != prep.Candidate || (admitted.Digest != want && want == \"\") {"
+    },
+    {
+      "name": "load ignores the admitted candidate",
+      "file": "admission.go",
+      "original": "\t\t\tadmitted.Candidate != prep.Candidate || admitted.Digest != want {",
+      "replacement": "\t\t\tadmitted.Digest != want {"
+    },
+    {
+      "name": "load ignores the admitted key",
+      "file": "admission.go",
+      "original": "if err != nil || admitted.Observation != key || admitted.Sequence != seq ||",
+      "replacement": "if err != nil || admitted.Sequence != seq ||"
+    },
+    {
+      "name": "load ignores the admitted sequence",
+      "file": "admission.go",
+      "original": "if err != nil || admitted.Observation != key || admitted.Sequence != seq ||",
+      "replacement": "if err != nil || admitted.Observation != key ||"
+    },
+    {
+      "name": "load accepts exec ready without admitted",
+      "file": "admission.go",
+      "original": "\t\tif !hasAdmitted {\n\t\t\treturn nil, fmt.Errorf(\"%w: EXEC_READY without ADMITTED for %s\", ErrCorrupt, key)\n\t\t}",
+      "replacement": "\t\t_ = hasAdmitted",
+      "equivalent": "Without ADMITTED the admitted digest is empty, so ExecReadyDigest fails and the record is refused; the explicit check only names the cause."
+    },
+    {
+      "name": "load ignores the exec ready digest",
+      "file": "admission.go",
+      "original": "\t\t\tready.AdmittedDigest != admitted.Digest || ready.Digest != want {",
+      "replacement": "\t\t\tready.AdmittedDigest != admitted.Digest || (ready.Digest != want && want == \"\") {"
+    },
+    {
+      "name": "load ignores the exec ready admitted digest",
+      "file": "admission.go",
+      "original": "\t\t\tready.AdmittedDigest != admitted.Digest || ready.Digest != want {",
+      "replacement": "\t\t\tready.Digest != want {"
+    },
+    {
+      "name": "load ignores the exec ready key",
+      "file": "admission.go",
+      "original": "if err != nil || ready.Observation != key || ready.Sequence != seq ||",
+      "replacement": "if err != nil || ready.Sequence != seq ||"
+    },
+    {
+      "name": "load ignores the exec ready sequence",
+      "file": "admission.go",
+      "original": "if err != nil || ready.Observation != key || ready.Sequence != seq ||",
+      "replacement": "if err != nil || ready.Observation != key ||"
+    },
+    {
+      "name": "pending ignores INPUT_PREPARING",
+      "file": "admission.go",
+      "original": "if (obs.State == InputPreparing || obs.State == Admitted) &&",
+      "replacement": "if (obs.State == Admitted) &&"
+    },
+    {
+      "name": "pending ignores ADMITTED",
+      "file": "admission.go",
+      "original": "if (obs.State == InputPreparing || obs.State == Admitted) &&",
+      "replacement": "if (obs.State == InputPreparing) &&"
+    },
+    {
+      "name": "go live ignores pending",
+      "file": "admission.go",
+      "original": "\tif obs := a.pending(); obs != nil {\n\t\treturn fmt.Errorf(\"%w: %s is %s\", ErrPending, obs.Key, obs.State)\n\t}\n\ta.mode = Live",
+      "replacement": "\ta.mode = Live"
+    },
+    {
+      "name": "begin in recovery",
+      "file": "admission.go",
+      "original": "\tif a.mode != Live {\n\t\treturn Observation{}, fmt.Errorf(\"%w: Begin in %s\", ErrMode, a.mode)\n\t}",
+      "replacement": "\t_ = a.mode"
+    },
+    {
+      "name": "begin skips the candidate check",
+      "file": "admission.go",
+      "original": "\tif err := validCandidate(c); err != nil {\n\t\treturn Observation{}, err\n\t}",
+      "replacement": "\t_ = validCandidate(c)"
+    },
+    {
+      "name": "begin ignores pending",
+      "file": "admission.go",
+      "original": "\tif obs := a.pending(); obs != nil {\n\t\treturn Observation{}, fmt.Errorf(\"%w: %s is %s\", ErrPending, obs.Key, obs.State)\n\t}",
+      "replacement": "\t_ = a.pending()"
+    },
+    {
+      "name": "begin ignores a record beyond the counter",
+      "file": "admission.go",
+      "original": "\t\tif ok {\n\t\t\treturn Observation{}, a.fail(fmt.Errorf(\"%w: %s record beyond the counter for %s\", ErrCorrupt, kind, key))\n\t\t}",
+      "replacement": "\t\t_ = ok"
+    },
+    {
+      "name": "begin skips the record sync",
+      "file": "admission.go",
+      "original": "\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn Observation{}, a.fail(err)\n\t}\n\tif err := putRecord(a.db, a.key(\"counter\")",
+      "replacement": "\tif err := putRecord(a.db, a.key(\"counter\")"
+    },
+    {
+      "name": "begin counter does not advance",
+      "file": "admission.go",
+      "original": "counterRecord{Next: seq + 1}",
+      "replacement": "counterRecord{Next: seq}"
+    },
+    {
+      "name": "admit in recovery",
+      "file": "admission.go",
+      "original": "\tif a.mode != Live {\n\t\treturn AdmittedRecord{}, fmt.Errorf(\"%w: Admit in %s\", ErrMode, a.mode)\n\t}",
+      "replacement": "\t_ = a.mode"
+    },
+    {
+      "name": "admit from any state",
+      "file": "admission.go",
+      "original": "\tif obs.State != InputPreparing && obs.State != Admitted {\n\t\treturn AdmittedRecord{}",
+      "replacement": "\tif obs.State == Abandoned {\n\t\treturn AdmittedRecord{}"
+    },
+    {
+      "name": "admit verifies another root",
+      "file": "admission.go",
+      "original": "pinDigest, err := a.pins.Verify(key, obs.Candidate.ParentRoot)",
+      "replacement": "pinDigest, err := a.pins.Verify(key, obs.Candidate.ParentHash)"
+    },
+    {
+      "name": "admit ignores the capsule error",
+      "file": "admission.go",
+      "original": "\tcapsuleDigest, err := a.inputs.CapsuleDigest(key)\n\tif err != nil {\n\t\treturn AdmittedRecord{}, fmt.Errorf(\"%w: capsule of %s: %w\", ErrBinding, key, err)\n\t}",
+      "replacement": "\tcapsuleDigest, _ := a.inputs.CapsuleDigest(key)"
+    },
+    {
+      "name": "admit repeat ignores a conflict",
+      "file": "admission.go",
+      "original": "\t\tif *obs.Admitted != record {\n\t\t\treturn AdmittedRecord{}, fmt.Errorf(\"%w: ADMITTED %s\", ErrConflict, key)\n\t\t}\n\t\treturn record, nil",
+      "replacement": "\t\treturn record, nil"
+    },
+    {
+      "name": "admit skips the closing sync",
+      "file": "admission.go",
+      "original": "\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn AdmittedRecord{}, a.fail(err)\n\t}",
+      "replacement": "\t_ = 0"
+    },
+    {
+      "name": "exec ready skips the digest check",
+      "file": "admission.go",
+      "original": "\tif !digestPattern.MatchString(execDigest) {\n\t\treturn ExecReadyRecord{}, fmt.Errorf(\"%w: exec digest %q\", ErrInvalid, execDigest)\n\t}",
+      "replacement": "\t_ = execDigest"
+    },
+    {
+      "name": "exec ready from INPUT_PREPARING",
+      "file": "admission.go",
+      "original": "\tif obs.State != Admitted && obs.State != ExecReady {",
+      "replacement": "\tif obs.State == Abandoned {"
+    },
+    {
+      "name": "exec ready skips the pin",
+      "file": "admission.go",
+      "original": "\tif pinDigest != admitted.PinDigest {\n\t\treturn ExecReadyRecord{}, fmt.Errorf(\"%w: pin of %s changed after admission\", ErrBinding, key)\n\t}",
+      "replacement": "\t_ = pinDigest"
+    },
+    {
+      "name": "exec ready skips the capsule",
+      "file": "admission.go",
+      "original": "\tif capsuleDigest != admitted.CapsuleDigest {\n\t\treturn ExecReadyRecord{}, fmt.Errorf(\"%w: capsule of %s changed after admission\", ErrBinding, key)\n\t}",
+      "replacement": "\t_ = capsuleDigest"
+    },
+    {
+      "name": "exec ready ignores the consumed observation",
+      "file": "admission.go",
+      "original": "consumed.Observation != key || consumed.CapsuleDigest != admitted.CapsuleDigest ||",
+      "replacement": "consumed.CapsuleDigest != admitted.CapsuleDigest ||"
+    },
+    {
+      "name": "exec ready ignores the consumed capsule",
+      "file": "admission.go",
+      "original": "consumed.Observation != key || consumed.CapsuleDigest != admitted.CapsuleDigest ||",
+      "replacement": "consumed.Observation != key ||"
+    },
+    {
+      "name": "exec ready trusts the consumed digest",
+      "file": "admission.go",
+      "original": "\t\tconsumed.Digest != want {",
+      "replacement": "\t\t(consumed.Digest != want && want == \"\") {"
+    },
+    {
+      "name": "exec ready repeat ignores a conflict",
+      "file": "admission.go",
+      "original": "\t\tif *obs.ExecReady != record {\n\t\t\treturn ExecReadyRecord{}, fmt.Errorf(\"%w: EXEC_READY %s\", ErrConflict, key)\n\t\t}",
+      "replacement": "\t\t_ = record"
+    },
+    {
+      "name": "exec ready skips the sync",
+      "file": "admission.go",
+      "original": "\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn ExecReadyRecord{}, a.fail(err)\n\t}",
+      "replacement": "\t_ = 0"
+    },
+    {
+      "name": "abandon of any state",
+      "file": "admission.go",
+      "original": "\tif obs.State != InputPreparing {\n\t\treturn fmt.Errorf(\"%w: Abandon of %s in %s\", ErrState, key, obs.State)\n\t}",
+      "replacement": "\t_ = obs.State"
+    },
+    {
+      "name": "abandon keeps the pin",
+      "file": "admission.go",
+      "original": "\tif err := a.pins.Release(key); err != nil {\n\t\treturn a.fail(err)\n\t}",
+      "replacement": "\t_ = a.pins"
+    },
+    {
+      "name": "abandon keeps the observation open",
+      "file": "admission.go",
+      "original": "\tdelete(a.open, obs.Sequence)\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "abandon skips the low-water mark",
+      "file": "admission.go",
+      "original": "\tif low == a.lowwater {\n\t\treturn nil\n\t}",
+      "replacement": "\tif true {\n\t\treturn nil\n\t}"
+    },
+    {
+      "name": "low-water passes open sequences",
+      "file": "admission.go",
+      "original": "\t\tif _, open := a.open[low]; open {\n\t\t\tbreak\n\t\t}",
+      "replacement": "\t\t_ = a.open[low]"
+    },
+    {
+      "name": "observations skip the copy",
+      "file": "admission.go",
+      "original": "\t\t\tout = append(out, copyObservation(obs))",
+      "replacement": "\t\t\tout = append(out, *obs)"
+    },
+    {
+      "name": "find accepts any key",
+      "file": "admission.go",
+      "original": "\t\tif obs.Key == key {",
+      "replacement": "\t\tif obs.Key != \"\" {"
+    },
+    {
+      "name": "canonical accepts invalid UTF-8",
+      "file": "canonical.go",
+      "original": "\tif !utf8.Valid(data) {\n\t\treturn nil, fmt.Errorf(\"%w: invalid UTF-8\", ErrCanonical)\n\t}",
+      "replacement": "\t_ = utf8.Valid(data)"
+    },
+    {
+      "name": "canonical accepts trailing data",
+      "file": "canonical.go",
+      "original": "\tif p.pos != len(p.data) {\n\t\treturn nil, p.errorf(\"data after the value\")\n\t}",
+      "replacement": "\t_ = p.pos"
+    },
+    {
+      "name": "depth limit off by one",
+      "file": "canonical.go",
+      "original": "\t\tif depth >= MaxJSONDepth {",
+      "replacement": "\t\tif depth > MaxJSONDepth {"
+    },
+    {
+      "name": "leading zero accepted",
+      "file": "canonical.go",
+      "original": "\tcase p.data[digits] == '0' && p.pos-digits > 1:",
+      "replacement": "\tcase false:"
+    },
+    {
+      "name": "negative zero accepted",
+      "file": "canonical.go",
+      "original": "\tcase text == \"-0\":",
+      "replacement": "\tcase false:"
+    },
+    {
+      "name": "fraction accepted",
+      "file": "canonical.go",
+      "original": "(p.data[p.pos] == '.' || p.data[p.pos] == 'e' || p.data[p.pos] == 'E')",
+      "replacement": "(p.data[p.pos] == 'e' || p.data[p.pos] == 'E')"
+    },
+    {
+      "name": "exponent accepted",
+      "file": "canonical.go",
+      "original": "(p.data[p.pos] == '.' || p.data[p.pos] == 'e' || p.data[p.pos] == 'E')",
+      "replacement": "(p.data[p.pos] == '.')"
+    },
+    {
+      "name": "raw control character accepted",
+      "file": "canonical.go",
+      "original": "\t\tcase c < 0x20:\n\t\t\treturn \"\", p.errorf(\"raw control character in a string\")",
+      "replacement": "\t\tcase c < 0x01:\n\t\t\treturn \"\", p.errorf(\"raw control character in a string\")"
+    },
+    {
+      "name": "unpaired high surrogate accepted",
+      "file": "canonical.go",
+      "original": "\t\t\tif r = utf16.DecodeRune(r, low); r == utf8.RuneError {",
+      "replacement": "\t\t\tif r = utf16.DecodeRune(r, low); false {"
+    },
+    {
+      "name": "duplicate key accepted",
+      "file": "canonical.go",
+      "original": "\t\tif seen[key] {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "keys not sorted",
+      "file": "canonical.go",
+      "original": "\tslices.SortFunc(members, func(x, y member) int { return bytes.Compare([]byte(x.key), []byte(y.key)) })\n",
+      "replacement": "\tslices.Reverse(members[:0])\n"
+    },
+    {
+      "name": "keys sorted in reverse",
+      "file": "canonical.go",
+      "original": "return bytes.Compare([]byte(x.key), []byte(y.key))",
+      "replacement": "return bytes.Compare([]byte(y.key), []byte(x.key))"
+    },
+    {
+      "name": "control characters not escaped",
+      "file": "canonical.go",
+      "original": "\t\tcase c < 0x20:\n\t\t\tfmt.Fprintf(out, `\\u%04x`, c)",
+      "replacement": "\t\tcase c < 0x10:\n\t\t\tfmt.Fprintf(out, `\\u%04x`, c)"
+    },
+    {
+      "name": "uppercase escape hex",
+      "file": "canonical.go",
+      "original": "fmt.Fprintf(out, `\\u%04x`, c)",
+      "replacement": "fmt.Fprintf(out, `\\u%04X`, c)"
+    },
+    {
+      "name": "quote not escaped",
+      "file": "canonical.go",
+      "original": "\t\tcase c == '\"' || c == '\\\\':",
+      "replacement": "\t\tcase c == '\\\\':"
+    },
+    {
+      "name": "slash escape dropped",
+      "file": "canonical.go",
+      "original": "'/': '/', ",
+      "replacement": ""
+    },
+    {
+      "name": "guard check accepts a nil token",
+      "file": "admission.go",
+      "original": "\tif t == nil {\n\t\treturn ErrGuard\n\t}\n\tg.state.Lock()",
+      "replacement": "\tg.state.Lock()"
+    },
+    {
+      "name": "high surrogate needs no pair",
+      "file": "canonical.go",
+      "original": "\t\t\tif !p.literal(`\\u`) {\n\t\t\t\treturn \"\", p.errorf(\"lone surrogate escape\")\n\t\t\t}",
+      "replacement": "\t\t\tif !p.literal(`\\u`) {\n\t\t\t\ttext = utf8.AppendRune(text, r)\n\t\t\t\tcontinue\n\t\t\t}"
+    }
+  ]
+}
