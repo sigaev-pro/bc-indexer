@@ -53,7 +53,7 @@ HARNESS_FILES = ("source_inputs_geth.py", "source_inputs.py", "admission.py", "c
 PROBE_PATH = "cmd/extractor-admission-probe/probe.go"
 UNIT_PACKAGES = ("./extractor/admission/...", "./extractor/source_inputs")
 PREPARATION_SECONDS = 5400
-RUN_SECONDS = 3600
+RUN_SECONDS = 1800
 BINARY_LIMIT = 512 * 1024 * 1024
 OBSERVATION_LIMIT = 64 * 1024 * 1024
 
@@ -334,6 +334,8 @@ def scenario_clean(c, oracle, observation, attempts, commit):
     later = rewind.get("result") or {}
     if oracle["messages"]["live_pins"] not in str(later.get("rewind_error")) or later.get("rewind_head") != [t + 1, t + 1]:
         c.fail("clean-3-rewind", "a native rewind below the pinned headers was not refused")
+    if "witness_error" not in later or later.get("witness_error") is not None:
+        c.fail("clean-3-rewind", "a witness execution without a state write did not run natively without an observation")
 
 
 def check_shipped(c, oracle, observation):
@@ -381,9 +383,19 @@ def scenario_crash_before_admission(name, point, abandoned, pinned):
 def scenario_admit_after_sync(c, oracle, observation, attempts, commit):
     """AC-CAP-02-02: power loss right after the closing ADMITTED sync. The same obligation is recovered from its pin
     and capsule; a new H and GoLive are refused until then."""
-    crash, hold, recover = attempts
+    crash, hold, changed, recover = attempts
     t = oracle["target"]
     ended(c, "admit-after-sync-1", crash, "after_sync/admitted")
+    # A restart with another normalization profile must not resume the saved obligation: the static inputs it would
+    # seal now differ from the capsule, so recovery stops and the obligation stays ADMITTED with its pin.
+    refused = changed.get("result") or {}
+    if changed.get("exit_code") != 0 or changed.get("signal") or \
+            oracle["messages"]["recovery"] not in str(refused.get("attach_error")) or \
+            any(row.get("event") in ("exec_ready", "rejected", "live") for row in changed.get("events") or []):
+        c.fail("admit-after-sync-3", "recovery resumed the obligation with changed static inputs")
+    elif hold.get("result") and (refused.get("records") != hold["result"].get("records") or
+                                 refused.get("pins") != hold["result"].get("pins")):
+        c.fail("admit-after-sync-3", "a refused recovery changed the admission records or pins")
     check_trace(c, "admit-after-sync-1", crash, ["opened", "live", "begin", "pinned", "sealed"])
     held = ended(c, "admit-after-sync-2", hold)
     if held:
@@ -396,21 +408,21 @@ def scenario_admit_after_sync(c, oracle, observation, attempts, commit):
         check_pins(c, "admit-after-sync-2", oracle, held, [0])
         if held.get("head_number") != t - 1 or held.get("captured_inputs") != []:
             c.fail("admit-after-sync-2", "a block was executed in RECOVERY_ONLY")
-    result = ended(c, "admit-after-sync-3", recover)
+    result = ended(c, "admit-after-sync-4", recover)
     if not result:
         return
-    check_live_result(c, "admit-after-sync-3", oracle, result)
-    check_trace(c, "admit-after-sync-3", recover, ["opened", "recovering", "resumed", "exec_ready", "recovered", "live",
+    check_live_result(c, "admit-after-sync-4", oracle, result)
+    check_trace(c, "admit-after-sync-4", recover, ["opened", "recovering", "resumed", "exec_ready", "recovered", "live",
                                                    "begin", "pinned", "sealed", "admitted", "exec_ready"])
-    check_sequences(c, "admit-after-sync-3", result, [0, 1], 2)
-    rows = check_observation(c, "admit-after-sync-3", oracle, observation, result, 0, t, "EXEC_READY")
-    check_observation(c, "admit-after-sync-3", oracle, observation, result, 1, t + 1, "EXEC_READY")
+    check_sequences(c, "admit-after-sync-4", result, [0, 1], 2)
+    rows = check_observation(c, "admit-after-sync-4", oracle, observation, result, 0, t, "EXEC_READY")
+    check_observation(c, "admit-after-sync-4", oracle, observation, result, 1, t + 1, "EXEC_READY")
     if held and rows.get("admitted") != records(held)[0].get(0, {}).get("admitted"):
-        c.fail("admit-after-sync-3", "recovery did not complete the saved ADMITTED obligation")
-    check_pins(c, "admit-after-sync-3", oracle, result, [0, 1])
-    check_head(c, "admit-after-sync-3", oracle, observation, result, t + 1)
-    check_lookups(c, "admit-after-sync-3", oracle, observation, recover, [t, t + 1])
-    check_captured(c, "admit-after-sync-3", result, [t, t + 1])
+        c.fail("admit-after-sync-4", "recovery did not complete the saved ADMITTED obligation")
+    check_pins(c, "admit-after-sync-4", oracle, result, [0, 1])
+    check_head(c, "admit-after-sync-4", oracle, observation, result, t + 1)
+    check_lookups(c, "admit-after-sync-4", oracle, observation, recover, [t, t + 1])
+    check_captured(c, "admit-after-sync-4", result, [t, t + 1])
 
 
 def scenario_exec_ready_before_sync(c, oracle, observation, attempts, commit, clean_exec):
@@ -426,7 +438,10 @@ def scenario_exec_ready_before_sync(c, oracle, observation, attempts, commit, cl
     rows = check_observation(c, "exec-ready-before-sync-2", oracle, observation, result, 0, t, "EXEC_READY")
     if clean_exec is None or rows.get("exec-ready", {}).get("exec_digest") != clean_exec:
         c.fail("exec-ready-before-sync-2", "the recovered execution digest differs from the clean import")
-    check_head(c, "exec-ready-before-sync-2", oracle, observation, result, t)
+    # Recovery writes the block without moving the head (InsertBlockWithoutSetHead).
+    check_head(c, "exec-ready-before-sync-2", oracle, observation, result, t - 1)
+    if (result.get("stored") or {}).get("target") is not True:
+        c.fail("exec-ready-before-sync-2", "recovery did not store the saved block with its state")
 
 
 def scenario_reject_live(c, oracle, observation, attempts, commit):
@@ -467,6 +482,26 @@ def scenario_reject_after_admit(c, oracle, observation, attempts, commit):
     check_head(c, "reject-after-admit-2", oracle, observation, result, t)
 
 
+def scenario_without_set_head(c, oracle, observation, attempts, commit):
+    """The engine path: InsertBlockWithoutSetHead admits and executes the block without moving the head; SetCanonical
+    then makes it canonical without a second execution."""
+    (attempt,) = attempts
+    t = oracle["target"]
+    result = ended(c, "without-set-head-1", attempt)
+    if not result:
+        return
+    if imports(result) != [("target-without-head", None), ("canonical-target", None)]:
+        c.fail("without-set-head-1", f"imports {imports(result)}")
+    check_trace(c, "without-set-head-1", attempt, ["opened", "live", "begin", "pinned", "sealed", "admitted", "exec_ready"])
+    check_sequences(c, "without-set-head-1", result, [0], 1)
+    check_observation(c, "without-set-head-1", oracle, observation, result, 0, t, "EXEC_READY")
+    check_pins(c, "without-set-head-1", oracle, result, [0])
+    check_head(c, "without-set-head-1", oracle, observation, result, t)
+    check_lookups(c, "without-set-head-1", oracle, observation, attempt, [t])
+    check_captured(c, "without-set-head-1", result, [t])
+    check_closing_sync(c, "without-set-head-1", attempt)
+
+
 def scenario_freezer(c, oracle, observation, attempts, commit):
     (attempt,) = attempts
     result = ended(c, "freezer-1", attempt)
@@ -487,6 +522,7 @@ CHECKS = {
     "admit_after_sync": scenario_admit_after_sync,
     "reject_live": scenario_reject_live,
     "reject_after_admit": scenario_reject_after_admit,
+    "without_set_head": scenario_without_set_head,
     "freezer": scenario_freezer,
 }
 
@@ -790,7 +826,7 @@ def run(preparation_path, expected_sha, output):
                 probe, geth = binaries.get("probe", base["probe"]), binaries.get("geth", base["geth"])
                 native.command(runtime, [f"/probe/{probe.name}", "run", "/probe/genesis.json", "/out/work",
                                          "/out/probe.json", commit, f"/probe/{geth.name}"],
-                               [(bin_dir, "/probe", True), (directory, "/out", False)], cap=900, memory="2g")
+                               [(bin_dir, "/probe", True), (directory, "/out", False)], cap=600, memory="2g")
                 failures = checked_compare(load(directory / "probe.json", OBSERVATION_LIMIT, deadline), oracle, commit)
                 return {"observation": reference(directory / "probe.json", OBSERVATION_LIMIT, deadline),
                         "binaries": {kind: path.name for kind, path in {"probe": probe, "geth": geth}.items()},

@@ -19,6 +19,7 @@ package native
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -211,6 +212,27 @@ func RecoverPruning(db ethdb.Database, instanceDir string) error {
 		return nil
 	}
 	return stateprovider.RecoverPruning(db, instanceDir)
+}
+
+// RequireNoCapture refuses a store that belongs to a capture producer: a
+// bound store, a live pin or a run record. The shipped binary calls it when
+// no admission config is given, so such a store never imports without its
+// admission and recovery.
+func RequireNoCapture(db ethdb.Database) error {
+	if identity, bound, err := stateprovider.BoundIdentity(db); err != nil {
+		return err
+	} else if bound {
+		return fmt.Errorf("%w: store is bound to capture producer store %s; set %s", ErrConfig, identity.StoreID, ConfigEnv)
+	}
+	if err := stateprovider.RequireNoLivePins(db); err != nil {
+		return err
+	}
+	if ok, err := db.Has([]byte(runKey)); err != nil {
+		return err
+	} else if ok {
+		return fmt.Errorf("%w: store holds a producer run record; set %s", ErrConfig, ConfigEnv)
+	}
+	return nil
 }
 
 // runRecord binds the store to one producer and its run.
@@ -447,9 +469,10 @@ func (a *Admission) trace(event string, fields map[string]any) {
 
 // Recover is the recovery driver of AC-CAP-02-02. In RECOVERY_ONLY it
 // abandons every INPUT_PREPARING observation, which is not a capture, and
-// re-executes every ADMITTED obligation through the patched import path from
-// its saved capsule and pinned parent root; the import writes EXEC_READY or
-// NATIVE_REJECTED. Only then it switches to LIVE. An obligation that stays
+// re-executes every ADMITTED obligation through the patched import path
+// (InsertBlockWithoutSetHead, which writes the block but does not move the
+// head) from its saved capsule and pinned parent root; the import writes
+// EXEC_READY or NATIVE_REJECTED. Only then it switches to LIVE. An obligation that stays
 // ADMITTED stops startup.
 func (a *Admission) Recover() error {
 	token := a.guard.Acquire()
@@ -479,7 +502,10 @@ func (a *Admission) Recover() error {
 			return err
 		}
 		a.trace("recovering", map[string]any{"observation": obs.Key, "number": block.NumberU64()})
-		_, importErr := a.chain.InsertChain(types.Blocks{block})
+		// Re-execute without moving the head: the original import may not
+		// have set it (engine newPayload), and the next import or the
+		// consensus client decides the head as natively.
+		_, importErr := a.chain.InsertBlockWithoutSetHead(context.Background(), block, false)
 		state, err := a.state(obs.Key)
 		if err != nil {
 			return err
@@ -625,7 +651,19 @@ func (a *Admission) resume(token *admission.Token, block *types.Block, candidate
 		if err != nil {
 			return nil, err
 		}
-		if err := checkSavedBlock(items, block); err != nil {
+		// Every static input must be what this node would seal now: the same
+		// block, ancestors, chain config, fork ID, native commit and profile.
+		// A changed config or binary refuses the resume, so EXEC_READY never
+		// binds a capsule that differs from the execution.
+		parent := a.chain.GetHeader(block.ParentHash(), block.NumberU64()-1)
+		if parent == nil {
+			return nil, fmt.Errorf("%w: parent header of block %d", ErrCapsule, block.NumberU64())
+		}
+		current, err := CapsuleItems(a.chain, block, parent, a.cfg.NativeCommit, a.cfg.Profile)
+		if err != nil {
+			return nil, err
+		}
+		if err := sameItems(items, current); err != nil {
 			return nil, err
 		}
 		a.trace("resumed", map[string]any{"observation": obs.Key, "number": candidate.Number})
@@ -678,7 +716,10 @@ type observation struct {
 	answers map[uint64]common.Hash
 	log     *sourceinputs.Log
 	missing []uint64
-	done    bool
+	// executing is set when the block's execution is configured; only a
+	// failure from there on is a native validation verdict.
+	executing bool
+	done      bool
 }
 
 // Configure installs the saved BLOCKHASH answers and the safe point, and
@@ -687,6 +728,7 @@ func (o *observation) Configure(cfg *vm.Config) {
 	cfg.ExtractorGetHash = o.getHash
 	cfg.ExtractorSafePoint = o.a.opts.SafePoint
 	cfg.DisableParallelExecution = true
+	o.executing = true
 }
 
 // getHash answers BLOCKHASH from the saved ancestor headers. The EVM asks
@@ -732,13 +774,17 @@ func (o *observation) ExecReady(block *types.Block, res *core.ProcessResult) err
 }
 
 // Close writes NATIVE_REJECTED when native execution or validation failed
-// before ExecReady. A missing BLOCKHASH answer is not a native verdict: the
-// obligation stays ADMITTED for recovery.
+// before ExecReady. A failure before the execution was configured (for
+// example missing parent state) or a missing BLOCKHASH answer is not a native
+// verdict: the obligation stays ADMITTED for recovery.
 func (o *observation) Close(cause error) error {
 	if cause == nil || o.done {
 		return nil
 	}
 	o.done = true
+	if !o.executing {
+		return fmt.Errorf("%w: %s stopped before execution: %v", ErrRecovery, o.key, cause)
+	}
 	if len(o.missing) != 0 {
 		return fmt.Errorf("%w: BLOCKHASH %v is not in the capsule of %s", ErrCapsule, o.missing, o.key)
 	}
@@ -859,23 +905,16 @@ func savedItems(store sourceinputs.Store, key string) ([]sourceinputs.Item, erro
 	return items, nil
 }
 
-// checkSavedBlock checks that the saved header and body are the encodings of
-// block, so recovery executes exactly the saved obligation.
-func checkSavedBlock(items []sourceinputs.Item, block *types.Block) error {
-	header, err := rlp.EncodeToBytes(block.Header())
-	if err != nil {
-		return err
+// sameItems checks that the saved capsule items equal the items this node
+// builds now, name for name and byte for byte.
+func sameItems(saved, current []sourceinputs.Item) error {
+	if len(saved) != len(current) {
+		return fmt.Errorf("%w: %d saved items, %d now", ErrCapsule, len(saved), len(current))
 	}
-	body, err := rlp.EncodeToBytes(block.Body())
-	if err != nil {
-		return err
-	}
-	byName := map[string][]byte{}
-	for _, item := range items {
-		byName[item.Name] = item.Data
-	}
-	if !bytes.Equal(byName[itemHeader], header) || !bytes.Equal(byName[itemBody], body) {
-		return fmt.Errorf("%w: block %d", ErrCapsule, block.NumberU64())
+	for index := range saved {
+		if saved[index].Name != current[index].Name || !bytes.Equal(saved[index].Data, current[index].Data) {
+			return fmt.Errorf("%w: item %s differs", ErrCapsule, saved[index].Name)
+		}
 	}
 	return nil
 }

@@ -131,7 +131,7 @@ NOT_RUN (D96, D98, D99).
 Scope: every Geth row of the plan table above. Design in
 [adapters/geth/admission/native/README.md](../adapters/geth/admission/native/README.md):
 
-- Product native patch set (`patches.json`, 18 anchored patches and two new
+- Product native patch set (`patches.json`, 20 anchored patches and two new
   files): `ProcessBlock` calls `Begin` (INPUT_PREPARING, pin, seal, closing
   ADMITTED sync) before `processor.Process`, `ExecReady` after validation
   and before the block is written, and `Reject` on any native validation
@@ -154,9 +154,20 @@ Scope: every Geth row of the plan table above. Design in
 
 Evidence: [E01-02.admission.geth](evidence/E01-02.admission.geth.md).
 
-Resume point: implementation, unit tests, probe, oracle and mutant tables
-are committed; next are the measured preparation and run under the host
-lock, the Python mutant record, the evidence file and the draft PR.
+Draft PR #147. Review 001 (head `3304991`): Spec REQUEST_CHANGES (P2:
+recovery moved the head, recovery did not check the static inputs, a bound
+store started without a config; P3: Begin after the prefetcher, the
+stateless self-check reached the safe point, an early evidence claim) and
+Standards REQUEST_CHANGES (P1: `debug_executionWitness` reached the
+admission without the guard; P2: recovery moved the head, the stateless
+self-check, a 3600-second run deadline, no coverage of the engine import
+path; P3 wording and docs). The next commit fixes all of them. Preparation
+01 at `3304991` waited for the host lock and was stopped before it started,
+because review 001 made it stale; its wait record is kept.
+
+Resume point: fixes of review 001 committed; next are the measured
+preparation and run under the host lock, the Python mutant record, the
+evidence figures and review 002.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 

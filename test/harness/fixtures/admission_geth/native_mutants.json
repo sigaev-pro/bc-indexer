@@ -5,7 +5,7 @@
     {
       "name": "begin_hook_skipped",
       "file": "core/blockchain.go",
-      "original": "\tif bc.extractor != nil {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n",
+      "original": "\tif bc.extractor != nil && config.WriteState {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n",
       "replacement": "\tif false {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n",
       "binaries": [
         "probe"
@@ -163,6 +163,46 @@
         "geth"
       ],
       "reason": "The shipped binary opens a store of another identity before refusing it; the refusal no longer comes from Preflight."
+    },
+    {
+      "name": "write_state_gate_removed",
+      "file": "core/blockchain.go",
+      "original": "\tif bc.extractor != nil && config.WriteState {\n",
+      "replacement": "\tif bc.extractor != nil {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "A witness execution that writes nothing (debug_executionWitness) enters the admission without the guard and fails instead of running natively."
+    },
+    {
+      "name": "without_head_guard_missing",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *types.Block, makeWitness bool) (witness *stateless.Witness, err error) {\n\tdefer bc.extractorLock()()\n",
+      "replacement": "func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *types.Block, makeWitness bool) (witness *stateless.Witness, err error) {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The engine newPayload path and the recovery driver reach ProcessBlock without the observation guard, so Begin refuses the block."
+    },
+    {
+      "name": "resume_inputs_unchecked",
+      "file": "geth.go",
+      "original": "\t\tif err := sameItems(items, current); err != nil {\n",
+      "replacement": "\t\tif err := error(nil); err != nil {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Recovery resumes an obligation whose saved static inputs differ from what the node seals now, so EXEC_READY binds a capsule that differs from the execution."
+    },
+    {
+      "name": "no_config_unchecked",
+      "file": "eth/backend.go",
+      "original": "\t} else if err := extractorgeth.RequireNoCapture(chainDb); err != nil {\n",
+      "replacement": "\t} else if err := error(nil); err != nil {\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "The shipped binary starts on a store of a capture producer without its admission config."
     }
   ]
 }

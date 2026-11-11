@@ -58,13 +58,16 @@
     "mode": "admission mode forbids this step",
     "pending": "an observation is still pending",
     "identity": "native store identity mismatch: expected binding",
-    "run": "store belongs to another producer run"
+    "run": "store belongs to another producer run",
+    "recovery": "admitted obligation was not resolved",
+    "bound": "store is bound to capture producer store"
   },
   "shipped": {
     "prune-state": "live_pins",
     "recover-pruning": "live_pins",
     "foreign-store": "identity",
-    "other-producer": "run"
+    "other-producer": "run",
+    "no-config": "bound"
   },
   "scenarios": [
     "clean",
@@ -75,6 +78,7 @@
     "exec_ready_before_sync",
     "reject_live",
     "reject_after_admit",
+    "without_set_head",
     "freezer"
   ],
   "attempts": {
@@ -98,7 +102,8 @@
     "admit_after_sync": [
       "admit-after-sync-1-crash",
       "admit-after-sync-2-hold",
-      "admit-after-sync-3-recover"
+      "admit-after-sync-3-changed-profile",
+      "admit-after-sync-4-recover"
     ],
     "exec_ready_before_sync": [
       "exec-ready-before-sync-1-crash",
@@ -113,6 +118,9 @@
     ],
     "freezer": [
       "freezer-1"
+    ],
+    "without_set_head": [
+      "without-set-head-1"
     ]
   }
 }

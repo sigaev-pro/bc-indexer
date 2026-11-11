@@ -204,7 +204,7 @@ def synthetic_observation():
     restart.update(imports=[], captured_inputs=[])
     restart["capsules"] = {key: {"capsule": row["capsule"]} for key, row in clean["capsules"].items()}
     rewind = copy.deepcopy(restart)
-    rewind.update(rewind_error=ORACLE["messages"]["live_pins"] + ": rewind", rewind_head=[T + 1, T + 1])
+    rewind.update(rewind_error=ORACLE["messages"]["live_pins"] + ": rewind", rewind_head=[T + 1, T + 1], witness_error=None)
     scenarios.append({"name": "clean", "attempts": [
         attempt("clean-1", clean, opened + s.admission_events([T, T + 1])),
         attempt("clean-2-restart", restart, opened), attempt("clean-3-rewind", rewind, opened)]})
@@ -230,8 +230,11 @@ def synthetic_observation():
         attempt("admit-after-sync-1-crash", events=opened + [trace("begin"), trace("pinned"), trace("sealed")],
                 crash="after_sync/admitted"),
         attempt("admit-after-sync-2-hold", held, [trace("opened")]),
-        attempt("admit-after-sync-3-recover", recovered, recover_events)]})
-    exec_recovered = s.result([(0, T, "EXEC_READY", False)], 1, T, [T])
+        attempt("admit-after-sync-3-changed-profile",
+                dict(copy.deepcopy(held), attach_error=ORACLE["messages"]["recovery"] + ": x"),
+                [trace("opened"), trace("recovering")]),
+        attempt("admit-after-sync-4-recover", recovered, recover_events)]})
+    exec_recovered = s.result([(0, T, "EXEC_READY", False)], 1, T - 1, [T], stored={"target": True})
     scenarios.append({"name": "exec_ready_before_sync", "attempts": [
         attempt("exec-ready-before-sync-1-crash",
                 events=opened + [trace("begin"), trace("pinned"), trace("sealed"), trace("admitted")],
@@ -252,6 +255,10 @@ def synthetic_observation():
         attempt("reject-after-admit-2-recover", after,
                 [trace("opened"), trace("recovering"), trace("resumed"), trace("rejected"),
                  trace("recovered", state="NATIVE_REJECTED"), trace("live")] + s.admission_events([T]))]})
+    without = s.result([(0, T, "EXEC_READY", False)], 1, T, [T],
+                       imports=[{"name": "target-without-head", "error": None}, {"name": "canonical-target", "error": None}])
+    scenarios.append({"name": "without_set_head", "attempts": [
+        attempt("without-set-head-1", without, opened + s.admission_events([T]))]})
     scenarios.append({"name": "freezer", "attempts": [attempt("freezer-1", {
         "frozen": ORACLE["side_fork"] + 1, "side_header_kept": True, "canonical_fork_kept": True})]})
     shipped = [{"name": name, "exit_code": 1, "timed_out": False, "output_tail": "Fatal: " + ORACLE["messages"][kind]}
@@ -549,9 +556,45 @@ class OracleTests(unittest.TestCase):
         failures = self.failures(observation)
         self.assertTrue(any("did not complete the saved ADMITTED obligation" in failure for failure in failures), failures)
         observation = fresh()
-        recover = scenario(observation, "admit_after_sync")[2]
+        recover = scenario(observation, "admit_after_sync")[3]
         recover["events"] = [row for row in recover["events"] if row.get("event") != "resumed"]
-        self.assertFails(observation, "admit-after-sync-3: admission steps")
+        self.assertFails(observation, "admit-after-sync-4: admission steps")
+
+    def test_changed_inputs_stop_recovery(self):
+        observation = fresh()
+        scenario(observation, "admit_after_sync")[2]["result"]["attach_error"] = None
+        self.assertFails(observation, "resumed the obligation with changed static inputs")
+        observation = fresh()
+        scenario(observation, "admit_after_sync")[2]["events"].append(trace("exec_ready"))
+        self.assertFails(observation, "resumed the obligation with changed static inputs")
+        observation = fresh()
+        scenario(observation, "admit_after_sync")[2]["result"]["pins"] = {}
+        self.assertFails(observation, "refused recovery changed")
+
+    def test_recovery_keeps_the_head_and_stores_the_block(self):
+        observation = fresh()
+        result = scenario(observation, "exec_ready_before_sync")[1]["result"]
+        result["head_number"], result["head_hash"] = T, observation["generated_hashes"][T]
+        self.assertFails(observation, "head 300, want block 299")
+        observation = fresh()
+        scenario(observation, "exec_ready_before_sync")[1]["result"]["stored"] = {"target": False}
+        self.assertFails(observation, "did not store the saved block")
+
+    def test_witness_execution(self):
+        observation = fresh()
+        scenario(observation, "clean")[2]["result"]["witness_error"] = "observation guard is not held"
+        self.assertFails(observation, "witness execution")
+        observation = fresh()
+        del scenario(observation, "clean")[2]["result"]["witness_error"]
+        self.assertFails(observation, "witness execution")
+
+    def test_without_set_head(self):
+        observation = fresh()
+        scenario(observation, "without_set_head")[0]["result"]["imports"][1]["error"] = "x"
+        self.assertFails(observation, "without-set-head-1: imports")
+        observation = fresh()
+        scenario(observation, "without_set_head")[0]["result"]["captured_inputs"] = []
+        self.assertFails(observation, "without-set-head-1: the VM safe point")
 
     def test_exec_ready_recovery_digest(self):
         observation = fresh()

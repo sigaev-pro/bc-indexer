@@ -35,10 +35,12 @@ digests.
 | `blockchain_field` | `core/blockchain.go` | Holds the admission seam |
 | `insert_chain_guard`, `insert_without_head_guard`, `set_canonical_guard` | `core/blockchain.go` | The three import entry points that reach `ProcessBlock` take the observation guard before the chain mutex |
 | `rewind_guard` | `core/blockchain.go` | A requested rewind (`SetHead`, `SetHeadWithTimestamp`, `debug_setHead`) calls `RequireRewindAllowed` under the chain mutex (D98 item 2) |
-| `process_block_begin` | `core/blockchain.go` | `ProcessBlock` calls `Begin` before `processor.Process` and closes the observation when it returns |
+| `process_block_begin` | `core/blockchain.go` | For an import that writes state, `ProcessBlock` calls `Begin` before `setupExecutionState` (so before the prefetcher and `processor.Process`), turns off the parallel processor, and closes the observation when it returns |
+| `process_block_configure` | `core/blockchain.go` | Installs the saved BLOCKHASH answers and the safe point into the config of `processor.Process` only |
+| `stateless_self_check` | `core/blockchain.go` | The stateless self-check (`--vm.statelessselfvalidation`) runs with a config without the BLOCKHASH answers and the safe point, so nothing is captured twice |
 | `process_block_exec_ready` | `core/blockchain.go` | `ExecReady` after `ValidateState` and the stateless self-check, before the block is written |
 | `freezer_limit` | `core/rawdb/chain_freezer.go` | The chain freezer stays at or below `FreezeLimit` (D98 item 2) |
-| `backend_import`, `backend_preflight`, `backend_recover_pruning`, `backend_attach` | `eth/backend.go` | Startup: `Preflight` before the store opens, `RecoverPruning` through the guard, `Attach` after `NewBlockChain` |
+| `backend_import`, `backend_preflight`, `backend_recover_pruning`, `backend_attach` | `eth/backend.go` | Startup: `Preflight` before the store opens, `RecoverPruning` through the guard, `Attach` after `NewBlockChain`, and `RequireNoCapture` without a config |
 | `snapshot_import`, `snapshot_prune_state` | `cmd/geth/snapshot.go` | `geth snapshot prune-state` calls `PruneState` (D98 item 2) |
 
 The guards of D98 item 2 are active in every binary that links
@@ -48,9 +50,14 @@ an admission config, because pins of an earlier run stay live.
 
 ## Per-block observation on the import path
 
-All Geth imports that execute a block go through `ProcessBlock`. With the
-guard and the chain mutex held, the patched `ProcessBlock` calls
-`Admission.Begin` before `processor.Process`. In LIVE:
+All Geth imports that execute a block go through `ProcessBlock`, reached
+only through `InsertChain`, `InsertBlockWithoutSetHead` and `SetCanonical`,
+each with `WriteState` set. `debug_executionWitness` also calls
+`ProcessBlock`, directly and without writing state; such an execution is not
+observed and runs natively. For a state-writing import, with the guard and
+the chain mutex held, the patched `ProcessBlock` calls `Admission.Begin`
+before `setupExecutionState`, so before the speculative prefetcher, the
+tracer's block start and `processor.Process`. In LIVE:
 
 1. `admission.Begin` records INPUT_PREPARING (counter sync).
 2. `stateprovider.Pin` pins the parent root under the observation key: trie
@@ -61,17 +68,22 @@ guard and the chain mutex held, the patched `ProcessBlock` calls
 5. `source_inputs.OpenLog` opens the dependency log.
 
 If a step before `Admit` fails, the observation is abandoned at once (its pin
-is released) and the block is refused. The observation then installs into
-the execution config the BLOCKHASH answers of the capsule and the VM safe
-point, and turns off the parallel processor, which reads neither.
+is released) and the block is refused. The parallel processor is turned off
+before `setupExecutionState` picks the state reader, because it reads
+neither the saved answers nor the safe point. Right before
+`processor.Process`, the observation installs the BLOCKHASH answers of the
+capsule and the VM safe point into that execution's config only; the
+prefetcher keeps its own copy without them, and the stateless self-check
+gets a copy without them.
 
 When `processor.Process`, `ValidateState` or the stateless self-check fails,
 the deferred `Close` writes NATIVE_REJECTED with the digest of the native
 rejection evidence (`RejectionDigest`: block hash and native error text),
 never EXEC_READY; the pin is released. When validation passes, `ExecReady`
 closes the log (`Log.Finish`) and writes EXEC_READY with the execution digest
-before the block is written. A BLOCKHASH lookup that the capsule cannot
-answer, or an error of `ExecReady` itself, is not a native verdict: the
+before the block is written. A failure before the execution is configured (for
+example missing parent state), a BLOCKHASH lookup that the capsule cannot
+answer, or an error of `ExecReady` itself is not a native verdict: the
 observation stays ADMITTED, the block is refused, and recovery resolves it.
 
 Geth has no external dependency on this profile: under the static manifest
@@ -112,11 +124,17 @@ import:
    its pin, if any, is released (an absent pin releases as nil).
 2. Every ADMITTED obligation is re-executed through the patched import path:
    the block is decoded from the saved `header-rlp` and `body-rlp` and passed
-   to `InsertChain`. In RECOVERY_ONLY, `Begin` accepts only a block whose
-   candidate equals a saved obligation and whose encodings equal the saved
-   items; it reuses that observation (no new sequence), its pin, its capsule
-   answers and its log. Native validation then writes EXEC_READY or
-   NATIVE_REJECTED as in LIVE.
+   to `InsertBlockWithoutSetHead`, which writes the block but does not move
+   the head, because the original import may not have set it (engine
+   `newPayload`); the next import or the consensus client decides the head as
+   natively. In RECOVERY_ONLY, `Begin` accepts only a block whose candidate
+   equals a saved obligation, and only when every static item the node would
+   seal now (block encodings, window headers, chain config, fork ID, native
+   commit, profile) equals the saved capsule byte for byte; otherwise the
+   obligation stays ADMITTED and startup stops, so EXEC_READY never binds a
+   capsule that differs from the execution. It reuses that observation (no
+   new sequence), its pin, its capsule answers and its log. Native validation
+   then writes EXEC_READY or NATIVE_REJECTED as in LIVE.
 3. `GoLive` switches to LIVE. An obligation that is still open stops startup.
 
 Any other block, a new H, is refused with `admission.ErrMode` while an
@@ -127,8 +145,12 @@ obligation is open, and `GoLive` is refused with `admission.ErrPending`.
 The shipped binary reads the admission config from the file named by
 `EXTRACTOR_ADMISSION_CONFIG` (strict JSON: `store_id`, `producer_id`,
 `chain_id`, `genesis_hash`, `native_commit`, `normalization_profile`).
-Without it the node runs without admission; the retention guards stay
-active. With it:
+Without it, the node starts only on a store that does not belong to a
+capture producer: `RequireNoCapture` refuses a bound store, a live pin or a
+run record, so such a store never imports without its admission and
+recovery. The retention guards stay active in both cases. The capture
+profile needs the hash state scheme (`--state.scheme hash`, E01-02.pins);
+`Attach` refuses a store of another scheme. With the config:
 
 - Before native code opens the store, `Preflight` runs the read-only
   `stateprovider.Preflight` of E01-02.pins: a store of another identity, an
@@ -159,7 +181,8 @@ binding glue, over the admission store.
 The entry points take the guard before the chain mutex; `Begin`,
 `ExecReady` and `Close` use the token of the current import and refuse
 without it (`ErrGuardMissing`), so an entry point without the guard patch
-fails closed. The recovery driver holds the guard only between its import
+fails closed. Only state-writing imports, which run under the guard and the
+chain mutex, reach `Begin`. The recovery driver holds the guard only between its import
 calls. Pins are written only under the chain mutex, and the rewind guard
 runs under it too, so no pin appears between the check and a rewind.
 
@@ -176,6 +199,10 @@ runs under it too, so no pin appears between the check and a rewind.
   chain-config compatibility rewind ignores the error of `SetHead`, so a
   refused rewind there leaves the head in place.
 - `geth removedb` and manual database tools are not guarded.
+- `SetCanonical` re-executes blocks only when the new head has no state
+  (`recoverAncestors`); that path takes the guard and admits each block as a
+  new observation, but no scenario exercises it.
+- `native-commit` comes from the config file, not from the binary.
 - Every EXEC_READY observation keeps its pin until the decision bridge
   closes it (E01-02.decision_bridge); with block-by-block import, pins and
   committed parent roots accumulate until then.

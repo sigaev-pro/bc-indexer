@@ -73,9 +73,23 @@
     {
       "name": "process_block_begin",
       "file": "core/blockchain.go",
+      "original": "\tvmConfig := bc.overrideTracerActivation(config.EnableTracer)\n",
+      "replacement": "\tvmConfig := bc.overrideTracerActivation(config.EnableTracer)\n\n\t// E01-02.admission: an import that writes state starts its observation\n\t// before anything of the block runs: Begin, pin, seal and the closing\n\t// ADMITTED sync. Executions that write nothing (debug_executionWitness)\n\t// are not observed. An admitted block runs serially. A failure of\n\t// execution or validation below closes the observation as\n\t// NATIVE_REJECTED.\n\tvar extractorObservation ExtractorObservation\n\tif bc.extractor != nil && config.WriteState {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tdefer func() {\n\t\t\tif closeErr := observation.Close(blockEndErr); closeErr != nil {\n\t\t\t\tblockEndErr = errors.Join(blockEndErr, closeErr)\n\t\t\t}\n\t\t}()\n\t\tvmConfig.DisableParallelExecution = true\n\t\textractorObservation = observation\n\t}\n",
+      "reason": "Product import path: the per-block observation of a state-writing import starts before setupExecutionState, the prefetcher and processor.Process."
+    },
+    {
+      "name": "process_block_configure",
+      "file": "core/blockchain.go",
       "original": "\t// Process block using the parent state as reference point\n\tpstart := time.Now()\n",
-      "replacement": "\t// E01-02.admission: Begin, pin, seal and the closing ADMITTED sync happen\n\t// before processor.Process. A failure of execution or validation below\n\t// closes the observation as NATIVE_REJECTED.\n\tvar extractorObservation ExtractorObservation\n\tif bc.extractor != nil {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tdefer func() {\n\t\t\tif closeErr := observation.Close(blockEndErr); closeErr != nil {\n\t\t\t\tblockEndErr = errors.Join(blockEndErr, closeErr)\n\t\t\t}\n\t\t}()\n\t\tobservation.Configure(&vmConfig)\n\t\textractorObservation = observation\n\t}\n\n\t// Process block using the parent state as reference point\n\tpstart := time.Now()\n",
-      "reason": "Product import path: the per-block observation starts before processor.Process."
+      "replacement": "\t// E01-02.admission: the saved BLOCKHASH answers and the VM safe point\n\t// apply to this serial execution only; the prefetcher started above\n\t// holds its own copy of the config.\n\tif extractorObservation != nil {\n\t\textractorObservation.Configure(&vmConfig)\n\t}\n\n\t// Process block using the parent state as reference point\n\tpstart := time.Now()\n",
+      "reason": "The saved BLOCKHASH answers and the safe point reach processor.Process only."
+    },
+    {
+      "name": "stateless_self_check",
+      "file": "core/blockchain.go",
+      "original": "\t\tcrossStateRoot, crossReceiptRoot, err := ExecuteStateless(ctx, bc.chainConfig, vmConfig, task, witness)\n",
+      "replacement": "\t\t// E01-02.admission: the self-check is a second execution; it gets\n\t\t// neither the saved BLOCKHASH answers nor the VM safe point.\n\t\tstatelessConfig := vmConfig\n\t\tstatelessConfig.ExtractorGetHash, statelessConfig.ExtractorSafePoint = nil, nil\n\t\tcrossStateRoot, crossReceiptRoot, err := ExecuteStateless(ctx, bc.chainConfig, statelessConfig, task, witness)\n",
+      "reason": "The stateless self-check never reaches the capture safe point, so no CALL input is captured twice."
     },
     {
       "name": "process_block_exec_ready",
@@ -116,8 +130,8 @@
       "name": "backend_attach",
       "file": "eth/backend.go",
       "original": "\teth.blockchain, err = core.NewBlockChain(chainDb, config.Genesis, eth.engine, options)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
-      "replacement": "\teth.blockchain, err = core.NewBlockChain(chainDb, config.Genesis, eth.engine, options)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\t// E01-02.admission: bind the store, open the saved producer run, run the\n\t// recovery driver and switch to LIVE before any import.\n\tif extractorConfig != nil {\n\t\tif _, err := extractorgeth.Attach(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{}); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n",
-      "reason": "Startup identity, recovery driver and LIVE switch."
+      "replacement": "\teth.blockchain, err = core.NewBlockChain(chainDb, config.Genesis, eth.engine, options)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\t// E01-02.admission: bind the store, open the saved producer run, run the\n\t// recovery driver and switch to LIVE before any import. Without a config,\n\t// refuse a store that belongs to a capture producer.\n\tif extractorConfig != nil {\n\t\tif _, err := extractorgeth.Attach(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{}); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t} else if err := extractorgeth.RequireNoCapture(chainDb); err != nil {\n\t\t// A store of a capture producer never starts without its admission.\n\t\treturn nil, err\n\t}\n",
+      "reason": "Startup identity, recovery driver and LIVE switch; a bound store without a config is refused."
     },
     {
       "name": "snapshot_import",

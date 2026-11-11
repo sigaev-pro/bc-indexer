@@ -98,8 +98,15 @@ type Spec struct {
 	Events       string `json:"events"`
 	Result       string `json:"result"`
 	// Imports names the blocks to import in order: "target", "next" (target+1)
-	// or "bad" (target with a wrong state root).
+	// or "bad" (target with a wrong state root) through InsertChain;
+	// "target-without-head" through InsertBlockWithoutSetHead, the engine
+	// newPayload path; "canonical-target" through SetCanonical.
 	Imports []string `json:"imports"`
+	// Profile overrides the normalization profile of the config.
+	Profile string `json:"profile"`
+	// Witness runs ProcessBlock of block target+1 the way
+	// debug_executionWitness does: no guard, no state write.
+	Witness bool `json:"witness"`
 	// CrashBeforeSync kills the process inside the first sync whose unsynced
 	// writes include a key with this suffix, before the writes reach the
 	// store. CrashAfterSync kills it right after such a sync is durable.
@@ -369,6 +376,9 @@ func attempt(specPath string) {
 	}
 	cfg := extractorgeth.Config{StoreID: storeID, ProducerID: producerID, ChainID: genesis.Config.ChainID.String(),
 		GenesisHash: genesis.ToBlock().Hash(), NativeCommit: spec.NativeCommit, Profile: profile}
+	if spec.Profile != "" {
+		cfg.Profile = spec.Profile
+	}
 	check(extractorgeth.Preflight(filepath.Join(spec.Datadir, "geth"), cfg))
 	db := openStore(spec.Datadir)
 	chain := newChain(db, genesis)
@@ -399,12 +409,31 @@ func attempt(specPath string) {
 	}
 	imports := []map[string]any{}
 	for _, name := range spec.Imports {
-		block := map[string]*types.Block{"target": blocks[target-1], "next": blocks[target], "bad": bad}[name]
+		block := map[string]*types.Block{"target": blocks[target-1], "next": blocks[target], "bad": bad,
+			"target-without-head": blocks[target-1], "canonical-target": blocks[target-1]}[name]
 		log.add(map[string]any{"op": "import", "name": name, "number": block.NumberU64()})
-		_, err := chain.InsertChain(types.Blocks{block})
+		var err error
+		switch name {
+		case "target-without-head":
+			_, err = chain.InsertBlockWithoutSetHead(context.Background(), block, false)
+		case "canonical-target":
+			_, err = chain.SetCanonical(block)
+		default:
+			_, err = chain.InsertChain(types.Blocks{block})
+		}
 		imports = append(imports, map[string]any{"name": name, "hash": block.Hash().Hex(), "error": errorText(err)})
 	}
 	result["imports"] = imports
+	if spec.Witness {
+		parent := blocks[target-1]
+		_, err := chain.ProcessBlock(context.Background(), parent.Root(), blocks[target], core.ExecuteConfig{MakeWitness: true})
+		result["witness_error"] = errorText(err)
+	}
+	stored := map[string]bool{}
+	for name, block := range map[string]*types.Block{"target": blocks[target-1], "next": blocks[target], "bad": bad} {
+		stored[name] = chain.GetBlockByHash(block.Hash()) != nil && chain.HasState(block.Root())
+	}
+	result["stored"] = stored
 	if spec.Rewind {
 		before := chain.CurrentBlock().Number.Uint64()
 		result["rewind_error"] = fmt.Sprint(chain.SetHead(target - 2))
@@ -568,7 +597,7 @@ func tail(text string) string {
 // shipped runs the patched native geth binary on a datadir with a cap and
 // reports its exit and output.
 func shipped(geth, name string, env []string, args ...string) map[string]any {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, geth, args...)
 	cmd.Env = append([]string{"HOME=/tmp"}, env...)
@@ -656,7 +685,8 @@ func run(genesisPath, work, output, commit, geth string) {
 	other := filepath.Join(work, "other-producer.json")
 	writeConfig(other, genesis, commit, storeID, "geth-other")
 	shippedRuns = append(shippedRuns, shipped(geth, "other-producer", []string{extractorgeth.ConfigEnv + "=" + other}, node...))
-	rewind := runAttempt(work, "clean-3-rewind", with(clean, func(s *Spec) { s.Rewind = true }))
+	shippedRuns = append(shippedRuns, shipped(geth, "no-config", nil, node...))
+	rewind := runAttempt(work, "clean-3-rewind", with(clean, func(s *Spec) { s.Rewind, s.Witness = true, true }))
 	scenario("clean", first, restart, rewind)
 
 	// AC-CAP-02-01: power loss before the counter sync of Begin, right after
@@ -686,7 +716,10 @@ func run(genesisPath, work, output, commit, geth string) {
 	scenario("admit_after_sync",
 		runAttempt(work, "admit-after-sync-1-crash", admitted),
 		runAttempt(work, "admit-after-sync-2-hold", with(admitted, func(s *Spec) { s.Imports, s.CrashAfterSync, s.Hold = nil, "", true })),
-		runAttempt(work, "admit-after-sync-3-recover", with(admitted, func(s *Spec) { s.Imports, s.CrashAfterSync = []string{"next"}, "" })))
+		runAttempt(work, "admit-after-sync-3-changed-profile", with(admitted, func(s *Spec) {
+			s.Imports, s.CrashAfterSync, s.Profile = nil, "", "another-profile"
+		})),
+		runAttempt(work, "admit-after-sync-4-recover", with(admitted, func(s *Spec) { s.Imports, s.CrashAfterSync = []string{"next"}, "" })))
 
 	execReady := with(base, func(s *Spec) {
 		s.Datadir = dir("exec_ready_before_sync")
@@ -711,6 +744,13 @@ func run(genesisPath, work, output, commit, geth string) {
 	scenario("reject_after_admit",
 		runAttempt(work, "reject-after-admit-1-crash", rejected),
 		runAttempt(work, "reject-after-admit-2-recover", with(rejected, func(s *Spec) { s.Imports, s.CrashAfterSync = []string{"target"}, "" })))
+
+	// The engine path: newPayload writes the block without the head, then
+	// forkchoice makes it canonical.
+	scenario("without_set_head", runAttempt(work, "without-set-head-1", with(base, func(s *Spec) {
+		s.Datadir = dir("without_set_head")
+		s.Imports = []string{"target-without-head", "canonical-target"}
+	})))
 
 	scenario("freezer", runAttempt(work, "freezer-1", with(base, func(s *Spec) { s.Datadir = dir("freezer"); s.Freezer = true })))
 

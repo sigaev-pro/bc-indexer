@@ -1,6 +1,7 @@
 package native
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -17,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/extractor/admission"
@@ -529,8 +531,129 @@ func TestUnitRecoveryCompletesTheSavedObligation(t *testing.T) {
 		list[0].Admitted.Digest != admitted.Digest {
 		t.Fatalf("recovered: %+v", list)
 	}
-	if chain.CurrentBlock().Hash() != f.blocks[4].Hash() {
-		t.Fatal("recovery did not import the saved block")
+	// Recovery writes the block without moving the head; the next import or
+	// the consensus client decides the head.
+	if chain.CurrentBlock().Hash() != f.blocks[3].Hash() || chain.GetBlockByHash(f.blocks[4].Hash()) == nil ||
+		!chain.HasState(f.blocks[4].Root()) {
+		t.Fatal("recovery must store the saved block and keep the head")
+	}
+	if _, err := chain.InsertChain(f.blocks[4:]); err != nil || chain.CurrentBlock().Hash() != f.blocks[4].Hash() {
+		t.Fatalf("a later import sets the head natively: %v", err)
+	}
+}
+
+func TestUnitResumeRefusesChangedInputs(t *testing.T) {
+	f := newFixture(t, 5)
+	db := rawdb.NewMemoryDatabase()
+	chain := newChain(t, db, f)
+	if _, err := chain.InsertChain(f.blocks[:4]); err != nil {
+		t.Fatal(err)
+	}
+	store := &failingStore{Database: db, suffix: "/exec-ready"}
+	if _, err := Attach(chain, db, f.config(), Options{Store: store, RunID: "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chain.InsertChain(f.blocks[4:]); err == nil {
+		t.Fatal("the import passed a failed EXEC_READY write")
+	}
+	chain.Stop()
+	chain = newChain(t, db, f)
+	defer chain.Stop()
+	changed := f.config()
+	changed.Profile = "another-profile"
+	if _, err := Attach(chain, db, changed, Options{}); !errors.Is(err, ErrRecovery) {
+		t.Fatalf("a changed profile must stop recovery: %v", err)
+	}
+	held, err := Attach(chain, db, f.config(), Options{SkipRecovery: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list := observations(t, held); len(list) != 1 || list[0].State != admission.Admitted {
+		t.Fatalf("the obligation must stay ADMITTED: %+v", list)
+	}
+}
+
+func TestUnitRequireNoCapture(t *testing.T) {
+	f := newFixture(t, 2)
+	db := rawdb.NewMemoryDatabase()
+	chain := newChain(t, db, f)
+	defer chain.Stop()
+	if err := RequireNoCapture(db); err != nil {
+		t.Fatalf("a plain store: %v", err)
+	}
+	if err := db.Put([]byte(runKey), []byte("{}")); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequireNoCapture(db); !errors.Is(err, ErrConfig) {
+		t.Fatalf("a run record: %v", err)
+	}
+	if err := db.Delete([]byte(runKey)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Attach(chain, db, f.config(), Options{RunID: "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequireNoCapture(db); !errors.Is(err, ErrConfig) {
+		t.Fatalf("a bound store: %v", err)
+	}
+}
+
+func TestUnitWitnessExecutionIsNotObserved(t *testing.T) {
+	f := newFixture(t, 3)
+	db := rawdb.NewMemoryDatabase()
+	chain := newChain(t, db, f)
+	defer chain.Stop()
+	if _, err := chain.InsertChain(f.blocks[:2]); err != nil {
+		t.Fatal(err)
+	}
+	a, err := Attach(chain, db, f.config(), Options{RunID: "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// debug_executionWitness calls ProcessBlock directly, without the guard
+	// and without writing state; it must run natively and record nothing.
+	parent := chain.GetHeaderByNumber(1)
+	if _, err := chain.ProcessBlock(context.Background(), parent.Root, f.blocks[1], core.ExecuteConfig{MakeWitness: true}); err != nil {
+		t.Fatalf("witness execution: %v", err)
+	}
+	if list := observations(t, a); len(list) != 0 {
+		t.Fatalf("a witness execution was observed: %+v", list)
+	}
+}
+
+func TestUnitStatelessSelfCheckSkipsTheSafePoint(t *testing.T) {
+	f := newFixture(t, 300)
+	db := rawdb.NewMemoryDatabase()
+	cfg := core.DefaultConfig()
+	cfg.StatelessSelfValidation = true
+	chain, err := core.NewBlockChain(db, f.genesis, ethash.NewFaker(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer chain.Stop()
+	if _, err := chain.InsertChain(f.blocks[:299]); err != nil {
+		t.Fatal(err)
+	}
+	calls, lookups := 0, 0
+	safe := func(op vm.OpCode, _ *vm.ScopeContext) {
+		if op == vm.BLOCKHASH {
+			calls++
+		}
+	}
+	trace := func(event string, _ map[string]any) {
+		if event == "lookup" {
+			lookups++
+		}
+	}
+	if _, err := Attach(chain, db, f.config(), Options{RunID: "r1", SafePoint: safe, Trace: trace}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chain.InsertChain(f.blocks[299:]); err != nil {
+		t.Fatal(err)
+	}
+	// The reader executes BLOCKHASH three times; the self-check must add none.
+	if calls != 3 || lookups != 2 {
+		t.Fatalf("safe point saw %d BLOCKHASH, %d capsule lookups; want 3 and 2", calls, lookups)
 	}
 }
 
