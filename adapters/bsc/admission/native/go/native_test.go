@@ -269,6 +269,7 @@ func (s *probeStore) Put(key, value []byte) error {
 			if err := s.db.SyncKeyValue(); err != nil {
 				return err
 			}
+			s.emit(Event{"event": "sync", "model": modelKeep})
 		}
 	}
 	if s.afterPut != nil {
@@ -641,6 +642,8 @@ func TestNativeBSCAdmission(t *testing.T) {
 		}
 		sc.Extra["receipts"] = strings.Join(receipts, ",")
 		sc.Extra["genesis_canonical_hex"] = hex.EncodeToString(n.seam.genesis.Canonical)
+		genesisRLP, _ := rlp.EncodeToBytes(n.chain.Genesis().Header())
+		sc.Extra["genesis_header_rlp"] = hex.EncodeToString(genesisRLP)
 		n.finish(sc)
 		n.close()
 		// Restart: the saved run opens with an empty producer, a foreign
