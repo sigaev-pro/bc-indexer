@@ -372,4 +372,19 @@ func TestNativeBSCSystemCallGuard(t *testing.T) {
 	if calls := backend.Calls(); calls[parent.Hash()] != 1 || len(calls) != 1 {
 		t.Fatalf("calls %v", calls)
 	}
+	// Start refuses an engine that cannot make system-contract calls.
+	home := filepath.Join(probeEnv(t, envWork), "home-no-ethapi")
+	nodb := openDisk(t, home)
+	defer nodb.Close()
+	config := core.DefaultConfig()
+	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = rawdb.HashScheme, false, 0
+	bare, err := core.NewBlockChain(nodb, fx.genesis, parlia.New(fx.genesis.Config, nodb, nil, fx.genesis.ToBlock().Hash()), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bare.Stop()
+	if _, err := Start(admission.NewGuard(), nodb, bare, Config{Producer: probeProducer, GenesisFile: fx.genesisFile,
+		NativeCommit: fx.commit}); !errors.Is(err, ErrEngine) {
+		t.Fatalf("start without ethAPI: %v", err)
+	}
 }

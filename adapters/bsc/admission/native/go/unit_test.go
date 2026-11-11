@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/parlia"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -29,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/triedb"
+	"github.com/holiman/uint256"
 )
 
 // ---- observation reader ----
@@ -721,5 +723,63 @@ func TestUnitStaticWindow(t *testing.T) {
 	changed["parlia-snapshots"] = []byte(SnapshotTag + ";all")
 	if _, err := DecodeStatic(changed, genesis, "commit"); err == nil || !strings.Contains(err.Error(), "parlia-snapshots") {
 		t.Fatalf("another snapshot declaration accepted: %v", err)
+	}
+}
+
+func TestUnitValidatedRefusesAParentStateError(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(db, triedb.HashDefaults)
+	statedb, err := state.New(types.EmptyRootHash, state.NewDatabase(tdb, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	accounts := []common.Address{{1}, {2}, {3}}
+	for _, addr := range accounts {
+		statedb.AddBalance(addr, uint256.NewInt(1), tracing.BalanceChangeUnspecified)
+	}
+	root, err := statedb.Commit(0, false, false)
+	if err != nil || tdb.Commit(root, false) != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	// Delete every node below the root, then read an account.
+	it := db.NewIterator(nil, nil)
+	for it.Next() {
+		if len(it.Key()) == common.HashLength && common.BytesToHash(it.Key()) != root {
+			rawdb.DeleteLegacyTrieNode(db, common.BytesToHash(it.Key()))
+		}
+	}
+	it.Release()
+	broken, err := state.New(root, state.NewDatabase(triedb.NewDatabase(db, triedb.HashDefaults), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken.GetBalance(accounts[0])
+	if broken.Error() == nil {
+		t.Fatal("no read error")
+	}
+	block := types.NewBlockWithHeader(&types.Header{Number: big.NewInt(1)})
+	// The read error must stop Validated before the log or the admission.
+	o := &observation{seam: &Seam{emit: func(Event) {}}, key: "obs-1", hash: block.Hash(), reader: &Reader{}}
+	if err := o.Validated(block, broken, nil); !errors.Is(err, core.ErrExtractorParentState) {
+		t.Fatalf("validated with a state read error: %v", err)
+	}
+}
+
+func TestUnitDecodeSnapshotChecksTheBlock(t *testing.T) {
+	config := &params.ChainConfig{ChainID: big.NewInt(714), Parlia: &params.ParliaConfig{}}
+	engine := parlia.New(config, rawdb.NewMemoryDatabase(), nil, common.Hash{9})
+	hash := common.Hash{7}
+	blob := []byte(`{"number":5,"hash":"` + hash.Hex() + `","validators":{},"recents":{},"recent_fork_hashes":{}}`)
+	if snap, err := engine.ExtractorDecodeSnapshot(blob, 5, hash); err != nil || snap.Number != 5 || snap.EpochLength == 0 {
+		t.Fatalf("decode: %v", err)
+	}
+	if _, err := engine.ExtractorDecodeSnapshot(blob, 6, hash); err == nil {
+		t.Fatal("snapshot of another number accepted")
+	}
+	if _, err := engine.ExtractorDecodeSnapshot(blob, 5, common.Hash{8}); err == nil {
+		t.Fatal("snapshot of another hash accepted")
+	}
+	if _, err := engine.ExtractorDecodeSnapshot([]byte("{"), 5, hash); err == nil {
+		t.Fatal("malformed snapshot accepted")
 	}
 }

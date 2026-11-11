@@ -10,6 +10,7 @@ driver formula fails the baseline instead of agreeing with itself.
 """
 
 import copy
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -50,6 +51,11 @@ def load_traces():
 
 
 TRACES = load_traces()
+LONG_REPORT = json.loads((HERE / "long-report.json").read_text())
+LONG_BLOCKS = gzip.decompress((HERE / "long-blocks.rlp.gz").read_bytes())
+EXTRA = {name: [json.loads(line) for line in gzip.decompress((HERE / f"trace-{name}.jsonl.gz").read_bytes()).splitlines()]
+         for name in driver.LONG_TRACES}
+EXTRA["parent-state"] = [json.loads(line) for line in (HERE / "trace-parent-state.jsonl").read_text().splitlines()]
 
 
 def scenario(report, name):
@@ -59,6 +65,11 @@ def scenario(report, name):
 def evaluate(report=None, traces=None, geth=None, genesis=GENESIS, chain_config=CHAIN_CONFIG, prepared=PREPARED):
     return driver.checked_evaluate(report or copy.deepcopy(REPORT), traces or copy.deepcopy(TRACES), RAW, genesis,
                                    COMMIT, GENESIS_HASH, chain_config, prepared, geth or dict(GETH))
+
+
+def changed_snapshot(handoff):
+    """Another snapshot response of the same block: one more JSON field."""
+    return json.dumps(dict(json.loads(bytes.fromhex(handoff["response_hex"])), extra=1)).encode()
 
 
 def record(sc, sequence, kind):
@@ -165,19 +176,27 @@ class Evaluate(unittest.TestCase):
     def test_consumed_from_handoffs(self):
         traces = copy.deepcopy(TRACES)
         handoff = next(e for e in traces["live"] if e.get("event") == "handoff" and e["observation"] == driver.key_of(1))
-        handoff["response_hex"] = "00"
-        handoff["response_sha256"] = hashlib.sha256(b"\x00").hexdigest()
+        changed = changed_snapshot(handoff)
+        handoff["response_hex"], handoff["response_sha256"] = changed.hex(), hashlib.sha256(changed).hexdigest()
         self.refused("live/bsc-probe.run-1.0000000000000001: EXEC_READY digests", traces=traces)
         traces = copy.deepcopy(TRACES)
         handoff = next(e for e in traces["live"] if e.get("event") == "handoff")
         handoff["response_sha256"] = "00" * 32
         self.refused("Hand-off digest", traces=traces)
 
-    def test_undeclared_read(self):
-        traces = copy.deepcopy(TRACES)
-        handoff = next(e for e in traces["live"] if e.get("event") == "handoff" and e["observation"] == driver.key_of(1))
-        handoff["request_hex"] = (driver.GET_TAG + b"parlia-" + b"\x01" * 32).hex()
-        self.refused("read of an undeclared key", traces=traces)
+    def test_snapshot_requests(self):
+        def tampered(field, value):
+            traces = copy.deepcopy(TRACES)
+            handoff = next(e for e in traces["live"] if e.get("event") == "handoff" and
+                           e["observation"] == driver.key_of(1))
+            handoff[field] = value(handoff)
+            return traces
+        self.refused("request is not a snapshot request", traces=tampered(
+            "request_hex", lambda h: (b"bsc-parlia-db-get-v1\x00parlia-" + b"\x01" * 32).hex()))
+        self.refused("snapshot of a header outside the capsule", traces=tampered(
+            "request_hex", lambda h: (driver.SNAPSHOT_TAG + (5).to_bytes(8, "big") + b"\x01" * 32).hex()))
+        other = lambda h: json.dumps(dict(json.loads(bytes.fromhex(h["response_hex"])), number=7)).encode().hex()
+        self.refused("response is the snapshot of another block", traces=tampered("response_hex", other))
 
     def test_handoff_sequence(self):
         traces = copy.deepcopy(TRACES)
@@ -356,13 +375,13 @@ class Evaluate(unittest.TestCase):
 
     def test_consumed_equal_across_scenarios(self):
         report, traces = copy.deepcopy(REPORT), copy.deepcopy(TRACES)
-        # Give the reject scenario a block 2 log with one more, consistent response.
+        # Give the reject scenario a block 2 log with another, consistent response.
         sc = scenario(report, "reject")
         events = traces["reject"]
         key = driver.key_of(2)
         last = max(i for i, e in enumerate(events) if e.get("event") == "handoff" and e.get("observation") == key)
-        extra = dict(events[last], sequence=events[last]["sequence"] + 1)
-        events.insert(last + 1, extra)
+        changed = changed_snapshot(events[last])
+        events[last]["response_hex"], events[last]["response_sha256"] = changed.hex(), hashlib.sha256(changed).hexdigest()
         handoffs = driver.attempt_handoffs(events, key)
         ready = record(sc, 2, "exec-ready")
         ready["consumed_digest"] = driver.consumed(record(sc, 2, "admitted")["capsule_digest"], handoffs)
@@ -482,7 +501,7 @@ class Patches(unittest.TestCase):
                            mainnet, 0, 0, table)
 
     def test_ancestor_floor(self):
-        for number, floor in {2: 0, 256: 0, 1024: 0, 1025: 769, 1500: 1024, 2049: 1793}.items():
+        for number, floor in {2: 0, 256: 0, 257: 1, 1024: 768, 1025: 769, 1500: 1244, 2049: 1793}.items():
             self.assertEqual(driver.ancestor_floor(number), floor)
 
     def test_install_list(self):
@@ -494,6 +513,79 @@ class Patches(unittest.TestCase):
             self.assertIn(f'"{mode}"', go)
         self.assertIn(f'"{driver.PRODUCER}"', go)
         self.assertIn(driver.STORE_ID, go)
+
+
+
+
+def evaluate_long(report=None, traces=None, blocks=LONG_BLOCKS):
+    return driver.checked_evaluate(report or copy.deepcopy(LONG_REPORT), traces or copy.deepcopy(EXTRA), blocks,
+                                   bytes.fromhex(GENESIS_HASH[2:]), function=driver.evaluate_long)
+
+
+class LongChain(unittest.TestCase):
+    def refused(self, message, **changes):
+        with self.assertRaises(Rejected) as caught:
+            evaluate_long(**changes)
+        self.assertIn(message, str(caught.exception))
+
+    def test_baseline_passes(self):
+        summary = evaluate_long()
+        self.assertEqual(summary["observed"], driver.LONG_LENGTH - driver.LONG_OBSERVED_FROM + 1)
+        self.assertEqual(summary["system_calls"], {str(driver.LONG_EPOCH_BLOCK): 1})
+        self.assertEqual(summary["window_of_last_block"], [1099, 844])
+
+    def changed(self, run, field, value):
+        report = copy.deepcopy(LONG_REPORT)
+        report[run][field] = value(report[run][field])
+        return report
+
+    def test_report_fields(self):
+        self.refused("cold: states", report=self.changed("cold", "states", lambda v: {"EXEC_READY": 110, "ADMITTED": 1}))
+        self.refused("warm: system calls", report=self.changed("warm", "system_calls_on_parent", lambda v: {"1001": 1}))
+        self.refused("warm: stored checkpoint", report=self.changed("warm", "stored_checkpoint_number", lambda v: 0))
+        self.refused("warm: window", report=self.changed("warm", "window_of_last_block", lambda v: [1099, 1024]))
+        self.refused("cold: restarts", report=self.changed("cold", "restarts", lambda v: 0))
+        self.refused("Warm and cold imports differ",
+                     report=self.changed("cold", "exec_digests", lambda v: dict(v, **{"1100": "00" * 32})))
+        report = copy.deepcopy(LONG_REPORT)
+        report["hashes"]["1024"] = "0x" + "00" * 32
+        self.refused("Long chain hash 1024", report=report)
+
+    def test_blocks_link(self):
+        items = probe14.split_rlp_list_items(LONG_BLOCKS)
+        self.refused("Long chain length", blocks=b"".join(items[:-1]))
+        self.refused("does not link", blocks=b"".join(items[:500] + items[501:] + items[500:501]))
+
+    def test_snapshot_rows(self):
+        traces = copy.deepcopy(EXTRA)
+        row = next(e for e in traces["long-warm"] if e.get("event") == "handoff")
+        row["request_hex"] = (driver.SNAPSHOT_TAG + (5).to_bytes(8, "big") + b"\x01" * 32).hex()
+        self.refused("snapshot of a header outside the capsule", traces=traces)
+        traces = copy.deepcopy(EXTRA)
+        rows = [e for e in traces["long-cold"] if e.get("event") == "handoff"]
+        rows[-1]["response_sha256"] = "00" * 32
+        self.refused("snapshot digests differ from the report", traces=traces)
+
+
+class ParentState(unittest.TestCase):
+    def evaluate(self, events):
+        return driver.checked_evaluate(events, function=driver.evaluate_parent_state)
+
+    def test_baseline_passes(self):
+        self.assertEqual(self.evaluate(copy.deepcopy(EXTRA["parent-state"]))["key"], driver.key_of(0))
+
+    def test_refusals(self):
+        key = driver.key_of(0)
+        base = EXTRA["parent-state"]
+        for message, events in {
+            "was rejected": base + [{"event": "rejected", "observation": key}],
+            "did not stop on the parent state": [dict(e, error="other") if e.get("event") == "observation-error" else e
+                                                 for e in base],
+            "recovery did not resolve": [e for e in base if e.get("event") != "exec-ready"],
+        }.items():
+            with self.assertRaises(Rejected) as caught:
+                self.evaluate(copy.deepcopy(events))
+            self.assertIn(message, str(caught.exception))
 
 
 if __name__ == "__main__":

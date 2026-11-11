@@ -852,11 +852,40 @@ type fakeObservation struct {
 	validated    int
 	validatedErr error
 	endErr       error
+	hashCalls    int
+	reader       *recordingReader
 }
 
-func (o *fakeObservation) Hash() [32]byte { return o.hash }
+func (o *fakeObservation) Hash() [32]byte { o.hashCalls++; return o.hash }
 
-func (o *fakeObservation) Reader(native core.ExtractorReader) core.ExtractorReader { return native }
+func (o *fakeObservation) Reader(native core.ExtractorReader) core.ExtractorReader {
+	if o.reader == nil {
+		return native
+	}
+	o.reader.ExtractorReader = native
+	return o.reader
+}
+
+// recordingReader counts the header reads that reach the observation's
+// reader; with refuse set it answers GetHeader with nil.
+type recordingReader struct {
+	core.ExtractorReader
+	refuse            bool
+	getHeader, byHash int
+}
+
+func (r *recordingReader) GetHeader(hash common.Hash, number uint64) *types.Header {
+	r.getHeader++
+	if r.refuse {
+		return nil
+	}
+	return r.ExtractorReader.GetHeader(hash, number)
+}
+
+func (r *recordingReader) GetHeaderByHash(hash common.Hash) *types.Header {
+	r.byHash++
+	return r.ExtractorReader.GetHeaderByHash(hash)
+}
 
 func (o *fakeObservation) Validated(*types.Block, *state.StateDB, *core.ProcessResult) error {
 	o.validated++
@@ -900,6 +929,8 @@ func TestNativeBSCHookContract(t *testing.T) {
 		{"validated-error", &fakeObservation{hash: fx.blocks[0].Hash(), validatedErr: errors.New("exec-ready failed")}, 0, nil},
 		{"end-error", &fakeObservation{hash: fx.blocks[0].Hash(), endErr: errors.New("unresolved")}, 1, nil},
 		{"unavailable-data", &fakeObservation{hash: fx.blocks[0].Hash()}, 0, nil},
+		{"reader-in-process", &fakeObservation{hash: fx.blocks[0].Hash(), reader: &recordingReader{}}, 1, nil},
+		{"reader-in-verify", &fakeObservation{hash: fx.blocks[0].Hash(), reader: &recordingReader{refuse: true}}, 0, nil},
 	}
 	for _, c := range cases {
 		chain, db := plainChain(t, fx, filepath.Join(work, c.name))
@@ -934,6 +965,18 @@ func TestNativeBSCHookContract(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "sidecars present in block body before cancun") ||
 				hook.begins != 0 || stored {
 				t.Errorf("%s: %v, begins %d, stored %v", c.name, err, hook.begins, stored)
+			}
+		case "reader-in-process":
+			// Process and Finalize read the parent by hash through the reader.
+			if err != nil || c.obs.reader.byHash == 0 || c.obs.validated != 1 {
+				t.Errorf("%s: %v, reads by hash %d", c.name, err, c.obs.reader.byHash)
+			}
+		case "reader-in-verify":
+			// Header verification reads the parent through the reader, so the
+			// refused read stops the block before ProcessBlock (the only Hash
+			// call is the rejection report's).
+			if err == nil || c.obs.reader.getHeader == 0 || c.obs.hashCalls != 1 || c.obs.validated != 0 {
+				t.Errorf("%s: %v, reads %d, hash calls %d", c.name, err, c.obs.reader.getHeader, c.obs.hashCalls)
 			}
 		}
 		if head != c.head {

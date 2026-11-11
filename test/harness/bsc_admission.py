@@ -685,10 +685,10 @@ def evaluate_long(report, traces, blocks_rlp, genesis_hash):
             "snapshot_responses": sum(len(v) for v in runs["warm"]["snapshot_response_sha256"].values())}
 
 
-def checked_evaluate(*args):
+def checked_evaluate(*args, function=None):
     """Evaluate, turning a malformed report into a rejection instead of an exception."""
     try:
-        return evaluate(*args)
+        return (function or evaluate)(*args)
     except Rejected:
         raise
     except (KeyError, TypeError, ValueError, AttributeError, IndexError, StopIteration) as error:
@@ -759,10 +759,10 @@ def probe_run(tool, fixture, genesis_hash, output, runner, deadline, binary=None
                                tool["native_source_commit"], genesis_hash, tool["chain_config"], fixture["blocks"], geth)
     long_report = root / "work/long-report.json"
     long_traces = {name: probe14.read_jsonl(root / "work" / f"trace-{name}.jsonl", deadline) for name in EXTRA_TRACES}
-    summary["parent_state"] = evaluate_parent_state(long_traces["parent-state"])
-    summary["long_chain"] = evaluate_long(load(long_report, 16 * 1024 * 1024, deadline), long_traces,
-                                          read_bytes(root / "work/long-blocks.rlp", 64 * 1024 * 1024, deadline),
-                                          bytes.fromhex(genesis_hash.removeprefix("0x")))
+    summary["parent_state"] = checked_evaluate(long_traces["parent-state"], function=evaluate_parent_state)
+    summary["long_chain"] = checked_evaluate(load(long_report, 16 * 1024 * 1024, deadline), long_traces,
+                                             read_bytes(root / "work/long-blocks.rlp", 64 * 1024 * 1024, deadline),
+                                             bytes.fromhex(genesis_hash.removeprefix("0x")), function=evaluate_long)
     return {"inputs": inputs, "passed": passed, "elapsed_seconds": elapsed,
             "report": reference(report_path, 16 * 1024 * 1024, deadline), "stdout": reference(stdout, deadline=deadline),
             "traces": {name: reference(root / "work" / f"trace-{name}.jsonl", deadline=deadline)
