@@ -130,6 +130,33 @@ EXEC_READY binding stays with E01-02.admission.
 Next: none for this block; it is merged. The open #14 items are listed in
 the first E01-02.inputs section.
 
+The status line and "Next" above are for the merged block. A new block
+follows.
+
+Static manifest block (Part of #14): IN_PROGRESS in draft PR #144 on branch
+`claude/elegant-shirley-a32d31`. Role: native-engineer. Allowed
+paths: the same BSC-only files as above. The BSC capsule now holds every
+static item of NATIVE_CAPTURE_PROTOCOL: the block, parent hash, parent header,
+parent root, the ancestor headers down to the Parlia checkpoint and BLOCKHASH
+floor, the genesis, the EIP-2124 fork id, the declared Parlia snapshot keys,
+native commit, normalization profile and state profile. `ParliaDB` refuses a
+read of an undeclared key. Block 2 now replays alone on a home that never
+imported block 1: its headers come from the capsule, and its parent body and
+state come from the parent pin. A missing parent state stops the replay
+before execution (`single-no-state`). Without the capsule headers, the live
+import fails with `unknown ancestor` (`single-no-headers`). The driver recomputes every item with its own
+Keccak-256. On clean commit `186ae16`: preparation 07 PASS; run 07 PASS in
+5.921 seconds with 36 Go tests; Go mutants 89 of 89 and Python 172 of 172
+killed. Kept failed records: Go mutants 04 at `c4d2657` (3 build failures,
+1 survivor; fixed in `646a918`), run 05 at `b8386c6` (a test sealed a
+duplicate item, which the shared core refuses; fixed in `43b215e`) and Go
+mutants 07 at `43b215e` (2 survivors on the parent header checks; fixed in
+`186ae16`). Review 001 of PR #144 (head `e168017`): Spec and Standards
+REQUEST_CHANGES with no P1; all P2 and P3 findings are fixed except two P3
+notes kept in the evidence. Next: Spec and Standards review and hosted
+`bootstrap/ci` on the exact head. Still missing for BSC: see "Still missing"
+in the evidence.
+
 ## E01-02.inputs — Geth block
 
 Status: block ACCEPTED in PR #138 at merge `b7c2679` (part of #14), after

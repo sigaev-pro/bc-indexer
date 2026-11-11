@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,7 +28,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/triedb"
 )
 
 // ---- unit tests on the native in-memory database ----
@@ -70,6 +74,15 @@ func bscUnitLog(t *testing.T, db ethdb.Database, events *eventLog, id string) *L
 	return log
 }
 
+// declare declares the keys that a unit test reads.
+func declare(d *ParliaDB, keys ...string) {
+	var declared [][]byte
+	for _, key := range keys {
+		declared = append(declared, []byte(key))
+	}
+	d.Declare(declared)
+}
+
 func TestUnitBSCGetIsDurableBeforeHandoff(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
 	events := new(eventLog)
@@ -88,6 +101,7 @@ func TestUnitBSCGetIsDurableBeforeHandoff(t *testing.T) {
 	if err := wrapped.Attach("obs-a", log); err != nil {
 		t.Fatal(err)
 	}
+	declare(wrapped, "parlia-k")
 	value, err := wrapped.Get([]byte("parlia-k"))
 	if err != nil || string(value) != "snapshot" {
 		t.Fatalf("Get = %q, %v", value, err)
@@ -118,6 +132,7 @@ func TestUnitBSCMissingKeyAndHas(t *testing.T) {
 	if err := wrapped.Attach("obs-b", log); err != nil {
 		t.Fatal(err)
 	}
+	declare(wrapped, "missing", "present")
 	if value, err := wrapped.Get([]byte("missing")); !errors.Is(err, ErrDependencyNotFound) || value != nil {
 		t.Fatalf("missing Get = %q, %v", value, err)
 	}
@@ -153,6 +168,7 @@ func TestUnitBSCReplayIgnoresTheLiveValue(t *testing.T) {
 	if err := wrapped.Attach("obs-c", log); err != nil {
 		t.Fatal(err)
 	}
+	declare(wrapped, "parlia-k")
 	if _, err := wrapped.Get([]byte("parlia-k")); err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +195,7 @@ func TestUnitBSCReplayIgnoresTheLiveValue(t *testing.T) {
 	if err := replay.Attach("obs-c", reopened); err != nil {
 		t.Fatal(err)
 	}
+	declare(replay, "parlia-k", "parlia-other")
 	if value, err := replay.Get([]byte("parlia-k")); err != nil || string(value) != "first" {
 		t.Fatalf("replayed Get = %q, %v", value, err)
 	}
@@ -310,6 +327,7 @@ func TestUnitBSCNativeReadErrorsStopTheObservation(t *testing.T) {
 		if err := wrapped.Attach("obs-f", log); err != nil {
 			t.Fatal(err)
 		}
+		declare(wrapped, "k")
 		_, err := wrapped.Get([]byte("k"))
 		if err == nil || errors.Is(err, ErrDependencyNotFound) || wrapped.Err() == nil {
 			t.Fatalf("hasErr %v: Get = %v, Err %v", hasErr, err, wrapped.Err())
@@ -325,6 +343,7 @@ func TestUnitBSCNativeReadErrorsStopTheObservation(t *testing.T) {
 	if err := wrapped.Attach("obs-g", log); err != nil {
 		t.Fatal(err)
 	}
+	declare(wrapped, "k")
 	if _, err := wrapped.Has([]byte("k")); err == nil || wrapped.Err() == nil {
 		t.Fatalf("Has error = %v", err)
 	}
@@ -350,6 +369,7 @@ func TestUnitBSCMalformedSavedResponseStops(t *testing.T) {
 		if err := wrapped.Attach("obs-h", reopened); err != nil {
 			t.Fatal(err)
 		}
+		declare(wrapped, "k")
 		if tc.tag == ParliaGetTag {
 			_, err = wrapped.Get([]byte("k"))
 		} else {
@@ -405,20 +425,468 @@ func TestUnitBSCRecordKind(t *testing.T) {
 	}
 }
 
-func TestUnitBSCBlockItems(t *testing.T) {
-	items := BlockItems([]byte{0xc0}, common.Hash{1}, []byte("{}"), "abc")
-	var names []string
-	for _, item := range items {
-		names = append(names, item.Name+"="+hex.EncodeToString(item.Data))
-	}
-	want := []string{"block-rlp=c0", "parent-hash=01" + strings.Repeat("00", 31), "genesis-json=7b7d",
-		"native-commit=616263", "state-profile=" + hex.EncodeToString([]byte(StateProfile))}
-	if strings.Join(names, ",") != strings.Join(want, ",") {
-		t.Fatalf("items %v", names)
-	}
+func TestUnitBSCRequestEncoding(t *testing.T) {
 	if string(ParliaRequest(ParliaGetTag, []byte("k"))) != "bsc-parlia-db-get-v1\x00k" ||
 		string(ParliaRequest(ParliaHasTag, []byte("k"))) != "bsc-parlia-db-has-v1\x00k" {
 		t.Fatal("request encoding")
+	}
+}
+
+func TestUnitBSCDeclaredReads(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	if err := db.Put([]byte("parlia-a"), []byte("a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Put([]byte("parlia-b"), []byte("b")); err != nil {
+		t.Fatal(err)
+	}
+	events := new(eventLog)
+	// Without a declaration, a read inside an observation stops the wrapper.
+	silent := NewParliaDB(db, false, nil)
+	if err := silent.Attach("obs-i", bscUnitLog(t, db, events, "obs-i")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := silent.Get([]byte("parlia-a")); !errors.Is(err, ErrUndeclaredRead) || silent.Fetches() != 0 {
+		t.Fatalf("Get before Declare = %v, fetches %d", err, silent.Fetches())
+	}
+	log := bscUnitLog(t, db, events, "obs-j")
+	wrapped := NewParliaDB(db, false, nil)
+	if err := wrapped.Attach("obs-j", log); err != nil {
+		t.Fatal(err)
+	}
+	declare(wrapped, "parlia-a")
+	if value, err := wrapped.Get([]byte("parlia-a")); err != nil || string(value) != "a" {
+		t.Fatalf("declared Get = %q, %v", value, err)
+	}
+	if _, err := wrapped.Has([]byte("parlia-b")); !errors.Is(err, ErrUndeclaredRead) {
+		t.Fatalf("undeclared Has = %v", err)
+	}
+	if _, err := wrapped.Get([]byte("parlia-a")); !errors.Is(err, ErrUndeclaredRead) {
+		t.Fatalf("Get after the stop = %v", err)
+	}
+	if log.Frontier() != 1 || wrapped.Fetches() != 1 || !errors.Is(wrapped.Detach(), ErrUndeclaredRead) {
+		t.Fatalf("frontier %d, fetches %d", log.Frontier(), wrapped.Fetches())
+	}
+	// Detach drops the declaration.
+	again := NewParliaDB(db, false, nil)
+	if err := again.Attach("obs-k", bscUnitLog(t, db, events, "obs-k")); err != nil {
+		t.Fatal(err)
+	}
+	declare(again, "parlia-a")
+	if err := again.Detach(); err != nil {
+		t.Fatal(err)
+	}
+	if err := again.Attach("obs-l", bscUnitLog(t, db, events, "obs-l")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := again.Get([]byte("parlia-a")); !errors.Is(err, ErrUndeclaredRead) {
+		t.Fatalf("Get after a new Attach = %v", err)
+	}
+}
+
+func TestUnitBSCAncestorFloor(t *testing.T) {
+	for n, want := range map[uint64]uint64{2: 0, 3: 0, 256: 0, 300: 0, 1024: 0, 1025: 769, 1100: 844, 1500: 1024,
+		2048: 1024, 2049: 1793} {
+		if got := AncestorFloor(n); got != want {
+			t.Errorf("AncestorFloor(%d) = %d, want %d", n, got, want)
+		}
+	}
+}
+
+// unitGenesis returns a test genesis whose state holds a contract with code
+// and storage and 32 plain accounts, so the account trie has inner nodes.
+// seed changes the state root.
+func unitGenesis(seed byte) *core.Genesis {
+	alloc := types.GenesisAlloc{common.Address{0xaa, seed}: {Balance: big.NewInt(1), Code: []byte{0x60, seed},
+		Storage: map[common.Hash]common.Hash{{1}: {2, seed}}}}
+	for index := range 32 {
+		alloc[common.Address{0xbb, seed, byte(index)}] = types.Account{Balance: big.NewInt(int64(index) + 1)}
+	}
+	return &core.Genesis{Config: params.TestChainConfig, Difficulty: big.NewInt(1), GasLimit: 8_000_000, Alloc: alloc}
+}
+
+func commitGenesis(t *testing.T, db ethdb.Database, genesis *core.Genesis) *types.Block {
+	t.Helper()
+	nodes := triedb.NewDatabase(db, triedb.HashDefaults)
+	defer nodes.Close()
+	block, err := genesis.Commit(db, nodes, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return block
+}
+
+// unitHeaders returns the genesis header and count child headers with the
+// given state root and difficulty 2.
+func unitHeaders(genesis *types.Header, count int, root common.Hash) []*types.Header {
+	headers := []*types.Header{genesis}
+	for number := 1; number <= count; number++ {
+		parent := headers[number-1]
+		headers = append(headers, &types.Header{ParentHash: parent.Hash(), UncleHash: types.EmptyUncleHash, Root: root,
+			TxHash: types.EmptyTxsHash, ReceiptHash: types.EmptyReceiptsHash, Difficulty: big.NewInt(2),
+			Number: big.NewInt(int64(number)), GasLimit: parent.GasLimit, Time: parent.Time + 3})
+	}
+	return headers
+}
+
+func unitItems(t *testing.T, headers []*types.Header, genesis *core.Genesis, n int) map[string][]byte {
+	t.Helper()
+	block := types.NewBlockWithHeader(headers[n])
+	raw, err := rlp.EncodeToBytes(block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookup := func(number uint64) *types.Header {
+		if number < uint64(len(headers)) {
+			return headers[number]
+		}
+		return nil
+	}
+	items, err := BlockItems(raw, block, lookup, []byte("{}"), genesis, "abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := make(map[string][]byte)
+	var names []string
+	for _, item := range items {
+		named[item.Name] = item.Data
+		names = append(names, item.Name)
+	}
+	if strings.Join(names, ",") != strings.Join(StaticItemNames, ",") {
+		t.Fatalf("items %v", names)
+	}
+	return named
+}
+
+func TestUnitBSCStaticItems(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	genesis := unitGenesis(1)
+	headers := unitHeaders(commitGenesis(t, db, genesis).Header(), 3, common.Hash{9})
+	items := unitItems(t, headers, genesis, 3)
+	static, err := DecodeStatic(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if static.Parent.Hash() != headers[2].Hash() || static.Root != headers[2].Root || len(static.Ancestors) != 2 ||
+		static.Ancestors[0].Hash() != headers[1].Hash() || static.Ancestors[1].Hash() != headers[0].Hash() {
+		t.Fatalf("static %+v", static)
+	}
+	wantSnapshot := fmt.Sprintf(`{"checkpoint":0,"keys":["%x"]}`, append([]byte("parlia-"), headers[0].Hash().Bytes()...))
+	fork, err := ForkID(genesis, 3, headers[3].Time)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(items["parlia-snapshot-keys"]) != wantSnapshot || string(items["fork-id"]) != string(fork) ||
+		string(items["normalization-profile"]) != NormalizationProfile || string(items["state-profile"]) != StateProfile ||
+		string(items["native-commit"]) != "abc" || string(items["genesis-json"]) != "{}" {
+		t.Fatalf("items %q", items)
+	}
+	if keys, err := static.Snapshot.KeyBytes(); err != nil || len(keys) != 1 || string(keys[0][:7]) != "parlia-" {
+		t.Fatalf("KeyBytes = %q, %v", keys, err)
+	}
+	if _, err := (SnapshotDependency{Keys: []string{"00"}}).KeyBytes(); !errors.Is(err, ErrStaticInput) {
+		t.Fatalf("foreign key = %v", err)
+	}
+	// Block 1 has no ancestor headers; its parent is the genesis.
+	first := unitItems(t, headers, genesis, 1)
+	if static, err := DecodeStatic(first); err != nil || len(static.Ancestors) != 0 ||
+		hex.EncodeToString(first["ancestor-headers-rlp"]) != "c0" {
+		t.Fatalf("block 1: %+v, %v", static, err)
+	}
+
+	// Each tampered item is refused.
+	reencode := func(headers []*types.Header) []byte {
+		data, err := rlp.EncodeToBytes(headers)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	broken := *headers[1]
+	broken.Extra = []byte("x")
+	flipped := bytes.Clone(items["parent-header-rlp"])
+	flipped[len(flipped)-1] ^= 1
+	otherBlock := unitItems(t, headers, genesis, 2)["block-rlp"]
+	for name, change := range map[string]func(map[string][]byte){
+		"missing item":       func(m map[string][]byte) { delete(m, "fork-id") },
+		"parent header byte": func(m map[string][]byte) { m["parent-header-rlp"] = flipped },
+		"parent hash":        func(m map[string][]byte) { m["parent-hash"] = headers[1].Hash().Bytes() },
+		"parent root":        func(m map[string][]byte) { m["parent-root"] = common.Hash{8}.Bytes() },
+		"short window":       func(m map[string][]byte) { m["ancestor-headers-rlp"] = reencode(headers[1:2]) },
+		"broken link":        func(m map[string][]byte) { m["ancestor-headers-rlp"] = reencode([]*types.Header{&broken, headers[0]}) },
+		"wrong order": func(m map[string][]byte) {
+			m["ancestor-headers-rlp"] = reencode([]*types.Header{headers[0], headers[1]})
+		},
+		"snapshot keys": func(m map[string][]byte) { m["parlia-snapshot-keys"] = []byte(`{"checkpoint":0,"keys":[]}`) },
+		"other block":   func(m map[string][]byte) { m["block-rlp"] = otherBlock },
+		"bad ancestors": func(m map[string][]byte) { m["ancestor-headers-rlp"] = []byte{0x01} },
+	} {
+		tampered := make(map[string][]byte)
+		for key, value := range items {
+			tampered[key] = value
+		}
+		change(tampered)
+		if _, err := DecodeStatic(tampered); !errors.Is(err, ErrStaticInput) {
+			t.Errorf("%s: DecodeStatic = %v", name, err)
+		}
+	}
+
+	// Above a checkpoint, the BLOCKHASH window sets the floor: block 1025
+	// keeps 255 ancestors down to 769, and its checkpoint is the parent. A
+	// window without its lowest header is refused by its length alone.
+	long := unitHeaders(headers[0], 1025, common.Hash{9})
+	longItems := unitItems(t, long, genesis, 1025)
+	if static, err := DecodeStatic(longItems); err != nil || len(static.Ancestors) != 255 ||
+		static.Ancestors[254].Number.Uint64() != 769 || static.Snapshot.Checkpoint != 1024 {
+		t.Fatalf("block 1025: %v", err)
+	}
+	var short []*types.Header
+	for number := 1023; number >= 770; number-- {
+		short = append(short, long[number])
+	}
+	longItems["ancestor-headers-rlp"] = reencode(short)
+	if _, err := DecodeStatic(longItems); !errors.Is(err, ErrStaticInput) || !strings.Contains(err.Error(), "want 255") {
+		t.Errorf("short BLOCKHASH window: DecodeStatic = %v", err)
+	}
+
+	// An ancestor whose hash links but whose number does not is refused.
+	renumbered := *headers[1]
+	renumbered.Number = big.NewInt(7)
+	child := *headers[2]
+	child.ParentHash = renumbered.Hash()
+	grandchild := *headers[3]
+	grandchild.ParentHash = child.Hash()
+	relinked := []*types.Header{headers[0], &renumbered, &child, &grandchild}
+	if _, err := DecodeStatic(unitItems(t, relinked, genesis, 3)); !errors.Is(err, ErrStaticInput) ||
+		!strings.Contains(err.Error(), "does not link") {
+		t.Errorf("renumbered ancestor: DecodeStatic = %v", err)
+	}
+
+	// BlockItems refuses a block without its parent or an ancestor header.
+	// Each lookup differs from the canonical headers at one number only.
+	block := types.NewBlockWithHeader(headers[3])
+	lookup := func(number uint64, header *types.Header) func(uint64) *types.Header {
+		return func(n uint64) *types.Header {
+			if n == number {
+				return header
+			}
+			return headers[n]
+		}
+	}
+	for name, test := range map[string]struct {
+		lookup func(uint64) *types.Header
+		want   string
+	}{
+		"missing parent":   {lookup(2, nil), "no parent header of block 3"},
+		"wrong parent":     {lookup(2, headers[1]), "parent header of block 3 has another hash"},
+		"missing ancestor": {lookup(1, nil), "ancestor header 1"},
+	} {
+		if _, err := BlockItems(nil, block, test.lookup, nil, genesis, ""); !errors.Is(err, ErrStaticInput) ||
+			!strings.Contains(err.Error(), test.want) {
+			t.Errorf("%s: BlockItems = %v", name, err)
+		}
+	}
+	if _, err := BlockItems(nil, types.NewBlockWithHeader(headers[0]), nil, nil, genesis, ""); !errors.Is(err, ErrStaticInput) {
+		t.Errorf("block 0: BlockItems = %v", err)
+	}
+
+	// ReadStatic accepts only the static item names, in order. SealCapsule
+	// already refuses a duplicate name.
+	ordered := make([]Item, len(StaticItemNames))
+	for index, name := range StaticItemNames {
+		ordered[index] = Item{Name: name, Data: items[name]}
+	}
+	swapped := append([]Item{}, ordered...)
+	swapped[1], swapped[2] = swapped[2], swapped[1]
+	for name, capsule := range map[string][]Item{
+		"ordered": ordered, "swapped": swapped,
+		"short": ordered[:len(ordered)-1], "extra": append(append([]Item{}, ordered...), Item{Name: "extra"}),
+	} {
+		db := rawdb.NewMemoryDatabase()
+		if _, err := SealCapsule(db, name, capsule); err != nil {
+			t.Fatal(err)
+		}
+		static, err := ReadStatic(db, name)
+		if name == "ordered" {
+			if err != nil || static.Block.NumberU64() != 3 {
+				t.Errorf("ordered: ReadStatic = %v", err)
+			}
+		} else if !errors.Is(err, ErrStaticInput) {
+			t.Errorf("%s: ReadStatic = %v", name, err)
+		}
+	}
+}
+
+// copyDB returns a memory copy of every key of db.
+func copyDB(t *testing.T, db ethdb.Database) ethdb.Database {
+	t.Helper()
+	copied := rawdb.NewMemoryDatabase()
+	it := db.NewIterator(nil, nil)
+	defer it.Release()
+	for it.Next() {
+		if err := copied.Put(bytes.Clone(it.Key()), bytes.Clone(it.Value())); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return copied
+}
+
+func TestUnitBSCSeedParent(t *testing.T) {
+	genesis := unitGenesis(1)
+	home := rawdb.NewMemoryDatabase()
+	genesisHeader := commitGenesis(t, home, genesis).Header()
+	// The pinned home holds another state: the parent state root differs
+	// from the genesis root, so the seed must copy it.
+	pin := rawdb.NewMemoryDatabase()
+	root := commitGenesis(t, pin, unitGenesis(2)).Root()
+	headers := unitHeaders(genesisHeader, 2, root)
+	rawdb.WriteBody(pin, headers[1].Hash(), 1, &types.Body{})
+	static, err := DecodeStatic(unitItems(t, headers, genesis, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := func() ethdb.Database { return copyDB(t, home) }
+	if err := CheckParentState(home, root); !errors.Is(err, ErrParentState) {
+		t.Fatalf("state before the seed = %v", err)
+	}
+
+	seeded := fresh()
+	report, err := SeedParent(seeded, pin, static, SeedOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Headers != 1 || report.StateNodes < 2 || report.Codes != 1 || report.BodySHA256 == "" {
+		t.Fatalf("report %+v", report)
+	}
+	if rawdb.ReadHeadBlockHash(seeded) != headers[1].Hash() || rawdb.ReadCanonicalHash(seeded, 1) != headers[1].Hash() ||
+		rawdb.ReadTd(seeded, headers[1].Hash(), 1).Uint64() != 3 || rawdb.ReadBody(seeded, headers[1].Hash(), 1) == nil {
+		t.Fatal("the seeded home lacks the parent")
+	}
+	if err := CheckParentState(seeded, root); err != nil {
+		t.Fatal(err)
+	}
+	// A missing storage node fails the state check, not only a missing root.
+	var account *types.StateAccount
+	state := triedb.NewDatabase(seeded, triedb.HashDefaults)
+	accounts, err := trie.New(trie.StateTrieID(root), state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := accounts.MustNodeIterator(nil)
+	for it.Next(true) {
+		if it.Leaf() {
+			leaf, err := types.FullAccount(it.LeafBlob())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if leaf.Root != types.EmptyRootHash {
+				account = leaf
+			}
+		}
+	}
+	state.Close()
+	if account == nil || account.Root == types.EmptyRootHash {
+		t.Fatal("no storage root")
+	}
+	partial := copyDB(t, seeded)
+	rawdb.DeleteLegacyTrieNode(partial, account.Root)
+	if err := CheckParentState(partial, root); !errors.Is(err, ErrParentState) {
+		t.Fatalf("missing storage node = %v", err)
+	}
+	// A missing inner node of the account trie fails the state check.
+	var inner []common.Hash
+	walker := triedb.NewDatabase(seeded, triedb.HashDefaults)
+	accountTrie, err := trie.New(trie.StateTrieID(root), walker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for nodes := accountTrie.MustNodeIterator(nil); nodes.Next(true); {
+		if hash := nodes.Hash(); hash != (common.Hash{}) && hash != root {
+			inner = append(inner, hash)
+		}
+	}
+	walker.Close()
+	if len(inner) == 0 {
+		t.Fatal("the account trie has no inner node")
+	}
+	innerless := copyDB(t, seeded)
+	rawdb.DeleteLegacyTrieNode(innerless, inner[len(inner)-1])
+	if err := CheckParentState(innerless, root); !errors.Is(err, ErrParentState) {
+		t.Fatalf("missing inner node = %v", err)
+	}
+	noCode := copyDB(t, seeded)
+	rawdb.DeleteCode(noCode, common.BytesToHash(account.CodeHash))
+	if err := CheckParentState(noCode, root); !errors.Is(err, ErrParentState) {
+		t.Fatalf("missing code = %v", err)
+	}
+
+	// Withheld parts.
+	noState := fresh()
+	if _, err := SeedParent(noState, pin, static, SeedOptions{WithholdState: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckParentState(noState, root); !errors.Is(err, ErrParentState) {
+		t.Fatalf("withheld state = %v", err)
+	}
+	noHeaders := fresh()
+	if report, err := SeedParent(noHeaders, pin, static, SeedOptions{WithholdHeaders: true}); err != nil || report.Headers != 0 {
+		t.Fatalf("withheld headers = %+v, %v", report, err)
+	}
+	if rawdb.ReadHeader(noHeaders, headers[1].Hash(), 1) != nil || rawdb.ReadHeadBlockHash(noHeaders) != genesisHeader.Hash() {
+		t.Fatal("withheld headers were written")
+	}
+
+	// A pin without the parent body, with another body, with a tampered
+	// state node or tampered code is refused.
+	noBody := copyDB(t, pin)
+	rawdb.DeleteBody(noBody, headers[1].Hash(), 1)
+	otherBody := copyDB(t, pin)
+	rawdb.WriteBody(otherBody, headers[1].Hash(), 1, &types.Body{Uncles: []*types.Header{headers[0]}})
+	badNode := copyDB(t, pin)
+	rawdb.WriteLegacyTrieNode(badNode, root, rawdb.ReadLegacyTrieNode(pin, account.Root))
+	badCode := copyDB(t, pin)
+	rawdb.WriteCode(badCode, common.BytesToHash(account.CodeHash), []byte{0x60, 0x07})
+	withdrawals := copyDB(t, pin)
+	rawdb.WriteBody(withdrawals, headers[1].Hash(), 1, &types.Body{Withdrawals: []*types.Withdrawal{{Index: 1}}})
+	transactions := copyDB(t, pin)
+	rawdb.WriteBody(transactions, headers[1].Hash(), 1,
+		&types.Body{Transactions: types.Transactions{types.NewTx(&types.LegacyTx{Nonce: 1, Gas: 21000})}})
+	stateless := rawdb.NewMemoryDatabase()
+	rawdb.WriteBody(stateless, headers[1].Hash(), 1, &types.Body{})
+	for name, tc := range map[string]struct {
+		source ethdb.Database
+		reason string
+	}{"no body": {noBody, "no parent body"}, "other uncles": {otherBody, "does not match the parent header"},
+		"other transactions": {transactions, "does not match the parent header"},
+		"tampered node":      {badNode, "state node"}, "tampered code": {badCode, "code"},
+		"withdrawals": {withdrawals, "withdrawals"}, "no state": {stateless, "parent state"}} {
+		if _, err := SeedParent(fresh(), tc.source, static, SeedOptions{}); !errors.Is(err, ErrParentPin) ||
+			!strings.Contains(err.Error(), tc.reason) {
+			t.Errorf("%s: SeedParent = %v", name, err)
+		}
+	}
+	// A home with another genesis, or without the total difficulty below
+	// the capsule headers, is refused.
+	otherHome := rawdb.NewMemoryDatabase()
+	commitGenesis(t, otherHome, unitGenesis(3))
+	if _, err := SeedParent(otherHome, pin, static, SeedOptions{}); !errors.Is(err, ErrStaticInput) ||
+		!strings.Contains(err.Error(), "genesis differs") {
+		t.Errorf("other genesis: %v", err)
+	}
+	high := Static{Parent: headers[2], Ancestors: []*types.Header{headers[1]}, Root: root}
+	rawdb.WriteBody(pin, headers[2].Hash(), 2, &types.Body{})
+	if _, err := SeedParent(rawdb.NewMemoryDatabase(), pin, high, SeedOptions{}); !errors.Is(err, ErrStaticInput) ||
+		!strings.Contains(err.Error(), "total difficulty") {
+		t.Errorf("no total difficulty: %v", err)
+	}
+	highHome := fresh()
+	if _, err := SeedParent(highHome, pin, high, SeedOptions{}); err != nil ||
+		rawdb.ReadTd(highHome, headers[2].Hash(), 2).Uint64() != 5 {
+		t.Errorf("seed above a non-genesis header: %v", err)
+	}
+	// A parent that is the genesis needs no seed.
+	if report, err := SeedParent(fresh(), pin, Static{Parent: genesisHeader}, SeedOptions{}); err != nil || report.Headers != 0 {
+		t.Errorf("genesis parent: %+v, %v", report, err)
 	}
 }
 
@@ -484,6 +952,17 @@ func loadProbeFixture(t testing.TB) probeFixture {
 	return fx
 }
 
+// header returns the fixture's canonical header of a number.
+func (fx probeFixture) header(number uint64) *types.Header {
+	if number == 0 {
+		return fx.genesis.ToBlock().Header()
+	}
+	if number <= uint64(len(fx.blocks)) {
+		return fx.blocks[number-1].Header()
+	}
+	return nil
+}
+
 // tracer appends one JSON line per event with a direct write, so the lines
 // survive a SIGKILL of the writing process.
 type tracer struct {
@@ -539,15 +1018,16 @@ func openChain(db ethdb.Database, engineDB ethdb.Database, genesis *core.Genesis
 }
 
 type observationResult struct {
-	Observation string    `json:"observation"`
-	Capsule     Capsule   `json:"capsule"`
-	Consumed    *Consumed `json:"consumed"`
-	Frontier    uint64    `json:"frontier_at_start"`
-	Fetches     int       `json:"fetches"`
-	HeadNumber  uint64    `json:"head_number"`
-	HeadHash    string    `json:"head_hash"`
-	HeadRoot    string    `json:"head_root"`
-	Error       string    `json:"error"`
+	Observation string            `json:"observation"`
+	Capsule     Capsule           `json:"capsule"`
+	Static      map[string]string `json:"static_items_hex"`
+	Consumed    *Consumed         `json:"consumed"`
+	Frontier    uint64            `json:"frontier_at_start"`
+	Fetches     int               `json:"fetches"`
+	HeadNumber  uint64            `json:"head_number"`
+	HeadHash    string            `json:"head_hash"`
+	HeadRoot    string            `json:"head_root"`
+	Error       string            `json:"error"`
 }
 
 func observationID(index int) string { return fmt.Sprintf("bsc-block-%d", index+1) }
@@ -572,14 +1052,31 @@ func observe(t testing.TB, fx probeFixture, home string, storeDB ethdb.Database,
 		emit(Event{"event": "failed", "observation": id, "error": result.Error})
 		return result
 	}
-	parent := fx.genesisHash
-	if index > 0 {
-		parent = fx.blocks[index-1].Hash()
-	}
 	store := TracedStore{DB: storeDB, Emit: emit}
-	var err error
-	if result.Capsule, err = SealCapsule(store, id, BlockItems(fx.raw[index], parent, fx.genesisJSON, fx.commit)); err != nil {
+	items, err := BlockItems(fx.raw[index], fx.blocks[index], fx.header, fx.genesisJSON, fx.genesis, fx.commit)
+	if err != nil {
 		return fail(err)
+	}
+	if result.Capsule, err = SealCapsule(store, id, items); err != nil {
+		return fail(err)
+	}
+	// The declared snapshot keys come from the sealed capsule, after its
+	// items pass the static checks.
+	static, err := ReadStatic(storeDB, id)
+	if err != nil {
+		return fail(err)
+	}
+	keys, err := static.Snapshot.KeyBytes()
+	if err != nil {
+		return fail(err)
+	}
+	result.Static = make(map[string]string, len(result.Capsule.Items))
+	for position, ref := range result.Capsule.Items {
+		data, err := ReadItem(storeDB, id, position)
+		if err != nil {
+			return fail(err)
+		}
+		result.Static[ref.Name] = hex.EncodeToString(data)
 	}
 	log, err := OpenLog(store, id)
 	if err != nil {
@@ -591,6 +1088,7 @@ func observe(t testing.TB, fx probeFixture, home string, storeDB ethdb.Database,
 	if err := engineDB.Attach(id, log); err != nil {
 		return fail(err)
 	}
+	engineDB.Declare(keys)
 	emit(Event{"event": "execute", "observation": id, "frontier": log.Frontier()})
 	chain, err := openChain(db, engineDB, fx.genesis)
 	if err != nil {
@@ -684,11 +1182,6 @@ func tamperSnapshot(blob []byte) ([]byte, error) {
 	return json.Marshal(snap)
 }
 
-func sumHex(data []byte) string {
-	digest := sum(data)
-	return hex.EncodeToString(digest[:])
-}
-
 type probeReport struct {
 	Genesis      string              `json:"genesis_hash"`
 	Blocks       []string            `json:"block_hashes"`
@@ -698,6 +1191,9 @@ type probeReport struct {
 	Resume       observationResult   `json:"resume"`
 	Control      map[string]any      `json:"control"`
 	Replay       []observationResult `json:"replay"`
+	Single       singleResult        `json:"single"`
+	NoState      singleResult        `json:"single_no_state"`
+	NoHeaders    singleResult        `json:"single_no_headers"`
 	PublicCredit bool                `json:"public_profile_credit"`
 }
 
@@ -807,6 +1303,36 @@ func TestNativeBSCInputs(t *testing.T) {
 		t.Error("replayed block 2 manifest differs from the resumed one")
 	}
 
+	// 6. Single-block native-only replay of block 2 on a fresh home that
+	// holds only the genesis: block 1 is never imported there. The parent
+	// and ancestor headers come from the block 2 capsule; the parent body
+	// and state come from the pinned home (capture). Two controls withhold
+	// the parent state (the preflight refuses) and the capsule headers (the
+	// native import fails).
+	store = openProbeDisk(t, capture)
+	for _, run := range []struct {
+		name    string
+		options SeedOptions
+		result  *singleResult
+	}{{"single", SeedOptions{}, &report.Single}, {"single-no-state", SeedOptions{WithholdState: true}, &report.NoState},
+		{"single-no-headers", SeedOptions{WithholdHeaders: true}, &report.NoHeaders}} {
+		trace := newTracer(t, filepath.Join(work, "trace-"+run.name+".jsonl"))
+		*run.result = replaySingle(t, fx, filepath.Join(work, run.name), store, run.options, trace.emit)
+	}
+	store.Close()
+	if single := report.Single.Observation; report.Single.Stage != "observe" || single == nil || single.Error != "" ||
+		single.Fetches != 0 || single.HeadHash != fx.blocks[1].Hash().Hex() || single.Consumed == nil ||
+		*single.Consumed != *report.Resume.Consumed || report.Single.Seed.Headers != 1 {
+		t.Errorf("single replay: %+v", report.Single)
+	}
+	if report.NoState.Stage != "preflight" || !strings.Contains(report.NoState.Error, ErrParentState.Error()) {
+		t.Errorf("state withheld: %+v", report.NoState)
+	}
+	if report.NoHeaders.Stage != "import" || !strings.Contains(report.NoHeaders.Error, "unknown ancestor") ||
+		report.NoHeaders.HeadNumber != 0 {
+		t.Errorf("headers withheld: %+v", report.NoHeaders)
+	}
+
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -871,5 +1397,65 @@ func runControl(t *testing.T, fx probeFixture, home string, emit func(Event)) ma
 	if err == nil || !strings.Contains(err.Error(), "unauthorized validator") {
 		t.Errorf("control import of block 2 = %v", err)
 	}
+	return result
+}
+
+type singleResult struct {
+	Stage       string             `json:"stage"`
+	Error       string             `json:"error"`
+	Seed        SeedReport         `json:"seed"`
+	Observation *observationResult `json:"observation"`
+	HeadNumber  uint64             `json:"head_number"`
+}
+
+// replaySingle replays block 2 alone on a fresh home. The home first gets
+// the genesis from the fixture. SeedParent then installs the parent and
+// ancestor headers from the block 2 capsule saved in store, and copies the
+// parent body and state from store, the pinned home. CheckParentState must
+// pass before execution. With the headers withheld, the import runs live
+// (no log) to show the native error.
+func replaySingle(t *testing.T, fx probeFixture, home string, store ethdb.Database, options SeedOptions,
+	emit func(Event)) singleResult {
+	t.Helper()
+	result := singleResult{Stage: "seed"}
+	db := openProbeDisk(t, home)
+	nodes := triedb.NewDatabase(db, triedb.HashDefaults)
+	_, err := fx.genesis.Commit(db, nodes, nil)
+	nodes.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	static, err := ReadStatic(store, observationID(1))
+	if err == nil {
+		result.Seed, err = SeedParent(db, store, static, options)
+	}
+	emit(Event{"event": "seed", "observation": observationID(1), "seed": result.Seed, "error": fmt.Sprint(err)})
+	if err == nil {
+		result.Stage = "preflight"
+		err = CheckParentState(db, static.Root)
+		emit(Event{"event": "preflight", "observation": observationID(1), "error": fmt.Sprint(err)})
+	}
+	if err != nil {
+		db.Close()
+		result.Error = err.Error()
+		return result
+	}
+	if !options.WithholdHeaders {
+		db.Close()
+		result.Stage = "observe"
+		observed := observe(t, fx, home, store, 1, emit, nil)
+		result.Observation, result.Error, result.HeadNumber = &observed, observed.Error, observed.HeadNumber
+		return result
+	}
+	defer db.Close()
+	result.Stage = "import"
+	chain, err := openChain(db, NewParliaDB(db, true, emit), fx.genesis)
+	if err != nil {
+		result.Stage, result.Error = "open", err.Error()
+		return result
+	}
+	_, err = chain.InsertChain(types.Blocks{fx.blocks[1]})
+	result.HeadNumber, result.Error = chain.CurrentBlock().Number.Uint64(), fmt.Sprint(err)
+	chain.Stop()
 	return result
 }

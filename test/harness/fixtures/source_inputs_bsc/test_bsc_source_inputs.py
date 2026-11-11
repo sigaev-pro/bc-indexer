@@ -5,12 +5,15 @@ single deviation must be rejected with the message of the check it breaks.
 """
 
 import copy
+import functools
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
+import zlib
 
 HARNESS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HARNESS))
@@ -18,12 +21,49 @@ import bsc_source_inputs as driver
 import source_inputs
 from artifacts import Rejected
 
-GENESIS_HASH = "0x" + "11" * 32
-HASHES = ["0x" + "22" * 32, "0x" + "33" * 32]
+
+
+def enc_bytes(data):
+    """Test-only RLP string encoder, independent of the driver."""
+    if len(data) == 1 and data[0] < 0x80:
+        return data
+    if len(data) <= 55:
+        return bytes([0x80 + len(data)]) + data
+    size = (len(data).bit_length() + 7) // 8
+    return bytes([0xb7 + size]) + len(data).to_bytes(size, "big") + data
+
+
+def enc_list(items):
+    payload = b"".join(items)
+    if len(payload) <= 55:
+        return bytes([0xc0 + len(payload)]) + payload
+    size = (len(payload).bit_length() + 7) // 8
+    return bytes([0xf7 + size]) + len(payload).to_bytes(size, "big") + payload
+
+
+def enc_int(value):
+    return enc_bytes(value.to_bytes((value.bit_length() + 7) // 8, "big"))
+
+
+def header(parent, number, root, time):
+    fields = [enc_bytes(parent), enc_bytes(b"\x1d" * 32), enc_bytes(b"\x00" * 20), enc_bytes(root),
+              enc_bytes(b"\x56" * 32), enc_bytes(b"\x56" * 32), enc_bytes(b"\x00" * 256), enc_int(2), enc_int(number),
+              enc_int(30_000_000), enc_int(0), enc_int(time), enc_bytes(b"x"), enc_bytes(b"\x00" * 32),
+              enc_bytes(b"\x00" * 8)]
+    return enc_list(fields)
+
+
 ROOTS = ["0x" + "44" * 32, "0x" + "44" * 32]
-RAW = [b"\xc3\x01\x02\x03", b"\xc1\x09"]
-GENESIS = b'{"config":{}}'
+GENESIS_HEADER = header(b"\x00" * 32, 0, b"\x33" * 32, 0x10)
+HEADER_1 = header(driver.keccak256(GENESIS_HEADER), 1, bytes.fromhex("44" * 32), 0x13)
+HEADER_2 = header(driver.keccak256(HEADER_1), 2, bytes.fromhex("44" * 32), 0x16)
+GENESIS_HASH = "0x" + driver.keccak256(GENESIS_HEADER).hex()
+HASHES = ["0x" + driver.keccak256(HEADER_1).hex(), "0x" + driver.keccak256(HEADER_2).hex()]
+RAW = [enc_list([HEADER_1, b"\xc0", b"\xc0"]), enc_list([HEADER_2, b"\xc0", b"\xc0"])]
+GENESIS = (b'{"config":{"chainId":714,"homesteadBlock":0,"brunoBlock":1,"eulerBlock":2,"keplerTime":0,'
+           b'"shanghaiTime":20},"timestamp":"0x10"}')
 COMMIT = "54afaff4da31ac9e49ba646a4f65104edac5a2f3"
+SEED = {"headers": 1, "body_sha256": "ab" * 32, "state_nodes": 5, "codes": 0}
 KEY = b"parlia-" + bytes.fromhex(GENESIS_HASH[2:])
 REQUEST = (driver.GET_TAG + KEY).hex()
 SNAPSHOT = b'{"number":0,"validators":{"0x03":{}}}'
@@ -36,12 +76,16 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+@functools.lru_cache(maxsize=None)
+def items(index):
+    return driver.expected_items(index, RAW, GENESIS_HEADER, GENESIS, COMMIT)
+
+
 def capsule(index):
-    parents = [GENESIS_HASH, HASHES[0]]
-    items = driver.expected_items(RAW[index], parents[index], GENESIS, COMMIT)
+    items_ = items(index)
     return {"observation": driver.OBSERVATIONS[index],
-            "items": [{"name": name, "length": len(data), "sha256": sha(data)} for name, data in items],
-            "digest": source_inputs.capsule_digest(items).hex()}
+            "items": [{"name": name, "length": len(data), "sha256": sha(data)} for name, data in items_],
+            "digest": source_inputs.capsule_digest(items_).hex()}
 
 
 def handoff(observation, sequence, response):
@@ -88,7 +132,15 @@ def finished(index, manifest):
 def result(index, fetches=0, frontier=0, error=""):
     return {"observation": driver.OBSERVATIONS[index], "capsule": capsule(index), "frontier_at_start": frontier,
             "fetches": fetches, "head_number": index + 1, "head_hash": HASHES[index], "head_root": ROOTS[index],
-            "error": error}
+            "error": error, "static_items_hex": {name: data.hex() for name, data in items(index)}}
+
+
+def seed(**changes):
+    return {"event": "seed", "observation": driver.OBSERVATIONS[1], "seed": dict(SEED, **changes), "error": "<nil>"}
+
+
+def preflight(error="<nil>"):
+    return {"event": "preflight", "observation": driver.OBSERVATIONS[1], "error": error}
 
 
 def synthetic():
@@ -103,9 +155,15 @@ def synthetic():
     replay = []
     for index, (observation, manifest, response) in enumerate(((one, first, b"\x00"), (two, second, b"\x01" + SNAPSHOT))):
         replay += [SYNC, SYNC, execute(observation), handoff(observation, 0, response), finished(index, manifest)]
+    state_error = "parent state is missing from the home: root 44: missing trie node"
     traces = {"trace-capture.jsonl": capture, "trace-resume.jsonl": resume,
               "trace-control.jsonl": [{"event": "fetch", "observation": "", "tag": "bsc-parlia-db-get-v1"}],
-              "trace-replay.jsonl": replay}
+              "trace-replay.jsonl": replay,
+              "trace-single.jsonl": [seed(), preflight(), SYNC, SYNC, execute(two), handoff(two, 0, b"\x01" + SNAPSHOT),
+                                     finished(1, second)],
+              "trace-single-no-state.jsonl": [seed(state_nodes=0), preflight(state_error)],
+              "trace-single-no-headers.jsonl": [seed(headers=0), preflight(),
+                                                {"event": "fetch", "observation": "", "tag": "bsc-parlia-db-get-v1"}]}
     resumed = dict(result(1, frontier=1), consumed=second)
     report = {
         "genesis_hash": GENESIS_HASH, "block_hashes": list(HASHES), "public_profile_credit": False,
@@ -119,12 +177,18 @@ def synthetic():
         "control": {"stage": "insert", "error": "unauthorized validator: 0x03", "head_number": 1, "fetches": 3,
                     "live_before_tamper_sha256": sha(SNAPSHOT), "live_after_tamper_sha256": sha(TAMPERED)},
         "replay": [dict(result(0), consumed=first), dict(result(1), consumed=second)],
+        "single": {"stage": "observe", "error": "", "seed": dict(SEED), "observation": dict(result(1), consumed=second),
+                   "head_number": 2},
+        "single_no_state": {"stage": "preflight", "error": state_error, "seed": dict(SEED, state_nodes=0),
+                            "observation": None, "head_number": 0},
+        "single_no_headers": {"stage": "import", "error": "unknown ancestor", "seed": dict(SEED, headers=0),
+                              "observation": None, "head_number": 0},
     }
     return report, traces
 
 
-def evaluate(report, traces):
-    return driver.checked_evaluate(report, traces, FIXTURE, RAW, GENESIS, COMMIT, GENESIS_HASH)
+def evaluate(report, traces, raw=None):
+    return driver.checked_evaluate(report, traces, FIXTURE, raw or RAW, GENESIS, COMMIT, GENESIS_HASH)
 
 
 class Evaluate(unittest.TestCase):
@@ -142,6 +206,12 @@ class Evaluate(unittest.TestCase):
         self.assertEqual(summary["crash_request"], KEY.hex())
         self.assertEqual(summary["consumed"], [consumed(0, [b"\x00"])["digest"],
                                                consumed(1, [b"\x01" + SNAPSHOT])["digest"]])
+        self.assertEqual(summary["static_items"], list(driver.ITEM_NAMES))
+        self.assertEqual(summary["capsule_digests"], [capsule(0)["digest"], capsule(1)["digest"]])
+        self.assertEqual(summary["single_seed"], SEED)
+        self.assertEqual(summary["single_consumed"], consumed(1, [b"\x01" + SNAPSHOT])["digest"])
+        self.assertIn("parent state is missing", summary["no_state_error"])
+        self.assertEqual(summary["no_headers_error"], "unknown ancestor")
 
     def test_resume_may_fetch_beyond_the_saved_frontier(self):
         report, traces = synthetic()
@@ -157,6 +227,10 @@ class Evaluate(unittest.TestCase):
         index = next(i for i, event in enumerate(replay) if event.get("event") == "handoff" and event["observation"] == two)
         replay.insert(index + 1, handoff(two, 1, extra))
         replay[-1] = finished(1, manifest)
+        report["single"]["observation"]["consumed"] = manifest
+        single = traces["trace-single.jsonl"]
+        single.insert(-1, handoff(two, 1, extra))
+        single[-1] = finished(1, manifest)
         self.assertEqual(evaluate(report, traces)["block2_responses"], 2)
 
     def test_public_credit_is_rejected(self):
@@ -313,7 +387,7 @@ class Evaluate(unittest.TestCase):
     def test_crashed_read_must_be_a_stored_snapshot(self):
         def other_key(report, traces):
             for name in ("trace-capture.jsonl",):
-                traces[name][-2]["request_hex"] = (driver.GET_TAG + b"other").hex()
+                traces[name][-2]["request_hex"] = (driver.HAS_TAG + KEY).hex()
         self.assertRejected(other_key, "not a Parlia snapshot read")
 
         def missing(report, traces):
@@ -397,7 +471,7 @@ class Evaluate(unittest.TestCase):
         self.assertRejected(other_bytes, "Resume did not replay the saved response")
 
         def other_request(report, traces):
-            traces["trace-resume.jsonl"][3]["request_hex"] = (driver.GET_TAG + b"parlia-x").hex()
+            traces["trace-resume.jsonl"][3]["request_hex"] = (driver.HAS_TAG + KEY).hex()
         self.assertRejected(other_request, "Resume did not replay the saved response")
 
         def second_replay(report, traces):
@@ -479,6 +553,165 @@ class Evaluate(unittest.TestCase):
             event = next(e for e in traces["trace-replay.jsonl"] if e.get("event") == "finished")
             event["consumed"] = manifest
         self.assertRejected(first_changed, "Replay of bsc-block-1 changed its manifest")
+
+    def test_static_item_bytes(self):
+        def changed(item, *path):
+            def change(report, traces):
+                target = report
+                for key in path:
+                    target = target[key]
+                target["static_items_hex"][item] = "00"
+            return change
+        self.assertRejected(changed("fork-id", "resume"), "bsc-block-2: static item bytes differ")
+        self.assertRejected(changed("normalization-profile", "replay", 1), "bsc-block-2: static item bytes differ")
+        self.assertRejected(changed("ancestor-headers-rlp", "single", "observation"), "bsc-block-2: static item bytes differ")
+        self.assertRejected(lambda r, t: r["replay"][0]["static_items_hex"].pop("state-profile"),
+                            "bsc-block-1: static item bytes differ")
+        self.assertRejected(lambda r, t: r["replay"][0]["static_items_hex"].update(extra="00"),
+                            "bsc-block-1: static item bytes differ")
+
+    def test_genesis_header_must_hash_to_the_genesis(self):
+        self.assertRejected(lambda r, t: r["replay"][0]["static_items_hex"].update({"parent-header-rlp": HEADER_1.hex()}),
+                            "genesis header does not hash")
+        other = header(b"\x00" * 32, 0, b"\x34" * 32, 0x10)
+        self.assertRejected(lambda r, t: r["replay"][0]["static_items_hex"].update({"parent-header-rlp": other.hex()}),
+                            "genesis header does not hash")
+
+        def numbered(report, traces):
+            # A header of another number that the report also claims as the genesis.
+            report["genesis_hash"] = HASHES[0]
+            report["replay"][0]["static_items_hex"]["parent-header-rlp"] = HEADER_1.hex()
+        with self.assertRaisesRegex(Rejected, "genesis header does not hash"):
+            report, traces = synthetic()
+            numbered(report, traces)
+            driver.checked_evaluate(report, traces, FIXTURE, RAW, GENESIS, COMMIT, HASHES[0])
+
+    def test_fixture_block_identity(self):
+        report, traces = synthetic()
+        with self.assertRaisesRegex(Rejected, "Fixture block 1 identity"):
+            evaluate(report, traces, raw=[RAW[1], RAW[0]])
+        orphan = enc_list([header(b"\x07" * 32, 1, bytes.fromhex("44" * 32), 0x13), b"\xc0", b"\xc0"])
+        fixture = copy.deepcopy(FIXTURE)
+        fixture["blocks"][0]["hash"] = "0x" + driver.keccak256(driver.rlp_list(orphan)[0]).hex()
+        report["block_hashes"][0] = fixture["blocks"][0]["hash"]
+        with self.assertRaisesRegex(Rejected, "Fixture block 1 identity"):
+            driver.checked_evaluate(report, traces, fixture, [orphan, RAW[1]], GENESIS, COMMIT, GENESIS_HASH)
+        fixture = copy.deepcopy(FIXTURE)
+        fixture["blocks"][1]["hash"] = "0x" + "77" * 32
+        report["block_hashes"] = [HASHES[0], fixture["blocks"][1]["hash"]]
+        with self.assertRaisesRegex(Rejected, "Fixture block 2 identity"):
+            driver.checked_evaluate(report, traces, fixture, RAW, GENESIS, COMMIT, GENESIS_HASH)
+        wrong_number = enc_list([header(bytes.fromhex(GENESIS_HASH[2:]), 5, bytes.fromhex("44" * 32), 0x13), b"\xc0",
+                                 b"\xc0"])
+        fixture["blocks"][0]["hash"] = "0x" + driver.keccak256(driver.rlp_list(wrong_number)[0]).hex()
+        report["block_hashes"][0] = fixture["blocks"][0]["hash"]
+        with self.assertRaisesRegex(Rejected, "Fixture block 1 identity"):
+            driver.checked_evaluate(report, traces, fixture, [wrong_number, RAW[1]], GENESIS, COMMIT, GENESIS_HASH)
+
+    def test_block_two_parent_root(self):
+        fixture = copy.deepcopy(FIXTURE)
+        fixture["blocks"][0]["state_root"] = "0x" + "55" * 32
+        report, traces = synthetic()
+        with self.assertRaisesRegex(Rejected, "Block 2 parent root"):
+            driver.checked_evaluate(report, traces, fixture, RAW, GENESIS, COMMIT, GENESIS_HASH)
+
+    def test_reads_must_be_declared(self):
+        other = (driver.GET_TAG + b"parlia-" + b"\x01" * 32).hex()
+
+        def capture_one(report, traces):
+            next(e for e in traces["trace-capture.jsonl"] if e.get("event") == "handoff")["request_hex"] = other
+        self.assertRejected(capture_one, "bsc-block-1: a read of an undeclared key")
+
+        def capture_two(report, traces):
+            traces["trace-capture.jsonl"][-2]["request_hex"] = other
+        self.assertRejected(capture_two, "bsc-block-2: a read of an undeclared key")
+
+        def resume(report, traces):
+            traces["trace-resume.jsonl"].insert(-3, dict(handoff(driver.OBSERVATIONS[1], 1, b"\x00"), request_hex=other))
+        self.assertRejected(resume, "bsc-block-2: a read of an undeclared key")
+
+        def replay(report, traces):
+            next(e for e in traces["trace-replay.jsonl"] if e.get("event") == "handoff")["request_hex"] = other
+        self.assertRejected(replay, "bsc-block-1: a read of an undeclared key")
+
+        def single(report, traces):
+            traces["trace-single.jsonl"][5]["request_hex"] = other
+        self.assertRejected(single, "bsc-block-2: a read of an undeclared key")
+
+        def unknown_tag(report, traces):
+            traces["trace-single.jsonl"][5]["request_hex"] = (b"bsc-parlia-db-xyz-v1\x00" + KEY).hex()
+        self.assertRejected(unknown_tag, "bsc-block-2: a read of an undeclared key")
+
+    def test_single_replay_passes_with_a_has_read(self):
+        report, traces = synthetic()
+        traces["trace-single.jsonl"][5]["request_hex"] = (driver.HAS_TAG + KEY).hex()
+        self.assertEqual(evaluate(report, traces)["single_seed"], SEED)
+
+    def test_single_replay_checks(self):
+        self.assertRejected(lambda r, t: r["single"].update(stage="preflight"), "Single replay failed")
+        self.assertRejected(lambda r, t: r["single"].update(error="boom"), "Single replay failed")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].pop(0), "must start with its seed")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"][0].update(observation="bsc-block-1"),
+                            "must start with its seed")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"][0].update(error="boom"), "Single replay seed")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"][0]["seed"].update(codes=1), "Single replay seed")
+        for field, value in (("headers", 2), ("headers", 0), ("state_nodes", 0), ("body_sha256", "")):
+            def change(report, traces, field=field, value=value):
+                report["single"]["seed"][field] = value
+                traces["trace-single.jsonl"][0]["seed"][field] = value
+            self.assertRejected(change, "Single replay seed")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].pop(1), "Single replay preflight")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"][1].update(error="boom"), "Single replay preflight")
+        for field, value in (("error", "boom"), ("fetches", 1), ("head_number", 1), ("head_hash", HASHES[0]),
+                             ("head_root", "0x" + "55" * 32)):
+            self.assertRejected(lambda r, t: r["single"]["observation"].update({field: value}),
+                                "Single replay did not import block 2")
+        self.assertRejected(lambda r, t: r["single"]["observation"]["capsule"].update(digest="00" * 32),
+                            "capsule digest differs")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].append({"event": "fetch"}), "Single replay fetched or wrote")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].insert(2, put("x", "other")),
+                            "Single replay fetched or wrote")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].append({"event": "x", "observation": "bsc-block-1"}),
+                            "Single replay ran block 1")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].__delitem__(slice(2, 4)), "capsule not synced")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].__delitem__(5), "Single replay fetched")
+
+        def manifest(report, traces):
+            changed = dict(report["single"]["observation"]["consumed"], digest="00" * 32)
+            report["single"]["observation"]["consumed"] = changed
+            traces["trace-single.jsonl"][-1] = finished(1, changed)
+        self.assertRejected(manifest, "Single replay changed the block 2 manifest")
+        self.assertRejected(lambda r, t: t["trace-single.jsonl"].__setitem__(
+            -1, finished(1, dict(r["single"]["observation"]["consumed"], count=5))), "Single replay changed")
+
+    def test_state_withheld_control(self):
+        message = "State-withheld control did not stop at the preflight"
+        self.assertRejected(lambda r, t: r["single_no_state"].update(stage="observe"), message)
+        self.assertRejected(lambda r, t: r["single_no_state"].update(error="other"), message)
+        self.assertRejected(lambda r, t: t["trace-single-no-state.jsonl"][0].update(error="boom"), message)
+        self.assertRejected(lambda r, t: r["single_no_state"]["seed"].update(state_nodes=5), message)
+        self.assertRejected(lambda r, t: r["single_no_state"]["seed"].update(headers=0), message)
+        self.assertRejected(lambda r, t: t["trace-single-no-state.jsonl"].pop(1), message)
+        self.assertRejected(lambda r, t: t["trace-single-no-state.jsonl"][1].update(error="<nil>"), message)
+        self.assertRejected(lambda r, t: t["trace-single-no-state.jsonl"].pop(0), "must start with its seed")
+        for name in ("execute", "handoff", "fetch"):
+            self.assertRejected(lambda r, t: t["trace-single-no-state.jsonl"].append({"event": name}),
+                                "State-withheld control executed")
+
+    def test_headers_withheld_control(self):
+        message = "Header-withheld control did not fail on the unknown parent"
+        self.assertRejected(lambda r, t: r["single_no_headers"].update(stage="open"), message)
+        self.assertRejected(lambda r, t: r["single_no_headers"].update(error="<nil>"), message)
+        self.assertRejected(lambda r, t: r["single_no_headers"].update(head_number=2), message)
+        self.assertRejected(lambda r, t: r["single_no_headers"].pop("head_number"), message)
+        self.assertRejected(lambda r, t: t["trace-single-no-headers.jsonl"][0].update(error="boom"), message)
+        self.assertRejected(lambda r, t: r["single_no_headers"]["seed"].update(headers=1), message)
+        self.assertRejected(lambda r, t: r["single_no_headers"]["seed"].update(state_nodes=4), message)
+        self.assertRejected(lambda r, t: t["trace-single-no-headers.jsonl"].pop(1), message)
+        self.assertRejected(lambda r, t: t["trace-single-no-headers.jsonl"][1].update(error="boom"), message)
+        for name in ("execute", "handoff"):
+            self.assertRejected(lambda r, t: t["trace-single-no-headers.jsonl"].append({"event": name}),
+                                "Header-withheld control executed")
 
     def test_malformed_report_is_rejected(self):
         self.assertRejected(lambda r, t: r.pop("resume"), "Malformed probe report")
@@ -603,16 +836,87 @@ class Helpers(unittest.TestCase):
             driver.split_rlp_list_items(b"\xf8\x38\x01")
 
     def test_expected_items(self):
-        items = driver.expected_items(b"\xc0", "0x" + "ab" * 32, b"{}", "abc")
-        self.assertEqual([name for name, _ in items],
-                         ["block-rlp", "parent-hash", "genesis-json", "native-commit", "state-profile"])
-        self.assertEqual(items[1][1], bytes.fromhex("ab" * 32))
-        self.assertEqual(items[4][1], b"state.scheme=hash;gcmode=full;snapshots=off")
+        one, two = (dict(driver.expected_items(index, RAW, GENESIS_HEADER, GENESIS, "abc")) for index in range(2))
+        self.assertEqual(list(dict(driver.expected_items(0, RAW, GENESIS_HEADER, GENESIS, "abc"))), list(driver.ITEM_NAMES))
+        self.assertEqual(one["block-rlp"], RAW[0])
+        self.assertEqual(one["parent-header-rlp"], GENESIS_HEADER)
+        self.assertEqual(one["parent-hash"].hex(), GENESIS_HASH[2:])
+        self.assertEqual(one["parent-root"], b"\x33" * 32)
+        self.assertEqual(one["ancestor-headers-rlp"], b"\xc0")
+        self.assertEqual(two["parent-header-rlp"], HEADER_1)
+        self.assertEqual(two["parent-root"], bytes.fromhex("44" * 32))
+        self.assertEqual(two["ancestor-headers-rlp"], enc_list([GENESIS_HEADER]))
+        key = (b"parlia-" + bytes.fromhex(GENESIS_HASH[2:])).hex()
+        self.assertEqual(two["parlia-snapshot-keys"], ('{"checkpoint":0,"keys":["%s"]}' % key).encode())
+        self.assertEqual(one["parlia-snapshot-keys"], two["parlia-snapshot-keys"])
+        self.assertEqual(one["native-commit"], b"abc")
+        self.assertEqual(one["normalization-profile"], b"test-only-probe-v1")
+        self.assertEqual(one["state-profile"], b"state.scheme=hash;gcmode=full;snapshots=off")
+        # Homestead at block 0 is the genesis rule set and is skipped. Bruno at block 1 has passed for
+        # block 1, and Euler at block 2 is next. Block 2 also passes Euler. Kepler at time 0 is not after
+        # the genesis time and is skipped; Shanghai at time 20 has passed at block 2's time 22.
+        start = zlib.crc32(bytes.fromhex(GENESIS_HASH[2:]))
+        bruno = zlib.crc32((1).to_bytes(8, "big"), start)
+        self.assertEqual(one["fork-id"], ('{"hash":"%08x","next":"2"}' % bruno).encode())
+        euler = zlib.crc32((2).to_bytes(8, "big"), bruno)
+        shanghai = zlib.crc32((20).to_bytes(8, "big"), euler)
+        self.assertEqual(two["fork-id"], ('{"hash":"%08x","next":"0"}' % shanghai).encode())
+
+    def test_keccak_vectors(self):
+        for data, digest in ((b"", "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),
+                             (b"abc", "4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45"),
+                             (b"\xc0", "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"),
+                             (b"\x80", "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")):
+            self.assertEqual(driver.keccak256(data).hex(), digest)
+
+    def test_fork_id_mainnet_vectors(self):
+        # EIP-2124 vectors for the Ethereum mainnet rules up to London.
+        config = {"chainId": 1, "homesteadBlock": 1150000, "daoForkBlock": 1920000, "eip150Block": 2463000,
+                  "eip155Block": 2675000, "eip158Block": 2675000, "byzantiumBlock": 4370000,
+                  "constantinopleBlock": 7280000, "petersburgBlock": 7280000, "istanbulBlock": 9069000,
+                  "muirGlacierBlock": 9200000, "berlinBlock": 12244000, "londonBlock": 12965000}
+        genesis = json.dumps({"config": config, "timestamp": "0x0"}).encode()
+        mainnet = bytes.fromhex("d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
+        for head, digest, following in ((0, "fc64ec04", "1150000"), (1149999, "fc64ec04", "1150000"),
+                                        (1150000, "97c2c34c", "1920000"), (1920000, "91d1f948", "2463000"),
+                                        (2675000, "3edd5b10", "4370000"), (7280000, "668db0af", "9069000"),
+                                        (12244000, "0eb440f6", "12965000"), (12965000, "b715077d", "0")):
+            self.assertEqual(json.loads(driver.fork_id(genesis, mainnet, head, 0)), {"hash": digest, "next": following})
+
+    def test_ancestor_floor_matches_the_go_table(self):
+        for number, floor in {2: 0, 3: 0, 256: 0, 300: 0, 1024: 0, 1025: 769, 1100: 844, 1500: 1024, 2048: 1024,
+                              2049: 1793}.items():
+            self.assertEqual(driver.ancestor_floor(number), floor)
+        go = re.sub(r"\s+", " ", (Path(__file__).with_name("bsc_inputs_test.go")).read_text())
+        self.assertIn("2: 0, 3: 0, 256: 0, 300: 0, 1024: 0, 1025: 769, 1100: 844, 1500: 1024, 2048: 1024, 2049: 1793}", go)
+
+    def test_rlp_helpers(self):
+        long_item = b"\xb8\x38" + b"\x07" * 0x38
+        self.assertEqual(driver.rlp_list(enc_list([b"\x01", b"\x82ab", long_item])), [b"\x01", b"\x82ab", long_item])
+        self.assertEqual(driver.rlp_bytes(long_item), b"\x07" * 0x38)
+        self.assertEqual(driver.rlp_bytes(b"\x05"), b"\x05")
+        self.assertEqual(driver.rlp_encode_list([long_item]), enc_list([long_item]))
+        self.assertEqual(driver.rlp_encode_list([]), b"\xc0")
+        self.assertEqual(driver.header_number(HEADER_2), 2)
+        for bad, function in ((b"\x80", driver.rlp_list), (b"\xc0\x00", driver.rlp_list), (b"\xc0", driver.rlp_bytes),
+                              (b"\x82a", driver.rlp_bytes), (b"\xb8", driver.rlp_bytes), (b"", driver.rlp_bytes),
+                              (b"\xc2\x82", driver.rlp_list), (b"\xc2\x82a", driver.rlp_list),
+                              (b"\xc3\xb9\x01\x00", driver.rlp_list)):
+            with self.assertRaises(Rejected):
+                function(bad)
 
     def test_go_constants_match_the_driver(self):
         go = (Path(__file__).with_name("bsc_inputs.go")).read_text()
         self.assertIn(f'StateProfile = "{driver.STATE_PROFILE.decode()}"', go)
         self.assertIn(f'ParliaGetTag = "{driver.GET_TAG[:-1].decode()}"', go)
+        self.assertIn(f'ParliaHasTag = "{driver.HAS_TAG[:-1].decode()}"', go)
+        self.assertIn(f'NormalizationProfile = "{driver.NORMALIZATION_PROFILE.decode()}"', go)
+        self.assertIn(f"CheckpointInterval = {driver.CHECKPOINT_INTERVAL}\n", go)
+        self.assertIn(f"BlockHashWindow = {driver.BLOCKHASH_WINDOW}\n", go)
+        self.assertIn(f'SnapshotPrefix = "{driver.SNAPSHOT_PREFIX.decode()}"', go)
+        self.assertIn(f'ErrParentState = errors.New("{driver.PARENT_STATE_ERROR}")', go)
+        names = go[go.index("var StaticItemNames"):go.index("}", go.index("var StaticItemNames"))]
+        self.assertEqual(re.findall(r'"([a-z-]+)"', names), list(driver.ITEM_NAMES))
 
     def test_test_names(self):
         with tempfile.TemporaryDirectory() as name:
