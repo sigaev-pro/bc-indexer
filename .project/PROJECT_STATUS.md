@@ -183,7 +183,15 @@ temporary files there; the driver now sets `TMPDIR` to the build directory,
 as the E01-02.pins harness does. Preparations 01 and 03 failed for this
 reason, not for lack of host disk.
 
-Next: preparation and measured run on the fixed head, evidence, review 002.
+Evidence ([E01-02.admission.bor](evidence/E01-02.admission.bor.md)):
+preparation 04 and measured run 01 on clean `cd9e2ef`, PASS (all nine
+scenarios). POLY private local: AC-CAP-02-01 PASS, AC-CAP-02-02 PASS,
+AC-CAP-04-03 real binding PASS; every public cell NOT_RUN. Mutants on
+`937d174`: Go 53 of 53, Python 86 of 86 killed. Preparation 05 and run 02 on
+`8dab2e2` (the copied probe path fix) are queued at the host lock.
+
+Next: review 002 on the head with this evidence, then READY for the
+coordinator.
 
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
