@@ -314,6 +314,7 @@ type node struct {
 	home    string
 	db      ethdb.Database
 	chain   *core.BlockChain
+	backend *SystemCallBackend
 	seam    *Seam
 	store   *probeStore
 	system  map[string]int
@@ -366,7 +367,7 @@ func startNode(t testing.TB, fx fixture, home string, producer admission.Produce
 		n.db.Close()
 		return nil, err
 	}
-	n.chain = chain
+	n.chain, n.backend = chain, backend
 	backend.Bind(chain, nil)
 	identity := stateprovider.StoreIdentity{StoreID: probeStoreID, ChainID: fx.genesis.Config.ChainID.String(),
 		GenesisHash: chain.Genesis().Hash(), StateScheme: rawdb.HashScheme}

@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -20,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -35,17 +37,31 @@ type SystemCallBackend struct {
 	ethapi.Backend
 	chain *core.BlockChain
 	seam  *Seam
+
+	mu    sync.Mutex
+	calls map[common.Hash]int
 }
 
 // NewSystemCallAPI returns the ethAPI to pass to parlia.New and its backend.
 // Bind the backend to the chain and the seam once they exist.
 func NewSystemCallAPI() (*ethapi.BlockChainAPI, *SystemCallBackend) {
-	backend := &SystemCallBackend{}
+	backend := &SystemCallBackend{calls: map[common.Hash]int{}}
 	return ethapi.NewBlockChainAPI(backend), backend
 }
 
 // Bind sets the chain and the seam.
 func (b *SystemCallBackend) Bind(chain *core.BlockChain, seam *Seam) { b.chain, b.seam = chain, seam }
+
+// Calls returns how many calls each block state served.
+func (b *SystemCallBackend) Calls() map[common.Hash]int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make(map[common.Hash]int, len(b.calls))
+	for hash, count := range b.calls {
+		out[hash] = count
+	}
+	return out
+}
 
 // StateAndHeaderByNumberOrHash implements ethapi.Backend for a block hash.
 func (b *SystemCallBackend) StateAndHeaderByNumberOrHash(_ context.Context,
@@ -69,6 +85,9 @@ func (b *SystemCallBackend) StateAndHeaderByNumberOrHash(_ context.Context,
 	if err != nil {
 		return nil, nil, err
 	}
+	b.mu.Lock()
+	b.calls[hash]++
+	b.mu.Unlock()
 	return statedb, header, nil
 }
 
@@ -81,6 +100,21 @@ func (b *SystemCallBackend) RPCGasCap() uint64 { return 0 }
 // RPCEVMTimeout implements ethapi.Backend: no timeout, so a call never ends
 // on the wall clock.
 func (b *SystemCallBackend) RPCEVMTimeout() time.Duration { return 0 }
+
+// GetEVM implements ethapi.Backend. The call runs without the import
+// tracer: a system-contract call is not block execution, so it is neither
+// captured nor a VM safe point of the observation.
+func (b *SystemCallBackend) GetEVM(_ context.Context, statedb *state.StateDB, header *types.Header,
+	config *vm.Config, blockContext *vm.BlockContext) *vm.EVM {
+	if config == nil {
+		config = &vm.Config{}
+	}
+	context := core.NewEVMBlockContext(header, b.chain, nil)
+	if blockContext != nil {
+		context = *blockContext
+	}
+	return vm.NewEVM(context, statedb, b.chain.Config(), *config)
+}
 
 // Engine implements ethapi.ChainContextBackend.
 func (b *SystemCallBackend) Engine() consensus.Engine { return b.chain.Engine() }

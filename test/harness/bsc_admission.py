@@ -64,6 +64,13 @@ ADMITTED_AFTER_RESTART = {"before-admitted-put-drop": False, "admitted-unsynced-
                           "admitted-unsynced-keep": True, "admitted-synced": True, "first-handoff": True,
                           "exec-ready-unsynced-drop": True}
 TRACES = ("live", "reject") + CRASH_MODES
+LONG_TRACES = ("long-warm", "long-cold")
+# Traces of the separate native tests, checked on their own.
+EXTRA_TRACES = ("parent-state",) + LONG_TRACES
+# The long chain of TestNativeBSCLongChain (independent copies).
+LONG_LENGTH, LONG_OBSERVED_FROM, LONG_EPOCH_BLOCK, LONG_CHECKPOINT = 1100, 990, 1000, 1024
+# The public test validator keystore of the BSC source tree (password "").
+KEYSTORE = "tests/truffle/storage/keystore/UTC--2023-12-07T03-21-00.035782000Z--03735c2ed70a56cd221e0024eb4bf90243c9d6e9"
 PRODUCER, RUN = "bsc-probe", "run-1"
 STORE_ID = "0123456789abcdef0123456789abcdef"
 # Independent copies of the BSC package's declared constants and tags.
@@ -71,12 +78,11 @@ STATE_PROFILE = b"state.scheme=hash;gcmode=full;snapshots=off"
 NORMALIZATION_PROFILE = b"test-only-probe-v1"
 EXEC_TAG = b"extractor-bsc-exec-result-v1\x00"
 REJECTION_TAG = b"extractor-bsc-rejection-v1\x00"
-GET_TAG = b"bsc-parlia-db-get-v1\x00"
-SNAPSHOT_PREFIX = b"parlia-"
-CHECKPOINT_INTERVAL = 1024
+SNAPSHOT_TAG = b"bsc-parlia-snapshot-v1\x00"
+SNAPSHOT_DECLARATION = b"bsc-parlia-snapshot-v1;capsule-headers"
 BLOCKHASH_WINDOW = 256
 ITEM_NAMES = ("block-rlp", "blob-sidecars", "parent-hash", "parent-header-rlp", "parent-root", "ancestor-headers-rlp", "genesis-json",
-              "fork-id", "parlia-snapshot-keys", "native-commit", "normalization-profile", "state-profile")
+              "fork-id", "parlia-snapshots", "native-commit", "normalization-profile", "state-profile")
 EMPTY_RLP_LIST = b"\xc0"
 SYSTEM_TXS_BLOCK_1 = 9  # fixture ORACLE: seven init calls and two fee transfers
 PRUNE_REFUSAL = "live pins forbid this native deletion"
@@ -258,6 +264,8 @@ def prepare(manifest_path, expected_sha, output):
         for row in installed:
             require(reference(Path(row["source"]["path"]), 1024 * 1024, deadline) == row["source"],
                     "Installed source changed during preparation")
+        keystore = root / "generated/validator-keystore.json"
+        copy_artifact(source / KEYSTORE, keystore, reference(source / KEYSTORE, deadline=deadline), deadline=deadline)
         tests = probe14.test_names([Path(row["retained"]["path"]) for row in installed
                                     if row["relative"].startswith("extractor/bsc/") and
                                     row["relative"].endswith("_test.go")])
@@ -267,6 +275,7 @@ def prepare(manifest_path, expected_sha, output):
                 "tests": [name for name in tests if name != CHILD_TEST],
                 "test_binary": reference(root / "generated/bsc.test", deadline=deadline),
                 "geth_binary": reference(root / "generated/geth", deadline=deadline),
+                "validator_keystore": reference(keystore, deadline=deadline),
                 "metadata": [reference(root / "metadata" / name, deadline=deadline) for name in ("go.mod", "go.sum")]}
         pins.save(output / "tool.json", tool)
         proof["tool"] = reference(output / "tool.json", deadline=deadline)
@@ -330,23 +339,20 @@ def fork_id(genesis_canonical, genesis_hash, number, time, chain_config):
 
 
 def ancestor_floor(number):
-    return min((number - 1) // CHECKPOINT_INTERVAL * CHECKPOINT_INTERVAL, max(0, number - BLOCKHASH_WINDOW))
+    return max(0, number - BLOCKHASH_WINDOW)
 
 
 def expected_items(number, headers, raw_blocks, genesis_canonical, native_commit, chain_config):
     """The static items of block `number` from the fixture bytes and the canonical genesis."""
     parent = headers[number - 1]
     ancestors = [headers[k] for k in range(number - 2, ancestor_floor(number) - 1, -1)] if number >= 2 else []
-    checkpoint = (number - 1) // CHECKPOINT_INTERVAL * CHECKPOINT_INTERVAL
-    snapshot = json.dumps({"checkpoint": checkpoint, "keys": [(SNAPSHOT_PREFIX + keccak(headers[checkpoint])).hex()]},
-                          separators=(",", ":")).encode()
     info = header_fields(headers[number])
     # The fixture blocks carry no blob sidecars: an empty RLP list.
     return [("block-rlp", raw_blocks[number - 1]), ("blob-sidecars", EMPTY_RLP_LIST), ("parent-hash", keccak(parent)), ("parent-header-rlp", parent),
             ("parent-root", header_fields(parent)["root"]), ("ancestor-headers-rlp", probe14.rlp_encode_list(ancestors)),
             ("genesis-json", genesis_canonical),
             ("fork-id", fork_id(genesis_canonical, keccak(headers[0]), number, info["time"], chain_config)),
-            ("parlia-snapshot-keys", snapshot), ("native-commit", native_commit.encode()),
+            ("parlia-snapshots", SNAPSHOT_DECLARATION), ("native-commit", native_commit.encode()),
             ("normalization-profile", NORMALIZATION_PROFILE), ("state-profile", STATE_PROFILE)]
 
 
@@ -403,6 +409,23 @@ def consumed(capsule_digest, rows):
         require(hashlib.sha256(response).hexdigest() == row["response_sha256"], "Hand-off digest")
         chain = source_inputs.chain_next(chain, source_inputs.entry_digest(sequence, request, response))
     return source_inputs.consumed_digest(bytes.fromhex(capsule_digest), len(rows), chain).hex()
+
+
+def check_snapshots(rows, capsule_headers, label):
+    """Every logged response is the snapshot of a capsule header, requested once."""
+    seen = set()
+    for row in rows:
+        request, response = bytes.fromhex(row["request_hex"]), bytes.fromhex(row["response_hex"])
+        require(request.startswith(SNAPSHOT_TAG) and len(request) == len(SNAPSHOT_TAG) + 40,
+                f"{label}: request is not a snapshot request")
+        number = int.from_bytes(request[len(SNAPSHOT_TAG):len(SNAPSHOT_TAG) + 8], "big")
+        block_hash = request[len(SNAPSHOT_TAG) + 8:]
+        require(capsule_headers.get(number) == block_hash, f"{label}: snapshot of a header outside the capsule")
+        require(request not in seen, f"{label}: snapshot requested twice")
+        seen.add(request)
+        snapshot = json.loads(response)
+        require(snapshot["number"] == number and snapshot["hash"] == "0x" + block_hash.hex(),
+                f"{label}: response is the snapshot of another block")
 
 
 def names(events):
@@ -542,11 +565,9 @@ def evaluate(report, traces, raw_blocks, genesis_file, native_commit, genesis_ha
                     pin_record["profile"] == hashlib.sha256(STATE_PROFILE).hexdigest() and
                     pin_record["store"]["store_id"] == STORE_ID, f"{name}/{key}: pin record")
             handoffs = attempt_handoffs(events, key)
-            declared = {bytes.fromhex(k) for k in json.loads(dict(items[number])["parlia-snapshot-keys"])["keys"]}
-            for row in handoffs:
-                request = bytes.fromhex(row["request_hex"])
-                require(request.startswith(GET_TAG) and request[len(GET_TAG):] in declared,
-                        f"{name}/{key}: read of an undeclared key")
+            capsule_headers = {number - 1 - index: keccak(headers[number - 1 - index])
+                               for index in range(number - ancestor_floor(number))}
+            check_snapshots(handoffs, capsule_headers, f"{name}/{key}")
             consumed_digest = consumed(capsule_digests[number], handoffs)
             require(record["consumed_digest"] == consumed_digest and record["exec_digest"] == execs[number] and
                     record["admitted_digest"] == admitted["digest"] and
@@ -606,6 +627,64 @@ def evaluate(report, traces, raw_blocks, genesis_file, native_commit, genesis_ha
     return summary
 
 
+def evaluate_parent_state(events):
+    """A missing parent state node keeps block 1 ADMITTED; with the node back, recovery resolves it."""
+    key = key_of(0)
+    kinds = [(event["event"], event.get("observation")) for event in events]
+    require(("admitted", key) in kinds and not any(kind == "rejected" for kind, _ in kinds),
+            "parent-state: the obligation was not admitted, or was rejected")
+    errors_ = [event["error"] for event in events if event.get("event") == "observation-error" and
+               event.get("observation") == key]
+    require(errors_ and all("parent state read failed" in error for error in errors_),
+            "parent-state: the import did not stop on the parent state")
+    first_error = kinds.index(("observation-error", key))
+    require(("exec-ready", key) in kinds[first_error:] and ("resume", key) in kinds[first_error:],
+            "parent-state: recovery did not resolve the same obligation")
+    return {"key": key, "errors": len(errors_)}
+
+
+def evaluate_long(report, traces, blocks_rlp, genesis_hash):
+    """Check the long-chain record against the generated blocks and the traces."""
+    raw_blocks = probe14.split_rlp_list_items(blocks_rlp)
+    require(len(raw_blocks) == LONG_LENGTH, "Long chain length")
+    headers = {0: None}
+    parent = genesis_hash
+    for number, raw in enumerate(raw_blocks, 1):
+        header = probe14.rlp_list(raw)[0]
+        info = header_fields(header)
+        require(info["number"] == number and info["parent"] == parent, f"Long chain block {number} does not link")
+        headers[number], parent = header, info["hash"]
+    require(report["length"] == LONG_LENGTH and report["observed_from"] == LONG_OBSERVED_FROM, "Long chain bounds")
+    for number in (LONG_EPOCH_BLOCK, LONG_CHECKPOINT, LONG_LENGTH):
+        require(report["hashes"][str(number)] == "0x" + keccak(headers[number]).hex(), f"Long chain hash {number}")
+    observed = list(range(LONG_OBSERVED_FROM, LONG_LENGTH + 1))
+    runs = {}
+    for name in ("warm", "cold"):
+        run, events = report[name], traces["long-" + name]
+        require(run["states"] == {"EXEC_READY": len(observed)}, f"{name}: states")
+        require(sorted(int(k) for k in run["exec_digests"]) == observed, f"{name}: EXEC_READY blocks")
+        require(run["system_calls_on_parent"].keys() == {str(LONG_EPOCH_BLOCK)} and
+                run["system_calls_on_parent"][str(LONG_EPOCH_BLOCK)] > 0, f"{name}: system calls")
+        require(run["stored_checkpoint_number"] == LONG_CHECKPOINT, f"{name}: stored checkpoint snapshot")
+        require(run["window_of_last_block"] == [LONG_LENGTH - 1, LONG_LENGTH - BLOCKHASH_WINDOW], f"{name}: window")
+        require(run["restarts"] == (len(observed) - 1 if name == "cold" else 0), f"{name}: restarts")
+        numbers = {event["observation"]: event["number"] for event in events if event.get("event") == "begin"}
+        require(sorted(numbers.values()) == observed, f"{name}: observations")
+        for key, number in numbers.items():
+            rows = attempt_handoffs(events, key)
+            capsule_headers = {k: keccak(headers[k]) for k in range(ancestor_floor(number), number)}
+            check_snapshots(rows, capsule_headers, f"{name}/{key}")
+            require([row["response_sha256"] for row in rows] == run["snapshot_response_sha256"][str(number)],
+                    f"{name}/{key}: snapshot digests differ from the report")
+        runs[name] = run
+    # The logged snapshots and the native results do not depend on the engine's memory.
+    require(runs["warm"]["snapshot_response_sha256"] == runs["cold"]["snapshot_response_sha256"] and
+            runs["warm"]["exec_digests"] == runs["cold"]["exec_digests"], "Warm and cold imports differ")
+    return {"observed": len(observed), "system_calls": runs["warm"]["system_calls_on_parent"],
+            "window_of_last_block": runs["warm"]["window_of_last_block"],
+            "snapshot_responses": sum(len(v) for v in runs["warm"]["snapshot_response_sha256"].values())}
+
+
 def checked_evaluate(*args):
     """Evaluate, turning a malformed report into a rejection instead of an exception."""
     try:
@@ -649,6 +728,9 @@ def probe_run(tool, fixture, genesis_hash, output, runner, deadline, binary=None
         (root / name).mkdir(parents=True)
     inputs = {name: copy_artifact(Path(ref["path"]), root / "inputs" / name, ref, 64 * 1024 * 1024, deadline)
               for name, ref in fixture["inputs"].items()}
+    inputs["validator-keystore.json"] = copy_artifact(Path(tool["validator_keystore"]["path"]),
+                                                      root / "inputs/validator-keystore.json", tool["validator_keystore"],
+                                                      1024 * 1024, deadline)
     binary = binary or artifact(tool["test_binary"], 1024 * 1024 * 1024, deadline=deadline)
     geth_binary = geth_binary or artifact(tool["geth_binary"], 1024 * 1024 * 1024, deadline=deadline)
     mounts = [(binary.parent, "/tool", True), (root / "inputs", "/inputs", True), (root / "work", "/work", False),
@@ -675,9 +757,18 @@ def probe_run(tool, fixture, genesis_hash, output, runner, deadline, binary=None
     report_path = root / "work/report.json"
     summary = checked_evaluate(load(report_path, 16 * 1024 * 1024, deadline), traces, raw_blocks, genesis,
                                tool["native_source_commit"], genesis_hash, tool["chain_config"], fixture["blocks"], geth)
+    long_report = root / "work/long-report.json"
+    long_traces = {name: probe14.read_jsonl(root / "work" / f"trace-{name}.jsonl", deadline) for name in EXTRA_TRACES}
+    summary["parent_state"] = evaluate_parent_state(long_traces["parent-state"])
+    summary["long_chain"] = evaluate_long(load(long_report, 16 * 1024 * 1024, deadline), long_traces,
+                                          read_bytes(root / "work/long-blocks.rlp", 64 * 1024 * 1024, deadline),
+                                          bytes.fromhex(genesis_hash.removeprefix("0x")))
     return {"inputs": inputs, "passed": passed, "elapsed_seconds": elapsed,
             "report": reference(report_path, 16 * 1024 * 1024, deadline), "stdout": reference(stdout, deadline=deadline),
-            "traces": {name: reference(root / "work" / f"trace-{name}.jsonl", deadline=deadline) for name in TRACES},
+            "traces": {name: reference(root / "work" / f"trace-{name}.jsonl", deadline=deadline)
+                       for name in TRACES + EXTRA_TRACES},
+            "long_chain": {"report": reference(long_report, 16 * 1024 * 1024, deadline),
+                           "blocks": reference(root / "work/long-blocks.rlp", 64 * 1024 * 1024, deadline)},
             "geth": {name: value for name, value in geth.items() if name.endswith("_exit")},
             "geth_outputs": {name: reference(root / "work" / f"geth-{name}.out", deadline=deadline)
                              for name in ("prune", "start", "bloom")},
