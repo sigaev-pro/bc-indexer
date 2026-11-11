@@ -419,7 +419,7 @@
       "name": "start ethapi",
       "file": "go/seam.go",
       "original": "\tif !engine.ExtractorHasEthAPI() {",
-      "replacement": "\tif false {"
+      "replacement": "\tif false && !engine.ExtractorHasEthAPI() {"
     },
     {
       "name": "detach reader error",
