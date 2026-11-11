@@ -1,9 +1,9 @@
 diff --git a/core/extractor_hook.go b/core/extractor_hook.go
 new file mode 100644
-index 0000000..e664857
+index 0000000..01ac673
 --- /dev/null
 +++ b/core/extractor_hook.go
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,214 @@
 +// Extractor patch (E01-02.admission, BSC block): the native import seam.
 +//
 +// This file is added to the BSC source tree by the extractor patch set. It
@@ -18,6 +18,7 @@ index 0000000..e664857
 +	"errors"
 +	"fmt"
 +
++	"github.com/ethereum/go-ethereum/consensus"
 +	"github.com/ethereum/go-ethereum/core/state"
 +	"github.com/ethereum/go-ethereum/core/types"
 +	"github.com/ethereum/go-ethereum/ethdb"
@@ -33,6 +34,11 @@ index 0000000..e664857
 +// ErrExtractorUnobserved refuses a block execution that no admitted
 +// observation covers while an extractor hook is installed.
 +var ErrExtractorUnobserved = errors.New("extractor: block execution outside an admitted observation")
++
++// ErrExtractorParentState marks a native failure of an observed block during
++// which a parent state read failed: the failure may come from the missing
++// state, so it is not an authoritative rejection.
++var ErrExtractorParentState = errors.New("extractor: parent state read failed during execution")
 +
 +// ExtractorHook admits one native observation per imported block. While a
 +// hook is installed, InsertChain takes the observation guard (Acquire) before
@@ -51,10 +57,21 @@ index 0000000..e664857
 +	Begin(chain *BlockChain, block *types.Block) (ExtractorObservation, error)
 +}
 +
++// ExtractorReader is the chain reader of an observation.
++type ExtractorReader interface {
++	consensus.ChainHeaderReader
++	Engine() consensus.Engine
++}
++
 +// ExtractorObservation is the admitted observation of one block.
 +type ExtractorObservation interface {
 +	// Hash is the hash of the observed block.
 +	Hash() [32]byte
++	// Reader returns the chain reader of the observation; native is the
++	// chain itself. Header verification, Process, Finalize and BLOCKHASH
++	// read headers only through it, so every header they read is a static
++	// input of the observation. Readers on other goroutines keep the chain.
++	Reader(native ExtractorReader) ExtractorReader
 +	// Validated runs after native validation (ValidateState) and before the
 +	// state and the block are written. It closes the dependency log and
 +	// writes EXEC_READY; an error stops the import before any write.
@@ -154,6 +171,46 @@ index 0000000..e664857
 +	}
 +}
 +
++// extractorReader returns the reader of the current observation, or nil.
++func (bc *BlockChain) extractorReader() ExtractorReader {
++	if bc.extractorObservation == nil {
++		return nil
++	}
++	return bc.extractorObservation.Reader(bc)
++}
++
++// extractorReaderKey carries the observation reader into Process.
++type extractorReaderKey struct{}
++
++// extractorContext adds the reader of the current observation to ctx.
++func (bc *BlockChain) extractorContext(ctx context.Context) context.Context {
++	if reader := bc.extractorReader(); reader != nil {
++		return context.WithValue(ctx, extractorReaderKey{}, reader)
++	}
++	return ctx
++}
++
++// extractorChain returns the observation reader that ctx carries, or chain.
++func extractorChain(ctx context.Context, chain *HeaderChain) ExtractorReader {
++	if reader, ok := ctx.Value(extractorReaderKey{}).(ExtractorReader); ok {
++		return reader
++	}
++	return chain
++}
++
++// extractorCause adds the state read error of statedb to a native failure of
++// the observed block, so the observation can tell it from an authoritative
++// rejection.
++func (bc *BlockChain) extractorCause(err error, statedb *state.StateDB) error {
++	if bc.extractorObservation == nil || statedb == nil {
++		return err
++	}
++	if dbErr := statedb.Error(); dbErr != nil {
++		return fmt.Errorf("%w (%w: %w)", err, ErrExtractorParentState, dbErr)
++	}
++	return err
++}
++
 +// extractorRewind runs the rewind guard.
 +func (bc *BlockChain) extractorRewind(head uint64) error {
 +	if ExtractorRewindGuard == nil {
@@ -162,7 +219,7 @@ index 0000000..e664857
 +	return ExtractorRewindGuard(bc.db, head)
 +}
 diff --git a/core/blockchain.go b/core/blockchain.go
-index 612b66f..56bee63 100644
+index 612b66f..78802db 100644
 --- a/core/blockchain.go
 +++ b/core/blockchain.go
 @@ -410,6 +410,11 @@ type BlockChain struct {
@@ -213,7 +270,22 @@ index 612b66f..56bee63 100644
  	_, n, err := bc.insertChain(context.Background(), chain, true, false) // No witness collection for mass inserts (would get super large)
  	return n, err
  }
-@@ -2624,6 +2645,12 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+@@ -2306,7 +2327,13 @@ func (bc *BlockChain) insertChain(ctx context.Context, chain types.Blocks, setHe
+ 		bc.GetBlockStats(block.Hash()).StartImportBlockTime.Store(time.Now().UnixMilli())
+ 		headers[i] = block.Header()
+ 	}
+-	abort, results := bc.engine.VerifyHeaders(bc, headers)
++	// Extractor patch: inside an observation, the engine reads headers
++	// through the observation's reader.
++	var verifyChain consensus.ChainHeaderReader = bc
++	if reader := bc.extractorReader(); reader != nil {
++		verifyChain = reader
++	}
++	abort, results := bc.engine.VerifyHeaders(verifyChain, headers)
+ 	defer close(abort)
+ 
+ 	// Peek the error for the first block to decide the directing import logic
+@@ -2624,6 +2651,12 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
  	)
  	defer interrupt.Store(true) // terminate the prefetch at the end
  
@@ -226,7 +298,27 @@ index 612b66f..56bee63 100644
  	if bc.chainConfig.IsUBT(block.Number(), block.Time()) {
  		sdb = state.NewUBTDatabase(bc.triedb, bc.codedb)
  	} else {
-@@ -2753,6 +2780,12 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+@@ -2732,10 +2765,10 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+ 	statedb.SetExpectedStateRoot(block.Root())
+ 	statedb.SetNeedBadSharedStorage(needBadSharedStorage)
+ 	pctx, _, spanEnd := telemetry.StartSpan(ctx, "bc.processor.Process")
+-	res, err := bc.processor.Process(pctx, block, statedb, bc.cfg.VmConfig)
++	res, err := bc.processor.Process(bc.extractorContext(pctx), block, statedb, bc.cfg.VmConfig) // Extractor patch: the observation reader
+ 	spanEnd(&err)
+ 	if err != nil {
+-		bc.reportBadBlock(block, res, err)
++		bc.reportBadBlock(block, res, bc.extractorCause(err, statedb)) // Extractor patch: mark a state read failure
+ 		bc.reportBadBidBlockEvidence(block, err)
+ 		return nil, err
+ 	}
+@@ -2747,12 +2780,18 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+ 	err = bc.validator.ValidateState(block, statedb, res, false)
+ 	spanEnd(&err)
+ 	if err != nil {
+-		bc.reportBadBlock(block, res, err)
++		bc.reportBadBlock(block, res, bc.extractorCause(err, statedb)) // Extractor patch: mark a state read failure
+ 		bc.reportBadBidBlockEvidence(block, err)
+ 		return nil, err
  	}
  	vtime := time.Since(vstart)
  
@@ -239,7 +331,7 @@ index 612b66f..56bee63 100644
  	// If witnesses was generated and stateless self-validation requested, do
  	// that now. Self validation should *never* run in production, it's more of
  	// a tight integration to enable running *all* consensus tests through the
-@@ -3423,6 +3456,9 @@ func (bc *BlockChain) reportBadBlock(block *types.Block, res *ProcessResult, err
+@@ -3423,6 +3462,9 @@ func (bc *BlockChain) reportBadBlock(block *types.Block, res *ProcessResult, err
  			"err", err)
  		return
  	}
@@ -249,3 +341,37 @@ index 612b66f..56bee63 100644
  	var receipts types.Receipts
  	if res != nil {
  		receipts = res.Receipts
+diff --git a/core/state_processor.go b/core/state_processor.go
+index 36057e7..374e208 100644
+--- a/core/state_processor.go
++++ b/core/state_processor.go
+@@ -89,7 +89,10 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
+ 		misc.ApplyDAOHardFork(tracingStateDB)
+ 	}
+ 
+-	lastBlock := p.chain.GetHeaderByHash(block.ParentHash())
++	// Extractor patch: inside an observation, headers are read through the
++	// observation's reader.
++	chain := extractorChain(ctx, p.chain)
++	lastBlock := chain.GetHeaderByHash(block.ParentHash())
+ 	if lastBlock == nil {
+ 		return nil, errors.New("could not get parent block")
+ 	}
+@@ -112,7 +115,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
+ 	)
+ 
+ 	// Apply pre-execution system calls.
+-	context = NewEVMBlockContext(header, p.chain, nil)
++	context = NewEVMBlockContext(header, chain, nil)
+ 	evm := vm.NewEVM(context, tracingStateDB, config, cfg)
+ 	defer evm.Release()
+ 
+@@ -188,7 +191,7 @@ func (p *StateProcessor) Process(ctx context.Context, block *types.Block, stated
+ 
+ 	gasUsed := gp.Used()
+ 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
+-	err = p.chain.Engine().Finalize(p.chain, header, tracingStateDB, &commonTxs, block.Uncles(), block.Withdrawals(), &receipts, &systemTxs, &gasUsed, cfg.Tracer)
++	err = p.chain.Engine().Finalize(chain, header, tracingStateDB, &commonTxs, block.Uncles(), block.Withdrawals(), &receipts, &systemTxs, &gasUsed, cfg.Tracer)
+ 	if err != nil {
+ 		return nil, err
+ 	}

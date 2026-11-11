@@ -1,0 +1,158 @@
+diff --git a/consensus/parlia/extractor.go b/consensus/parlia/extractor.go
+new file mode 100644
+index 0000000..a84203b
+--- /dev/null
++++ b/consensus/parlia/extractor.go
+@@ -0,0 +1,78 @@
++// Extractor patch (E01-02.admission, BSC block): Parlia snapshots as logged
++// dependency responses.
++
++package parlia
++
++import (
++	"encoding/json"
++	"errors"
++	"fmt"
++
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/consensus"
++	"github.com/ethereum/go-ethereum/core/types"
++)
++
++// ExtractorSnapshotSource is implemented by the chain reader of an extractor
++// observation. When snapshot receives such a reader, the snapshot is a
++// logged dependency response of the observation: the source runs compute,
++// the native lookup on the native chain (memory cache, stored checkpoint
++// snapshot, header walk), on the first attempt and saves its bytes, and it
++// returns the saved bytes on every later attempt. The bytes are the
++// snapshot's JSON, the encoding of a stored snapshot.
++type ExtractorSnapshotSource interface {
++	ExtractorSnapshot(number uint64, hash common.Hash,
++		compute func(native consensus.ChainHeaderReader) ([]byte, error)) ([]byte, error)
++}
++
++func (p *Parlia) extractorSnapshot(source ExtractorSnapshotSource, number uint64, hash common.Hash,
++	parents []*types.Header) (*Snapshot, error) {
++	blob, err := source.ExtractorSnapshot(number, hash, func(native consensus.ChainHeaderReader) ([]byte, error) {
++		snap, err := p.snapshot(native, number, hash, parents)
++		if err != nil {
++			return nil, err
++		}
++		return json.Marshal(snap)
++	})
++	if err != nil {
++		return nil, err
++	}
++	return p.ExtractorDecodeSnapshot(blob, number, hash)
++}
++
++// ExtractorDecodeSnapshot decodes a snapshot response as loadSnapshot decodes
++// a stored snapshot, and checks that it is the snapshot of the requested
++// block.
++func (p *Parlia) ExtractorDecodeSnapshot(blob []byte, number uint64, hash common.Hash) (*Snapshot, error) {
++	snap := new(Snapshot)
++	if err := json.Unmarshal(blob, snap); err != nil {
++		return nil, err
++	}
++	if snap.Number != number || snap.Hash != hash {
++		return nil, fmt.Errorf("snapshot response of block %d %x, want %d %x", snap.Number, snap.Hash, number, hash)
++	}
++	if snap.EpochLength == 0 {
++		snap.EpochLength = defaultEpochLength
++	}
++	if snap.BlockInterval == 0 {
++		snap.BlockInterval = defaultBlockInterval
++	}
++	if snap.TurnLength == 0 {
++		snap.TurnLength = defaultTurnLength
++	}
++	snap.config, snap.sigCache, snap.ethAPI = p.config, p.signatures, p.ethAPI
++	return snap, nil
++}
++
++// ErrExtractorSystemCall marks a failed system-contract call (ethAPI) on the
++// import path. The calls read the parent state; a failed call is an input
++// failure, not a native decision about the block.
++var ErrExtractorSystemCall = errors.New("parlia: system-contract call failed")
++
++func extractorSystemCall(err error) error {
++	return fmt.Errorf("%w: %w", ErrExtractorSystemCall, err)
++}
++
++// ExtractorHasEthAPI reports whether the engine can make system-contract
++// calls; the import of an epoch or breathe block needs them.
++func (p *Parlia) ExtractorHasEthAPI() bool { return p.ethAPI != nil }
+diff --git a/consensus/parlia/parlia.go b/consensus/parlia/parlia.go
+index c8ae1ed..65c20ea 100644
+--- a/consensus/parlia/parlia.go
++++ b/consensus/parlia/parlia.go
+@@ -804,6 +804,12 @@ func (p *Parlia) verifyCascadingFields(chain consensus.ChainHeaderReader, header
+ // unlike other interfaces such as verifyCascadingFields, `parents` are real parents
+ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
+ 	// Search for a snapshot in memory or on disk for checkpoints
++	// Extractor patch: inside an observation, the snapshot is a logged
++	// dependency response.
++	if source, ok := chain.(ExtractorSnapshotSource); ok {
++		return p.extractorSnapshot(source, number, hash, parents)
++	}
++
+ 	var (
+ 		headers []*types.Header
+ 		snap    *Snapshot
+@@ -1987,7 +1993,7 @@ func (p *Parlia) getCurrentValidators(blockHash common.Hash, blockNum *big.Int)
+ 		Data: &msgData,
+ 	}, &blockNr, nil, nil)
+ 	if err != nil {
+-		return nil, nil, err
++		return nil, nil, extractorSystemCall(err) // Extractor patch
+ 	}
+ 
+ 	var valSet []common.Address
+diff --git a/consensus/parlia/lubanFork.go b/consensus/parlia/lubanFork.go
+index 14a6d2c..da0f325 100644
+--- a/consensus/parlia/lubanFork.go
++++ b/consensus/parlia/lubanFork.go
+@@ -40,7 +40,7 @@ func (p *Parlia) getCurrentValidatorsBeforeLuban(blockHash common.Hash, blockNum
+ 		Data: &msgData,
+ 	}, &blockNr, nil, nil)
+ 	if err != nil {
+-		return nil, err
++		return nil, extractorSystemCall(err) // Extractor patch
+ 	}
+ 
+ 	var valSet []common.Address
+diff --git a/consensus/parlia/bohrFork.go b/consensus/parlia/bohrFork.go
+index aea8811..c0ad30d 100644
+--- a/consensus/parlia/bohrFork.go
++++ b/consensus/parlia/bohrFork.go
+@@ -72,7 +72,7 @@ func (p *Parlia) getTurnLengthFromContract(header *types.Header) (turnLength *bi
+ 		Data: &msgData,
+ 	}, &blockNr, nil, nil)
+ 	if err != nil {
+-		return nil, err
++		return nil, extractorSystemCall(err) // Extractor patch
+ 	}
+ 
+ 	if err := p.validatorSetABI.UnpackIntoInterface(&turnLength, method, result); err != nil {
+diff --git a/consensus/parlia/feynmanfork.go b/consensus/parlia/feynmanfork.go
+index 832abfb..bab099a 100644
+--- a/consensus/parlia/feynmanfork.go
++++ b/consensus/parlia/feynmanfork.go
+@@ -148,7 +148,7 @@ func (p *Parlia) getValidatorElectionInfo(blockNr rpc.BlockNumberOrHash) ([]Vali
+ 		Data: &msgData,
+ 	}, &blockNr, nil, nil)
+ 	if err != nil {
+-		return nil, err
++		return nil, extractorSystemCall(err) // Extractor patch
+ 	}
+ 
+ 	var validators []common.Address
+@@ -195,7 +195,7 @@ func (p *Parlia) getMaxElectedValidators(blockNr rpc.BlockNumberOrHash) (maxElec
+ 		Data: &msgData,
+ 	}, &blockNr, nil, nil)
+ 	if err != nil {
+-		return nil, err
++		return nil, extractorSystemCall(err) // Extractor patch
+ 	}
+ 
+ 	if err := p.stakeHubABI.UnpackIntoInterface(&maxElectedValidators, method, result); err != nil {

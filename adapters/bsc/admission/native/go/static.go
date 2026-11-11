@@ -26,7 +26,7 @@ import (
 // StaticItemNames lists the static capsule items of one BSC block
 // observation, in their sealed order.
 var StaticItemNames = []string{"block-rlp", "blob-sidecars", "parent-hash", "parent-header-rlp", "parent-root",
-	"ancestor-headers-rlp", "genesis-json", "fork-id", "parlia-snapshot-keys", "native-commit",
+	"ancestor-headers-rlp", "genesis-json", "fork-id", "parlia-snapshots", "native-commit",
 	"normalization-profile", "state-profile"}
 
 const (
@@ -36,13 +36,12 @@ const (
 	// NormalizationProfile is the test-only normalization profile item; the
 	// product profile belongs to E04-01.block_record (D99 item 4).
 	NormalizationProfile = "test-only-probe-v1"
-	// CheckpointInterval is checkpointInterval of the pinned Parlia source:
-	// the snapshot walk stops at a block number that it divides.
-	CheckpointInterval = 1024
 	// BlockHashWindow is the number of ancestors that BLOCKHASH can read.
 	BlockHashWindow = 256
-	// SnapshotPrefix is the key prefix of a stored Parlia snapshot.
-	SnapshotPrefix = "parlia-"
+	// SnapshotDeclaration is the parlia-snapshots item: Parlia snapshots are
+	// logged dependency responses (SnapshotTag), requested only for capsule
+	// headers.
+	SnapshotDeclaration = SnapshotTag + ";capsule-headers"
 )
 
 // ErrStaticInput reports a static capsule that is incomplete or
@@ -50,52 +49,14 @@ const (
 var ErrStaticInput = errors.New("static input check failed")
 
 // AncestorFloor returns the lowest ancestor number whose header the import
-// of block n (n >= 2) may read through the chain: the Parlia snapshot walk
-// reads headers from the parent down to the checkpoint below it, and
-// BLOCKHASH reads the 256 most recent ancestors.
+// of block n (n >= 2) may read: BLOCKHASH reads the 256 most recent
+// ancestors. Parlia reads headers only through logged snapshots, the parent,
+// and attestation and finality-reward targets inside this window.
 func AncestorFloor(n uint64) uint64 {
-	floor := (n - 1) / CheckpointInterval * CheckpointInterval
-	if n > BlockHashWindow && n-BlockHashWindow < floor {
-		floor = n - BlockHashWindow
+	if n > BlockHashWindow {
+		return n - BlockHashWindow
 	}
-	return floor
-}
-
-// SnapshotDependency names the stored Parlia snapshot that the import may
-// read: the snapshot of the checkpoint at or below the parent. Its content
-// is not static; it is a logged dependency response.
-type SnapshotDependency struct {
-	Checkpoint uint64   `json:"checkpoint"`
-	Keys       []string `json:"keys"`
-}
-
-// SnapshotKey returns the key of the stored Parlia snapshot of a block.
-func SnapshotKey(hash common.Hash) []byte {
-	return append([]byte(SnapshotPrefix), hash.Bytes()...)
-}
-
-// SnapshotFor returns the snapshot dependency of the block after parent.
-func SnapshotFor(parent *types.Header, ancestors []*types.Header) (SnapshotDependency, error) {
-	checkpoint := parent.Number.Uint64() / CheckpointInterval * CheckpointInterval
-	for _, header := range append([]*types.Header{parent}, ancestors...) {
-		if header.Number.Uint64() == checkpoint {
-			return SnapshotDependency{Checkpoint: checkpoint, Keys: []string{hex.EncodeToString(SnapshotKey(header.Hash()))}}, nil
-		}
-	}
-	return SnapshotDependency{}, fmt.Errorf("%w: no header of checkpoint %d", ErrStaticInput, checkpoint)
-}
-
-// KeyBytes returns the declared keys as bytes.
-func (s SnapshotDependency) KeyBytes() ([][]byte, error) {
-	var keys [][]byte
-	for _, key := range s.Keys {
-		data, err := hex.DecodeString(key)
-		if err != nil || !bytes.HasPrefix(data, []byte(SnapshotPrefix)) {
-			return nil, fmt.Errorf("%w: snapshot key %q", ErrStaticInput, key)
-		}
-		keys = append(keys, data)
-	}
-	return keys, nil
+	return 0
 }
 
 // ForkID returns the fork-id item: the EIP-2124 fork identifier of the
@@ -182,14 +143,6 @@ func BlockItems(block *types.Block, header func(uint64) *types.Header, genesis *
 	if err != nil {
 		return nil, err
 	}
-	dependency, err := SnapshotFor(parent, ancestors)
-	if err != nil {
-		return nil, err
-	}
-	snapshot, err := json.Marshal(dependency)
-	if err != nil {
-		return nil, err
-	}
 	return []sourceinputs.Item{
 		{Name: "block-rlp", Data: blockRLP},
 		{Name: "blob-sidecars", Data: sidecarsRLP},
@@ -199,7 +152,7 @@ func BlockItems(block *types.Block, header func(uint64) *types.Header, genesis *
 		{Name: "ancestor-headers-rlp", Data: ancestorsRLP},
 		{Name: "genesis-json", Data: genesis.Canonical},
 		{Name: "fork-id", Data: fork},
-		{Name: "parlia-snapshot-keys", Data: snapshot},
+		{Name: "parlia-snapshots", Data: []byte(SnapshotDeclaration)},
 		{Name: "native-commit", Data: []byte(nativeCommit)},
 		{Name: "normalization-profile", Data: []byte(NormalizationProfile)},
 		{Name: "state-profile", Data: []byte(StateProfile)},
@@ -212,7 +165,6 @@ type Static struct {
 	Parent    *types.Header
 	Ancestors []*types.Header // descending, from the grandparent
 	Root      common.Hash
-	Snapshot  SnapshotDependency
 }
 
 // ReadStatic reads and checks the stored capsule of an observation against
@@ -238,9 +190,9 @@ func ReadStatic(db sourceinputs.Store, id string, genesis *Genesis, nativeCommit
 }
 
 // DecodeStatic decodes the items of one block observation and checks that
-// the block, the parent, the parent root, the ancestor window and the
-// declared snapshot dependency agree with each other, and that the genesis,
-// fork id, native commit and profile items equal the home's values.
+// the block, the parent, the parent root and the ancestor window agree with
+// each other, and that the genesis, fork id, snapshot declaration, native
+// commit and profile items equal the home's values.
 func DecodeStatic(items map[string][]byte, genesis *Genesis, nativeCommit string) (Static, error) {
 	bad := func(format string, args ...any) (Static, error) {
 		return Static{}, fmt.Errorf("%w: "+format, append([]any{ErrStaticInput}, args...)...)
@@ -294,12 +246,8 @@ func DecodeStatic(items map[string][]byte, genesis *Genesis, nativeCommit string
 		}
 		child = ancestor
 	}
-	dependency, err := SnapshotFor(static.Parent, static.Ancestors)
-	if err != nil {
-		return Static{}, err
-	}
-	if encoded, err := json.Marshal(dependency); err != nil || !bytes.Equal(encoded, items["parlia-snapshot-keys"]) {
-		return bad("parlia-snapshot-keys differs from the headers")
+	if !bytes.Equal(items["parlia-snapshots"], []byte(SnapshotDeclaration)) {
+		return bad("parlia-snapshots differs from the snapshot declaration")
 	}
 	if !bytes.Equal(items["genesis-json"], genesis.Canonical) {
 		return bad("genesis-json differs from the home's canonical genesis")
@@ -315,6 +263,6 @@ func DecodeStatic(items map[string][]byte, genesis *Genesis, nativeCommit string
 		!bytes.Equal(items["state-profile"], []byte(StateProfile)) {
 		return bad("profile items differ")
 	}
-	static.Root, static.Snapshot = static.Parent.Root, dependency
+	static.Root = static.Parent.Root
 	return static, nil
 }
