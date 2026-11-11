@@ -2,46 +2,29 @@
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
-Status: ACCEPTED (2026-11-11); #16 closes when this record merges. Every
-block is merged: block 0 admission-core in PR #146 at `9046de9`, Geth in PR
-#147 at `6f6eb2c`, BSC part A in PR #148 at `4bf65f3`, Bor in PR #149 at
-`9f2a3d9`, and BSC part B in PR #150 at `10cd2c6`. Every row of the plan
-table below is met by its block, or is marked "Not admission" with its
-owner. AC-CAP-02-01 and AC-CAP-02-02 pass on every applicable private local
-slot: ETH (Geth), BSC (BSC part A) and POLY (Bor). Every public cell stays
-NOT_RUN for E06 and E07 (D96, D98, D99).
+Status: IN_PROGRESS; #16 stays open. Merged: block 0 admission-core in PR
+#146 at `9046de9`, Geth in PR #147 at `6f6eb2c`, BSC part A in PR #148 at
+`4bf65f3`, Bor in PR #149 at `9f2a3d9`, and BSC part B in PR #150 at
+`10cd2c6`. The acceptance audit (Spec review of PR #151) found two Bor
+hazards and no AC-CAP-02 verdict for the BSC slot. D100 records the owner's
+answers. Still open before #16 closes:
 
-The limits that the block evidence lists go to their owners:
+- Bor hazards block (native-engineer and qa, Bor session):
+  `bor snapshot prune-block` never deletes a pinned header, and only the
+  import's own Heimdall reads enter an observation's log (D100 item 1).
+- BSC AC verdict block (qa, BSC session): the AC-CAP-02-01 and
+  AC-CAP-02-02 matrix for the private BSC slot from part A run 03 and part B
+  run 06 (D100).
 
-- E01-02.lifecycle_seams: node wiring of the seams (which flag installs
-  them, the caller of `Start`, where the live boundary H is read), the BSC
-  `ethAPI` over `SystemCallBackend`, the Bor `bor server` profile check, and
-  the side-chain, reorg and known-branch callers.
-- E01-02.decision_bridge: the step that closes EXEC_READY observations and
-  releases their pins, the BSC finality result of `GetFinalizedHeader` and
-  the fork choice, and one decision per candidate when a block is observed
-  twice after a recovery.
-- E04-04.import_pressure: the capture producer on the chain and the raw
-  spool encoder (D98 item 4).
-- E04-01.block_record: the normalization profile (D99 item 4) and the
-  record-corpus digest, which replaces the stand-in execution digest.
-- E06 and E07: public profiles, and the native exercise of what the private
-  fixtures cannot reach (BSC vote attestations, validator-set switches, the
-  Bohr, Feynman, Lorentz and Maxwell transitions, blob blocks; Bor with real
-  Heimdall and L1).
+AC-CAP-02-01 and AC-CAP-02-02 pass on the private ETH (Geth) and POLY (Bor)
+slots. Every public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D100
+names the owner of every other limit in the block evidence.
 
-The other limits are accepted as recorded in the evidence of each block:
-the native behavior of startup repair rewinds and manual database tools in
-Geth, the fail-closed refusal of a BSC rewind by timestamp while any header
-is pinned, and the process-crash semantics of native chain data. No limit
-moves scope without an owner decision.
-
-Dependencies E01-02.pins (#13),
-E01-02.inputs (#14) and E01-02.owned_capture (#15) are accepted. Plan agreed
-with the owner on 2026-11-11, the same split as #14 under D97 and D98: block
-0 core (architect, then native-engineer), then up to three parallel
-per-client blocks (native-engineer each) with qa for the AC matrix; reviewer
-for the Spec and Standards reviews.
+Dependencies E01-02.pins (#13), E01-02.inputs (#14) and E01-02.owned_capture
+(#15) are accepted. Plan agreed with the owner on 2026-11-11, the same split
+as #14 under D97 and D98: block 0 core (architect, then native-engineer),
+then up to three parallel per-client blocks (native-engineer each) with qa
+for the AC matrix; reviewer for the Spec and Standards reviews.
 
 ### Block 0: admission-core
 
@@ -145,8 +128,8 @@ PASS with two P3 wording notes. Commit `9f6bbe4` writes and syncs the
 terminal record before the release, lets `Open` release the pins of closed
 observations above the low-water mark again, and fixes the wording.
 
-Next: none for E01-02.admission. Its dependent task E01-02.decision_bridge
-is unlocked when #16 closes.
+Next: the Bor hazards block and the BSC AC verdict block (D100), then the
+acceptance record; #16 closes when that record merges.
 
 ## E01-02.admission — Geth block
 
@@ -216,9 +199,10 @@ passed. Merged in PR #147 at `6f6eb2c`.
 
 ## E01-02.admission — BSC block
 
-Status: block ACCEPTED (part of #16). Part A merged in PR #148 at
-`4bf65f3`; part B merged in PR #150 at `10cd2c6` (branch
-`claude/e01-02-admission-bsc-parlia-inputs`, base main `9f2a3d9`).
+Status: part A merged in PR #148 at `4bf65f3`; part B merged in PR #150 at
+`10cd2c6` (branch `claude/e01-02-admission-bsc-parlia-inputs`, started on
+main `4bf65f3`, merged with main `9f2a3d9`). Part of #16. Open: the qa
+AC-CAP-02 verdict for the private BSC slot (D100).
 
 Split: the coordinator approved on 2026-11-11 splitting the BSC block into
 PR A "bsc-import" and PR B "bsc-parlia-inputs", both "Part of #16", with no
@@ -323,8 +307,9 @@ passed. Merged in PR #150 at `10cd2c6`.
 
 ## E01-02.admission — Bor block
 
-Status: block ACCEPTED in PR #149 at merge `9f2a3d9` (part of #16). Base
-`9046de9` (block 0 merged in PR #146).
+Status: merged in PR #149 at `9f2a3d9` (part of #16). Base `9046de9` (block
+0 merged in PR #146). Open: the hazards block of D100 item 1 (`bor snapshot
+prune-block` and Heimdall reads outside the import).
 Branch/worktree: `claude/e01-02-admission-bor-b95e1c` /
 `e01-02-admission-bor-b95e1c`. Roles: native-engineer (revision
 `ed35bb98`) for the patches and the probe, qa (revision `4b479131`) for the
