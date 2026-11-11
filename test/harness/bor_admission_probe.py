@@ -166,10 +166,8 @@ def prepare_bor(manifest, root, output, native, compiler, oracle, deadline):
     extract(read_bytes(directory / "source.tar", closure["source_archive"]["size_bytes"], deadline), source, deadline)
     row["installed"] = bor_admission_tree.install(source)
     probe = source / PROBE_DIR
-    probe.mkdir(parents=True)
-    row["probe_sources"] = capture_probe.copy_sources(("main.go",), FIXTURE, probe / "main", deadline)
-    (probe / "main" / "main.go").rename(probe / "main.go")
-    (probe / "main").rmdir()
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    row["probe_sources"] = capture_probe.copy_sources(("main.go",), FIXTURE, probe, deadline)
     row["stub_sources"] = capture_probe.copy_sources(STUB_FILES, STUB_SOURCES, probe / "heimdallstub", deadline)
     for name in ("bin", "build-cache", "gopath", "gotmp"):
         (directory / name).mkdir()
