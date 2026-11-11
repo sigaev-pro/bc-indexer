@@ -4,7 +4,8 @@
   "source_commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
   "files": {
     "core_hook.go.txt": "core/extractor_admission.go",
-    "rawdb_hook.go.txt": "core/rawdb/extractor_retention.go"
+    "rawdb_hook.go.txt": "core/rawdb/extractor_retention.go",
+    "utils_hook.go.txt": "cmd/utils/extractor_guard.go"
   },
   "patches": [
     {
@@ -146,6 +147,27 @@
       "original": "\tprunerconfig := pruner.Config{\n\t\tDatadir:   stack.ResolvePath(\"\"),\n\t\tBloomSize: ctx.Uint64(utils.BloomFilterSizeFlag.Name),\n\t}\n\tpruner, err := pruner.NewPruner(chaindb, prunerconfig)\n\tif err != nil {\n\t\tlog.Error(\"Failed to open snapshot tree\", \"err\", err)\n\t\treturn err\n\t}\n\tif ctx.NArg() > 1 {\n\t\tlog.Error(\"Too many arguments given\")\n\t\treturn errors.New(\"too many arguments\")\n\t}\n\tvar targetRoot common.Hash\n\tif ctx.NArg() == 1 {\n\t\ttargetRoot, err = parseRoot(ctx.Args().First())\n\t\tif err != nil {\n\t\t\tlog.Error(\"Failed to resolve state root\", \"err\", err)\n\t\t\treturn err\n\t\t}\n\t}\n\tif err = pruner.Prune(targetRoot); err != nil {\n\t\tlog.Error(\"Failed to prune state\", \"err\", err)\n\t\treturn err\n\t}\n\treturn nil\n}\n\n",
       "replacement": "\tif ctx.NArg() > 1 {\n\t\tlog.Error(\"Too many arguments given\")\n\t\treturn errors.New(\"too many arguments\")\n\t}\n\tvar (\n\t\ttargetRoot common.Hash\n\t\terr        error\n\t)\n\tif ctx.NArg() == 1 {\n\t\ttargetRoot, err = parseRoot(ctx.Args().First())\n\t\tif err != nil {\n\t\t\tlog.Error(\"Failed to resolve state root\", \"err\", err)\n\t\t\treturn err\n\t\t}\n\t}\n\t// E01-02.admission retention patch (D98 item 2): the guarded pruner\n\t// refuses while an extractor pin is live.\n\tif err = stateprovider.PruneState(chaindb, stack.ResolvePath(\"\"), ctx.Uint64(utils.BloomFilterSizeFlag.Name), targetRoot); err != nil {\n\t\tlog.Error(\"Failed to prune state\", \"err\", err)\n\t\treturn err\n\t}\n\treturn nil\n}\n\n",
       "reason": "D98 item 2: geth snapshot prune-state calls PruneState, which refuses while a pin is live."
+    },
+    {
+      "name": "writable_database_guard",
+      "file": "cmd/utils/flags.go",
+      "original": "\tdefault:\n\t\toptions := node.DatabaseOptions{\n\t\t\tReadOnly:          readonly,",
+      "replacement": "\tdefault:\n\t\t// E01-02.admission manual database guard (D100 item 3): a writable\n\t\t// open of an existing store is refused while an extractor pin is live\n\t\t// or an obligation is open.\n\t\tif !readonly {\n\t\t\tif err = ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\t\t\tbreak\n\t\t\t}\n\t\t}\n\t\toptions := node.DatabaseOptions{\n\t\t\tReadOnly:          readonly,",
+      "reason": "D100 item 3: every manual geth command that opens chaindata for writing through MakeChainDatabase or MakeChain first passes the read-only guard."
+    },
+    {
+      "name": "removedb_guard",
+      "file": "cmd/geth/dbcmd.go",
+      "original": "func removeDB(ctx *cli.Context) error {\n\tstack, config := makeConfigNode(ctx)\n",
+      "replacement": "func removeDB(ctx *cli.Context) error {\n\tstack, config := makeConfigNode(ctx)\n\n\t// E01-02.admission manual database guard (D100 item 3): refuse before\n\t// any prompt or deletion while an extractor pin is live or an obligation\n\t// is open.\n\tif err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\treturn err\n\t}\n",
+      "reason": "D100 item 3: geth removedb deletes chaindata without opening it, so it calls the read-only guard itself before any prompt."
+    },
+    {
+      "name": "generate_trie_guard",
+      "file": "cmd/geth/snapshot.go",
+      "original": "\tlog.Info(\"creating pebble checkpoint\", \"src\", srcDir, \"dst\", ckpt)\n",
+      "replacement": "\t// E01-02.admission manual database guard (D100 item 3): the checkpoint\n\t// opens the source pebble store and the source chain freezer for writing.\n\tif err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\treturn err\n\t}\n\tlog.Info(\"creating pebble checkpoint\", \"src\", srcDir, \"dst\", ckpt)\n",
+      "reason": "D100 item 3: geth snapshot generate-trie opens the source pebble store writable and shares the source chain freezer writable, so it calls the read-only guard first."
     }
   ]
 }

@@ -125,16 +125,6 @@
       "reason": "The chain freezer freezes past the fork point of a pinned side-branch header and deletes it."
     },
     {
-      "name": "prune_state_skipped",
-      "file": "cmd/geth/snapshot.go",
-      "original": "\tif err = stateprovider.PruneState(chaindb,",
-      "replacement": "\tif err = func(any, string, uint64, any) error { _ = stateprovider.PruneState; return nil }(chaindb,",
-      "binaries": [
-        "geth"
-      ],
-      "reason": "geth snapshot prune-state no longer reaches the guarded pruner and reports success with live pins."
-    },
-    {
       "name": "recover_pruning_unguarded",
       "file": "geth.go",
       "original": "\tif len(matches) == 0 {\n\t\treturn nil\n",
@@ -213,6 +203,66 @@
         "geth"
       ],
       "reason": "geth import executes and writes a block into a capture store without an admission."
+    },
+    {
+      "name": "writable_database_unguarded",
+      "file": "cmd/utils/flags.go",
+      "original": "\t\tif !readonly {\n\t\t\tif err = ExtractorGuardChaindata(ctx, stack); err != nil {",
+      "replacement": "\t\tif false && !readonly {\n\t\t\tif err = ExtractorGuardChaindata(ctx, stack); err != nil {",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "Manual geth commands open chaindata for writing without the guard while a pin is live and an obligation is ADMITTED."
+    },
+    {
+      "name": "removedb_unguarded",
+      "file": "cmd/geth/dbcmd.go",
+      "original": "\tif err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\treturn err\n\t}\n",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\treturn err\n\t}\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "geth removedb deletes a store with a live pin, an ADMITTED obligation or an INPUT_PREPARING observation."
+    },
+    {
+      "name": "guard_pins_unchecked",
+      "file": "geth.go",
+      "original": "func RequireNoOpenCapture(db ethdb.Database) error {\n\tif err := stateprovider.RequireNoLivePins(db); err != nil {",
+      "replacement": "func RequireNoOpenCapture(db ethdb.Database) error {\n\tif err := error(nil); err != nil {",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "The manual database guard no longer reads the pin ledger; a store with live pins is refused only for its open obligations."
+    },
+    {
+      "name": "guard_obligations_ignored",
+      "file": "geth.go",
+      "original": "\tif len(open) != 0 {\n\t\treturn fmt.Errorf(\"%w: %d open, first %s\", ErrOpenObligation,",
+      "replacement": "\tif false && len(open) != 0 {\n\t\treturn fmt.Errorf(\"%w: %d open, first %s\", ErrOpenObligation,",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "geth removedb deletes a store whose INPUT_PREPARING observation has no pin yet."
+    },
+    {
+      "name": "guard_counts_orphan",
+      "file": "geth.go",
+      "original": "\t\tfor sequence := low.Sequence; sequence < counter.Next; sequence++ {",
+      "replacement": "\t\tfor sequence := low.Sequence; sequence <= counter.Next; sequence++ {",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "An INPUT_PREPARING record beyond the counter (an interrupted Begin, not an observation) blocks removedb and geth import of a store without pins."
+    },
+    {
+      "name": "generate_trie_unguarded",
+      "file": "cmd/geth/snapshot.go",
+      "original": "\tif err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {\n\t\treturn err\n\t}\n\tlog.Info(\"creating pebble checkpoint\"",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\treturn err\n\t}\n\tlog.Info(\"creating pebble checkpoint\"",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "geth snapshot generate-trie opens the source store and its chain freezer for writing while a pin is live and an obligation is ADMITTED."
     }
   ]
 }

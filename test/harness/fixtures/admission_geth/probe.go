@@ -615,6 +615,40 @@ func shipped(geth, name string, env []string, args ...string) map[string]any {
 	return row
 }
 
+// storeFiles lists every file under the chaindata of datadir as
+// "<relative path> <size> <SHA-256>", in path order. Two equal lists show that
+// a refused command left the store byte for byte unchanged.
+func storeFiles(datadir string) []string {
+	root := filepath.Join(datadir, "geth", "chaindata")
+	files := []string{}
+	check(filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, fmt.Sprintf("%s %d %x", filepath.ToSlash(relative), len(data), sha256.Sum256(data)))
+		return nil
+	}))
+	sort.Strings(files)
+	return files
+}
+
+// onStore runs a shipped geth command on datadir and records the chaindata
+// files before and after it.
+func onStore(geth, name, datadir string, args ...string) map[string]any {
+	before := storeFiles(datadir)
+	row := shipped(geth, name, nil, append([]string{"--datadir", datadir}, args...)...)
+	row["store_before"], row["store_after"] = before, storeFiles(datadir)
+	return row
+}
+
 // setup imports blocks 1..target-1 natively, without admission, into a new
 // on-disk store and stops the chain, so the parent state of the target block
 // is on disk.
@@ -626,6 +660,16 @@ func setup(datadir string, genesis *core.Genesis, blocks []*types.Block) {
 	check(err)
 	chain.Stop()
 	check(db.Close())
+}
+
+// exportBlock writes one block as the RLP file that geth import reads.
+func exportBlock(work, name string, block *types.Block) string {
+	path := filepath.Join(work, name)
+	file, err := os.Create(path)
+	check(err)
+	check(rlp.Encode(file, block))
+	check(file.Close())
+	return path
 }
 
 func writeConfig(path string, genesis *core.Genesis, commit, store, producer string) {
@@ -705,16 +749,35 @@ func run(genesisPath, work, output, commit, geth string) {
 		})
 		retry := with(spec, func(s *Spec) { s.CrashBeforeSync, s.CrashAfterSync = "", "" })
 		prefix := strings.ReplaceAll(row.name, "_", "-")
-		scenario(row.name, runAttempt(work, prefix+"-1-crash", spec), runAttempt(work, prefix+"-2-recover", retry))
+		crash := runAttempt(work, prefix+"-1-crash", spec)
+		if row.name == "begin_after_counter_sync" {
+			// An INPUT_PREPARING observation without a pin: removedb is
+			// refused before any prompt and the store stays unchanged.
+			shippedRuns = append(shippedRuns, onStore(geth, "removedb-open-obligation", dirs[row.name],
+				"removedb", "--remove.state", "--remove.chain"))
+		}
+		scenario(row.name, crash, runAttempt(work, prefix+"-2-recover", retry))
 	}
+
+	// An interrupted Begin on a store of its own leaves no observation and no
+	// pin, only an INPUT_PREPARING record beyond the counter. The manual
+	// database guard passes there: geth import of block 300 stops at the
+	// capture-store refusal of ProcessBlock, and removedb then deletes the
+	// store natively.
+	allowed := with(base, func(s *Spec) {
+		s.Datadir = dir("removedb_allowed")
+		s.Imports = []string{"target"}
+		s.CrashBeforeSync = "/counter"
+	})
+	scenario("removedb_allowed", runAttempt(work, "removedb-allowed-1-crash", allowed))
+	shippedRuns = append(shippedRuns, onStore(geth, "import-bound", allowed.Datadir, "--cache", "64",
+		"--state.scheme", "hash", "import", exportBlock(work, "block-300.rlp", blocks[target-1])))
+	shippedRuns = append(shippedRuns, onStore(geth, "removedb-allowed", allowed.Datadir,
+		"removedb", "--remove.state", "--remove.chain"))
 
 	// geth import opens the chain without eth.New. On a capture store (head
 	// 300 after the scenario above) it must refuse to import block 301.
-	export := filepath.Join(work, "block-301.rlp")
-	file, err := os.Create(export)
-	check(err)
-	check(rlp.Encode(file, blocks[target]))
-	check(file.Close())
+	export := exportBlock(work, "block-301.rlp", blocks[target])
 	shippedRuns = append(shippedRuns, shipped(geth, "import", nil, "--datadir", dirs["admit_before_sync"], "--cache", "64",
 		"--state.scheme", "hash", "import", export))
 
@@ -725,8 +788,36 @@ func run(genesisPath, work, output, commit, geth string) {
 		s.Imports = []string{"target"}
 		s.CrashAfterSync = "/admitted"
 	})
+	admittedCrash := runAttempt(work, "admit-after-sync-1-crash", admitted)
+	// D100 item 3: with the ADMITTED obligation and its live pin, every
+	// guarded manual geth command that deletes or rewrites chaindata is refused
+	// before it writes, and the store stays unchanged; recovery then
+	// completes below.
+	empty := filepath.Join(work, "empty-input")
+	check(os.WriteFile(empty, nil, 0o600))
+	emptyDir := filepath.Join(work, "empty-era")
+	check(os.Mkdir(emptyDir, 0o700))
+	admittedKey := hex.EncodeToString([]byte("extractor-admission-v1/" + producerID + "." + runID + "/0000000000000000/admitted"))
+	for _, command := range [][]string{
+		{"removedb", "removedb", "--remove.state", "--remove.chain"},
+		{"init", "init", genesisPath},
+		{"import-admitted", "--cache", "64", "--state.scheme", "hash", "import", export},
+		{"import-history", "import-history", emptyDir},
+		{"import-preimages", "import-preimages", empty},
+		{"prune-history", "prune-history", "--history.chain", "100:" + hashes[100]},
+		{"db-compact", "db", "compact"},
+		{"db-delete", "db", "delete", "0x" + admittedKey},
+		{"db-put", "db", "put", "0x" + admittedKey, "0x00"},
+		{"db-import", "db", "import", empty},
+		{"db-import-badblocks", "db", "import-badblocks", empty},
+		{"bintrie-convert", "bintrie", "convert"},
+		{"snapshot-prune-state", "snapshot", "prune-state"},
+		{"snapshot-generate-trie", "snapshot", "generate-trie"},
+	} {
+		shippedRuns = append(shippedRuns, onStore(geth, "admitted-"+command[0], admitted.Datadir, command[1:]...))
+	}
 	scenario("admit_after_sync",
-		runAttempt(work, "admit-after-sync-1-crash", admitted),
+		admittedCrash,
 		runAttempt(work, "admit-after-sync-2-hold", with(admitted, func(s *Spec) { s.Imports, s.CrashAfterSync, s.Hold = nil, "", true })),
 		runAttempt(work, "admit-after-sync-3-changed-profile", with(admitted, func(s *Spec) {
 			s.Imports, s.CrashAfterSync, s.Profile = nil, "", "another-profile"

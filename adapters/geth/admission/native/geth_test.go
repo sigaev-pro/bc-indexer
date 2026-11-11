@@ -475,6 +475,10 @@ func TestUnitImportPathAndRecovery(t *testing.T) {
 	if err := chain.SetHead(200); !errors.Is(err, stateprovider.ErrLivePins) {
 		t.Fatalf("rewind below a pin: %v", err)
 	}
+	// The manual database guard refuses while the EXEC_READY pin is live.
+	if err := RequireNoOpenCapture(db); !errors.Is(err, stateprovider.ErrLivePins) {
+		t.Fatalf("manual database guard with a live pin: %v", err)
+	}
 	chain.Stop()
 }
 
@@ -800,5 +804,98 @@ func TestUnitRetentionGuardsAreInstalled(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
 	if err := RecoverPruning(db, dir); err != nil {
 		t.Fatalf("no interrupted prune: %v", err)
+	}
+}
+
+func TestUnitOpenObligations(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	put := func(key, value string) {
+		t.Helper()
+		if err := db.Put([]byte(admissionPrefix+key), []byte(value)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	del := func(key string) {
+		t.Helper()
+		if err := db.Delete([]byte(admissionPrefix + key)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if open, err := OpenObligations(db); err != nil || len(open) != 0 {
+		t.Fatalf("an empty store: %v %v", open, err)
+	}
+	if err := RequireNoOpenCapture(db); err != nil {
+		t.Fatalf("an empty store: %v", err)
+	}
+	// Run r1: sequence 0 EXEC_READY, 1 ABANDONED, 2 NATIVE_REJECTED, 3
+	// ADMITTED, and an INPUT_PREPARING record beyond the counter (an
+	// interrupted Begin), which is not an observation. Run r2: sequence 0
+	// INPUT_PREPARING.
+	put("geth-test.r1/counter", `{"next":4}`)
+	for _, record := range []string{"0/preparing", "0/admitted", "0/exec-ready", "1/preparing", "1/abandoned",
+		"2/preparing", "2/admitted", "2/rejected", "3/preparing", "3/admitted", "4/preparing"} {
+		sequence, kind, _ := strings.Cut(record, "/")
+		put("geth-test.r1/000000000000000"+sequence+"/"+kind, "{}")
+	}
+	put("geth-test.r2/counter", `{"next":1}`)
+	put("geth-test.r2/0000000000000000/preparing", "{}")
+	open, err := OpenObligations(db)
+	want := []string{"geth-test.r1.0000000000000003", "geth-test.r2.0000000000000000"}
+	if err != nil || strings.Join(open, ",") != strings.Join(want, ",") {
+		t.Fatalf("open obligations %v %v, want %v", open, err, want)
+	}
+	if err := RequireNoOpenCapture(db); !errors.Is(err, ErrOpenObligation) {
+		t.Fatalf("an open obligation: %v", err)
+	}
+	// Closing them clears the refusal; the low-water mark skips closed
+	// sequences whose records are gone.
+	put("geth-test.r1/0000000000000003/exec-ready", "{}")
+	put("geth-test.r2/0000000000000000/abandoned", "{}")
+	if err := RequireNoOpenCapture(db); err != nil {
+		t.Fatalf("closed obligations: %v", err)
+	}
+	put("geth-test.r1/lowwater", `{"sequence":2}`)
+	del("geth-test.r1/0000000000000000/preparing")
+	if err := RequireNoOpenCapture(db); err != nil {
+		t.Fatalf("below the low-water mark: %v", err)
+	}
+	// Every layout fault fails closed.
+	for name, change := range map[string]func(){
+		"a sequence without INPUT_PREPARING": func() { del("geth-test.r1/0000000000000002/preparing") },
+		"a low-water mark above the counter": func() { put("geth-test.r1/lowwater", `{"sequence":5}`) },
+		"a malformed counter":                func() { put("geth-test.r1/counter", `{"next":4,"extra":1}`) },
+		"an unknown record kind":             func() { put("geth-test.r1/0000000000000002/other", "{}") },
+		"a short sequence":                   func() { put("geth-test.r1/2/preparing", "{}") },
+		"an owner without a run":             func() { put("geth-test/counter", `{"next":0}`) },
+	} {
+		snapshot := map[string][]byte{}
+		iterator := db.NewIterator([]byte(admissionPrefix), nil)
+		for iterator.Next() {
+			snapshot[string(iterator.Key())] = append([]byte(nil), iterator.Value()...)
+		}
+		iterator.Release()
+		change()
+		if _, err := OpenObligations(db); !errors.Is(err, admission.ErrCorrupt) {
+			t.Errorf("%s: %v", name, err)
+		}
+		if err := RequireNoOpenCapture(db); err == nil {
+			t.Errorf("%s: the guard passed", name)
+		}
+		iterator = db.NewIterator([]byte(admissionPrefix), nil)
+		var keys [][]byte
+		for iterator.Next() {
+			keys = append(keys, append([]byte(nil), iterator.Key()...))
+		}
+		iterator.Release()
+		for _, key := range keys {
+			if err := db.Delete(key); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for key, value := range snapshot {
+			if err := db.Put([]byte(key), value); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }

@@ -110,6 +110,9 @@ var (
 	ErrCapsule = errors.New("saved capsule does not match the block")
 	// ErrRecovery stops startup when an ADMITTED obligation stays open.
 	ErrRecovery = errors.New("admitted obligation was not resolved")
+	// ErrOpenObligation refuses a manual database command while an
+	// observation is INPUT_PREPARING or ADMITTED (D100 item 3).
+	ErrOpenObligation = errors.New("open admission obligations forbid this native database write")
 )
 
 var (
@@ -233,6 +236,132 @@ func RequireNoCapture(db ethdb.Database) error {
 		return err
 	} else if ok {
 		return fmt.Errorf("%w: store holds a producer run record; set %s", ErrConfig, ConfigEnv)
+	}
+	return nil
+}
+
+// admissionPrefix starts every key of the shared admission records
+// (extractor/admission): "<prefix><producer>.<run>/counter", ".../lowwater"
+// and ".../<16 hex digits of the sequence>/<kind>".
+const admissionPrefix = "extractor-admission-v1/"
+
+// recordKinds are the record kinds of one sequence; every kind except
+// "preparing" and "admitted" closes it.
+var recordKinds = map[string]bool{"preparing": false, "admitted": false, "exec-ready": true, "abandoned": true,
+	"rejected": true}
+
+var sequencePattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
+
+// OpenObligations lists, in key order, the observation keys of every producer
+// run in the store that are INPUT_PREPARING or ADMITTED: the obligations that
+// only the recovery of that run may resolve. Like admission.Open, it reads
+// the counter and the low-water mark of each run and the records of each
+// sequence between them, so an INPUT_PREPARING record beyond the counter (an
+// interrupted Begin) is not an observation. It only reads; a key under the
+// admission prefix that does not fit the layout, or a sequence below the
+// counter without its INPUT_PREPARING record, fails closed.
+func OpenObligations(db ethdb.Database) ([]string, error) {
+	iterator := db.NewIterator([]byte(admissionPrefix), nil)
+	defer iterator.Release()
+	var owners []string
+	seen := map[string]bool{}
+	for iterator.Next() {
+		rest := string(iterator.Key()[len(admissionPrefix):])
+		owner, suffix, ok := strings.Cut(rest, "/")
+		producer, run, dotted := strings.Cut(owner, ".")
+		if !ok || !dotted || !partPattern.MatchString(producer) || !partPattern.MatchString(run) {
+			return nil, fmt.Errorf("%w: admission key %q", admission.ErrCorrupt, iterator.Key())
+		}
+		if suffix != "counter" && suffix != "lowwater" {
+			sequence, kind, ok := strings.Cut(suffix, "/")
+			if _, known := recordKinds[kind]; !ok || !known || !sequencePattern.MatchString(sequence) {
+				return nil, fmt.Errorf("%w: admission key %q", admission.ErrCorrupt, iterator.Key())
+			}
+		}
+		if !seen[owner] {
+			seen[owner] = true
+			owners = append(owners, owner)
+		}
+	}
+	if err := iterator.Error(); err != nil {
+		return nil, err
+	}
+	var open []string
+	for _, owner := range owners {
+		base := admissionPrefix + owner + "/"
+		var counter struct {
+			Next uint64 `json:"next"`
+		}
+		var low struct {
+			Sequence uint64 `json:"sequence"`
+		}
+		if err := readOptional(db, base+"counter", &counter); err != nil {
+			return nil, err
+		}
+		if err := readOptional(db, base+"lowwater", &low); err != nil {
+			return nil, err
+		}
+		if low.Sequence > counter.Next {
+			return nil, fmt.Errorf("%w: low-water %d above counter %d of %s", admission.ErrCorrupt, low.Sequence,
+				counter.Next, owner)
+		}
+		for sequence := low.Sequence; sequence < counter.Next; sequence++ {
+			stem := fmt.Sprintf("%s%016x/", base, sequence)
+			closed := false
+			for kind, closes := range recordKinds {
+				ok, err := db.Has([]byte(stem + kind))
+				if err != nil {
+					return nil, err
+				}
+				if kind == "preparing" && !ok {
+					return nil, fmt.Errorf("%w: sequence %d of %s has no INPUT_PREPARING record",
+						admission.ErrCorrupt, sequence, owner)
+				}
+				closed = closed || (ok && closes)
+			}
+			if !closed {
+				open = append(open, fmt.Sprintf("%s.%016x", owner, sequence))
+			}
+		}
+	}
+	return open, nil
+}
+
+// readOptional strictly decodes the JSON record at key into value; an absent
+// key leaves value unchanged.
+func readOptional(db ethdb.KeyValueReader, key string, value any) error {
+	ok, err := db.Has([]byte(key))
+	if err != nil || !ok {
+		return err
+	}
+	data, err := db.Get([]byte(key))
+	if err != nil {
+		return err
+	}
+	if err := strictDecode(data, value); err != nil {
+		return fmt.Errorf("%w: %s: %v", admission.ErrCorrupt, key, err)
+	}
+	return nil
+}
+
+// RequireNoOpenCapture is the check of the manual database commands of the
+// shipped geth that delete or rewrite chaindata (D100 item 3): it refuses
+// while a pin is live (the same ledger check as the other retention guards)
+// or an obligation is open. The pin ledger and the admission records live in
+// chaindata, so such a command would otherwise lose them silently. It only
+// reads; the caller opens the store read-only and holds the instance lock
+// of the native node, so no pin or obligation can appear before the command
+// opens the store for writing.
+func RequireNoOpenCapture(db ethdb.Database) error {
+	if err := stateprovider.RequireNoLivePins(db); err != nil {
+		return err
+	}
+	open, err := OpenObligations(db)
+	if err != nil {
+		return err
+	}
+	if len(open) != 0 {
+		return fmt.Errorf("%w: %d open, first %s", ErrOpenObligation, len(open), open[0])
 	}
 	return nil
 }
