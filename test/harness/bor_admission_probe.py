@@ -48,7 +48,9 @@ NATIVE_TESTS = ("TestExtractorFreezeThreshold", "TestExtractorGoroutineIDs", "Te
                 "TestExtractorGateOpenWaitsForGatedCalls", "TestExtractorGateNestedCallsDoNotWaitForAnOpeningWindow",
                 "TestExtractorGateMisuse", "TestExtractorGateFinalizeOfTheObservedBlockIsTheImport",
                 "TestExtractorBlockGateHashesTheHeader", "TestExtractorCreator",
-                "TestExtractorGateWaitsForDetachedFetches", "TestExtractorGateCoversEveryHeimdallEntryPoint")
+                "TestExtractorGateWaitsForDetachedFetches", "TestExtractorGateOneWindowAtATime",
+                "TestExtractorSpanRangeFetchIsCountedFromTheStart", "TestExtractorSpanRangeFetchCountPrecedesDoChan",
+                "TestExtractorGateCoversEveryHeimdallEntryPoint")
 PACKAGE = "github.com/ethereum/go-ethereum"
 BODY_FILES = ("span-0.json", "span-1.json", "span-latest.json", "status.json", "clerk-a-from-1.json",
               "clerk-b-from-1.json", "clerk-empty.json")
@@ -675,6 +677,8 @@ def compare(name, observed, context):
         check_rpc_window(context, plan, attempts, block, fail)
     elif kind == "prune-block":
         check_prune_block(context, plan, attempts, fail)
+    elif kind == "prune-block-frozen":
+        check_prune_block_frozen(context, plan, attempts, fail)
     else:
         fail(f"unknown scenario kind {kind}")
     return failures
@@ -741,7 +745,8 @@ def check_rpc_window(context, plan, attempts, block, fail):
     first = expected_requests(oracle, config, chain[block - 1], "a")[0]["request"]
     if rpc.get("block") != block or rpc.get("target") != block - 1 or rpc.get("trigger_request") != first:
         fail(f"the RPC call was not started by the first Heimdall read of the window of block {block}: {rpc}")
-    if rpc.get("waiting_at_gate") is not True or rpc.get("returned_in_window") is not False:
+    if rpc.get("waiting_at_gate") is not True or not (rpc.get("waiting_goroutine") or "").startswith("goroutine ") or \
+            rpc.get("returned_in_window") is not False:
         fail(f"the RPC call did not wait at the window gate until the window closed: {rpc}")
     if rpc.get("error") or rpc.get("snapshot_number") != block - 1 or \
             rpc.get("snapshot_hash") != "0x" + chain[block - 2]["hash"].hex():
@@ -758,6 +763,15 @@ def check_rpc_window(context, plan, attempts, block, fail):
     if before.get("error") or before.get("snapshot_number") != at - 1 or \
             before.get("snapshot_hash") != "0x" + chain[at - 2]["hash"].hex():
         fail(f"the RPC call in flight at the window of block {at} did not return the native snapshot: {before}")
+    # A native span range lookup with an expired context just before the
+    # window of `expired_fetch`: the lookup returns at once, its detached
+    # fetch of span 1 is in flight when the import starts, and the window
+    # waits for it, so the read is in no log (check_completed above).
+    expired, at = result.get("expired_fetch") or {}, step["expired_fetch"]
+    if expired.get("block") != at or "context canceled" not in (expired.get("lookup_error") or "") or \
+            expired.get("held_request") != "GET /bor/spans/1" or expired.get("held_at_observe") is not True:
+        fail(f"no detached span fetch of an expired lookup was in flight when the window of block {at} started: "
+             f"{expired}")
     ready = sorted(int(seq, 16) for (seq, *rest) in records(row["store_after"]) if rest == ["exec-ready"])
     replays = result.get("replays") or []
     if [r.get("key") for r in replays] != [key_of(sequence) for sequence in ready] or len(ready) != len(numbers):
@@ -817,6 +831,43 @@ def check_prune_block(context, plan, attempts, fail):
         if tool(1).get("command") != "prune-block" or tool(1).get("refused_live_pins") is not False or \
                 want["refusal"] in tail(1) or want["native_error"] not in tail(1):
             fail(f"without live pins the patched prune-block did not reach the native pruner: {tool(1)}")
+
+
+def check_prune_block_frozen(context, plan, attempts, fail):
+    """D100 item 1 with a non-empty freezer: the native freezer moves pinned
+    headers into the ancient store (finalized block `finalize`), and they stay
+    readable; the patched prune-block refuses for the live pins before any
+    native step, with no store or ancient change. Control: the accepted binary
+    reaches its native store open, which in this source cannot open a store
+    whose freezer holds blocks (OpenDatabaseWithFreezer drops its ancient
+    argument), so it stops there and prunes nothing; every pin stays
+    readable afterwards."""
+    want = context["oracle"]["prune_block"]
+    steps = plan["attempts"]
+    first = attempts[0]
+    check_completed(context, first, list(range(steps[0]["from"], steps[0]["to"] + 1)), "a", fail, "import")
+    frozen = (attempts[1]["result"] or {}).get("pins_after_freeze") or {}
+    pins = frozen.get("pins") or []
+    ancients = frozen.get("ancients") or 0
+    if ancients <= plan["finalize"] or not any(min(p.get("headers") or [ancients]) < ancients for p in pins) or \
+            any(p.get("verify_error") for p in pins):
+        fail(f"the native freezer did not move readable pinned headers into the ancient store: {frozen}")
+    tool = lambda index: attempts[index]["prune_state"]
+    tail = lambda index: tool(index).get("output_tail") or ""
+    patched = attempts[2]
+    if tool(2).get("command") != "prune-block" or tool(2).get("refused_live_pins") is not True or \
+            want["refusal"] not in tail(2) or want["native_frozen_open_error"] in tail(2):
+        fail(f"the patched prune-block did not refuse the live pins over a non-empty freezer: {tool(2)}")
+    if patched["store_after"] != patched["store_before"] or patched["ancient_after"] != patched["ancient_before"] or \
+            not patched["ancient_before"]:
+        fail("the refused prune-block changed the store or the ancient directory, or the freezer was empty")
+    accepted = attempts[3]
+    if tool(3).get("refused_live_pins") is not False or want["native_frozen_open_error"] not in tail(3) or \
+            accepted["ancient_after"] != accepted["ancient_before"]:
+        fail(f"the accepted bor binary did not stop at its native store open over the frozen store: {tool(3)}")
+    after = (attempts[4]["result"] or {}).get("pins_after_freeze") or {}
+    if not after.get("pins") or any(p.get("verify_error") for p in after["pins"]):
+        fail(f"a pin is unreadable after the prune attempts: {after}")
 
 
 def checked_compare(name, observed, context):

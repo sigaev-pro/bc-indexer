@@ -37,6 +37,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,6 +53,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
@@ -549,6 +551,8 @@ type attemptResult struct {
 	Crashed        bool               `json:"crashed"`
 	RPC            *RPCCheck          `json:"rpc_in_window,omitempty"`
 	RPCBefore      *RPCBefore         `json:"rpc_before_window,omitempty"`
+	ExpiredFetch   *ExpiredFetch      `json:"expired_fetch,omitempty"`
+	FrozenPins     *FrozenPins        `json:"pins_after_freeze,omitempty"`
 	Replays        []ReplayRow        `json:"replays,omitempty"`
 	RPCControl     *RPCControl        `json:"rpc_control,omitempty"`
 }
@@ -573,6 +577,10 @@ func attempt(args []string) (returned error) {
 	unobserved := flags.Bool("unobserved", false, "import the range without observations")
 	rpcDuring := flags.Uint64("rpc-during", 0, "send bor_getSnapshot of the parent while this block's window is open")
 	rpcBeforeBlock := flags.Uint64("rpc-before", 0, "have bor_getSnapshot of the parent inside a Heimdall read when this block's window starts")
+	expiredBlock := flags.Uint64("expired-fetch", 0, "start a span range lookup with an expired context just before this block's window")
+	finalize := flags.Uint64("finalize", 0, "after the import, mark this block finalized (the native freezer freezes up to it)")
+	awaitFrozen := flags.Uint64("await-frozen", 0, "after the start, wait until the native freezer froze this block, then record the pins")
+	verifyPins := flags.Bool("verify-pins", false, "record every live pin and its native Verify result")
 	replay := flags.Bool("replay", false, "after the import, replay every saved EXEC_READY observation")
 	control := flags.Uint64("rpc-control", 0, "finally send bor_getSnapshot of this block with cold caches outside every window")
 	output := flags.String("out", "", "result JSON")
@@ -635,15 +643,18 @@ func attempt(args []string) (returned error) {
 		result.RPC = &RPCCheck{Block: *rpcDuring, Target: *rpcDuring - 1}
 		inWindow = &rpcInWindow{check: result.RPC, done: make(chan struct{})}
 	}
+	delay := &delayOnce{}
 	var before *rpcBefore
 	if *rpcBeforeBlock > 0 {
 		result.RPCBefore = &RPCBefore{Block: *rpcBeforeBlock, Target: *rpcBeforeBlock - 1}
-		before = &rpcBefore{check: result.RPCBefore, delay: &delayOnce{}, done: make(chan struct{})}
+		before = &rpcBefore{check: result.RPCBefore, delay: delay, done: make(chan struct{})}
 	}
-	transport := stubTransport{stub: heimdallstub.Stub{Bodies: *bodies, Variant: *variant}, rpc: inWindow}
-	if before != nil {
-		transport.delay = before.delay
+	var expired *expiredFetch
+	if *expiredBlock > 0 {
+		result.ExpiredFetch = &ExpiredFetch{Block: *expiredBlock}
+		expired = &expiredFetch{check: result.ExpiredFetch, delay: delay}
 	}
+	transport := stubTransport{stub: heimdallstub.Stub{Bodies: *bodies, Variant: *variant}, rpc: inWindow, delay: delay}
 	http.DefaultTransport = transport
 	eth, err := backend(stack, in.genesis)
 	if err != nil {
@@ -659,6 +670,10 @@ func attempt(args []string) (returned error) {
 	if before != nil {
 		before.engine, before.chain = engine, chain
 		rec.before = before
+	}
+	if expired != nil {
+		expired.engine = engine
+		rec.expired = expired
 	}
 	db := &crashDB{Database: eth.ChainDb(), crash: crash}
 	node, err := borimport.Start(cfg, db, chain)
@@ -702,6 +717,27 @@ func attempt(args []string) (returned error) {
 	}
 	if err != nil {
 		return err
+	}
+	if *awaitFrozen > 0 {
+		deadline := time.Now().Add(5 * time.Minute)
+		for {
+			frozen, err := eth.ChainDb().Ancients()
+			if err != nil {
+				return err
+			}
+			if frozen > *awaitFrozen {
+				break
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("the native freezer froze %d blocks, not block %d", frozen, *awaitFrozen)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if *awaitFrozen > 0 || *verifyPins {
+		if result.FrozenPins, err = pinStatus(eth.ChainDb()); err != nil {
+			return err
+		}
 	}
 	report, err := node.Recover()
 	result.Recovery = &report
@@ -773,6 +809,9 @@ func attempt(args []string) (returned error) {
 			return errors.New("the RPC call started before the window did not return")
 		}
 	}
+	if *finalize > 0 {
+		rawdb.WriteFinalizedBlockHash(eth.ChainDb(), blocks[*finalize-1].Hash())
+	}
 	head := chain.CurrentBlock()
 	result.HeadNumber, result.HeadHash = head.Number.Uint64(), head.Hash().Hex()
 	if err = describe(node, db, &result); err != nil {
@@ -830,10 +869,11 @@ type RPCCheck struct {
 	Target uint64 `json:"target"`
 	// TriggerRequest is the Heimdall request of the window that started the call.
 	TriggerRequest string `json:"trigger_request"`
-	// WaitingBefore is the number of callers waiting at the gate just before
-	// the call started; Waiting is true once that number grew.
-	WaitingBefore int  `json:"waiting_before"`
-	Waiting       bool `json:"waiting_at_gate"`
+	// Waiting is true once a goroutine that runs the bor API GetSnapshot was
+	// seen waiting in the window gate (its stack trace), WaitingGoroutine is
+	// its stack header.
+	Waiting          bool   `json:"waiting_at_gate"`
+	WaitingGoroutine string `json:"waiting_goroutine,omitempty"`
 	// ReturnedInWindow is true if the call had returned when the window's
 	// observation closed.
 	ReturnedInWindow bool   `json:"returned_in_window"`
@@ -857,8 +897,6 @@ func (r *rpcInWindow) trigger(req *http.Request) {
 		return
 	}
 	r.check.TriggerRequest = req.Method + " " + req.URL.RequestURI()
-	before := bor.ExtractorGateWaiting()
-	r.check.WaitingBefore = before
 	go func() {
 		defer close(r.done)
 		number, hash, err := rpcCall(r.engine, r.chain, r.check.Target)
@@ -869,8 +907,8 @@ func (r *rpcInWindow) trigger(req *http.Request) {
 	}()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		if bor.ExtractorGateWaiting() > before {
-			r.check.Waiting = true
+		if header := gateWaiter("consensus/bor.(*API).GetSnapshot("); header != "" {
+			r.check.Waiting, r.check.WaitingGoroutine = true, header
 			return
 		}
 		select {
@@ -879,6 +917,29 @@ func (r *rpcInWindow) trigger(req *http.Request) {
 		case <-time.After(time.Millisecond):
 		}
 	}
+}
+
+// gateWaiter returns the stack header of a goroutine that runs function and
+// waits in the window gate (sync.Cond.Wait inside extractorGateState.enter),
+// or "" if there is none.
+func gateWaiter(function string) string {
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	for _, trace := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(trace, function) && strings.Contains(trace, "sync.(*Cond).Wait(") &&
+			strings.Contains(trace, "consensus/bor.(*extractorGateState).enter(") {
+			header, _, _ := strings.Cut(trace, "\n")
+			return header
+		}
+	}
+	return ""
 }
 
 func (r *rpcInWindow) returned() bool {
@@ -971,6 +1032,78 @@ func (r *rpcBefore) start() error {
 	return nil
 }
 
+// ExpiredFetch records a native span range lookup with an expired context,
+// made through the window gate just before the window of Block starts, as
+// waitForNewSpan does after its timeout: the lookup returns at once while its
+// detached fetch of span 1 is held in flight for a second.
+type ExpiredFetch struct {
+	Block         uint64 `json:"block"`
+	LookupError   string `json:"lookup_error"`
+	HeldRequest   string `json:"held_request"`
+	HeldAtObserve bool   `json:"held_at_observe"`
+}
+
+type expiredFetch struct {
+	engine *bor.Bor
+	delay  *delayOnce
+	check  *ExpiredFetch
+}
+
+func (e *expiredFetch) start() error {
+	e.engine.ExtractorPurgeInputs()
+	e.delay.arm()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	e.check.LookupError = fmt.Sprint(e.engine.ExtractorFetchSpanRange(ctx, 1))
+	select {
+	case <-e.delay.held:
+	case <-time.After(30 * time.Second):
+		return errors.New("the detached span fetch reached no Heimdall request")
+	}
+	e.delay.mu.Lock()
+	e.check.HeldRequest = e.delay.request
+	e.delay.mu.Unlock()
+	e.check.HeldAtObserve = e.delay.inFlight.Load()
+	return nil
+}
+
+// FrozenPins records the pins after the native freezer ran: the frozen block
+// count and, per pin, its header numbers and the native Verify result.
+type FrozenPins struct {
+	Ancients uint64      `json:"ancients"`
+	Pins     []PinStatus `json:"pins"`
+}
+
+// PinStatus is one live pin and whether its native data is readable.
+type PinStatus struct {
+	ID      string   `json:"id"`
+	Headers []uint64 `json:"headers"`
+	Error   string   `json:"verify_error,omitempty"`
+}
+
+func pinStatus(db ethdb.Database) (*FrozenPins, error) {
+	ancients, err := db.Ancients()
+	if err != nil {
+		return nil, err
+	}
+	pins, err := stateprovider.Pins(db)
+	if err != nil {
+		return nil, err
+	}
+	out := &FrozenPins{Ancients: ancients, Pins: []PinStatus{}}
+	for _, pin := range pins {
+		row := PinStatus{ID: pin.ID, Headers: []uint64{}}
+		for _, ref := range pin.Headers {
+			row.Headers = append(row.Headers, ref.Number)
+		}
+		if err := stateprovider.Verify(db, pin); err != nil {
+			row.Error = err.Error()
+		}
+		out.Pins = append(out.Pins, row)
+	}
+	return out, nil
+}
+
 // ReplayRow is the replay of one saved EXEC_READY observation.
 type ReplayRow struct {
 	Key   string           `json:"key"`
@@ -1034,12 +1167,13 @@ func rpcControl(engine *bor.Bor, chain *core.BlockChain, router *obligation.Rout
 // recorder wraps the admission observer and keeps the counted calls and the
 // outcome of every observation, so a batch import is judged block by block.
 type recorder struct {
-	node   *borimport.Node
-	rpc    *rpcInWindow
-	before *rpcBefore
-	mu     sync.Mutex
-	result *attemptResult
-	window []obligation.Row // counted calls of the open window, for crash points
+	node    *borimport.Node
+	rpc     *rpcInWindow
+	before  *rpcBefore
+	expired *expiredFetch
+	mu      sync.Mutex
+	result  *attemptResult
+	window  []obligation.Row // counted calls of the open window, for crash points
 }
 
 type recorded struct {
@@ -1055,6 +1189,12 @@ func (r *recorder) Observe(block *types.Block, parent *types.Header) (core.Extra
 	r.mu.Unlock()
 	if r.before != nil && r.before.check.Block == block.NumberU64() {
 		if err := r.before.start(); err != nil {
+			r.finish(err)
+			return nil, err
+		}
+	}
+	if r.expired != nil && r.expired.check.Block == block.NumberU64() {
+		if err := r.expired.start(); err != nil {
 			r.finish(err)
 			return nil, err
 		}
@@ -1244,6 +1384,12 @@ type Step struct {
 	Unobserved bool   `json:"unobserved"`
 	RPCDuring  uint64 `json:"rpc_during"`
 	RPCBefore  uint64 `json:"rpc_before"`
+	Expired    uint64 `json:"expired_fetch"`
+	Finalize   uint64 `json:"finalize"`
+	Frozen     uint64 `json:"await_frozen"`
+	VerifyPins bool   `json:"verify_pins"`
+	// ToolArgs are extra arguments of the tool command, separated by spaces.
+	ToolArgs   string `json:"tool_args"`
 	Replay     bool   `json:"replay"`
 	RPCControl uint64 `json:"rpc_control"`
 }
@@ -1304,7 +1450,8 @@ func scenario(args []string) error {
 			}
 		}
 		if step.PruneTool != "" {
-			row["prune_state"], err = runTool(filepath.Join(*tools, step.PruneTool), step.Command, dataDir, *output, index)
+			row["prune_state"], err = runTool(filepath.Join(*tools, step.PruneTool), step.Command, strings.Fields(step.ToolArgs),
+				dataDir, *output, index)
 			if err != nil {
 				return err
 			}
@@ -1315,7 +1462,9 @@ func scenario(args []string) error {
 				"-base", fmt.Sprint(step.Base), "-from", fmt.Sprint(step.From), "-to", fmt.Sprint(step.To),
 				"-crash=" + step.Crash, "-store-id", storeIDOf(step), "-set-head", fmt.Sprint(step.SetHead), "-walk-check", fmt.Sprint(step.Walk), fmt.Sprintf("-batch=%t", step.Batch),
 				fmt.Sprintf("-unobserved=%t", step.Unobserved), "-rpc-during", fmt.Sprint(step.RPCDuring),
-				"-rpc-before", fmt.Sprint(step.RPCBefore),
+				"-rpc-before", fmt.Sprint(step.RPCBefore), "-expired-fetch", fmt.Sprint(step.Expired),
+				"-finalize", fmt.Sprint(step.Finalize), "-await-frozen", fmt.Sprint(step.Frozen),
+				fmt.Sprintf("-verify-pins=%t", step.VerifyPins),
 				fmt.Sprintf("-replay=%t", step.Replay), "-rpc-control", fmt.Sprint(step.RPCControl), "-out", out}
 			row["argv"] = argv
 			row["status"], err = runChild(os.Args[0], argv, filepath.Join(*output, fmt.Sprintf("attempt-%d.log", index)))
@@ -1398,7 +1547,7 @@ func runChild(binary string, argv []string, logPath string) (map[string]any, err
 // of one binary on the scenario data directory and keeps its output. Each
 // binary file is named bor, because the native node derives the instance
 // directory from the program name.
-func runTool(binary, command, dataDir, output string, index int) (map[string]any, error) {
+func runTool(binary, command string, args []string, dataDir, output string, index int) (map[string]any, error) {
 	if command == "" {
 		command = "prune-state"
 	}
@@ -1406,7 +1555,7 @@ func runTool(binary, command, dataDir, output string, index int) (map[string]any
 		return nil, fmt.Errorf("unknown tool command %q", command)
 	}
 	logPath := filepath.Join(output, fmt.Sprintf("attempt-%d.log", index))
-	status, err := runChild(binary, []string{"snapshot", command, "--datadir", dataDir}, logPath)
+	status, err := runChild(binary, append([]string{"snapshot", command, "--datadir", dataDir}, args...), logPath)
 	if err != nil {
 		return nil, err
 	}

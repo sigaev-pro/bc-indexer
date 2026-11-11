@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the observation window gate state (zz_extractor_gate_core.go, E01-02.admission Bor block, D100 item 1). The core imports only the standard library, so each mutant compiles in a small module instead of a full Bor build; the Bor bindings (zz_extractor_gate.go, the patched span store) are covered by the native tests and the probe.",
+  "language": "go",
+  "root": "tree/consensus/bor",
+  "copy": [
+    "zz_extractor_gate_core.go",
+    "zz_extractor_gate_core_test.go"
+  ],
+  "go_module": "github.com/ethereum/go-ethereum/consensus/bor",
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout",
+    "120s",
+    "./"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "the owner passes its own calls",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tif id == g.owner || g.importers[id] != 0 {\n\t\treturn func() {}",
+      "replacement": "\tif g.importers[id] != 0 {\n\t\treturn func() {}"
+    },
+    {
+      "name": "calls nested in the import pass",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tif id == g.owner || g.importers[id] != 0 {\n\t\treturn func() {}",
+      "replacement": "\tif id == g.owner {\n\t\treturn func() {}"
+    },
+    {
+      "name": "callers wait while a window is open",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tif g.holders[id] == 0 && (g.owner != 0 || g.opening) {",
+      "replacement": "\tif g.holders[id] == 0 && g.opening {"
+    },
+    {
+      "name": "callers wait while a window opens",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tif g.holders[id] == 0 && (g.owner != 0 || g.opening) {",
+      "replacement": "\tif g.holders[id] == 0 && g.owner != 0 {"
+    },
+    {
+      "name": "nested calls do not wait",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tif g.holders[id] == 0 && (g.owner != 0 || g.opening) {",
+      "replacement": "\tif g.owner != 0 || g.opening {"
+    },
+    {
+      "name": "a waiter waits until the window closes",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\t\tfor g.owner != 0 || g.opening {\n\t\t\tg.changed.Wait()\n\t\t}\n\t\tg.waiting--",
+      "replacement": "\t\tfor g.opening {\n\t\t\tg.changed.Wait()\n\t\t}\n\t\tg.waiting--"
+    },
+    {
+      "name": "waiters are counted",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\t\tg.waiting++\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "Finalize of another block is not the import",
+      "file": "zz_extractor_gate_core.go",
+      "original": "g.owner != 0 && block == g.block && g.holders[id] == 0 &&",
+      "replacement": "g.owner != 0 && g.holders[id] == 0 &&"
+    },
+    {
+      "name": "Finalize on a foreign goroutine is not the import",
+      "file": "zz_extractor_gate_core.go",
+      "original": "(id == g.owner || creator == g.owner)",
+      "replacement": "(id == g.owner || creator != 0)"
+    },
+    {
+      "name": "the import counts its goroutine",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\t\tg.importers[id]++\n\t\tg.mu.Unlock()",
+      "replacement": "\t\tg.mu.Unlock()"
+    },
+    {
+      "name": "leaving wakes the waiters",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\t\tdelete(g.holders, id)\n\t}\n\tg.changed.Broadcast()",
+      "replacement": "\t\tdelete(g.holders, id)\n\t}"
+    },
+    {
+      "name": "a window waits for the gated calls in progress",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tfor len(g.holders) != 0 {",
+      "replacement": "\tfor false {"
+    },
+    {
+      "name": "one window at a time",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tfor g.owner != 0 || g.opening {\n\t\tg.changed.Wait()\n\t}\n\tg.opening = true",
+      "replacement": "\tfor false {\n\t\tg.changed.Wait()\n\t}\n\tg.opening = true"
+    },
+    {
+      "name": "a window records its block",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tg.opening, g.owner, g.block = false, id, block",
+      "replacement": "\tg.opening, g.owner = false, id"
+    },
+    {
+      "name": "a window opened inside a gated call panics",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tif g.holders[id] != 0 || g.importers[id] != 0 || g.owner == id {",
+      "replacement": "\tif g.importers[id] != 0 || g.owner == id {"
+    },
+    {
+      "name": "fetches are counted",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tg.fetches++\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "a window waits for the fetches",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tfor g.fetches != 0 {",
+      "replacement": "\tfor false {"
+    },
+    {
+      "name": "a finished fetch wakes the window",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\t\tg.fetches--\n\t\tg.changed.Broadcast()",
+      "replacement": "\t\tg.fetches--"
+    },
+    {
+      "name": "only the owner closes the window",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tif g.owner == 0 || g.owner != id {",
+      "replacement": "\tif g.owner == 0 {"
+    },
+    {
+      "name": "closing wakes the waiters",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tg.owner, g.block = 0, [32]byte{}\n\tg.changed.Broadcast()",
+      "replacement": "\tg.owner, g.block = 0, [32]byte{}"
+    },
+    {
+      "name": "the creator is parsed from the trace",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tid, err := strconv.ParseUint(string(bytes.TrimSpace(line[at+len(marker):])), 10, 64)\n\tif err != nil {\n\t\treturn 0\n\t}\n\treturn id",
+      "replacement": "\tid, err := strconv.ParseUint(string(bytes.TrimSpace(line[at+len(marker):])), 10, 64)\n\tif err != nil {\n\t\treturn 0\n\t}\n\treturn id + 1"
+    },
+    {
+      "name": "the goroutine ID is the second field",
+      "file": "zz_extractor_gate_core.go",
+      "original": "\tid, err := strconv.ParseUint(string(fields[1]), 10, 64)",
+      "replacement": "\tid, err := strconv.ParseUint(string(fields[0]), 10, 64)"
+    }
+  ]
+}
