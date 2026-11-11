@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "description": "Native mutants of the E01-02.admission Geth block. Each must compile in the patched Geth tree and must fail the oracle in the measured run. file is a tree path changed by patches.json, or geth.go (extractor/admission/native/geth.go); binaries names what is rebuilt; the rest come from the base build.",
+  "mutants": [
+    {
+      "name": "begin_hook_skipped",
+      "file": "core/blockchain.go",
+      "original": "\tif bc.extractor != nil && config.WriteState {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n",
+      "replacement": "\tif false {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "ProcessBlock runs processor.Process without an observation: no INPUT_PREPARING, pin, capsule, ADMITTED or EXEC_READY record."
+    },
+    {
+      "name": "import_guard_missing",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {\n\tdefer bc.extractorLock()()\n",
+      "replacement": "func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "InsertChain reaches ProcessBlock without the observation guard, so Begin refuses every block."
+    },
+    {
+      "name": "failure_not_rejected",
+      "file": "geth.go",
+      "original": "\tif cause == nil || o.done {\n",
+      "replacement": "\tif true || o.done {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "A native validation failure leaves the observation ADMITTED instead of NATIVE_REJECTED, so it keeps its pin and blocks the next admission."
+    },
+    {
+      "name": "recovery_skips_admitted",
+      "file": "geth.go",
+      "original": "\t\t\tadmitted = append(admitted, obs)\n",
+      "replacement": "\t\t\t_ = obs\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The recovery driver does not re-execute the saved ADMITTED obligation, so GoLive is refused and startup fails."
+    },
+    {
+      "name": "resume_any_block",
+      "file": "geth.go",
+      "original": "\t\tif obs.State != admission.Admitted || obs.Candidate != candidate {\n",
+      "replacement": "\t\tif obs.State != admission.Admitted {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "RECOVERY_ONLY treats another block as the saved obligation instead of refusing it with ErrMode."
+    },
+    {
+      "name": "release_keeps_pin",
+      "file": "geth.go",
+      "original": "\tif err := p.Provider.Release(id); err != nil && !errors.Is(err, stateprovider.ErrUnknownPin) {\n",
+      "replacement": "\tif err := error(nil); err != nil && !errors.Is(err, stateprovider.ErrUnknownPin) {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The pin adapter reports a release without removing the pin, so abandoned and rejected observations keep their pins."
+    },
+    {
+      "name": "release_absent_pin_fails",
+      "file": "geth.go",
+      "original": "err != nil && !errors.Is(err, stateprovider.ErrUnknownPin) {\n\t\treturn err\n",
+      "replacement": "err != nil {\n\t\treturn err\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The pin adapter passes ErrUnknownPin through, so the Abandon of an observation without a pin fails and startup stops."
+    },
+    {
+      "name": "window_short",
+      "file": "geth.go",
+      "original": "number > windowStart(block.NumberU64()); number--",
+      "replacement": "number > windowStart(block.NumberU64())+1; number--",
+      "binaries": [
+        "probe",
+        "geth"
+      ],
+      "reason": "The capsule leaves out the lowest BLOCKHASH window header, so the window check refuses the observation after ADMITTED."
+    },
+    {
+      "name": "get_hash_native",
+      "file": "geth.go",
+      "original": "\tcfg.ExtractorGetHash = o.getHash\n",
+      "replacement": "\t_ = o.getHash\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Native execution answers BLOCKHASH from its own chain instead of the saved capsule headers; no lookup reaches the capsule."
+    },
+    {
+      "name": "safe_point_untraced",
+      "file": "core/vm/interpreter.go",
+      "original": "evm.Config.Tracer != nil ||\n\t\tevm.Config.ExtractorSafePoint != nil {\n",
+      "replacement": "evm.Config.Tracer != nil ||\n\t\tfalse {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "An execution with a safe point runs the generated loop, which has no safe point, so no CALL input is captured."
+    },
+    {
+      "name": "rewind_unguarded",
+      "file": "core/blockchain.go",
+      "original": "\tif !repair {\n\t\tif err := bc.extractorRewindAllowed(head, time); err != nil {\n",
+      "replacement": "\tif false {\n\t\tif err := bc.extractorRewindAllowed(head, time); err != nil {\n",
+      "binaries": [
+        "probe",
+        "geth"
+      ],
+      "reason": "A requested rewind deletes pinned headers."
+    },
+    {
+      "name": "freezer_unbounded",
+      "file": "core/rawdb/chain_freezer.go",
+      "original": "\t\tif err == nil {\n\t\t\t// E01-02.admission retention patch (D98 item 2): FreezeLimit.\n",
+      "replacement": "\t\tif false {\n\t\t\t// E01-02.admission retention patch (D98 item 2): FreezeLimit.\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The chain freezer freezes past the fork point of a pinned side-branch header and deletes it."
+    },
+    {
+      "name": "prune_state_skipped",
+      "file": "cmd/geth/snapshot.go",
+      "original": "\tif err = stateprovider.PruneState(chaindb,",
+      "replacement": "\tif err = func(any, string, uint64, any) error { _ = stateprovider.PruneState; return nil }(chaindb,",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "geth snapshot prune-state no longer reaches the guarded pruner and reports success with live pins."
+    },
+    {
+      "name": "recover_pruning_unguarded",
+      "file": "geth.go",
+      "original": "\tif len(matches) == 0 {\n\t\treturn nil\n",
+      "replacement": "\tif true || len(matches) == 0 {\n\t\treturn nil\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "Startup skips the guarded RecoverPruning, so an interrupted prune does not stop a node with live pins."
+    },
+    {
+      "name": "run_record_any_producer",
+      "file": "geth.go",
+      "original": "\t\tif record.StoreID != storeID || record.ProducerID != producerID {\n",
+      "replacement": "\t\tif record.StoreID != storeID {\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "A config of another producer opens the saved run of this store instead of being refused."
+    },
+    {
+      "name": "preflight_skipped",
+      "file": "eth/backend.go",
+      "original": "\t\tif err := extractorgeth.Preflight(stack.ResolvePath(\"\"), *extractorConfig); err != nil {\n",
+      "replacement": "\t\tif err := error(nil); err != nil {\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "The shipped binary opens a store of another identity before refusing it; the refusal no longer comes from Preflight."
+    },
+    {
+      "name": "write_state_gate_removed",
+      "file": "core/blockchain.go",
+      "original": "\tif bc.extractor != nil && config.WriteState {\n",
+      "replacement": "\tif bc.extractor != nil {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "A witness execution that writes nothing (debug_executionWitness) enters the admission without the guard and fails instead of running natively."
+    },
+    {
+      "name": "without_head_guard_missing",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *types.Block, makeWitness bool) (witness *stateless.Witness, err error) {\n\tdefer bc.extractorLock()()\n",
+      "replacement": "func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *types.Block, makeWitness bool) (witness *stateless.Witness, err error) {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The engine newPayload path and the recovery driver reach ProcessBlock without the observation guard, so Begin refuses the block."
+    },
+    {
+      "name": "resume_inputs_unchecked",
+      "file": "geth.go",
+      "original": "\t\tif err := sameItems(items, current); err != nil {\n",
+      "replacement": "\t\tif err := sameItems(items, append(current[:0:0], items...)); err != nil {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Recovery resumes an obligation whose saved static inputs differ from what the node seals now, so EXEC_READY binds a capsule that differs from the execution."
+    },
+    {
+      "name": "no_config_unchecked",
+      "file": "eth/backend.go",
+      "original": "\t} else if err := extractorgeth.RequireNoCapture(chainDb); err != nil {\n",
+      "replacement": "\t} else if err := error(nil); err != nil {\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "The shipped binary starts on a store of a capture producer without its admission config."
+    },
+    {
+      "name": "import_without_admission",
+      "file": "core/blockchain.go",
+      "original": "\t} else if config.WriteState && ExtractorRequireNoCapture != nil {\n",
+      "replacement": "\t} else if false && ExtractorRequireNoCapture != nil {\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "geth import executes and writes a block into a capture store without an admission."
+    }
+  ]
+}
