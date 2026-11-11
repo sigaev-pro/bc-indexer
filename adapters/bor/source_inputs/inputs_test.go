@@ -585,9 +585,18 @@ func TestTailAppendAndStandInMarker(t *testing.T) {
 			t.Fatalf("tail append changed prefix key %s", key)
 		}
 	}
+	if _, ok := retry.Closed(); ok {
+		t.Fatalf("an open log reports a closed manifest")
+	}
 	manifest, err := retry.Finish()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if got, ok := retry.Closed(); !ok || got != manifest {
+		t.Fatalf("closed manifest after finish %+v %v", got, ok)
+	}
+	if got, ok := mustOpen(t, db).Closed(); !ok || got != manifest {
+		t.Fatalf("closed manifest of a reopened log %+v %v", got, ok)
 	}
 	marker := standInMarker{Observation: observation, ConsumedDigest: manifest.Digest}
 	if marker.ConsumedDigest != wantConsumedDigest {
@@ -619,7 +628,8 @@ func TestTailAppendAndStandInMarker(t *testing.T) {
 	}
 }
 
-// standInMarker stands in for the EXEC_READY marker in this test only.
+// standInMarker stands in for the EXEC_READY marker in this test only. The
+// real binding is the EXEC_READY record of E01-02.admission.
 type standInMarker struct {
 	Observation    string
 	ConsumedDigest string
