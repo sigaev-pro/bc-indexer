@@ -61,9 +61,13 @@ Failures that say nothing about the block keep the obligation ADMITTED with
 its pin: a refusal by the dependency log (prefix conflict, store failure,
 which also stops the window), a Heimdall failure before a native failure, a
 capsule read or decode failure, and local state that `ProcessBlock` could
-not read (`Fail`). A Heimdall failure is passed to Bor as an explicit source
-error and the log stays usable, so Bor's own retry goes through the log; if
-the retry succeeds, the block completes normally. The next `Observe`, or
+not read (`ExtractorLocalStateUnavailable`, the native `isLocalStateUnavailable`:
+`Fail` on the live path, the same rule in recovery). A Heimdall failure is
+passed to Bor as an explicit source error and the log stays usable, so Bor's
+own retry goes through the log; if the retry succeeds, the block completes
+normally. A Heimdall response with a status other than 200 reaches Bor
+unchanged and is not saved, so Bor's own status handling applies (a 503 ends
+its retry loop at once, as in native Bor). The next `Observe`, or
 `Recover` at startup, resolves an ADMITTED obligation from its pin and
 capsule before any new `Begin`, so no restart is needed.
 
@@ -254,9 +258,10 @@ adapter, and the native tests drive them with a real EVM run.
   stub Heimdall. Public profiles stay with E06 and E07.
 - Header verification is held back during a window, but other Heimdall
   readers are not: an RPC query of the span or snapshot API during a window
-  would enter the log; recovery then fails closed with a prefix conflict or
-  unconsumed entries instead of capturing different inputs. The capture
-  profile runs no such RPC.
+  would enter the log. A live EXEC_READY can then bind a read that the import
+  did not consume; only a later replay detects it, and recovery then fails
+  closed with a prefix conflict or unconsumed entries. The capture profile
+  runs no such RPC.
 - `bor snapshot prune-block` (ancient block pruning) is not guarded; D98
   item 2 names four guards and this is not one of them. It can delete old
   pinned headers and remains a known hazard, like the unguarded paths that

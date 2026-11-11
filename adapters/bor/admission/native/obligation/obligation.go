@@ -210,7 +210,7 @@ func (d *Driver) Observe(c admission.Candidate) (*Observation, error) {
 
 func (d *Driver) observe(token *admission.Token, c admission.Candidate) (*Observation, error) {
 	if d.Reexecutor != nil {
-		if _, err := d.resolveSaved(token, d.Reexecutor, &Report{}); err != nil {
+		if err := d.resolveSaved(token, d.Reexecutor, &Report{}); err != nil {
 			return nil, err
 		}
 	}
@@ -337,7 +337,7 @@ type Report struct {
 func (d *Driver) Recover(r Reexecutor) (Report, error) {
 	report := Report{Abandoned: []string{}, ExecReady: []string{}, Rejected: []string{}, Kept: []string{}}
 	token := d.Guard.Acquire()
-	_, err := d.resolveSaved(token, r, &report)
+	err := d.resolveSaved(token, r, &report)
 	if err == nil {
 		err = d.Admission.GoLive(token)
 	}
@@ -347,36 +347,33 @@ func (d *Driver) Recover(r Reexecutor) (Report, error) {
 	return report, err
 }
 
-func (d *Driver) resolveSaved(token *admission.Token, r Reexecutor, report *Report) (int, error) {
+func (d *Driver) resolveSaved(token *admission.Token, r Reexecutor, report *Report) error {
 	saved, err := d.Admission.Observations(token)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	resolved := 0
 	for _, obs := range saved {
 		switch obs.State {
 		case admission.InputPreparing:
 			if err := d.Admission.Abandon(token, obs.Key); err != nil {
-				return resolved, err
+				return err
 			}
 			report.Abandoned = append(report.Abandoned, obs.Key)
-			resolved++
 		case admission.Admitted:
 			rejected, err := d.resolve(token, r, obs)
 			if err != nil {
-				return resolved, err
+				return err
 			}
 			if rejected {
 				report.Rejected = append(report.Rejected, obs.Key)
 			} else {
 				report.ExecReady = append(report.ExecReady, obs.Key)
 			}
-			resolved++
 		default:
 			report.Kept = append(report.Kept, obs.Key)
 		}
 	}
-	return resolved, nil
+	return nil
 }
 
 func (d *Driver) resolve(token *admission.Token, r Reexecutor, saved admission.Observation) (bool, error) {
@@ -503,13 +500,23 @@ func (r *Router) fetch(req *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("Heimdall response larger than %d bytes", MaxResponseBytes)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Heimdall status %d", resp.StatusCode)
+		return nil, &statusError{status: resp.StatusCode, body: body}
 	}
 	return body, nil
 }
 
-func response(req *http.Request, body []byte) *http.Response {
-	return &http.Response{Status: "200 OK", StatusCode: http.StatusOK, Proto: "HTTP/1.1", ProtoMajor: 1,
+// statusError is a Heimdall response with a status other than 200. Bor
+// receives that response unchanged, so its own status handling applies (for
+// example 503 ends a retry loop); the log does not save it.
+type statusError struct {
+	status int
+	body   []byte
+}
+
+func (e *statusError) Error() string { return fmt.Sprintf("Heimdall status %d", e.status) }
+
+func response(req *http.Request, status int, body []byte) *http.Response {
+	return &http.Response{Status: http.StatusText(status), StatusCode: status, Proto: "HTTP/1.1", ProtoMajor: 1,
 		ProtoMinor: 1, Header: http.Header{"Content-Type": {"application/json"}},
 		Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: req}
 }
@@ -554,6 +561,10 @@ func (r *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			// The log wrote nothing and stays usable: an explicit source
 			// error that Bor may retry through the log.
 			r.source = fmt.Errorf("%w: %s: %w", ErrInput, request, err)
+			var status *statusError
+			if errors.As(err, &status) {
+				return response(req, status.status, status.body), nil
+			}
 			return nil, r.source
 		}
 		r.fault = fmt.Errorf("%w: %s: %w", ErrInput, request, err)
@@ -566,5 +577,5 @@ func (r *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	if r.AfterCounted != nil {
 		r.AfterCounted(row)
 	}
-	return response(req, body), nil
+	return response(req, http.StatusOK, body), nil
 }

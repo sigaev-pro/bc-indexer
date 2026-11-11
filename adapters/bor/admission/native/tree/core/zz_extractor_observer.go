@@ -82,7 +82,7 @@ func (bc *BlockChain) extractorProcess(observer ExtractorObserver, block *types.
 	}
 	receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent, witness, interrupt, pipeOpts)
 	var closeErr error
-	if err != nil && isLocalStateUnavailable(err) {
+	if err != nil && ExtractorLocalStateUnavailable(err) {
 		closeErr = observation.Fail(err)
 	} else {
 		closeErr = observation.Done(block, receipts, usedGas, err)
@@ -114,3 +114,8 @@ func (bc *BlockChain) extractorRewindTarget(timestamp uint64) uint64 {
 	}
 	return header.Number.Uint64()
 }
+
+// ExtractorLocalStateUnavailable reports whether err from ProcessBlock means
+// that native code could not read local state (a missing or unreadable trie
+// node), which says nothing about the block.
+func ExtractorLocalStateUnavailable(err error) bool { return isLocalStateUnavailable(err) }

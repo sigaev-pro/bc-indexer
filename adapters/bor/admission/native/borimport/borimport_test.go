@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/extractor/retention"
 	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
 )
 
@@ -327,6 +328,15 @@ func TestSafePointCaptureFailureLeavesExecutionUnchanged(t *testing.T) {
 	}
 	if untraced := runLoop(t, nil); !bytes.Equal(untraced, traced) {
 		t.Fatal("a capture failure changed the execution result")
+	}
+}
+
+func TestLocalStateErrorsAreNotNativeVerdicts(t *testing.T) {
+	if !core.ExtractorLocalStateUnavailable(&trie.MissingNodeError{}) {
+		t.Fatal("a missing trie node counted as a native verdict")
+	}
+	if core.ExtractorLocalStateUnavailable(errors.New("invalid merkle root")) {
+		t.Fatal("a validation failure counted as missing local state")
 	}
 }
 

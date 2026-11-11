@@ -536,6 +536,11 @@ func (n *Node) Reexecute(key string, cand admission.Candidate) (string, error, e
 		return "", nil, fmt.Errorf("pinned parent state %s of %s is unavailable", c.Parent.Root, key)
 	}
 	_, _, usedGas, _, _, nativeErr := n.chain.ProcessBlock(c.Block, c.Parent, nil, nil, nil)
+	if nativeErr != nil && core.ExtractorLocalStateUnavailable(nativeErr) {
+		// Local state that native code could not read, as on the live path:
+		// the obligation stays ADMITTED.
+		return "", nil, nativeErr
+	}
 	if nativeErr != nil {
 		return "", nativeErr, nil
 	}

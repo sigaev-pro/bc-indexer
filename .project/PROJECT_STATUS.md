@@ -173,9 +173,8 @@ next `Observe` resolves a saved obligation; `ExtractorCheckHeimdall`; a
 window gate on `VerifyHeader`, `VerifyHeaders` and `VerifySeal`; the batch
 split moved into `insertChainWithWitnesses`; and the P3 notes (README limits,
 lock order, safe point owner, `go list -deps ./cmd/cli` check, batch imports
-in the probe). Preparations 01 (no space left on the host disk at the probe
-link step) and 02 (stopped, superseded by these fixes) on `2b251ea` are kept
-(D83).
+in the probe). Preparations 01 (failed at the probe link step) and 02 (stopped, superseded
+by these fixes) on `2b251ea` are kept (D83).
 
 Preparation 03 on `937d174` failed at the same probe link step: the
 container's `/tmp` is a 256 MB tmpfs and the external linker writes its

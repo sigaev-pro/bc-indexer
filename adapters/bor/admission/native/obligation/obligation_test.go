@@ -306,6 +306,9 @@ func get(t *testing.T, path string) (string, error) {
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
+	if err == nil && resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("status %d", resp.StatusCode)
+	}
 	return string(body), err
 }
 
@@ -464,7 +467,7 @@ func TestSourceFailureBeforeANativeFailureKeepsTheObligation(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.stub.status = http.StatusServiceUnavailable
-	if _, err := get(t, "/bor/spans/1"); !errors.Is(err, ErrInput) {
+	if _, err := get(t, "/bor/spans/1"); err == nil || err.Error() != "status 503" {
 		t.Fatalf("first read: %v", err)
 	}
 	err = obs.Done("", errors.New("error while committing span"))
@@ -482,6 +485,29 @@ func TestSourceFailureBeforeANativeFailureKeepsTheObligation(t *testing.T) {
 	}
 }
 
+func TestErrorStatusReachesBorUnlogged(t *testing.T) {
+	f := newFixture(t)
+	useRouter(t, f.driver.Router)
+	obs, err := f.driver.Observe(candidate(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.stub.status = http.StatusServiceUnavailable
+	f.stub.bodies["/bor/spans/1"] = "unavailable"
+	req := &http.Request{Method: http.MethodGet, URL: &url.URL{Scheme: "http", Host: host, Path: "/bor/spans/1"}}
+	resp, err := f.driver.Router.RoundTrip(req)
+	if err != nil || resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("Bor did not receive the native status: %v %v", resp, err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "unavailable" || len(f.world.logs[key0].order) != 0 {
+		t.Fatalf("body %q, saved %v", body, f.world.logs[key0].order)
+	}
+	if err := obs.Done("", errors.New("span 1 not available")); !errors.Is(err, ErrInput) {
+		t.Fatalf("Done: %v", err)
+	}
+}
+
 func TestSourceFailureRetriedThroughTheLog(t *testing.T) {
 	f := newFixture(t)
 	useRouter(t, f.driver.Router)
@@ -490,7 +516,7 @@ func TestSourceFailureRetriedThroughTheLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.stub.status = http.StatusServiceUnavailable
-	if _, err := get(t, "/bor/spans/1"); !errors.Is(err, ErrInput) {
+	if _, err := get(t, "/bor/spans/1"); err == nil || err.Error() != "status 503" {
 		t.Fatalf("first read: %v", err)
 	}
 	f.stub.status = 0
