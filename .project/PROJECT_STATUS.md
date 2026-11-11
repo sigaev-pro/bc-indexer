@@ -1,5 +1,83 @@
 # Состояние проекта
 
+## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
+
+Status: IN_PROGRESS, block 0 admission-core. Dependencies E01-02.pins (#13),
+E01-02.inputs (#14) and E01-02.owned_capture (#15) are accepted. Plan agreed
+with the owner on 2026-11-11, the same split as #14 under D97 and D98: block
+0 core (architect, then native-engineer), then up to three parallel
+per-client blocks (native-engineer each) with qa for the AC matrix; reviewer
+for the Spec and Standards reviews.
+
+### Block 0: admission-core
+
+Base `a73fcfc`. Branch/worktree: `claude/e01-02-admission-core-a0420b` /
+`e01-02-admission-core-a0420b`. Allowed paths:
+`adapters/{geth,bsc,bor}/admission/**`, `adapters/{geth,bsc,bor}/source_inputs/**`
+(one accessor, `Log.Closed`, and the README line on the binding),
+`test/harness/admission.py`, `test/harness/test_admission.py`,
+`test/harness/admission.mutants.json`, `test/harness/fixtures/admission_core/**`,
+`.project/evidence/E01-02.admission.md` and this section. Profiles: none;
+client-independent unit tests on an in-memory power-loss store model, so
+every AC-CAP-02 profile cell stays NOT_RUN and the block gives no AC verdict.
+
+Design (architect), in full in the package README
+[adapters/geth/admission/README.md](../adapters/geth/admission/README.md):
+
+- Shared stdlib-only package `admission`, byte-identical in the three
+  clients except a reserved `native/` directory for the client blocks. It
+  reaches the pin ledger and the input log through two interfaces (`Pins`,
+  `Inputs`), so it compiles in every native module graph.
+- Records per observation under `extractor-admission-v1/<producer>.<run>/`:
+  a durable counter (commit point of `Begin`, INPUT_PREPARING), then
+  ADMITTED (commit point of the closing admission sync, after the pin and
+  the sealed capsule verify), then EXEC_READY, and ABANDONED as the only
+  cleanup of INPUT_PREPARING. The observation key is also the pin ID and the
+  `source_inputs` ID.
+- Real EXEC_READY binding (D98 item 7): `ExecReady` writes its record only
+  after the durable closed consumed manifest of the same capsule is read and
+  its digest recomputes; the EXEC_READY digest covers the admitted digest,
+  the consumed digest and the record-corpus digest.
+- Modes: `Open` starts in RECOVERY_ONLY; `GoLive` and `Begin` are refused
+  while an observation is in INPUT_PREPARING or ADMITTED, so an ADMITTED
+  obligation keeps its pin and cannot be passed over by a new H.
+- One observation guard with tokens; nested native calls pass the token.
+- Shared canonical JSON rule (D99 item 3): integers only, kept as written;
+  sorted keys; minimal escaping; Go and Python agree byte for byte.
+
+### Plan for the per-client blocks
+
+The three blocks start after block 0 merges and are independent of each
+other. Each installs `source_inputs`, `admission` and its wiring under
+`extractor/` in the accepted native tree (module path
+`github.com/ethereum/go-ethereum` in all three), adds its native patch set,
+and records private local evidence; public cells stay NOT_RUN for E06 and
+E07 (D96, D98, D99). Family-only files go under
+`adapters/<client>/admission/native/` or `test/harness/fixtures/`.
+
+| Item handed to admission | Source | Block |
+|---|---|---|
+| Guard/pin/ADMITTED contract, crash points of AC-CAP-02-01 and AC-CAP-02-02 (unit form) | TASK_DECOMPOSITION card | 0 |
+| Real EXEC_READY binding of the consumed-manifest digest | D98 item 7 | 0 (core and binding test); every client block on its import path; Bor credits AC-CAP-04-03 with qa |
+| Shared canonical JSON rule, with the BSC fork-id recompute | D99 item 3 | 0 defines it; each client block moves its genesis and config items to it; BSC drops the key-suffix recompute |
+| Retention patch: `PruneState`, `RecoverPruning`, `RequireRewindAllowed`, `FreezeLimit` called from the shipped binaries | D98 item 2 | Geth, BSC, Bor |
+| VM safe-point patch: the interpreter calls the `core/capture` safe point | D98 item 4 | Geth, BSC, Bor |
+| Product import path and per-block observations (Begin, pin, seal, Admit, log, ExecReady at the native boundary) | D99 technical decisions | Geth (before `processor.Process`), BSC (import seam and `Parlia.applyTransaction`), Bor (`processBlockForImport` to `ProcessBlock`) |
+| AC-CAP-02-01 and AC-CAP-02-02 per network, private local | TASK_DECOMPOSITION card | Geth (ETH), BSC (BSC), Bor (POLY, with consumed Heimdall inputs in the obligation); qa owns the matrix |
+| Bor post-Rio ancestor rule (`getVeBlopSnapshot`); log or bound the latest-span and status calls | D99 item 1 | Bor |
+| BSC reads below the window (`FindAncientHeader`, `GetFinalizedHeader`): extend the window or fail closed | D99 item 2 | BSC |
+| BSC parent-state completeness: replace `CheckParentState` with a workable per-block check | D99 item 2 | BSC |
+| Parlia system-contract calls (`ethAPI`) | D99 item 2 | BSC |
+| Read order of concurrent Parlia reads of different keys; snapshot-key declaration without the fresh-engine assumption | D99 technical decisions | BSC |
+| Window and checkpoint rule on the real import path | D99 item 5 | BSC defines and proves it (stored checkpoint snapshot above genesis, trusted-checkpoint path, window above a checkpoint); Geth proves the full 256-header BLOCKHASH window; Bor proves its checkpoint interval |
+| Normalization profile | D99 item 4 | Not admission: E04-01.block_record |
+| Raw spool encoder | D98 item 4 | Not admission: E04-04.import_pressure |
+
+#16 closes only when every client block is accepted and both AC-CAP-02
+cases pass for every applicable private slot under the D96 boundary.
+
+Next: implement block 0 (native-engineer), then the record, reviews and CI.
+
 ## E01-02.inputs — Persist native inputs and consumed dependency responses (issue #14)
 
 Status: ACCEPTED; #14 closes under D99 (2026-11-11) when this record merges.
