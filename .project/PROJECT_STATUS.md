@@ -277,6 +277,13 @@ input that a BSC block import reads):
   exists, so the silent finality 0 of D99 item 2 cannot occur there. The
   finality decision belongs to E01-02.decision_bridge.
 
+Part B records (2026-11-11, at `7eb892c`): preparation 06, run 06, trusted
+chain 03 and trusted 03 PASS (the trusted path was entered at block 1200
+inside the observation), Go mutants 04 PASS (81 killed, 2 labeled
+equivalents), Python mutants 06 PASS. Earlier attempts are kept under D83
+and listed in
+[E01-02.admission.bsc-parlia-inputs](evidence/E01-02.admission.bsc-parlia-inputs.md).
+
 Resume point: none (not paused).
 
 ## E01-02.admission — Bor block
