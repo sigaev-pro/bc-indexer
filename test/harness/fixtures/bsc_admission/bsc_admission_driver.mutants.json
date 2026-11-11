@@ -603,6 +603,12 @@
       "file": "test/harness/bsc_admission.py",
       "original": "require(last[\"number\"] == TRUSTED_PARENT + 1 and \"0x\" + last[\"hash\"].hex() == record[\"last_hash\"], \"Chain head\")",
       "replacement": "require(True, \"Chain head\")"
+    },
+    {
+      "name": "trusted inside observation",
+      "file": "test/harness/bsc_admission.py",
+      "original": "require(report[\"checkpoint_stored_before\"] is False and report[\"fetches\"] >= 1,",
+      "replacement": "require(True,"
     }
   ]
 }

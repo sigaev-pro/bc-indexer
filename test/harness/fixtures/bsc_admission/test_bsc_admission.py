@@ -641,7 +641,9 @@ class Trusted(unittest.TestCase):
                 ("Trusted bounds", "threshold", 90000),
                 ("Observed block", "observed_number", driver.TRUSTED_PARENT),
                 ("Trusted snapshot", "trusted_snapshot_recents", 1),
-                ("Trusted snapshot", "deleted_snapshots", 0)):
+                ("Trusted snapshot", "deleted_snapshots", 0),
+                ("Trusted path not taken inside the observation", "checkpoint_stored_before", True),
+                ("Trusted path not taken inside the observation", "fetches", 0)):
             report = copy.deepcopy(TRUSTED_REPORT)
             report[field] = value
             self.refused(message, report=report)
@@ -667,6 +669,8 @@ class Trusted(unittest.TestCase):
         for message, record, sha, frames in (
                 ("Chain record", dict(TRUSTED_CHAIN, count=1), TRUSTED_CHAIN["sha256"], TRUSTED_FRAMES),
                 ("Chain record", dict(TRUSTED_CHAIN), "00" * 32, TRUSTED_FRAMES),
+                ("Chain record", dict(TRUSTED_CHAIN, home_head=driver.TRUSTED_PARENT + 1), TRUSTED_CHAIN["sha256"],
+                 TRUSTED_FRAMES),
                 ("Chain head", dict(TRUSTED_CHAIN, last_hash="0x" + "00" * 32), TRUSTED_CHAIN["sha256"], TRUSTED_FRAMES),
                 ("Chain length", dict(TRUSTED_CHAIN), TRUSTED_CHAIN["sha256"],
                  FakeFrames(TRUSTED_FRAMES.frames, driver.TRUSTED_PARENT))):

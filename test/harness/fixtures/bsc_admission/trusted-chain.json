@@ -1,9 +1,10 @@
 {
  "count": 601251,
  "genesis_hash": "0x16d03930cdabc5b474bb63eb69fb6e8a803f4a606310a42e743dc5bd45441e77",
- "kept_in_file": 243423,
+ "home_head": 601250,
+ "kept_in_file": 0,
  "last_hash": "0xcf178bee08c34ba9e1155bfb41776ae6c334c05be9184df578a439052f322fcd",
- "resumed_from": 243834,
- "session_seconds": 213.810917995,
+ "resumed_from": 0,
+ "session_seconds": 344.421393258,
  "sha256": "bb99c8d7997076a0d94ff1ac44e8bfef1a59c6a333f64fa79d2e42efe5d9688d"
 }

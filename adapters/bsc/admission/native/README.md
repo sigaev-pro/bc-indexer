@@ -394,21 +394,34 @@ The trusted-checkpoint path has its own two driver commands, because it
 needs more than 600,000 blocks (`params.FullImmutabilityThreshold` is
 600,000). Their tests are skipped unless their variable is set, and `run`
 and the mutant runs leave them out.
-- `generate-trusted` runs `TestNativeBSCGenerateTrustedChain`
-  (`EXTRACTOR_ADMISSION_TRUSTED_GENERATE`). It generates the 601,251-block
-  private chain into a persistent directory outside the working tree, with
-  an on-disk generator home. A cut-off attempt resumes from that home and
-  its block file and never regenerates. The step writes `chain.json`
-  (count, SHA-256, last hash).
-- `trusted` runs `TestNativeBSCTrustedCheckpoint`
-  (`EXTRACTOR_ADMISSION_TRUSTED`) on that chain, checked by its digest and
-  mounted read-only. The test imports blocks 1 to 601,250 natively and then
-  deletes every stored Parlia snapshot. A cold observed import of block
-  601,251 then walks down: at block 1200 it has passed the threshold, and
-  1200 % 1000 == 200, so Parlia takes the trusted-checkpoint path, stores
-  that snapshot, and the block reaches EXEC_READY. The driver checks that
-  1200 is the only candidate block with a stored snapshot, and checks the
-  logged parent snapshot against the chain.
+- `generate-trusted` is a preparation step, outside the measured budget. It
+  runs `TestNativeBSCGenerateTrustedChain`
+  (`EXTRACTOR_ADMISSION_TRUSTED_GENERATE`).
+  - It generates the 601,251-block private chain into a persistent directory
+    outside the working tree.
+  - Its on-disk generator home is a native home that has imported blocks 1
+    to 601,250. Block 601,251 is sealed but not imported.
+  - A cut-off attempt resumes from the home and the block file and never
+    regenerates.
+  - The record binds the block file by its SHA-256 and the home by a tree
+    digest.
+- `trusted` is a measured run with the 1800-second deadline. It runs
+  `TestNativeBSCTrustedCheckpoint` (`EXTRACTOR_ADMISSION_TRUSTED`) on a
+  copy of the prepared home, after checking the file and the home against
+  the preparation record.
+  - The test deletes every stored Parlia snapshot.
+  - `NewBlockChain` verifies the head header natively at startup, outside
+    any observation, and would cache the parent snapshot. So the test hides
+    the grandparent header during startup, which makes that lookup fail at
+    once, and restores the header before the import.
+  - It then checks that no snapshot is stored at 1200, and imports block
+    601,251 through the seam. The observation's logged lookup walks down,
+    and at block 1200 it has passed the threshold, with 1200 % 1000 == 200.
+    So Parlia takes the trusted-checkpoint path there, stores that snapshot,
+    and the block reaches EXEC_READY.
+  - The driver checks that 1200 is the only candidate block with a stored
+    snapshot, that it was absent before the observation, and that the
+    logged parent snapshot matches the chain.
 
 The driver's `run` also starts the patched `geth` on a probe home that holds
 live pins, and re-checks every digest and the trace order with its own

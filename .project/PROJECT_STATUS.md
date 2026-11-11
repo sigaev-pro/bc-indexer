@@ -262,9 +262,15 @@ input that a BSC block import reads):
   logged snapshot bytes from a cold and a warm engine. The trusted-checkpoint
   path runs only after a walk of more than 600,000 headers without a stored
   checkpoint (`params.FullImmutabilityThreshold`). It runs inside the native
-  snapshot computation, whose result is logged like any other snapshot. Its
-  native proof (a gated test over a chain of about 601,250 blocks, about 3 h
-  under the runner lock) waits for a coordinator decision (2026-11-11).
+  snapshot computation, whose result is logged like any other snapshot. The
+  coordinator chose a native proof (option A, 2026-11-11), with no scope
+  moved to E06/E07. The `generate-trusted` preparation builds the
+  601,251-block private chain, resumably, in a persistent directory outside
+  the working tree, with a native home of blocks 1 to 601,250. The measured
+  `trusted` run (1800 s deadline) copies that home, deletes the stored
+  snapshots, and defeats the startup head verification. Its cold observed
+  import of block 601,251 then takes the trusted-checkpoint path at block
+  1200, inside the observation's logged lookup.
 - Technical decision (native-engineer, not an owner answer): the finality
   result of `GetFinalizedHeader` and the fork choice is not an execution
   input. Both run after EXEC_READY, on the native home, where every header
