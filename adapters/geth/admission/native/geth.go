@@ -113,6 +113,10 @@ var (
 	// ErrOpenObligation refuses a manual database command while an
 	// observation is INPUT_PREPARING or ADMITTED (D100 item 3).
 	ErrOpenObligation = errors.New("open admission obligations forbid this native database write")
+	// ErrKnownBlock refuses a new observation of a block that the native
+	// store already holds with its state: it never opens a second
+	// observation of a candidate (D100, one decision per block).
+	ErrKnownBlock = errors.New("block is already in the chain with its state")
 )
 
 var (
@@ -535,12 +539,40 @@ type Admission struct {
 	provider *stateprovider.Provider
 	pins     Pins
 	token    *admission.Token
+	// replay names the EXEC_READY observations whose block the recovery
+	// driver of the decision bridge re-executes natively (native-only
+	// replay): Begin in RECOVERY_ONLY resumes them without an admission
+	// step.
+	replay map[string]bool
 }
 
 // Attach binds the store, opens the saved producer run, installs the
 // admission into the chain, runs the recovery driver and switches to LIVE.
 // The chain must not have imported anything since it was opened.
 func Attach(chain *core.BlockChain, db ethdb.Database, cfg Config, opts Options) (*Admission, error) {
+	a, err := attach(chain, db, cfg, opts, false)
+	if err != nil {
+		return nil, err
+	}
+	if !opts.SkipRecovery {
+		if err := a.Recover(); err != nil {
+			return nil, err
+		}
+	}
+	return a, nil
+}
+
+// purger deletes the capsule and dependency log of a closed observation
+// (admission.InputPurger over source_inputs.Purge).
+type purger struct{ db sourceinputs.Deleter }
+
+func (p purger) Purge(observation string) error { return sourceinputs.Purge(p.db, observation) }
+
+// attach binds the store, opens the saved producer run and the admission in
+// RECOVERY_ONLY, and installs it into the chain. With cleanup, the admission
+// is opened with OpenWithCleanup: closing an observation purges its inputs
+// and the records below the low-water mark (D100).
+func attach(chain *core.BlockChain, db ethdb.Database, cfg Config, opts Options, cleanup bool) (*Admission, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -568,7 +600,17 @@ func Attach(chain *core.BlockChain, db ethdb.Database, cfg Config, opts Options)
 		producer: admission.Producer{ProducerID: cfg.ProducerID, RunID: run}, guard: admission.NewGuard(),
 		provider: provider, pins: Pins{DB: db, Provider: provider, Identity: identity}}
 	token := a.guard.Acquire()
-	a.core, err = admission.Open(token, store, a.producer, a.pins, Inputs{Store: store})
+	if cleanup {
+		deleter, ok := store.(admission.DeleteStore)
+		if !ok {
+			err = fmt.Errorf("%w: the admission store cannot delete", ErrConfig)
+		} else {
+			a.core, err = admission.OpenWithCleanup(token, deleter, a.producer, a.pins, Inputs{Store: store},
+				purger{db: deleter})
+		}
+	} else {
+		a.core, err = admission.Open(token, store, a.producer, a.pins, Inputs{Store: store})
+	}
 	if releaseErr := token.Release(); err == nil {
 		err = releaseErr
 	}
@@ -577,11 +619,6 @@ func Attach(chain *core.BlockChain, db ethdb.Database, cfg Config, opts Options)
 	}
 	chain.SetExtractorAdmission(a)
 	a.trace("opened", map[string]any{"producer": cfg.ProducerID, "run": run})
-	if !opts.SkipRecovery {
-		if err := a.Recover(); err != nil {
-			return nil, err
-		}
-	}
 	return a, nil
 }
 
@@ -606,6 +643,24 @@ func (a *Admission) trace(event string, fields map[string]any) {
 // EXEC_READY or NATIVE_REJECTED. Only then it switches to LIVE. An
 // obligation that stays ADMITTED stops startup.
 func (a *Admission) Recover() error {
+	if err := a.RecoverObligations(); err != nil {
+		return err
+	}
+	token := a.guard.Acquire()
+	err := a.core.GoLive(token)
+	if releaseErr := token.Release(); err == nil {
+		err = releaseErr
+	}
+	if err == nil {
+		a.trace("live", nil)
+	}
+	return err
+}
+
+// RecoverObligations is the admission part of the recovery driver, without
+// the switch to LIVE: it abandons every INPUT_PREPARING observation and
+// re-executes every ADMITTED obligation to EXEC_READY or NATIVE_REJECTED.
+func (a *Admission) RecoverObligations() error {
 	token := a.guard.Acquire()
 	observations, err := a.core.Observations(token)
 	var admitted []admission.Observation
@@ -647,15 +702,7 @@ func (a *Admission) Recover() error {
 		a.trace("recovered", map[string]any{"observation": obs.Key, "state": string(state),
 			"import_error": errorText(importErr)})
 	}
-	token = a.guard.Acquire()
-	err = a.core.GoLive(token)
-	if releaseErr := token.Release(); err == nil {
-		err = releaseErr
-	}
-	if err == nil {
-		a.trace("live", nil)
-	}
-	return err
+	return nil
 }
 
 // state returns the state of an observation; a closed one is no longer
@@ -712,6 +759,12 @@ func (a *Admission) Begin(block *types.Block, parentRoot common.Hash) (core.Extr
 	}
 	if mode == admission.RecoveryOnly {
 		return a.resume(token, block, candidate)
+	}
+	// A block that the store already holds with its state never opens a new
+	// observation: Geth re-executes such a block only to rebuild a missing
+	// snapshot layer, and that is not a new capture.
+	if a.chain.HasBlockAndState(block.Hash(), block.NumberU64()) {
+		return nil, fmt.Errorf("%w: block %d %s", ErrKnownBlock, candidate.Number, candidate.Hash)
 	}
 	obs, err := a.core.Begin(token, candidate)
 	if err != nil {
@@ -775,6 +828,13 @@ func (a *Admission) resume(token *admission.Token, block *types.Block, candidate
 		return nil, err
 	}
 	for _, obs := range observations {
+		if obs.State == admission.ExecReady && obs.Candidate == candidate && a.replay[obs.Key] {
+			// Native-only replay of an EXEC_READY observation for the decision
+			// bridge: no admission step and no capture hook; the EXEC_READY
+			// record and the decision identity stay.
+			a.trace("replaying", map[string]any{"observation": obs.Key, "number": candidate.Number})
+			return &replayed{a: a, key: obs.Key}, nil
+		}
 		if obs.State != admission.Admitted || obs.Candidate != candidate {
 			continue
 		}
@@ -930,6 +990,41 @@ func (o *observation) Close(cause error) error {
 	o.a.trace("rejected", map[string]any{"observation": o.key, "evidence": evidence, "digest": record.Digest,
 		"cause": cause.Error()})
 	return nil
+}
+
+// Key returns the observation key.
+func (o *observation) Key() string { return o.key }
+
+// replayed is the native-only replay of an EXEC_READY observation in
+// RECOVERY_ONLY. Native validation of the replay (the same state root as the
+// header) is its check; it writes no admission record.
+type replayed struct {
+	a    *Admission
+	key  string
+	done bool
+}
+
+// Key returns the observation key.
+func (r *replayed) Key() string { return r.key }
+
+// Configure leaves the native execution unchanged: a replay captures nothing.
+func (r *replayed) Configure(*vm.Config) {}
+
+// ExecReady reports that the replay passed native validation.
+func (r *replayed) ExecReady(*types.Block, *core.ProcessResult) error {
+	r.done = true
+	r.a.trace("replayed", map[string]any{"observation": r.key})
+	return nil
+}
+
+// Close stops recovery when the replay failed: the saved EXEC_READY
+// observation must replay to the same state.
+func (r *replayed) Close(cause error) error {
+	if cause == nil || r.done {
+		return nil
+	}
+	r.done = true
+	return fmt.Errorf("%w: native-only replay of %s failed: %v", ErrRecovery, r.key, cause)
 }
 
 // current checks that the import still holds the guard of this observation.

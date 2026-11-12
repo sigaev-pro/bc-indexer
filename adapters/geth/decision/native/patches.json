@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "description": "Geth native patch set of E01-02.decision_bridge. Applied after the patch set of adapters/geth/admission/native/patches.json; each original must occur exactly once in the tree it produces.",
+  "source_commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+  "files": {
+    "core_decision.go.txt": "core/extractor_decision.go"
+  },
+  "patches": [
+    {
+      "name": "blockchain_decision_field",
+      "file": "core/blockchain.go",
+      "original": "\textractor ExtractorAdmission // E01-02.admission seam; nil without an extractor\n",
+      "replacement": "\textractor ExtractorAdmission // E01-02.admission seam; nil without an extractor\n\t// E01-02.decision_bridge seam and the decision of the write in progress;\n\t// nil without the bridge.\n\textractorDecision ExtractorDecision\n\textractorWriting  *extractorWriting\n",
+      "reason": "Holds the decision bridge seam and the decision of the block write in progress."
+    },
+    {
+      "name": "process_block_decision",
+      "file": "core/blockchain.go",
+      "original": "\t// Write the block to the chain and get the status.\n\tvar status WriteStatus\n\tif config.WriteState {\n",
+      "replacement": "\t// E01-02.decision_bridge: an observed block is written as one native\n\t// decision: the child-root barrier and the transition intent before the\n\t// native mutation, the marker in its final batch, then Resolve. Before the\n\t// bridge opens (recovery of a saved ADMITTED obligation), EXEC_READY is\n\t// durable and the block is written later, with its decision.\n\tvar extractorWrite ExtractorWrite\n\tif extractorObservation != nil && bc.extractorDecision != nil && config.WriteState {\n\t\textractorWrite, err = bc.extractorDecision.Write(extractorObservation, block, config.WriteHead)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tif extractorWrite == nil {\n\t\t\treturn &blockProcessingResult{usedGas: res.GasUsed, procTime: proctime, witness: witness, stats: stats}, nil\n\t\t}\n\t\tbc.extractorWriting = &extractorWriting{write: extractorWrite, setHead: config.WriteHead}\n\t\tdefer func() { bc.extractorWriting = nil }()\n\t}\n\n\t// Write the block to the chain and get the status.\n\tvar status WriteStatus\n\tif config.WriteState {\n",
+      "reason": "Product write path: every observed block write is a native decision."
+    },
+    {
+      "name": "process_block_resolve",
+      "file": "core/blockchain.go",
+      "original": "\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\t// Update the metrics touched during block commit\n",
+      "replacement": "\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\t// E01-02.decision_bridge: the batch with the marker is durable; record\n\t\t// the decision.\n\t\tif extractorWrite != nil {\n\t\t\tif err := extractorWrite.Resolve(); err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t}\n\t\t// Update the metrics touched during block commit\n",
+      "reason": "Resolve after the final native batch is synced."
+    },
+    {
+      "name": "write_block_decision",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {\n",
+      "replacement": "func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {\n\t// E01-02.decision_bridge: a decided write keeps the protocol order\n\t// (core/extractor_decision.go); the SIDE marker is in its block batch.\n\tif w := bc.extractorWriting; w != nil && w.write != nil {\n\t\treturn bc.extractorWriteBlockWithState(w, block, receipts, statedb)\n\t}\n",
+      "reason": "Side-chain write (InsertBlockWithoutSetHead) and the block batch of a head change: barrier, intent, then the block batch."
+    },
+    {
+      "name": "head_batch_marker",
+      "file": "core/blockchain.go",
+      "original": "\trawdb.WriteHeadBlockHash(batch, block.Hash())\n\n\t// Flush the whole batch into the disk, exit the node if failed\n\tif err := batch.Write(); err != nil {\n\t\tlog.Crit(\"Failed to update chain indexes and markers\", \"err\", err)\n\t}\n",
+      "replacement": "\trawdb.WriteHeadBlockHash(batch, block.Hash())\n\n\t// E01-02.decision_bridge: the head batch is the final authoritative batch\n\t// of a head change and carries the native decision marker.\n\tmarker := bc.extractorHeadMarker()\n\tif marker != nil {\n\t\tif err := batch.Put(marker[0], marker[1]); err != nil {\n\t\t\tlog.Crit(\"Failed to write the extractor decision marker\", \"err\", err)\n\t\t}\n\t}\n\t// Flush the whole batch into the disk, exit the node if failed\n\tif err := batch.Write(); err != nil {\n\t\tlog.Crit(\"Failed to update chain indexes and markers\", \"err\", err)\n\t}\n\tif marker != nil {\n\t\tif err := bc.db.SyncKeyValue(); err != nil {\n\t\t\tlog.Crit(\"Failed to sync the extractor decision marker\", \"err\", err)\n\t\t}\n\t}\n",
+      "reason": "writeBlockAndSetHead: the marker in the final head batch, then sync."
+    },
+    {
+      "name": "backend_attach_decisions",
+      "file": "eth/backend.go",
+      "original": "\t\tif _, err := extractorgeth.Attach(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{}); err != nil {\n",
+      "replacement": "\t\t// E01-02.decision_bridge: the admission is opened with input cleanup,\n\t\t// and the decision recovery driver ends with decision.Bridge.GoLive.\n\t\tif _, err := extractorgeth.AttachDecisions(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{},\n\t\t\textractorgeth.DecisionOptions{}); err != nil {\n",
+      "reason": "The shipped node attaches the decision bridge."
+    }
+  ]
+}
