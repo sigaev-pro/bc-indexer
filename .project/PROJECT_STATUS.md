@@ -180,8 +180,12 @@ The refusal of BSC and Bor manual database commands is a technical decision
 of this task. It goes into the decision record that closes #18. Retained
 record 02 of `67d9141` passed; it is superseded and kept.
 
-Next: re-review of the follow-up head, its retained record, hosted CI, then
-the client blocks.
+Retained record 03 of `544cd49`: PASS. It covers the Go tests in the three
+assembled modules (116 each, 30 in lifecycle, 99.2% statements), Go mutants
+(122 killed) and Python mutants (38 killed). Records 01 and 02 passed; they
+are superseded and kept.
+
+Next: re-review of `544cd49`, hosted CI, then the client blocks.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
