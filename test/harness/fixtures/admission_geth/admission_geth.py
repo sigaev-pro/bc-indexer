@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Build and run the E01-02.admission Geth probe on the product import path.
+"""Build and run the E01-02.admission and E01-02.decision_bridge Geth probe on the product import path.
 
-`prepare` extracts the accepted Geth source, applies the product patch set of
-`adapters/geth/admission/native/patches.json`, installs the shared packages
-`admission`, `source_inputs` and `state_provider` and the Geth wiring under
-`extractor/`, and compiles them offline with the accepted compiler: the unit
+`prepare` extracts the accepted Geth source, applies the product patch sets of
+`adapters/geth/admission/native/patches.json` and then
+`adapters/geth/decision/native/patches.json`, installs the shared packages
+`admission`, `source_inputs`, `decision` and `state_provider` and the Geth
+wiring under `extractor/`, and compiles them offline with the accepted compiler: the unit
 tests, the patched `geth` command and the probe (with `core/capture` in a Go
 workspace). It also builds the binaries of every native mutant. `run` executes
 the probe and every mutant in the pinned runtime image and judges their
@@ -39,6 +40,11 @@ import source_inputs  # noqa: E402
 from source_inputs_geth import STATE_ROOT, header_fields, keccak256  # noqa: E402
 
 NATIVE = ROOT / "adapters" / "geth" / "admission" / "native"
+# The decision bridge wiring (E01-02.decision_bridge): its patch set applies after the admission patch set, and its
+# Go files join the package extractor/admission/native.
+DECISION = ROOT / "adapters" / "geth" / "decision" / "native"
+DECISION_FILES = ("patches.json", "core_decision.go.txt", "decision.go", "decision_test.go", "README.md")
+DECISION_GO = ("decision.go", "decision_test.go")
 FIXTURE_FILES = ("probe.go", "genesis.json", "expected.json", "ORACLE.md", "native_mutants.json")
 NATIVE_FILES = ("patches.json", "core_hook.go.txt", "rawdb_hook.go.txt", "utils_hook.go.txt", "geth.go", "geth_test.go",
                 "README.md")
@@ -47,15 +53,16 @@ PACKAGES = {
                             ("admission.go", "admission_test.go", "canonical.go", "canonical_test.go", "vectors.json")),
     "extractor/source_inputs": (ROOT / "adapters" / "geth" / "source_inputs", ("inputs.go", "inputs_test.go")),
     "extractor/state_provider": (ROOT / "adapters" / "geth" / "state_provider", ("provider.go", "family.go")),
+    "extractor/decision": (ROOT / "adapters" / "geth" / "decision", ("decision.go", "decision_test.go", "vectors.json")),
     "extractor/admission/native": (NATIVE, ("geth.go", "geth_test.go")),
 }
 CAPTURE_FILES = ("go.mod", "capture.go")
 HARNESS_FILES = ("source_inputs_geth.py", "source_inputs.py", "admission.py", "capture_probe.py", "native.py",
                  "owned.py", "artifacts.py")
 PROBE_PATH = "cmd/extractor-admission-probe/probe.go"
-UNIT_PACKAGES = ("./extractor/admission/...", "./extractor/source_inputs")
+UNIT_PACKAGES = ("./extractor/admission/...", "./extractor/source_inputs", "./extractor/decision")
 PREPARATION_SECONDS = 5400
-RUN_SECONDS = 1800
+RUN_SECONDS = 3600
 BINARY_LIMIT = 512 * 1024 * 1024
 OBSERVATION_LIMIT = 64 * 1024 * 1024
 
@@ -978,8 +985,9 @@ def apply_patches(source, native_dir):
 
 
 def install(source, copies):
-    """Install the patch set, the extractor packages and the probe into an extracted Geth tree."""
+    """Install both patch sets, the extractor packages and the probe into an extracted Geth tree."""
     record = apply_patches(source, copies["native"])
+    record["decision"] = apply_patches(source, copies["decision_native"])
     rows = []
     for package, (origin, names) in PACKAGES.items():
         directory = copies["native"] if package.endswith("/native") else copies[package]
@@ -988,6 +996,11 @@ def install(source, copies):
             rows.append({"relative": f"{package}/{name}",
                          "copy": copy_artifact(directory / name, source / package / name,
                                                reference(directory / name, 4 * 1024 * 1024))})
+    for name in DECISION_GO:
+        relative = f"extractor/admission/native/{name}"
+        rows.append({"relative": relative, "copy": copy_artifact(copies["decision_native"] / name, source / relative,
+                                                                 reference(copies["decision_native"] / name,
+                                                                           4 * 1024 * 1024))})
     probe = source / PROBE_PATH
     probe.parent.mkdir(parents=True)
     rows.append({"relative": PROBE_PATH, "copy": copy_artifact(copies["fixture"] / "probe.go", probe,
@@ -996,10 +1009,11 @@ def install(source, copies):
     return record
 
 
-def mutant_targets(table, patches):
+def mutant_targets(table, patches, decisions=None):
     """Map each native mutant to the text it changes; the original must occur exactly once there."""
-    texts = {"geth.go": (NATIVE / "geth.go").read_text()}
-    for patch in patches["patches"]:
+    texts = {"geth.go": (NATIVE / "geth.go").read_text(), "decision.go": (DECISION / "decision.go").read_text(),
+             "core_decision.go.txt": (DECISION / "core_decision.go.txt").read_text()}
+    for patch in patches["patches"] + (decisions or {"patches": []})["patches"]:
         texts.setdefault(patch["file"], "")
         texts[patch["file"]] += patch["replacement"]
     out = {}
@@ -1013,7 +1027,8 @@ def mutant_targets(table, patches):
 
 def apply_mutant(source, mutant):
     """Apply one native mutant to the installed tree; return a function that restores it."""
-    relative = "extractor/admission/native/geth.go" if mutant["file"] == "geth.go" else mutant["file"]
+    relative = {"geth.go": "extractor/admission/native/geth.go", "decision.go": "extractor/admission/native/decision.go",
+                "core_decision.go.txt": "core/extractor_decision.go"}.get(mutant["file"], mutant["file"])
     path = source / relative
     before = path.read_text()
     require(before.count(mutant["original"]) == 1, f"Mutant {mutant['name']} must match exactly once")
@@ -1052,6 +1067,9 @@ def prepare(manifest_path, expected_sha, output):
             copies = {"fixture": output / "fixture", "native": output / "native", "capture": output / "capture"}
             record["fixture"] = capture_probe.copy_sources(FIXTURE_FILES, FIXTURE, copies["fixture"], deadline)
             record["native"] = capture_probe.copy_sources(NATIVE_FILES, NATIVE, copies["native"], deadline)
+            copies["decision_native"] = output / "decision-native"
+            record["decision_native"] = capture_probe.copy_sources(DECISION_FILES, DECISION, copies["decision_native"],
+                                                                   deadline)
             record["capture"] = capture_probe.copy_sources(CAPTURE_FILES, ROOT / "core" / "capture", copies["capture"],
                                                            deadline)
             record["shared"] = {}
@@ -1065,9 +1083,11 @@ def prepare(manifest_path, expected_sha, output):
             record["driver_code"] = capture_probe.copy_sources(("admission_geth.py",), FIXTURE, output / "driver-code",
                                                                deadline)
             patches = json.loads((copies["native"] / "patches.json").read_text())
+            decisions = json.loads((copies["decision_native"] / "patches.json").read_text())
+            require(decisions["source_commit"] == patches["source_commit"], "The patch sets name different commits")
             _, table = json_artifact([row["copy"] for row in record["fixture"]
                                       if row["copy"]["path"].endswith("/native_mutants.json")][0], deadline=deadline)
-            mutant_targets(table, patches)
+            mutant_targets(table, patches, decisions)
             compiler = manifest["image_inputs"]["golang-build-image"]["reference"]
             require(re.fullmatch(r"docker.io/library/golang@sha256:[0-9a-f]{64}", compiler), "Unpinned compiler")
             require(manifest["builds"]["geth"]["compiler_image"] == compiler, "Geth compiler mismatch")
@@ -1124,7 +1144,8 @@ def prepare(manifest_path, expected_sha, output):
                                    mounts, cap=1800, memory="6g", cwd="/work/source", environment=go_environment())
             record["unit_tests"] = reference(tests)
             text = b"\n" + tests.read_bytes()
-            for package in ("extractor/admission", "extractor/admission/native", "extractor/source_inputs"):
+            for package in ("extractor/admission", "extractor/admission/native", "extractor/source_inputs",
+                            "extractor/decision"):
                 require(f"\nok  \tgithub.com/ethereum/go-ethereum/{package}\t".encode() in text,
                         f"Unit tests of {package} did not pass inside the native module")
             build = [go, "build", "-p", "2", "-trimpath", "-o"]
