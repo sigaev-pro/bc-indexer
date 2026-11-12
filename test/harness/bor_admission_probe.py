@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Build and run the E01-02.admission Bor probe and judge its AC matrix.
+"""Build and run the E01-02.admission and E01-02.decision_bridge Bor probe and
+judge its AC matrix.
 
 `prepare` installs the Bor block into the accepted Bor source tree
 (bor_admission_tree.py), runs the native Go tests of the installed packages in
@@ -11,8 +12,10 @@ scenario, and compares the result with values computed here from the stub
 files, the sealed blocks and the README formulas, not from the probe output.
 Preparation is not part of the measured run.
 
-The judge is the qa oracle of AC-CAP-02-01, AC-CAP-02-02 (POLY, private local)
-and of the real EXEC_READY binding credited to AC-CAP-04-03 (D98 item 7).
+The judge is the qa oracle of AC-CAP-02-01, AC-CAP-02-02 (POLY, private local),
+of the real EXEC_READY binding credited to AC-CAP-04-03 (D98 item 7), and of
+AC-CAP-07-01, AC-CAP-07-02, AC-CAP-07-03 and AC-CAP-07-06 (E01-02.decision_bridge,
+POLY, private local).
 """
 
 import argparse
@@ -32,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import admission
 import bor_admission_tree
 import capture_probe
+import decision
 from artifacts import (Rejected, artifact, check_deadline, copy_artifact, json_artifact, pinned_json, read_bytes,
                        reference, require)
 from bor_source_inputs_probe import decoded_header, fork_id, keccak256, rlp_encode, rlp_item
@@ -50,13 +54,20 @@ NATIVE_TESTS = ("TestExtractorFreezeThreshold", "TestExtractorGoroutineIDs", "Te
                 "TestExtractorBlockGateHashesTheHeader", "TestExtractorCreator",
                 "TestExtractorGateWaitsForDetachedFetches", "TestExtractorGateOneWindowAtATime",
                 "TestExtractorSpanRangeFetchIsCountedFromTheStart", "TestExtractorSpanRangeFetchCountPrecedesDoChan",
-                "TestExtractorGateCoversEveryHeimdallEntryPoint")
+                "TestExtractorGateCoversEveryHeimdallEntryPoint",
+                # E01-02.decision_bridge (core/zz_extractor_decision_test.go).
+                "TestExtractorDecisionImportOrder", "TestExtractorDecisionSideAndCanonical",
+                "TestExtractorDecisionNativeRejection", "TestExtractorDecisionIntendFailureWritesNothing",
+                "TestExtractorDecisionWithoutDeciderIsNative", "TestExtractorRecoverImportsUnderTheChainLock",
+                "TestExtractorMarkBatchOnlyMarksTheArmedBatch", "TestExtractorCommitOnceUsesTheBarrierCommit",
+                "TestExtractorRootDurable", "TestExtractorRecoverCompletesAnInterruptedReorg")
 PACKAGE = "github.com/ethereum/go-ethereum"
 BODY_FILES = ("span-0.json", "span-1.json", "span-latest.json", "status.json", "clerk-a-from-1.json",
               "clerk-b-from-1.json", "clerk-empty.json")
 FIXTURE_FILES = ("expected.json", "ORACLE.md", "main.go")
 STUB_FILES = ("stub.go", "stub_test.go")
 TESTED_PACKAGES = ("extractor/admission", "extractor/admission/native/obligation", "extractor/source_inputs",
+                   "extractor/decision", "extractor/decision/native/decider", "extractor/bordecision",
                    "extractor/capture", "extractor/borimport")
 PREPARATION_SECONDS = 3600
 RUN_SECONDS = 1800
@@ -66,6 +77,11 @@ INPUTS = "extractor-source-inputs-v1/"
 PIN = "extractor-state-provider-pin-v1-"
 TAG_RESULT = "extractor-bor-native-result-v1"
 TAG_REJECTION = "extractor-bor-native-rejection-v1"
+DECISION = "extractor-decision-v1/bor.run-1/"
+MARKER = "extractor-decision-marker-v1/bor.run-1/"
+STORE_ID = "0123456789abcdef0123456789abcdef"
+TAG_EVIDENCE = "extractor-bor-decision-evidence-v1"
+TAG_DECISION_REJECTION = "extractor-bor-decision-rejection-v1"
 CHECKPOINT_INTERVAL = 1024
 
 
@@ -122,7 +138,7 @@ def prepare(manifest_path, expected_sha, output):
             record["stub_bodies"] = capture_probe.copy_sources(BODY_FILES, FIXTURE / "stub", output / "stub", deadline)
             record["harness_code"] = capture_probe.copy_sources(
                 ("bor_admission_probe.py", "bor_admission_tree.py", "bor_source_inputs_probe.py", "admission.py",
-                 "source_inputs.py", "capture_probe.py", "native.py", "owned.py", "artifacts.py"),
+                 "decision.py", "source_inputs.py", "capture_probe.py", "native.py", "owned.py", "artifacts.py"),
                 Path(__file__).parent, output / "harness-code", deadline)
             compiler = manifest["image_inputs"]["golang-build-image"]["reference"]
             require(re.fullmatch(r"docker.io/library/golang@sha256:[0-9a-f]{64}", compiler), "Unpinned compiler")
@@ -194,10 +210,11 @@ def prepare_bor(manifest, root, output, native, compiler, oracle, deadline):
                  f"./{PROBE_DIR}/heimdallstub"], 1800)
     row["unit_tests"] = reference(stdout)
     go_test_passed(stdout.read_text(errors="replace"), (*TESTED_PACKAGES, f"{PROBE_DIR}/heimdallstub"))
-    stdout = go(["test", "-race", "-count=1", "-run", "^TestExtractor", "-v", "./core/rawdb", "./consensus/bor"], 1200)
+    stdout = go(["test", "-race", "-count=1", "-run", "^TestExtractor", "-v", "./core/rawdb", "./consensus/bor", "./core"],
+                1800)
     row["rawdb_tests"] = reference(stdout)
     text = stdout.read_text(errors="replace")
-    go_test_passed(text, ("core/rawdb", "consensus/bor"))
+    go_test_passed(text, ("core/rawdb", "consensus/bor", "core"))
     for name in NATIVE_TESTS:
         require(f"--- PASS: {name} " in text, f"The native test {name} did not pass")
     stdout = go(["list", "-deps", "./cmd/cli"], 600)
@@ -275,7 +292,8 @@ def sealed_chain(blocks, genesis_header):
         require(number == len(rows) + 1 and block[0][0] == previous["hash"], "The sealed blocks are not one chain")
         row = {"number": number, "rlp": blocks[start:offset], "header": header, "hash": keccak256(header),
                "parent_hash": block[0][0], "state_root": block[0][3], "receipt_root": block[0][5],
-               "gas_used": int.from_bytes(block[0][10], "big"), "time": int.from_bytes(block[0][11], "big")}
+               "gas_used": int.from_bytes(block[0][10], "big"), "time": int.from_bytes(block[0][11], "big"),
+               "difficulty": int.from_bytes(block[0][7], "big")}
         rows.append(row)
         previous = row
     require(rows, "No sealed blocks")
@@ -517,8 +535,10 @@ def check_observation(context, dump, sequence, number, variant, fail, label):
         if pin is None:
             fail(f"{label}: {key} EXEC_READY lost its pin")
     rejected = recs.get((seq, "rejected"))
-    if rejected is not None and (ready is not None or pin is not None):
-        fail(f"{label}: {key} NATIVE_REJECTED kept EXEC_READY or its pin")
+    # The pin of a rejected observation is released after the rejected sync;
+    # its release is checked on the store after the attempt.
+    if rejected is not None and ready is not None:
+        fail(f"{label}: {key} NATIVE_REJECTED kept EXEC_READY")
     return state
 
 
@@ -526,9 +546,139 @@ def observations_of(result):
     return {o["block"]: o for o in (result or {}).get("observations") or []}
 
 
+# ---------------------------------------------------------------------------
+# Decision bridge (E01-02.decision_bridge): independent expected decisions.
+
+
+def decision_records(dump):
+    """Decision records by (sequence, kind), and the counters by (name,)."""
+    out = {}
+    for row in dump or []:
+        key = row["key"]
+        if key.startswith(DECISION):
+            parts = key[len(DECISION):].split("/")
+            index = (int(parts[0], 16), parts[1]) if len(parts) == 2 else (parts[0],)
+            out[index] = json.loads(row["value"])
+    return out
+
+
+def markers(dump):
+    return {int(row["key"][len(MARKER):], 16): row["value"] for row in dump or [] if row["key"].startswith(MARKER)}
+
+
+def total_difficulty(context, number):
+    """Total difficulty of block `number`: the sum of the header difficulties from genesis."""
+    total = int.from_bytes(decoded_header(context["genesis_header"])[7], "big")
+    for row in context["chain"][:number]:
+        total += row["difficulty"]
+    return total
+
+
+def head_of(context, number):
+    header = context["genesis_header"] if number == 0 else context["chain"][number - 1]["header"]
+    return {"number": number, "hash": keccak256(header).hex()}
+
+
+def expected_intent(context, sequence, number, key, ready_digest):
+    """The IMPORT intent of block `number` onto its parent, the head (README of
+    adapters/bor/decision/native): the member binds the EXEC_READY digest and
+    the state root of the block; the evidence binds the fork choice inputs."""
+    block, old = head_of(context, number), head_of(context, number - 1)
+    child = context["chain"][number - 1]["state_root"].hex()
+    evidence = tagged_digest(TAG_EVIDENCE, "IMPORT", str(number), block["hash"], child, str(number - 1), old["hash"],
+                             str(number), block["hash"], str(total_difficulty(context, number - 1)),
+                             str(total_difficulty(context, number)))
+    record = {"native_store_id": STORE_ID, "producer": f"{PRODUCER}.{RUN}", "sequence": sequence, "kind": "IMPORT",
+              "old_head": old, "new_head": block,
+              "members": [{"observation": key, "block": block["hash"], "exec_ready_digest": ready_digest,
+                           "child_root": child}],
+              "evidence_digest": evidence, "events": True}
+    record["digest"] = decision.intent_digest(record)
+    return record
+
+
+def intents_naming(dump, key):
+    recs = decision_records(dump)
+    return sorted(seq for (seq, *kind), value in recs.items() if kind == ["intent"] and
+                  any(m.get("observation") == key for m in value.get("members") or []))
+
+
+def check_decision(context, dump, number, key, ready_digest, fail, label, outcome="DECIDED"):
+    """Block `number` has exactly one decision, over observation `key` with
+    its EXEC_READY digest: the IMPORT intent computed here, and either
+    NATIVE_DECIDED (BATCH, its marker present with exactly the intent bytes:
+    no mirror applied it) or the native rejection with its evidence digest and
+    no marker. The observation is closed: no pin, capsule or log remains, and
+    an admission record that remains is the DECIDED record with the decision
+    digest. Returns the decision sequence."""
+    if ready_digest is None:
+        fail(f"{label}: block {number} has no EXEC_READY digest to bind")
+        return None
+    found = intents_naming(dump, key)
+    if len(found) != 1:
+        fail(f"{label}: block {number} has decisions {found} over {key}, expected one")
+        return None
+    seq = found[0]
+    recs = decision_records(dump)
+    intent = recs[(seq, "intent")]
+    want = expected_intent(context, seq, number, key, ready_digest)
+    if intent != want:
+        fail(f"{label}: the intent of block {number} differs from the independent IMPORT intent: {intent}")
+    decided, rejected, marker = recs.get((seq, "decided")), recs.get((seq, "rejected")), markers(dump).get(seq)
+    if outcome == "DECIDED":
+        record = {"sequence": seq, "intent_digest": want["digest"], "delivery": "BATCH",
+                  "digest": decision.decided_digest(want["digest"], "BATCH")}
+        if decided != record or rejected is not None:
+            fail(f"{label}: block {number} is not NATIVE_DECIDED with one BATCH obligation: {decided} {rejected}")
+        if marker != decision.marker_value(want).decode():
+            fail(f"{label}: the native marker of block {number} is not the intent bytes")
+        closing = record["digest"]
+    else:
+        evidence = tagged_digest(TAG_DECISION_REJECTION, want["digest"], context["oracle"]["decision_rejection_error"])
+        record = {"sequence": seq, "intent_digest": want["digest"], "evidence_digest": evidence,
+                  "digest": decision.rejected_digest(want["digest"], evidence)}
+        if rejected != record or decided is not None or marker is not None:
+            fail(f"{label}: block {number} is not a native rejection without a marker: {rejected} {decided} {marker}")
+        closing = record["digest"]
+    seqhex = key.rsplit(".", 1)[1]
+    admitted = records(dump)
+    left = admitted.get((seqhex, "decided"))
+    if has(dump, PIN + key) or any(row["key"].startswith(INPUTS + key + "/") for row in dump) or \
+            (left is not None and left.get("decision_digest") != closing) or \
+            any(len(index) == 2 and index[0] == seqhex and index[1] != "decided" for index in admitted):
+        fail(f"{label}: the decided observation {key} kept a pin, inputs or another admission record")
+    return seq
+
+
+def check_decisions_once(context, dump, fail, label, result=None):
+    """One NATIVE_DECIDED decision per block in the store (a rejected intent
+    decides nothing, so a later application of the same block is a new
+    decision), and one delivery obligation per NATIVE_DECIDED BATCH decision
+    (the bridge's list, when given)."""
+    recs = decision_records(dump)
+    blocks = [m["block"] for (seq, *kind), value in recs.items() if kind == ["intent"] and (seq, "decided") in recs
+              for m in value.get("members") or []]
+    if len(blocks) != len(set(blocks)):
+        fail(f"{label}: a block has two decisions")
+    if result is not None:
+        batch = sorted(seq for (seq, *kind), value in recs.items() if kind == ["decided"] and value.get("delivery") == "BATCH")
+        if sorted(result.get("obligations") or []) != batch:
+            fail(f"{label}: the obligations {result.get('obligations')} are not the BATCH decisions {batch}")
+
+
+def snapshot_of(result, key):
+    return ((result or {}).get("snapshots") or {}).get(key)
+
+
+def ready_of(snapshot, key):
+    ready = records((snapshot or {}).get("rows") or []).get((key.rsplit(".", 1)[1], "exec-ready"))
+    return (ready or {}).get("digest")
+
+
 def check_completed(context, attempt, numbers, variant, fail, label):
     """Every listed block was observed in this attempt, reached EXEC_READY with
-    the expected counted calls fetched live, and was imported."""
+    the expected counted calls fetched live (checked on the snapshot taken at
+    its EXEC_READY sync), was imported, and has exactly one IMPORT decision."""
     result, dump = attempt["result"] or {}, attempt["store_after"]
     observed = observations_of(result)
     for number in numbers:
@@ -536,15 +686,21 @@ def check_completed(context, attempt, numbers, variant, fail, label):
         if obs is None or obs.get("error") or not obs.get("key"):
             fail(f"{label}: block {number} was not observed and imported")
             continue
-        sequence = int(obs["key"].rsplit(".", 1)[1], 16)
+        key = obs["key"]
+        sequence = int(key.rsplit(".", 1)[1], 16)
         want = expected_requests(context["oracle"], context["config"], context["chain"][number - 1], variant)
         check_rows(obs.get("counted_calls"), want, ["fetch"] * len(want), fail, f"{label}: block {number}",
                    context["body_sha256"])
-        if check_observation(context, dump, sequence, number, variant, fail, f"{label}: block {number}") != "EXEC_READY":
+        snap = snapshot_of(result, key)
+        if snap is None or check_observation(context, snap["rows"], sequence, number, variant, fail,
+                                             f"{label}: block {number}") != "EXEC_READY":
             fail(f"{label}: block {number} did not reach EXEC_READY")
-    last = context["chain"][numbers[-1] - 1]
-    if result.get("head_hash") != "0x" + last["hash"].hex():
-        fail(f"{label}: the imported head is not block {numbers[-1]}")
+            continue
+        check_decision(context, dump, number, key, ready_of(snap, key), fail, f"{label}: block {number}")
+    if numbers:
+        last = context["chain"][numbers[-1] - 1]
+        if result.get("head_hash") != "0x" + last["hash"].hex():
+            fail(f"{label}: the imported head is not block {numbers[-1]}")
 
 
 def lost_attempt(context, crash, dump, first, block):
@@ -561,6 +717,13 @@ def check_refused_before_recovery(result, fail, label):
         fail(f"{label}: GoLive was not refused while an obligation was pending")
     if "RECOVERY_ONLY" not in (result.get("begin_before_recovery") or ""):
         fail(f"{label}: Begin was not refused in RECOVERY_ONLY")
+
+
+def check_decision_recovery(result, fail, label, **want):
+    report = (result or {}).get("decision_recovery")
+    expected = {"resolved": [], "completed": [], "rejected": [], "imported": [], **want}
+    if report != expected:
+        fail(f"{label}: the decision recovery did {report}, expected {expected}")
 
 
 def compare(name, observed, context):
@@ -589,88 +752,31 @@ def compare(name, observed, context):
     kind, block = plan["kind"], plan.get("block")
     variant = lambda index: plan["attempts"][index]["variant"]
     if kind in ("lost-before-admitted", "lost-after-admitted", "lost-after-exec-ready"):
-        lost, retry = attempts[0], attempts[1]
-        dump = lost["store_after"]
-        crash = lost["crash_result"]
-        check_completed(context, lost_attempt(context, crash, dump, 1, block), list(range(1, block)), variant(0), fail,
-                        "lost attempt")
-        sequence = block - 1
-        key = key_of(sequence)
-        state = check_observation(context, dump, sequence, block, variant(0), fail, "lost attempt")
-        step = plan["crash_step"]
-        want_state = {"lost-before-admitted": "INPUT_PREPARING", "lost-after-admitted": "ADMITTED",
-                      "lost-after-exec-ready": "EXEC_READY"}[kind]
-        if state != want_state:
-            fail(f"the lost observation is {state}, expected {want_state}")
-        pinned, sealed = has(dump, PIN + key), has(dump, INPUTS + key + "/capsule")
-        if (pinned, sealed) != {"begin": (False, False), "pin": (True, False), "seal": (True, True)}.get(step, (True, True)):
-            fail(f"after a loss at {step} the pin is {pinned} and the capsule {sealed}")
-        saved = log_entries(dump, key)
-        want_saved = {"log-2": [0, 1, 2], "finish": [0, 1, 2, 3], "exec-ready": [0, 1, 2, 3]}.get(step, [])
-        if saved != want_saved:
-            fail(f"after a loss at {step} the durable log entries are {saved}, expected {want_saved}")
-        result = retry["result"] or {}
-        pending = [f"{key_of(s)} EXEC_READY" for s in range(sequence)] + [f"{key} {want_state}"]
-        if result.get("pending_at_open") != pending:
-            fail(f"the restart did not reopen the saved run with its obligations: {result.get('pending_at_open')}")
-        recovery = result.get("recovery") or {}
-        after = retry["store_after"]
-        if kind == "lost-before-admitted":
-            check_refused_before_recovery(result, fail, "restart")
-            if recovery.get("abandoned") != [key] or recovery.get("exec_ready") or recovery.get("rejected"):
-                fail(f"recovery did not abandon only the INPUT_PREPARING observation: {recovery}")
-            if state_of(records(after), sequence) != "ABANDONED" or has(after, PIN + key) or log_entries(after, key):
-                fail("the abandoned observation kept a pin, a log entry or another state")
-        elif kind == "lost-after-admitted":
-            check_refused_before_recovery(result, fail, "restart")
-            if recovery.get("exec_ready") != [key] or recovery.get("abandoned") or recovery.get("rejected"):
-                fail(f"recovery did not resolve the ADMITTED obligation to EXEC_READY: {recovery}")
-            want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], variant(0))
-            origins = ["replay"] * len(want_saved) + ["fetch"] * (len(want) - len(want_saved))
-            check_rows(result.get("recovery_counted_calls"), want, origins, fail, "recovery", context["body_sha256"])
-            changed = context["body_sha256"].get(plan.get("changed_body", ""))
-            if changed and any(r.get("response_sha256") == changed for r in result.get("recovery_counted_calls") or []):
-                fail("the changed external response reached recovery")
-            if records(after).get((f"{sequence:016x}", "admitted")) != records(dump).get((f"{sequence:016x}", "admitted")):
-                fail("recovery changed the ADMITTED record")
-            if check_observation(context, after, sequence, block, variant(0), fail, "recovery") != "EXEC_READY":
-                fail("the recovered obligation is not EXEC_READY")
-        else:
-            if recovery.get("exec_ready") or recovery.get("abandoned") or key not in (recovery.get("kept") or []):
-                fail(f"recovery did not keep the EXEC_READY observation for the decision bridge: {recovery}")
-        if kind == "lost-after-admitted" and variant(1) == "b":
-            # The live re-import of the block runs a new observation with the
-            # changed response; native validation rejects it.
-            obs = observations_of(result).get(block) or {}
-            new = sequence + 1
-            rejected = records(after).get((f"{new:016x}", "rejected"))
-            if not obs.get("error") or obs.get("key") != key_of(new) or not rejected or \
-                    rejected.get("evidence_digest") != rejection_digest(key_of(new), context["chain"][block - 1]["hash"].hex(),
-                                                                         obs["error"]):
-                fail("the live re-import with the changed response was not rejected with its evidence digest")
-            check_observation(context, after, new, block, variant(1), fail, "re-import")
-            done = attempts[2]
-            check_completed(context, done, list(range(block, plan["attempts"][2]["to"] + 1)), variant(2), fail, "third attempt")
-        else:
-            check_completed(context, retry, list(range(block, plan["attempts"][1]["to"] + 1)), variant(1), fail, "retry")
+        check_lost_obligation(context, plan, attempts, block, kind, variant, fail)
     elif kind == "native-rejection":
         first, second = attempts
         result, dump = first["result"] or {}, first["store_after"]
         sequence, key = block - 1, key_of(block - 1)
         obs = observations_of(result).get(block) or {}
-        rejected = records(dump).get((f"{sequence:016x}", "rejected"))
+        snap = snapshot_of(result, key) or {}
+        rejected = records(snap.get("rows") or []).get((f"{sequence:016x}", "rejected"))
         if "invalid merkle root" not in (obs.get("error") or "") or result.get("inserted") != block - 1:
             fail("native validation did not refuse the block with the changed state sync response")
         if not rejected or rejected.get("evidence_digest") != rejection_digest(key, context["chain"][block - 1]["hash"].hex(),
                                                                                 obs.get("error") or ""):
             fail("NATIVE_REJECTED does not bind the native rejection evidence")
-        if check_observation(context, dump, sequence, block, variant(0), fail, "rejected") != "NATIVE_REJECTED":
+        # The snapshot is taken at the rejected sync, before the pin release;
+        # the release is checked on the store after the attempt below.
+        rows = [row for row in snap.get("rows") or [] if row["key"] != PIN + key]
+        if check_observation(context, rows, sequence, block, variant(0), fail, "rejected") != "NATIVE_REJECTED":
             fail("the refused observation is not NATIVE_REJECTED")
         want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], variant(0))
         check_rows(obs.get("counted_calls"), want, ["fetch"] * len(want), fail, "rejected", context["body_sha256"])
-        if has(dump, PIN + key) or has(dump, INPUTS + key + "/closed"):
-            fail("the rejected observation kept its pin or closed its log")
+        if has(dump, PIN + key) or any(row["key"].startswith(INPUTS + key + "/") for row in dump) or intents_naming(dump, key):
+            fail("the rejected observation kept its pin or inputs, or has a decision")
+        check_completed(context, first, list(range(1, block)), variant(0), fail, "first attempt")
         check_completed(context, second, list(range(block, plan["attempts"][1]["to"] + 1)), variant(1), fail, "retry")
+        check_decisions_once(context, second["store_after"], fail, "retry", second["result"])
     elif kind == "checkpoint-rio":
         check_checkpoint_rio(context, plan, attempts, block, fail)
     elif kind == "rpc-window":
@@ -679,14 +785,267 @@ def compare(name, observed, context):
         check_prune_block(context, plan, attempts, fail)
     elif kind == "prune-block-frozen":
         check_prune_block_frozen(context, plan, attempts, fail)
+    elif kind == "decision-crash":
+        check_decision_crash(context, plan, attempts, block, fail)
+    elif kind == "decision-rejected":
+        check_decision_rejected(context, plan, attempts, block, fail)
+    elif kind == "known-block":
+        check_known_block(context, plan, attempts, fail)
     else:
         fail(f"unknown scenario kind {kind}")
     return failures
 
 
-def check_checkpoint_rio(context, plan, attempts, block, fail):
+def check_lost_obligation(context, plan, attempts, block, kind, variant, fail):
+    """AC-CAP-02-01, AC-CAP-02-02, and with the decision bridge AC-CAP-07-01
+    (loss of a partly written corpus before EXEC_READY: no decision exists for
+    it, recovery reuses the saved obligation, and the native import of the
+    block completes in RECOVERY_ONLY with one decision) and AC-CAP-07-02 (loss
+    after EXEC_READY with the child state volatile: native-only replay from the
+    capsule and the closed log, the same EXEC_READY record bound by the
+    decision)."""
     lost, retry = attempts[0], attempts[1]
+    dump = lost["store_after"]
+    crash = lost["crash_result"]
+    check_completed(context, lost_attempt(context, crash, dump, 1, block), list(range(1, block)), variant(0), fail,
+                    "lost attempt")
+    sequence = block - 1
+    key = key_of(sequence)
+    state = check_observation(context, dump, sequence, block, variant(0), fail, "lost attempt")
+    step = plan["crash_step"]
+    want_state = {"lost-before-admitted": "INPUT_PREPARING", "lost-after-admitted": "ADMITTED",
+                  "lost-after-exec-ready": "EXEC_READY"}[kind]
+    if state != want_state:
+        fail(f"the lost observation is {state}, expected {want_state}")
+    pinned, sealed = has(dump, PIN + key), has(dump, INPUTS + key + "/capsule")
+    if (pinned, sealed) != {"begin": (False, False), "pin": (True, False), "seal": (True, True)}.get(step, (True, True)):
+        fail(f"after a loss at {step} the pin is {pinned} and the capsule {sealed}")
+    saved = log_entries(dump, key)
+    want_saved = {"log-2": [0, 1, 2], "finish": [0, 1, 2, 3], "exec-ready": [0, 1, 2, 3]}.get(step, [])
+    if saved != want_saved:
+        fail(f"after a loss at {step} the durable log entries are {saved}, expected {want_saved}")
+    if intents_naming(dump, key):
+        fail("the lost observation has a decision before the restart")
+    result = retry["result"] or {}
+    if result.get("pending_at_open") != [f"{key} {want_state}"]:
+        fail(f"the restart did not reopen the saved run with its obligation: {result.get('pending_at_open')}")
+    recovery = result.get("recovery") or {}
+    after = retry["store_after"]
+    want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], variant(0))
+    if kind == "lost-before-admitted":
+        check_refused_before_recovery(result, fail, "restart")
+        if recovery.get("abandoned") != [key] or recovery.get("exec_ready") or recovery.get("rejected"):
+            fail(f"recovery did not abandon only the INPUT_PREPARING observation: {recovery}")
+        snap = snapshot_of(result, key) or {}
+        if state_of(records(snap.get("rows") or []), sequence) != "ABANDONED" or has(after, PIN + key) or \
+                any(row["key"].startswith(INPUTS + key + "/") for row in after) or intents_naming(after, key):
+            fail("the abandoned observation kept a pin or inputs, has a decision, or was not ABANDONED")
+        check_decision_recovery(result, fail, "restart")
+        check_completed(context, retry, list(range(block, plan["attempts"][1]["to"] + 1)), variant(1), fail, "retry")
+    else:
+        if kind == "lost-after-admitted":
+            check_refused_before_recovery(result, fail, "restart")
+            if recovery.get("exec_ready") != [key] or recovery.get("abandoned") or recovery.get("rejected"):
+                fail(f"recovery did not resolve the ADMITTED obligation to EXEC_READY: {recovery}")
+            origins = ["replay"] * len(want_saved) + ["fetch"] * (len(want) - len(want_saved))
+            check_rows((result.get("recovery_counted_calls") or [])[:len(want)], want, origins, fail, "recovery",
+                       context["body_sha256"])
+            changed = context["body_sha256"].get(plan.get("changed_body", ""))
+            if changed and any(r.get("response_sha256") == changed for r in result.get("recovery_counted_calls") or []):
+                fail("the changed external response reached recovery")
+            snap = snapshot_of(result, key) or {}
+            if records(snap.get("rows") or []).get((f"{sequence:016x}", "admitted")) != \
+                    records(dump).get((f"{sequence:016x}", "admitted")):
+                fail("recovery changed the ADMITTED record")
+            if check_observation(context, snap.get("rows") or [], sequence, block, variant(0), fail, "recovery") != \
+                    "EXEC_READY":
+                fail("the recovered obligation is not EXEC_READY")
+            ready = ready_of(snap, key)
+            # The obligation's replay rows come first; the completion replays
+            # the now closed log again before the native import.
+            rows = result.get("recovery_counted_calls") or []
+            check_rows(rows[len(want):], want, ["replay"] * len(want), fail, "completion replay", context["body_sha256"])
+        else:
+            if recovery.get("exec_ready") or recovery.get("abandoned") or key not in (recovery.get("kept") or []):
+                fail(f"recovery did not keep the EXEC_READY observation for the decision bridge: {recovery}")
+            # AC-CAP-07-02: the child state was volatile; the completion
+            # replays the capsule and closed log natively, fetching nothing.
+            if (result.get("child_roots_at_open") or {}).get(key) is not False:
+                fail(f"the child state of the lost block was durable at the restart: {result.get('child_roots_at_open')}")
+            check_rows(result.get("recovery_counted_calls"), want, ["replay"] * len(want), fail, "completion replay",
+                       context["body_sha256"])
+            ready = (records(dump).get((f"{sequence:016x}", "exec-ready")) or {}).get("digest")
+        if block in (result.get("stored_at_open") or []) or result.get("head_number_at_open") != block - 1:
+            fail("the lost block was stored before the recovery")
+        seq = check_decision(context, after, block, key, ready, fail, "recovery")
+        check_decision_recovery(result, fail, "restart",
+                                imported=[{"observation": key, "sequence": seq, "outcome": "NATIVE_DECIDED"}])
+        # The recovery imported the block; the live import does not observe it again.
+        if block in observations_of(result):
+            fail("the block decided in recovery was observed again by the live import")
+        check_completed(context, retry, list(range(block + 1, plan["attempts"][1]["to"] + 1)), variant(1), fail,
+                        "retry")
+        if len(attempts) > 2:
+            third = attempts[2]["result"] or {}
+            if third.get("observations") or third.get("head_hash") != "0x" + context["chain"][
+                    plan["attempts"][2]["to"] - 1]["hash"].hex():
+                fail("the third attempt observed a block again or moved the head")
+    check_decisions_once(context, attempts[-1]["store_after"], fail, "final", attempts[-1]["result"])
+
+
+def check_decision_crash(context, plan, attempts, block, fail):
+    """AC-CAP-07-02 and AC-CAP-07-03: a loss at one step of the decision of
+    `block` after its EXEC_READY. The restart settles it in RECOVERY_ONLY from
+    native evidence: before the intent, the import completes with a new
+    decision; with an intent and no marker (before or inside the native
+    mutation), native recovery completes exactly the saved transition; with
+    the marker, the intent is resolved; with the decided record, the opening
+    closes the observation. In every case the block has one decision, the
+    same EXEC_READY record, and one obligation."""
+    lost, retry = attempts[0], attempts[1]
+    crash, dump = lost["crash_result"], lost["store_after"]
+    check_completed(context, lost_attempt(context, crash, dump, 1, block), list(range(1, block)), "a", fail,
+                    "lost attempt")
+    sequence, key, step = block - 1, key_of(block - 1), plan["crash_step"]
+    snap = snapshot_of(crash, key)
+    if snap is None or check_observation(context, snap["rows"], sequence, block, "a", fail, "lost block") != "EXEC_READY":
+        fail("the lost block did not reach EXEC_READY before the loss")
+        return
+    ready = ready_of(snap, key)
+    recs, marks = decision_records(dump), markers(dump)
+    found = intents_naming(dump, key)
+    seq = block - 1
+    want_intent = expected_intent(context, seq, block, key, ready)
+    result = retry["result"] or {}
+    stored, head = block in (result.get("stored_at_open") or []), result.get("head_number_at_open")
+    if step == "child-root":
+        if found or state_of(records(dump), sequence) != "EXEC_READY":
+            fail("after a loss at the child-root barrier the block has a decision or is not EXEC_READY")
+        if (result.get("child_roots_at_open") or {}).get(key) is not True or stored or head != block - 1:
+            fail("the child state was not durable, or the block was stored, before the intent")
+        report = {"imported": [{"observation": key, "sequence": seq, "outcome": "NATIVE_DECIDED"}]}
+    else:
+        if found != [seq] or recs.get((seq, "intent")) != want_intent:
+            fail(f"after a loss at {step} the saved intent is not the independent intent: {found}")
+        decided = recs.get((seq, "decided"))
+        marker = marks.get(seq)
+        want_marker = {"intent": None, "block-batch": None}.get(step, decision.marker_value(want_intent).decode())
+        if marker != want_marker or (decided is not None) != (step == "decided"):
+            fail(f"after a loss at {step} the marker is {marker!r} and the decided record {decided}")
+        want_stored = step in ("block-batch", "marker", "decided")
+        want_head = block if step in ("marker", "decided") else block - 1
+        if stored != want_stored or head != want_head:
+            fail(f"after a loss at {step} the block is stored {stored} with head {head}, expected {want_stored} "
+                 f"with head {want_head}")
+        report = {"intent": {"completed": [seq]}, "block-batch": {"completed": [seq]}, "marker": {"resolved": [seq]},
+                  "decided": {}}[step]
+        if step == "decided" and result.get("pending_at_open") != [f"{key} EXEC_READY"]:
+            fail(f"the decided observation was not open at the restart: {result.get('pending_at_open')}")
+    check_decision_recovery(result, fail, "restart", **report)
+    want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], "a")
+    replays = ["replay"] * len(want) if step in ("child-root", "intent", "block-batch") else []
+    check_rows(result.get("recovery_counted_calls"), want if replays else [], replays, fail, "recovery",
+               context["body_sha256"])
+    after = retry["store_after"]
+    if check_decision(context, after, block, key, ready, fail, "recovery") != seq:
+        fail("the recovered decision does not have the saved sequence")
+    if block in observations_of(result):
+        fail("the decided block was observed again")
+    check_completed(context, retry, list(range(block + 1, plan["attempts"][1]["to"] + 1)), "a", fail, "retry")
+    check_decisions_once(context, after, fail, "final", result)
+
+
+def check_decision_rejected(context, plan, attempts, block, fail):
+    """AC-CAP-07-06: a whitelisted milestone that conflicts with `block`
+    arrives after its EXEC_READY; the native check refuses the write after the
+    intent. Live, the intent is rejected at once; after a loss before
+    RejectIntent, the restart repeats the native check from the saved inputs
+    (the milestone is stored natively) and records the rejection. Either way:
+    no marker, no NATIVE_DECIDED record and no obligation for the block, the
+    head stays below it, and the observation is closed."""
+    key, seq = key_of(block - 1), block - 1
+    first = attempts[0]
+    crash = first["crash_result"] if plan["attempts"][0]["crash"] else first["result"]
+    check_completed(context, lost_attempt(context, crash, first["store_after"], 1, block), list(range(1, block)), "a",
+                    fail, "first attempt")
+    snap = snapshot_of(crash, key)
+    if snap is None or check_observation(context, snap["rows"], seq, block, "a", fail, "refused block") != "EXEC_READY":
+        fail("the refused block did not reach EXEC_READY")
+        return
+    ready = ready_of(snap, key)
+    if plan["attempts"][0]["crash"]:
+        dump = first["store_after"]
+        want_intent = expected_intent(context, seq, block, key, ready)
+        recs = decision_records(dump)
+        if intents_naming(dump, key) != [seq] or recs.get((seq, "intent")) != want_intent or \
+                recs.get((seq, "rejected")) or recs.get((seq, "decided")) or seq in markers(dump):
+            fail("after the loss the refused intent is not saved unresolved without a marker")
+        final = attempts[1]
+        result = final["result"] or {}
+        if block in (result.get("stored_at_open") or []) or result.get("head_number_at_open") != block - 1:
+            fail("the refused block was stored before the recovery")
+        check_decision_recovery(result, fail, "restart", rejected=[seq])
+        want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], "a")
+        check_rows(result.get("recovery_counted_calls"), want, ["replay"] * len(want), fail, "recovery",
+                   context["body_sha256"])
+        # Native Bor's pre-import check passes the block (the head is below the
+        # milestone), so the live import may execute it again: a new
+        # observation and a new intent that the native check refuses again.
+        again = observations_of(result).get(block)
+        if again is None:
+            fail("the live import did not execute the refused block again after the restart")
+        else:
+            snap = snapshot_of(result, again.get("key") or "")
+            if snap is None or check_observation(context, snap["rows"], int(again["key"].rsplit(".", 1)[1], 16), block,
+                                                 "a", fail, "re-import") != "EXEC_READY":
+                fail("the re-imported refused block did not reach EXEC_READY")
+            else:
+                check_decision(context, final["store_after"], block, again["key"], ready_of(snap, again["key"]), fail,
+                               "re-import", outcome="REJECTED")
+    else:
+        final = first
+        result = final["result"] or {}
+    if context["oracle"]["decision_rejection_error"] not in (result.get("import_error") or "") or \
+            result.get("head_hash") != "0x" + context["chain"][block - 2]["hash"].hex():
+        fail(f"the refused block was imported or the import did not stop: {result.get('import_error')}")
+    check_decision(context, final["store_after"], block, key, ready, fail, "rejection", outcome="REJECTED")
+    check_decisions_once(context, final["store_after"], fail, "final", result)
+    if seq in (result.get("obligations") or []):
+        fail("the rejected intent has a delivery obligation")
+
+
+def check_known_block(context, plan, attempts, fail):
+    """One decision per block after a restart (D100): the native import of a
+    block already in the chain with its state opens no observation and no
+    decision."""
+    first, second = attempts
+    numbers = list(range(plan["attempts"][0]["from"], plan["attempts"][0]["to"] + 1))
+    check_completed(context, first, numbers, "a", fail, "import")
+    result = second["result"] or {}
+    if result.get("observations") or result.get("reimport_error") or \
+            result.get("stored_at_open") != numbers or result.get("head_number_at_open") != numbers[-1]:
+        fail(f"the re-import of stored blocks opened an observation or failed: {result.get('observations')} "
+             f"{result.get('reimport_error')}")
+    before, after = first["store_after"], second["store_after"]
+    counters = lambda dump: (value(dump, ADMISSION + "counter"), decision_records(dump).get(("counter",)))
+    if counters(after) != counters(before) or decision_records(after) != decision_records(before) or \
+            markers(after) != markers(before):
+        fail("the re-import of stored blocks changed an admission or decision record")
+    check_decision_recovery(result, fail, "restart")
+    check_decisions_once(context, after, fail, "final", result)
+
+
+def check_checkpoint_rio(context, plan, attempts, block, fail):
+    """Post-Rio loss with two saved span reads (AC-CAP-02-02, AC-CAP-04-03),
+    the native snapshot walk, and the retention guards while a pin is live:
+    SetHead before the recovery (the saved obligation keeps its pin), then a
+    loss after the EXEC_READY of the last block keeps that pin live for the
+    store identity, startup prune recovery and prune-state refusals (the last
+    block stays undecided: the leftover state bloom filter of attempt 3 would
+    refuse every later start while its pin is live)."""
+    lost, second = attempts[0], attempts[1]
     first = plan["attempts"][0]["from"]
+    last = plan["attempts"][1]["to"]
     crash = lost["crash_result"]
     check_completed(context, lost_attempt(context, crash, lost["store_after"], first, block), list(range(first, block)),
                     "a", fail, "lost attempt")
@@ -695,22 +1054,33 @@ def check_checkpoint_rio(context, plan, attempts, block, fail):
     dump = lost["store_after"]
     if state_of(records(dump), sequence) != "ADMITTED" or log_entries(dump, key) != [0, 1]:
         fail("the lost post-Rio observation is not ADMITTED with two durable entries")
-    result = retry["result"] or {}
-    check_refused_before_recovery(result, fail, "restart")
-    want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], "a")
-    check_rows(result.get("recovery_counted_calls"), want, ["replay", "replay"] + ["fetch"] * (len(want) - 2), fail,
-               "recovery", context["body_sha256"])
-    if (result.get("recovery") or {}).get("exec_ready") != [key] or \
-            check_observation(context, retry["store_after"], sequence, block, "a", fail, "recovery") != "EXEC_READY":
-        fail("recovery did not resolve the post-Rio obligation from its capsule and saved span reads")
-    check_completed(context, retry, list(range(block, plan["attempts"][1]["to"] + 1)), "a", fail, "retry")
-    walk = result.get("walk_check") or {}
-    if walk.get("block") != plan["attempts"][1]["walk_check"] or walk.get("complete_list_error") != "<nil>" or \
+    walk = crash.get("walk_check") or {}
+    if walk.get("block") != plan["attempts"][0]["walk_check"] or walk.get("complete_list_error") != "<nil>" or \
             "unknown ancestor" not in (walk.get("truncated_list_error") or ""):
         fail(f"the native snapshot walk does not stop at the checkpoint and need every header above it: {walk}")
+    result = second["crash_result"] or {}
+    check_refused_before_recovery(result, fail, "restart")
     if "live pins forbid" not in (result.get("set_head_error") or ""):
         fail("native SetHead below a pinned header was not refused")
-    final = retry["store_after"]
+    want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], "a")
+    rows = result.get("recovery_counted_calls") or []
+    check_rows(rows[:len(want)], want, ["replay", "replay"] + ["fetch"] * (len(want) - 2), fail, "recovery",
+               context["body_sha256"])
+    check_rows(rows[len(want):], want, ["replay"] * len(want), fail, "completion replay", context["body_sha256"])
+    snap = snapshot_of(result, key)
+    if (result.get("recovery") or {}).get("exec_ready") != [key] or snap is None or \
+            check_observation(context, snap["rows"], sequence, block, "a", fail, "recovery") != "EXEC_READY":
+        fail("recovery did not resolve the post-Rio obligation from its capsule and saved span reads")
+        return
+    seq = check_decision(context, second["store_after"], block, key, ready_of(snap, key), fail, "recovery")
+    check_decision_recovery(result, fail, "restart",
+                            imported=[{"observation": key, "sequence": seq, "outcome": "NATIVE_DECIDED"}])
+    check_completed(context, lost_attempt(context, result, second["store_after"], first, last),
+                    list(range(block + 1, last)), "a", fail, "second attempt")
+    pinned = key_of(last - first)
+    final = second["store_after"]
+    if state_of(records(final), last - first) != "EXEC_READY" or not has(final, PIN + pinned):
+        fail(f"the loss after the EXEC_READY of block {last} did not keep its pin live")
     for index, reason in ((2, "native store identity mismatch"), (3, "guarded state pruning recovery: live pins forbid")):
         row = attempts[index]
         if reason not in ((row["result"] or {}).get("error") or "") or row["store_after"] != final:
@@ -720,6 +1090,7 @@ def check_checkpoint_rio(context, plan, attempts, block, fail):
         fail("the patched bor snapshot prune-state did not refuse the live pins")
     if accepted.get("refused_live_pins") is not False:
         fail("the accepted bor binary refused the live pins, so the refusal does not prove the patch")
+    check_decisions_once(context, final, fail, "final")
 
 
 def request_path(request):
@@ -772,9 +1143,11 @@ def check_rpc_window(context, plan, attempts, block, fail):
             expired.get("held_request") != "GET /bor/spans/1" or expired.get("held_at_observe") is not True:
         fail(f"no detached span fetch of an expired lookup was in flight when the window of block {at} started: "
              f"{expired}")
-    ready = sorted(int(seq, 16) for (seq, *rest) in records(row["store_after"]) if rest == ["exec-ready"])
+    # Each observation replays from its saved inputs right after its
+    # EXEC_READY, before its decision closes it.
     replays = result.get("replays") or []
-    if [r.get("key") for r in replays] != [key_of(sequence) for sequence in ready] or len(ready) != len(numbers):
+    keys = [observations_of(result).get(number, {}).get("key") for number in numbers]
+    if [r.get("key") for r in replays] != keys:
         fail(f"the replays do not cover every EXEC_READY observation: {[r.get('key') for r in replays]}")
     for replay in replays:
         number = step["from"] + int(replay["key"].rsplit(".", 1)[1], 16)
@@ -808,9 +1181,14 @@ def check_prune_block(context, plan, attempts, fail):
     tool = lambda index: attempts[index]["prune_state"]
     tail = lambda index: tool(index).get("output_tail") or ""
     if plan["pins"]:
-        check_completed(context, first, numbers, "a", fail, "import")
-        if not any(row["key"].startswith(PIN) for row in first["store_after"]):
-            fail("no pin is live before the prune")
+        # A loss right after the EXEC_READY of the last block keeps its pin
+        # live: decided blocks hold none.
+        last = numbers[-1]
+        check_completed(context, lost_attempt(context, first["crash_result"], first["store_after"], numbers[0], last),
+                        numbers[:-1], "a", fail, "import")
+        pins = [row["key"] for row in first["store_after"] if row["key"].startswith(PIN)]
+        if pins != [PIN + key_of(last - numbers[0])]:
+            fail(f"the live pins before the prune are {pins}, expected the pin of block {last}")
         patched = attempts[1]
         if tool(1).get("command") != "prune-block" or tool(1).get("refused_live_pins") is not True or \
                 want["refusal"] not in tail(1) or want["native_error"] in tail(1):
@@ -834,40 +1212,49 @@ def check_prune_block(context, plan, attempts, fail):
 
 
 def check_prune_block_frozen(context, plan, attempts, fail):
-    """D100 item 1 with a non-empty freezer: the native freezer moves pinned
-    headers into the ancient store (finalized block `finalize`), and they stay
-    readable; the patched prune-block refuses for the live pins before any
-    native step, with no store or ancient change. Control: the accepted binary
-    reaches its native store open, which in this source cannot open a store
-    whose freezer holds blocks (OpenDatabaseWithFreezer drops its ancient
-    argument), so it stops there and prunes nothing; every pin stays
-    readable afterwards."""
+    """D100 item 1 with a non-empty freezer: the native freezer freezes the
+    blocks up to the finalized block `finalize`, then a loss right after the
+    EXEC_READY of the next block keeps its pin live; the patched prune-block
+    refuses for that pin before any native step, with no store or ancient
+    change. Control: the accepted binary reaches its native store open, which
+    in this source cannot open a store whose freezer holds blocks
+    (OpenDatabaseWithFreezer drops its ancient argument), so it stops there
+    and prunes nothing. The final restart decides the lost block."""
     want = context["oracle"]["prune_block"]
     steps = plan["attempts"]
     first = attempts[0]
     check_completed(context, first, list(range(steps[0]["from"], steps[0]["to"] + 1)), "a", fail, "import")
-    frozen = (attempts[1]["result"] or {}).get("pins_after_freeze") or {}
-    pins = frozen.get("pins") or []
-    ancients = frozen.get("ancients") or 0
-    if ancients <= plan["finalize"] or not any(min(p.get("headers") or [ancients]) < ancients for p in pins) or \
-            any(p.get("verify_error") for p in pins):
-        fail(f"the native freezer did not move readable pinned headers into the ancient store: {frozen}")
+    lost = attempts[1]
+    frozen = (lost["crash_result"] or {}).get("pins_after_freeze") or {}
+    if (frozen.get("ancients") or 0) <= plan["finalize"] or any(p.get("verify_error") for p in frozen.get("pins") or []):
+        fail(f"the native freezer did not freeze the finalized blocks: {frozen}")
+    block = steps[1]["from"]
+    key = key_of(block - 1)
+    if [row["key"] for row in lost["store_after"] if row["key"].startswith(PIN)] != [PIN + key] or \
+            state_of(records(lost["store_after"]), block - 1) != "EXEC_READY":
+        fail(f"the loss after the EXEC_READY of block {block} did not keep its pin live")
     tool = lambda index: attempts[index]["prune_state"]
     tail = lambda index: tool(index).get("output_tail") or ""
     patched = attempts[2]
     if tool(2).get("command") != "prune-block" or tool(2).get("refused_live_pins") is not True or \
             want["refusal"] not in tail(2) or want["native_frozen_open_error"] in tail(2):
         fail(f"the patched prune-block did not refuse the live pins over a non-empty freezer: {tool(2)}")
-    if patched["store_after"] != patched["store_before"] or patched["ancient_after"] != patched["ancient_before"] or \
-            not patched["ancient_before"]:
+    if patched["store_before"] != lost["store_after"] or patched["store_after"] != patched["store_before"] or \
+            patched["ancient_after"] != patched["ancient_before"] or not patched["ancient_before"]:
         fail("the refused prune-block changed the store or the ancient directory, or the freezer was empty")
     accepted = attempts[3]
     if tool(3).get("refused_live_pins") is not False or want["native_frozen_open_error"] not in tail(3) or \
             accepted["ancient_after"] != accepted["ancient_before"]:
         fail(f"the accepted bor binary did not stop at its native store open over the frozen store: {tool(3)}")
-    after = (attempts[4]["result"] or {}).get("pins_after_freeze") or {}
-    if not after.get("pins") or any(p.get("verify_error") for p in after["pins"]):
+    end = attempts[4]
+    after = (end["result"] or {}).get("pins_after_freeze") or {}
+    if after.get("pins") is None or any(p.get("verify_error") for p in after["pins"]):
         fail(f"a pin is unreadable after the prune attempts: {after}")
+    ready = (records(lost["store_after"]).get((f"{block - 1:016x}", "exec-ready")) or {}).get("digest")
+    seq = check_decision(context, end["store_after"], block, key, ready, fail, "final recovery")
+    check_decision_recovery(end["result"], fail, "final restart",
+                            imported=[{"observation": key, "sequence": seq, "outcome": "NATIVE_DECIDED"}])
+    check_decisions_once(context, end["store_after"], fail, "final", end["result"])
 
 
 def checked_compare(name, observed, context):
@@ -877,11 +1264,19 @@ def checked_compare(name, observed, context):
         return [f"{name}: malformed observation: {type(error).__name__}: {error}"]
 
 
-def checkpoints(observed):
+def checkpoints(observed, scenario=None):
     """Observed checkpoint-snapshot items by (block, SHA-256), from the probe's
-    item dumps; the judge checks each against the ancestor rule."""
+    item dumps of the capsules left at the end and of the EXEC_READY
+    snapshots (a decision deletes the capsule); the judge checks each against
+    the ancestor rule."""
     out = {}
-    for row in observed.get("checkpoint_items") or []:
+    rows = list(observed.get("checkpoint_items") or [])
+    for attempt in (scenario or {}).get("attempts") or []:
+        for result in (attempt.get("result"), attempt.get("crash_result")):
+            for snap in ((result or {}).get("snapshots") or {}).values():
+                if snap.get("block"):
+                    rows.append({"block": snap["block"], "data": snap.get("checkpoint_item") or ""})
+    for row in rows:
         data = bytes.fromhex(row["data"])
         out[(row["block"], hashlib.sha256(data).hexdigest())] = data
     return out
@@ -963,7 +1358,7 @@ def run(preparation_path, expected_sha, output):
                                 (plans, "/plans", True), (output, "/out", False)],
                                cap=900, memory="4g")
                 observed = load_scenario(output / name, deadline)
-                context["checkpoints"] = checkpoints(observed_checkpoints(output / name, deadline))
+                context["checkpoints"] = checkpoints(observed_checkpoints(output / name, deadline), observed)
                 failures = checked_compare(name, observed, context)
                 record["scenarios"][name] = {"ac": plan["ac"], "scenario": reference(output / name / "scenario.json"),
                                              "failures": failures,

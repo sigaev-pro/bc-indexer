@@ -74,8 +74,10 @@ its retry loop at once, as in native Bor). The next `Observe`, or
 capsule before any new `Begin`, so no restart is needed.
 
 The native steps after `ProcessBlock` (the milestone whitelist check
-`ValidateReorg` and the block write) are the native decision, which belongs
-to E01-02.decision_bridge.
+`ValidateReorg` and the block write) are the native decision of
+E01-02.decision_bridge: the child-root barrier, the intent, the native check
+and the write with the decision marker
+([../../decision/native/README.md](../../decision/native/README.md)).
 
 While an observer is installed, `insertChainWithWitnesses`, which every
 batch import passes (the side-chain re-import too), imports one block at a
@@ -245,19 +247,31 @@ the probe starts native Bor with that profile.
 `borimport.Preflight` refuses a stopped native store of another identity
 (`state_provider.Preflight`) before the node opens it. `Start` binds the store
 identity, reopens the saved producer run (`extractor-admission-run-v1/producer/<id>`),
-installs the router and opens the admission in RECOVERY_ONLY. `Recover`
-abandons each INPUT_PREPARING observation, and for each ADMITTED obligation
-opens its log window, purges the caches, verifies the header from the capsule
-and re-executes the capsule block with `ProcessBlock` on the pinned parent
-state; then `ExecReady` or `Reject`. Only then does it switch to LIVE and
-install the observer. Any other failure leaves the admission in
-RECOVERY_ONLY. EXEC_READY observations stay for the decision bridge.
-Re-execution in recovery writes no block: a later native import of the same
-block opens a new observation, and the decision bridge decides once per
-candidate.
+installs the router and opens the admission in RECOVERY_ONLY with
+`admission.OpenWithCleanup` and a `source_inputs.Purge` adapter
+(E01-02.decision_bridge, D100): closing an observation deletes its capsule,
+dependency log and admission records. A store written before this switch must
+be discarded, not reused. `Recover` abandons each INPUT_PREPARING
+observation, and for each ADMITTED obligation opens its log window, purges the
+caches, verifies the header from the capsule and re-executes the capsule
+block with `ProcessBlock` on the pinned parent state; then `ExecReady` or
+`Reject`. Only then does it switch to LIVE (through the decision bridge,
+below) and install the observer. Any
+other failure leaves the admission in RECOVERY_ONLY. Re-execution in this
+step writes no block.
 
-`Replay` (`obligation.Driver.Replay`, `borimport.Node.Replay`) checks a saved
-EXEC_READY observation without changing it: with its closed log in the
+The product start is `bordecision.Start` (E01-02.decision_bridge), which runs
+the same recovery through `RecoverThen` (obligation `Driver.RecoverThen`, with
+the guard still held) and, instead of the admission's `GoLive`, the decision
+recovery: it settles the saved intent and completes the native import of every
+EXEC_READY observation (the re-executed obligations included) in
+RECOVERY_ONLY, then `decision.Bridge.GoLive`; see
+[../../decision/native/README.md](../../decision/native/README.md).
+
+`Replay` (`obligation.Driver.Replay`, `borimport.Node.Replay`; `ReplayHeld`
+for a caller that holds the guard, as the decision recovery does before it
+completes a native import) checks a saved EXEC_READY observation without
+changing it: with its closed log in the
 router, it opens the window, verifies the header from the capsule and
 re-executes the block on the pinned parent state. Every counted read must be
 served from the log (a read past the closed log stops the window), every
@@ -377,13 +391,14 @@ adapter, and the native tests drive them with a real EVM run.
   opens the store with `OpenDatabaseWithOptions`, which resolves the ancient
   directory, so it refuses for the live pins before that native step, and it
   stays in front of the pruner if a later source fixes the open.
-- `bor snapshot prune-block` refuses while any pin is live, EXEC_READY pins
-  that the decision bridge still holds included; pruning ancient blocks
-  needs every obligation resolved first. The probe chain (1,040 blocks) is
-  shorter than the freezer threshold (90,000), so `prune-block-frozen` marks
-  block 30 finalized and the native freezer freezes blocks 0 to 30 with their
-  pinned headers; the refusal is measured over that non-empty freezer as
-  well as over an empty one. No run exercises a native deletion: the
+- `bor snapshot prune-block` refuses while any pin is live. With the decision
+  bridge a pin stays live only while the decision of its block is pending
+  (or while a `SIDE` decision retains it, until E05-01.activation_gc), so the
+  probe keeps one live by a loss right after an EXEC_READY. The probe chain
+  (1,040 blocks) is shorter than the freezer threshold (90,000), so
+  `prune-block-frozen` marks block 30 finalized and the native freezer
+  freezes blocks 0 to 30; the refusal is measured over that non-empty freezer
+  as well as over an empty one. No run exercises a native deletion: the
   accepted pruner cannot open a store with frozen blocks (see above) and
   stops at an empty freezer.
 - In the probe, `SetHead` and the startup prune recovery are refused inside
@@ -391,5 +406,5 @@ adapter, and the native tests drive them with a real EVM run.
   shipped binary itself runs `snapshot prune-state`, and the preparation
   records that `./cmd/cli` depends on `borwire`.
 - Process loss in the probe is a real SIGKILL right after a sync, not a power
-  cut; a process kill keeps unsynced writes, so loss of unsynced writes is
+  cut; the records that matter are synced before the loss, so loss of unsynced writes is
   covered only by the unit tests of the shared core.

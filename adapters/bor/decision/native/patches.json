@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "description": "Bor native patch set of E01-02.decision_bridge: the decision path of the product import (child-root barrier, intent, native check, decision marker in the final authoritative batch). Applied after adapters/bor/admission/native/patches.json; see adapters/bor/decision/native/README.md.",
+  "files": {
+    "core/zz_extractor_decision.go": "tree/core/zz_extractor_decision.go",
+    "core/zz_extractor_decision_test.go": "tree/core/zz_extractor_decision_test.go"
+  },
+  "edits": [
+    {
+      "name": "decision-import-write",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "\t\treorgCheckStart := time.Now()\n\t\tisValid, err = bc.forker.ValidateReorg(block.Header(), []*types.Header{block.Header()})\n\t\treorgCheckElapsed := time.Since(reorgCheckStart)\n\t\tnormalImportReorgCheckTimer.Update(reorgCheckElapsed)\n\t\tif err != nil {\n\t\t\treturn nil, it.index, err\n\t\t}\n\t\tif !isValid {\n\t\t\treturn nil, it.index, whitelist.ErrMismatch\n\t\t}\n\n\t\tif !setHead {\n\t\t\t// Don't set the head, only insert the block\n\t\t\t_, err = bc.writeBlockWithState(block, receipts, logs, statedb)\n\t\t} else {\n\t\t\tstatus, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false, false)\n\t\t}\n",
+      "text": "\t\treorgCheckStart := time.Now()\n\t\tvar reorgCheckElapsed time.Duration\n\t\tif decider := bc.extractorDecider(); decider != nil {\n\t\t\t// Extractor (E01-02.decision_bridge): child-root barrier, intent,\n\t\t\t// native check, write with the decision marker, Resolve.\n\t\t\tstatus, reorgCheckElapsed, err = bc.extractorWriteDecided(decider, block, receipts, logs, statedb, setHead, nil)\n\t\t\tnormalImportReorgCheckTimer.Update(reorgCheckElapsed)\n\t\t} else {\n\t\t\tisValid, err = bc.forker.ValidateReorg(block.Header(), []*types.Header{block.Header()})\n\t\t\treorgCheckElapsed = time.Since(reorgCheckStart)\n\t\t\tnormalImportReorgCheckTimer.Update(reorgCheckElapsed)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, it.index, err\n\t\t\t}\n\t\t\tif !isValid {\n\t\t\t\treturn nil, it.index, whitelist.ErrMismatch\n\t\t\t}\n\n\t\t\tif !setHead {\n\t\t\t\t// Don't set the head, only insert the block\n\t\t\t\t_, err = bc.writeBlockWithState(block, receipts, logs, statedb)\n\t\t\t} else {\n\t\t\t\tstatus, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false, false)\n\t\t\t}\n\t\t}\n"
+    },
+    {
+      "name": "decision-commit-once",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "root, stateUpdate, err := statedb.CommitWithUpdate(block.NumberU64(), bc.chainConfig.IsEIP158(block.Number()), bc.chainConfig.IsCancun(block.Number()))",
+      "text": "root, stateUpdate, err := extractorCommitOnce(statedb, statedb.CommitWithUpdate, block.NumberU64(), bc.chainConfig.IsEIP158(block.Number()), bc.chainConfig.IsCancun(block.Number()))"
+    },
+    {
+      "name": "decision-marker-block-batch",
+      "file": "core/blockchain.go",
+      "mode": "before",
+      "anchor": "\tbatchStart := time.Now()\n\tif err := blockBatch.Write(); err != nil {\n\t\tlog.Crit(\"Failed to write block into disk\", \"err\", err)\n\t}\n\tbatchFlushDuration := time.Since(batchStart)",
+      "text": "\t// Extractor (E01-02.decision_bridge): the decision marker of a SIDE decision.\n\tbc.extractorMarkBatch(blockBatch, block, false)\n"
+    },
+    {
+      "name": "decision-marker-head-batch",
+      "file": "core/blockchain.go",
+      "mode": "before",
+      "anchor": "\t// Flush the whole batch into the disk, exit the node if failed\n\tif err := batch.Write(); err != nil {\n\t\tlog.Crit(\"Failed to update chain indexes and markers\", \"err\", err)",
+      "text": "\t// Extractor (E01-02.decision_bridge): the decision marker of an IMPORT or CANONICAL decision.\n\tbc.extractorMarkBatch(batch, block, true)\n"
+    }
+  ]
+}

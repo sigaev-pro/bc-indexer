@@ -38,6 +38,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,8 +64,11 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/admission/native/obligation"
+	"github.com/ethereum/go-ethereum/extractor/bordecision"
 	"github.com/ethereum/go-ethereum/extractor/borimport"
 	_ "github.com/ethereum/go-ethereum/extractor/borwire"
+	"github.com/ethereum/go-ethereum/extractor/decision"
+	"github.com/ethereum/go-ethereum/extractor/decision/native/decider"
 	"github.com/ethereum/go-ethereum/extractor/retention"
 	sourceinputs "github.com/ethereum/go-ethereum/extractor/source_inputs"
 	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
@@ -88,7 +92,7 @@ const (
 
 // Key prefixes that the store dump lists.
 var dumpPrefixes = []string{"extractor-admission-v1/", "extractor-source-inputs-v1/", "extractor-state-provider-",
-	"extractor-admission-run-v1/"}
+	"extractor-admission-run-v1/", "extractor-decision-v1/", "extractor-decision-marker-v1/"}
 
 func readBounded(path string, maximum int64) ([]byte, error) {
 	f, err := os.Open(path)
@@ -377,7 +381,9 @@ func readBlocks(path string) ([]*types.Block, error) {
 // kill keeps every write the process made; the synced frontier is what a
 // power loss keeps, so the retry sees the durable state of that point.
 type crashPoint struct {
-	step   string // begin, pin, seal, admitted, log-N, finish, exec-ready
+	// begin, pin, seal, admitted, log-N, finish, exec-ready; and the decision
+	// steps child-root, intent, native-rejected, block-batch, marker, decided.
+	step   string
 	block  uint64
 	output string
 	result func() any
@@ -389,7 +395,7 @@ func parseCrash(value string) (*crashPoint, error) {
 	}
 	step, number, ok := strings.Cut(value, "@")
 	block, err := strconv.ParseUint(number, 10, 64)
-	if !ok || err != nil || !regexp.MustCompile(`^(begin|pin|seal|admitted|log-[0-9]+|finish|exec-ready)$`).MatchString(step) {
+	if !ok || err != nil || !regexp.MustCompile(`^(begin|pin|seal|admitted|log-[0-9]+|finish|exec-ready|child-root|intent|native-rejected|block-batch|marker|decided)$`).MatchString(step) {
 		return nil, fmt.Errorf("bad crash point %q", value)
 	}
 	return &crashPoint{step: step, block: block}, nil
@@ -410,6 +416,11 @@ func observingBlock() uint64 {
 	observing.Lock()
 	defer observing.Unlock()
 	return observing.block
+}
+
+// armed reports whether the crash point fires at step for the observed block.
+func (c *crashPoint) armed(step string) bool {
+	return c != nil && c.step == step && observingBlock() == c.block
 }
 
 func (c *crashPoint) fire(step string) {
@@ -433,7 +444,10 @@ func (c *crashPoint) fire(step string) {
 // point after the sync that made the step's commit record durable.
 type crashDB struct {
 	ethdb.Database
-	crash   *crashPoint
+	crash *crashPoint
+	// synced, if set, runs for every key whose write a sync made durable,
+	// before the crash point fires.
+	synced  func(key string)
 	mu      sync.Mutex
 	pending []string
 }
@@ -454,6 +468,9 @@ func (d *crashDB) SyncKeyValue() error {
 	d.pending = nil
 	d.mu.Unlock()
 	for _, key := range written {
+		if d.synced != nil {
+			d.synced(key)
+		}
 		switch {
 		case strings.HasPrefix(key, "extractor-admission-v1/") && strings.HasSuffix(key, "/counter"):
 			d.crash.fire("begin")
@@ -467,6 +484,10 @@ func (d *crashDB) SyncKeyValue() error {
 			d.crash.fire("finish")
 		case strings.HasSuffix(key, "/exec-ready"):
 			d.crash.fire("exec-ready")
+		case strings.HasPrefix(key, "extractor-decision-v1/") && strings.HasSuffix(key, "/counter"):
+			d.crash.fire("intent")
+		case strings.HasPrefix(key, "extractor-decision-v1/") && strings.HasSuffix(key, "/decided"):
+			d.crash.fire("decided")
 		}
 	}
 	return nil
@@ -515,6 +536,17 @@ type Observed struct {
 	Capsule *CapsuleSummary  `json:"capsule,omitempty"`
 }
 
+// Snapshot is the store rows of one observation (admission records, capsule,
+// log, pin) right after its EXEC_READY, NATIVE_REJECTED or ABANDONED sync,
+// before a decision or the admission cleanup deletes them, with its decoded
+// capsule summary and checkpoint-snapshot item when it has a capsule.
+type Snapshot struct {
+	Rows           Dump            `json:"rows"`
+	Capsule        *CapsuleSummary `json:"capsule,omitempty"`
+	Block          uint64          `json:"block,omitempty"`
+	CheckpointItem string          `json:"checkpoint_item,omitempty"`
+}
+
 // CapsuleSummary describes the decoded capsule of an observation.
 type CapsuleSummary struct {
 	AncestorFirst  uint64 `json:"ancestor_first"`
@@ -555,6 +587,27 @@ type attemptResult struct {
 	FrozenPins     *FrozenPins        `json:"pins_after_freeze,omitempty"`
 	Replays        []ReplayRow        `json:"replays,omitempty"`
 	RPCControl     *RPCControl        `json:"rpc_control,omitempty"`
+	// Decision bridge (E01-02.decision_bridge).
+	DecisionRecovery *decider.Report      `json:"decision_recovery,omitempty"`
+	Snapshots        map[string]*Snapshot `json:"snapshots"`
+	ChildRootsAtOpen map[string]bool      `json:"child_roots_at_open"`
+	// HeadAtOpen and StoredAtOpen are the native head and the stored blocks
+	// of the range when the node started, before the recovery.
+	HeadAtOpen    uint64        `json:"head_number_at_open"`
+	StoredAtOpen  []uint64      `json:"stored_at_open"`
+	Decisions     []DecisionRow `json:"decisions"`
+	Obligations   []uint64      `json:"obligations"`
+	Reimported    int           `json:"reimported"`
+	ReimportError string        `json:"reimport_error,omitempty"`
+}
+
+// DecisionRow is one decision that the bridge lists after the import.
+type DecisionRow struct {
+	Sequence uint64   `json:"sequence"`
+	State    string   `json:"state"`
+	Kind     string   `json:"kind"`
+	Members  []string `json:"members"`
+	Marker   bool     `json:"marker"`
 }
 
 func attempt(args []string) (returned error) {
@@ -570,8 +623,8 @@ func attempt(args []string) (returned error) {
 	from := flags.Uint64("from", 1, "first observed block")
 	to := flags.Uint64("to", 0, "last observed block")
 	crashValue := flags.String("crash", "", "crash point STEP@BLOCK")
-	setHead := flags.Int64("set-head", -1, "after the import, ask native SetHead for this head (must be refused)")
-	walk := flags.Uint64("walk-check", 0, "check the native snapshot walk of this observed block from its capsule")
+	setHead := flags.Int64("set-head", -1, "before the recovery, ask native SetHead for this head (must be refused)")
+	walk := flags.Uint64("walk-check", 0, "at EXEC_READY of this block, check the native snapshot walk from its capsule")
 	batch := flags.Bool("batch", false, "import the observed range with one native InsertChain call")
 	store := flags.String("store-id", storeID, "producer binding of the native store")
 	unobserved := flags.Bool("unobserved", false, "import the range without observations")
@@ -583,16 +636,20 @@ func attempt(args []string) (returned error) {
 	verifyPins := flags.Bool("verify-pins", false, "record every live pin and its native Verify result")
 	replay := flags.Bool("replay", false, "after the import, replay every saved EXEC_READY observation")
 	control := flags.Uint64("rpc-control", 0, "finally send bor_getSnapshot of this block with cold caches outside every window")
+	conflict := flags.Uint64("milestone-conflict", 0, "after EXEC_READY of this block, whitelist a conflicting milestone at its number")
+	reimport := flags.Bool("reimport", false, "after the start, import the range again without skipping stored blocks")
 	output := flags.String("out", "", "result JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	result := attemptResult{Args: args, Observations: []Observed{}, RecoveryRows: []obligation.Row{}, Pending: []string{}}
+	result := attemptResult{Args: args, Observations: []Observed{}, RecoveryRows: []obligation.Row{}, Pending: []string{},
+		ChildRootsAtOpen: map[string]bool{}, StoredAtOpen: []uint64{}, Decisions: []DecisionRow{}, Obligations: []uint64{},
+		Snapshots: map[string]*Snapshot{}}
 	crash, err := parseCrash(*crashValue)
 	if err != nil {
 		return err
 	}
-	rec := &recorder{result: &result}
+	rec := &recorder{result: &result, replay: *replay, walk: *walk}
 	if crash != nil {
 		crash.output = *output + ".crash.json"
 		crash.result = func() any {
@@ -676,14 +733,47 @@ func attempt(args []string) (returned error) {
 		rec.expired = expired
 	}
 	db := &crashDB{Database: eth.ChainDb(), crash: crash}
+	rec.db, rec.eth = db, eth
+	db.synced = func(key string) {
+		// Admission terminal records: keep the observation's rows before a
+		// decision or the cleanup deletes them.
+		prefix := "extractor-admission-v1/" + producerID + "." + runID + "/"
+		parts := strings.Split(strings.TrimPrefix(key, prefix), "/")
+		if strings.HasPrefix(key, prefix) && len(parts) == 2 &&
+			(parts[1] == "exec-ready" || parts[1] == "rejected" || parts[1] == "abandoned") {
+			if err := rec.snapshot(producerID + "." + runID + "." + parts[0]); err != nil {
+				panic(fmt.Sprintf("snapshot: %v", err))
+			}
+		}
+	}
+	if *conflict > 0 {
+		rec.conflict = *conflict
+		rec.milestone = eth.Downloader().ChainValidator.ProcessMilestone
+	}
+	core.ExtractorDecisionStep = func(step string, _ common.Hash) {
+		if step == "block-batch" && crash.armed(step) {
+			// A process kill loses writes that pebble has not synced, so the
+			// probe makes the block batch durable before the loss inside
+			// the native mutation.
+			if err := eth.ChainDb().SyncKeyValue(); err != nil {
+				panic(fmt.Sprintf("sync before the loss: %v", err))
+			}
+		}
+		crash.fire(step)
+	}
 	node, err := borimport.Start(cfg, db, chain)
 	if err != nil {
 		shutdown(stack, eth)
 		return err
 	}
+	var decided *bordecision.Node
 	defer func() {
 		result.Passed = node.Router.Passed()
-		node.Detach()
+		if decided != nil {
+			decided.Detach()
+		} else {
+			node.Detach()
+		}
 		shutdown(stack, eth)
 	}()
 	router := node.Router
@@ -695,12 +785,23 @@ func attempt(args []string) (returned error) {
 		rec.mu.Unlock()
 		crash.fire(fmt.Sprintf("log-%d", row.Sequence))
 	}
+	result.HeadAtOpen = chain.CurrentBlock().Number.Uint64()
+	for number := *from; number <= *to; number++ {
+		if chain.HasBlock(blocks[number-1].Hash(), number) {
+			result.StoredAtOpen = append(result.StoredAtOpen, number)
+		}
+	}
 	// RECOVERY_ONLY: with a saved obligation, GoLive and Begin are refused.
 	token := node.Driver.Guard.Acquire()
 	saved, err := node.Driver.Admission.Observations(token)
 	if err == nil {
 		for _, obs := range saved {
 			result.Pending = append(result.Pending, fmt.Sprintf("%s %s", obs.Key, obs.State))
+			if obs.State == admission.ExecReady && obs.Candidate.Number >= 1 && obs.Candidate.Number <= uint64(len(blocks)) {
+				// AC-CAP-07-02: is the child state of the saved EXEC_READY block durable?
+				root := blocks[obs.Candidate.Number-1].Root()
+				result.ChildRootsAtOpen[obs.Key] = rawdb.HasLegacyTrieNode(eth.ChainDb(), root)
+			}
 		}
 		pending := false
 		for _, obs := range saved {
@@ -739,15 +840,27 @@ func attempt(args []string) (returned error) {
 			return err
 		}
 	}
-	report, err := node.Recover()
+	if *setHead >= 0 {
+		// Before the recovery, while the saved obligations keep their pins.
+		result.SetHead = fmt.Sprint(chain.SetHead(uint64(*setHead)))
+	}
+	decided, report, err := bordecision.Start(node, nil)
 	result.Recovery = &report
-	result.RecoveryRows = router.Rows()
+	// Every counted call of the recovery windows, in order: the admission
+	// recovery, then the replay before each completed native import.
+	rec.mu.Lock()
+	result.RecoveryRows = append([]obligation.Row{}, rec.window...)
+	rec.window = nil
+	rec.mu.Unlock()
+	if decided != nil {
+		result.DecisionRecovery = &decided.Report
+	}
 	if err != nil {
 		return fmt.Errorf("recovery: %w", err)
 	}
 	if *base > 0 {
 		// Blocks below the observed range: a chain the node already had.
-		node.Detach()
+		decided.Detach()
 		result.BaseInserted, err = chain.InsertChain(blocks[:*base], false)
 		http.DefaultTransport = router
 		if err != nil {
@@ -755,10 +868,18 @@ func attempt(args []string) (returned error) {
 		}
 	}
 	if *unobserved {
-		node.Detach()
+		decided.Detach()
 		http.DefaultTransport = router
 	} else {
-		chain.SetExtractorObserver(rec)
+		decided.Attach(rec)
+	}
+	if *reimport {
+		// Blocks already in the chain with their state: the native import
+		// skips them, so none opens an observation or a decision.
+		result.Reimported, err = chain.InsertChain(blocks[*from-1:*to], false)
+		if err != nil {
+			result.ReimportError = err.Error()
+		}
 	}
 	if *batch {
 		// One native batch: the patched import splits it into one block per
@@ -817,19 +938,11 @@ func attempt(args []string) (returned error) {
 	if err = describe(node, db, &result); err != nil {
 		return err
 	}
-	if *setHead >= 0 {
-		result.SetHead = fmt.Sprint(chain.SetHead(uint64(*setHead)))
+	if err = describeDecisions(decided, &result); err != nil {
+		return err
 	}
-	if *walk > 0 {
-		result.Walk, err = checkWalk(eth, db, *walk)
-		if err != nil {
-			return err
-		}
-	}
-	if *replay {
-		if result.Replays, err = replayAll(node); err != nil {
-			return err
-		}
+	if *walk > 0 && result.Walk == nil {
+		return fmt.Errorf("block %d was not observed for the walk check", *walk)
 	}
 	if *control > 0 {
 		result.RPCControl = rpcControl(engine, chain, router, *control)
@@ -1120,31 +1233,6 @@ type RPCControl struct {
 	Passed map[string]int `json:"passed_heimdall_calls"`
 }
 
-// replayAll replays every saved EXEC_READY observation of the admission.
-func replayAll(node *borimport.Node) ([]ReplayRow, error) {
-	token := node.Driver.Guard.Acquire()
-	saved, err := node.Driver.Admission.Observations(token)
-	if releaseErr := token.Release(); err == nil {
-		err = releaseErr
-	}
-	if err != nil {
-		return nil, err
-	}
-	rows := []ReplayRow{}
-	for _, obs := range saved {
-		if obs.State != admission.ExecReady {
-			continue
-		}
-		row := ReplayRow{Key: obs.Key}
-		if err := node.Replay(obs.Key); err != nil {
-			row.Error = err.Error()
-		}
-		row.Rows = node.Router.Rows()
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
 // rpcControl purges the Heimdall caches and sends the RPC call outside every
 // window; its Heimdall reads pass through the router to the native client.
 func rpcControl(engine *bor.Bor, chain *core.BlockChain, router *obligation.Router, target uint64) *RPCControl {
@@ -1168,12 +1256,24 @@ func rpcControl(engine *bor.Bor, chain *core.BlockChain, router *obligation.Rout
 // outcome of every observation, so a batch import is judged block by block.
 type recorder struct {
 	node    *borimport.Node
+	db      ethdb.Database
 	rpc     *rpcInWindow
 	before  *rpcBefore
 	expired *expiredFetch
-	mu      sync.Mutex
-	result  *attemptResult
-	window  []obligation.Row // counted calls of the open window, for crash points
+	// replay replays each observation from its saved inputs right after
+	// EXEC_READY, before its decision closes it.
+	replay bool
+	// conflict is the block whose EXEC_READY is followed by a conflicting
+	// whitelisted milestone (the native rejection fixture of AC-CAP-07-06).
+	conflict  uint64
+	milestone func(uint64, common.Hash)
+	// walk is the block whose native snapshot walk is checked from its
+	// capsule at EXEC_READY.
+	walk   uint64
+	eth    *eth.Ethereum
+	mu     sync.Mutex
+	result *attemptResult
+	window []obligation.Row // counted calls of the open window, for crash points
 }
 
 type recorded struct {
@@ -1232,13 +1332,114 @@ func (o recorded) Done(block *types.Block, receipts types.Receipts, usedGas uint
 	}
 	err = o.inner.Done(block, receipts, usedGas, err)
 	o.recorder.finish(err)
-	return err
+	key := o.inner.(interface{ Key() string }).Key()
+	o.recorder.keyed(key)
+	if err != nil {
+		return err
+	}
+	// EXEC_READY is durable and the guard is free; the decision follows.
+	if o.recorder.walk == block.NumberU64() {
+		walk, walkErr := checkWalk(o.recorder.eth, o.recorder.db, block.NumberU64())
+		if walkErr != nil {
+			return walkErr
+		}
+		o.recorder.mu.Lock()
+		o.recorder.result.Walk = walk
+		o.recorder.mu.Unlock()
+	}
+	if o.recorder.replay {
+		row := ReplayRow{Key: key}
+		if replayErr := o.recorder.node.Replay(key); replayErr != nil {
+			row.Error = replayErr.Error()
+		}
+		row.Rows = o.recorder.node.Router.Rows()
+		o.recorder.mu.Lock()
+		o.recorder.result.Replays = append(o.recorder.result.Replays, row)
+		o.recorder.mu.Unlock()
+	}
+	if o.recorder.conflict == block.NumberU64() {
+		o.recorder.milestone(block.NumberU64(), common.Hash{0xee})
+	}
+	return nil
 }
 
 func (o recorded) Fail(err error) error {
 	err = o.inner.Fail(err)
 	o.recorder.finish(err)
+	o.recorder.keyed(o.inner.(interface{ Key() string }).Key())
 	return err
+}
+
+// keyed sets the observation key of the last observation.
+func (r *recorder) keyed(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.result.Observations[len(r.result.Observations)-1].Key = key
+}
+
+// snapshot records the store rows of observation key and, if it has a
+// sealed capsule, its capsule summary and checkpoint-snapshot item.
+func (r *recorder) snapshot(key string) error {
+	seq := key[strings.LastIndex(key, ".")+1:]
+	snap := &Snapshot{Rows: Dump{}}
+	for _, prefix := range []string{"extractor-admission-v1/" + producerID + "." + runID + "/" + seq + "/",
+		"extractor-source-inputs-v1/" + key + "/", "extractor-state-provider-pin-v1-" + key} {
+		rows, err := dumpPrefix(r.db, prefix)
+		if err != nil {
+			return err
+		}
+		snap.Rows = append(snap.Rows, rows...)
+	}
+	if sealed, err := r.db.Has([]byte("extractor-source-inputs-v1/" + key + "/capsule")); err != nil {
+		return err
+	} else if sealed {
+		c, err := borimport.ReadCapsule(r.db, key)
+		if err != nil {
+			return err
+		}
+		item, err := sourceinputs.ReadItem(r.db, key, 6)
+		if err != nil {
+			return err
+		}
+		snap.Block, snap.CheckpointItem = c.Block.NumberU64(), hex.EncodeToString(item)
+		snap.Capsule = &CapsuleSummary{AncestorFirst: c.Ancestors[0].Number.Uint64(), AncestorCount: len(c.Ancestors),
+			CheckpointSize: len(c.Checkpoint)}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.result.Snapshots[key] = snap
+	return nil
+}
+
+// describeDecisions lists the decisions and delivery obligations of the bridge.
+func describeDecisions(n *bordecision.Node, result *attemptResult) error {
+	if n == nil {
+		return nil
+	}
+	token := n.Import.Driver.Guard.Acquire()
+	decisions, err := n.Bridge.Decisions(token)
+	var obligations []decision.Obligation
+	if err == nil {
+		obligations, err = n.Bridge.Obligations(token)
+	}
+	if releaseErr := token.Release(); err == nil {
+		err = releaseErr
+	}
+	if err != nil {
+		return err
+	}
+	for _, d := range decisions {
+		row := DecisionRow{Sequence: d.Sequence, State: string(d.State), Kind: string(d.Intent.Kind), Members: []string{},
+			Marker: d.Marker}
+		for _, m := range d.Intent.Members {
+			row.Members = append(row.Members, m.Observation)
+		}
+		result.Decisions = append(result.Decisions, row)
+	}
+	for _, o := range obligations {
+		result.Obligations = append(result.Obligations, o.Decided.Sequence)
+	}
+	return nil
 }
 
 // describe fills the observation keys and capsule summaries from the store.
@@ -1261,7 +1462,12 @@ func describe(node *borimport.Node, db ethdb.Database, result *attemptResult) er
 		if len(list) == 0 {
 			continue
 		}
-		observed.Key = list[len(list)-1]
+		if observed.Key == "" {
+			observed.Key = list[len(list)-1]
+		}
+		if observed.Capsule != nil || !slices.Contains(list, observed.Key) {
+			continue
+		}
 		c, err := borimport.ReadCapsule(db, observed.Key)
 		if err != nil {
 			return err
@@ -1345,24 +1551,32 @@ func dumpStore(path string) (Dump, error) {
 	}
 	defer db.Close()
 	dump := Dump{}
-	record := regexp.MustCompile(`/(counter|lowwater|preparing|admitted|exec-ready|abandoned|rejected|capsule|frontier|closed)$|^extractor-state-provider-|^extractor-admission-run-v1/`)
 	for _, prefix := range dumpPrefixes {
-		it := db.NewIterator([]byte(prefix), nil)
-		for it.Next() {
-			row := map[string]any{"key": string(it.Key()), "value_sha256": heimdallstub.HexSum(it.Value()),
-				"value_length": len(it.Value())}
-			if record.MatchString(string(it.Key())) {
-				row["value"] = string(it.Value())
-			}
-			dump = append(dump, row)
-		}
-		err := it.Error()
-		it.Release()
+		rows, err := dumpPrefix(db, prefix)
 		if err != nil {
 			return nil, err
 		}
+		dump = append(dump, rows...)
 	}
 	return dump, nil
+}
+
+// recordKeys are the keys whose values a dump lists: records and the decision keys.
+var recordKeys = regexp.MustCompile(`/(counter|lowwater|purged|preparing|admitted|exec-ready|abandoned|rejected|decided|intent|capsule|frontier|closed)$|^extractor-state-provider-|^extractor-admission-run-v1/|^extractor-decision-`)
+
+func dumpPrefix(db ethdb.Iteratee, prefix string) (Dump, error) {
+	dump := Dump{}
+	it := db.NewIterator([]byte(prefix), nil)
+	defer it.Release()
+	for it.Next() {
+		row := map[string]any{"key": string(it.Key()), "value_sha256": heimdallstub.HexSum(it.Value()),
+			"value_length": len(it.Value())}
+		if recordKeys.MatchString(string(it.Key())) {
+			row["value"] = string(it.Value())
+		}
+		dump = append(dump, row)
+	}
+	return dump, it.Error()
 }
 
 // Step is one attempt of a scenario plan.
@@ -1392,6 +1606,9 @@ type Step struct {
 	ToolArgs   string `json:"tool_args"`
 	Replay     bool   `json:"replay"`
 	RPCControl uint64 `json:"rpc_control"`
+	// MilestoneConflict and Reimport are the decision bridge fixtures.
+	MilestoneConflict uint64 `json:"milestone_conflict"`
+	Reimport          bool   `json:"reimport"`
 }
 
 // Plan is the attempt list of one scenario, fixed in the oracle.
@@ -1465,7 +1682,8 @@ func scenario(args []string) error {
 				"-rpc-before", fmt.Sprint(step.RPCBefore), "-expired-fetch", fmt.Sprint(step.Expired),
 				"-finalize", fmt.Sprint(step.Finalize), "-await-frozen", fmt.Sprint(step.Frozen),
 				fmt.Sprintf("-verify-pins=%t", step.VerifyPins),
-				fmt.Sprintf("-replay=%t", step.Replay), "-rpc-control", fmt.Sprint(step.RPCControl), "-out", out}
+				fmt.Sprintf("-replay=%t", step.Replay), "-rpc-control", fmt.Sprint(step.RPCControl),
+				"-milestone-conflict", fmt.Sprint(step.MilestoneConflict), fmt.Sprintf("-reimport=%t", step.Reimport), "-out", out}
 			row["argv"] = argv
 			row["status"], err = runChild(os.Args[0], argv, filepath.Join(*output, fmt.Sprintf("attempt-%d.log", index)))
 			if err != nil {
