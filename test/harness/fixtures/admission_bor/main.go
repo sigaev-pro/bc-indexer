@@ -418,6 +418,11 @@ func observingBlock() uint64 {
 	return observing.block
 }
 
+// armed reports whether the crash point fires at step for the observed block.
+func (c *crashPoint) armed(step string) bool {
+	return c != nil && c.step == step && observingBlock() == c.block
+}
+
 func (c *crashPoint) fire(step string) {
 	if c == nil || c.step != step {
 		return
@@ -745,7 +750,17 @@ func attempt(args []string) (returned error) {
 		rec.conflict = *conflict
 		rec.milestone = eth.Downloader().ChainValidator.ProcessMilestone
 	}
-	core.ExtractorDecisionStep = func(step string, _ common.Hash) { crash.fire(step) }
+	core.ExtractorDecisionStep = func(step string, _ common.Hash) {
+		if step == "block-batch" && crash.armed(step) {
+			// A process kill loses writes that pebble has not synced, so the
+			// probe makes the block batch durable before the loss inside
+			// the native mutation.
+			if err := eth.ChainDb().SyncKeyValue(); err != nil {
+				panic(fmt.Sprintf("sync before the loss: %v", err))
+			}
+		}
+		crash.fire(step)
+	}
 	node, err := borimport.Start(cfg, db, chain)
 	if err != nil {
 		shutdown(stack, eth)

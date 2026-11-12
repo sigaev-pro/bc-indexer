@@ -146,6 +146,8 @@ type intent struct {
 	key     []byte
 	value   []byte
 	release func() error
+	// rejected, if set, is set when the native rejection was recorded.
+	rejected *bool
 }
 
 func newIntent(d *decider.Decider, token *admission.Token, rec decision.IntentRecord, block decision.Head,
@@ -170,7 +172,11 @@ func (i *intent) done(err error) error {
 func (i *intent) Resolve() error { return i.done(i.d.Resolve(i.token, i.rec.Sequence)) }
 
 func (i *intent) Reject(nativeErr error) error {
-	return i.done(i.d.Reject(i.token, i.rec, i.block, nativeErr))
+	err := i.d.Reject(i.token, i.rec, i.block, nativeErr)
+	if err == nil && i.rejected != nil {
+		*i.rejected = true
+	}
+	return i.done(err)
 }
 
 func (i *intent) Release() error { return i.done(nil) }
@@ -200,8 +206,9 @@ func (l liveDecider) Intend(t core.ExtractorTransition) (core.ExtractorIntent, e
 // recovery driver's token and returns the saved intent of the same
 // transition.
 type recoveryDecider struct {
-	d     *decider.Decider
-	token *admission.Token
+	d        *decider.Decider
+	token    *admission.Token
+	rejected *bool
 }
 
 func (r recoveryDecider) Intend(t core.ExtractorTransition) (core.ExtractorIntent, error) {
@@ -210,7 +217,11 @@ func (r recoveryDecider) Intend(t core.ExtractorTransition) (core.ExtractorInten
 	if err != nil {
 		return nil, err
 	}
-	return newIntent(r.d, r.token, rec, tr.Block, nil)
+	in, err := newIntent(r.d, r.token, rec, tr.Block, nil)
+	if err == nil {
+		in.rejected = r.rejected
+	}
+	return in, err
 }
 
 // live is the native side of the import path.
@@ -255,7 +266,15 @@ func (r recovery) Complete(token *admission.Token, obs admission.Observation) er
 	if run.block == nil {
 		return fmt.Errorf("%w: %s was not executed", ErrCapsule, obs.Key)
 	}
-	return r.rec.Import(recoveryDecider{d: r.d, token: token}, run.block, run.receipts, run.logs, run.statedb)
+	// A native refusal returns the native error after the rejection was
+	// recorded: the decision is settled, so recovery goes on.
+	rejected := false
+	err := r.rec.Import(recoveryDecider{d: r.d, token: token, rejected: &rejected}, run.block, run.receipts, run.logs,
+		run.statedb)
+	if err != nil && rejected {
+		return nil
+	}
+	return err
 }
 
 // execution is the native-only replay of one observation that keeps the

@@ -758,8 +758,10 @@ def compare(name, observed, context):
         if not rejected or rejected.get("evidence_digest") != rejection_digest(key, context["chain"][block - 1]["hash"].hex(),
                                                                                 obs.get("error") or ""):
             fail("NATIVE_REJECTED does not bind the native rejection evidence")
-        if check_observation(context, snap.get("rows") or [], sequence, block, variant(0), fail, "rejected") != \
-                "NATIVE_REJECTED":
+        # The snapshot is taken at the rejected sync, before the pin release;
+        # the release is checked on the store after the attempt below.
+        rows = [row for row in snap.get("rows") or [] if row["key"] != PIN + key]
+        if check_observation(context, rows, sequence, block, variant(0), fail, "rejected") != "NATIVE_REJECTED":
             fail("the refused observation is not NATIVE_REJECTED")
         want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], variant(0))
         check_rows(obs.get("counted_calls"), want, ["fetch"] * len(want), fail, "rejected", context["body_sha256"])

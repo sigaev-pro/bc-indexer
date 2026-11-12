@@ -129,7 +129,7 @@ the node imports again:
 | EXEC_READY (AC-CAP-07-02) | EXEC_READY, child state volatile | Native-only replay, then the native import with a new intent |
 | The child-root barrier | EXEC_READY, child state durable | The same |
 | The intent (AC-CAP-07-03) | Unresolved intent, no marker, block not stored | Native recovery completes the saved transition |
-| The block batch (AC-CAP-07-03) | Unresolved intent, no marker, block stored, head not moved | The same; the write repeats the block batch |
+| The block batch (AC-CAP-07-03) | Unresolved intent, no marker, block stored if the block batch reached the disk, head not moved | The same; the write repeats the block batch |
 | The head batch with the marker | Unresolved intent with marker | `Resolve` |
 | The decided sync | NATIVE_DECIDED, observation open | `decision.Open` closes it |
 | A native refusal, before `RejectIntent` (AC-CAP-07-06) | Unresolved intent, no marker, block not stored | The native check refuses again (the whitelisted milestone is stored natively); `RejectIntent` |
@@ -192,3 +192,12 @@ obligation; `Cleanup` removes their marker at once.
 - A pin stays live only while the decision of its block is pending (and while
   a `SIDE` decision retains its block, until E05-01.activation_gc), so the
   retention guards of the admission block act on undecided blocks.
+- The decision path is on the normal write path of `insertChain`. The
+  pipelined, parallel and stateless import paths are outside the capture
+  profile (`state_provider.CheckProfile`); a block observed on one of them
+  would reach EXEC_READY without a decision, and the next start would stop
+  (the block is stored without a decision, a source invariant error).
+- Blocks that the node seals itself reach the chain through
+  `WriteBlockAndSetHead` without an observation or a decision; the capture
+  profile imports blocks, it does not produce them. Canonical and finality
+  changes without a new execution belong to E01-02.lifecycle_seams.

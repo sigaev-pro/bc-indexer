@@ -235,10 +235,12 @@ class JudgeTests(unittest.TestCase):
             rows.remove(row_of(rows, "pin-v1-bor.run-1.0000000000000004"))
         self.assertFails("native-rejection", lost_pin, "EXEC_READY lost its pin")
 
-        def rejected_pin(o, c):
+        def rejected_ready(o, c):
             rows = snap_rows(o["attempts"][0]["result"], probe.key_of(3))
-            rows.append({"key": probe.PIN + probe.key_of(3), "value_sha256": "00" * 32, "value_length": 1})
-        self.assertFails("native-rejection", rejected_pin, "kept EXEC_READY or its pin")
+            ready = copy.deepcopy(row_of(snap_rows(o["attempts"][0]["result"], probe.key_of(2)), "0000000000000002/exec-ready"))
+            ready["key"] = ready["key"].replace("0000000000000002", "0000000000000003")
+            rows.append(ready)
+        self.assertFails("native-rejection", rejected_ready, "kept EXEC_READY or its pin")
 
         def checkpoint(o, c):
             c["checkpoints"] = {key: b"{}" for key in c["checkpoints"]}
