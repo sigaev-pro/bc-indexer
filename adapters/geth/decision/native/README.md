@@ -101,7 +101,9 @@ before any import:
      and writes the head batch with the saved marker (`SIDE`:
      `ExtractorWriteMarker`), then `Resolve` (AC-CAP-07-03). The head must be
      the saved old head or, for `CANONICAL`, a lower block of the new branch
-     that an interrupted `reorg` already made the head;
+     that an interrupted `reorg` already made the head; `reorg` runs again
+     from the saved old head, so its clean-up of the old branch indexes
+     (canonical hashes above the new branch, transaction lookups) is done;
    - nothing of the block is stored: the saved block (from its capsule) is
      re-imported natively, through `InsertChain` for a head change and
      `InsertBlockWithoutSetHead` for `SIDE`, with native-only replay of its

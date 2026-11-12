@@ -827,7 +827,7 @@ def scenario_decision_completed(name, point, evidence, prefix_events, crash_even
     return check
 
 
-def scenario_decision_canonical(name, point, evidence, crash_events, settle_events):
+def scenario_decision_canonical(name, point, evidence, crash_events, settle_events, head_at_start):
     """AC-CAP-07-03 on a CANONICAL write: 300 is decided SIDE, then the import of 301 crashes inside its CANONICAL
     decision (members 301 and the retained 300); recovery completes exactly the saved transition."""
     label = name.replace("_", "-")
@@ -858,6 +858,9 @@ def scenario_decision_canonical(name, point, evidence, crash_events, settle_even
                                                                                                          "live"])
         check_decision_end(c, f"{label}-2", oracle, result, 2, 2, [1])
         check_head(c, f"{label}-2", oracle, observation, result, t + 1)
+        # Where the crash left the native head: on 299, or on 300 after the intermediate head batch of reorg.
+        if result.get("head_at_start") != observation["generated_hashes"][head_at_start]:
+            c.fail(f"{label}-2", f"the native head at the restart is not block {head_at_start}")
     return check
 
 
@@ -934,12 +937,12 @@ CHECKS = {
 CHECKS.update({
     "decision_canonical_intent": scenario_decision_canonical(
         "decision_canonical_intent", "after_sync-decision-v1/geth-probe.r1/counter", "reimport", [],
-        ["replaying", "replayed", "committed", "intent", "mutated", "intermediate"]),
+        ["replaying", "replayed", "committed", "intent", "mutated", "intermediate"], 299),
     "decision_canonical_mutated": scenario_decision_canonical(
-        "decision_canonical_mutated", "native/mutated", "stored_block", ["intent", "mutated"], []),
+        "decision_canonical_mutated", "native/mutated", "stored_block", ["intent", "mutated"], [], 299),
     "decision_canonical_intermediate": scenario_decision_canonical(
         "decision_canonical_intermediate", "native/intermediate", "stored_block",
-        ["intent", "mutated", "intermediate"], []),
+        ["intent", "mutated", "intermediate"], [], 300),
 })
 
 COMPLETED = {

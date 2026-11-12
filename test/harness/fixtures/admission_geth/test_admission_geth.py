@@ -432,7 +432,8 @@ def decision_scenarios(s):
                  rejection(i0), trace("live")])]})
     # AC-CAP-07-03 on a CANONICAL write over the retained side block 300.
     before = base + admitted_events(s, T, 0) + intent_events(side, "CHECKPOINT") + admitted_events(s, T + 1, 1)
-    finished = decision_result(s, 2, 2, T + 1, [T, T + 1], [1])
+    finished = decision_result(s, 2, 2, T + 1, [T, T + 1], [1], head_at_start=s.hashes[T - 1])
+    mid_reorg = decision_result(s, 2, 2, T + 1, [T, T + 1], [1], head_at_start=s.hashes[T])
     settled_canonical = [trace("decided", sequence=1, delivery="BATCH",
                                digest=decision.decided_digest(canonical["digest"], "BATCH"))]
     out.append({"name": "decision_canonical_intent", "attempts": [
@@ -451,7 +452,7 @@ def decision_scenarios(s):
     out.append({"name": "decision_canonical_intermediate", "attempts": [
         attempt("decision-canonical-intermediate-1-crash",
                 events=before + intent_events(canonical, None, points=("intermediate",)), crash="native/intermediate"),
-        attempt("decision-canonical-intermediate-2-recover", finished,
+        attempt("decision-canonical-intermediate-2-recover", mid_reorg,
                 [trace("opened"), trace("bridge_opened"), trace("settling", sequence=1, evidence="stored_block")] +
                 settled_canonical + [trace("live")])]})
     refused_live = copy.deepcopy(refused)
@@ -1070,6 +1071,9 @@ class OracleTests(unittest.TestCase):
         observation = fresh()
         scenario(observation, "decision_canonical_intent")[1]["result"]["head_number"] = T
         self.assertFails(observation, "decision-canonical-intent-2: head")
+        observation = fresh()
+        scenario(observation, "decision_canonical_intermediate")[1]["result"]["head_at_start"] = ZERO
+        self.assertFails(observation, "the native head at the restart is not block 300")
 
     def test_decision_exec_ready_recovery(self):
         observation = fresh()

@@ -175,13 +175,15 @@ func (bc *BlockChain) extractorHeadWritten(head common.Hash) {
 	}
 }
 
-// ExtractorCompleteHead completes a saved head transition whose block is
-// already stored with its state: the recovery driver calls it for an
-// unresolved IMPORT or CANONICAL intent after a crash between the block
-// batch and the final head batch, including a crash inside reorg. It
-// reorganizes if the block does not extend the head and writes the head
-// batch of the block with the marker, then syncs.
-func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, key, value []byte) error {
+// ExtractorCompleteHead completes a saved head transition from oldHead to
+// block, whose block is already stored with its state: the recovery driver
+// calls it for an unresolved IMPORT or CANONICAL intent after a crash
+// between the block batch and the final head batch, including a crash
+// inside reorg. If the block does not extend oldHead, it runs reorg from
+// oldHead again (its writes are idempotent, and its final clean-up of the
+// old branch indexes is then done), and it writes the head batch of the
+// block with the marker, then syncs.
+func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, oldHead common.Hash, key, value []byte) error {
 	if !bc.chainmu.TryLock() {
 		return errChainStopped
 	}
@@ -189,9 +191,12 @@ func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, key, value []byt
 	if !bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
 		return fmt.Errorf("extractor: block %d %s is not stored with its state", block.NumberU64(), block.Hash())
 	}
-	current := bc.CurrentBlock()
-	if block.ParentHash() != current.Hash() {
-		if err := bc.reorg(current, block.Header()); err != nil {
+	old := bc.GetHeaderByHash(oldHead)
+	if old == nil {
+		return fmt.Errorf("extractor: saved old head %s is not stored", oldHead)
+	}
+	if block.ParentHash() != old.Hash() {
+		if err := bc.reorg(old, block.Header()); err != nil {
 			return err
 		}
 	}

@@ -594,6 +594,12 @@
    "file": "test/harness/fixtures/admission_geth/admission_geth.py",
    "original": "        if markers != [decision.marker_value(side).decode(), decision.marker_value(canonical).decode()]:\n",
    "replacement": "        if len(markers) != 2:\n"
+  },
+  {
+   "name": "decision canonical head at restart unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if result.get(\"head_at_start\") != observation[\"generated_hashes\"][head_at_start]:\n",
+   "replacement": "        if False:\n"
   }
  ]
 }

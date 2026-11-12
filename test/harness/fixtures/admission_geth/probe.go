@@ -451,6 +451,8 @@ func attempt(specPath string) {
 	}
 	result["roots_at_start"] = roots
 	result["records_at_start"] = prefixed(db, "extractor-admission-v1/")
+	// The native head at the restart, before NewBlockChain repairs anything.
+	result["head_at_start"] = rawdb.ReadHeadBlockHash(db).Hex()
 	chain := newChain(db, genesis)
 	store := &powerLossStore{db: db, log: log, pending: map[string][]byte{}, spec: spec}
 	safe := newSafePoint()
@@ -477,6 +479,10 @@ func attempt(specPath string) {
 			},
 			Point: func(name string) {
 				if store.trigger(name == spec.CrashPoint) {
+					// A power loss may keep any subset of unsynced native writes;
+					// this one keeps every native write so far, including the
+					// unsynced intermediate head batch of reorg.
+					check(db.SyncKeyValue())
 					crash(log, "native/"+name)
 				}
 			}}

@@ -468,7 +468,7 @@ func (d *Decisions) settleIntent() error {
 				return fmt.Errorf("%w: head %s is neither the saved old head of intent %d nor on its new branch",
 					ErrDecisionRecovery, d.a.chain.CurrentBlock().Hash(), saved.Sequence)
 			}
-			err = d.a.chain.ExtractorCompleteHead(block, key, value)
+			err = d.a.chain.ExtractorCompleteHead(block, common.HexToHash(saved.Intent.OldHead.Hash), key, value)
 		}
 		if err != nil {
 			return err
