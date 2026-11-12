@@ -152,9 +152,10 @@ then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
 ## E01-02.decision_bridge — Geth block
 
-Status: READY for review (draft PR #158, Part of #17). Base main `add17e6`
+Status: block merged in PR #158 at `7ee8eb0` (Part of #17). Base main `add17e6`
 (block 0, PR #157). Branch/worktree: `claude/e01-02-decision-geth` /
-`e01-02-admission-geth-95b3ee`. Evidence:
+`e01-02-admission-geth-95b3ee`. qa verdict block: IN_PROGRESS on branch
+`claude/e01-02-decision-geth-qa` from main `7ee8eb0` (Part of #17). Evidence:
 [E01-02.decision_bridge.geth](evidence/E01-02.decision_bridge.geth.md);
 design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/native/README.md).
 
@@ -176,8 +177,11 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
   - run 03 PASS in 1,282 seconds: the probe passed and 41 of 41 native
     mutants were killed;
   - Python mutants: 96 of 96 killed.
-  - AC-CAP-07-01, 07-02, 07-03 and 07-06 pass for the private local ETH slot
-    only. Every public cell stays NOT_RUN (D96, D98, D99).
+- qa verdict (private local ETH slot, from records 03; nothing rerun):
+  AC-CAP-07-01, 07-02, 07-03 and 07-06 PASS. 07-06 uses the probe's native
+  outcome fixture after the intent. At the native crash points of 07-03 the
+  probe keeps every native write made so far. `ethereum-mainnet`,
+  `ethereum-sepolia` and `ethereum-hoodi` stay NOT_RUN (D96, D98, D99).
 - Kept attempts (D83):
   - preparation 01 (`2ce8eee`) failed on a `go vet` deadline under host load;
   - preparation 02 (`d04b20b`) passed but was superseded before its run.
