@@ -140,6 +140,13 @@ equivalent but a reachable test kills it; P3: a test result listed as a
 limit). The follow-up commit adds that test, removes the label, adds the
 optional ordering mutant from the Spec review, and changes no code.
 
+Evidence: [E01-02.decision_bridge](evidence/E01-02.decision_bridge.md).
+Retained record 04 of `b21064f`: PASS; Go tests in all three copies and the
+three assembled modules, Go mutants 106 killed and 2 labeled equivalent
+(decision), 140 killed and 3 labeled equivalent (admission), 79 killed
+(source_inputs), Python mutants 23, 37 and 11 killed. Records 01 to 03
+passed and are superseded and kept.
+
 Next: confirmation of the final head by both reviewers and hosted CI on it,
 then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
