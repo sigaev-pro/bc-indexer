@@ -1,5 +1,32 @@
 # Состояние проекта
 
+## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
+
+Status: IN_PROGRESS (block 0, decision-core). Dependencies E01-02.admission
+(#16, PR #155 at `2a644f8`) and BOOT-09 are accepted. Plan agreed with the
+owner on 2026-11-12, the same split as #16: block 0 core (architect, then
+native-engineer), then parallel Geth, BSC and Bor blocks (native-engineer
+each) with qa for the AC matrix; reviewer for the Spec and Standards reviews.
+
+### Block 0: decision-core
+
+Base `2a644f8`. Branch/worktree: `claude/e01-02-decision-core` /
+`e01-02-admission-core-a0420b`. Allowed paths:
+`adapters/{geth,bsc,bor}/decision/**`, `adapters/{geth,bsc,bor}/admission/**`
+(the closing step and input cleanup), `adapters/{geth,bsc,bor}/source_inputs/**`
+(`Purge`), `test/harness/decision.py`, `test/harness/test_decision.py`,
+`test/harness/decision.mutants.json`, `test/harness/admission.py`,
+`test/harness/test_admission.py`, `test/harness/admission.mutants.json`,
+`test/harness/source_inputs.py`, `test/harness/test_source_inputs.py`,
+`test/harness/fixtures/decision_core/**`,
+`.project/evidence/E01-02.decision_bridge.md` and this section. Profiles:
+none; client-independent unit tests on an in-memory power-loss store model,
+so every AC-CAP-07 profile cell stays NOT_RUN and the block gives no AC
+verdict.
+
+Next: architect design and per-client plan, then the native-engineer
+implementation.
+
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
 Status: ACCEPTED (2026-11-12); #16 closes when this record merges. Merged
