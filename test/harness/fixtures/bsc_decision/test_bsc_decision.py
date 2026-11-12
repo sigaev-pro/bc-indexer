@@ -467,6 +467,207 @@ class ControlTest(unittest.TestCase):
                                            e.get("owner", "").endswith("/0000000000000001"))]
         self.refused("intent-synced: decisions", traces=traces)
 
+    # ---- one condition per control ----
+
+    def test_reimport_error(self):
+        report = self.report()
+        scenario(report, "live")["reimport"]["error"] = "refused"
+        self.refused("re-import", report=report)
+
+    def test_reimport_observation_counter(self):
+        report = self.report()
+        scenario(report, "live")["reimport"]["observation_counter"][1] += 1
+        self.refused("re-import", report=report)
+
+    def test_reimport_blocks(self):
+        report = self.report()
+        scenario(report, "live")["reimport"]["blocks"] = 1
+        self.refused("re-import head", report=report)
+
+    def test_final_mode(self):
+        report = self.report()
+        scenario(report, "barrier-synced")["mode"] = "RECOVERY_ONLY"
+        self.refused("final head", report=report)
+
+    def test_final_head_hash(self):
+        report = self.report()
+        sc = scenario(report, "barrier-synced")
+        sc["head_hash"] = "00" * 32
+        self.refused("final head", report=report)
+
+    def test_open_observation(self):
+        report = self.report()
+        scenario(report, "barrier-synced")["observations"] = [{"key": "x", "state": "EXEC_READY"}]
+        self.refused("open observations, capsules or pins", report=report)
+
+    def test_pin_left(self):
+        report = self.report()
+        scenario(report, "barrier-synced")["pins"] = [f"{driver.OWNER}.0000000000000000"]
+        self.refused("open observations, capsules or pins", report=report)
+
+    def test_live_mode_at_start(self):
+        report = self.report()
+        scenario(report, "live")["mode_at_start"] = "LIVE"
+        self.refused("import before recovery was not refused", report=report)
+
+    def test_live_obligation_left(self):
+        report = self.report()
+        scenario(report, "live")["obligations"] = []
+        self.refused("the applied decision kept its marker or obligation", report=report)
+
+    def test_live_lowwater(self):
+        report = self.report()
+        scenario(report, "live")["decision_records"]["lowwater"] = {"sequence": 0}
+        self.refused("records of the applied decision", report=report)
+
+    def test_crash_event(self):
+        traces = self.traces()
+        events(traces, "head-written", "crash")[0]["event"] = "crashed"
+        self.refused("crash marker", traces=traces)
+
+    def test_first_intent_of_block_2(self):
+        traces = self.traces()
+        trace = traces["intent-synced"]
+        put = first_put(traces, "intent-synced", "decision", "intent")
+        later = first_put(traces, "intent-synced", "decision", "intent", sequence=1)
+        trace.insert(trace.index(put), copy.deepcopy(later))
+        self.refused("more than one intent", traces=traces)
+
+    def test_exec_ready_writes_differ(self):
+        traces = self.traces()
+        trace = traces["exec-ready-unsynced-drop"]
+        restart = next(i for i, e in enumerate(trace) if e.get("event") == "restart")
+        put = next(e for e in trace[restart:] if e.get("event") == "put" and e.get("record") == "exec-ready")
+        record = json.loads(put["value"])
+        record["exec_digest"] = "ab" * 32
+        put["value"] = json.dumps(record)
+        self.refused("EXEC_READY writes", traces=traces)
+
+    def test_marker_missing(self):
+        report = self.report()
+        del scenario(report, "intent-synced")["markers"]["0000000000000001"]
+        self.refused("markers", report=report)
+
+    def test_fixture_link_of_block_2(self):
+        block = probe14.rlp_list(RAW[1])
+        header = probe14.rlp_list(block[0])
+        header[0] = b"\xa0" + bytes(32)
+        changed = probe14.rlp_encode_list([probe14.rlp_encode_list(header)] + block[1:])
+        self.refused("not linked to the genesis", raw=[RAW[0], changed])
+
+    def test_intent_sequence(self):
+        traces = self.traces()
+        rewrite_intent(traces, "live", lambda r: r.update(sequence=5))
+        self.refused("Intent 0 identity", traces=traces)
+
+    def test_intent_producer(self):
+        traces = self.traces()
+        rewrite_intent(traces, "live", lambda r: r.update(producer="other.run"))
+        self.refused("Intent 0 identity", traces=traces)
+
+    def test_intent_kind_only(self):
+        traces = self.traces()
+        rewrite_intent(traces, "live", lambda r: r.update(kind="SIDE"))
+        self.refused("is not an IMPORT", traces=traces)
+
+    def test_intent_events_only(self):
+        traces = self.traces()
+        rewrite_intent(traces, "live", lambda r: r.update(events=False))
+        self.refused("is not an IMPORT", traces=traces)
+
+    def test_intent_old_head(self):
+        traces = self.traces()
+        rewrite_intent(traces, "live", lambda r: r["old_head"].update(number=9))
+        self.refused("Intent 0 heads", traces=traces)
+
+    def test_intent_member_block(self):
+        traces = self.traces()
+        rewrite_intent(traces, "live", lambda r: r["members"][0].update(block="12" * 32))
+        self.refused("member block or child root", traces=traces)
+
+    def rewrite_evidence(self, change):
+        traces = self.traces()
+        event = events(traces, "live", "evidence")[0]
+        change(event)
+        event["digest"] = driver.evidence_digest(event["kind"], event["old_head"], event["new_head"],
+                                                 event["justified"], event["finalized"])
+        return traces
+
+    def test_evidence_kind(self):
+        self.refused("Evidence heads", traces=self.rewrite_evidence(lambda e: e.update(kind="SIDE")))
+
+    def test_evidence_new_head(self):
+        self.refused("Evidence heads", traces=self.rewrite_evidence(lambda e: e["new_head"].update(hash="34" * 32)))
+
+    def test_evidence_justified(self):
+        self.refused("Finality result",
+                     traces=self.rewrite_evidence(lambda e: e.update(justified=dict(e["new_head"]))))
+
+    def rewrite_admission_decided(self, field):
+        traces = self.traces()
+        put = first_put(traces, "live", "admission", "decided")
+        record = json.loads(put["value"])
+        record[field] = "56" * 32
+        put["value"] = json.dumps(record)
+        return traces
+
+    def test_admission_decided_exec_ready_only(self):
+        self.refused("Admission DECIDED", traces=self.rewrite_admission_decided("exec_ready_digest"))
+
+    def test_admission_decided_decision_only(self):
+        self.refused("Admission DECIDED", traces=self.rewrite_admission_decided("decision_digest"))
+
+    def test_admission_decided_digest_only(self):
+        self.refused("Admission DECIDED", traces=self.rewrite_admission_decided("digest"))
+
+    def test_obligation_intent(self):
+        report = self.report()
+        scenario(report, "intent-synced")["obligations"][0]["intent_digest"] = "78" * 32
+        self.refused("Obligation 0 digests", report=report)
+
+    def test_before_bridge_refusal(self):
+        report = self.report()
+        scenario(report, "intent-synced")["extra"]["before_bridge"] = ""
+        self.refused("did not refuse", report=report)
+
+    def test_records_after_rejection(self):
+        report = self.report()
+        scenario(report, "native-rejection")["decision_records"]["0000000000000000/rejected"] = {}
+        self.refused("records after the rejection", report=report)
+
+    def test_lowwater_after_rejection(self):
+        report = self.report()
+        scenario(report, "native-rejection")["decision_records"]["lowwater"] = {"sequence": 0}
+        self.refused("records after the rejection", report=report)
+
+    def test_decided_writes_differ(self):
+        traces = self.traces()
+        put = first_put(traces, "decided-unsynced-drop", "decision", "decided")
+        record = json.loads(put["value"])
+        record["digest"] = "9a" * 32
+        put["value"] = json.dumps(record)
+        self.refused("NATIVE_DECIDED writes of block 1", traces=traces)
+
+    def test_native_write_first(self):
+        traces = self.traces()
+        traces["live"].insert(0, {"event": "native-block", "observation": "x", "sequence": 0})
+        self.refused("before the intent", traces=traces)
+
+    def test_resumed_intent_sequence(self):
+        traces = self.traces()
+        events(traces, "intent-synced", "intent-resumed")[0]["sequence"] = 1
+        self.refused("resumed intent", traces=traces)
+
+    def test_replay_digest(self):
+        traces = self.traces()
+        events(traces, "exec-ready-synced", "replayed")[0]["digest"] = "bc" * 32
+        self.refused("replay differs", traces=traces)
+
+    def test_replay_consumed(self):
+        traces = self.traces()
+        events(traces, "exec-ready-synced", "replayed")[0]["consumed_digest"] = "cd" * 32
+        self.refused("replay differs", traces=traces)
+
     def test_malformed(self):
         report = self.report()
         del scenario(report, "live")["markers"]

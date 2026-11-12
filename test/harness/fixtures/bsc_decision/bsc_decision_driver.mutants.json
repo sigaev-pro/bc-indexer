@@ -36,376 +36,605 @@
   "timeout_seconds": 300,
   "mutants": [
     {
-      "name": "check Fixture must hold two blocks",
+      "name": "NATIVE_DECIDED",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(len(raw_blocks) == 2, \"Fixture must hold two blocks\")",
-      "replacement": "require(True or len(raw_blocks) == 2, \"Fixture must hold two blocks\")"
+      "original": "require(decided == {\"sequence\": sequence, \"intent_digest\": intent[\"digest\"], \"delivery\": \"BATCH\",\n                        \"digest\": decision.decided_digest(intent[\"digest\"], \"BATCH\")}, f\"NATIVE_DECIDED {sequence}\")",
+      "replacement": "require(True or decided == {\"sequence\": sequence, \"intent_digest\": intent[\"digest\"], \"delivery\": \"BATCH\",\n                        \"digest\": decision.decided_digest(intent[\"digest\"], \"BATCH\")}, f\"NATIVE_DECIDED {sequence}\")"
     },
     {
-      "name": "check number",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require([h[\"number\"] for h in self.headers] == [1, 2], \"Fixture block numbers\")",
-      "replacement": "require(True or [h[\"number\"] for h in self.headers] == [1, 2], \"Fixture block numbers\")"
-    },
-    {
-      "name": "check parent",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(self.headers[0][\"parent\"] == genesis_hash and self.headers[1][\"parent\"] == self.headers[0][\"hash\"],",
-      "replacement": "require(True or self.headers[0][\"parent\"] == genesis_hash and self.headers[1][\"parent\"] == self.headers[0][\"hash\"],"
-    },
-    {
-      "name": "check The fixture expectation needs both blocks before Plato",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(plato_block > 2, \"The fixture expectation needs both blocks before Plato\")",
-      "replacement": "require(True or plato_block > 2, \"The fixture expectation needs both blocks before Plato\")"
-    },
-    {
-      "name": "check sequence",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(record[\"sequence\"] == sequence and record[\"native_store_id\"] == STORE_ID and",
-      "replacement": "require(True or record[\"sequence\"] == sequence and record[\"native_store_id\"] == STORE_ID and"
-    },
-    {
-      "name": "check kind",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(record[\"kind\"] == \"IMPORT\" and record[\"events\"] is True, f\"Intent {sequence} is not an IMPORT\")",
-      "replacement": "require(True or record[\"kind\"] == \"IMPORT\" and record[\"events\"] is True, f\"Intent {sequence} is not an IMPORT\")"
-    },
-    {
-      "name": "check old_head",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(record[\"old_head\"] == self.head(number - 1) and record[\"new_head\"] == self.head(number),",
-      "replacement": "require(True or record[\"old_head\"] == self.head(number - 1) and record[\"new_head\"] == self.head(number),"
-    },
-    {
-      "name": "check members",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(len(record[\"members\"]) == 1, f\"Intent {sequence} members\")",
-      "replacement": "require(True or len(record[\"members\"]) == 1, f\"Intent {sequence} members\")"
-    },
-    {
-      "name": "check block",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(member[\"block\"] == header[\"hash\"].hex() and member[\"child_root\"] == header[\"root\"].hex(),",
-      "replacement": "require(True or member[\"block\"] == header[\"hash\"].hex() and member[\"child_root\"] == header[\"root\"].hex(),"
-    },
-    {
-      "name": "check evidence_digest",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(record[\"evidence_digest\"] == evidence, f\"Intent {sequence} evidence digest\")",
-      "replacement": "require(True or record[\"evidence_digest\"] == evidence, f\"Intent {sequence} evidence digest\")"
-    },
-    {
-      "name": "check digest",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(record[\"digest\"] == decision.intent_digest(record), f\"Intent {sequence} digest\")",
-      "replacement": "require(True or record[\"digest\"] == decision.intent_digest(record), f\"Intent {sequence} digest\")"
-    },
-    {
-      "name": "check kind (2)",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(event[\"kind\"] == \"IMPORT\" and event[\"old_head\"] == fixture.head(number - 1) and",
-      "replacement": "require(True or event[\"kind\"] == \"IMPORT\" and event[\"old_head\"] == fixture.head(number - 1) and"
-    },
-    {
-      "name": "check justified",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(event[\"justified\"] == fixture.genesis and event[\"finalized\"] == fixture.genesis,",
-      "replacement": "require(True or event[\"justified\"] == fixture.genesis and event[\"finalized\"] == fixture.genesis,"
-    },
-    {
-      "name": "check digest (2)",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(event[\"digest\"] == evidence_digest(\"IMPORT\", event[\"old_head\"], event[\"new_head\"], event[\"justified\"],",
-      "replacement": "require(True or event[\"digest\"] == evidence_digest(\"IMPORT\", event[\"old_head\"], event[\"new_head\"], event[\"justified\"],"
-    },
-    {
-      "name": "check barrier",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(keys[-2:] == [\"barrier\", \"evidence\"], \"An intent without the barrier and the evidence before it\")",
-      "replacement": "require(True or keys[-2:] == [\"barrier\", \"evidence\"], \"An intent without the barrier and the evidence before it\")"
-    },
-    {
-      "name": "check intent",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(keys and keys[-1] in (\"intent\", \"intent-resumed\", \"native-block\"),",
-      "replacement": "require(True or keys and keys[-1] in (\"intent\", \"intent-resumed\", \"native-block\"),"
-    },
-    {
-      "name": "check sequence (2)",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(decided == {\"sequence\": sequence, \"intent_digest\": intent[\"digest\"], \"delivery\": \"BATCH\",",
-      "replacement": "require(True or decided == {\"sequence\": sequence, \"intent_digest\": intent[\"digest\"], \"delivery\": \"BATCH\","
-    },
-    {
-      "name": "check No admission DECIDED record of member['observation']",
+      "name": "No admission DECIDED record of",
       "file": "test/harness/bsc_decision.py",
       "original": "require(rows, f\"No admission DECIDED record of {member['observation']}\")",
       "replacement": "require(True or rows, f\"No admission DECIDED record of {member['observation']}\")"
     },
     {
-      "name": "check exec_ready_digest",
+      "name": "re-import: reimport[\"error\"] == \"\"",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(row[\"exec_ready_digest\"] == member[\"exec_ready_digest\"] and row[\"decision_digest\"] == decision_digest",
-      "replacement": "require(True or row[\"exec_ready_digest\"] == member[\"exec_ready_digest\"] and row[\"decision_digest\"] == decision_digest"
+      "original": "require(reimport[\"error\"] == \"\" and reimport[\"observation_counter\"][0] == reimport[\"observation_counter\"][1] and\n            reimport[\"decision_counter\"][0] == reimport[\"decision_counter\"][1], f\"{sc['name']}: re-import\")",
+      "replacement": "require(True and reimport[\"observation_counter\"][0] == reimport[\"observation_counter\"][1] and\n            reimport[\"decision_counter\"][0] == reimport[\"decision_counter\"][1], f\"{sc['name']}: re-import\")"
     },
     {
-      "name": "check error",
+      "name": "re-import: reimport[\"observation_counter\"][0] == re",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(reimport[\"error\"] == \"\" and reimport[\"observation_counter\"][0] == reimport[\"observation_counter\"][1] and",
-      "replacement": "require(True or reimport[\"error\"] == \"\" and reimport[\"observation_counter\"][0] == reimport[\"observation_counter\"][1] and"
+      "original": "require(reimport[\"error\"] == \"\" and reimport[\"observation_counter\"][0] == reimport[\"observation_counter\"][1] and\n            reimport[\"decision_counter\"][0] == reimport[\"decision_counter\"][1], f\"{sc['name']}: re-import\")",
+      "replacement": "require(reimport[\"error\"] == \"\" and True and\n            reimport[\"decision_counter\"][0] == reimport[\"decision_counter\"][1], f\"{sc['name']}: re-import\")"
     },
     {
-      "name": "check head",
+      "name": "re-import: reimport[\"decision_counter\"][0] == reimp",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(reimport[\"head\"] == sc[\"head_number\"] and reimport[\"blocks\"] == sc[\"head_number\"],",
-      "replacement": "require(True or reimport[\"head\"] == sc[\"head_number\"] and reimport[\"blocks\"] == sc[\"head_number\"],"
+      "original": "require(reimport[\"error\"] == \"\" and reimport[\"observation_counter\"][0] == reimport[\"observation_counter\"][1] and\n            reimport[\"decision_counter\"][0] == reimport[\"decision_counter\"][1], f\"{sc['name']}: re-import\")",
+      "replacement": "require(reimport[\"error\"] == \"\" and reimport[\"observation_counter\"][0] == reimport[\"observation_counter\"][1] and\n            True, f\"{sc['name']}: re-import\")"
     },
     {
-      "name": "check start",
+      "name": "re-import head: reimport[\"head\"] == sc[\"head_number\"]",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(reimport[\"head\"] == sc[\"head_number\"] and reimport[\"blocks\"] == sc[\"head_number\"],\n            f\"{sc['name']}: re-import head\")",
+      "replacement": "require(True and reimport[\"blocks\"] == sc[\"head_number\"],\n            f\"{sc['name']}: re-import head\")"
+    },
+    {
+      "name": "re-import head: reimport[\"blocks\"] == sc[\"head_number\"]",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(reimport[\"head\"] == sc[\"head_number\"] and reimport[\"blocks\"] == sc[\"head_number\"],\n            f\"{sc['name']}: re-import head\")",
+      "replacement": "require(reimport[\"head\"] == sc[\"head_number\"] and True,\n            f\"{sc['name']}: re-import head\")"
+    },
+    {
+      "name": "restart of the re-import",
       "file": "test/harness/bsc_decision.py",
       "original": "require(names[:3] == [\"start\", \"bridge-open\", \"live\"], f\"{sc['name']}: restart of the re-import\")",
       "replacement": "require(True or names[:3] == [\"start\", \"bridge-open\", \"live\"], f\"{sc['name']}: restart of the re-import\")"
     },
     {
-      "name": "check begin",
+      "name": "the re-import observed or decided a block",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(not set(names) & {\"begin\", \"replay\", \"barrier\", \"intent\", \"intent-resumed\", \"decided\", \"put\"},",
-      "replacement": "require(True or not set(names) & {\"begin\", \"replay\", \"barrier\", \"intent\", \"intent-resumed\", \"decided\", \"put\"},"
+      "original": "require(not set(names) & {\"begin\", \"replay\", \"barrier\", \"intent\", \"intent-resumed\", \"decided\", \"put\"},\n            f\"{sc['name']}: the re-import observed or decided a block\")",
+      "replacement": "require(True or not set(names) & {\"begin\", \"replay\", \"barrier\", \"intent\", \"intent-resumed\", \"decided\", \"put\"},\n            f\"{sc['name']}: the re-import observed or decided a block\")"
     },
     {
-      "name": "check mode",
+      "name": "final head: sc[\"mode\"] == \"LIVE\"",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(sc[\"mode\"] == \"LIVE\" and sc[\"head_number\"] == head and",
-      "replacement": "require(True or sc[\"mode\"] == \"LIVE\" and sc[\"head_number\"] == head and"
+      "original": "require(sc[\"mode\"] == \"LIVE\" and sc[\"head_number\"] == head and\n            (head == 0 or sc[\"head_hash\"] == fixture.head(head)[\"hash\"]), f\"{sc['name']}: final head\")",
+      "replacement": "require(True and sc[\"head_number\"] == head and\n            (head == 0 or sc[\"head_hash\"] == fixture.head(head)[\"hash\"]), f\"{sc['name']}: final head\")"
     },
     {
-      "name": "check observations",
+      "name": "final head: sc[\"head_number\"] == head",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(not sc[\"observations\"] and not sc[\"capsules\"] and not sc[\"pins\"],",
-      "replacement": "require(True or not sc[\"observations\"] and not sc[\"capsules\"] and not sc[\"pins\"],"
+      "original": "require(sc[\"mode\"] == \"LIVE\" and sc[\"head_number\"] == head and\n            (head == 0 or sc[\"head_hash\"] == fixture.head(head)[\"hash\"]), f\"{sc['name']}: final head\")",
+      "replacement": "require(sc[\"mode\"] == \"LIVE\" and True and\n            (head == 0 or sc[\"head_hash\"] == fixture.head(head)[\"hash\"]), f\"{sc['name']}: final head\")"
     },
     {
-      "name": "check Marker sequence has no intent",
+      "name": "final head: head == 0 or sc[\"head_hash\"] == fixture.",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(sequence in decisions_seen, f\"Marker {sequence} has no intent\")",
-      "replacement": "require(True or sequence in decisions_seen, f\"Marker {sequence} has no intent\")"
+      "original": "require(sc[\"mode\"] == \"LIVE\" and sc[\"head_number\"] == head and\n            (head == 0 or sc[\"head_hash\"] == fixture.head(head)[\"hash\"]), f\"{sc['name']}: final head\")",
+      "replacement": "require(sc[\"mode\"] == \"LIVE\" and sc[\"head_number\"] == head and\n            (True), f\"{sc['name']}: final head\")"
     },
     {
-      "name": "check intent (2)",
+      "name": "open observations, capsules or pins after the decisions: not sc[\"observations\"]",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(data == decision.marker_value(decisions_seen[sequence][\"intent\"]), f\"Marker {sequence} bytes\")",
-      "replacement": "require(True or data == decision.marker_value(decisions_seen[sequence][\"intent\"]), f\"Marker {sequence} bytes\")"
+      "original": "require(not sc[\"observations\"] and not sc[\"capsules\"] and not sc[\"pins\"],\n            f\"{sc['name']}: open observations, capsules or pins after the decisions\")",
+      "replacement": "require(True and not sc[\"capsules\"] and not sc[\"pins\"],\n            f\"{sc['name']}: open observations, capsules or pins after the decisions\")"
     },
     {
-      "name": "check intent_digest",
+      "name": "open observations, capsules or pins after the decisions: not sc[\"capsules\"]",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(row[\"intent_digest\"] == intent[\"digest\"] and",
-      "replacement": "require(True or row[\"intent_digest\"] == intent[\"digest\"] and"
+      "original": "require(not sc[\"observations\"] and not sc[\"capsules\"] and not sc[\"pins\"],\n            f\"{sc['name']}: open observations, capsules or pins after the decisions\")",
+      "replacement": "require(not sc[\"observations\"] and True and not sc[\"pins\"],\n            f\"{sc['name']}: open observations, capsules or pins after the decisions\")"
     },
     {
-      "name": "check mode_at_start",
+      "name": "open observations, capsules or pins after the decisions: not sc[\"pins\"]",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(sc[\"mode_at_start\"] == \"RECOVERY_ONLY\" and \"RECOVERY_ONLY\" in sc[\"extra\"][\"import_before_recovery\"],",
-      "replacement": "require(True or sc[\"mode_at_start\"] == \"RECOVERY_ONLY\" and \"RECOVERY_ONLY\" in sc[\"extra\"][\"import_before_recovery\"],"
+      "original": "require(not sc[\"observations\"] and not sc[\"capsules\"] and not sc[\"pins\"],\n            f\"{sc['name']}: open observations, capsules or pins after the decisions\")",
+      "replacement": "require(not sc[\"observations\"] and not sc[\"capsules\"] and True,\n            f\"{sc['name']}: open observations, capsules or pins after the decisions\")"
     },
     {
-      "name": "check guard",
+      "name": "live: an import before recovery was not refused: sc[\"mode_at_start\"] == \"RECOVERY_ONLY\"",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(sc[\"mode_at_start\"] == \"RECOVERY_ONLY\" and \"RECOVERY_ONLY\" in sc[\"extra\"][\"import_before_recovery\"],\n            \"live: an import before recovery was not refused\")",
+      "replacement": "require(True and \"RECOVERY_ONLY\" in sc[\"extra\"][\"import_before_recovery\"],\n            \"live: an import before recovery was not refused\")"
+    },
+    {
+      "name": "live: an import before recovery was not refused: \"RECOVERY_ONLY\" in sc[\"extra\"][\"import_b",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(sc[\"mode_at_start\"] == \"RECOVERY_ONLY\" and \"RECOVERY_ONLY\" in sc[\"extra\"][\"import_before_recovery\"],\n            \"live: an import before recovery was not refused\")",
+      "replacement": "require(sc[\"mode_at_start\"] == \"RECOVERY_ONLY\" and True,\n            \"live: an import before recovery was not refused\")"
+    },
+    {
+      "name": "live: a hook call without the guard was not refused",
       "file": "test/harness/bsc_decision.py",
       "original": "require(\"guard\" in sc[\"extra\"][\"begin_without_guard\"], \"live: a hook call without the guard was not refused\")",
       "replacement": "require(True or \"guard\" in sc[\"extra\"][\"begin_without_guard\"], \"live: a hook call without the guard was not refused\")"
     },
     {
-      "name": "check import_errors",
+      "name": "live: import error",
       "file": "test/harness/bsc_decision.py",
       "original": "require(sc[\"import_errors\"] == [\"\"], \"live: import error\")",
       "replacement": "require(True or sc[\"import_errors\"] == [\"\"], \"live: import error\")"
     },
     {
-      "name": "check bridge-open",
+      "name": "live: protocol order",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(key_names(live, until_live=False) == [\"bridge-open\", \"live\"] + [\"exec-ready\", \"barrier\", \"evidence\",",
-      "replacement": "require(True or key_names(live, until_live=False) == [\"bridge-open\", \"live\"] + [\"exec-ready\", \"barrier\", \"evidence\","
+      "original": "require(key_names(live, until_live=False) == [\"bridge-open\", \"live\"] + [\"exec-ready\", \"barrier\", \"evidence\",\n                                                                            \"intent\", \"native-block\", \"native-head\",\n                                                                            \"decided\"] * 2, \"live: protocol order\")",
+      "replacement": "require(True or key_names(live, until_live=False) == [\"bridge-open\", \"live\"] + [\"exec-ready\", \"barrier\", \"evidence\",\n                                                                            \"intent\", \"native-block\", \"native-head\",\n                                                                            \"decided\"] * 2, \"live: protocol order\")"
     },
     {
-      "name": "check live: decisions",
+      "name": "live: decisions",
       "file": "test/harness/bsc_decision.py",
       "original": "require(sorted(seen) == [0, 1], \"live: decisions\")",
       "replacement": "require(True or sorted(seen) == [0, 1], \"live: decisions\")"
     },
     {
-      "name": "check exec_ready_digest (2)",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(member[\"exec_ready_digest\"] == ready[member[\"observation\"]][\"digest\"], \"live: member EXEC_READY\")",
-      "replacement": "require(True or member[\"exec_ready_digest\"] == ready[member[\"observation\"]][\"digest\"], \"live: member EXEC_READY\")"
-    },
-    {
-      "name": "check extra",
+      "name": "live: the mirror applied another decision",
       "file": "test/harness/bsc_decision.py",
       "original": "require(sc[\"extra\"][\"applied_decision_0\"] == applied, \"live: the mirror applied another decision\")",
       "replacement": "require(True or sc[\"extra\"][\"applied_decision_0\"] == applied, \"live: the mirror applied another decision\")"
     },
     {
-      "name": "check live: the applied decision kept its marker or obligation",
+      "name": "live: the applied decision kept its marker or obligatio: markers == [1]",
       "file": "test/harness/bsc_decision.py",
       "original": "require(markers == [1] and obligations == [1], \"live: the applied decision kept its marker or obligation\")",
-      "replacement": "require(True or markers == [1] and obligations == [1], \"live: the applied decision kept its marker or obligation\")"
+      "replacement": "require(True and obligations == [1], \"live: the applied decision kept its marker or obligation\")"
     },
     {
-      "name": "check decision_records",
+      "name": "live: the applied decision kept its marker or obligatio: obligations == [1]",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(sorted(sc[\"decision_records\"]) == [\"0000000000000001/decided\", \"0000000000000001/intent\", \"counter\",",
-      "replacement": "require(True or sorted(sc[\"decision_records\"]) == [\"0000000000000001/decided\", \"0000000000000001/intent\", \"counter\","
+      "original": "require(markers == [1] and obligations == [1], \"live: the applied decision kept its marker or obligation\")",
+      "replacement": "require(markers == [1] and True, \"live: the applied decision kept its marker or obligation\")"
     },
     {
-      "name": "check event",
+      "name": "live: records of the applied decision: sorted(sc[\"decision_records\"]) == [\"0000",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(sorted(sc[\"decision_records\"]) == [\"0000000000000001/decided\", \"0000000000000001/intent\", \"counter\",\n                                               \"lowwater\", \"purged\"] and\n            sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, \"live: records of the applied decision\")",
+      "replacement": "require(True and\n            sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, \"live: records of the applied decision\")"
+    },
+    {
+      "name": "live: records of the applied decision: sc[\"decision_records\"][\"lowwater\"] == {\"",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(sorted(sc[\"decision_records\"]) == [\"0000000000000001/decided\", \"0000000000000001/intent\", \"counter\",\n                                               \"lowwater\", \"purged\"] and\n            sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, \"live: records of the applied decision\")",
+      "replacement": "require(sorted(sc[\"decision_records\"]) == [\"0000000000000001/decided\", \"0000000000000001/intent\", \"counter\",\n                                               \"lowwater\", \"purged\"] and\n            True, \"live: records of the applied decision\")"
+    },
+    {
+      "name": "crash marker: child[-1].get(\"event\") == \"crash\"",
       "file": "test/harness/bsc_decision.py",
       "original": "require(child[-1].get(\"event\") == \"crash\" and child[-1].get(\"point\") == mode, f\"{mode}: crash marker\")",
-      "replacement": "require(True or child[-1].get(\"event\") == \"crash\" and child[-1].get(\"point\") == mode, f\"{mode}: crash marker\")"
+      "replacement": "require(True and child[-1].get(\"point\") == mode, f\"{mode}: crash marker\")"
     },
     {
-      "name": "check bridge-open (2)",
+      "name": "crash marker: child[-1].get(\"point\") == mode",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(child[-1].get(\"event\") == \"crash\" and child[-1].get(\"point\") == mode, f\"{mode}: crash marker\")",
+      "replacement": "require(child[-1].get(\"event\") == \"crash\" and True, f\"{mode}: crash marker\")"
+    },
+    {
+      "name": "the child events",
       "file": "test/harness/bsc_decision.py",
       "original": "require(end == [\"bridge-open\"] + EXPECTED_CHILD_END[mode], f\"{mode}: the child events {end}\")",
       "replacement": "require(True or end == [\"bridge-open\"] + EXPECTED_CHILD_END[mode], f\"{mode}: the child events {end}\")"
     },
     {
-      "name": "check event (2)",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require([e.get(\"event\") for e in child[-2:]] == [\"native-bad-block\", \"crash\"], f\"{mode}: bad-block fixture\")",
-      "replacement": "require(True or [e.get(\"event\") for e in child[-2:]] == [\"native-bad-block\", \"crash\"], f\"{mode}: bad-block fixture\")"
-    },
-    {
-      "name": "check mode_at_start (2)",
+      "name": "mode at the restart",
       "file": "test/harness/bsc_decision.py",
       "original": "require(sc[\"mode_at_start\"] == \"RECOVERY_ONLY\", f\"{mode}: mode at the restart\")",
       "replacement": "require(True or sc[\"mode_at_start\"] == \"RECOVERY_ONLY\", f\"{mode}: mode at the restart\")"
     },
     {
-      "name": "check key",
+      "name": "observation at the restart",
       "file": "test/harness/bsc_decision.py",
-      "original": "require([(o[\"key\"], o[\"state\"]) for o in sc[\"observations_after_restart\"]] == [(f\"{OWNER}.{0:016x}\", state)],",
-      "replacement": "require(True or [(o[\"key\"], o[\"state\"]) for o in sc[\"observations_after_restart\"]] == [(f\"{OWNER}.{0:016x}\", state)],"
+      "original": "require([(o[\"key\"], o[\"state\"]) for o in sc[\"observations_after_restart\"]] == [(f\"{OWNER}.{0:016x}\", state)],\n            f\"{mode}: observation at the restart\")",
+      "replacement": "require(True or [(o[\"key\"], o[\"state\"]) for o in sc[\"observations_after_restart\"]] == [(f\"{OWNER}.{0:016x}\", state)],\n            f\"{mode}: observation at the restart\")"
     },
     {
-      "name": "check block1_root_on_disk_at_restart",
+      "name": "child root or head at the restart: sc[\"block1_root_on_disk_at_restart\"] is ",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(sc[\"block1_root_on_disk_at_restart\"] is on_disk and sc[\"head_at_restart\"] == head,",
-      "replacement": "require(True or sc[\"block1_root_on_disk_at_restart\"] is on_disk and sc[\"head_at_restart\"] == head,"
+      "original": "require(sc[\"block1_root_on_disk_at_restart\"] is on_disk and sc[\"head_at_restart\"] == head,\n            f\"{mode}: child root or head at the restart\")",
+      "replacement": "require(True and sc[\"head_at_restart\"] == head,\n            f\"{mode}: child root or head at the restart\")"
     },
     {
-      "name": "check recover_error",
+      "name": "child root or head at the restart: sc[\"head_at_restart\"] == head",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(sc[\"block1_root_on_disk_at_restart\"] is on_disk and sc[\"head_at_restart\"] == head,\n            f\"{mode}: child root or head at the restart\")",
+      "replacement": "require(sc[\"block1_root_on_disk_at_restart\"] is on_disk and True,\n            f\"{mode}: child root or head at the restart\")"
+    },
+    {
+      "name": "recovery error",
       "file": "test/harness/bsc_decision.py",
       "original": "require(not sc.get(\"recover_error\"), f\"{mode}: recovery error\")",
       "replacement": "require(True or not sc.get(\"recover_error\"), f\"{mode}: recovery error\")"
     },
     {
-      "name": "check recovery order key_names(parent)",
+      "name": "recovery order",
       "file": "test/harness/bsc_decision.py",
       "original": "require(key_names(parent) == EXPECTED_AFTER_RESTART[mode], f\"{mode}: recovery order {key_names(parent)}\")",
       "replacement": "require(True or key_names(parent) == EXPECTED_AFTER_RESTART[mode], f\"{mode}: recovery order {key_names(parent)}\")"
     },
     {
-      "name": "check not open yet",
+      "name": "block 1 has more than one intent: [i[\"sequence\"] for i in intents][:1] == ",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(\"not open yet\" in sc[\"extra\"][\"before_bridge\"] and",
-      "replacement": "require(True or \"not open yet\" in sc[\"extra\"][\"before_bridge\"] and"
+      "original": "require([i[\"sequence\"] for i in intents][:1] == [0] and sum(i[\"sequence\"] == 0 for i in intents) == 1,\n            f\"{mode}: block 1 has more than one intent\")",
+      "replacement": "require(True and sum(i[\"sequence\"] == 0 for i in intents) == 1,\n            f\"{mode}: block 1 has more than one intent\")"
     },
     {
-      "name": "check stored",
+      "name": "block 1 has more than one intent: sum(i[\"sequence\"] == 0 for i in intents)",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(settle[\"stored\"] is SETTLE_STORED[mode], f\"{mode}: block 1 stored at the settle\")",
-      "replacement": "require(True or settle[\"stored\"] is SETTLE_STORED[mode], f\"{mode}: block 1 stored at the settle\")"
+      "original": "require([i[\"sequence\"] for i in intents][:1] == [0] and sum(i[\"sequence\"] == 0 for i in intents) == 1,\n            f\"{mode}: block 1 has more than one intent\")",
+      "replacement": "require([i[\"sequence\"] for i in intents][:1] == [0] and True,\n            f\"{mode}: block 1 has more than one intent\")"
     },
     {
-      "name": "check sequence (3)",
+      "name": "EXEC_READY writes: ready",
       "file": "test/harness/bsc_decision.py",
-      "original": "require([i[\"sequence\"] for i in intents][:1] == [0] and sum(i[\"sequence\"] == 0 for i in intents) == 1,",
-      "replacement": "require(True or [i[\"sequence\"] for i in intents][:1] == [0] and sum(i[\"sequence\"] == 0 for i in intents) == 1,"
+      "original": "require(ready and all(r == ready[0] for r in ready) and\n            len(ready) == (2 if mode == \"exec-ready-unsynced-drop\" else 1), f\"{mode}: EXEC_READY writes\")",
+      "replacement": "require(True and all(r == ready[0] for r in ready) and\n            len(ready) == (2 if mode == \"exec-ready-unsynced-drop\" else 1), f\"{mode}: EXEC_READY writes\")",
+      "equivalent": "The same require also asks len(ready) to be 1 or 2, which already refuses an empty list."
     },
     {
-      "name": "check sequence (4)",
+      "name": "EXEC_READY writes: all(r == ready[0] for r in ready)",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(event[\"sequence\"] == 0 and event[\"digest\"] == seen[0][\"intent\"][\"digest\"],",
-      "replacement": "require(True or event[\"sequence\"] == 0 and event[\"digest\"] == seen[0][\"intent\"][\"digest\"],"
+      "original": "require(ready and all(r == ready[0] for r in ready) and\n            len(ready) == (2 if mode == \"exec-ready-unsynced-drop\" else 1), f\"{mode}: EXEC_READY writes\")",
+      "replacement": "require(ready and True and\n            len(ready) == (2 if mode == \"exec-ready-unsynced-drop\" else 1), f\"{mode}: EXEC_READY writes\")"
     },
     {
-      "name": "check ready and all(r == ready[0] for r in rea",
+      "name": "EXEC_READY writes: len(ready) == (2 if mode == \"exec-ready-",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(ready and all(r == ready[0] for r in ready) and",
-      "replacement": "require(True or ready and all(r == ready[0] for r in ready) and"
+      "original": "require(ready and all(r == ready[0] for r in ready) and\n            len(ready) == (2 if mode == \"exec-ready-unsynced-drop\" else 1), f\"{mode}: EXEC_READY writes\")",
+      "replacement": "require(ready and all(r == ready[0] for r in ready) and\n            True, f\"{mode}: EXEC_READY writes\")"
     },
     {
-      "name": "check exec_ready_digest (3)",
+      "name": "member EXEC_READY digest",
       "file": "test/harness/bsc_decision.py",
       "original": "require(member[\"exec_ready_digest\"] == ready[-1][\"digest\"], f\"{mode}: member EXEC_READY digest\")",
       "replacement": "require(True or member[\"exec_ready_digest\"] == ready[-1][\"digest\"], f\"{mode}: member EXEC_READY digest\")"
     },
     {
-      "name": "check digest (3)",
+      "name": "markers or obligations: markers == want",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(event[\"digest\"] == ready[-1][\"digest\"] and event[\"consumed_digest\"] == ready[-1][\"consumed_digest\"]",
-      "replacement": "require(True or event[\"digest\"] == ready[-1][\"digest\"] and event[\"consumed_digest\"] == ready[-1][\"consumed_digest\"]"
+      "original": "require(markers == want and obligations == want, f\"{mode}: markers {markers} or obligations {obligations}\")",
+      "replacement": "require(True and obligations == want, f\"{mode}: markers {markers} or obligations {obligations}\")"
     },
     {
-      "name": "check evidence",
+      "name": "markers or obligations: obligations == want",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(markers == want and obligations == want, f\"{mode}: markers {markers} or obligations {obligations}\")",
+      "replacement": "require(markers == want and True, f\"{mode}: markers {markers} or obligations {obligations}\")"
+    },
+    {
+      "name": "Scenarios",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(list(scenarios) == list(TRACES), f\"Scenarios {list(scenarios)}\")",
+      "replacement": "require(True or list(scenarios) == list(TRACES), f\"Scenarios {list(scenarios)}\")"
+    },
+    {
+      "name": "Fixture must hold two blocks",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(len(raw_blocks) == 2, \"Fixture must hold two blocks\")",
+      "replacement": "require(True or len(raw_blocks) == 2, \"Fixture must hold two blocks\")"
+    },
+    {
+      "name": "Fixture block numbers",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require([h[\"number\"] for h in self.headers] == [1, 2], \"Fixture block numbers\")",
+      "replacement": "require(True or [h[\"number\"] for h in self.headers] == [1, 2], \"Fixture block numbers\")"
+    },
+    {
+      "name": "Fixture blocks are not linked to the genesis: self.headers[0][\"parent\"] == genesis_has",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(self.headers[0][\"parent\"] == genesis_hash and self.headers[1][\"parent\"] == self.headers[0][\"hash\"],\n                \"Fixture blocks are not linked to the genesis\")",
+      "replacement": "require(True and self.headers[1][\"parent\"] == self.headers[0][\"hash\"],\n                \"Fixture blocks are not linked to the genesis\")"
+    },
+    {
+      "name": "Fixture blocks are not linked to the genesis: self.headers[1][\"parent\"] == self.header",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(self.headers[0][\"parent\"] == genesis_hash and self.headers[1][\"parent\"] == self.headers[0][\"hash\"],\n                \"Fixture blocks are not linked to the genesis\")",
+      "replacement": "require(self.headers[0][\"parent\"] == genesis_hash and True,\n                \"Fixture blocks are not linked to the genesis\")"
+    },
+    {
+      "name": "The fixture expectation needs both blocks before Plato",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(plato_block > 2, \"The fixture expectation needs both blocks before Plato\")",
+      "replacement": "require(True or plato_block > 2, \"The fixture expectation needs both blocks before Plato\")"
+    },
+    {
+      "name": "Intent identity: record[\"sequence\"] == sequence",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"sequence\"] == sequence and record[\"native_store_id\"] == STORE_ID and\n                record[\"producer\"] == OWNER, f\"Intent {sequence} identity\")",
+      "replacement": "require(True and record[\"native_store_id\"] == STORE_ID and\n                record[\"producer\"] == OWNER, f\"Intent {sequence} identity\")"
+    },
+    {
+      "name": "Intent identity: record[\"native_store_id\"] == STORE_ID",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"sequence\"] == sequence and record[\"native_store_id\"] == STORE_ID and\n                record[\"producer\"] == OWNER, f\"Intent {sequence} identity\")",
+      "replacement": "require(record[\"sequence\"] == sequence and True and\n                record[\"producer\"] == OWNER, f\"Intent {sequence} identity\")"
+    },
+    {
+      "name": "Intent identity: record[\"producer\"] == OWNER",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"sequence\"] == sequence and record[\"native_store_id\"] == STORE_ID and\n                record[\"producer\"] == OWNER, f\"Intent {sequence} identity\")",
+      "replacement": "require(record[\"sequence\"] == sequence and record[\"native_store_id\"] == STORE_ID and\n                True, f\"Intent {sequence} identity\")"
+    },
+    {
+      "name": "Intent is not an IMPORT: record[\"kind\"] == \"IMPORT\"",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"kind\"] == \"IMPORT\" and record[\"events\"] is True, f\"Intent {sequence} is not an IMPORT\")",
+      "replacement": "require(True and record[\"events\"] is True, f\"Intent {sequence} is not an IMPORT\")"
+    },
+    {
+      "name": "Intent is not an IMPORT: record[\"events\"] is True",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"kind\"] == \"IMPORT\" and record[\"events\"] is True, f\"Intent {sequence} is not an IMPORT\")",
+      "replacement": "require(record[\"kind\"] == \"IMPORT\" and True, f\"Intent {sequence} is not an IMPORT\")"
+    },
+    {
+      "name": "Intent heads: record[\"old_head\"] == self.head(number -",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"old_head\"] == self.head(number - 1) and record[\"new_head\"] == self.head(number),\n                f\"Intent {sequence} heads\")",
+      "replacement": "require(True and record[\"new_head\"] == self.head(number),\n                f\"Intent {sequence} heads\")"
+    },
+    {
+      "name": "Intent heads: record[\"new_head\"] == self.head(number)",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"old_head\"] == self.head(number - 1) and record[\"new_head\"] == self.head(number),\n                f\"Intent {sequence} heads\")",
+      "replacement": "require(record[\"old_head\"] == self.head(number - 1) and True,\n                f\"Intent {sequence} heads\")"
+    },
+    {
+      "name": "Intent members",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(len(record[\"members\"]) == 1, f\"Intent {sequence} members\")",
+      "replacement": "require(True or len(record[\"members\"]) == 1, f\"Intent {sequence} members\")"
+    },
+    {
+      "name": "Intent member block or child root: member[\"block\"] == header[\"hash\"].hex()",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(member[\"block\"] == header[\"hash\"].hex() and member[\"child_root\"] == header[\"root\"].hex(),\n                f\"Intent {sequence} member block or child root\")",
+      "replacement": "require(True and member[\"child_root\"] == header[\"root\"].hex(),\n                f\"Intent {sequence} member block or child root\")"
+    },
+    {
+      "name": "Intent member block or child root: member[\"child_root\"] == header[\"root\"].h",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(member[\"block\"] == header[\"hash\"].hex() and member[\"child_root\"] == header[\"root\"].hex(),\n                f\"Intent {sequence} member block or child root\")",
+      "replacement": "require(member[\"block\"] == header[\"hash\"].hex() and True,\n                f\"Intent {sequence} member block or child root\")"
+    },
+    {
+      "name": "Intent evidence digest",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"evidence_digest\"] == evidence, f\"Intent {sequence} evidence digest\")",
+      "replacement": "require(True or record[\"evidence_digest\"] == evidence, f\"Intent {sequence} evidence digest\")"
+    },
+    {
+      "name": "Intent digest",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(record[\"digest\"] == decision.intent_digest(record), f\"Intent {sequence} digest\")",
+      "replacement": "require(True or record[\"digest\"] == decision.intent_digest(record), f\"Intent {sequence} digest\")"
+    },
+    {
+      "name": "Evidence heads: event[\"kind\"] == \"IMPORT\"",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"kind\"] == \"IMPORT\" and event[\"old_head\"] == fixture.head(number - 1) and\n                event[\"new_head\"] == fixture.head(number), \"Evidence heads\")",
+      "replacement": "require(True and event[\"old_head\"] == fixture.head(number - 1) and\n                event[\"new_head\"] == fixture.head(number), \"Evidence heads\")"
+    },
+    {
+      "name": "Evidence heads: event[\"old_head\"] == fixture.head(number",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"kind\"] == \"IMPORT\" and event[\"old_head\"] == fixture.head(number - 1) and\n                event[\"new_head\"] == fixture.head(number), \"Evidence heads\")",
+      "replacement": "require(event[\"kind\"] == \"IMPORT\" and True and\n                event[\"new_head\"] == fixture.head(number), \"Evidence heads\")"
+    },
+    {
+      "name": "Evidence heads: event[\"new_head\"] == fixture.head(number",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"kind\"] == \"IMPORT\" and event[\"old_head\"] == fixture.head(number - 1) and\n                event[\"new_head\"] == fixture.head(number), \"Evidence heads\")",
+      "replacement": "require(event[\"kind\"] == \"IMPORT\" and event[\"old_head\"] == fixture.head(number - 1) and\n                True, \"Evidence heads\")"
+    },
+    {
+      "name": "Finality result of a pre-Plato block is not the genesis: event[\"justified\"] == fixture.genesis",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"justified\"] == fixture.genesis and event[\"finalized\"] == fixture.genesis,\n                \"Finality result of a pre-Plato block is not the genesis\")",
+      "replacement": "require(True and event[\"finalized\"] == fixture.genesis,\n                \"Finality result of a pre-Plato block is not the genesis\")"
+    },
+    {
+      "name": "Finality result of a pre-Plato block is not the genesis: event[\"finalized\"] == fixture.genesis",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"justified\"] == fixture.genesis and event[\"finalized\"] == fixture.genesis,\n                \"Finality result of a pre-Plato block is not the genesis\")",
+      "replacement": "require(event[\"justified\"] == fixture.genesis and True,\n                \"Finality result of a pre-Plato block is not the genesis\")"
+    },
+    {
+      "name": "Evidence digest",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"digest\"] == evidence_digest(\"IMPORT\", event[\"old_head\"], event[\"new_head\"], event[\"justified\"],\n                                                   event[\"finalized\"]), \"Evidence digest\")",
+      "replacement": "require(True or event[\"digest\"] == evidence_digest(\"IMPORT\", event[\"old_head\"], event[\"new_head\"], event[\"justified\"],\n                                                   event[\"finalized\"]), \"Evidence digest\")"
+    },
+    {
+      "name": "Admission DECIDED of: row[\"exec_ready_digest\"] == member[\"exec",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(row[\"exec_ready_digest\"] == member[\"exec_ready_digest\"] and row[\"decision_digest\"] == decision_digest\n                and row[\"digest\"] == admission.decided_digest(member[\"exec_ready_digest\"], decision_digest),\n                f\"Admission DECIDED of {member['observation']}\")",
+      "replacement": "require(True and row[\"decision_digest\"] == decision_digest\n                and row[\"digest\"] == admission.decided_digest(member[\"exec_ready_digest\"], decision_digest),\n                f\"Admission DECIDED of {member['observation']}\")"
+    },
+    {
+      "name": "Admission DECIDED of: row[\"decision_digest\"] == decision_diges",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(row[\"exec_ready_digest\"] == member[\"exec_ready_digest\"] and row[\"decision_digest\"] == decision_digest\n                and row[\"digest\"] == admission.decided_digest(member[\"exec_ready_digest\"], decision_digest),\n                f\"Admission DECIDED of {member['observation']}\")",
+      "replacement": "require(row[\"exec_ready_digest\"] == member[\"exec_ready_digest\"] and True\n                and row[\"digest\"] == admission.decided_digest(member[\"exec_ready_digest\"], decision_digest),\n                f\"Admission DECIDED of {member['observation']}\")"
+    },
+    {
+      "name": "Admission DECIDED of: row[\"digest\"] == admission.decided_diges",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(row[\"exec_ready_digest\"] == member[\"exec_ready_digest\"] and row[\"decision_digest\"] == decision_digest\n                and row[\"digest\"] == admission.decided_digest(member[\"exec_ready_digest\"], decision_digest),\n                f\"Admission DECIDED of {member['observation']}\")",
+      "replacement": "require(row[\"exec_ready_digest\"] == member[\"exec_ready_digest\"] and row[\"decision_digest\"] == decision_digest\n                and True,\n                f\"Admission DECIDED of {member['observation']}\")"
+    },
+    {
+      "name": "Marker has no intent",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(sequence in decisions_seen, f\"Marker {sequence} has no intent\")",
+      "replacement": "require(True or sequence in decisions_seen, f\"Marker {sequence} has no intent\")"
+    },
+    {
+      "name": "Marker bytes",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(data == decision.marker_value(decisions_seen[sequence][\"intent\"]), f\"Marker {sequence} bytes\")",
+      "replacement": "require(True or data == decision.marker_value(decisions_seen[sequence][\"intent\"]), f\"Marker {sequence} bytes\")"
+    },
+    {
+      "name": "Obligation digests: row[\"intent_digest\"] == intent[\"digest\"]",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(row[\"intent_digest\"] == intent[\"digest\"] and\n                row[\"decided_digest\"] == decision.decided_digest(intent[\"digest\"], \"BATCH\"),\n                f\"Obligation {row['sequence']} digests\")",
+      "replacement": "require(True and\n                row[\"decided_digest\"] == decision.decided_digest(intent[\"digest\"], \"BATCH\"),\n                f\"Obligation {row['sequence']} digests\")"
+    },
+    {
+      "name": "Obligation digests: row[\"decided_digest\"] == decision.decide",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(row[\"intent_digest\"] == intent[\"digest\"] and\n                row[\"decided_digest\"] == decision.decided_digest(intent[\"digest\"], \"BATCH\"),\n                f\"Obligation {row['sequence']} digests\")",
+      "replacement": "require(row[\"intent_digest\"] == intent[\"digest\"] and\n                True,\n                f\"Obligation {row['sequence']} digests\")"
+    },
+    {
+      "name": "live: member EXEC_READY",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(member[\"exec_ready_digest\"] == ready[member[\"observation\"]][\"digest\"], \"live: member EXEC_READY\")",
+      "replacement": "require(True or member[\"exec_ready_digest\"] == ready[member[\"observation\"]][\"digest\"], \"live: member EXEC_READY\")"
+    },
+    {
+      "name": "bad-block fixture",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require([e.get(\"event\") for e in child[-2:]] == [\"native-bad-block\", \"crash\"], f\"{mode}: bad-block fixture\")",
+      "replacement": "require(True or [e.get(\"event\") for e in child[-2:]] == [\"native-bad-block\", \"crash\"], f\"{mode}: bad-block fixture\")"
+    },
+    {
+      "name": "the hook did not refuse before the intent was settled: \"not open yet\" in sc[\"extra\"][\"before_br",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(\"not open yet\" in sc[\"extra\"][\"before_bridge\"] and\n                \"still pending\" in sc[\"extra\"][\"other_block_while_pending\"],\n                f\"{mode}: the hook did not refuse before the intent was settled\")",
+      "replacement": "require(True and\n                \"still pending\" in sc[\"extra\"][\"other_block_while_pending\"],\n                f\"{mode}: the hook did not refuse before the intent was settled\")"
+    },
+    {
+      "name": "the hook did not refuse before the intent was settled: \"still pending\" in sc[\"extra\"][\"other_bl",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(\"not open yet\" in sc[\"extra\"][\"before_bridge\"] and\n                \"still pending\" in sc[\"extra\"][\"other_block_while_pending\"],\n                f\"{mode}: the hook did not refuse before the intent was settled\")",
+      "replacement": "require(\"not open yet\" in sc[\"extra\"][\"before_bridge\"] and\n                True,\n                f\"{mode}: the hook did not refuse before the intent was settled\")"
+    },
+    {
+      "name": "the replay on a moved head was not refused",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(\"sequential import profile\" in sc[\"extra\"][\"replay_on_moved_head\"],\n                f\"{mode}: the replay on a moved head was not refused\")",
+      "replacement": "require(True or \"sequential import profile\" in sc[\"extra\"][\"replay_on_moved_head\"],\n                f\"{mode}: the replay on a moved head was not refused\")"
+    },
+    {
+      "name": "block 1 stored at the settle",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(settle[\"stored\"] is SETTLE_STORED[mode], f\"{mode}: block 1 stored at the settle\")",
+      "replacement": "require(True or settle[\"stored\"] is SETTLE_STORED[mode], f\"{mode}: block 1 stored at the settle\")"
+    },
+    {
+      "name": "bad-block evidence",
       "file": "test/harness/bsc_decision.py",
       "original": "require(settle[\"evidence\"] == evidence, f\"{mode}: bad-block evidence\")",
       "replacement": "require(True or settle[\"evidence\"] == evidence, f\"{mode}: bad-block evidence\")"
     },
     {
-      "name": "check rejected",
+      "name": "rejected intent record: seen[0].get(\"rejected\") == want",
       "file": "test/harness/bsc_decision.py",
       "original": "require(seen[0].get(\"rejected\") == want and \"decided\" not in seen[0], f\"{mode}: rejected intent record\")",
-      "replacement": "require(True or seen[0].get(\"rejected\") == want and \"decided\" not in seen[0], f\"{mode}: rejected intent record\")"
+      "replacement": "require(True and \"decided\" not in seen[0], f\"{mode}: rejected intent record\")"
     },
     {
-      "name": "check digest (4)",
+      "name": "rejected intent record: \"decided\" not in seen[0]",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(seen[0].get(\"rejected\") == want and \"decided\" not in seen[0], f\"{mode}: rejected intent record\")",
+      "replacement": "require(seen[0].get(\"rejected\") == want and True, f\"{mode}: rejected intent record\")"
+    },
+    {
+      "name": "rejection event",
       "file": "test/harness/bsc_decision.py",
       "original": "require(rejection[\"digest\"] == want[\"digest\"], f\"{mode}: rejection event\")",
       "replacement": "require(True or rejection[\"digest\"] == want[\"digest\"], f\"{mode}: rejection event\")"
     },
     {
-      "name": "check event (3)",
+      "name": "a native write or decision after the rejection",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(not [e for e in parent if e.get(\"event\") in (\"native-block\", \"native-head\", \"decided\")],",
-      "replacement": "require(True or not [e for e in parent if e.get(\"event\") in (\"native-block\", \"native-head\", \"decided\")],"
+      "original": "require(not [e for e in parent if e.get(\"event\") in (\"native-block\", \"native-head\", \"decided\")],\n                f\"{mode}: a native write or decision after the rejection\")",
+      "replacement": "require(True or not [e for e in parent if e.get(\"event\") in (\"native-block\", \"native-head\", \"decided\")],\n                f\"{mode}: a native write or decision after the rejection\")"
     },
     {
-      "name": "check import_errors (2)",
+      "name": "records after the rejection: sc[\"import_errors\"] == []",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(sc[\"import_errors\"] == [] and sorted(sc[\"decision_records\"]) == [\"counter\", \"lowwater\", \"purged\"] and",
-      "replacement": "require(True or sc[\"import_errors\"] == [] and sorted(sc[\"decision_records\"]) == [\"counter\", \"lowwater\", \"purged\"] and"
+      "original": "require(sc[\"import_errors\"] == [] and sorted(sc[\"decision_records\"]) == [\"counter\", \"lowwater\", \"purged\"] and\n                sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, f\"{mode}: records after the rejection\")",
+      "replacement": "require(True and sorted(sc[\"decision_records\"]) == [\"counter\", \"lowwater\", \"purged\"] and\n                sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, f\"{mode}: records after the rejection\")"
     },
     {
-      "name": "check decided-unsynced-drop",
+      "name": "records after the rejection: sorted(sc[\"decision_records\"]) == [\"coun",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(len(decided_puts) == (2 if mode == \"decided-unsynced-drop\" else 1) and",
-      "replacement": "require(True or len(decided_puts) == (2 if mode == \"decided-unsynced-drop\" else 1) and"
+      "original": "require(sc[\"import_errors\"] == [] and sorted(sc[\"decision_records\"]) == [\"counter\", \"lowwater\", \"purged\"] and\n                sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, f\"{mode}: records after the rejection\")",
+      "replacement": "require(sc[\"import_errors\"] == [] and True and\n                sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, f\"{mode}: records after the rejection\")"
     },
     {
-      "name": "check import_errors (3)",
+      "name": "records after the rejection: sc[\"decision_records\"][\"lowwater\"] == {\"",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(sc[\"import_errors\"] == [] and sorted(sc[\"decision_records\"]) == [\"counter\", \"lowwater\", \"purged\"] and\n                sc[\"decision_records\"][\"lowwater\"] == {\"sequence\": 1}, f\"{mode}: records after the rejection\")",
+      "replacement": "require(sc[\"import_errors\"] == [] and sorted(sc[\"decision_records\"]) == [\"counter\", \"lowwater\", \"purged\"] and\n                True, f\"{mode}: records after the rejection\")"
+    },
+    {
+      "name": "NATIVE_DECIDED writes of block 1: len(decided_puts) == (2 if mode == \"deci",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(len(decided_puts) == (2 if mode == \"decided-unsynced-drop\" else 1) and\n                all(d == decided_puts[0] for d in decided_puts), f\"{mode}: NATIVE_DECIDED writes of block 1\")",
+      "replacement": "require(True and\n                all(d == decided_puts[0] for d in decided_puts), f\"{mode}: NATIVE_DECIDED writes of block 1\")"
+    },
+    {
+      "name": "NATIVE_DECIDED writes of block 1: all(d == decided_puts[0] for d in decide",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(len(decided_puts) == (2 if mode == \"decided-unsynced-drop\" else 1) and\n                all(d == decided_puts[0] for d in decided_puts), f\"{mode}: NATIVE_DECIDED writes of block 1\")",
+      "replacement": "require(len(decided_puts) == (2 if mode == \"decided-unsynced-drop\" else 1) and\n                True, f\"{mode}: NATIVE_DECIDED writes of block 1\")"
+    },
+    {
+      "name": "live import after recovery",
       "file": "test/harness/bsc_decision.py",
       "original": "require(sc[\"import_errors\"] == [\"\"], f\"{mode}: live import after recovery\")",
       "replacement": "require(True or sc[\"import_errors\"] == [\"\"], f\"{mode}: live import after recovery\")"
     },
     {
-      "name": "check decisions",
+      "name": "decisions",
       "file": "test/harness/bsc_decision.py",
       "original": "require(sorted(seen) == [0, 1], f\"{mode}: decisions\")",
       "replacement": "require(True or sorted(seen) == [0, 1], f\"{mode}: decisions\")"
     },
     {
-      "name": "check markers markers or obligations obligations",
+      "name": "An intent without the barrier and the evidence before i",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(markers == want and obligations == want, f\"{mode}: markers {markers} or obligations {obligations}\")",
-      "replacement": "require(True or markers == want and obligations == want, f\"{mode}: markers {markers} or obligations {obligations}\")"
+      "original": "require(keys[-2:] == [\"barrier\", \"evidence\"], \"An intent without the barrier and the evidence before it\")",
+      "replacement": "require(True or keys[-2:] == [\"barrier\", \"evidence\"], \"An intent without the barrier and the evidence before it\")"
     },
     {
-      "name": "check Scenarios list(scenarios)",
+      "name": "before the intent of its decision: keys",
       "file": "test/harness/bsc_decision.py",
-      "original": "require(list(scenarios) == list(TRACES), f\"Scenarios {list(scenarios)}\")",
-      "replacement": "require(True or list(scenarios) == list(TRACES), f\"Scenarios {list(scenarios)}\")"
+      "original": "require(keys and keys[-1] in (\"intent\", \"intent-resumed\", \"native-block\"),\n                    f\"{name} before the intent of its decision\")",
+      "replacement": "require(True and keys[-1] in (\"intent\", \"intent-resumed\", \"native-block\"),\n                    f\"{name} before the intent of its decision\")"
+    },
+    {
+      "name": "before the intent of its decision: keys[-1] in (\"intent\", \"intent-resumed\",",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(keys and keys[-1] in (\"intent\", \"intent-resumed\", \"native-block\"),\n                    f\"{name} before the intent of its decision\")",
+      "replacement": "require(keys and True,\n                    f\"{name} before the intent of its decision\")"
+    },
+    {
+      "name": "resumed intent: event[\"sequence\"] == 0",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"sequence\"] == 0 and event[\"digest\"] == seen[0][\"intent\"][\"digest\"],\n                    f\"{mode}: resumed intent\")",
+      "replacement": "require(True and event[\"digest\"] == seen[0][\"intent\"][\"digest\"],\n                    f\"{mode}: resumed intent\")"
+    },
+    {
+      "name": "resumed intent: event[\"digest\"] == seen[0][\"intent\"][\"di",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"sequence\"] == 0 and event[\"digest\"] == seen[0][\"intent\"][\"digest\"],\n                    f\"{mode}: resumed intent\")",
+      "replacement": "require(event[\"sequence\"] == 0 and True,\n                    f\"{mode}: resumed intent\")"
+    },
+    {
+      "name": "replay differs: event[\"digest\"] == ready[-1][\"digest\"]",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"digest\"] == ready[-1][\"digest\"] and event[\"consumed_digest\"] == ready[-1][\"consumed_digest\"]\n                    and event[\"exec_digest\"] == ready[-1][\"exec_digest\"], f\"{mode}: replay differs\")",
+      "replacement": "require(True and event[\"consumed_digest\"] == ready[-1][\"consumed_digest\"]\n                    and event[\"exec_digest\"] == ready[-1][\"exec_digest\"], f\"{mode}: replay differs\")"
+    },
+    {
+      "name": "replay differs: event[\"consumed_digest\"] == ready[-1][\"c",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"digest\"] == ready[-1][\"digest\"] and event[\"consumed_digest\"] == ready[-1][\"consumed_digest\"]\n                    and event[\"exec_digest\"] == ready[-1][\"exec_digest\"], f\"{mode}: replay differs\")",
+      "replacement": "require(event[\"digest\"] == ready[-1][\"digest\"] and True\n                    and event[\"exec_digest\"] == ready[-1][\"exec_digest\"], f\"{mode}: replay differs\")"
+    },
+    {
+      "name": "replay differs: event[\"exec_digest\"] == ready[-1][\"exec_",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(event[\"digest\"] == ready[-1][\"digest\"] and event[\"consumed_digest\"] == ready[-1][\"consumed_digest\"]\n                    and event[\"exec_digest\"] == ready[-1][\"exec_digest\"], f\"{mode}: replay differs\")",
+      "replacement": "require(event[\"digest\"] == ready[-1][\"digest\"] and event[\"consumed_digest\"] == ready[-1][\"consumed_digest\"]\n                    and True, f\"{mode}: replay differs\")"
     },
     {
       "name": "formula evidence kind",
@@ -454,12 +683,6 @@
       "file": "test/harness/bsc_decision.py",
       "original": "        if name in KEY_EVENTS:\n            keys.append(name)",
       "replacement": "        if name in KEY_EVENTS and name != \"barrier\":\n            keys.append(name)"
-    },
-    {
-      "name": "check sequential import profile",
-      "file": "test/harness/bsc_decision.py",
-      "original": "require(\"sequential import profile\" in sc[\"extra\"][\"replay_on_moved_head\"],",
-      "replacement": "require(True or \"sequential import profile\" in sc[\"extra\"][\"replay_on_moved_head\"],"
     }
   ]
 }

@@ -90,7 +90,9 @@ Every observation it returns implements `core.ExtractorDecider`. `Intend`:
 ## Child-root barrier
 
 `Roots.Durable(root)` is true only for a root whose barrier synced in this
-process and whose node is in the store. After a restart, a root node on disk
+process and whose node is in the store. `Intend` records the root
+(`Roots.Synced`): patch 07 calls `Intend` only after its barrier returned,
+so the record depends on that order. After a restart, a root node on disk
 does not prove that its subtrie is complete, because the trie flush writes
 several batches. So recovery replays every EXEC_READY observation without a
 decision, and the replay's own barrier records the root.
@@ -115,7 +117,7 @@ come after EXEC_READY and are not logged; the evidence digest binds their
 result.
 
 The evidence digest is SHA-256 of the tag `extractor-bsc-decision-evidence-v1`
-and a zero byte, then `str(kind)`, then the old head, the new head, the
+and a zero byte, then `str(kind)` (`u64(len(kind)) || kind`), then the old head, the new head, the
 justified block (`GetJustifiedNumberAndHash`) and the finalized block
 (`GetFinalizedHeader`), each as `u64(number) || hash`. The intent's
 `evidence_digest` is this digest.
@@ -205,14 +207,20 @@ from the genesis, and block 2 has the same root as block 1):
   At the `intent-synced` restart the probe also checks two refusals: before
   the bridge opens, the EXEC_READY block is refused (`ErrDeferred`); and with
   the bridge open, block 2 is refused while the intent of block 1 is
-  unresolved (`decision.ErrPending`).
+  unresolved (`decision.ErrPending`). At the `head-written` restart, with the
+  bridge open, a replay of block 1 on the moved head is refused
+  (`ErrImportProfile`), so only the marker settles that intent.
 - **re-import**: after every scenario, the node restarts and imports the
   blocks of the chain again. No observation and no decision is opened.
 
 The driver checks the report and every trace again with its own rules, and
 recomputes each digest from the README formulas: intent, NATIVE_DECIDED,
 rejected intent, marker bytes, admission DECIDED, the evidence, and the
-bad-block evidence.
+bad-block evidence. It takes the marker keys' producer prefix from the probe
+and checks their sequences. The trace's `barrier` event is emitted when
+`Intend` starts, after patch 07's barrier returned; it proves the order, not
+the barrier itself. The barrier is proven by the block 1 root on disk at the
+`barrier-synced` restart and by the core barrier mutants.
 
 `bsc_decision.mutants.json` lists the Go mutants. The Python mutants and the
 portable controls are in `test/harness/fixtures/bsc_decision`.
@@ -225,7 +233,9 @@ portable controls are in `test/harness/fixtures/bsc_decision`.
   are proven by the unit tests, with a stand-in for Parlia.
 - No `SIDE` decision occurs: the admission profile imports only on top of the
   head, where the fork choice always makes the block the head. The `SIDE`
-  marker in the block batch is covered by source review only.
+  marker in the block batch is covered by source review only, and the `SIDE`
+  path does not send the native side-chain feed (`chainSideFeed`). Retained
+  `SIDE` blocks wait for E05-01.activation_gc (block 0).
 - The mismatch of a saved intent (`ErrTransition`), a bad block that is also
   stored, and a replay whose digests differ (`ErrReplay`) do not occur on the
   fixture. The first is covered by `TestUnitSameTransition`, the others by
@@ -238,6 +248,9 @@ portable controls are in `test/harness/fixtures/bsc_decision`.
 - The probe installs only the decision hook, so the refusal of an observed
   block without a decision step (`ErrExtractorDecision`, for example under
   the plain admission seam) is covered by source review.
+- A native bad-block record is keyed only by the block hash. Recovery rejects
+  an intent whose block has such a record and is not stored, even if an
+  earlier, unobserved attempt left the record.
 - No store or native write error is injected. A failed `Resolve`, `Cleanup`,
   native batch write or sync after the intent leaves the intent unresolved,
   and recovery settles it; these error paths are covered by source review.

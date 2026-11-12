@@ -164,8 +164,10 @@ Scope: every plan row marked BSC or "each client block":
 - `OpenWithCleanup` with a `Purge` adapter;
 - the recovery driver and `decision.Bridge.GoLive`;
 - the re-import proof after a restart;
-- the BSC finality result and fork choice as decision evidence, with reads
-  below the capsule window failing closed;
+- the BSC finality result and fork choice as decision evidence; header reads
+  and snapshot requests below the capsule window fail closed (unit tests
+  with a stand-in for Parlia), while the native snapshot lookup of a served
+  header is unlogged and bound by the evidence digest;
 - the qa AC-CAP-07 matrix for the private BSC slot.
 
 Client code is under `adapters/bsc/decision/native/`, the BSC admission seam
