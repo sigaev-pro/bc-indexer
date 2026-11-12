@@ -2,8 +2,14 @@
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
-Status: IN_PROGRESS (block 0, decision-core). Dependencies E01-02.admission
-(#16, PR #155 at `2a644f8`) and BOOT-09 are accepted. Plan agreed with the
+Status: IN_PROGRESS; #17 stays open. Merged: block 0 decision-core in PR
+#157 at `add17e6`, BSC in PR #159 at `3cc16fe`, Bor in PR #160 at `a7f21ef`
+and Geth in PR #158 at `7ee8eb0`. The acceptance audit found no qa verdict
+for the ETH slot. D101 records the owner's answers: long runs are gated on
+E05-01.registry and E05-01.activation_gc, and the other limits have owners.
+Still open before #17 closes: the qa AC-CAP-07 verdict for the private ETH
+slot (Geth session). BSC and POLY have explicit verdicts. Dependencies
+E01-02.admission (#16, PR #155 at `2a644f8`) and BOOT-09 are accepted. Plan agreed with the
 owner on 2026-11-12, the same split as #16: block 0 core (architect, then
 native-engineer), then parallel Geth, BSC and Bor blocks (native-engineer
 each) with qa for the AC matrix; reviewer for the Spec and Standards reviews.
@@ -147,15 +153,19 @@ three assembled modules, Go mutants 106 killed and 2 labeled equivalent
 (source_inputs), Python mutants 23, 37 and 11 killed. Records 01 to 03
 passed and are superseded and kept.
 
-Next: confirmation of the final head by both reviewers and hosted CI on it,
-then READY to the coordinator; then the Geth, BSC and Bor blocks.
+Merged in PR #157 at `add17e6` (final head `6d40601`, Spec and Standards
+PASS, hosted CI passed).
+
+Next: the ETH qa verdict, then the acceptance record; #17 closes when that
+record merges.
 
 ## E01-02.decision_bridge — Geth block
 
-Status: block merged in PR #158 at `7ee8eb0` (Part of #17). Base main `add17e6`
-(block 0, PR #157). Branch/worktree: `claude/e01-02-decision-geth` /
-`e01-02-admission-geth-95b3ee`. qa verdict block: draft PR #162 on branch
-`claude/e01-02-decision-geth-qa` from main `7ee8eb0` (Part of #17). Evidence:
+Status: ACCEPTED in PR #158 at merge `7ee8eb0` (final head `5087db5`, Part
+of #17). The qa AC-CAP-07 verdict for the private ETH slot (D101) is below,
+from draft PR #162 on branch `claude/e01-02-decision-geth-qa` (base main
+`7ee8eb0`). Base main `add17e6` (block 0, PR #157). Branch/worktree:
+`claude/e01-02-decision-geth` / `e01-02-admission-geth-95b3ee`. Evidence:
 [E01-02.decision_bridge.geth](evidence/E01-02.decision_bridge.geth.md);
 design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/native/README.md).
 
@@ -196,7 +206,7 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
 
 ## E01-02.decision_bridge — BSC block
 
-Status: IN_PROGRESS (part of #17), draft PR #159 on branch
+Status: ACCEPTED in PR #159 at merge `3cc16fe` (part of #17), branch
 `claude/e01-02-decision-bsc`, started on main `add17e6` (block 0 merged in
 PR #157). Measured head `61cbfa3`; later commits change only docs.
 
@@ -237,13 +247,13 @@ qa verdict (private BSC slot): AC-CAP-07-01, 07-02, 07-03 and 07-06 PASS.
 07-06 uses the native outcome fixture, the bad-block record. `bsc-mainnet`
 and `bsc-testnet` stay NOT_RUN (D96, D98, D99).
 
-Next: hosted CI on the final head, the final review comment, then READY to
-the coordinator.
+Final head `23b0788`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #159 at `3cc16fe`.
 
 ## E01-02.decision_bridge — Bor block
 
-Status: IN_PROGRESS (part of #17), draft PR #160. Base `add17e6` (block 0
-merged in PR #157). Branch/worktree: `claude/e01-02-decision-bor` /
+Status: ACCEPTED in PR #160 at merge `a7f21ef` (part of #17). Base `add17e6`
+(block 0 merged in PR #157). Branch/worktree: `claude/e01-02-decision-bor` /
 `e01-02-admission-bor-b95e1c`. Allowed paths: `adapters/bor/decision/native/**`,
 `adapters/bor/admission/native/**` (the switch to `OpenWithCleanup` and the
 recovery hooks), `test/harness/fixtures/admission_bor/**`,
@@ -303,8 +313,10 @@ qa verdict (POLY private local): AC-CAP-07-01, 07-02, 07-03 and 07-06 PASS.
 native outcome fixture. Polygon Mainnet and Amoy stay NOT_RUN (D96, D98,
 D99).
 
-Next: the docs-only confirmation review, hosted CI on the final head, the
-final review comment, then READY to the coordinator.
+Final head `90b40ee`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #160 at `a7f21ef`. The `SIDE` and `CANONICAL` crash paths and the
+partial-reorg completion rest on native tests in the Bor graph, not on the
+single-branch probe (D101).
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
