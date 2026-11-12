@@ -23,8 +23,10 @@ import bsc_decision as driver  # noqa: E402
 import bsc_source_inputs as probe14  # noqa: E402
 import decision  # noqa: E402
 
-GENESIS = (HERE / "genesis.json").read_bytes()
-RAW = probe14.split_rlp_list_items((HERE / "blocks.rlp").read_bytes())
+# The fixture inputs are the files of the BSC admission sample.
+INPUTS = HERE.parent / "bsc_admission"
+GENESIS = (INPUTS / "genesis.json").read_bytes()
+RAW = probe14.split_rlp_list_items((INPUTS / "blocks.rlp").read_bytes())
 GENESIS_HASH = bytes.fromhex(json.loads((HERE / "genesis-hash.json").read_text())["genesis_hash"])
 REPORT = json.loads((HERE / "report.json").read_text())
 TRACES = {name: [json.loads(line) for line in (HERE / f"trace-{name}.jsonl").read_text().splitlines()]
@@ -272,6 +274,11 @@ class ControlTest(unittest.TestCase):
         report = self.report()
         scenario(report, "first-handoff")["observations_after_restart"][0]["state"] = "EXEC_READY"
         self.refused("observation at the restart", report=report)
+
+    def test_replay_on_moved_head(self):
+        report = self.report()
+        scenario(report, "head-written")["extra"]["replay_on_moved_head"] = ""
+        self.refused("replay on a moved head", report=report)
 
     def test_settle_stored(self):
         traces = self.traces()

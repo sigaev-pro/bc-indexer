@@ -64,6 +64,7 @@
 {"event":"sync"}
 {"event":"start","producer_id":"bsc-probe","run_id":"run-1"}
 {"event":"sync"}
+{"event":"sync"}
 {"event":"bridge-open"}
 {"event":"settle","outcome":"marker","sequence":0}
 {"event":"put","owner":"bsc-probe.run-1/0000000000000000","record":"decided","scope":"decision","value":"{\"sequence\":0,\"intent_digest\":\"b7ecb1886a21eb4be7c236c71f08b4aaa417143a9acc71d7ac81d11b3976c841\",\"delivery\":\"BATCH\",\"digest\":\"ab9ce62874fe44c9ce1d7606dab374cc9061640ebe0acabaf5e871d406f70ba6\"}"}

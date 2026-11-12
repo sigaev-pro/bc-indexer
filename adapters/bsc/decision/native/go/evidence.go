@@ -116,16 +116,15 @@ func Evaluate(engine Finality, reader *EvidenceReader, header, current *types.He
 		e.Kind, e.NewHead = decision.Import, head(header)
 	}
 	number, hash, err := engine.GetJustifiedNumberAndHash(reader, []*types.Header{header})
-	if refused := reader.Err(); refused != nil {
-		return Evidence{}, fmt.Errorf("%w: justified block: %w", ErrFinality, refused)
-	}
 	if err != nil {
 		return Evidence{}, fmt.Errorf("%w: justified block: %w", ErrFinality, err)
 	}
 	e.Justified = decision.Head{Number: number, Hash: hex.EncodeToString(hash.Bytes())}
 	finalized := engine.GetFinalizedHeader(reader, header)
+	// The reader keeps its first refusal: a refused read in either call
+	// fails closed, even when the call still returned a result.
 	if refused := reader.Err(); refused != nil {
-		return Evidence{}, fmt.Errorf("%w: finalized block: %w", ErrFinality, refused)
+		return Evidence{}, fmt.Errorf("%w: %w", ErrFinality, refused)
 	}
 	if finalized == nil {
 		return Evidence{}, fmt.Errorf("%w: no finalized block for %d", ErrFinality, header.Number.Uint64())

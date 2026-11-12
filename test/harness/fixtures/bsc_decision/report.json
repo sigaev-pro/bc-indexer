@@ -1050,6 +1050,9 @@
      2,
      2
     ]
+   },
+   "extra": {
+    "replay_on_moved_head": "block outside the sequential import profile: block 1 is not on top of the head"
    }
   },
   {

@@ -749,8 +749,11 @@ func TestNativeBSCDecision(t *testing.T) {
 			}
 			return err
 		})
-		if mode == "intent-synced" {
+		switch mode {
+		case "intent-synced":
 			pendingChecks(t, fx, n, sc)
+		case "head-written":
+			movedHeadCheck(t, fx, n, sc)
 		}
 		onDisk := rawdb.HasLegacyTrieNode(n.db, fx.blocks[0].Root())
 		sc.RootAtRestart = &onDisk
@@ -800,6 +803,23 @@ func pendingChecks(t *testing.T, fx fixture, n *node, sc *scenario) {
 	sc.Extra["other_block_while_pending"] = errText(err)
 	if !errors.Is(err, decision.ErrPending) {
 		t.Fatalf("another block while an intent is unresolved: %v", err)
+	}
+	n.hook.bridge = nil
+}
+
+// movedHeadCheck runs, at the restart after "head-written", the replay of
+// block 1 with the bridge open: the native head is already block 1, so the
+// replay is refused (it must be on top of the head) and only the marker
+// settles the intent. The bridge is then closed again for Recover.
+func movedHeadCheck(t *testing.T, fx fixture, n *node, sc *scenario) {
+	n.guarded(func(adm *admission.Admission, token *admission.Token) (err error) {
+		n.hook.bridge, err = decision.Open(token, n.hook.store, adm, n.hook.storeID, n.hook.roots, n.hook.mirror)
+		return err
+	})
+	_, err := n.chain.InsertChain(fx.blocks[:1])
+	sc.Extra["replay_on_moved_head"] = errText(err)
+	if !errors.Is(err, bsc.ErrImportProfile) {
+		t.Fatalf("replay of block 1 on a moved head: %v", err)
 	}
 	n.hook.bridge = nil
 }

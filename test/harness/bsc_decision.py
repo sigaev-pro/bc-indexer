@@ -461,6 +461,9 @@ def evaluate_crash(sc, events, fixture):
         require("not open yet" in sc["extra"]["before_bridge"] and
                 "still pending" in sc["extra"]["other_block_while_pending"],
                 f"{mode}: the hook did not refuse before the intent was settled")
+    if mode == "head-written":
+        require("sequential import profile" in sc["extra"]["replay_on_moved_head"],
+                f"{mode}: the replay on a moved head was not refused")
     if mode in SETTLE_STORED:
         settle = next(e for e in parent if e.get("event") == "settle")
         require(settle["stored"] is SETTLE_STORED[mode], f"{mode}: block 1 stored at the settle")

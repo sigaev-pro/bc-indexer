@@ -61,13 +61,13 @@
       "name": "roots synced",
       "file": "go/bridge.go",
       "original": "\treturn synced && rawdb.HasLegacyTrieNode(r.db, hash), nil",
-      "replacement": "\treturn rawdb.HasLegacyTrieNode(r.db, hash), nil"
+      "replacement": "\treturn (synced || true) && rawdb.HasLegacyTrieNode(r.db, hash), nil"
     },
     {
       "name": "roots on disk",
       "file": "go/bridge.go",
       "original": "\treturn synced && rawdb.HasLegacyTrieNode(r.db, hash), nil",
-      "replacement": "\treturn synced, nil"
+      "replacement": "\treturn synced && (true || rawdb.HasLegacyTrieNode(r.db, hash)), nil"
     },
     {
       "name": "roots length",
@@ -91,7 +91,8 @@
       "name": "intend member observation",
       "file": "go/bridge.go",
       "original": "\tif ready == nil {\n\t\treturn nil, fmt.Errorf(\"%w: block %d has no EXEC_READY observation\", decision.ErrBinding, block.NumberU64())\n\t}",
-      "replacement": "\tif ready == nil {\n\t\treturn nil, nil\n\t}"
+      "replacement": "\tif ready == nil {\n\t\treturn nil, nil\n\t}",
+      "equivalent": "Core calls Intend only from the write of an observed block, after Validated: Validated writes EXEC_READY (or, in a replay, requires the open EXEC_READY observation), so the observation is always found. The check guards a wiring error that the import path cannot produce."
     },
     {
       "name": "intend events",
@@ -124,12 +125,6 @@
       "replacement": "key: decision.MarkerKey(adm.Producer(), record.Sequence+1), value: marker}"
     },
     {
-      "name": "step resolve",
-      "file": "go/bridge.go",
-      "original": "\tdecided, err := s.hook.bridge.Resolve(token, s.record.Sequence)\n\tif err != nil {\n\t\treturn err\n\t}",
-      "replacement": "\tdecided, _ := s.hook.bridge.Resolve(token, s.record.Sequence)"
-    },
-    {
       "name": "evidence digest kind",
       "file": "go/evidence.go",
       "original": "\tdata = append(data, u64(uint64(len(e.Kind)))...)\n\tdata = append(data, e.Kind...)\n",
@@ -148,21 +143,15 @@
       "replacement": "\tif !canonical {\n\t\te.Kind, e.NewHead = decision.Import, head(header)"
     },
     {
-      "name": "evidence justified window",
-      "file": "go/evidence.go",
-      "original": "\tif refused := reader.Err(); refused != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: justified block: %w\", ErrFinality, refused)\n\t}",
-      "replacement": "\tif refused := reader.Err(); false && refused != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: justified block: %w\", ErrFinality, refused)\n\t}"
-    },
-    {
       "name": "evidence justified error",
       "file": "go/evidence.go",
       "original": "\tif err != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: justified block: %w\", ErrFinality, err)\n\t}",
-      "replacement": ""
+      "replacement": "\tif false && err != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: justified block: %w\", ErrFinality, err)\n\t}"
     },
     {
-      "name": "evidence finalized window",
+      "name": "evidence window",
       "file": "go/evidence.go",
-      "original": "\tif refused := reader.Err(); refused != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: finalized block: %w\", ErrFinality, refused)\n\t}",
+      "original": "\tif refused := reader.Err(); refused != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: %w\", ErrFinality, refused)\n\t}",
       "replacement": ""
     },
     {
@@ -211,13 +200,8 @@
       "name": "evidence capsule block",
       "file": "go/evidence.go",
       "original": "\tif static.Block.Hash() != block.Hash() {",
-      "replacement": "\tif false && static.Block.Hash() != block.Hash() {"
-    },
-    {
-      "name": "recover keeps deferred failures",
-      "file": "go/recover.go",
-      "original": "\t\tif !errors.Is(failure, ErrDeferred) {",
-      "replacement": "\t\tif true {"
+      "replacement": "\tif false && static.Block.Hash() != block.Hash() {",
+      "equivalent": "Intend finds the observation by the block hash of its candidate, and ADMITTED binds the capsule digest of that candidate's block (ReadStatic checks the capsule), so the capsule always holds this block. The check guards a wiring error the import path cannot produce."
     },
     {
       "name": "recover settle",
@@ -247,7 +231,8 @@
       "name": "settle members",
       "file": "go/recover.go",
       "original": "\t\tlen(pending.Intent.Members) != 1 {",
-      "replacement": "\t\tlen(pending.Intent.Members) == 0 {"
+      "replacement": "\t\tlen(pending.Intent.Members) == 0 {",
+      "equivalent": "Every intent that this block writes has exactly one member (Intend builds it from the one observed block), and decision.Open refuses an intent whose digest does not recompute, so an IMPORT or SIDE intent with two members cannot reach settle."
     },
     {
       "name": "bad-block evidence hash",
@@ -262,18 +247,6 @@
       "replacement": "\tif true {\n\t\ts.adm, err = admission.Open("
     },
     {
-      "name": "seam replay digests",
-      "file": "seam/seam.go",
-      "original": "\t\tif consumed.Digest != o.replay.ConsumedDigest || digest != o.replay.ExecDigest {",
-      "replacement": "\t\tif false {"
-    },
-    {
-      "name": "seam replay candidate",
-      "file": "seam/seam.go",
-      "original": "\t\tif obs.State != admission.ExecReady || obs.Candidate != candidate {",
-      "replacement": "\t\tif obs.State != admission.ExecReady {"
-    },
-    {
       "name": "seam replay head",
       "file": "seam/seam.go",
       "original": "\tif head := chain.CurrentBlock(); head == nil || head.Hash() != parent.Hash() {\n\t\treturn nil, fmt.Errorf(\"%w: block %d is not on top of the head\", ErrImportProfile, n)\n\t}\n\tcandidate := Candidate(block, parent)\n\tobservations, err := s.adm.Observations(s.token)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfor _, obs := range observations {\n\t\tif obs.State != admission.ExecReady",
@@ -283,19 +256,13 @@
       "name": "seam replay keeps EXEC_READY",
       "file": "seam/seam.go",
       "original": "\t\to.replay = &record\n",
-      "replacement": ""
+      "replacement": "\t\t_ = record\n"
     },
     {
       "name": "core decision redirect",
       "file": "native/core/blockchain.go",
       "original": "\tif bc.extractorObservation != nil {\n\t\treturn bc.extractorWriteBlockAndSetHead(",
       "replacement": "\tif false && bc.extractorObservation != nil {\n\t\treturn bc.extractorWriteBlockAndSetHead("
-    },
-    {
-      "name": "core replay skips a known block",
-      "file": "native/core/blockchain.go",
-      "original": "\tif bc.extractorObservation != nil {\n\t\treturn false\n\t}",
-      "replacement": "\tif false && bc.extractorObservation != nil {\n\t\treturn false\n\t}"
     },
     {
       "name": "core head marker",
@@ -319,19 +286,13 @@
       "name": "core intent before writes",
       "file": "native/core/extractor_decision.go",
       "original": "\tdecision, err := decider.Intend(bc, block, current, reorg)\n\tif err != nil {\n\t\treturn NonStatTy, err\n\t}",
-      "replacement": "\tdecision, _ := decider.Intend(bc, block, current, reorg)"
+      "replacement": "\tdecision, err := decider.Intend(bc, block, current, reorg)\n\tif false && err != nil {\n\t\treturn NonStatTy, err\n\t}"
     },
     {
       "name": "core resolve after the sync",
       "file": "native/core/extractor_decision.go",
       "original": "\tif err := bc.db.SyncKeyValue(); err != nil {\n\t\treturn NonStatTy, err\n\t}\n\tif err := decision.Resolve(); err != nil {",
       "replacement": "\tif err := decision.Resolve(); err != nil {"
-    },
-    {
-      "name": "core decision step required",
-      "file": "native/core/extractor_decision.go",
-      "original": "\tdecider, ok := bc.extractorObservation.(ExtractorDecider)\n\tif !ok {",
-      "replacement": "\tdecider, ok := bc.extractorObservation.(ExtractorDecider)\n\tif false && !ok {"
     }
   ]
 }

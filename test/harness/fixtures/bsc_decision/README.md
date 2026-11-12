@@ -7,9 +7,9 @@ evaluation (`python3 test/mutate.py ...`).
 
 Sample files:
 
-- `genesis.json`, `blocks.rlp`: the accepted private BSC fixture inputs
-  (`private-bsc-transfer-empty`, chain 714, test-only), copied byte for byte
-  from the ProfileManifest inputs.
+- The fixture inputs `genesis.json` and `blocks.rlp` are read from
+  `../bsc_admission` (the accepted private BSC fixture, chain 714,
+  test-only, copied byte for byte from the ProfileManifest inputs).
 - `genesis-hash.json`: the genesis hash of that fixture, from the
   ProfileManifest identity.
 - `report.json`, `trace-*.jsonl`: the report and the event traces of the

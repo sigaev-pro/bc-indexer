@@ -6,6 +6,7 @@
   "copy": [
     "test/harness/*",
     "test/harness/fixtures/bsc_decision/*",
+    "test/harness/fixtures/bsc_admission/*",
     "adapters/bsc/admission/*",
     "adapters/bsc/admission/native/*",
     "adapters/bsc/admission/native/go/*",
@@ -453,6 +454,12 @@
       "file": "test/harness/bsc_decision.py",
       "original": "        if name in KEY_EVENTS:\n            keys.append(name)",
       "replacement": "        if name in KEY_EVENTS and name != \"barrier\":\n            keys.append(name)"
+    },
+    {
+      "name": "check sequential import profile",
+      "file": "test/harness/bsc_decision.py",
+      "original": "require(\"sequential import profile\" in sc[\"extra\"][\"replay_on_moved_head\"],",
+      "replacement": "require(True or \"sequential import profile\" in sc[\"extra\"][\"replay_on_moved_head\"],"
     }
   ]
 }

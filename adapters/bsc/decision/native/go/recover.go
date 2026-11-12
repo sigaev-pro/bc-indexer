@@ -56,15 +56,11 @@ func BadBlockEvidence(block *types.Block) (string, error) {
 // through decision.Bridge.GoLive. The hook must be installed on the chain.
 // An error keeps the node in RECOVERY_ONLY.
 func (h *Hook) Recover(chain *core.BlockChain) error {
-	failures, err := h.seam.RecoverObligations(chain)
+	// The re-executions end with an import error (ErrDeferred, or a native
+	// rejection); they only explain a later failure.
+	kept, err := h.seam.RecoverObligations(chain)
 	if err != nil {
 		return err
-	}
-	var kept []error
-	for _, failure := range failures {
-		if !errors.Is(failure, ErrDeferred) {
-			kept = append(kept, failure)
-		}
 	}
 	if err := h.withGuard(func(token *admission.Token) error {
 		adm, _ := h.seam.Admission()

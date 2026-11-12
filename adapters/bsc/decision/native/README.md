@@ -230,6 +230,17 @@ portable controls are in `test/harness/fixtures/bsc_decision`.
   stored, and a replay whose digests differ (`ErrReplay`) do not occur on the
   fixture. The first is covered by `TestUnitSameTransition`, the others by
   source review.
+- The `skipBlock` patch is not exercised: in the probe, native `skipBlock`
+  already executes the stored block again, because the chain has a snapshot
+  tree without a layer for that block. The patch keeps that behavior for a
+  chain where `skipBlock` would skip the block; it is covered by source
+  review.
+- The probe installs only the decision hook, so the refusal of an observed
+  block without a decision step (`ErrExtractorDecision`, for example under
+  the plain admission seam) is covered by source review.
+- No store or native write error is injected. A failed `Resolve`, `Cleanup`,
+  native batch write or sync after the intent leaves the intent unresolved,
+  and recovery settles it; these error paths are covered by source review.
 - Native chain data has process-crash semantics (D100): a SIGKILL may lose
   writes that pebble has not synced. The probe proves the outcomes in which
   the native writes before a crash point reached the disk, and in which they

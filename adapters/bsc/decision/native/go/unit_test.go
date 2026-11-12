@@ -161,12 +161,16 @@ type fakeFinality struct {
 	justified *int
 	finalized *int
 	// peek, when set, is a header that GetFinalizedHeader reads first and
-	// whose absence it ignores, like the VotePool branch of Parlia.
-	peek *int
+	// whose absence it ignores, like the VotePool branch of Parlia;
+	// peekJustified is the same for GetJustifiedNumberAndHash.
+	peek, peekJustified *int
 }
 
 func (f fakeFinality) GetJustifiedNumberAndHash(chain consensus.ChainHeaderReader, _ []*types.Header) (uint64,
 	common.Hash, error) {
+	if f.peekJustified != nil {
+		chain.GetHeaderByNumber(uint64(*f.peekJustified))
+	}
 	if f.justified == nil {
 		return 0, common.Hash{}, errors.New("no snapshot")
 	}
@@ -232,6 +236,8 @@ func TestUnitEvaluate(t *testing.T) {
 		"finalized below the window": {headers: headers, justified: ptr(n - 1), finalized: ptr(n - 258)},
 		"justified below the window": {headers: headers, justified: ptr(n - 258), finalized: ptr(n - 2)},
 		"no finalized block":         {headers: headers, justified: ptr(n - 1)},
+		"justified refused read with a result": {headers: headers, justified: ptr(n - 1), finalized: ptr(n - 2),
+			peekJustified: ptr(n - 258)},
 		"refused read with a result": {headers: headers, justified: ptr(n - 1), finalized: ptr(n - 2), peek: ptr(n - 258)},
 		"justified error":            {headers: headers, finalized: ptr(n - 2)},
 	} {
