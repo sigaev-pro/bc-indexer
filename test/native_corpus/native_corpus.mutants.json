@@ -2,7 +2,7 @@
   "schema_version": 1,
   "language": "python",
   "root": "../..",
-  "description": "One mutant per checked condition of the E01-03.smoke_corpus comparator, reference executor and oracle fee rules.",
+  "description": "Single-check mutants of the E01-03.smoke_corpus comparator, reference executor and oracle fee rules. The test command first rewrites the expected files from the mutated oracle, so only the hand arithmetic and unit tests can kill an oracle or executor mutant.",
   "copy": [
     "test/native_corpus/*.py",
     "test/native_corpus/*.md",
@@ -11,6 +11,7 @@
   "test": [
     "{python}",
     "test/native_corpus/test_native_corpus.py",
+    "--regenerate",
     "-v"
   ],
   "import": [
@@ -41,7 +42,7 @@
     {
       "name": "format chain id",
       "file": "test/native_corpus/corpus_compare.py",
-      "original": "require(isinstance(observation.get(\"chain_id\"), int), \"chain_id must be an integer\")",
+      "original": "require(is_int(observation.get(\"chain_id\")), \"chain_id must be an integer\")",
       "replacement": "pass"
     },
     {
@@ -71,8 +72,8 @@
     {
       "name": "format gas used",
       "file": "test/native_corpus/corpus_compare.py",
-      "original": "isinstance(block.get(\"gas_limit\"), int) and isinstance(block.get(\"gas_used\"), int),",
-      "replacement": "isinstance(block.get(\"gas_limit\"), int),"
+      "original": "is_int(block.get(\"gas_limit\")) and is_int(block.get(\"gas_used\")),",
+      "replacement": "is_int(block.get(\"gas_limit\")),"
     },
     {
       "name": "format lists",
@@ -89,7 +90,7 @@
     {
       "name": "format receipt integers",
       "file": "test/native_corpus/corpus_compare.py",
-      "original": "require(isinstance(receipt.get(key), int), f\"{tx_where}: receipt {key}\")",
+      "original": "require(is_int(receipt.get(key)), f\"{tx_where}: receipt {key}\")",
       "replacement": "pass"
     },
     {
@@ -125,8 +126,8 @@
     {
       "name": "format storage word",
       "file": "test/native_corpus/corpus_compare.py",
-      "original": "slot.isdigit() and is_hex(value, 64)",
-      "replacement": "slot.isdigit()"
+      "original": "is_digits(slot) and is_hex(value, 64)",
+      "replacement": "is_digits(slot)"
     },
     {
       "name": "format block state address",
@@ -143,14 +144,122 @@
     {
       "name": "format reimport decisions",
       "file": "test/native_corpus/corpus_compare.py",
-      "original": "isinstance(reimport.get(\"new_decisions\"), int), \"reimport",
+      "original": "is_int(reimport.get(\"new_decisions\")), \"reimport",
       "replacement": "True, \"reimport"
     },
     {
       "name": "format decimal leading zero",
       "file": "test/native_corpus/corpus_compare.py",
-      "original": "value.isdigit() and (value == \"0\" or not value.startswith(\"0\"))",
+      "original": "is_digits(value) and (value == \"0\" or not value.startswith(\"0\"))",
+      "replacement": "is_digits(value)"
+    },
+    {
+      "name": "format ascii digits",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "value.isascii() and value.isdigit()",
       "replacement": "value.isdigit()"
+    },
+    {
+      "name": "format integer is not a boolean",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "isinstance(value, int) and not isinstance(value, bool)",
+      "replacement": "isinstance(value, int)"
+    },
+    {
+      "name": "format system transaction fields",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(isinstance(tx, dict) and all(key in tx for key in SYSTEM_FIELDS + (\"index\",)),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "format state sync id",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(isinstance(event, dict) and is_int(event.get(\"id\")), f\"{where}: state sync id\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format state sync logs",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "                check_log(log, f\"{where} state sync log {number}\")",
+      "replacement": "                pass"
+    },
+    {
+      "name": "format frame type",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(frame[\"type\"] in (\"CALL\", \"STATICCALL\", \"DELEGATECALL\", \"CALLCODE\", \"CREATE\", \"CREATE2\"),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "format frame addresses",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_hex(frame[\"from\"], 40) and is_hex(frame[\"to\"], 40), f\"{where}: frame address\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format frame error",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(frame[\"error\"] is None or isinstance(frame[\"error\"], str), f\"{where}: frame error\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format account nonce",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_int(row.get(\"nonce\")) and row[\"nonce\"] >= 0, f\"{where}: nonce must be an integer\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format account code",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_hex(row.get(\"code\")), f\"{where}: code must be lowercase hex without 0x\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format body tx count",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_int(block.get(\"body_tx_count\")), f\"{where}: body_tx_count\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format decision rows",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "        require(isinstance(row, dict) and is_int(row.get(\"block\")) and isinstance(row.get(\"kind\"), str),",
+      "replacement": "        require(True,"
+    },
+    {
+      "name": "diff decisions of other blocks",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(whole, \"decisions of other blocks\", [],",
+      "replacement": "diff.equal(whole, \"decisions of other blocks\", [] if False else sorted(set(decided) - {block[\"number\"] for block in expected[\"blocks\"]}),"
+    },
+    {
+      "name": "unreadable observation is a format error",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "except (FormatError, ValueError, OSError) as error:",
+      "replacement": "except FormatError as error:"
+    },
+    {
+      "name": "evm revert restores refund",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "        self.refund = refund\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "evm revert restores warm accounts",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "        self.warm_accounts = accounts\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "evm revert restores warm slots",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "        self.warm_slots = slots\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "evm call input memory",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                base = expand(in_offset, in_size)",
+      "replacement": "                base = 0"
     },
     {
       "name": "format hex lowercase",

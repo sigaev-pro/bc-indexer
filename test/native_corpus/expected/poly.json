@@ -1048,6 +1048,7 @@
  "fixture": {
   "genesis": "tests/bor/testdata/genesis.json of the native source",
   "heimdall": "in-process stub (D98 item 6) serving only the state sync event below",
+  "native_build": "the accepted patched build of this source; the observation source names it",
   "native_source": "bor 3a018e38467594508ca31ebeaf804837fb92834a"
  },
  "genesis_additions": [

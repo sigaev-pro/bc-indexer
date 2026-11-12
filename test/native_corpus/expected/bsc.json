@@ -666,6 +666,7 @@
  "fee_accumulator": "fffffffffffffffffffffffffffffffffffffffe",
  "fixture": {
   "genesis": "test/harness/fixtures/bsc_admission/genesis.json",
+  "native_build": "the accepted patched build of this source; the observation source names it",
   "native_source": "bsc 54afaff4da31ac9e49ba646a4f65104edac5a2f3"
  },
  "genesis_additions": [

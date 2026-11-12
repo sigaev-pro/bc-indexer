@@ -7,13 +7,14 @@ POLY (Bor), each with independent expected results:
 |---|---|---|---|
 | transfer | yes | yes | yes |
 | nested-revert | yes | yes | yes |
-| fee | dynamic-fee burn and tip | fee accumulator and the Parlia distribution | burn to the burnt contract, tip, Bor fee log |
-| system-action | NOT_APPLICABLE (no native system transaction) | Parlia `init()` system transactions | Bor StateSync |
+| fee | dynamic-fee burn and tip | fee accumulator and the Parlia distribution (before Kepler) | burn to the burnt contract, tip, Bor fee log |
+| system-action | NOT_APPLICABLE (no native system transaction) | Parlia `init()` system transactions | Bor StateSync (before Madhugiri) |
 | empty-block | yes | yes | yes |
 
 This corpus is small. It is not full production semantic coverage. TC02, the
 BOOT-08 catalog and the native type matrix of E01-05.type_paths stay with
-their owners. Public profiles stay NOT_RUN (D96).
+their owners. The fixtures run older fork paths than the production networks
+(ORACLE.md, "Older fork paths"). Public profiles stay NOT_RUN (D96).
 
 ## Files
 
@@ -28,8 +29,12 @@ their owners. Public profiles stay NOT_RUN (D96).
 - [test_native_corpus.py](test_native_corpus.py): portable controls (the
   EIP-2200 and EIP-3529 gas tables, the hand arithmetic, a perfect synthetic
   observation per family and single-field mismatches, format errors).
-- [native_corpus.mutants.json](native_corpus.mutants.json): one mutant per
-  checked condition, run by `test/mutate.py`.
+- [native_corpus.mutants.json](native_corpus.mutants.json): single-check
+  mutants of the comparator checks, the executor rules and the oracle fee
+  rules, run by `test/mutate.py`. Its test command first rewrites the
+  expected files from the mutated oracle, so only the hand arithmetic and
+  unit tests can kill an oracle or executor mutant. Executor paths that no
+  test reaches are not claimed.
 
 Commands, from the repository root:
 
@@ -45,9 +50,9 @@ python3 test/mutate.py test/native_corpus/native_corpus.mutants.json --output RU
 The expected files come only from `corpus_oracle.py`, `corpus_evm.py` and the rules in
 ORACLE.md. Neither file reads a native output, and `corpus_compare.py` never changes
 an expected value from an observation. A client block that finds a
-difference records the FAIL under D83. It changes the oracle only with a
-reviewed reason taken from the protocol rules or the native source, never to
-match an observed value.
+difference keeps the FAIL record (D83); the oracle changes only in a separate
+change made by the qa role and accepted by an independent reviewer (ORACLE.md,
+"Changing the oracle").
 
 ## Observation format
 
@@ -59,7 +64,7 @@ both without `0x`; amounts are decimal strings; counters are integers.
 {
   "schema_version": 1, "kind": "native-corpus-observation",
   "family": "eth" | "bsc" | "poly", "chain_id": <int>,
-  "source": {<native build, tool and record digests>},
+  "source": {<accepted patched native build and patch set, tool and record digests>},
   "blocks": [{
     "number", "hash", "state_root", "base_fee" (decimal or null), "gas_limit", "gas_used",
     "body_tx_count": <transactions in the block body, system transactions included>,
@@ -95,9 +100,13 @@ How a client block fills it:
   with their receipt status; `system_nonce_after`: the native nonce;
 - `state_sync` (POLY): the state sync receipt logs and the native result of
   `lastStateId()` on `0x1001`;
-- `decisions` and `reimport`: the decision bridge records of the run.
+- `decisions` and `reimport`: derived from the decision bridge and admission
+  records that the client block retains with its run, never typed by hand.
 
 The comparator joins blocks by number and transactions by index, reports
 each difference with its place (block and transaction index or system kind),
-and gives each case PASS, FAIL or NOT_APPLICABLE. A whole-observation or
-block-level difference fails every case in that block.
+and gives each case PASS, FAIL or NOT_APPLICABLE. A whole-observation
+difference fails every case; a block-level difference fails every case in
+that block. A block that belongs to no case (POLY block 3) still fails the
+result when it differs. A decision of a block the corpus does not have is a
+whole-observation difference.

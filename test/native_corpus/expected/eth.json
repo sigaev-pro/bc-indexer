@@ -640,7 +640,7 @@
   {
    "applicable": false,
    "case": "system-action",
-   "reason": "An Ethereum block body has no native system transaction. The block reward is a credit outside a transaction, checked only when that extension is implemented (DEVELOPMENT_PLAN E01-03); the block-end state still binds it."
+   "reason": "DEVELOPMENT_PLAN E01-03 (line 89) asks for native system transactions; a block body of this London ethash fixture has none. Post-merge protocol system calls (EIP-4788, EIP-2935) are not transactions, and withdrawals and block rewards are credits outside a transaction; ORACLE.md names their owners. The block-end state still binds the block reward."
   },
   {
    "applicable": true,
@@ -659,6 +659,7 @@
  "family": "eth",
  "fixture": {
   "genesis": "test/harness/fixtures/genesis.json",
+  "native_build": "the accepted patched build of this source; the observation source names it",
   "native_source": "go-ethereum 1df30b18d9ed35ee9d28ffd4648442c2204554ad"
  },
  "genesis_additions": [

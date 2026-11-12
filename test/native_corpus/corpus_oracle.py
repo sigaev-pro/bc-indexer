@@ -285,14 +285,17 @@ def ethereum():
         "nested-revert": {"applicable": True, "where": [[1, 2], [1, 3]]},
         "fee": {"applicable": True, "where": [[1, 1]]},
         "system-action": {"applicable": False,
-                          "reason": "An Ethereum block body has no native system transaction. The block reward is a "
-                                    "credit outside a transaction, checked only when that extension is implemented "
-                                    "(DEVELOPMENT_PLAN E01-03); the block-end state still binds it."},
+                          "reason": "DEVELOPMENT_PLAN E01-03 (line 89) asks for native system transactions; a block "
+                                    "body of this London ethash fixture has none. Post-merge protocol system calls "
+                                    "(EIP-4788, EIP-2935) are not transactions, and withdrawals and block rewards are "
+                                    "credits outside a transaction; ORACLE.md names their owners. The block-end state "
+                                    "still binds the block reward."},
         "empty-block": {"applicable": True, "where": [[2, None]]},
     })
     return {"family": "eth", "client": "geth", "chain_id": 31337,
             "fixture": {"genesis": "test/harness/fixtures/genesis.json",
-                        "native_source": "go-ethereum 1df30b18d9ed35ee9d28ffd4648442c2204554ad"}, "rules": rules.name, "coinbase": ETH_COINBASE,
+                        "native_source": "go-ethereum 1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+                        "native_build": "the accepted patched build of this source; the observation source names it"}, "rules": rules.name, "coinbase": ETH_COINBASE,
             "genesis_base_fee": str(GWEI), "genesis_additions": genesis_rows(False), "cases": cases,
             "blocks": [block1, block2],
             "unasserted": ["state roots, hashes and timestamps (input bindings)",
@@ -344,7 +347,8 @@ def bsc():
     })
     return {"family": "bsc", "client": "bsc", "chain_id": 714,
             "fixture": {"genesis": "test/harness/fixtures/bsc_admission/genesis.json",
-                        "native_source": "bsc 54afaff4da31ac9e49ba646a4f65104edac5a2f3"}, "rules": rules.name, "coinbase": BSC_VALIDATOR,
+                        "native_source": "bsc 54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+                        "native_build": "the accepted patched build of this source; the observation source names it"}, "rules": rules.name, "coinbase": BSC_VALIDATOR,
             "fee_accumulator": BSC_SYSTEM, "genesis_additions": genesis_rows(False), "cases": cases,
             "blocks": [block1, block2],
             "unasserted": ["state roots, hashes and timestamps (input bindings)",
@@ -404,6 +408,7 @@ def polygon():
     return {"family": "poly", "client": "bor", "chain_id": 15001,
             "fixture": {"genesis": "tests/bor/testdata/genesis.json of the native source",
                         "native_source": "bor 3a018e38467594508ca31ebeaf804837fb92834a",
+                        "native_build": "the accepted patched build of this source; the observation source names it",
                         "heimdall": "in-process stub (D98 item 6) serving only the state sync event below"}, "rules": rules.name, "coinbase": BOR_SIGNER,
             "header_coinbase": BOR_BURN, "burn_recipient": BOR_BURN, "genesis_additions": genesis_rows(True),
             "cases": cases, "blocks": [block1, block2, block3, block4],

@@ -9,8 +9,8 @@ expected value from an observation. It joins blocks by number and
 transactions by block and index, and reports every difference with its place.
 Each case gets PASS or FAIL from the differences at its places, or
 NOT_APPLICABLE with the oracle's reason. Exit 0 means every applicable case
-passed; exit 1 means a difference or a format error; exit 2 means a usage
-error.
+passed; exit 1 means a difference, a format error or an unreadable
+observation (the report then names the error); exit 2 means a usage error.
 """
 
 import json
@@ -37,19 +37,28 @@ def is_hex(value, size=None):
         size is None or len(value) == size)
 
 
+def is_int(value):
+    """An integer that is not a boolean (JSON true and false are not counters)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def is_digits(value):
+    return isinstance(value, str) and value.isascii() and value.isdigit()
+
+
 def is_decimal(value):
-    return isinstance(value, str) and value.isdigit() and (value == "0" or not value.startswith("0"))
+    return is_digits(value) and (value == "0" or not value.startswith("0"))
 
 
 def check_account(row, where):
     require(isinstance(row, dict), f"{where}: account is not an object")
     require(is_decimal(row.get("balance")), f"{where}: balance must be a decimal string")
-    require(isinstance(row.get("nonce"), int) and row["nonce"] >= 0, f"{where}: nonce must be an integer")
+    require(is_int(row.get("nonce")) and row["nonce"] >= 0, f"{where}: nonce must be an integer")
     require(is_hex(row.get("code")), f"{where}: code must be lowercase hex without 0x")
     storage = row.get("storage", {})
     require(isinstance(storage, dict), f"{where}: storage must be an object")
     for slot, value in storage.items():
-        require(slot.isdigit() and is_hex(value, 64), f"{where}: storage {slot} must be a 64-digit hex word")
+        require(is_digits(slot) and is_hex(value, 64), f"{where}: storage {slot} must be a 64-digit hex word")
 
 
 def check_log(log, where):
@@ -80,28 +89,28 @@ def check_observation(observation):
     require(observation.get("schema_version") == 1 and observation.get("kind") == "native-corpus-observation",
             "not a version 1 native corpus observation")
     require(observation.get("family") in ("eth", "bsc", "poly"), "unknown family")
-    require(isinstance(observation.get("chain_id"), int), "chain_id must be an integer")
+    require(is_int(observation.get("chain_id")), "chain_id must be an integer")
     source = observation.get("source")
     require(isinstance(source, dict) and source, "source must name the native build and tool")
     require(isinstance(observation.get("blocks"), list) and observation["blocks"], "blocks must be a non-empty list")
     for block in observation["blocks"]:
         where = f"block {block.get('number') if isinstance(block, dict) else '?'}"
-        require(isinstance(block, dict) and isinstance(block.get("number"), int), f"{where}: number")
+        require(isinstance(block, dict) and is_int(block.get("number")), f"{where}: number")
         require(is_hex(block.get("hash"), 64) and is_hex(block.get("state_root"), 64), f"{where}: hash or root")
         require(block.get("base_fee") is None or is_decimal(block["base_fee"]), f"{where}: base_fee")
-        require(isinstance(block.get("gas_limit"), int) and isinstance(block.get("gas_used"), int),
+        require(is_int(block.get("gas_limit")) and is_int(block.get("gas_used")),
                 f"{where}: gas_limit and gas_used must be integers")
-        require(isinstance(block.get("body_tx_count"), int), f"{where}: body_tx_count")
+        require(is_int(block.get("body_tx_count")), f"{where}: body_tx_count")
         for key in ("transactions", "system_transactions", "state_sync"):
             require(isinstance(block.get(key), list), f"{where}: {key} must be a list")
         for tx in block["transactions"]:
             tx_where = f"{where} tx {tx.get('index') if isinstance(tx, dict) else '?'}"
-            require(isinstance(tx, dict) and isinstance(tx.get("index"), int), f"{tx_where}: index")
+            require(isinstance(tx, dict) and is_int(tx.get("index")), f"{tx_where}: index")
             require(is_hex(tx.get("hash"), 64), f"{tx_where}: hash")
             receipt = tx.get("receipt")
             require(isinstance(receipt, dict), f"{tx_where}: receipt")
             for key in ("status", "gas_used", "cumulative_gas_used"):
-                require(isinstance(receipt.get(key), int), f"{tx_where}: receipt {key}")
+                require(is_int(receipt.get(key)), f"{tx_where}: receipt {key}")
             require(is_decimal(receipt.get("effective_gas_price")), f"{tx_where}: effective_gas_price")
             require(isinstance(receipt.get("logs"), list), f"{tx_where}: logs")
             for number, log in enumerate(receipt["logs"]):
@@ -116,7 +125,7 @@ def check_observation(observation):
             require(isinstance(tx, dict) and all(key in tx for key in SYSTEM_FIELDS + ("index",)),
                     f"{where}: system transaction fields")
         for event in block["state_sync"]:
-            require(isinstance(event, dict) and isinstance(event.get("id"), int), f"{where}: state sync id")
+            require(isinstance(event, dict) and is_int(event.get("id")), f"{where}: state sync id")
             for number, log in enumerate(event.get("logs", [])):
                 check_log(log, f"{where} state sync log {number}")
         require(isinstance(block.get("state_after_block"), dict), f"{where}: state_after_block")
@@ -125,9 +134,12 @@ def check_observation(observation):
             check_account(row, f"{where} state_after_block {address}")
     decisions = observation.get("decisions")
     require(isinstance(decisions, list), "decisions must be a list")
+    for row in decisions:
+        require(isinstance(row, dict) and is_int(row.get("block")) and isinstance(row.get("kind"), str),
+                "each decision must name an integer block and a kind")
     reimport = observation.get("reimport")
-    require(isinstance(reimport, dict) and isinstance(reimport.get("new_observations"), int) and
-            isinstance(reimport.get("new_decisions"), int), "reimport must count new observations and decisions")
+    require(isinstance(reimport, dict) and is_int(reimport.get("new_observations")) and
+            is_int(reimport.get("new_decisions")), "reimport must count new observations and decisions")
 
 
 class Diff:
@@ -230,6 +242,9 @@ def compare(expected, observation):
         decided.setdefault(row.get("block"), []).append(row.get("kind"))
     for block in expected["blocks"]:
         diff.equal([block["number"], None], "decisions", ["IMPORT"], decided.get(block["number"]))
+    # A decision of a block the corpus does not have (for example the genesis) is a difference too.
+    diff.equal(whole, "decisions of other blocks", [],
+               sorted(set(decided) - {block["number"] for block in expected["blocks"]}))
     diff.equal(whole, "reimport.new_observations", 0, observation["reimport"]["new_observations"])
     diff.equal(whole, "reimport.new_decisions", 0, observation["reimport"]["new_decisions"])
     cases = []
@@ -263,11 +278,11 @@ def main(argv):
         return 2
     with open(args[0]) as handle:
         expected = json.load(handle)
-    with open(args[1]) as handle:
-        observation = json.load(handle)
     try:
+        with open(args[1]) as handle:
+            observation = json.load(handle)
         report = compare(expected, observation)
-    except FormatError as error:
+    except (FormatError, ValueError, OSError) as error:
         report = {"schema_version": 1, "kind": "native-corpus-comparison", "family": expected.get("family"),
                   "result": "FAIL", "format_error": str(error), "cases": [], "differences": []}
     text = json.dumps(report, indent=1, sort_keys=True) + "\n"

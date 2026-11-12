@@ -12,7 +12,8 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
 
 import corpus_compare as compare  # noqa: E402
 import corpus_evm as evm_ref  # noqa: E402
@@ -23,7 +24,8 @@ ETHER = 10 ** 18
 
 
 def expected(family):
-    return json.loads((HERE / "expected" / f"{family}.json").read_text())
+    """The oracle's own output, so a changed rule is caught here and not only by the file check."""
+    return json.loads(oracle.render(family))
 
 
 def run_code(rules, code, original, warm=True):
@@ -162,6 +164,38 @@ class ReferenceExecutorTests(unittest.TestCase):
         self.assertEqual(state[target].balance, 1)
 
 
+class RevertJournalTests(unittest.TestCase):
+    """A reverted frame restores the refund counter and the warm sets (EIP-2929)."""
+
+    def test_revert_restores_refund_and_warm_sets(self):
+        child, other = "00000000000000000000000000000000000000cc", "00000000000000000000000000000000000000dd"
+        # Clear slot 0 (a refund), touch `other` with a zero-gas CALL, then revert.
+        code = evm_ref.assemble([("PUSH1", 0), ("PUSH1", 0), "SSTORE",
+                                 ("PUSH1", 0), ("PUSH1", 0), ("PUSH1", 0), ("PUSH1", 0), ("PUSH1", 0),
+                                 ("PUSH20", int(other, 16)), ("PUSH1", 0), "CALL", "POP",
+                                 ("PUSH1", 0), ("PUSH1", 0), "REVERT"])
+        state = {child: evm_ref.Account(code=code, storage={0: 1}), "bb" * 20: evm_ref.Account()}
+        tx = evm_ref.Transaction(evm_ref.LONDON, state, "bb" * 20)
+        ok, left, _, frame = tx.call("bb" * 20, child, 0, b"", 100_000)
+        self.assertFalse(ok)
+        self.assertEqual(frame["error"], "execution reverted")
+        self.assertEqual(tx.refund, 0)
+        self.assertNotIn((child, 0), tx.warm_slots)
+        self.assertNotIn(other, tx.warm_accounts)
+        self.assertEqual(state[child].storage, {0: 1})
+        self.assertGreater(left, 0)
+
+    def test_call_input_memory_is_charged(self):
+        caller = "00000000000000000000000000000000000000aa"
+        # CALL a missing account with no value and 64 bytes of input at memory 0.
+        code = evm_ref.assemble([("PUSH1", 0), ("PUSH1", 0), ("PUSH1", 64), ("PUSH1", 0), ("PUSH1", 0),
+                                 ("PUSH20", 0xEE), ("PUSH1", 0), "CALL", "STOP"])
+        state = {caller: evm_ref.Account(code=code)}
+        tx = evm_ref.Transaction(evm_ref.ISTANBUL, state, caller)
+        _, left, _ = tx.run(code, caller, caller, 0, b"", 100_000, 0, {"calls": []})
+        self.assertEqual(100_000 - left, 21 + 700 + 6)  # two memory words cost 6
+
+
 class HandArithmeticTests(unittest.TestCase):
     """The totals written in ORACLE.md, recomputed here by hand."""
 
@@ -257,6 +291,16 @@ class HandArithmeticTests(unittest.TestCase):
         fee = self.tx("poly", 1, 1)
         self.assertEqual(fee["effective_gas_price"], str(3 * GWEI))
         self.assertEqual((fee["fee"]["tip"], fee["fee"]["burnt"]), (str(2 * GWEI * 21000), str(GWEI * 21000)))
+
+    def test_bor_burn_and_signer(self):
+        block = expected("poly")["blocks"][0]
+        self.assertEqual(int(block["state_after_block"][oracle.BOR_BURN]["balance"]), 228_538 * GWEI)
+        tips = (84_000 + 42_000 + 570_620 + 175_532) * 10 ** 9
+        self.assertEqual(int(block["state_after_block"][oracle.BOR_SIGNER]["balance"]), 1000 * ETHER + tips)
+        # Sender: 10 coins - 1 coin - 1 gwei - 5 wei - fees (105 + 63 + 713.275 + 219.415) * 10^12.
+        fees = (105_000 + 63_000 + 713_275 + 219_415) * 10 ** 9
+        self.assertEqual(int(block["state_after_block"][oracle.SENDER]["balance"]),
+                         10 * ETHER - ETHER - GWEI - 5 - fees)
 
     def test_bsc_fee_distribution(self):
         block = expected("bsc")["blocks"][0]
@@ -405,6 +449,15 @@ class ComparatorTests(unittest.TestCase):
             with self.subTest():
                 self.assert_fails("eth", mutate, names)
 
+    def test_a_decision_of_an_unknown_block_fails(self):
+        for row in ({"block": 0, "kind": "REJECT"}, {"block": 3, "kind": "IMPORT"}):
+            with self.subTest(row=row):
+                observation = synthetic("eth")
+                observation["decisions"].append(row)
+                report, verdicts = self.verdicts("eth", observation)
+                self.assertEqual(report["result"], "FAIL")
+                self.assertEqual(verdicts["transfer"], "FAIL")
+
     def test_a_difference_outside_every_case_still_fails(self):
         # Block 3 of POLY belongs to no case; its difference fails the result, not a case.
         observation = synthetic("poly")
@@ -474,6 +527,22 @@ class ComparatorTests(unittest.TestCase):
             lambda o: o["blocks"][0]["transactions"][0]["state_after"].update(
                 {oracle.SENDER.upper(): dict(o["blocks"][0]["transactions"][0]["state_after"][oracle.SENDER])}),
             lambda o: o.pop("decisions"),
+            lambda o: o["decisions"].append("IMPORT"),
+            lambda o: o["decisions"].append({"block": True, "kind": "IMPORT"}),
+            lambda o: o["blocks"][0].update(body_tx_count=True),
+            lambda o: o["blocks"][0].update(body_tx_count="4"),
+            lambda o: o["blocks"][0]["transactions"][0]["receipt"].update(status=True),
+            lambda o: o["blocks"][0].update(base_fee="\u00b2"),
+            lambda o: o["blocks"][0]["transactions"][2]["frame"].update(type="call"),
+            lambda o: o["blocks"][0]["transactions"][2]["frame"].update(to="0x" + oracle.PARENT),
+            lambda o: o["blocks"][0]["transactions"][2]["frame"].update(**{"from": oracle.SENDER[:-2]}),
+            lambda o: o["blocks"][0]["transactions"][2]["frame"].update(error=1),
+            lambda o: o["blocks"][0]["transactions"][0]["state_after"][oracle.SENDER].update(nonce="4"),
+            lambda o: o["blocks"][0]["transactions"][0]["state_after"][oracle.SENDER].update(nonce=-1),
+            lambda o: o["blocks"][0]["transactions"][2]["state_after"][oracle.PARENT].update(code="0x60"),
+            lambda o: o["blocks"][0]["system_transactions"].append({"index": 9}),
+            lambda o: o["blocks"][0]["state_sync"].append({"id": "1", "logs": []}),
+            lambda o: o["blocks"][0]["state_sync"].append({"id": 1, "logs": [{"address": "00"}]}),
             lambda o: o["reimport"].pop("new_decisions"),
         ]
         for number, mutate in enumerate(cases):
@@ -505,7 +574,18 @@ class ComparatorTests(unittest.TestCase):
             self.assertEqual(failed.returncode, 1)
             self.assertIn("format_error", json.loads(failed.stdout))
             self.assertEqual(subprocess.run(args[:3], capture_output=True).returncode, 2)
+            good.write_text("{not json")
+            unreadable = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(unreadable.returncode, 1)
+            self.assertIn("format_error", json.loads(unreadable.stdout))
 
 
 if __name__ == "__main__":
+    # The mutant table runs with --regenerate: the expected files are first rewritten from the
+    # (mutated) oracle, so the file check cannot kill an oracle or executor mutant and only the
+    # hand arithmetic and unit tests can.
+    if "--regenerate" in sys.argv:
+        sys.argv.remove("--regenerate")
+        for name in oracle.FAMILIES:
+            (HERE / "expected" / f"{name}.json").write_text(oracle.render(name))
     unittest.main()

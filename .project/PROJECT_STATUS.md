@@ -2,8 +2,11 @@
 
 ## E01-03.smoke_corpus — Minimal independent native test corpus (issue #19)
 
-Status: IN_PROGRESS (plan proposed 2026-11-13; the split per client waits
-for the coordinator). Branch `claude/e01-03-smoke-corpus` from main
+Status: IN_PROGRESS. The coordinator approved the split on 2026-11-13:
+block 0 in this session, then three parallel client blocks after block 0
+merges. D97 requires the roles, agent definitions and split to be agreed
+with the owner; the coordinator records that agreement when it assigns the
+client sessions. Branch `claude/e01-03-smoke-corpus` from main
 `a7ea231`. Dependencies E01-01.harness (#12), E01-02.decision_bridge (#17,
 merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Runs in parallel
 with #18, which another session does; no shared paths except this file.
@@ -16,7 +19,11 @@ E01-03: full transaction records and the state before and after each
 transaction are compared with an independent result; credits outside a
 transaction are checked only when that extension is implemented. This
 corpus is small. It is not full production semantic coverage (TC02 and the
-BOOT-08 catalog stay with their owners).
+BOOT-08 catalog stay with their owners), and the private fixtures run older
+fork paths than production: Bor StateSync before Madhugiri (not a body
+transaction), the BSC distribution before Kepler under Istanbul gas, and a
+pre-merge ETH chain. These limits go to E01-05.type_paths and E06/E07
+(ORACLE.md, "Older fork paths").
 
 Evidence: [E01-03.smoke_corpus](evidence/E01-03.smoke_corpus.md). Every
 public cell stays NOT_RUN (D96). Under D101 only short measured runs; no
@@ -28,8 +35,8 @@ long, load or product run.
 |---|---|---|---|
 | transfer | legacy value transfer to an empty account | the same | the same, with the Bor transfer and fee logs at `0x1010` |
 | nested-revert | a parent contract calls a child with value; the child writes storage, logs and reverts; the parent records the failed call and succeeds. A second transaction calls the child directly and fails (status 0, fee charged) | the same | the same |
-| fee | a dynamic-fee transaction: effective gas price, base-fee burn and tip | legacy gas price paid to the system address and distributed by the native fee system transactions (fee/16 to `0x1002`, the rest to `0x1000` through `deposit`) | a dynamic-fee transaction: burn to the configured burnt contract, tip to the recovered signer, Bor fee log |
-| system-action | NOT_APPLICABLE: an Ethereum block body has no native system transaction; the block reward is a credit outside a transaction (optional extension) | the Parlia `init()` system transactions at block 1 and the fee `deposit` system transactions | a Bor StateSync at the first sprint block: one state sync event from the in-process Heimdall stub (D98 item 6) delivered by `0x1001` to a receiver contract |
+| fee | a dynamic-fee transaction: effective gas price, base-fee burn and tip | legacy gas price paid to the fee accumulator and distributed by the two fee system transactions (fee/16 to `0x1002`, the rest to `0x1000` through `deposit`) | a dynamic-fee transaction: burn to the configured burnt contract, tip to the recovered signer, Bor fee log |
+| system-action | NOT_APPLICABLE: DEVELOPMENT_PLAN E01-03 (line 89) asks for native system transactions, and this fixture's block bodies have none; effects without a transaction and their owners are in ORACLE.md | the seven Parlia `init()` system transactions at block 1 | a Bor StateSync at the first sprint block: one state sync event from the in-process Heimdall stub (D98 item 6) delivered by `0x1001` to a receiver contract |
 | empty-block | an empty block: no transaction, receipt or log; state unchanged except the block reward | an empty block: the full state root unchanged | an empty block without a sprint: the full state root unchanged |
 
 Contracts are hand-assembled bytecode placed in the genesis allocation of
@@ -48,8 +55,8 @@ contracts use, with the gas rules of each active fork (Istanbul for BSC
 blocks before Berlin, London for ETH and Bor). It never reads a native
 output. Per transaction it fixes the receipt (status, gas used, cumulative
 gas, logs), the effective gas price and fee, the call frames (type, from,
-to, value, input, output, revert) and the balance, nonce, code hash and
-named storage slots of every touched account before and after. Per block it
+to, value, input, output, error) and the balance, nonce, full code and
+slots 0 to 3 of a fixed list of accounts per family before and after. Per block it
 fixes the transaction count, gas used, base fee where active and the system
 actions. Generated hashes, timestamps and roots bind the prepared input and
 are never expected values.
@@ -62,7 +69,8 @@ imports them through the accepted import path with the decision bridge
 observation), and exports the native output: raw blocks and receipts,
 native state reads at the parent root and the block root, and the native
 call frames from the client's call tracer. A comparator in
-`test/native_corpus/` joins it with the oracle by block, order and hash.
+`test/native_corpus/` joins it with the oracle by block number and
+transaction index; hashes bind the input and are not compared.
 
 ### Proposed blocks and roles
 
@@ -74,13 +82,14 @@ call frames from the client's call tracer. A comparator in
 | POLY | native-engineer; qa for the matrix | Bor corpus fixture with the Heimdall stub, import with the decision bridge, observer, measured records | `test/native_corpus/poly/**`, `.project/evidence/E01-03.smoke_corpus.poly.md` |
 
 The three client blocks start after block 0 merges and are independent of
-each other. They change no `admission`, `decision` or `source_inputs` file.
+each other. They change no `admission`, `decision` or `source_inputs` file,
+and no file of block 0: an oracle change is a separate change made by qa
+and accepted by an independent reviewer. Their measured runs execute one at
+a time under the host lock (D97).
 
-ACs: the card lists AC-CAP-01-01 and AC-CAP-07-01 to 07-03. The corpus
-supplies their inputs and expected results. AC-CAP-01-01 is owned by
-E01-02.lifecycle_seams (D96), and the AC-CAP-07 verdicts were issued by
-E01-02.decision_bridge, so this task issues no new verdict for them. Its qa
-verdict is per case and family: PASS, FAIL or NOT_APPLICABLE with a reason.
+ACs: the corpus issues no AC verdict. Its qa verdict is per case and family:
+PASS, FAIL or NOT_APPLICABLE with a reason. The evidence lists which AC
+verdicts take the corpus as input and which tasks own them.
 
 ### Block 0: corpus-core
 
@@ -92,12 +101,19 @@ Branch `claude/e01-03-smoke-corpus` (this worktree). Design:
 caller and data, log). The nested transaction uses 142,655 gas under London
 and 130,255 under Istanbul; the direct revert 43,883 and 41,783.
 
-Measured head `3346a4a`: records portable-01 (33 tests), oracle-check-01 and
-python-mutants-01 (97 killed, none labeled equivalent), all PASS. Later
-block 0 commits change only docs.
+Records 01 at `3346a4a` (33 tests, 97 mutants killed) passed and are kept
+(D83). Review 001 on `49a693f`: Spec REQUEST_CHANGES (P2: decisions of other
+blocks were ignored; P2: older fork paths not disclosed; P2: split approval
+wording; P3 notes) and Standards REQUEST_CHANGES (P2: most executor and
+oracle mutants were killed only by the expected-file check, and the burn
+balance had no test; P2: several format checks and executor revert rules had
+no control; P3 notes). The follow-up commit fixes all of them: decisions of
+other blocks are a difference; strict integers and ASCII digits; unreadable
+observations give a report; the tests read the oracle's output and the
+mutant table regenerates the expected files first; new controls and
+mutants; the doc fixes above.
 
-Next: block 0 reviews and CI; then the client blocks after the coordinator
-approves the split.
+Next: records 02 at the fix head, review 002, CI; then the client blocks.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 

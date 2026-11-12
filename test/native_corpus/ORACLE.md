@@ -36,7 +36,7 @@ Shanghai, Cancun, Prague, Delhi and Bhilai at block 3, sprint 4, signer
 
 ## Contracts
 
-Hand-assembled bytecode (no compiler). `evm_ref.disassemble` prints it.
+Hand-assembled bytecode (no compiler). `corpus_evm.disassemble` prints it.
 
 Child, `600160005560c160006000a160ee60005260206000fd`: store 1 in slot 0, emit
 `LOG1` with topic `0xc1` and no data, then `REVERT` with the 32-byte word
@@ -100,9 +100,21 @@ reward of each block, which E01-01.harness already asserts
 (`test/harness/fixtures/ORACLE.md`). Block 2 is empty with base fee
 875,000,000 - floor(875,000,000 × (5,000,000 - 228,538) / 5,000,000 / 8).
 
-System-action is NOT_APPLICABLE for ETH: an Ethereum block body has no native
-system transaction, and DEVELOPMENT_PLAN E01-03 checks credits outside a
-transaction only when that extension is implemented.
+System-action is NOT_APPLICABLE for ETH. DEVELOPMENT_PLAN E01-03 (line 89)
+asks for native system transactions, and a block body of this London ethash
+fixture has none. Two kinds of effects without a transaction exist on
+Ethereum, and neither is a system transaction:
+- post-merge protocol system calls (EIP-4788 beacon roots and EIP-2935
+  history storage from Cancun and Prague, and the EIP-7002 and EIP-7251
+  request contracts). No TASK_DECOMPOSITION card names them; the proposed
+  owners, still to be confirmed by the coordinator, are E04-02.optional_scope
+  for their effects outside a transaction and E01-05.type_paths for the
+  current-fork system paths. This pre-merge fixture runs none of them;
+- withdrawals and block rewards, which are credits outside a transaction.
+  Line 89 checks them only when that extension is implemented; their owner is
+  E04-02.optional_scope (outside-transaction records, off by default, enabled
+  only with declared typed fixtures; BALANCE_MODEL, withdrawals and rewards).
+  The block-end state here still binds the block reward.
 
 ## BSC (Parlia)
 
@@ -116,7 +128,9 @@ reward contract 1002 with no data, and the rest to the validator contract
 1000 through `deposit(address)` (`0xf340fa01` and the padded validator). The
 nine system transactions come from the validator with nonces 0 to 8, gas
 price 0 and gas 9,223,372,036,854,775,807. The fee accumulator ends at 0 and
-the validator nonce at 9.
+the validator nonce at 9. Every system transaction succeeds (status 1), as
+the accepted E01-01 BSC oracle states for the same fixture
+(`test/harness/fixtures/bsc/ORACLE.md`, "All ten receipts must succeed").
 
 | Index | Case | Transaction | Gas used | Fee at 5 gwei |
 |---|---|---|---|---|
@@ -186,7 +200,7 @@ slots 0 to 3 of every listed account before and after it. For every block:
 the body transaction count, base fee, gas limit and gas used where given,
 BSC system transactions in order, the state sync result, the listed
 accounts at the block end, an unchanged state root where stated, exactly one
-IMPORT decision, and no new observation or decision after a restart and
+IMPORT decision and no decision of any other block, and no new observation or decision after a restart and
 re-import.
 
 Not asserted: roots, hashes and timestamps as values; unlisted accounts;
@@ -194,3 +208,24 @@ system-contract internals; outside-transaction actions except the ETH block
 reward already asserted by E01-01. This corpus is small. It is not full
 production semantic coverage: TC02, the BOOT-08 catalog and the type matrix
 of E01-05.type_paths stay with their owners.
+
+## Older fork paths
+
+The private fixtures run older paths than the production networks. These are
+limits of this corpus, handed to E01-05.type_paths (the current-fork native
+type and system paths) and to E06 and E07 (public profiles):
+- POLY system-action is the StateSync before Madhugiri: the fixture has no
+  Madhugiri block, so state sync is a separate receipt and not a body
+  transaction. Polygon Mainnet and Amoy have Madhugiri, where state sync is a
+  body transaction of type `StateSyncTxType`.
+- The BSC fee case is the path before Kepler (`fees >> 4` to the system reward
+  contract) under Istanbul gas rules. Production BSC is past Kepler, where
+  that distribution is off.
+- The ETH fixture is before the merge (ethash, London).
+
+## Changing the oracle
+
+A client block that finds a difference keeps the FAIL record (D83). The
+oracle changes only in a separate change that the qa role makes and an
+independent reviewer accepts, with a reason taken from the protocol rules or
+the native source, never to match an observed value.

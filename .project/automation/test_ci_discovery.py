@@ -13,7 +13,7 @@ class DiscoveryTests(unittest.TestCase):
             ".project/automation/test_ci.py", "test/harness/test_runner.py", "test/test_mutate.py",
             "test/builds/test_build_contract.py", "test/evidence/test_evidence.py", "test/mutate.py",
             "test/harness/fixtures/test_data.json", "adapters/test_adapter.py",
-            "test/native_corpus/test_native_corpus.py", "test/native_corpus/compare.py")]
+            "test/native_corpus/test_native_corpus.py", "test/native_corpus/helper.py")]
         self.assertEqual([str(path.relative_to(root)) for path in ci.test_modules(paths, root)],
                          [".project/automation/test_ci.py", "test/harness/test_runner.py", "test/test_mutate.py",
                           "test/native_corpus/test_native_corpus.py"])
