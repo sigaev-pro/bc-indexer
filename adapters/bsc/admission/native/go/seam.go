@@ -40,6 +40,10 @@ var (
 	ErrEngine = errors.New("consensus engine is not the patched Parlia")
 	// ErrGuard reports a seam call without the observation guard.
 	ErrGuard = errors.New("observation guard is not held")
+	// ErrReplay reports a native-only replay of an EXEC_READY observation
+	// whose result differs from its EXEC_READY record, or that native
+	// validation refused.
+	ErrReplay = errors.New("replay differs from the EXEC_READY record")
 )
 
 // RunRecordKey holds the saved producer run of the native store. The key is
@@ -69,6 +73,11 @@ type Config struct {
 	// Store, when set, holds the admission and source inputs records instead
 	// of the native database (the probe passes a power-loss model over it).
 	Store sourceinputs.Store
+	// Cleanup, when set, opens the admission with admission.OpenWithCleanup:
+	// closing an observation then deletes its capsule and dependency log
+	// through Cleanup, and the admission records below the low-water mark
+	// (D100). The store must then implement admission.DeleteStore.
+	Cleanup admission.InputPurger
 	// Emit receives the seam's trace events; it must not call the Seam.
 	Emit func(Event)
 	// SafePoint, when set, receives the VM safe points of the import tracer
@@ -148,7 +157,14 @@ func Start(guard *admission.Guard, db ethdb.Database, chain *core.BlockChain, cf
 		emit: emit, tracer: chain.GetVMConfig().Tracer, safePoint: cfg.SafePoint}
 	token := guard.Acquire()
 	defer token.Release()
-	if s.adm, err = admission.Open(token, store, producer, s.pins, Inputs{DB: store}); err != nil {
+	if cfg.Cleanup == nil {
+		s.adm, err = admission.Open(token, store, producer, s.pins, Inputs{DB: store})
+	} else if deleter, ok := store.(admission.DeleteStore); !ok {
+		err = fmt.Errorf("%w: the store cannot delete the records of closed observations", ErrWiring)
+	} else {
+		s.adm, err = admission.OpenWithCleanup(token, deleter, producer, s.pins, Inputs{DB: store}, cfg.Cleanup)
+	}
+	if err != nil {
 		return nil, err
 	}
 	vm.SetExtractorSafePoint(s.onSafePoint)
@@ -192,6 +208,21 @@ func openRun(store sourceinputs.Store, cfg Config) (admission.Producer, error) {
 
 // Producer returns the producer run that the seam opened.
 func (s *Seam) Producer() admission.Producer { return s.producer }
+
+// Admission returns the admission of the seam and the token of the held
+// guard (nil outside Acquire). The decision bridge shares both.
+func (s *Seam) Admission() (*admission.Admission, *admission.Token) { return s.adm, s.token }
+
+// Store returns the store of the admission and source inputs records.
+func (s *Seam) Store() sourceinputs.Store { return s.store }
+
+// Static reads back and checks the static capsule of an observation.
+func (s *Seam) Static(key string) (Static, error) {
+	return ReadStatic(s.store, key, s.genesis, s.commit)
+}
+
+// Genesis returns the genesis header, a static input of every capsule.
+func (s *Seam) Genesis() *types.Header { return s.genesis.Block.Header() }
 
 // Acquire implements core.ExtractorHook.
 func (s *Seam) Acquire() func() {
@@ -364,6 +395,46 @@ func (s *Seam) resume(chain *core.BlockChain, key string, block *types.Block) (c
 	return o, nil
 }
 
+// Replay attaches an EXEC_READY observation of block for a native-only
+// replay: the native import executes the block again from the parent pin
+// and the capsule, and the dependency log replays the saved responses. The
+// result must match the EXEC_READY record, which is not replaced: Validated
+// checks the consumed and exec digests and writes nothing. It runs with the
+// guard and the chain mutex held, like Begin; the decision bridge calls it
+// for an EXEC_READY observation without a decision.
+func (s *Seam) Replay(chain *core.BlockChain, block *types.Block) (core.ExtractorObservation, error) {
+	if s.token == nil {
+		return nil, ErrGuard
+	}
+	n, parent := block.NumberU64(), chain.GetHeaderByHash(block.ParentHash())
+	if n == 0 || parent == nil || parent.Number.Uint64() != n-1 || !chain.HasState(parent.Root) {
+		return nil, fmt.Errorf("%w: block %d has no parent with state", ErrImportProfile, n)
+	}
+	if head := chain.CurrentBlock(); head == nil || head.Hash() != parent.Hash() {
+		return nil, fmt.Errorf("%w: block %d is not on top of the head", ErrImportProfile, n)
+	}
+	candidate := Candidate(block, parent)
+	observations, err := s.adm.Observations(s.token)
+	if err != nil {
+		return nil, err
+	}
+	for _, obs := range observations {
+		if obs.State != admission.ExecReady || obs.Candidate != candidate {
+			continue
+		}
+		s.emit(Event{"event": "replay", "observation": obs.Key, "number": n})
+		attached, err := s.resume(chain, obs.Key, block)
+		if err != nil {
+			return nil, err
+		}
+		o := attached.(*observation)
+		record := *obs.ExecReady
+		o.replay = &record
+		return o, nil
+	}
+	return nil, fmt.Errorf("%w: block %d has no EXEC_READY observation", ErrReplay, n)
+}
+
 // observation is one admitted block import.
 type observation struct {
 	seam       *Seam
@@ -375,6 +446,8 @@ type observation struct {
 	resolved   admission.State
 	err        error
 	safePoints atomic.Int64
+	// replay is the EXEC_READY record of a native-only replay (Replay).
+	replay *admission.ExecReadyRecord
 }
 
 // Hash implements core.ExtractorObservation.
@@ -416,6 +489,15 @@ func (o *observation) Validated(block *types.Block, statedb *state.StateDB, res 
 	if err != nil {
 		return o.fail(err)
 	}
+	if o.replay != nil {
+		if consumed.Digest != o.replay.ConsumedDigest || digest != o.replay.ExecDigest {
+			return o.fail(fmt.Errorf("%w: %s consumed %s exec %s", ErrReplay, o.key, consumed.Digest, digest))
+		}
+		o.resolved = admission.ExecReady
+		s.emit(Event{"event": "replayed", "observation": o.key, "consumed_digest": consumed.Digest,
+			"exec_digest": digest, "digest": o.replay.Digest, "safe_points": o.safePoints.Load()})
+		return nil
+	}
 	record, err := s.adm.ExecReady(s.token, o.key, digest)
 	if err != nil {
 		return o.fail(err)
@@ -442,6 +524,12 @@ func (o *observation) Rejected(block *types.Block, _ *core.ProcessResult, cause 
 	if errors.Is(cause, core.ErrExtractorParentState) || errors.Is(cause, parlia.ErrExtractorSystemCall) ||
 		errors.Is(cause, parlia.ErrExtractorSnapshotResponse) {
 		o.fail(cause)
+		return
+	}
+	if o.replay != nil {
+		// The block reached EXEC_READY before: a refusal of its replay is
+		// not a decision about the block.
+		o.fail(fmt.Errorf("%w: native validation refused %s: %w", ErrReplay, o.key, cause))
 		return
 	}
 	evidence := RejectionEvidence(block, cause)
@@ -527,33 +615,9 @@ func RejectionEvidence(block *types.Block, cause error) string {
 // obligation is still open, so an obligation that recovery could not resolve
 // keeps the node in RECOVERY_ONLY. The seam must be installed on the chain.
 func (s *Seam) Recover(chain *core.BlockChain) error {
-	observations, err := s.Observations()
+	failures, err := s.RecoverObligations(chain)
 	if err != nil {
 		return err
-	}
-	var failures []error
-	for _, obs := range observations {
-		switch obs.State {
-		case admission.InputPreparing:
-			release := s.Acquire()
-			err := s.adm.Abandon(s.token, obs.Key)
-			release()
-			if err != nil {
-				return err
-			}
-			s.emit(Event{"event": "abandon", "observation": obs.Key})
-		case admission.Admitted:
-			static, err := ReadStatic(s.store, obs.Key, s.genesis, s.commit)
-			if err != nil {
-				return err
-			}
-			s.emit(Event{"event": "recover", "observation": obs.Key, "number": static.Block.NumberU64()})
-			if _, err := chain.InsertChain(types.Blocks{static.Block}); err != nil {
-				// A native rejection closes the obligation and still returns
-				// the native error; GoLive below decides.
-				failures = append(failures, fmt.Errorf("recovery of %s: %w", obs.Key, err))
-			}
-		}
 	}
 	release := s.Acquire()
 	defer release()
@@ -562,4 +626,40 @@ func (s *Seam) Recover(chain *core.BlockChain) error {
 	}
 	s.emit(Event{"event": "live"})
 	return nil
+}
+
+// RecoverObligations is the admission part of Recover, without GoLive: it
+// abandons INPUT_PREPARING observations and re-executes each ADMITTED
+// obligation through the native import. It returns the import errors of the
+// re-executions; err is any other error. The decision bridge runs it before
+// it opens and calls its own GoLive.
+func (s *Seam) RecoverObligations(chain *core.BlockChain) (failures []error, err error) {
+	observations, err := s.Observations()
+	if err != nil {
+		return nil, err
+	}
+	for _, obs := range observations {
+		switch obs.State {
+		case admission.InputPreparing:
+			release := s.Acquire()
+			err := s.adm.Abandon(s.token, obs.Key)
+			release()
+			if err != nil {
+				return nil, err
+			}
+			s.emit(Event{"event": "abandon", "observation": obs.Key})
+		case admission.Admitted:
+			static, err := ReadStatic(s.store, obs.Key, s.genesis, s.commit)
+			if err != nil {
+				return nil, err
+			}
+			s.emit(Event{"event": "recover", "observation": obs.Key, "number": static.Block.NumberU64()})
+			if _, err := chain.InsertChain(types.Blocks{static.Block}); err != nil {
+				// A native rejection closes the obligation and still returns
+				// the native error; GoLive decides.
+				failures = append(failures, fmt.Errorf("recovery of %s: %w", obs.Key, err))
+			}
+		}
+	}
+	return failures, nil
 }
