@@ -289,6 +289,12 @@
       "file": "test/native_corpus/poly/poly_corpus.py",
       "original": "    except corpus_compare.FormatError as error:",
       "replacement": "    except KeyError as error:"
+    },
+    {
+      "name": "observe skips the expected digest",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "expected_path = artifact(run_record[\"expected\"], 4 * 1024 * 1024)",
+      "replacement": "expected_path = Path(run_record[\"expected\"][\"path\"])"
     }
   ]
 }

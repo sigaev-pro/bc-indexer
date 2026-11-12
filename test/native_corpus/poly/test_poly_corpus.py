@@ -307,7 +307,9 @@ class VerdictTests(unittest.TestCase):
 
 class ObserveTests(unittest.TestCase):
     def directory(self, change=None):
-        root = Path(tempfile.mkdtemp()).resolve()
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        root = Path(holder.name).resolve()
         imported, reimported = sample()
         if change:
             change(imported, reimported)
@@ -330,6 +332,27 @@ class ObserveTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             poly_corpus.observe(root, expected(), SOURCE, root)
         self.assertEqual((root / "comparison.json").read_text(), "retained")
+
+    def retained(self):
+        root = self.directory()
+        copy_path = root / "expected-copy.json"
+        copy_path.write_bytes(poly_corpus.EXPECTED.read_bytes())
+        (root / "run-record.json").write_text(json.dumps({"expected": poly_corpus.reference(copy_path)}))
+        (root / "observation.json").write_text(json.dumps({"source": SOURCE}))
+        return root, copy_path
+
+    def test_observe_command_uses_the_run_expected_file(self):
+        root, _ = self.retained()
+        self.assertEqual(poly_corpus.main(["observe", str(root), "--output", str(root / "again")]), 0)
+        report = json.loads((root / "again" / "observe.json").read_text())
+        self.assertEqual(report["result"], "PASS")
+        self.assertEqual(report["expected"]["path"], str(root / "expected-copy.json"))
+
+    def test_observe_command_refuses_a_changed_expected_copy(self):
+        root, copy_path = self.retained()
+        copy_path.write_bytes(copy_path.read_bytes().replace(b"228538", b"228539", 1))
+        with self.assertRaises(Exception):
+            poly_corpus.main(["observe", str(root), "--output", str(root / "again")])
 
     def test_format_error_is_a_failed_comparison(self):
         root = self.directory(lambda i, r: r["blocks"][0].__setitem__("hash", "not hex"))

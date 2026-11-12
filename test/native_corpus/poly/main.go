@@ -347,12 +347,13 @@ func generate(args []string) error {
 		}
 		body := &types.Body{}
 		var receipts []*types.Receipt
+		// Every block first gets the processor's pre-transaction system calls.
+		evm := vm.NewEVM(core.NewEVMBlockContext(header, chain, &author), statedb, config, vm.Config{})
+		preTransaction(evm, config, header)
 		if number == 1 {
 			// The probe applies the transactions with native
 			// core.ApplyTransaction, the signer as the execution beneficiary
 			// (Bor's miner is not used); FinalizeAndAssemble and Seal follow.
-			evm := vm.NewEVM(core.NewEVMBlockContext(header, chain, &author), statedb, config, vm.Config{})
-			preTransaction(evm, config, header)
 			pool := new(core.GasPool).AddGas(header.GasLimit)
 			used := uint64(0)
 			for i, tx := range txs {

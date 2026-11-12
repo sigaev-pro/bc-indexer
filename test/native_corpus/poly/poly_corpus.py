@@ -458,7 +458,8 @@ def main(argv=None):
         record_path = args.directory / "run-record.json"
         if record_path.exists():
             run_record = load(record_path, 16 * 1024 * 1024)
-            expected_path = Path(run_record["expected"]["path"])
+            # The retained copy must still have the digest the run recorded.
+            expected_path = artifact(run_record["expected"], 4 * 1024 * 1024)
             source = load(args.directory / "observation.json", 64 * 1024 * 1024)["source"]
         else:
             expected_path, source = EXPECTED, {"development": "not measured"}
