@@ -142,7 +142,7 @@ three client blocks after block 0 merges.
 
 ### ETH block (Geth)
 
-Status: IN_PROGRESS in draft PR (pending), branch
+Status: IN_PROGRESS in draft PR #167, branch
 `claude/e01-03-smoke-corpus-eth` from main `3cc31ec` (block 0 merged in PR
 #164 at `3cc31ec`). Part of #19. Role: native-engineer, and qa for the
 matrix; Spec and Standards reviewers read-only. D97: as the coordinator
