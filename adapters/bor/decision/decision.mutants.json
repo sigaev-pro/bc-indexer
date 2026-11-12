@@ -1,0 +1,671 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the shared E01-02.decision_bridge core. The table is shared byte for byte by the geth, bsc and bor copies; it runs in the module from `python3 test/harness/decision.py assemble DIR`, at extractor/decision, because the package imports admission at its native path.",
+  "language": "go",
+  "root": "../..",
+  "copy": [
+    "go.mod",
+    "extractor/*.go",
+    "extractor/*/vectors.json"
+  ],
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "./extractor/decision/",
+    "./extractor/decision_binding/"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "store id pattern anchors",
+      "file": "extractor/decision/decision.go",
+      "original": "`^[0-9A-Za-z][0-9A-Za-z._:-]{0,127}$`",
+      "replacement": "`[0-9A-Za-z][0-9A-Za-z._:-]{0,127}`"
+    },
+    {
+      "name": "digest pattern anchors",
+      "file": "extractor/decision/decision.go",
+      "original": "digestPattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)",
+      "replacement": "digestPattern  = regexp.MustCompile(`[0-9a-f]{64}`)"
+    },
+    {
+      "name": "intent tag",
+      "file": "extractor/decision/decision.go",
+      "original": "tagIntent   = \"extractor-decision-intent-v1\"",
+      "replacement": "tagIntent   = \"extractor-decision-intent-v0\""
+    },
+    {
+      "name": "decided tag",
+      "file": "extractor/decision/decision.go",
+      "original": "tagDecided  = \"extractor-decision-decided-v1\"",
+      "replacement": "tagDecided  = \"extractor-decision-decided-v0\""
+    },
+    {
+      "name": "rejected tag",
+      "file": "extractor/decision/decision.go",
+      "original": "tagRejected = \"extractor-decision-rejected-v1\"",
+      "replacement": "tagRejected = \"extractor-decision-rejected-v0\""
+    },
+    {
+      "name": "marker prefix",
+      "file": "extractor/decision/decision.go",
+      "original": "markerPrefix = \"extractor-decision-marker-v1/\"",
+      "replacement": "markerPrefix = \"extractor-decision-v1/marker/\""
+    },
+    {
+      "name": "intent digest omits the store id",
+      "file": "extractor/decision/decision.go",
+      "original": "str(r.NativeStoreID), str(r.Producer)",
+      "replacement": "str(r.Producer)"
+    },
+    {
+      "name": "intent digest omits the sequence",
+      "file": "extractor/decision/decision.go",
+      "original": "str(r.Producer), u64(r.Sequence),",
+      "replacement": "str(r.Producer),"
+    },
+    {
+      "name": "intent digest omits the member count",
+      "file": "extractor/decision/decision.go",
+      "original": "parts = append(parts, u64(uint64(len(r.Members))))\n",
+      "replacement": ""
+    },
+    {
+      "name": "intent digest omits the member observation",
+      "file": "extractor/decision/decision.go",
+      "original": "parts = append(parts, str(m.Observation))\n",
+      "replacement": ""
+    },
+    {
+      "name": "intent digest omits the child root",
+      "file": "extractor/decision/decision.go",
+      "original": "m.Block, m.ExecReadyDigest, m.ChildRoot}",
+      "replacement": "m.Block, m.ExecReadyDigest}"
+    },
+    {
+      "name": "intent digest omits the events flag",
+      "file": "extractor/decision/decision.go",
+      "original": "evidence, []byte{events})...)",
+      "replacement": "evidence, []byte{events}[:0])...)"
+    },
+    {
+      "name": "events flag always zero",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tevents = 1\n",
+      "replacement": "\t\tevents = 0\n"
+    },
+    {
+      "name": "decided digest omits the delivery",
+      "file": "extractor/decision/decision.go",
+      "original": "intent, str(string(delivery))), nil",
+      "replacement": "intent), nil"
+    },
+    {
+      "name": "rejected digest omits the evidence",
+      "file": "extractor/decision/decision.go",
+      "original": "return digestOf(append([]byte(tagRejected), 0), intent, evidence), nil",
+      "replacement": "return digestOf(append([]byte(tagRejected), 0), intent, evidence[:0]), nil"
+    },
+    {
+      "name": "marker key without sequence",
+      "file": "extractor/decision/decision.go",
+      "original": "\"%s%s.%s/%016x\", markerPrefix, p.ProducerID, p.RunID, sequence))",
+      "replacement": "\"%s%s.%s/%016x\", markerPrefix, p.ProducerID, p.RunID, 0))"
+    },
+    {
+      "name": "strict decode allows unknown fields",
+      "file": "extractor/decision/decision.go",
+      "original": "\tdecoder.DisallowUnknownFields()\n",
+      "replacement": ""
+    },
+    {
+      "name": "strict decode allows trailing data",
+      "file": "extractor/decision/decision.go",
+      "original": "if _, err := decoder.Token(); err != io.EOF {",
+      "replacement": "if _, err := decoder.Token(); err != io.EOF && false {"
+    },
+    {
+      "name": "open accepts a nil admission",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif adm == nil {\n\t\treturn nil, fmt.Errorf(\"%w: missing admission\", ErrInvalid)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "open skips the guard check",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := adm.Check(t); err != nil {\n\t\treturn nil, err\n\t}\n\tif db == nil",
+      "replacement": "\tif db == nil"
+    },
+    {
+      "name": "open accepts a nil mirror",
+      "file": "extractor/decision/decision.go",
+      "original": "if db == nil || roots == nil || mirror == nil {",
+      "replacement": "if db == nil || roots == nil {"
+    },
+    {
+      "name": "open accepts a bad store id",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif !storeIDPattern.MatchString(storeID) {\n\t\treturn nil, fmt.Errorf(\"%w: native store ID %q\", ErrInvalid, storeID)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "open does not sync first",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := db.SyncKeyValue(); err != nil {\n\t\treturn nil, err\n\t}\n\tp := adm.Producer()",
+      "replacement": "\tp := adm.Producer()"
+    },
+    {
+      "name": "open accepts low-water above counter",
+      "file": "extractor/decision/decision.go",
+      "original": "if low.Sequence > counter.Next || purged.Sequence > low.Sequence {",
+      "replacement": "if purged.Sequence > low.Sequence {"
+    },
+    {
+      "name": "open accepts purged above low-water",
+      "file": "extractor/decision/decision.go",
+      "original": "if low.Sequence > counter.Next || purged.Sequence > low.Sequence {",
+      "replacement": "if low.Sequence > counter.Next {"
+    },
+    {
+      "name": "open accepts an unresolved intent below the counter",
+      "file": "extractor/decision/decision.go",
+      "original": "if d.State == Intended && seq != counter.Next-1 {",
+      "replacement": "if false && d.State == Intended {"
+    },
+    {
+      "name": "open keeps decided decisions without marker open",
+      "file": "extractor/decision/decision.go",
+      "original": "if d.State == Intended || (d.State == Decided && d.Marker) {",
+      "replacement": "if d.State == Intended || d.State == Decided {"
+    },
+    {
+      "name": "open does not finish closes",
+      "file": "extractor/decision/decision.go",
+      "original": "\tfor _, d := range resolved {\n\t\tif err := b.closeMembers(t, d); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "open does not advance",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := b.advance(); err != nil {\n\t\treturn nil, err\n\t}\n\tif err := b.prune(); err != nil {\n\t\treturn nil, err\n\t}\n\treturn b, nil",
+      "replacement": "\tif err := b.prune(); err != nil {\n\t\treturn nil, err\n\t}\n\treturn b, nil"
+    },
+    {
+      "name": "load accepts a missing intent",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif !ok {\n\t\treturn nil, fmt.Errorf(\"%w: missing intent %d\", ErrCorrupt, seq)\n\t}\n",
+      "replacement": "\t_ = ok\n"
+    },
+    {
+      "name": "load accepts another store",
+      "file": "extractor/decision/decision.go",
+      "original": "intent.NativeStoreID != b.storeID ||",
+      "replacement": ""
+    },
+    {
+      "name": "load accepts another producer",
+      "file": "extractor/decision/decision.go",
+      "original": "intent.Producer != b.producer.ProducerID+\".\"+b.producer.RunID ||",
+      "replacement": ""
+    },
+    {
+      "name": "load accepts a wrong intent digest",
+      "file": "extractor/decision/decision.go",
+      "original": "intent.Sequence != seq || intent.Digest != want {",
+      "replacement": "intent.Sequence != seq || (intent.Digest != want && false) {"
+    },
+    {
+      "name": "load accepts a malformed intent",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%w: intent %d: %v\", ErrCorrupt, seq, err)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "load accepts decided with rejected",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif hasRejected || err != nil || decided.Sequence != seq",
+      "replacement": "\t\tif err != nil || decided.Sequence != seq"
+    },
+    {
+      "name": "load accepts a wrong decided delivery",
+      "file": "extractor/decision/decision.go",
+      "original": "decided.Delivery != delivery(intent) || decided.Digest != want {",
+      "replacement": "decided.Digest != want {"
+    },
+    {
+      "name": "load accepts a wrong decided digest",
+      "file": "extractor/decision/decision.go",
+      "original": "decided.Delivery != delivery(intent) || decided.Digest != want {",
+      "replacement": "decided.Delivery != delivery(intent) || (decided.Digest != want && false) {"
+    },
+    {
+      "name": "load accepts a removed marker before the mirror",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\tif !applied {\n\t\t\t\treturn nil, fmt.Errorf(\"%w: marker of decision %d removed before the mirror applied it\",\n\t\t\t\t\tErrInvariant, seq)\n\t\t\t}\n",
+      "replacement": "\t\t\t_ = applied\n"
+    },
+    {
+      "name": "load skips the mirror for a removed marker",
+      "file": "extractor/decision/decision.go",
+      "original": "if !marker && decided.Delivery == Batch {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "load accepts a wrong rejected digest",
+      "file": "extractor/decision/decision.go",
+      "original": "rejected.IntentDigest != intent.Digest || rejected.Digest != want {",
+      "replacement": "rejected.IntentDigest != intent.Digest || (rejected.Digest != want && false) {"
+    },
+    {
+      "name": "load accepts a rejected intent with marker",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif marker {\n\t\t\treturn nil, fmt.Errorf(\"%w: rejected intent %d has a native marker\", ErrInvariant, seq)\n\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "marker accepts other bytes",
+      "file": "extractor/decision/decision.go",
+      "original": "if !bytes.Equal(data, want) {",
+      "replacement": "if !bytes.Equal(data, want) && false {"
+    },
+    {
+      "name": "delivery ignores events",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif intent.Events {\n\t\treturn Batch\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "enter skips the guard",
+      "file": "extractor/decision/decision.go",
+      "original": "func (b *Bridge) enter(t *admission.Token) error {\n\tif err := b.adm.Check(t); err != nil {\n\t\treturn err\n\t}\n",
+      "replacement": "func (b *Bridge) enter(t *admission.Token) error {\n"
+    },
+    {
+      "name": "enter ignores a stopped bridge",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif b.err != nil {\n\t\treturn fmt.Errorf(\"%w: %v\", ErrFailed, b.err)\n\t}\n\treturn nil\n}\n\nfunc (b *Bridge) fail",
+      "replacement": "\treturn nil\n}\n\nfunc (b *Bridge) fail"
+    },
+    {
+      "name": "fail does not record the error",
+      "file": "extractor/decision/decision.go",
+      "original": "\tb.err = err\n",
+      "replacement": ""
+    },
+    {
+      "name": "copy shares the members",
+      "file": "extractor/decision/decision.go",
+      "original": "\tout.Intent.Members = append([]Member{}, d.Intent.Members...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "copy shares the decided record",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tdecided := *d.Decided\n\t\tout.Decided = &decided\n",
+      "replacement": "\t\tout.Decided = d.Decided\n"
+    },
+    {
+      "name": "undecided ignores the intent members",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\tnamed[m.Observation] = true\n",
+      "replacement": "\t\t\tnamed[m.Observation] = false\n"
+    },
+    {
+      "name": "undecided lists every state",
+      "file": "extractor/decision/decision.go",
+      "original": "if obs.State == admission.ExecReady && !named[obs.Key] {",
+      "replacement": "if !named[obs.Key] {"
+    },
+    {
+      "name": "go live ignores an unresolved intent",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif d := b.unresolved(); d != nil {\n\t\treturn fmt.Errorf(\"%w: intent %d is unresolved\", ErrPending, d.Sequence)\n\t}\n\tundecided, err := b.Undecided(t)",
+      "replacement": "\tundecided, err := b.Undecided(t)"
+    },
+    {
+      "name": "go live ignores undecided observations",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif len(undecided) != 0 {\n",
+      "replacement": "\tif len(undecided) < 0 {\n"
+    },
+    {
+      "name": "intent accepts a bad old head",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := validHead(in.OldHead); err != nil {\n\t\treturn err\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "intent accepts a bad evidence digest",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif !digestPattern.MatchString(in.EvidenceDigest) {\n\t\treturn fmt.Errorf(\"%w: evidence digest %q\", ErrInvalid, in.EvidenceDigest)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "import accepts no members",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif len(in.Members) == 0 {\n\t\t\treturn fmt.Errorf(\"%w: IMPORT without members\", ErrInvalid)\n\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "side accepts events",
+      "file": "extractor/decision/decision.go",
+      "original": "if len(in.Members) == 0 || in.Events || in.OldHead != in.NewHead {",
+      "replacement": "if len(in.Members) == 0 || in.OldHead != in.NewHead {"
+    },
+    {
+      "name": "side accepts a head change",
+      "file": "extractor/decision/decision.go",
+      "original": "if len(in.Members) == 0 || in.Events || in.OldHead != in.NewHead {",
+      "replacement": "if len(in.Members) == 0 || in.Events {"
+    },
+    {
+      "name": "finality accepts members",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif len(in.Members) != 0 {\n\t\t\treturn fmt.Errorf(\"%w: FINALITY with members\", ErrInvalid)\n\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "intent accepts an unknown kind",
+      "file": "extractor/decision/decision.go",
+      "original": "\tdefault:\n\t\treturn fmt.Errorf(\"%w: kind %q\", ErrInvalid, in.Kind)\n",
+      "replacement": ""
+    },
+    {
+      "name": "intent accepts a malformed member root",
+      "file": "extractor/decision/decision.go",
+      "original": "!digestPattern.MatchString(m.ExecReadyDigest) || !digestPattern.MatchString(m.ChildRoot)",
+      "replacement": "!digestPattern.MatchString(m.ExecReadyDigest)"
+    },
+    {
+      "name": "intend ignores an unresolved intent",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif d := b.unresolved(); d != nil {\n\t\treturn IntentRecord{}, fmt.Errorf(\"%w: intent %d is unresolved\", ErrPending, d.Sequence)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "intend checks the EXEC_READY record instead of the state",
+      "file": "extractor/decision/decision.go",
+      "original": "if obs == nil || obs.State != admission.ExecReady || obs.ExecReady.Digest != m.ExecReadyDigest {",
+      "replacement": "if obs == nil || obs.ExecReady == nil || obs.ExecReady.Digest != m.ExecReadyDigest {",
+      "equivalent": "Admission lists an observation with an EXEC_READY record exactly when its state is EXEC_READY (DECIDED and later states are not listed), so the ExecReady != nil test of the mutant selects the same observations."
+    },
+    {
+      "name": "intend accepts another EXEC_READY digest",
+      "file": "extractor/decision/decision.go",
+      "original": "if obs == nil || obs.State != admission.ExecReady || obs.ExecReady.Digest != m.ExecReadyDigest {",
+      "replacement": "if obs == nil || obs.State != admission.ExecReady {"
+    },
+    {
+      "name": "intend accepts a member twice",
+      "file": "extractor/decision/decision.go",
+      "original": "if keys[obs.Key] || blocks[obs.Candidate.Hash] {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "intend accepts a later observation of a block",
+      "file": "extractor/decision/decision.go",
+      "original": "if other.Sequence < obs.Sequence {",
+      "replacement": "if other.Sequence < 0 {"
+    },
+    {
+      "name": "intend accepts an unfinished observation of the block",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\tif other.State != admission.ExecReady {\n",
+      "replacement": "\t\t\tif false {\n"
+    },
+    {
+      "name": "side closes its members",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif d.Intent.Kind == Side {\n\t\t\t// The side block",
+      "replacement": "\t\tif false {\n\t\t\t// The side block"
+    },
+    {
+      "name": "retains ignores the kind",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif d.Intent.Kind != Side {\n\t\treturn false\n\t}\n",
+      "replacement": "",
+      "equivalent": "retains is asked only about NATIVE_DECIDED decisions without a marker. A NATIVE_DECIDED IMPORT or CANONICAL decision loses its marker only in Cleanup, which runs after Resolve or Open closed its members, so retains never sees an open member of another kind."
+    },
+    {
+      "name": "retains nothing",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\tif obs.Key == m.Observation {\n\t\t\t\treturn true\n",
+      "replacement": "\t\t\tif obs.Key == m.Observation {\n\t\t\t\treturn false\n"
+    },
+    {
+      "name": "open drops retained side decisions",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif d.State == Decided && !d.Marker && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d",
+      "replacement": "\t\tif false && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d"
+    },
+    {
+      "name": "cleanup keeps finished side decisions",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif d.State == Decided && !d.Marker && !retains(d, observations) {",
+      "replacement": "\t\tif d.State == Decided && !d.Marker && d.Intent.Kind != Side && !retains(d, observations) {"
+    },
+    {
+      "name": "undecided names only the unresolved intent",
+      "file": "extractor/decision/decision.go",
+      "original": "\tfor _, d := range b.open {\n\t\tfor _, m := range d.Intent.Members {\n\t\t\tnamed[m.Observation] = true",
+      "replacement": "\tfor _, d := range b.open {\n\t\tfor _, m := range d.Intent.Members {\n\t\t\tnamed[m.Observation] = d.State == Intended"
+    },
+    {
+      "name": "reject closes retained side blocks",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\t\t\tretained[m.Block] = true\n",
+      "replacement": "\t\t\t\t\tretained[m.Block] = false\n"
+    },
+    {
+      "name": "reject retains blocks of decided imports",
+      "file": "extractor/decision/decision.go",
+      "original": "if other.Intent.Kind == Side && other.State == Decided {",
+      "replacement": "if other.State == Decided {"
+    },
+    {
+      "name": "open finishes closes before listing retained side decisions",
+      "file": "extractor/decision/decision.go",
+      "original": "\tfor _, d := range resolved {\n\t\tif d.State == Decided && !d.Marker && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d\n\t\t}\n\t}\n\t// Finish the closes that a power loss interrupted after the decided or\n\t// rejected record was synced.\n\tfor _, d := range resolved {\n\t\tif err := b.closeMembers(t, d); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}",
+      "replacement": "\tfor _, d := range resolved {\n\t\tif err := b.closeMembers(t, d); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tfor _, d := range resolved {\n\t\tif d.State == Decided && !d.Marker && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d\n\t\t}\n\t}"
+    },
+    {
+      "name": "intend stores the returned members",
+      "file": "extractor/decision/decision.go",
+      "original": "\tstored.Members = append([]Member{}, record.Members...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "intend ignores the root check error",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif err != nil {\n\t\t\treturn IntentRecord{}, fmt.Errorf(\"%w: %s: %w\", ErrChildRoot",
+      "replacement": "\t\tif err != nil && false {\n\t\t\treturn IntentRecord{}, fmt.Errorf(\"%w: %s: %w\", ErrChildRoot"
+    },
+    {
+      "name": "intend accepts a volatile child root",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif !durable {\n",
+      "replacement": "\t\tif !durable && false {\n"
+    },
+    {
+      "name": "intend records the caller block",
+      "file": "extractor/decision/decision.go",
+      "original": "Block: obs.Candidate.Hash,\n",
+      "replacement": "Block: m.Block,\n"
+    },
+    {
+      "name": "intend skips the counter re-read",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif counter.Next != b.next {\n\t\treturn IntentRecord{}, b.fail(fmt.Errorf(\"%w: decision counter is %d, this bridge expects %d\", ErrConflict,\n\t\t\tcounter.Next, b.next))\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "intend accepts records beyond the counter",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif ok {\n\t\t\treturn IntentRecord{}, b.fail(fmt.Errorf(\"%w: %s beyond the counter\"",
+      "replacement": "\t\tif ok && false {\n\t\t\treturn IntentRecord{}, b.fail(fmt.Errorf(\"%w: %s beyond the counter\""
+    },
+    {
+      "name": "intend does not sync the intent before the counter",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := putRecord(b.db, b.recordKey(seq, \"intent\"), record); err != nil {\n\t\treturn IntentRecord{}, b.fail(err)\n\t}\n\tif err := b.db.SyncKeyValue(); err != nil {\n\t\treturn IntentRecord{}, b.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(b.db, b.recordKey(seq, \"intent\"), record); err != nil {\n\t\treturn IntentRecord{}, b.fail(err)\n\t}\n"
+    },
+    {
+      "name": "intend does not sync the counter",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := putRecord(b.db, b.key(\"counter\"), counterRecord{Next: seq + 1}); err != nil {\n\t\treturn IntentRecord{}, b.fail(err)\n\t}\n\tif err := b.db.SyncKeyValue(); err != nil {\n\t\treturn IntentRecord{}, b.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(b.db, b.key(\"counter\"), counterRecord{Next: seq + 1}); err != nil {\n\t\treturn IntentRecord{}, b.fail(err)\n\t}\n"
+    },
+    {
+      "name": "resolve treats an absent marker as a decision",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif !marker {\n\t\treturn DecidedRecord{}",
+      "replacement": "\tif !marker && false {\n\t\treturn DecidedRecord{}"
+    },
+    {
+      "name": "resolve does not sync the decided record",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := putRecord(b.db, b.recordKey(seq, \"decided\"), record); err != nil {\n\t\treturn DecidedRecord{}, b.fail(err)\n\t}\n\tif err := b.db.SyncKeyValue(); err != nil {\n\t\treturn DecidedRecord{}, b.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(b.db, b.recordKey(seq, \"decided\"), record); err != nil {\n\t\treturn DecidedRecord{}, b.fail(err)\n\t}\n"
+    },
+    {
+      "name": "resolve does not close the observations",
+      "file": "extractor/decision/decision.go",
+      "original": "\td.State, d.Decided, d.Marker = Decided, &record, true\n\tif err := b.closeMembers(t, d); err != nil {\n\t\treturn DecidedRecord{}, b.fail(err)\n\t}\n",
+      "replacement": "\td.State, d.Decided, d.Marker = Decided, &record, true\n"
+    },
+    {
+      "name": "resolve rewrites a decided decision",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif d.State == Decided {\n\t\treturn *d.Decided, nil\n\t}\n\tmarker, err := b.marker(d.Intent)\n\tif err != nil {\n\t\treturn DecidedRecord{}, b.fail(err)\n\t}\n\tif !marker {",
+      "replacement": "\tmarker, err := b.marker(d.Intent)\n\tif err != nil {\n\t\treturn DecidedRecord{}, b.fail(err)\n\t}\n\tif !marker {"
+    },
+    {
+      "name": "reject accepts a malformed evidence digest",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif !digestPattern.MatchString(evidenceDigest) {\n\t\treturn RejectedRecord{}, fmt.Errorf(\"%w: evidence digest %q\", ErrInvalid, evidenceDigest)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "reject accepts a decided decision",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif d.State != Intended {\n\t\treturn RejectedRecord{}, fmt.Errorf(\"%w: RejectIntent of %d in %s\", ErrState, seq, d.State)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "reject accepts a marker",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif marker {\n\t\treturn RejectedRecord{}",
+      "replacement": "\tif marker && false {\n\t\treturn RejectedRecord{}"
+    },
+    {
+      "name": "reject does not sync",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := putRecord(b.db, b.recordKey(seq, \"rejected\"), record); err != nil {\n\t\treturn RejectedRecord{}, b.fail(err)\n\t}\n\tif err := b.db.SyncKeyValue(); err != nil {\n\t\treturn RejectedRecord{}, b.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(b.db, b.recordKey(seq, \"rejected\"), record); err != nil {\n\t\treturn RejectedRecord{}, b.fail(err)\n\t}\n"
+    },
+    {
+      "name": "reject keeps the decision open",
+      "file": "extractor/decision/decision.go",
+      "original": "\td.State, d.Rejected = Rejected, &record\n\tdelete(b.open, seq)\n",
+      "replacement": "\td.State, d.Rejected = Rejected, &record\n"
+    },
+    {
+      "name": "reject does not close the observations",
+      "file": "extractor/decision/decision.go",
+      "original": "\tdelete(b.open, seq)\n\tif err := b.closeMembers(t, d); err != nil {\n\t\treturn RejectedRecord{}, b.fail(err)\n\t}\n",
+      "replacement": "\tdelete(b.open, seq)\n"
+    },
+    {
+      "name": "close uses the intent digest",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tdigest = d.Decided.Digest\n",
+      "replacement": "\t\tdigest = d.Intent.Digest\n"
+    },
+    {
+      "name": "close skips duplicate observations",
+      "file": "extractor/decision/decision.go",
+      "original": "if !blocks[obs.Candidate.Hash] || retained[obs.Candidate.Hash] {",
+      "replacement": "if !blocks[obs.Candidate.Hash] || retained[obs.Candidate.Hash] || obs.Key != d.Intent.Members[0].Observation {"
+    },
+    {
+      "name": "close accepts a non EXEC_READY observation",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif obs.State != admission.ExecReady {\n\t\t\treturn fmt.Errorf(\"%w: %s of decided block %s is %s\", ErrInvariant, obs.Key, obs.Candidate.Hash, obs.State)\n\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "obligations list checkpoints",
+      "file": "extractor/decision/decision.go",
+      "original": "if !ok || d.State != Decided || d.Decided.Delivery != Batch {",
+      "replacement": "if !ok || d.State != Decided {"
+    },
+    {
+      "name": "obligations ignore the mirror",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif !applied {\n\t\t\tc := copyDecision(d)",
+      "replacement": "\t\tif true || !applied {\n\t\t\tc := copyDecision(d)"
+    },
+    {
+      "name": "cleanup removes unapplied markers",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\tif !applied {\n\t\t\t\tcontinue\n",
+      "replacement": "\t\t\tif !applied && false {\n\t\t\t\tcontinue\n"
+    },
+    {
+      "name": "cleanup consults the mirror for checkpoints",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif d.Decided.Delivery == Batch {\n\t\t\tapplied, err",
+      "replacement": "\t\tif true {\n\t\t\tapplied, err"
+    },
+    {
+      "name": "cleanup does not sync the deletions",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif len(done) != 0 {\n\t\tif err := b.db.SyncKeyValue(); err != nil {\n\t\t\treturn b.fail(err)\n\t\t}\n",
+      "replacement": "\tif len(done) != 0 {\n"
+    },
+    {
+      "name": "cleanup keeps done decisions open",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\tdelete(b.open, seq)\n",
+      "replacement": "\t\t\t_ = seq\n"
+    },
+    {
+      "name": "cleanup removes a marker twice",
+      "file": "extractor/decision/decision.go",
+      "original": "if !ok || d.State != Decided || !d.Marker {",
+      "replacement": "if !ok || d.State != Decided {"
+    },
+    {
+      "name": "advance passes an open decision",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif _, open := b.open[low]; open {\n\t\t\tbreak\n\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "advance does not sync",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err := putRecord(b.db, b.key(\"lowwater\"), lowwaterRecord{Sequence: low}); err != nil {\n\t\treturn b.fail(err)\n\t}\n\tif err := b.db.SyncKeyValue(); err != nil {\n\t\treturn b.fail(err)\n\t}\n",
+      "replacement": "\tif err := putRecord(b.db, b.key(\"lowwater\"), lowwaterRecord{Sequence: low}); err != nil {\n\t\treturn b.fail(err)\n\t}\n"
+    },
+    {
+      "name": "prune deletes no records",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\t\tif err := b.db.Delete(b.recordKey(seq, kind)); err != nil {\n\t\t\t\t\treturn b.fail(err)\n\t\t\t\t}\n",
+      "replacement": "\t\t\t\t_ = kind\n"
+    },
+    {
+      "name": "prune marks before the deletions are synced",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif err := b.db.SyncKeyValue(); err != nil {\n\t\t\treturn b.fail(err)\n\t\t}\n\t\tif err := putRecord(b.db, b.key(\"purged\")",
+      "replacement": "\t\tif err := putRecord(b.db, b.key(\"purged\")"
+    },
+    {
+      "name": "prune ignores the batch bound",
+      "file": "extractor/decision/decision.go",
+      "original": "end := min(b.lowwater, b.purged+pruneBatch)",
+      "replacement": "end := b.lowwater"
+    }
+  ]
+}

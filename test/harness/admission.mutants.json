@@ -227,6 +227,18 @@
       "file": "test/harness/admission.py",
       "original": "raw(admitted) + raw(evidence)).hex()",
       "replacement": "raw(admitted)).hex()"
+    },
+    {
+      "name": "decided tag",
+      "file": "test/harness/admission.py",
+      "original": "tag(\"extractor-admission-decided-v1\")",
+      "replacement": "tag(\"extractor-admission-decided-v0\")"
+    },
+    {
+      "name": "decided omits the decision digest",
+      "file": "test/harness/admission.py",
+      "original": "raw(exec_ready) + raw(decision)).hex()",
+      "replacement": "raw(exec_ready)).hex()"
     }
   ]
 }

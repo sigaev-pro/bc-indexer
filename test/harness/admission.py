@@ -75,6 +75,10 @@ def rejected_digest(admitted, evidence):
     return sha(tag("extractor-admission-rejected-v1") + raw(admitted) + raw(evidence)).hex()
 
 
+def decided_digest(exec_ready, decision):
+    return sha(tag("extractor-admission-decided-v1") + raw(exec_ready) + raw(decision)).hex()
+
+
 def exec_ready_digest(admitted, consumed, execution):
     return sha(tag("extractor-admission-exec-ready-v1") + raw(admitted) + raw(consumed) + raw(execution)).hex()
 
@@ -172,6 +176,7 @@ CAPSULE_DIGEST = sha(b"capsule").hex()
 CONSUMED_COUNT, CONSUMED_CHAIN = 2, sha(b"chain").hex()
 EXEC_DIGEST = sha(b"record-corpus").hex()
 EVIDENCE_DIGEST = sha(b"rejection-evidence").hex()
+DECISION_DIGEST = sha(b"decision-record").hex()
 CANONICAL_INPUTS = (
     b'{"b":1,"a":[true,false,null],"c":{"z":"x","y":-12}}',
     b' { "a" : 1 ,\t"b" : [ 1 , 2 ] }\r\n',
@@ -205,6 +210,7 @@ def vectors():
     key = observation_key(PRODUCER, RUN, SEQUENCE)
     admitted = admitted_digest(key, SEQUENCE, CANDIDATE, PIN_DIGEST, CAPSULE_DIGEST)
     consumed = consumed_digest(CAPSULE_DIGEST, CONSUMED_COUNT, CONSUMED_CHAIN)
+    ready = exec_ready_digest(admitted, consumed, EXEC_DIGEST)
     cases = []
     for data in CANONICAL_INPUTS:
         try:
@@ -216,8 +222,9 @@ def vectors():
         "producer": PRODUCER, "run": RUN, "sequence": SEQUENCE, "key": key, "candidate": CANDIDATE,
         "pin_digest": PIN_DIGEST, "capsule_digest": CAPSULE_DIGEST, "consumed_count": CONSUMED_COUNT,
         "consumed_chain": CONSUMED_CHAIN, "exec_digest": EXEC_DIGEST, "admitted_digest": admitted,
-        "consumed_digest": consumed, "exec_ready_digest": exec_ready_digest(admitted, consumed, EXEC_DIGEST),
+        "consumed_digest": consumed, "exec_ready_digest": ready,
         "evidence_digest": EVIDENCE_DIGEST, "rejected_digest": rejected_digest(admitted, EVIDENCE_DIGEST),
+        "decision_digest": DECISION_DIGEST, "decided_digest": decided_digest(ready, DECISION_DIGEST),
         "canonical": cases, "binding": binding_vectors(),
     }
 

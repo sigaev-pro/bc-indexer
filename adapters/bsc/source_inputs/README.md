@@ -128,6 +128,26 @@ of E01-02.admission (`adapters/<client>/admission`) binds this digest (D98
 item 7); the unit test of this package still binds it to a test-only stand-in
 marker, as block 0 of E01-02.inputs did (AC-CAP-04-03).
 
+### Deleting the inputs of a closed observation (D100)
+
+`Purge(db, id)` deletes the capsule, its item chunks, every entry and
+response chunk, the frontier and the closed manifest of one observation. The
+admission core calls it (through `admission.OpenWithCleanup`) after the
+terminal record of the observation is durable and its pin is released;
+nothing reads these records afterward. `db` must also support `Delete`
+(`Deleter`; the native `ethdb.Database` does), and a deletion is durable only
+after `SyncKeyValue`, like a write.
+
+A power loss may keep any subset of unsynced deletions, so `Purge` first
+writes a plan under `<id>/purge` with the chunk count of every item and every
+logged response (including an entry at the frontier that an interrupted
+`Next` left) and syncs it. Then it deletes every listed key and syncs, then
+deletes the plan and syncs. A repeated `Purge` finds the plan and finishes;
+with no plan and no capsule there is nothing left and it returns nil. A
+damaged capsule, plan or entry below the frontier is `ErrCorrupt`. Chunks
+that an interrupted `SealCapsule` or `Next` left without a durable record
+are not listed and stay; they are never read.
+
 ### Bounds and concurrency
 
 A log is not safe for concurrent use: the caller holds the native observation

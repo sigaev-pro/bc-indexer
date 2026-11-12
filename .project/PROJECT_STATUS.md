@@ -1,5 +1,155 @@
 # Состояние проекта
 
+## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
+
+Status: IN_PROGRESS (block 0, decision-core). Dependencies E01-02.admission
+(#16, PR #155 at `2a644f8`) and BOOT-09 are accepted. Plan agreed with the
+owner on 2026-11-12, the same split as #16: block 0 core (architect, then
+native-engineer), then parallel Geth, BSC and Bor blocks (native-engineer
+each) with qa for the AC matrix; reviewer for the Spec and Standards reviews.
+
+### Block 0: decision-core
+
+Base `2a644f8`. Branch/worktree: `claude/e01-02-decision-core` /
+`e01-02-admission-core-a0420b`. Allowed paths:
+`adapters/{geth,bsc,bor}/decision/**`, `adapters/{geth,bsc,bor}/admission/**`
+(the closing step and input cleanup), `adapters/{geth,bsc,bor}/source_inputs/**`
+(`Purge`), `test/harness/decision.py`, `test/harness/test_decision.py`,
+`test/harness/decision.mutants.json`, `test/harness/admission.py`,
+`test/harness/test_admission.py`, `test/harness/admission.mutants.json`,
+`test/harness/source_inputs.py`, `test/harness/test_source_inputs.py`,
+`test/harness/fixtures/decision_core/**`,
+`.project/evidence/E01-02.decision_bridge.md` and this section. Profiles:
+none; client-independent unit tests on an in-memory power-loss store model,
+so every AC-CAP-07 profile cell stays NOT_RUN and the block gives no AC
+verdict.
+
+Design (architect), in full in the package README
+[adapters/geth/decision/README.md](../adapters/geth/decision/README.md):
+
+- New shared package `decision`, byte-identical in the three clients except
+  a reserved `native/` directory. It imports only the standard library and
+  the shared admission package at its native path
+  (`github.com/ethereum/go-ethereum/extractor/admission`), so it compiles in
+  every native module graph; `python3 test/harness/decision.py assemble DIR`
+  builds the same layout for the tests. It reaches the native side through
+  two interfaces and one key: `Roots.Durable(root)` (the child-root
+  barrier), `Mirror.Applied(sequence, digest)` (E05-01.registry), and the
+  native marker under `MarkerKey`, whose value `MarkerValue(intent)` the
+  native patch writes in its final authoritative batch.
+- Records per decision under `extractor-decision-v1/<producer>.<run>/`: a
+  durable decision counter (commit point of `Intend`), the transition intent
+  written and synced before the native mutation, then NATIVE_DECIDED (commit
+  point of the authoritative decision and its single delivery obligation,
+  written by `Resolve` only after the marker is present with exactly the
+  intent bytes), or the rejection of the intent (`RejectIntent`, only without
+  a marker). An absent marker is never a decision.
+- Single delivery obligation: a NATIVE_DECIDED decision with public events
+  has one obligation (`Obligations`) until the mirror's applied-decision
+  frontier covers it; a decision without events (`CHECKPOINT`, every `SIDE`
+  decision) and a rejected intent have none, so neither creates a public
+  batch. `Cleanup` removes the marker in its own sync step after the mirror
+  applied the decision.
+- Admission closing step (D100): `Admission.Decide` closes each EXEC_READY
+  observation that a resolved decision covers, releases its pin and advances
+  the admission low-water mark; the bridge never writes admission keys.
+- Deletion of the records of closed observations (D100):
+  `admission.OpenWithCleanup` purges the capsule and log of every closed
+  observation (`source_inputs.Purge`, crash-safe through a synced plan) and
+  deletes the admission records below its low-water mark; the bridge deletes
+  its own records below its low-water mark.
+- Side blocks: a `SIDE` decision (a valid block stored without a head
+  change, including one that lost the fork choice) keeps its members
+  EXEC_READY with their pins and inputs, so the known branch can become
+  canonical later without execution; a later `CANONICAL` or `IMPORT`
+  decision closes them. This is a technical decision within the known-branch
+  retention rule: these observations are not closed in the D100 sense, and
+  their release belongs to E05-01.activation_gc. `RejectIntent` is only for a
+  transition the native side never applied and whose blocks it kept none of.
+- One decision per block (D100): the authoritative observation of a block is
+  its open EXEC_READY observation with the lowest sequence; `Intend` refuses
+  any other, and resolving a decision closes every open EXEC_READY
+  observation of its blocks with the same digest.
+- Recovery: `Open` checks every open decision against its records and
+  marker (a marker that differs from its intent, a marker of a rejected
+  intent, or a marker removed before the mirror applied its decision is a
+  source invariant error) and finishes interrupted closes. `GoLive` refuses
+  while an intent is unresolved or an EXEC_READY observation is undecided.
+
+### Plan for the per-client blocks
+
+The three blocks start after block 0 merges and are independent of each
+other. Each installs `decision` under `extractor/` next to `source_inputs`
+and `admission` in the accepted native tree, adds its native patch set, and
+records private local evidence; public cells stay NOT_RUN for E06 and E07
+(D96, D98, D99). Family-only files go under `adapters/<client>/decision/native/`
+or `test/harness/fixtures/`. qa owns the AC-CAP-07 matrix.
+
+| Item | Source | Block |
+|---|---|---|
+| Decision records, single delivery obligation, rejected and no-event decisions without a batch, crash points of AC-CAP-07-01, 07-02, 07-03 and 07-06 (unit form) | TASK_DECOMPOSITION card | 0 |
+| Closing step for EXEC_READY observations, releasing their pins and moving the low-water mark, never by writing admission keys | D100 | 0 (`Admission.Decide`); each client block calls it through `Resolve` and `RejectIntent` |
+| Deletion of the capsule and log records of closed observations | D100 | 0 (`source_inputs.Purge`, `admission.OpenWithCleanup`); each client block switches its admission to `OpenWithCleanup` with a `Purge` adapter before the first product run |
+| One decision per candidate observed twice after a recovery | D100 | 0 (authoritative observation rule, and `GoLive` only after every EXEC_READY observation has a decision); Geth, BSC and Bor prove it on the import path after a restart, where a block already in the chain with its state opens no new observation (the BSC import path already skips it) |
+| Native marker patch: write `MarkerValue` under `MarkerKey` in the final authoritative native batch of every decision on the import path, then sync | NATIVE_CAPTURE_PROTOCOL | Geth (`writeBlockAndSetHead`, side-chain write), BSC, Bor (`processBlockForImport` commit) |
+| Child-root barrier: `Roots` over the hash trie database (StateDB commit, `triedb.Commit(root)`, `SyncKeyValue`) before `Intend` | NATIVE_CAPTURE_PROTOCOL | Geth, BSC, Bor |
+| Import-path calls: `Intend` before the native mutation, `Resolve` after the native batch sync, `RejectIntent` on a native refusal, `Cleanup` | TASK_DECOMPOSITION card | Geth, BSC, Bor |
+| Recovery driver: after native DB recovery, complete or reject each unresolved intent from native evidence (source invariant error if unsettled), native-only replay for an undecided EXEC_READY observation with a volatile child root, then `decision.Bridge.GoLive` | NATIVE_CAPTURE_PROTOCOL startup; AC-CAP-07-02, 07-03, 07-06 | Geth, BSC, Bor; the Bor recovery today leaves a re-executed obligation EXEC_READY for a later live import, and its block completes that native import in RECOVERY_ONLY instead |
+| BSC finality result of `GetFinalizedHeader` and the fork choice after EXEC_READY, recorded in the decision evidence; a read below the capsule window fails closed | D100, D99 item 2 | BSC (the native finality paths stay with E05-01.bsc_finality) |
+| AC-CAP-07-01, 07-02, 07-03 and 07-06 per network, private local | TASK_DECOMPOSITION card | Geth (ETH), BSC (BSC), Bor (POLY); qa owns the matrix |
+| Canonical and finality callers without a new block (Engine forkchoice, `SetCanonical`, finality setters, known branch, StateSync, whitelist): every one passes the decision bridge | NATIVE_CAPTURE_PROTOCOL; TASK_DECOMPOSITION | Not decision_bridge: E01-02.lifecycle_seams (caller map), using the `CANONICAL` and `FINALITY` intents of block 0 |
+| Mirror, registry generation, READY, applied-decision frontier; AC-CAP-07-04 and 07-05 | TASK_DECOMPOSITION REQ-CAP-07 rows | Not decision_bridge: E05-01.registry (implements `Mirror`; its frontier is per decision sequence and digest, because `CHECKPOINT` decisions and rejected intents never reach it) |
+| Decision to batch ID allocation and semantic descriptors | CONTROL_WIRE_CONTRACT, TASK_DECOMPOSITION | Not decision_bridge: E02-01.semantic_descriptors |
+| Native finality paths (safe and finalized setters, VotePool, Polygon checkpoints) | D100 | Not decision_bridge: E05-01.eth_finality, E05-01.bsc_finality, E05-01.polygon_observer |
+| Release of retained side blocks: a `SIDE` decision keeps its members EXEC_READY with pins and inputs (block 0), which keeps the pin-ledger guards engaged and stops both low-water marks and their record deletion at the oldest retained block; their release on the irreversible anchor, as a step added to `decision`, and the other retained replay pins and lifecycle GC | NATIVE_CAPTURE_PROTOCOL known branch and GC | Not decision_bridge: E05-01.activation_gc |
+| Record corpus digest (`exec_digest`) and normalization profile | D100 | Not decision_bridge: E04-01.block_record |
+
+#17 closes only when every client block is accepted and AC-CAP-07-01,
+07-02, 07-03 and 07-06 pass for every applicable private slot under the D96
+boundary.
+
+Review 001 (head `5b4665a`): Spec REQUEST_CHANGES (P1: a `SIDE` decision
+closed its members, so their pins, inputs and EXEC_READY binding were gone
+when the known side block later became canonical; P2: the `Mirror` contract
+did not say that `CHECKPOINT` sequences never reach it; P3: the rejection
+example, a process-crash row, the recovery driver order, inputs closed before
+the switch to `OpenWithCleanup`) and Standards PASS with P3 notes (the
+"applied once" assertion, fixed crash ranges, two equivalent mutant names,
+the stale next action, the `Cleanup` name, the intent decode error). The
+follow-up commit retains the members of `SIDE` decisions (technical decision
+above; release with E05-01.activation_gc), states the per-sequence `Mirror`
+contract, documents the rest, renames `admission.Cleanup` to `InputPurger`,
+and adds the tests and mutants. Retained record 01 of `5b4665a` passed and
+is superseded and kept.
+
+Review 002 (head `551af6c`): Spec REQUEST_CHANGES (P2: a rejected intent
+naming a retained side block closed it; P2: one retained side block stops
+both low-water marks and record deletion, which the README understated; P3:
+retained pins keep the pin-ledger guards engaged) and Standards
+REQUEST_CHANGES (the same rejection P2, and P3 notes). Commit `45ae35d` makes
+a rejected intent and `Open` leave blocks that a `SIDE` decision retains,
+documents the real bound in the README, evidence and the activation_gc row,
+and adds tests. Retained record 02 of `551af6c` passed and is superseded and
+kept.
+
+Review 003 (head `45ae35d`): Spec PASS, accepting the documented bound for
+block 0 on the condition that E05-01.activation_gc lands before any
+long-running or product run and lets pruning and the low-water marks pass
+released side blocks; Standards REQUEST_CHANGES (P2: one mutant was labeled
+equivalent but a reachable test kills it; P3: a test result listed as a
+limit). The follow-up commit adds that test, removes the label, adds the
+optional ordering mutant from the Spec review, and changes no code.
+
+Evidence: [E01-02.decision_bridge](evidence/E01-02.decision_bridge.md).
+Retained record 04 of `b21064f`: PASS; Go tests in all three copies and the
+three assembled modules, Go mutants 106 killed and 2 labeled equivalent
+(decision), 140 killed and 3 labeled equivalent (admission), 79 killed
+(source_inputs), Python mutants 23, 37 and 11 killed. Records 01 to 03
+passed and are superseded and kept.
+
+Next: confirmation of the final head by both reviewers and hosted CI on it,
+then READY to the coordinator; then the Geth, BSC and Bor blocks.
+
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
 Status: ACCEPTED (2026-11-12); #16 closes when this record merges. Merged

@@ -665,3 +665,102 @@ func (l *Log) Finish() (Consumed, error) {
 	l.closed = &manifest
 	return manifest, nil
 }
+
+// Deleter is a Store that can also delete a key. A Delete is durable only
+// after SyncKeyValue returns nil, like a Put. The native ethdb.Database of
+// each accepted client satisfies it.
+type Deleter interface {
+	Store
+	Delete(key []byte) error
+}
+
+// purgePlan lists the chunk counts of every item and every logged response
+// of one observation. Purge saves it before it deletes anything.
+type purgePlan struct {
+	Items     []uint64 `json:"items"`
+	Responses []uint64 `json:"responses"`
+}
+
+func purgeKey(id string) []byte { return []byte(keyPrefix + id + "/purge") }
+
+// Purge deletes the capsule and the dependency log of a closed observation
+// (D100). Only the owner of the observation calls it, after its terminal
+// record is durable; nothing reads these records afterward.
+//
+// A power loss may keep any subset of unsynced deletions, so Purge first
+// saves a plan with the chunk counts and syncs it, then deletes every listed
+// key and syncs, then deletes the plan and syncs. A repeated Purge finds the
+// plan and finishes the deletions. Without a plan or a capsule there is
+// nothing left to delete, and Purge returns nil. Chunks that an interrupted
+// SealCapsule or Next left without a durable record are not listed and stay.
+func Purge(db Deleter, id string) error {
+	if err := validID(id); err != nil {
+		return err
+	}
+	var plan purgePlan
+	ok, err := readRecord(db, purgeKey(id), &plan)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		capsule, sealed, err := readCapsule(db, id)
+		if err != nil || !sealed {
+			return err
+		}
+		plan.Items = []uint64{}
+		for _, item := range capsule.Items {
+			plan.Items = append(plan.Items, chunkCount(item.Length))
+		}
+		var durable frontier
+		if _, err := readRecord(db, frontierKey(id), &durable); err != nil {
+			return err
+		}
+		// The entry at the frontier may exist: an interrupted Next wrote it
+		// but not the advanced frontier.
+		plan.Responses = []uint64{}
+		for seq := uint64(0); seq <= durable.Count; seq++ {
+			var entry Entry
+			ok, err := readRecord(db, entryKey(id, seq), &entry)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				if seq < durable.Count {
+					return fmt.Errorf("%w: entry %d of %s", ErrCorrupt, seq, id)
+				}
+				break
+			}
+			plan.Responses = append(plan.Responses, chunkCount(entry.ResponseLength))
+		}
+		if err := putRecord(db, purgeKey(id), plan); err != nil {
+			return err
+		}
+		if err := db.SyncKeyValue(); err != nil {
+			return err
+		}
+	}
+	keys := [][]byte{capsuleKey(id), frontierKey(id), closedKey(id)}
+	for item, chunks := range plan.Items {
+		for chunk := uint64(0); chunk < chunks; chunk++ {
+			keys = append(keys, itemChunkKey(id, uint64(item), chunk))
+		}
+	}
+	for seq, chunks := range plan.Responses {
+		keys = append(keys, entryKey(id, uint64(seq)))
+		for chunk := uint64(0); chunk < chunks; chunk++ {
+			keys = append(keys, responseChunkKey(id, uint64(seq), chunk))
+		}
+	}
+	for _, key := range keys {
+		if err := db.Delete(key); err != nil {
+			return err
+		}
+	}
+	if err := db.SyncKeyValue(); err != nil {
+		return err
+	}
+	if err := db.Delete(purgeKey(id)); err != nil {
+		return err
+	}
+	return db.SyncKeyValue()
+}

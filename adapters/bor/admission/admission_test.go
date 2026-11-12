@@ -32,6 +32,8 @@ type vectorFile struct {
 	ExecReadyDigest string            `json:"exec_ready_digest"`
 	EvidenceDigest  string            `json:"evidence_digest"`
 	RejectedDigest  string            `json:"rejected_digest"`
+	DecisionDigest  string            `json:"decision_digest"`
+	DecidedDigest   string            `json:"decided_digest"`
 	Binding         map[string]string `json:"binding"`
 	Canonical       []struct {
 		Input string  `json:"input"`
@@ -61,8 +63,9 @@ var (
 )
 
 type write struct {
-	key   string
-	value []byte
+	key     string
+	value   []byte
+	deleted bool
 }
 
 // memStore models a native key-value store. Put stays pending until
@@ -76,9 +79,14 @@ type memStore struct {
 	crashAt   int
 	putErr    error
 	syncErr   error
+	deleteErr error
 	hasErr    error
 	getErrFor string
 	writes    []string
+	// deletes counts Delete calls; maxPending is the largest number of
+	// unsynced writes seen.
+	deletes    int
+	maxPending int
 }
 
 func newStore() *memStore { return &memStore{durable: map[string][]byte{}} }
@@ -86,7 +94,7 @@ func newStore() *memStore { return &memStore{durable: map[string][]byte{}} }
 func (s *memStore) view(key string) ([]byte, bool) {
 	for i := len(s.pending) - 1; i >= 0; i-- {
 		if s.pending[i].key == key {
-			return s.pending[i].value, true
+			return s.pending[i].value, !s.pending[i].deleted
 		}
 	}
 	value, ok := s.durable[key]
@@ -127,9 +135,31 @@ func (s *memStore) Put(key, value []byte) error {
 	if err := s.step(); err != nil {
 		return err
 	}
-	s.pending = append(s.pending, write{string(key), bytes.Clone(value)})
+	s.pending = append(s.pending, write{key: string(key), value: bytes.Clone(value)})
 	s.writes = append(s.writes, string(key))
+	s.maxPending = max(s.maxPending, len(s.pending))
 	return nil
+}
+
+func (s *memStore) Delete(key []byte) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+	if err := s.step(); err != nil {
+		return err
+	}
+	s.pending = append(s.pending, write{key: string(key), deleted: true})
+	s.deletes++
+	s.maxPending = max(s.maxPending, len(s.pending))
+	return nil
+}
+
+func apply(durable map[string][]byte, w write) {
+	if w.deleted {
+		delete(durable, w.key)
+	} else {
+		durable[w.key] = w.value
+	}
 }
 
 func (s *memStore) SyncKeyValue() error {
@@ -140,7 +170,7 @@ func (s *memStore) SyncKeyValue() error {
 		return err
 	}
 	for _, w := range s.pending {
-		s.durable[w.key] = w.value
+		apply(s.durable, w)
 	}
 	s.pending = nil
 	return nil
@@ -152,7 +182,7 @@ func (s *memStore) powerLoss(keep uint) *memStore {
 	out := &memStore{durable: maps.Clone(s.durable)}
 	for i, w := range s.pending {
 		if keep&(1<<i) != 0 {
-			out.durable[w.key] = w.value
+			apply(out.durable, w)
 		}
 	}
 	return out
@@ -229,16 +259,44 @@ func (f *fakeInputs) Consumed(id string) (Consumed, error) {
 	return manifest, nil
 }
 
-// fixture is one producer with its store, pins, inputs and guard token.
-type fixture struct {
-	t      *testing.T
-	v      vectorFile
-	db     *memStore
-	pins   *fakePins
+// fakeCleanup records Purge calls; a purged observation has no inputs.
+type fakeCleanup struct {
 	inputs *fakeInputs
-	guard  *Guard
-	token  *Token
-	a      *Admission
+	purged []string
+	err    error
+}
+
+func (c *fakeCleanup) Purge(id string) error {
+	if c.err != nil {
+		return c.err
+	}
+	delete(c.inputs.capsules, id)
+	delete(c.inputs.consumed, id)
+	c.purged = append(c.purged, id)
+	return nil
+}
+
+// fixture is one producer with its store, pins, inputs and guard token.
+// With cleanup set, reopen uses OpenWithCleanup.
+type fixture struct {
+	t       *testing.T
+	v       vectorFile
+	db      *memStore
+	pins    *fakePins
+	inputs  *fakeInputs
+	cleanup *fakeCleanup
+	guard   *Guard
+	token   *Token
+	a       *Admission
+}
+
+func newCleanupFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := &fixture{t: t, v: loadVectors(t), db: newStore(), pins: newPins(), inputs: newInputs(), guard: NewGuard()}
+	f.cleanup = &fakeCleanup{inputs: f.inputs}
+	f.token = f.guard.Acquire()
+	f.reopen(f.db)
+	return f
 }
 
 func (f *fixture) producer() Producer { return Producer{ProducerID: f.v.Producer, RunID: f.v.Run} }
@@ -254,7 +312,13 @@ func newFixture(t *testing.T) *fixture {
 func (f *fixture) reopen(db *memStore) {
 	f.t.Helper()
 	f.db = db
-	a, err := Open(f.token, db, f.producer(), f.pins, f.inputs)
+	var a *Admission
+	var err error
+	if f.cleanup != nil {
+		a, err = OpenWithCleanup(f.token, db, f.producer(), f.pins, f.inputs, f.cleanup)
+	} else {
+		a, err = Open(f.token, db, f.producer(), f.pins, f.inputs)
+	}
 	if err != nil {
 		f.t.Fatalf("open: %v", err)
 	}
@@ -892,7 +956,7 @@ func TestOpenRejectsCorruptRecords(t *testing.T) {
 }
 
 func TestBeginRefusesRecordBeyondCounter(t *testing.T) {
-	for _, kind := range []string{"admitted", "exec-ready", "abandoned", "rejected"} {
+	for _, kind := range []string{"admitted", "exec-ready", "abandoned", "rejected", "decided"} {
 		f := newFixture(t)
 		f.live()
 		f.db.durable[string(f.a.recordKey(0, kind))] = []byte("{}")
@@ -1362,5 +1426,404 @@ func TestOpenFinishesAnInterruptedClose(t *testing.T) {
 		if !slices.Equal(f.pins.released, []string{key}) {
 			t.Fatalf("%s: a closed observation below the low-water mark was released again: %v", step, f.pins.released)
 		}
+	}
+}
+
+// execReadyObservation runs one observation to EXEC_READY and returns its key.
+func (f *fixture) execReadyObservation() string {
+	f.t.Helper()
+	key := f.begin().Key
+	f.prepare(key)
+	f.admit(key)
+	f.closeLog(key)
+	f.execReady(key)
+	return key
+}
+
+func TestDecideClosesAnExecReadyObservation(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	key := f.execReadyObservation()
+	if err := f.a.Check(f.token); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if got := f.a.Producer(); got != f.producer() {
+		t.Fatalf("producer %v", got)
+	}
+	// The bridge may close an observation in RECOVERY_ONLY.
+	f.reopen(f.db)
+	if _, err := f.a.Decide(f.token, key, "AB"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("malformed decision digest: %v", err)
+	}
+	record, err := f.a.Decide(f.token, key, f.v.DecisionDigest)
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	want := DecidedRecord{Observation: key, Sequence: 0, ExecReadyDigest: f.v.ExecReadyDigest,
+		DecisionDigest: f.v.DecisionDigest, Digest: f.v.DecidedDigest}
+	if record != want {
+		t.Fatalf("decided record %+v, want %+v", record, want)
+	}
+	if got := f.states(); len(got) != 0 {
+		t.Fatalf("decided observation still listed: %v", got)
+	}
+	if !slices.Equal(f.pins.released, []string{key}) {
+		t.Fatalf("released %v", f.pins.released)
+	}
+	if string(f.db.durable[string(f.a.key("lowwater"))]) != `{"sequence":1}` {
+		t.Fatalf("low-water mark %s", f.db.durable[string(f.a.key("lowwater"))])
+	}
+	// Open does not delete records: the DECIDED record stays and is not read.
+	if _, ok := f.db.durable[string(f.a.recordKey(0, "decided"))]; !ok {
+		t.Fatalf("Open without cleanup deleted the DECIDED record")
+	}
+	if _, err := f.a.Decide(f.token, key, f.v.DecisionDigest); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("repeated decide: %v", err)
+	}
+	if got, _ := DecidedDigest(f.v.ExecReadyDigest, f.v.DecisionDigest); got != f.v.DecidedDigest {
+		t.Fatalf("decided digest %s, want %s", got, f.v.DecidedDigest)
+	}
+	if _, err := DecidedDigest(f.v.ExecReadyDigest, "zz"); err == nil {
+		t.Fatalf("malformed digest accepted")
+	}
+}
+
+func TestDecideNeedsExecReady(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	key := f.begin().Key
+	if _, err := f.a.Decide(f.token, key, f.v.DecisionDigest); !errors.Is(err, ErrState) {
+		t.Fatalf("decide INPUT_PREPARING: %v", err)
+	}
+	f.prepare(key)
+	f.admit(key)
+	if _, err := f.a.Decide(f.token, key, f.v.DecisionDigest); !errors.Is(err, ErrState) {
+		t.Fatalf("decide ADMITTED: %v", err)
+	}
+	if _, err := f.a.Decide(f.token, "producer-1.run-1.0000000000000009", f.v.DecisionDigest); !errors.Is(err, ErrUnknown) {
+		t.Fatalf("decide unknown: %v", err)
+	}
+	if len(f.pins.released) != 0 {
+		t.Fatalf("a refused decide released %v", f.pins.released)
+	}
+	if _, err := f.a.Decide(nil, key, f.v.DecisionDigest); !errors.Is(err, ErrGuard) {
+		t.Fatalf("decide without token: %v", err)
+	}
+	if err := f.a.Check(nil); !errors.Is(err, ErrGuard) {
+		t.Fatalf("check without token: %v", err)
+	}
+}
+
+func TestDecidePowerLoss(t *testing.T) {
+	for _, cleanup := range []bool{false, true} {
+		// The crash range is the number of store operations of a clean Decide.
+		probe := newFixture(t)
+		if cleanup {
+			probe = newCleanupFixture(t)
+		}
+		probe.live()
+		probeKey := probe.execReadyObservation()
+		start := probe.db.ops
+		if _, err := probe.a.Decide(probe.token, probeKey, probe.v.DecisionDigest); err != nil {
+			t.Fatalf("probe decide: %v", err)
+		}
+		for crash := 0; crash <= probe.db.ops-start; crash++ {
+			for _, keep := range []uint{0, 1, ^uint(0)} {
+				f := newFixture(t)
+				if cleanup {
+					f = newCleanupFixture(t)
+				}
+				f.live()
+				key := f.execReadyObservation()
+				if crash > 0 {
+					f.db.crashAt = f.db.ops + crash
+				}
+				_, err := f.a.Decide(f.token, key, f.v.DecisionDigest)
+				if err != nil && !errors.Is(err, errCrash) {
+					t.Fatalf("cleanup %v crash %d: %v", cleanup, crash, err)
+				}
+				f.reopen(f.db.powerLoss(keep))
+				got := f.states()
+				if len(got) == 1 {
+					// The DECIDED record did not survive: the observation is
+					// EXEC_READY with its pin, and a repeated Decide completes.
+					if got[0] != ExecReady || err == nil {
+						t.Fatalf("cleanup %v crash %d keep %b: %v after %v", cleanup, crash, keep, got, err)
+					}
+					if _, err := f.pins.Verify(key, f.v.Candidate.ParentRoot); err != nil {
+						t.Fatalf("cleanup %v crash %d keep %b: EXEC_READY lost its pin: %v", cleanup, crash, keep, err)
+					}
+					if record, err := f.a.Decide(f.token, key, f.v.DecisionDigest); err != nil ||
+						record.Digest != f.v.DecidedDigest {
+						t.Fatalf("cleanup %v crash %d: retry decide: %+v %v", cleanup, crash, record, err)
+					}
+				}
+				if _, err := f.pins.Verify(key, f.v.Candidate.ParentRoot); !errors.Is(err, errNoPin) {
+					t.Fatalf("cleanup %v crash %d keep %b: pin of the decided observation: %v", cleanup, crash, keep, err)
+				}
+				if cleanup {
+					if _, ok := f.inputs.capsules[key]; ok {
+						t.Fatalf("crash %d keep %b: inputs of the decided observation were not purged", crash, keep)
+					}
+					for _, kind := range recordKinds {
+						if _, ok := f.db.durable[string(f.a.recordKey(0, kind))]; ok {
+							t.Fatalf("crash %d keep %b: %s record left after the close", crash, keep, kind)
+						}
+					}
+				}
+				f.live()
+				if next := f.begin(); next.Sequence != 1 {
+					t.Fatalf("cleanup %v crash %d keep %b: next sequence %d", cleanup, crash, keep, next.Sequence)
+				}
+			}
+		}
+	}
+}
+
+// TestCleanupDeletesClosedRecords: with cleanup, every closed observation
+// loses its inputs and, once the low-water mark passes it, its records; the
+// store keeps only the counter, low-water and purged records.
+func TestCleanupDeletesClosedRecords(t *testing.T) {
+	f := newCleanupFixture(t)
+	f.live()
+	abandoned := f.begin().Key
+	f.inputs.capsules[abandoned] = f.v.CapsuleDigest
+	if err := f.a.Abandon(f.token, abandoned); err != nil {
+		t.Fatalf("abandon: %v", err)
+	}
+	rejected := f.begin().Key
+	f.prepare(rejected)
+	f.admit(rejected)
+	if _, err := f.a.Reject(f.token, rejected, f.v.EvidenceDigest); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	decided := f.execReadyObservation()
+	open := f.execReadyObservation()
+	if _, err := f.a.Decide(f.token, decided, f.v.DecisionDigest); err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if !slices.Equal(f.cleanup.purged, []string{abandoned, rejected, decided}) {
+		t.Fatalf("purged %v", f.cleanup.purged)
+	}
+	if _, ok := f.inputs.capsules[open]; !ok {
+		t.Fatalf("the open observation lost its inputs")
+	}
+	keys := slices.Sorted(maps.Keys(f.db.durable))
+	want := []string{string(f.a.recordKey(3, "admitted")), string(f.a.recordKey(3, "exec-ready")),
+		string(f.a.recordKey(3, "preparing")), string(f.a.key("counter")), string(f.a.key("lowwater")),
+		string(f.a.key("purged"))}
+	slices.Sort(want)
+	if !slices.Equal(keys, want) {
+		t.Fatalf("store keys %v, want %v", keys, want)
+	}
+	if string(f.db.durable[string(f.a.key("purged"))]) != `{"sequence":3}` {
+		t.Fatalf("purged mark %s", f.db.durable[string(f.a.key("purged"))])
+	}
+	// A reopen deletes nothing again below the purged mark.
+	deletes := f.db.deletes
+	f.reopen(f.db)
+	if got := f.states(); !slices.Equal(got, []State{ExecReady}) || f.db.deletes != deletes {
+		t.Fatalf("after reopen %v, %d deletions", got, f.db.deletes-deletes)
+	}
+}
+
+// TestCleanupFinishesAStoreWithoutIt: a store closed without cleanup is
+// pruned by the first OpenWithCleanup in batches, and a power loss in the
+// middle only repeats a batch.
+func TestCleanupFinishesAStoreWithoutIt(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	total := pruneBatch + 10
+	for range total {
+		key := f.begin().Key
+		if err := f.a.Abandon(f.token, key); err != nil {
+			t.Fatalf("abandon: %v", err)
+		}
+	}
+	base := f.db.powerLoss(0)
+	recordsLeft := func(db *memStore) int {
+		count := 0
+		for key := range db.durable {
+			if strings.HasSuffix(key, "/preparing") || strings.HasSuffix(key, "/abandoned") {
+				count++
+			}
+		}
+		return count
+	}
+	if got := recordsLeft(base); got != 2*total {
+		t.Fatalf("fixture holds %d records", got)
+	}
+	// Crash after the first batch's deletions sync but before its purged mark.
+	for _, crash := range []int{1, 2*pruneBatch + 1, 2*pruneBatch + 2, 2*pruneBatch + 3} {
+		db := base.powerLoss(0)
+		db.crashAt = crash
+		cleanup := &fakeCleanup{inputs: newInputs()}
+		if _, err := OpenWithCleanup(f.token, db, f.producer(), newPins(), newInputs(), cleanup); !errors.Is(err, errCrash) {
+			t.Fatalf("crash %d: %v", crash, err)
+		}
+		db = db.powerLoss(0)
+		db.maxPending = 0
+		a, err := OpenWithCleanup(f.token, db, f.producer(), newPins(), newInputs(), cleanup)
+		if err != nil {
+			t.Fatalf("crash %d: reopen: %v", crash, err)
+		}
+		if got := recordsLeft(db); got != 0 {
+			t.Fatalf("crash %d: %d records left", crash, got)
+		}
+		if db.maxPending > len(recordKinds)*pruneBatch {
+			t.Fatalf("crash %d: a prune batch held %d unsynced writes", crash, db.maxPending)
+		}
+		if string(db.durable[string(a.key("purged"))]) != fmt.Sprintf(`{"sequence":%d}`, total) {
+			t.Fatalf("crash %d: purged mark %s", crash, db.durable[string(a.key("purged"))])
+		}
+	}
+}
+
+func TestCleanupErrorsStopTheAdmission(t *testing.T) {
+	f := newCleanupFixture(t)
+	f.live()
+	key := f.execReadyObservation()
+	f.cleanup.err = errDisk
+	if _, err := f.a.Decide(f.token, key, f.v.DecisionDigest); !errors.Is(err, errDisk) {
+		t.Fatalf("purge error: %v", err)
+	}
+	if _, err := f.a.Observations(f.token); !errors.Is(err, ErrFailed) {
+		t.Fatalf("admission did not stop: %v", err)
+	}
+	if _, err := OpenWithCleanup(f.token, f.db, f.producer(), f.pins, f.inputs, f.cleanup); !errors.Is(err, errDisk) {
+		t.Fatalf("open with a failing purge: %v", err)
+	}
+	f.cleanup.err = nil
+	f.reopen(f.db)
+	if len(f.cleanup.purged) != 1 || len(f.states()) != 0 {
+		t.Fatalf("reopen did not finish the close: %v %v", f.cleanup.purged, f.states())
+	}
+
+	f = newCleanupFixture(t)
+	f.live()
+	key = f.begin().Key
+	f.db.deleteErr = errDisk
+	if err := f.a.Abandon(f.token, key); !errors.Is(err, errDisk) {
+		t.Fatalf("delete error: %v", err)
+	}
+	if _, err := f.a.Observations(f.token); !errors.Is(err, ErrFailed) {
+		t.Fatalf("admission did not stop after a delete error: %v", err)
+	}
+	// Abandon with cleanup: record put and sync (1, 2), low-water put and
+	// sync (3, 4), six deletions (5 to 10), their sync (11), purged-mark put
+	// and sync (12, 13). A failure in the prune stops the admission, and a
+	// reopen finishes the prune.
+	for crash := 11; crash <= 13; crash++ {
+		f = newCleanupFixture(t)
+		f.live()
+		key = f.begin().Key
+		f.db.crashAt = f.db.ops + crash
+		if err := f.a.Abandon(f.token, key); !errors.Is(err, errCrash) {
+			t.Fatalf("prune crash %d: %v", crash, err)
+		}
+		if _, err := f.a.Observations(f.token); !errors.Is(err, ErrFailed) {
+			t.Fatalf("prune crash %d: admission did not stop: %v", crash, err)
+		}
+		f.reopen(f.db.powerLoss(0))
+		if _, ok := f.db.durable[string(f.a.recordKey(0, "abandoned"))]; ok {
+			t.Fatalf("prune crash %d: reopen left the ABANDONED record", crash)
+		}
+	}
+
+	f = newCleanupFixture(t)
+	if _, err := OpenWithCleanup(f.token, nil, f.producer(), f.pins, f.inputs, f.cleanup); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("nil store: %v", err)
+	}
+	if _, err := OpenWithCleanup(f.token, f.db, f.producer(), f.pins, f.inputs, nil); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("nil cleanup: %v", err)
+	}
+	f.db.durable[string(f.a.key("purged"))] = []byte(`{"sequence":1}`)
+	if _, err := OpenWithCleanup(f.token, f.db, f.producer(), f.pins, f.inputs, f.cleanup); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("purged mark above the low-water mark: %v", err)
+	}
+	f.db.durable[string(f.a.key("purged"))] = []byte(`{`)
+	if _, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("damaged purged mark: %v", err)
+	}
+}
+
+func TestOpenRejectsCorruptDecidedRecords(t *testing.T) {
+	cases := map[string]func(f *fixture, key string){
+		"DECIDED without EXEC_READY": func(f *fixture, key string) {
+			delete(f.db.durable, string(f.a.recordKey(0, "exec-ready")))
+		},
+		"DECIDED digest": func(f *fixture, key string) {
+			var record DecidedRecord
+			_ = json.Unmarshal(f.db.durable[string(f.a.recordKey(0, "decided"))], &record)
+			record.DecisionDigest = f.v.EvidenceDigest
+			data, _ := json.Marshal(record)
+			f.db.durable[string(f.a.recordKey(0, "decided"))] = data
+		},
+		"DECIDED with NATIVE_REJECTED": func(f *fixture, key string) {
+			f.db.durable[string(f.a.recordKey(0, "rejected"))] = []byte(`{"observation":"x","sequence":0,` +
+				`"admitted_digest":"","evidence_digest":"","digest":""}`)
+		},
+		"ABANDONED with DECIDED": func(f *fixture, key string) {
+			f.db.durable[string(f.a.recordKey(0, "abandoned"))] = []byte(
+				fmt.Sprintf(`{"observation":%q,"sequence":0}`, key))
+		},
+		"DECIDED record format": func(f *fixture, key string) {
+			f.db.durable[string(f.a.recordKey(0, "decided"))] = []byte(`{"extra":1}`)
+		},
+		"DECIDED EXEC_READY digest": func(f *fixture, key string) {
+			var record DecidedRecord
+			_ = json.Unmarshal(f.db.durable[string(f.a.recordKey(0, "decided"))], &record)
+			record.ExecReadyDigest = f.v.AdmittedDigest
+			data, _ := json.Marshal(record)
+			f.db.durable[string(f.a.recordKey(0, "decided"))] = data
+		},
+	}
+	for name, damage := range cases {
+		f := newFixture(t)
+		f.live()
+		key := f.execReadyObservation()
+		if _, err := f.a.Decide(f.token, key, f.v.DecisionDigest); err != nil {
+			t.Fatalf("%s: decide: %v", name, err)
+		}
+		// Put the low-water mark back so Open reads the records again.
+		f.db.durable[string(f.a.key("lowwater"))] = []byte(`{"sequence":0}`)
+		damage(f, key)
+		_, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs)
+		if !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if name == "DECIDED without EXEC_READY" && !strings.Contains(err.Error(), name) {
+			t.Fatalf("refusal does not name the cause: %v", err)
+		}
+	}
+	// A DECIDED record next to an ABANDONED or NATIVE_REJECTED close.
+	for _, exit := range []string{"abandoned", "rejected"} {
+		f := newFixture(t)
+		f.live()
+		key := f.begin().Key
+		if exit == "abandoned" {
+			if err := f.a.Abandon(f.token, key); err != nil {
+				t.Fatalf("abandon: %v", err)
+			}
+		} else {
+			f.prepare(key)
+			f.admit(key)
+			if _, err := f.a.Reject(f.token, key, f.v.EvidenceDigest); err != nil {
+				t.Fatalf("reject: %v", err)
+			}
+		}
+		f.db.durable[string(f.a.key("lowwater"))] = []byte(`{"sequence":0}`)
+		f.db.durable[string(f.a.recordKey(0, "decided"))] = []byte("{}")
+		if _, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs); !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("DECIDED with %s: %v", exit, err)
+		}
+	}
+	f := newFixture(t)
+	f.live()
+	f.execReadyObservation()
+	f.db.getErrFor = "/decided"
+	f.db.durable[string(f.a.recordKey(0, "decided"))] = []byte("{}")
+	if _, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs); !errors.Is(err, errDisk) {
+		t.Fatalf("read error of the DECIDED record: %v", err)
 	}
 }
