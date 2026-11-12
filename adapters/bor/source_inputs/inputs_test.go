@@ -43,8 +43,9 @@ var (
 )
 
 type write struct {
-	key   string
-	value []byte
+	key     string
+	value   []byte
+	deleted bool
 }
 
 // memStore models a native key-value store. Put stays pending until
@@ -60,6 +61,8 @@ type memStore struct {
 	getErr  error
 	hasErr  error
 	syncErr error
+	// deleteErr fails every Delete.
+	deleteErr error
 	// hasErrFor and getErrFor fail Has or Get with errDisk for a key that
 	// ends with the given suffix.
 	hasErrFor string
@@ -72,11 +75,16 @@ func newStore() *memStore { return &memStore{durable: map[string][]byte{}} }
 func (s *memStore) view(key string) ([]byte, bool) {
 	for i := len(s.pending) - 1; i >= 0; i-- {
 		if s.pending[i].key == key {
-			return s.pending[i].value, true
+			return s.pending[i].value, !s.pending[i].deleted
 		}
 	}
 	value, ok := s.durable[key]
 	return value, ok
+}
+
+func (s *memStore) has(key string) bool {
+	_, ok := s.view(key)
+	return ok
 }
 
 func (s *memStore) Has(key []byte) (bool, error) {
@@ -119,9 +127,28 @@ func (s *memStore) Put(key, value []byte) error {
 	if err := s.step(); err != nil {
 		return err
 	}
-	s.pending = append(s.pending, write{string(key), bytes.Clone(value)})
+	s.pending = append(s.pending, write{key: string(key), value: bytes.Clone(value)})
 	s.writes = append(s.writes, string(key))
 	return nil
+}
+
+func (s *memStore) Delete(key []byte) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+	if err := s.step(); err != nil {
+		return err
+	}
+	s.pending = append(s.pending, write{key: string(key), deleted: true})
+	return nil
+}
+
+func apply(durable map[string][]byte, w write) {
+	if w.deleted {
+		delete(durable, w.key)
+	} else {
+		durable[w.key] = w.value
+	}
 }
 
 func (s *memStore) SyncKeyValue() error {
@@ -132,7 +159,7 @@ func (s *memStore) SyncKeyValue() error {
 		return err
 	}
 	for _, w := range s.pending {
-		s.durable[w.key] = w.value
+		apply(s.durable, w)
 	}
 	s.pending = nil
 	return nil
@@ -143,7 +170,7 @@ func (s *memStore) powerLoss(keep uint) *memStore {
 	out := &memStore{durable: maps.Clone(s.durable)}
 	for i, w := range s.pending {
 		if keep&(1<<i) != 0 {
-			out.durable[w.key] = w.value
+			apply(out.durable, w)
 		}
 	}
 	return out
@@ -979,5 +1006,186 @@ func TestChunkReadErrorsPassThrough(t *testing.T) {
 	}
 	if _, err := SealCapsule(db, observation, vectorItems); !errors.Is(err, errDisk) {
 		t.Fatalf("reseal sync error: %v", err)
+	}
+}
+
+// purgeFixture seals the vector capsule, logs both vector responses and
+// closes the log, then leaves an interrupted third response at the frontier.
+func purgeFixture(t *testing.T) *memStore {
+	t.Helper()
+	db := newStore()
+	mustSeal(t, db)
+	log := mustOpen(t, db)
+	mustNext(t, log, request0, serve(response0), response0)
+	mustNext(t, log, request1, serve(response1), response1)
+	if _, err := log.Finish(); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	return db
+}
+
+func countPrefix(db *memStore, prefix string) int {
+	count := 0
+	for key := range db.durable {
+		if strings.HasPrefix(key, prefix) {
+			count++
+		}
+	}
+	return count
+}
+
+func TestPurgeDeletesEveryRecord(t *testing.T) {
+	db := purgeFixture(t)
+	other := "obs-2"
+	if _, err := SealCapsule(db, other, vectorItems); err != nil {
+		t.Fatalf("seal other: %v", err)
+	}
+	before := countPrefix(db, keyPrefix+other+"/")
+	// Capsule, header chunk, frontier, closed, two entries, one chunk of
+	// response0 and two chunks of response1.
+	if got := countPrefix(db, keyPrefix+observation+"/"); got != 9 {
+		t.Fatalf("fixture holds %d keys, want 9", got)
+	}
+	if err := Purge(db, observation); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if len(db.pending) != 0 {
+		t.Fatalf("purge left %d unsynced writes", len(db.pending))
+	}
+	if got := countPrefix(db, keyPrefix+observation+"/"); got != 0 {
+		t.Fatalf("purge left %d keys: %v", got, db.snapshot())
+	}
+	if got := countPrefix(db, keyPrefix+other+"/"); got != before {
+		t.Fatalf("purge changed another observation: %d keys, want %d", got, before)
+	}
+	if err := Purge(db, observation); err != nil {
+		t.Fatalf("repeated purge: %v", err)
+	}
+	if _, err := ReadCapsule(db, observation); !errors.Is(err, ErrNoCapsule) {
+		t.Fatalf("read after purge: %v", err)
+	}
+	if err := Purge(db, "Bad"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("invalid id: %v", err)
+	}
+}
+
+func TestPurgeIncludesTheEntryAtTheFrontier(t *testing.T) {
+	db := newStore()
+	mustSeal(t, db)
+	log := mustOpen(t, db)
+	mustNext(t, log, request0, serve(response0), response0)
+	// An interrupted Next: the entry and chunks of the second response are
+	// durable, the advanced frontier is not.
+	db.crashAt = db.ops + 5
+	if _, err := log.Next(request1, serve(response1)); !errors.Is(err, errCrash) {
+		t.Fatalf("interrupted next: %v", err)
+	}
+	db = db.powerLoss(0)
+	if !db.has(string(entryKey(observation, 1))) {
+		t.Fatalf("fixture lost the entry at the frontier")
+	}
+	if err := Purge(db, observation); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if got := countPrefix(db, keyPrefix+observation+"/"); got != 0 {
+		t.Fatalf("purge left %d keys: %v", got, db.snapshot())
+	}
+}
+
+func TestPurgeOfAnUnsealedObservation(t *testing.T) {
+	db := newStore()
+	if err := Purge(db, observation); err != nil {
+		t.Fatalf("purge without capsule: %v", err)
+	}
+	if len(db.durable) != 0 || len(db.writes) != 0 {
+		t.Fatalf("purge without capsule wrote %v", db.writes)
+	}
+}
+
+func TestPurgePowerLossAtEveryPoint(t *testing.T) {
+	probe := purgeFixture(t)
+	if err := Purge(probe, observation); err != nil {
+		t.Fatalf("probe purge: %v", err)
+	}
+	total := probe.ops - purgeFixture(t).ops
+	for crash := 1; crash <= total; crash++ {
+		for _, keep := range []uint{0, 1, 0b0101, ^uint(0)} {
+			db := purgeFixture(t)
+			db.crashAt = db.ops + crash
+			if err := Purge(db, observation); !errors.Is(err, errCrash) {
+				t.Fatalf("crash %d: %v", crash, err)
+			}
+			db = db.powerLoss(keep)
+			if left := countPrefix(db, keyPrefix+observation+"/"); left == 0 {
+				continue
+			}
+			if !db.has(string(purgeKey(observation))) {
+				// Before the plan sync nothing is deleted: the log still opens.
+				if _, err := OpenLog(db, observation); err != nil {
+					t.Fatalf("crash %d keep %b: log without a plan: %v", crash, keep, err)
+				}
+			}
+			if err := Purge(db, observation); err != nil {
+				t.Fatalf("crash %d keep %b: repeated purge: %v", crash, keep, err)
+			}
+			if left := countPrefix(db, keyPrefix+observation+"/"); left != 0 {
+				t.Fatalf("crash %d keep %b: %d keys left: %v", crash, keep, left, db.snapshot())
+			}
+		}
+	}
+}
+
+func TestPurgeErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  func(db *memStore)
+	}{
+		{"plan read", func(db *memStore) { db.hasErrFor = "/purge" }},
+		{"capsule read", func(db *memStore) { db.getErrFor = "/capsule" }},
+		{"frontier read", func(db *memStore) { db.getErrFor = "/frontier" }},
+		{"entry read", func(db *memStore) { db.getErrFor = "/log/0000000000000001" }},
+		{"plan write", func(db *memStore) { db.putErr = errDisk }},
+		{"sync", func(db *memStore) { db.syncErr = errDisk }},
+		{"delete", func(db *memStore) { db.deleteErr = errDisk }},
+	} {
+		db := purgeFixture(t)
+		tc.set(db)
+		if err := Purge(db, observation); !errors.Is(err, errDisk) {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+	}
+	// The plan is synced before the first deletion, so a failed deletion
+	// is finished by a repeated purge.
+	db := purgeFixture(t)
+	db.crashAt = db.ops + 3
+	if err := Purge(db, observation); !errors.Is(err, errCrash) {
+		t.Fatalf("crash in the deletions: %v", err)
+	}
+	db = db.powerLoss(^uint(0))
+	if err := Purge(db, observation); err != nil || countPrefix(db, keyPrefix+observation+"/") != 0 {
+		t.Fatalf("finish after crash: %v, left %v", err, db.snapshot())
+	}
+}
+
+func TestPurgeRefusesDamagedRecords(t *testing.T) {
+	db := purgeFixture(t)
+	db.durable[string(entryKey(observation, 0))] = []byte("{")
+	if err := Purge(db, observation); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("damaged entry: %v", err)
+	}
+	db = purgeFixture(t)
+	delete(db.durable, string(entryKey(observation, 0)))
+	if err := Purge(db, observation); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("missing entry below the frontier: %v", err)
+	}
+	db = purgeFixture(t)
+	db.durable[string(purgeKey(observation))] = []byte(`{"items":[1],"responses":[],"extra":1}`)
+	if err := Purge(db, observation); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("damaged plan: %v", err)
+	}
+	db = purgeFixture(t)
+	db.durable[string(capsuleKey(observation))] = []byte(`{"observation":"obs-1","items":[],"digest":"00"}`)
+	if err := Purge(db, observation); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("damaged capsule: %v", err)
 	}
 }

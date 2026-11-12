@@ -39,6 +39,20 @@ type Pins interface {
 	Release(id string) error
 }
 
+// DeleteStore is a Store that can also delete a key. A Delete is durable
+// only after SyncKeyValue returns nil, like a Put.
+type DeleteStore interface {
+	Store
+	Delete(key []byte) error
+}
+
+// Cleanup deletes the capsule and dependency log records of a closed
+// observation (D100); source_inputs.Purge does this. It must return nil when
+// nothing is left to delete.
+type Cleanup interface {
+	Purge(observation string) error
+}
+
 // Consumed is the closed consumed-input manifest of E01-02.inputs.
 type Consumed struct {
 	Observation   string
@@ -66,6 +80,7 @@ const (
 	tagAdmitted  = "extractor-admission-admitted-v1"
 	tagExecReady = "extractor-admission-exec-ready-v1"
 	tagRejected  = "extractor-admission-rejected-v1"
+	tagDecided   = "extractor-admission-decided-v1"
 	tagConsumed  = "extractor-source-inputs-consumed-v1"
 )
 
@@ -102,13 +117,15 @@ var (
 // State is the admission state of one observation.
 type State string
 
-// Observation states. Later states belong to E01-02.decision_bridge.
+// Observation states. Decided is the close of an EXEC_READY observation by
+// E01-02.decision_bridge.
 const (
 	InputPreparing State = "INPUT_PREPARING"
 	Admitted       State = "ADMITTED"
 	ExecReady      State = "EXEC_READY"
 	Abandoned      State = "ABANDONED"
 	Rejected       State = "NATIVE_REJECTED"
+	Decided        State = "DECIDED"
 )
 
 // Mode is the admission mode of the node.
@@ -174,6 +191,16 @@ type RejectedRecord struct {
 	Digest         string `json:"digest"`
 }
 
+// DecidedRecord closes an EXEC_READY observation. It binds the EXEC_READY
+// record and the digest of the decision bridge record that resolved it.
+type DecidedRecord struct {
+	Observation     string `json:"observation"`
+	Sequence        uint64 `json:"sequence"`
+	ExecReadyDigest string `json:"exec_ready_digest"`
+	DecisionDigest  string `json:"decision_digest"`
+	Digest          string `json:"digest"`
+}
+
 type abandonedRecord struct {
 	Observation string `json:"observation"`
 	Sequence    uint64 `json:"sequence"`
@@ -184,6 +211,10 @@ type counterRecord struct {
 }
 
 type lowwaterRecord struct {
+	Sequence uint64 `json:"sequence"`
+}
+
+type purgedRecord struct {
 	Sequence uint64 `json:"sequence"`
 }
 
@@ -325,6 +356,15 @@ func ExecReadyDigest(admittedDigest, consumedDigest, execDigest string) (string,
 	return digestOf(tagged(tagExecReady), raw[0], raw[1], raw[2]), nil
 }
 
+// DecidedDigest returns the digest of the close of an EXEC_READY observation.
+func DecidedDigest(execReadyDigest, decisionDigest string) (string, error) {
+	raw, err := hashes(execReadyDigest, decisionDigest)
+	if err != nil {
+		return "", err
+	}
+	return digestOf(tagged(tagDecided), raw[0], raw[1]), nil
+}
+
 // RejectedDigest returns the digest of a NATIVE_REJECTED record.
 func RejectedDigest(admittedDigest, evidenceDigest string) (string, error) {
 	raw, err := hashes(admittedDigest, evidenceDigest)
@@ -373,7 +413,10 @@ func putRecord(db Store, key []byte, value any) error {
 // for concurrent use; every call needs the held guard token.
 type Admission struct {
 	db       Store
+	deleter  DeleteStore
+	cleanup  Cleanup
 	guard    *Guard
+	producer Producer
 	owner    string
 	base     string
 	pins     Pins
@@ -381,9 +424,16 @@ type Admission struct {
 	mode     Mode
 	next     uint64
 	lowwater uint64
+	purged   uint64
 	open     map[uint64]*Observation
 	err      error
 }
+
+// recordKinds are the per-observation record names, in protocol order.
+var recordKinds = []string{"preparing", "admitted", "exec-ready", "abandoned", "rejected", "decided"}
+
+// pruneBatch bounds the sequences whose records one sync deletes.
+const pruneBatch = 256
 
 // ObservationKey returns the observation key of a sequence. It is also the
 // pin ID and the source_inputs ID of the observation.
@@ -402,8 +452,25 @@ func (a *Admission) observationKey(seq uint64) string { return fmt.Sprintf("%s.%
 // Open syncs the store, reads every observation above the low-water mark and
 // checks its records. It releases the pin of every closed observation there
 // again, which finishes an interrupted close, and advances the low-water
-// mark. It starts in RECOVERY_ONLY.
+// mark. It starts in RECOVERY_ONLY. An Admission from Open deletes no
+// records; see OpenWithCleanup.
 func Open(t *Token, db Store, p Producer, pins Pins, inputs Inputs) (*Admission, error) {
+	return open(t, db, nil, p, pins, inputs, nil)
+}
+
+// OpenWithCleanup is Open for an Admission that also deletes the records of
+// closed observations (D100). After the pin of a closed observation is
+// released, cleanup.Purge deletes its capsule and dependency log; after the
+// low-water mark passes it, its own records under this package are deleted.
+// Open repeats both for closes that a power loss interrupted.
+func OpenWithCleanup(t *Token, db DeleteStore, p Producer, pins Pins, inputs Inputs, cleanup Cleanup) (*Admission, error) {
+	if db == nil || cleanup == nil {
+		return nil, fmt.Errorf("%w: missing store or cleanup", ErrInvalid)
+	}
+	return open(t, db, db, p, pins, inputs, cleanup)
+}
+
+func open(t *Token, db Store, deleter DeleteStore, p Producer, pins Pins, inputs Inputs, cleanup Cleanup) (*Admission, error) {
 	if t == nil || t.guard == nil {
 		return nil, ErrGuard
 	}
@@ -422,8 +489,8 @@ func Open(t *Token, db Store, p Producer, pins Pins, inputs Inputs) (*Admission,
 		return nil, err
 	}
 	owner := p.ProducerID + "." + p.RunID
-	a := &Admission{db: db, guard: t.guard, owner: owner, base: keyPrefix + owner + "/",
-		pins: pins, inputs: inputs, mode: RecoveryOnly, open: map[uint64]*Observation{}}
+	a := &Admission{db: db, deleter: deleter, cleanup: cleanup, guard: t.guard, producer: p, owner: owner,
+		base: keyPrefix + owner + "/", pins: pins, inputs: inputs, mode: RecoveryOnly, open: map[uint64]*Observation{}}
 	var counter counterRecord
 	if _, err := readRecord(db, a.key("counter"), &counter); err != nil {
 		return nil, err
@@ -435,28 +502,39 @@ func Open(t *Token, db Store, p Producer, pins Pins, inputs Inputs) (*Admission,
 	if low.Sequence > counter.Next {
 		return nil, fmt.Errorf("%w: low-water %d above counter %d", ErrCorrupt, low.Sequence, counter.Next)
 	}
-	a.next, a.lowwater = counter.Next, low.Sequence
+	var purged purgedRecord
+	if _, err := readRecord(db, a.key("purged"), &purged); err != nil {
+		return nil, err
+	}
+	if purged.Sequence > low.Sequence {
+		return nil, fmt.Errorf("%w: purged mark %d above low-water %d", ErrCorrupt, purged.Sequence, low.Sequence)
+	}
+	a.next, a.lowwater, a.purged = counter.Next, low.Sequence, purged.Sequence
 	var closed []*Observation
 	for seq := low.Sequence; seq < counter.Next; seq++ {
 		obs, err := a.load(seq)
 		if err != nil {
 			return nil, err
 		}
-		if obs.State == Abandoned || obs.State == Rejected {
+		if obs.State == Abandoned || obs.State == Rejected || obs.State == Decided {
 			closed = append(closed, obs)
 		} else {
 			a.open[seq] = obs
 		}
 	}
 	// Finish closes that a power loss or a release error interrupted after
-	// the terminal record was synced: release the pin again, then advance the
-	// low-water mark.
+	// the terminal record was synced: release the pin again, delete the
+	// inputs again, then advance the low-water mark and delete the records
+	// below it.
 	for _, obs := range closed {
-		if err := pins.Release(obs.Key); err != nil {
+		if err := a.release(obs); err != nil {
 			return nil, err
 		}
 	}
 	if err := a.advance(); err != nil {
+		return nil, err
+	}
+	if err := a.prune(); err != nil {
 		return nil, err
 	}
 	return a, nil
@@ -494,8 +572,14 @@ func (a *Admission) load(seq uint64) (*Observation, error) {
 	if err != nil {
 		return nil, err
 	}
+	var decided DecidedRecord
+	hasDecided, err := readRecord(a.db, a.recordKey(seq, "decided"), &decided)
+	if err != nil {
+		return nil, err
+	}
 	if hasAbandoned {
-		if hasAdmitted || hasReady || hasRejected || abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {
+		if hasAdmitted || hasReady || hasRejected || hasDecided ||
+			abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {
 			return nil, fmt.Errorf("%w: ABANDONED record of %s", ErrCorrupt, key)
 		}
 		obs.State = Abandoned
@@ -511,7 +595,7 @@ func (a *Admission) load(seq uint64) (*Observation, error) {
 	}
 	if hasRejected {
 		want, err := RejectedDigest(admitted.Digest, rejected.EvidenceDigest)
-		if !hasAdmitted || hasReady || err != nil || rejected.Observation != key || rejected.Sequence != seq ||
+		if !hasAdmitted || hasReady || hasDecided || err != nil || rejected.Observation != key || rejected.Sequence != seq ||
 			rejected.AdmittedDigest != admitted.Digest || rejected.Digest != want {
 			return nil, fmt.Errorf("%w: NATIVE_REJECTED record of %s", ErrCorrupt, key)
 		}
@@ -529,8 +613,27 @@ func (a *Admission) load(seq uint64) (*Observation, error) {
 		}
 		obs.State, obs.ExecReady = ExecReady, &ready
 	}
+	if hasDecided {
+		if !hasReady {
+			return nil, fmt.Errorf("%w: DECIDED without EXEC_READY for %s", ErrCorrupt, key)
+		}
+		want, err := DecidedDigest(ready.Digest, decided.DecisionDigest)
+		if err != nil || decided.Observation != key || decided.Sequence != seq ||
+			decided.ExecReadyDigest != ready.Digest || decided.Digest != want {
+			return nil, fmt.Errorf("%w: DECIDED record of %s", ErrCorrupt, key)
+		}
+		obs.State = Decided
+	}
 	return obs, nil
 }
+
+// Check returns nil if t holds the guard of this admission and the admission
+// has not stopped after an error. The decision bridge, which shares the
+// guard, uses it.
+func (a *Admission) Check(t *Token) error { return a.enter(t) }
+
+// Producer returns the producer run of this admission.
+func (a *Admission) Producer() Producer { return a.producer }
 
 func (a *Admission) enter(t *Token) error {
 	if err := a.guard.check(t); err != nil {
@@ -645,7 +748,7 @@ func (a *Admission) Begin(t *Token, c Candidate) (Observation, error) {
 	key := a.observationKey(seq)
 	// A record beyond the counter can only be an orphan INPUT_PREPARING of an
 	// interrupted Begin; any later record there means the store is damaged.
-	for _, kind := range []string{"admitted", "exec-ready", "abandoned", "rejected"} {
+	for _, kind := range recordKinds[1:] {
 		ok, err := a.db.Has(a.recordKey(seq, kind))
 		if err != nil {
 			return Observation{}, a.fail(err)
@@ -836,6 +939,38 @@ func (a *Admission) Reject(t *Token, key, evidenceDigest string) (RejectedRecord
 	return record, nil
 }
 
+// Decide closes an EXEC_READY observation after the decision bridge resolved
+// it (D100). decisionDigest is the digest of the bridge record that resolved
+// the observation: a NATIVE_DECIDED record, or the rejection of its
+// transition intent. Decide writes the DECIDED record and syncs, releases the
+// pin, then advances the low-water mark. It works in either mode. Only the
+// decision bridge calls it, after its own record is durable.
+func (a *Admission) Decide(t *Token, key, decisionDigest string) (DecidedRecord, error) {
+	if err := a.enter(t); err != nil {
+		return DecidedRecord{}, err
+	}
+	if !digestPattern.MatchString(decisionDigest) {
+		return DecidedRecord{}, fmt.Errorf("%w: decision digest %q", ErrInvalid, decisionDigest)
+	}
+	obs, err := a.find(key)
+	if err != nil {
+		return DecidedRecord{}, err
+	}
+	if obs.State != ExecReady {
+		return DecidedRecord{}, fmt.Errorf("%w: Decide of %s in %s", ErrState, key, obs.State)
+	}
+	digest, err := DecidedDigest(obs.ExecReady.Digest, decisionDigest)
+	if err != nil {
+		return DecidedRecord{}, err
+	}
+	record := DecidedRecord{Observation: key, Sequence: obs.Sequence, ExecReadyDigest: obs.ExecReady.Digest,
+		DecisionDigest: decisionDigest, Digest: digest}
+	if err := a.terminate(obs, "decided", record); err != nil {
+		return DecidedRecord{}, err
+	}
+	return record, nil
+}
+
 // terminate writes the terminal record of an observation and syncs it, then
 // releases the pin, then advances the low-water mark. The record comes first:
 // an ADMITTED obligation keeps its pin until its closing record is durable
@@ -850,10 +985,25 @@ func (a *Admission) terminate(obs *Observation, kind string, record any) error {
 		return a.fail(err)
 	}
 	delete(a.open, obs.Sequence)
-	if err := a.pins.Release(obs.Key); err != nil {
+	if err := a.release(obs); err != nil {
 		return a.fail(err)
 	}
-	return a.advance()
+	if err := a.advance(); err != nil {
+		return err
+	}
+	return a.prune()
+}
+
+// release releases the pin of a closed observation and then, with cleanup,
+// deletes its inputs. Both return nil when nothing is left.
+func (a *Admission) release(obs *Observation) error {
+	if err := a.pins.Release(obs.Key); err != nil {
+		return err
+	}
+	if a.cleanup == nil {
+		return nil
+	}
+	return a.cleanup.Purge(obs.Key)
 }
 
 // advance moves the low-water mark past the closed sequences at its front.
@@ -876,5 +1026,33 @@ func (a *Admission) advance() error {
 		return a.fail(err)
 	}
 	a.lowwater = low
+	return nil
+}
+
+// prune deletes the records of the sequences below the low-water mark, which
+// are never read again, in batches of pruneBatch sequences. Each batch syncs
+// its deletions and then the advanced purged mark, so a power loss only
+// repeats a batch. It does nothing without cleanup.
+func (a *Admission) prune() error {
+	for a.deleter != nil && a.purged < a.lowwater {
+		end := min(a.lowwater, a.purged+pruneBatch)
+		for seq := a.purged; seq < end; seq++ {
+			for _, kind := range recordKinds {
+				if err := a.deleter.Delete(a.recordKey(seq, kind)); err != nil {
+					return a.fail(err)
+				}
+			}
+		}
+		if err := a.db.SyncKeyValue(); err != nil {
+			return a.fail(err)
+		}
+		if err := putRecord(a.db, a.key("purged"), purgedRecord{Sequence: end}); err != nil {
+			return a.fail(err)
+		}
+		if err := a.db.SyncKeyValue(); err != nil {
+			return a.fail(err)
+		}
+		a.purged = end
+	}
 	return nil
 }

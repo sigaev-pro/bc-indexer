@@ -1,0 +1,80 @@
+{
+  "candidate": {
+    "hash": "bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3",
+    "number": 7,
+    "parent_hash": "276ebaa0da80347dd44fb336e667fa673db8d019bc1f03a041f271573785c510",
+    "parent_root": "2d69af57d177e10835fd62c65c7d80e949a07a5bcb709967cac34f9d604f9574"
+  },
+  "capsule_digest": "881df12b68cd344e83f6b83d6e0eea5432aae64c332895aa4b1b51c7a24ac210",
+  "child_root": "91d10eeeec0e486c4a1631be71c2abc290d761aa278ebb685b41b1563e92ad58",
+  "consumed_chain": "9414886b1ebf025db067a4cbd13a0903fbd9733a5372bba1b58bd72c1699b798",
+  "consumed_count": 2,
+  "consumed_digest": "6ff10a232a563b1e985d5a80ee76fdc14fd88ff387fbf395f1f649abe85c12dd",
+  "decision_evidence": "4a49848004adf2a63a28782cca678bb90bdaa87447fd177e58841aaefb6ae338",
+  "exec_digest": "ff309099ddf13366ad0ee3dd176868524efc9f7337de353bd1f8d07f3914c9d0",
+  "exec_ready_digest": "be04ea7933f4525724a493bd84c1a516eb17f22701c00c7fc097f7d5b09d00ae",
+  "finality_decided_digest": "ceea806f1a4805ef30735badb308f7e17f08a4a0e3fdf766d6366bbb6d9edc6b",
+  "finality_intent": {
+    "digest": "030477816bc421dbd58c40246cc16d9a44196e68ea651484775578ad84d4342b",
+    "events": false,
+    "evidence_digest": "4a49848004adf2a63a28782cca678bb90bdaa87447fd177e58841aaefb6ae338",
+    "kind": "FINALITY",
+    "members": [],
+    "native_store_id": "native-store-1",
+    "new_head": {
+      "hash": "bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3",
+      "number": 7
+    },
+    "old_head": {
+      "hash": "bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3",
+      "number": 7
+    },
+    "producer": "producer-1.run-1",
+    "sequence": 1
+  },
+  "finality_marker": "{\"native_store_id\":\"native-store-1\",\"producer\":\"producer-1.run-1\",\"sequence\":1,\"kind\":\"FINALITY\",\"old_head\":{\"number\":7,\"hash\":\"bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3\"},\"new_head\":{\"number\":7,\"hash\":\"bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3\"},\"members\":[],\"evidence_digest\":\"4a49848004adf2a63a28782cca678bb90bdaa87447fd177e58841aaefb6ae338\",\"events\":false,\"digest\":\"030477816bc421dbd58c40246cc16d9a44196e68ea651484775578ad84d4342b\"}",
+  "import_decided_digest": "5cbd090b4b1fd5cfbe368ab94c2e55449da3bbaecee0df228ed67e3da5093316",
+  "import_intent": {
+    "digest": "4c6faba2036046a5ffbd3168ae26774c0c1901d015fb9a28bbf45d02f4a1bbd9",
+    "events": true,
+    "evidence_digest": "4a49848004adf2a63a28782cca678bb90bdaa87447fd177e58841aaefb6ae338",
+    "kind": "IMPORT",
+    "members": [
+      {
+        "block": "bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3",
+        "child_root": "91d10eeeec0e486c4a1631be71c2abc290d761aa278ebb685b41b1563e92ad58",
+        "exec_ready_digest": "be04ea7933f4525724a493bd84c1a516eb17f22701c00c7fc097f7d5b09d00ae",
+        "observation": "producer-1.run-1.0000000000000000"
+      }
+    ],
+    "native_store_id": "native-store-1",
+    "new_head": {
+      "hash": "bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3",
+      "number": 7
+    },
+    "old_head": {
+      "hash": "276ebaa0da80347dd44fb336e667fa673db8d019bc1f03a041f271573785c510",
+      "number": 6
+    },
+    "producer": "producer-1.run-1",
+    "sequence": 0
+  },
+  "import_marker": "{\"native_store_id\":\"native-store-1\",\"producer\":\"producer-1.run-1\",\"sequence\":0,\"kind\":\"IMPORT\",\"old_head\":{\"number\":6,\"hash\":\"276ebaa0da80347dd44fb336e667fa673db8d019bc1f03a041f271573785c510\"},\"new_head\":{\"number\":7,\"hash\":\"bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3\"},\"members\":[{\"observation\":\"producer-1.run-1.0000000000000000\",\"block\":\"bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3\",\"exec_ready_digest\":\"be04ea7933f4525724a493bd84c1a516eb17f22701c00c7fc097f7d5b09d00ae\",\"child_root\":\"91d10eeeec0e486c4a1631be71c2abc290d761aa278ebb685b41b1563e92ad58\"}],\"evidence_digest\":\"4a49848004adf2a63a28782cca678bb90bdaa87447fd177e58841aaefb6ae338\",\"events\":true,\"digest\":\"4c6faba2036046a5ffbd3168ae26774c0c1901d015fb9a28bbf45d02f4a1bbd9\"}",
+  "import_marker_key": "extractor-decision-marker-v1/producer-1.run-1/0000000000000000",
+  "import_rejected_digest": "b4667828bf77268bd1dd96483469967b60f4d5907d08a11fc73aef3f586b3d74",
+  "member_decided_digest": "5742b4977a31252ba1abb8ec407d3a1e747d696d1f190a040f4c8a4d4dc06da5",
+  "member_rejected_digest": "4543e746ef34cb093225785fec235d92f3b5355161bbf545617b929fbfd8a9aa",
+  "new_head": {
+    "hash": "bf60053ae6caed9fc3ebb46abd5f29ff37265b7b080592ea930ed46072e8f4b3",
+    "number": 7
+  },
+  "old_head": {
+    "hash": "276ebaa0da80347dd44fb336e667fa673db8d019bc1f03a041f271573785c510",
+    "number": 6
+  },
+  "pin_digest": "022fe700356893e0ee1099343405230282fc333df1b9603ab065e551b1480078",
+  "producer": "producer-1",
+  "rejection_evidence": "6550800b6cca29784bc7f94e96eb6ed067cc18f187b4a97a23eda889c0a7dfd4",
+  "run": "run-1",
+  "store_id": "native-store-1"
+}
