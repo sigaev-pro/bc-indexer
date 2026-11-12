@@ -168,16 +168,18 @@ def table(data):
     return "\n".join(lines)
 
 
-def boundary_digest(store_id, producer, number, block):
+def boundary_digest(store_id, producer, number, block, root):
     return sha(tag("extractor-lifecycle-boundary-v1") + text(store_id) + text(producer) + u64(number)
-               + raw(block)).hex()
+               + raw(block) + raw(root)).hex()
 
 
 def finality_digest(field, caller, old, new):
+    if new["hash"] == ZERO:
+        raise ValueError("no-op finality change: zero hash")
     if new["hash"] == old["hash"] and new["number"] != old["number"]:
         raise ValueError("one block at two numbers")
-    if new["hash"] == ZERO or new == old:
-        raise ValueError("no-op finality change")
+    if new == old:
+        raise ValueError("no-op finality change: unchanged")
     return sha(tag("extractor-lifecycle-finality-v1") + text(field) + text(caller) + head(old) + head(new)).hex()
 
 
@@ -188,6 +190,7 @@ def attestation_digest(status, justified, finalized):
 # Fixed vector inputs.
 STORE_ID = decision.STORE_ID
 HEAD = {"number": 7, "hash": sha(b"head-7").hex()}
+BOUNDARY_ROOT = sha(b"root-7").hex()
 GENESIS = sha(b"genesis").hex()
 OLD_FINALIZED = {"number": 3, "hash": sha(b"block-3").hex()}
 NEW_FINALIZED = {"number": 5, "hash": sha(b"block-5").hex()}
@@ -203,8 +206,9 @@ def vectors():
     genesis = {"number": 0, "hash": GENESIS}
     return {
         "store_id": STORE_ID, "producer": base["producer"], "run": base["run"], "head": HEAD,
+        "root": BOUNDARY_ROOT,
         "boundary_key": f"extractor-lifecycle-v1/{producer}/boundary",
-        "boundary_digest": boundary_digest(STORE_ID, producer, HEAD["number"], HEAD["hash"]),
+        "boundary_digest": boundary_digest(STORE_ID, producer, HEAD["number"], HEAD["hash"], BOUNDARY_ROOT),
         "fcu_caller": FCU_CALLER, "old_finalized": OLD_FINALIZED, "new_finalized": NEW_FINALIZED,
         "finalized_digest": finality_digest("FINALIZED", FCU_CALLER, OLD_FINALIZED, NEW_FINALIZED),
         "first_safe_digest": finality_digest("SAFE", FCU_CALLER, NONE, NEW_FINALIZED),

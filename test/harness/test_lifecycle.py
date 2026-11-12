@@ -72,6 +72,9 @@ class IndependentVectors(unittest.TestCase):
                                       {"number": 9, "hash": lifecycle.ZERO})
         with self.assertRaisesRegex(ValueError, "no-op"):
             lifecycle.finality_digest("SAFE", v["fcu_caller"], v["old_finalized"], v["old_finalized"])
+        none = {"number": 0, "hash": lifecycle.ZERO}
+        with self.assertRaisesRegex(ValueError, "zero hash"):
+            lifecycle.finality_digest("SAFE", v["fcu_caller"], none, {"number": 9, "hash": lifecycle.ZERO})
         moved = dict(v["old_finalized"], number=v["old_finalized"]["number"] + 1)
         with self.assertRaisesRegex(ValueError, "two numbers"):
             lifecycle.finality_digest("SAFE", v["fcu_caller"], v["old_finalized"], moved)

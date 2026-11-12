@@ -57,14 +57,14 @@
     {
       "name": "finality zero hash allowed",
       "file": "test/harness/lifecycle.py",
-      "original": "if new[\"hash\"] == ZERO or new == old:",
-      "replacement": "if new == old:"
+      "original": "    if new[\"hash\"] == ZERO:\n",
+      "replacement": "    if False:\n"
     },
     {
       "name": "finality unchanged allowed",
       "file": "test/harness/lifecycle.py",
-      "original": "if new[\"hash\"] == ZERO or new == old:",
-      "replacement": "if new[\"hash\"] == ZERO:"
+      "original": "    if new == old:\n",
+      "replacement": "    if False:\n"
     },
     {
       "name": "attestation omits status",
@@ -245,6 +245,12 @@
       "file": "test/harness/lifecycle.py",
       "original": "if new[\"hash\"] == old[\"hash\"] and new[\"number\"] != old[\"number\"]:",
       "replacement": "if False:"
+    },
+    {
+      "name": "boundary omits root",
+      "file": "test/harness/lifecycle.py",
+      "original": "+ raw(block) + raw(root)).hex()",
+      "replacement": "+ raw(block)).hex()"
     }
   ]
 }

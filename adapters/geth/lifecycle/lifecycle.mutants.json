@@ -630,12 +630,6 @@
       "replacement": "\t\tif err != nil && false {\n\t\t\treturn Boundary{}, fmt.Errorf(\"%w: %s: %w\", ErrRoot, root, err)"
     },
     {
-      "name": "golive root pattern",
-      "file": "extractor/lifecycle/lifecycle.go",
-      "original": "\t\tif !digestPattern.MatchString(root) {",
-      "replacement": "\t\tif false {"
-    },
-    {
       "name": "golive nil roots",
       "file": "extractor/lifecycle/lifecycle.go",
       "original": "\tif bridge == nil || roots == nil {",
@@ -644,14 +638,14 @@
     {
       "name": "decision write without intent",
       "file": "extractor/lifecycle/lifecycle.go",
-      "original": "if top.caller.Route == Decision && top.observe && !top.granted[effect] {",
-      "replacement": "if false {"
+      "original": "\tif top.caller.Route == Decision && top.observe {\n\t\tif !top.granted[effect] {",
+      "replacement": "\tif top.caller.Route == Decision && top.observe {\n\t\tif false {"
     },
     {
       "name": "bootstrap decision write needs intent",
       "file": "extractor/lifecycle/lifecycle.go",
-      "original": "if top.caller.Route == Decision && top.observe && !top.granted[effect] {",
-      "replacement": "if top.caller.Route == Decision && !top.granted[effect] {"
+      "original": "\tif top.caller.Route == Decision && top.observe {\n\t\tif !top.granted[effect] {",
+      "replacement": "\tif top.caller.Route == Decision {\n\t\tif !top.granted[effect] {"
     },
     {
       "name": "intent grants every effect",
@@ -730,6 +724,30 @@
       "file": "extractor/lifecycle/lifecycle.go",
       "original": "\tif !ok {\n\t\treturn nil, fmt.Errorf(\"%w: %q of %s\", ErrUnmapped, id, g.client)",
       "replacement": "\tif !ok && false {\n\t\treturn nil, fmt.Errorf(\"%w: %q of %s\", ErrUnmapped, id, g.client)"
+    },
+    {
+      "name": "finality grant reusable",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\t\ttop.granted[Finality] = false\n",
+      "replacement": ""
+    },
+    {
+      "name": "every grant single use",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif effect == Finality {\n\t\t\ttop.granted[Finality] = false",
+      "replacement": "\t\tif true {\n\t\t\ttop.granted[effect] = false"
+    },
+    {
+      "name": "boundary digest omits root",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "str(b.Producer), head, root), nil",
+      "replacement": "str(b.Producer), head, root[:0]), nil"
+    },
+    {
+      "name": "boundary root not stored",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "Head: head, Root: root}",
+      "replacement": "Head: head, Root: strings.Repeat(\"0\", 64)}"
     }
   ]
 }

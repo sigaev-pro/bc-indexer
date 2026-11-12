@@ -1,6 +1,6 @@
 {
   "attested_digest": "1309f8e3a60733bcf0c50b42cf12f8af91016de0d17dcbd4dd77e27beeb25381",
-  "boundary_digest": "9131d39ec37a850e4b081a404251cc23efc6f5932126dac69ea4d301a47f9abd",
+  "boundary_digest": "f71a5a75fda3e2879dbd2e8ccad494b3f18aba12f980a6cb9e4b433242e9b82b",
   "boundary_key": "extractor-lifecycle-v1/producer-1.run-1/boundary",
   "fallback_digest": "a1509fc23bef78bd4b3ad3bbdedf0001cd32f970ed9a6c21f3591132350c37a7",
   "fcu_caller": "geth.engine-forkchoice",
@@ -20,6 +20,7 @@
     "number": 3
   },
   "producer": "producer-1",
+  "root": "91d10eeeec0e486c4a1631be71c2abc290d761aa278ebb685b41b1563e92ad58",
   "run": "run-1",
   "source": {
     "hash": "51b0b105bb16ebcd60cfee5ea698e21a60300ce6aee537045cb725bbb5b308a1",

@@ -156,6 +156,30 @@ caller field, a new hash equal to the old at another number is `ErrInvalid`,
 and new tests and mutants were added. Retained record 01 of `0b55619`
 passed; it is superseded and kept.
 
+Review 002 (head `67d9141`):
+- **Spec: PASS.** Spec agreed that the refusal of manual database commands
+  needs no BLOCKED_DECISION. Three P3 notes:
+  - store the root of H in the boundary record;
+  - the client block must read the old finality reference under the guard;
+  - record that technical decision in the acceptance decision record when
+    #18 closes.
+- **Standards: REQUEST_CHANGES.** P2: a FINALITY grant lasted for the whole
+  pass, so one no-op, or one intent, let a later setter of the same request
+  write without its own intent. P3 notes: the Python order of the finality
+  checks, an unused test variable, and a long README line.
+
+The follow-up commit fixes these:
+- A FINALITY intent or no-op now allows exactly one finality write. A
+  CANONICAL intent still covers every write of its reorganization.
+- The boundary record and its digest carry the state root of H.
+- Python checks the zero hash first, as Go does.
+- The README states the client duties (pass the root of the H header; read
+  the old reference under the guard).
+
+The refusal of BSC and Bor manual database commands is a technical decision
+of this task. It goes into the decision record that closes #18. Retained
+record 02 of `67d9141` passed; it is superseded and kept.
+
 Next: re-review of the follow-up head, its retained record, hosted CI, then
 the client blocks.
 

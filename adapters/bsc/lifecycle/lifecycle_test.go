@@ -24,6 +24,7 @@ type vectorFile struct {
 	Producer        string        `json:"producer"`
 	Run             string        `json:"run"`
 	Head            decision.Head `json:"head"`
+	Root            string        `json:"root"`
 	BoundaryKey     string        `json:"boundary_key"`
 	BoundaryDigest  string        `json:"boundary_digest"`
 	FCUCaller       string        `json:"fcu_caller"`
@@ -273,7 +274,7 @@ func mustErr(t *testing.T, err, want error) {
 func TestVectors(t *testing.T) {
 	v := loadVectors(t)
 	producer := v.Producer + "." + v.Run
-	b := Boundary{NativeStoreID: v.StoreID, Producer: producer, Head: v.Head}
+	b := Boundary{NativeStoreID: v.StoreID, Producer: producer, Head: v.Head, Root: v.Root}
 	if got, err := BoundaryDigest(b); err != nil || got != v.BoundaryDigest {
 		t.Fatalf("boundary digest %s %v, want %s", got, err, v.BoundaryDigest)
 	}
@@ -675,7 +676,7 @@ func TestGoLiveNeedsDurableRoot(t *testing.T) {
 		t.Fatal("a boundary was written without a durable root")
 	}
 	got, err := g.GoLive(f.token, head7, root7, someRoots{durable: map[string]bool{root7: true}}, b)
-	if err != nil || got.Head != head7 {
+	if err != nil || got.Head != head7 || got.Root != root7 {
 		t.Fatalf("GoLive with a durable root: %+v %v", got, err)
 	}
 	// A restart keeps H and does not check a root again.
@@ -687,27 +688,47 @@ func TestGoLiveNeedsDurableRoot(t *testing.T) {
 }
 
 func TestDecisionPassNeedsIntent(t *testing.T) {
-	f, g, b := liveGeth(t)
-	p, err := g.Enter(f.token, "geth.engine-forkchoice")
-	if err != nil {
+	f, g, _ := liveGeth(t)
+	if _, err := g.Enter(f.token, "geth.engine-forkchoice"); err != nil {
 		t.Fatal(err)
 	}
 	mustErr(t, g.Require(Canonical), ErrBypass)
-	f, g, b = liveGeth(t)
-	p, _ = g.Enter(f.token, "geth.engine-forkchoice")
+	f, g, b := liveGeth(t)
+	p, _ := g.Enter(f.token, "geth.engine-forkchoice")
 	canonical := decision.Intent{Kind: decision.Canonical, OldHead: head7,
 		NewHead: decision.Head{Number: 8, Hash: hash("head-8")}, EvidenceDigest: hash("evidence"), Events: true}
 	if _, err := p.Intend(b, canonical); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.Require(Canonical); err != nil {
-		t.Fatalf("canonical write after its intent: %v", err)
+	// A CANONICAL intent covers every write of its reorganization.
+	for range 3 {
+		if err := g.Require(Canonical); err != nil {
+			t.Fatalf("canonical write after its intent: %v", err)
+		}
 	}
 	// The CANONICAL intent does not allow a finality write.
 	mustErr(t, g.Require(Finality), ErrBypass)
 	if g.Coverage()["geth.engine-forkchoice"] != (Reach{Passes: 1, Intents: 1}) {
 		t.Fatalf("coverage %v", g.Coverage())
 	}
+}
+
+func TestFinalityIntentAllowsOneWrite(t *testing.T) {
+	v := loadVectors(t)
+	f, g, b := liveGeth(t)
+	p, err := g.Enter(f.token, "geth.engine-forkchoice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Finality(b, head7, FinalityChange{Field: Finalized, Caller: "geth.engine-forkchoice",
+		Old: v.OldFinalized, New: v.NewFinalized}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Require(Finality); err != nil {
+		t.Fatalf("finalized write after its intent: %v", err)
+	}
+	// The safe setter of the same forkchoice update needs its own intent.
+	mustErr(t, g.Require(Finality), ErrBypass)
 }
 
 func TestFailedIntentGrantsNothing(t *testing.T) {
@@ -751,6 +772,9 @@ func TestUnchangedFinalityAllowsRewrite(t *testing.T) {
 	if ds, _ := b.Decisions(f.token); len(ds) != 0 {
 		t.Fatalf("an unchanged reference made a decision: %+v", ds)
 	}
+	// The no-op allows one write only: a later setter that changes the
+	// reference without its intent is a bypass.
+	mustErr(t, g.Require(Finality), ErrBypass)
 	// A caller that may not make FINALITY gets no rewrite either.
 	f, g, b = liveGeth(t)
 	q, _ := g.Enter(f.token, "geth.set-canonical")
@@ -968,8 +992,8 @@ func TestBoundaryRecordChecks(t *testing.T) {
 	_ = strictDecode(good, &b)
 	b.Producer = "producer-2.run-1"
 	b.Digest, _ = BoundaryDigest(b)
-	db.durable[key] = []byte(fmt.Sprintf(`{"native_store_id":%q,"producer":%q,"head":{"number":7,"hash":%q},"digest":%q}`,
-		b.NativeStoreID, b.Producer, b.Head.Hash, b.Digest))
+	db.durable[key] = []byte(fmt.Sprintf(`{"native_store_id":%q,"producer":%q,"head":{"number":7,"hash":%q},"root":%q,"digest":%q}`,
+		b.NativeStoreID, b.Producer, b.Head.Hash, b.Root, b.Digest))
 	if _, err := OpenMap(f.token, db, f.adm, "native-store-1", "geth", false, testMap()); !errors.Is(err, ErrInvariant) {
 		t.Fatalf("other producer: %v", err)
 	}

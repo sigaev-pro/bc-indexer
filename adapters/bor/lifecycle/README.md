@@ -136,8 +136,10 @@ client block checks its order with a deadlock test.
   builds it for one finality setter call. An observing pass of a `DECISION`
   caller must record an intent before it writes: `Require(CANONICAL)` needs a
   `CANONICAL` intent of that pass and `Require(FINALITY)` a `FINALITY`
-  intent; otherwise it is `ErrBypass`. The one exception is a finality setter
-  that rewrites an unchanged reference (below).
+  intent; otherwise it is `ErrBypass`. A `CANONICAL` intent covers every
+  write of its reorganization. A `FINALITY` intent, or a no-op rewrite of an
+  unchanged reference (below), allows exactly one finality write, so each
+  setter call of one request needs its own intent.
 - `Coverage()` counts passes, intents and refusals per caller, and
   `Gaps(map, client, coverage)` lists every `OBSERVATION` caller without a
   pass, every `DECISION` caller without an intent, and every `REFUSE` caller
@@ -162,8 +164,9 @@ mutations past H), with the native head and its state root read under the
 guard. Without a boundary it requires the root to be durable in the native
 store (`roots.Durable`: flushed through the hash provider and synced;
 `ErrRoot` otherwise), so native startup repair cannot rewind below H; then it
-writes the boundary record and syncs it, then calls
-`decision.Bridge.GoLive`. With a boundary (a restart, or a crash after the
+writes the boundary record with the head and its root and syncs it, then
+calls `decision.Bridge.GoLive`. The client block passes the state root of
+the H header itself, read under the guard. With a boundary (a restart, or a crash after the
 boundary sync) it keeps the stored H and never sets a new one. If the bridge
 refuses, the gate stays in `RECOVERY`. A failed boundary write stops the
 gate; a power loss before its sync leaves no boundary, so the next start is
@@ -171,7 +174,7 @@ gate; a power loss before its sync leaves no boundary, so the next start is
 
 Record: key `extractor-lifecycle-v1/<producer>.<run>/boundary` (longer than
 33 bytes and starting with "e", so the native offline pruner keeps it),
-JSON `{"native_store_id","producer","head":{"number","hash"},"digest"}`. A
+JSON `{"native_store_id","producer","head":{"number","hash"},"root","digest"}`. A
 record of another store or producer is `ErrInvariant`; a malformed record or
 a wrong digest is `ErrCorrupt`.
 
@@ -187,12 +190,14 @@ A new hash equal to the old one at another number is `ErrInvalid` (one block
 cannot have two numbers).
 
 `Pass.Finality` makes one FINALITY intent per setter call, before the
-setter runs, with the unchanged head. For an unchanged reference it makes no
-intent but lets the pass rewrite the same reference, because Geth calls
-`SetFinalized` on every forkchoice update with a non-zero hash; that write
-carries no marker. A zero hash allows no write, because no setter runs. The native setter then writes its
+setter runs, with the unchanged head. The native setter then writes its
 reference and the marker in one batch and syncs, and the caller resolves the
-decision. A setter that ran stays decided even if a later step of the same
+decision. For an unchanged reference it makes no intent but lets the pass
+rewrite the same reference once, because Geth calls `SetFinalized` on every
+forkchoice update with a non-zero hash; that write carries no marker. The
+client block reads the old reference under the guard from the same native
+field the setter writes, so a real change is never taken for an unchanged
+one. A zero hash allows no write, because no setter runs. A setter that ran stays decided even if a later step of the same
 request fails and the request returns an error; a setter that did not run
 makes no decision (AC-LIF-05-03). A decided record cannot be rejected
 afterwards.
@@ -212,7 +217,7 @@ its 32 raw bytes, a head is its number then its hash.
 
 | Digest | Tag | Fields |
 |---|---|---|
-| boundary | `extractor-lifecycle-boundary-v1` | native store ID, producer (`<producer>.<run>`), head |
+| boundary | `extractor-lifecycle-boundary-v1` | native store ID, producer (`<producer>.<run>`), head, state root of the head |
 | finality | `extractor-lifecycle-finality-v1` | field, caller ID, old head, new head |
 | attestation | `extractor-lifecycle-attestation-v1` | status, justified head, finalized head |
 

@@ -408,12 +408,13 @@ type LiveSwitcher interface {
 }
 
 // Boundary is the durable live boundary H of a producer run: the native head
-// read under the guard when the run first went live. Capture starts with the
-// first mutation after it.
+// read under the guard when the run first went live, and its state root.
+// Capture starts with the first mutation after it.
 type Boundary struct {
 	NativeStoreID string        `json:"native_store_id"`
 	Producer      string        `json:"producer"`
 	Head          decision.Head `json:"head"`
+	Root          string        `json:"root"`
 	Digest        string        `json:"digest"`
 }
 
@@ -451,7 +452,11 @@ func BoundaryDigest(b Boundary) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return digestOf(tagBoundary, str(b.NativeStoreID), str(b.Producer), head), nil
+	root, err := rawHash(b.Root)
+	if err != nil {
+		return "", err
+	}
+	return digestOf(tagBoundary, str(b.NativeStoreID), str(b.Producer), head, root), nil
 }
 
 // Reach counts how often a caller entered the gate, how often it recorded a
@@ -755,9 +760,16 @@ func (g *Gate) Require(effect Effect) error {
 		return g.err
 	}
 	// An observing Decision pass must record its intent before it mutates.
-	if top.caller.Route == Decision && top.observe && !top.granted[effect] {
-		g.err = fmt.Errorf("%w: %s under %s without an intent", ErrBypass, effect, top.caller.ID)
-		return g.err
+	if top.caller.Route == Decision && top.observe {
+		if !top.granted[effect] {
+			g.err = fmt.Errorf("%w: %s under %s without an intent", ErrBypass, effect, top.caller.ID)
+			return g.err
+		}
+		// One finality setter call writes once per intent or no-op rewrite;
+		// a CANONICAL intent covers every write of its reorganization.
+		if effect == Finality {
+			top.granted[Finality] = false
+		}
 	}
 	return nil
 }
@@ -790,13 +802,10 @@ func (g *Gate) GoLive(t *admission.Token, head decision.Head, root string, roots
 		return *g.boundary, nil
 	}
 	if g.boundary == nil {
-		b := Boundary{NativeStoreID: g.storeID, Producer: g.producer, Head: head}
+		b := Boundary{NativeStoreID: g.storeID, Producer: g.producer, Head: head, Root: root}
 		digest, err := BoundaryDigest(b)
 		if err != nil {
 			return Boundary{}, err
-		}
-		if !digestPattern.MatchString(root) {
-			return Boundary{}, fmt.Errorf("%w: root %q", ErrInvalid, root)
 		}
 		durable, err := roots.Durable(root)
 		if err != nil {
