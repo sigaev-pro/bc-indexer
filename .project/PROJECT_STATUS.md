@@ -171,8 +171,8 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
     observation, on the import path;
   - the AC-CAP-07-01, 07-02, 07-03 and 07-06 matrix is measured.
 - Records 03 at clean `ca88680`:
-  - preparation 03 PASS: 23 admission and 6 decision patches, 112 unit test
-    lines, 41 mutant builds;
+  - preparation 03 PASS: 23 admission and 6 decision patches, 112 top-level
+    unit tests (115 with subtests), 41 mutant builds;
   - run 03 PASS in 1,282 seconds: the probe passed and 41 of 41 native
     mutants were killed;
   - Python mutants: 96 of 96 killed.
