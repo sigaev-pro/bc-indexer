@@ -133,7 +133,12 @@ NOT_APPLICABLE reason in `expected/eth.json` names only EIP-4788 and 2935 and
 points to ORACLE.md for the owners; changing it would change the measured
 head, so it stays.
 
-Next: review 003, CI; then the client blocks.
+Review 003 on `f5153d2`: Spec PASS and Standards PASS, with no open finding.
+The Spec note that the owner agreement under D97 must be recorded before
+the client sessions start goes to the coordinator.
+
+Next: hosted CI and the final review comment on the final head; then the
+three client blocks after block 0 merges.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
