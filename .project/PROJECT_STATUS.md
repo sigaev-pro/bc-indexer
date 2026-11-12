@@ -185,7 +185,17 @@ assembled modules (116 each, 30 in lifecycle, 99.2% statements), Go mutants
 (122 killed) and Python mutants (38 killed). Records 01 and 02 passed; they
 are superseded and kept.
 
-Next: re-review of `544cd49`, hosted CI, then the client blocks.
+Review 003 (head `544cd49`): Spec PASS and Standards PASS, with P3 notes
+only:
+- how a rewind records a finality clear;
+- that each setter's intent comes right before its own write;
+- two README lines to reflow.
+
+The follow-up commits after `544cd49` change only the README, this section
+and the evidence.
+
+Next: hosted CI on the final head and the final review comment, then the
+client blocks after merge.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
