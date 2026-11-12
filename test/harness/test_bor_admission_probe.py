@@ -745,8 +745,10 @@ class TreeTests(unittest.TestCase):
                 tree.apply_edit(text, edit)
 
     def test_patch_set_anchors_and_paths(self):
-        patches = tree.load_patches()
-        self.assertEqual(len({edit["name"] for edit in patches["edits"]}), len(patches["edits"]))
+        names = [edit["name"] for path in tree.PATCH_SETS for edit in tree.load_patches(path)["edits"]]
+        self.assertEqual(len(set(names)), len(names))
+        self.assertEqual([path.name for path in tree.PATCH_SETS], ["patches.json", "patches.json"])
+        self.assertEqual([path.parent for path in tree.PATCH_SETS], [tree.NATIVE, tree.DECISION])
         for value in ("", "/abs", "a/../b", "a\\b"):
             with self.assertRaises(tree.TreeError):
                 tree.relative(value)
@@ -765,9 +767,11 @@ class TreeTests(unittest.TestCase):
                 with self.assertRaises(tree.TreeError):
                     tree.load_patches(path)
 
-    def fake_tree(self, directory, patches):
-        """A fake native tree holding every edited file with its anchor once."""
-        for edit in patches["edits"]:
+    def fake_tree(self, directory, patches=None):
+        """A fake native tree holding every edited file of both patch sets
+        with each anchor once."""
+        edits = [edit for path in tree.PATCH_SETS for edit in tree.load_patches(path)["edits"]]
+        for edit in edits:
             path = directory / edit["file"]
             path.parent.mkdir(parents=True, exist_ok=True)
             old = path.read_text() if path.exists() else ""
@@ -783,14 +787,32 @@ class TreeTests(unittest.TestCase):
             self.assertEqual(kinds["extractor/borimport/borimport.go"], "package")
             self.assertEqual(kinds["core/zz_extractor_observer.go"], "new")
             self.assertEqual(kinds["core/blockchain.go"], "edited")
-            self.assertEqual(record["edits"], [edit["name"] for edit in patches["edits"]])
+            self.assertEqual(kinds["extractor/decision/decision.go"], "package")
+            self.assertEqual(kinds["extractor/decision/native/decider/decider.go"], "package")
+            self.assertEqual(kinds["extractor/bordecision/bordecision.go"], "package")
+            self.assertEqual(kinds["core/zz_extractor_decision.go"], "new")
+            decision_edits = [edit["name"] for edit in tree.load_patches(tree.DECISION / "patches.json")["edits"]]
+            self.assertEqual(record["edits"], [edit["name"] for edit in patches["edits"]] + decision_edits)
+            self.assertEqual([row["path"] for row in record["patch_sets"]],
+                             ["adapters/bor/admission/native/patches.json", "adapters/bor/decision/native/patches.json"])
             text = (source / "core/vm/interpreter.go").read_text()
             self.assertIn("OnExtractorSafePoint(byte(op), callContext)", text)
+            text = (source / "core/blockchain.go").read_text()
+            for call in ("bc.extractorWriteDecided(decider", "extractorCommitOnce(statedb, statedb.CommitWithUpdate",
+                         "bc.extractorMarkBatch(blockBatch, block, false)", "bc.extractorMarkBatch(batch, block, true)"):
+                self.assertIn(call, text)
             row = next(r for r in record["files"] if r["path"] == "core/blockchain.go")
             self.assertEqual(row["sha256"], hashlib.sha256((source / "core/blockchain.go").read_bytes()).hexdigest())
             self.assertNotEqual(row["sha256"], row["sha256_before"])
             with self.assertRaises(tree.TreeError):
                 tree.install(source)
+
+    def test_install_refuses_an_edit_name_in_two_patch_sets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            self.fake_tree(source)
+            with self.assertRaises(tree.TreeError):
+                tree.install(source, patch_sets=(tree.NATIVE / "patches.json", tree.NATIVE / "patches.json"))
 
     def test_install_never_replaces_a_native_file(self):
         patches = tree.load_patches()

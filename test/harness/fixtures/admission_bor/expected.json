@@ -107,7 +107,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -131,7 +133,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -166,7 +170,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -190,7 +196,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -225,7 +233,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -249,7 +259,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -284,7 +296,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -308,7 +322,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -344,7 +360,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -368,7 +386,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -392,12 +412,15 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
     "AC-CAP-02-02",
-    "AC-CAP-04-03"
+    "AC-CAP-04-03",
+    "AC-CAP-07-01"
    ],
    "changed_body": "clerk-b-from-1.json"
   },
@@ -429,7 +452,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -453,7 +478,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -477,12 +504,15 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
     "AC-CAP-02-02",
-    "AC-CAP-04-03"
+    "AC-CAP-04-03",
+    "AC-CAP-07-01"
    ],
    "changed_body": "clerk-b-from-1.json"
   },
@@ -514,7 +544,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -538,11 +570,14 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
-    "AC-CAP-02-02"
+    "AC-CAP-02-02",
+    "AC-CAP-07-02"
    ]
   },
   {
@@ -572,7 +607,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -596,7 +633,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -615,7 +654,7 @@
      "variant": "a",
      "crash": "log-1@1033",
      "set_head": -1,
-     "walk_check": 0,
+     "walk_check": 1028,
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
@@ -630,16 +669,18 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 1020,
      "from": 1021,
      "to": 1040,
      "variant": "a",
-     "crash": "",
+     "crash": "exec-ready@1040",
      "set_head": 1000,
-     "walk_check": 1028,
+     "walk_check": 0,
      "stale_prune_dir": "",
      "prune_state": "",
      "store_id": "",
@@ -654,7 +695,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 1020,
@@ -678,7 +721,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 1020,
@@ -702,7 +747,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -726,7 +773,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -750,7 +799,35 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    },
+    {
+     "base": 1020,
+     "from": 1021,
+     "to": 1040,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -791,7 +868,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -810,7 +889,7 @@
      "from": 1,
      "to": 6,
      "variant": "a",
-     "crash": "",
+     "crash": "exec-ready@6",
      "set_head": -1,
      "walk_check": 0,
      "stale_prune_dir": "",
@@ -827,7 +906,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -851,7 +932,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -875,7 +958,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -914,7 +999,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -938,7 +1025,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -957,7 +1046,7 @@
     {
      "base": 0,
      "from": 1,
-     "to": 40,
+     "to": 39,
      "variant": "a",
      "crash": "",
      "set_head": -1,
@@ -976,14 +1065,16 @@
      "finalize": 30,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
      "from": 40,
      "to": 40,
      "variant": "a",
-     "crash": "",
+     "crash": "exec-ready@40",
      "set_head": -1,
      "walk_check": 0,
      "stale_prune_dir": "",
@@ -1000,7 +1091,9 @@
      "finalize": 0,
      "await_frozen": 30,
      "verify_pins": false,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -1024,7 +1117,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": "--block-amount-reserved 2"
+     "tool_args": "--block-amount-reserved 2",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -1048,7 +1143,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": false,
-     "tool_args": "--block-amount-reserved 2"
+     "tool_args": "--block-amount-reserved 2",
+     "milestone_conflict": 0,
+     "reimport": false
     },
     {
      "base": 0,
@@ -1072,7 +1169,9 @@
      "finalize": 0,
      "await_frozen": 0,
      "verify_pins": true,
-     "tool_args": ""
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
     }
    ],
    "ac": [
@@ -1083,11 +1182,488 @@
     2,
     3
    ]
+  },
+  {
+   "name": "ac-cap-07-02-child-root",
+   "kind": "decision-crash",
+   "crash_step": "child-root",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "child-root@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-02"
+   ]
+  },
+  {
+   "name": "ac-cap-07-03-intent",
+   "kind": "decision-crash",
+   "crash_step": "intent",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "intent@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-03"
+   ]
+  },
+  {
+   "name": "ac-cap-07-03-block-batch",
+   "kind": "decision-crash",
+   "crash_step": "block-batch",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "block-batch@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-03"
+   ]
+  },
+  {
+   "name": "ac-cap-07-03-marker",
+   "kind": "decision-crash",
+   "crash_step": "marker",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "marker@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-03"
+   ]
+  },
+  {
+   "name": "ac-cap-07-03-decided",
+   "kind": "decision-crash",
+   "crash_step": "decided",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "decided@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-03"
+   ]
+  },
+  {
+   "name": "ac-cap-07-06-native-rejected",
+   "kind": "decision-rejected",
+   "crash_step": "native-rejected",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "native-rejected@4",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 4,
+     "reimport": false
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-06"
+   ]
+  },
+  {
+   "name": "ac-cap-07-06-live",
+   "kind": "decision-rejected",
+   "block": 4,
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 4,
+     "reimport": false
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-06"
+   ]
+  },
+  {
+   "name": "known-block-restart",
+   "kind": "known-block",
+   "attempts": [
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": false
+    },
+    {
+     "base": 0,
+     "from": 1,
+     "to": 6,
+     "variant": "a",
+     "crash": "",
+     "set_head": -1,
+     "walk_check": 0,
+     "stale_prune_dir": "",
+     "prune_state": "",
+     "store_id": "",
+     "batch": false,
+     "tool_command": "",
+     "unobserved": false,
+     "rpc_during": 0,
+     "replay": false,
+     "rpc_control": 0,
+     "rpc_before": 0,
+     "expired_fetch": 0,
+     "finalize": 0,
+     "await_frozen": 0,
+     "verify_pins": false,
+     "tool_args": "",
+     "milestone_conflict": 0,
+     "reimport": true
+    }
+   ],
+   "ac": [
+    "AC-CAP-07-03"
+   ],
+   "decision": "one decision per block after a restart (D100)"
   }
  ],
  "prune_block": {
   "refusal": "guarded block pruning: live pins forbid",
   "native_error": "freezer is empty, abort",
   "native_frozen_open_error": "ancient chain segments already extracted"
- }
+ },
+ "decision_rejection_error": "mismatch error"
 }

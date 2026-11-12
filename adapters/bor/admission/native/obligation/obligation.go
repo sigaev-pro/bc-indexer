@@ -343,11 +343,20 @@ type Report struct {
 // bridge. Only then does it switch to LIVE. Any other failure stops it and
 // leaves the admission in RECOVERY_ONLY.
 func (d *Driver) Recover(r Reexecutor) (Report, error) {
+	return d.RecoverThen(r, d.Admission.GoLive)
+}
+
+// RecoverThen is Recover with live in place of the admission's GoLive: it
+// runs with the guard token still held after every saved obligation is
+// resolved, and must end with the switch to LIVE. The decision bridge passes
+// its recovery driver (E01-02.decision_bridge), which decides the EXEC_READY
+// observations first.
+func (d *Driver) RecoverThen(r Reexecutor, live func(*admission.Token) error) (Report, error) {
 	report := Report{Abandoned: []string{}, ExecReady: []string{}, Rejected: []string{}, Kept: []string{}}
 	token := d.Guard.Acquire()
 	err := d.resolveSaved(token, r, &report)
 	if err == nil {
-		err = d.Admission.GoLive(token)
+		err = live(token)
 	}
 	if releaseErr := token.Release(); releaseErr != nil {
 		err = errors.Join(err, releaseErr)
@@ -426,6 +435,13 @@ func (d *Driver) Replay(key string, r Reexecutor) (err error) {
 			err = errors.Join(err, releaseErr)
 		}
 	}()
+	return d.ReplayHeld(token, key, r)
+}
+
+// ReplayHeld is Replay for a caller that already holds the guard token: the
+// decision recovery driver replays an EXEC_READY observation before it
+// completes the native import of its block.
+func (d *Driver) ReplayHeld(token *admission.Token, key string, r Reexecutor) error {
 	saved, err := d.Admission.Observations(token)
 	if err != nil {
 		return err

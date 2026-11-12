@@ -433,6 +433,18 @@
       "file": "native/obligation/obligation.go",
       "original": "\td.Native.OpenWindow(obs.Candidate)\n\tif err := d.Router.Enter(log); err != nil {\n\t\td.Native.CloseWindow()\n\t\treturn err\n\t}\n\tvar result string",
       "replacement": "\tif err := d.Router.Enter(log); err != nil {\n\t\treturn err\n\t}\n\td.Native.OpenWindow(obs.Candidate)\n\tvar result string"
+    },
+    {
+      "name": "recover goes live without the admission",
+      "file": "native/obligation/obligation.go",
+      "original": "\treturn d.RecoverThen(r, d.Admission.GoLive)",
+      "replacement": "\treturn d.RecoverThen(r, func(*admission.Token) error { return nil })"
+    },
+    {
+      "name": "recover then runs live after a failure",
+      "file": "native/obligation/obligation.go",
+      "original": "\terr := d.resolveSaved(token, r, &report)\n\tif err == nil {\n\t\terr = live(token)",
+      "replacement": "\terr := d.resolveSaved(token, r, &report)\n\tif true {\n\t\terr = live(token)"
     }
   ]
 }

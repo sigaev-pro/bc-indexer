@@ -208,6 +208,13 @@ func (i inputs) Consumed(key string) (admission.Consumed, error) {
 		Count: closed.Count, Chain: closed.Chain, Digest: closed.Digest}, nil
 }
 
+// purger adapts source_inputs.Purge to admission.InputPurger: closing an
+// observation deletes its capsule and dependency log (D100,
+// E01-02.decision_bridge).
+type purger struct{ db sourceinputs.Deleter }
+
+func (p purger) Purge(observation string) error { return sourceinputs.Purge(p.db, observation) }
+
 // depLog adapts sourceinputs.Log to obligation.Log.
 type depLog struct{ log *sourceinputs.Log }
 
@@ -275,8 +282,12 @@ func Start(cfg Config, db ethdb.Database, chain *core.BlockChain) (*Node, error)
 	n := &Node{cfg: cfg, db: db, chain: chain, engine: engine, identity: identity, provider: provider, Run: run}
 	guard := admission.NewGuard()
 	token := guard.Acquire()
-	adm, err := admission.Open(token, db, admission.Producer{ProducerID: cfg.Producer, RunID: run},
-		obligation.PinAdapter{Ledger: ledger{db: db, provider: provider}, Unknown: stateprovider.ErrUnknownPin}, inputs{db: db})
+	// The admission deletes the inputs and records of closed observations
+	// (E01-02.decision_bridge, D100). A store opened before this switch must
+	// be discarded, not reused.
+	adm, err := admission.OpenWithCleanup(token, db, admission.Producer{ProducerID: cfg.Producer, RunID: run},
+		obligation.PinAdapter{Ledger: ledger{db: db, provider: provider}, Unknown: stateprovider.ErrUnknownPin}, inputs{db: db},
+		purger{db: db})
 	if releaseErr := token.Release(); err == nil {
 		err = releaseErr
 	}
@@ -319,13 +330,30 @@ func checkConfig(cfg Config, running *params.ChainConfig) error {
 // Recover runs the recovery driver, then installs the observer on the chain
 // so every later import runs per-block observations.
 func (n *Node) Recover() (obligation.Report, error) {
-	report, err := n.Driver.Recover(n)
+	return n.RecoverThen(n.Driver.Admission.GoLive)
+}
+
+// RecoverThen is Recover with live in place of the admission's GoLive
+// (obligation.Driver.RecoverThen): the decision bridge decides the
+// EXEC_READY observations and then switches to LIVE. The observer is
+// installed only after live succeeded.
+func (n *Node) RecoverThen(live func(*admission.Token) error) (obligation.Report, error) {
+	report, err := n.Driver.RecoverThen(n, live)
 	if err != nil {
 		return report, err
 	}
 	n.chain.SetExtractorObserver(n)
 	return report, nil
 }
+
+// DB returns the native store that the admission uses.
+func (n *Node) DB() ethdb.Database { return n.db }
+
+// Chain returns the native chain.
+func (n *Node) Chain() *core.BlockChain { return n.chain }
+
+// StoreID returns the producer binding of the native store.
+func (n *Node) StoreID() string { return n.cfg.StoreID }
 
 // Replay checks a saved EXEC_READY observation against its saved inputs
 // (obligation.Driver.Replay); it changes no record.
@@ -364,6 +392,9 @@ func (n *Node) Observe(block *types.Block, parent *types.Header) (core.Extractor
 	}
 	return observation{node: n, obs: obs}, nil
 }
+
+// Key returns the observation key.
+func (o observation) Key() string { return o.obs.Key() }
 
 // Done implements core.ExtractorObservation.
 func (o observation) Done(block *types.Block, receipts types.Receipts, usedGas uint64, err error) error {

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Install the E01-02.admission Bor block into an extracted Bor source tree.
+"""Install the E01-02.admission and E01-02.decision_bridge Bor blocks into an
+extracted Bor source tree.
 
 The installer copies the shared extractor packages (admission, source_inputs,
-state_provider, core/capture) and the Bor glue to `extractor/` in the tree,
-adds the new files of `adapters/bor/admission/native/tree/` and applies the
-anchored edits of `adapters/bor/admission/native/patches.json`. Every anchor
-must occur exactly once and no new file may replace a native one, so a
-changed native tree is refused instead of patched in the wrong place. The
-returned rows record the digest of every file before and after.
+state_provider, core/capture, decision) and the Bor glue to `extractor/` in
+the tree, adds the new files of `adapters/bor/admission/native/tree/` and
+`adapters/bor/decision/native/tree/`, and applies the anchored edits of
+`adapters/bor/admission/native/patches.json`, then those of
+`adapters/bor/decision/native/patches.json`. Every anchor must occur exactly
+once and no new file may replace a native one, so a changed native tree is
+refused instead of patched in the wrong place. The returned rows record the
+digest of every file before and after.
 """
 
 import hashlib
@@ -16,6 +19,8 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "adapters/bor/admission/native"
+DECISION = ROOT / "adapters/bor/decision/native"
+PATCH_SETS = (NATIVE / "patches.json", DECISION / "patches.json")
 MODES = ("before", "after", "replace")
 
 # (source directory relative to ROOT, file names, directory inside the tree)
@@ -32,6 +37,9 @@ PACKAGES = (
     ("core/capture", ("capture.go", "capture_test.go"), "extractor/capture"),
     ("adapters/bor/admission/native/borimport", ("borimport.go", "safepoint.go", "borimport_test.go"),
      "extractor/borimport"),
+    ("adapters/bor/decision", ("decision.go", "decision_test.go", "vectors.json"), "extractor/decision"),
+    ("adapters/bor/decision/native/decider", ("decider.go", "decider_test.go"), "extractor/decision/native/decider"),
+    ("adapters/bor/decision/native/bordecision", ("bordecision.go", "bordecision_test.go"), "extractor/bordecision"),
 )
 
 
@@ -84,19 +92,23 @@ def add_file(source, tree_path, data, rows, kind):
     rows.append({"kind": kind, "path": tree_path, "sha256": sha(data), "size_bytes": len(data)})
 
 
-def install(source, patches_path=NATIVE / "patches.json", root=ROOT):
-    """Install the Bor block into the tree at `source` and return the record."""
+def install(source, patch_sets=PATCH_SETS, root=ROOT):
+    """Install the Bor blocks into the tree at `source` and return the record.
+    The patch sets apply in order; an edit name must be unique across them."""
     source = Path(source)
-    patches = load_patches(patches_path)
+    sets = [(Path(path), load_patches(Path(path))) for path in patch_sets]
+    names = [edit["name"] for _, patches in sets for edit in patches["edits"]]
+    if len(names) != len(set(names)):
+        raise TreeError("an edit name occurs in two patch sets")
     rows = []
-    for directory, names, target in PACKAGES:
-        for name in names:
+    for directory, files, target in PACKAGES:
+        for name in files:
             add_file(source, f"{target}/{name}", (root / directory / name).read_bytes(), rows, "package")
-    base = Path(patches_path).parent
-    for tree_path, origin in sorted(patches["files"].items()):
-        add_file(source, tree_path, (base / Path(*relative(origin).parts)).read_bytes(), rows, "new")
+    for path, patches in sets:
+        for tree_path, origin in sorted(patches["files"].items()):
+            add_file(source, tree_path, (path.parent / Path(*relative(origin).parts)).read_bytes(), rows, "new")
     edited = {}
-    for edit in patches["edits"]:
+    for edit in (edit for _, patches in sets for edit in patches["edits"]):
         path = source / Path(*relative(edit["file"]).parts)
         if edit["file"] not in edited:
             if not path.is_file() or path.is_symlink():
@@ -109,8 +121,9 @@ def install(source, patches_path=NATIVE / "patches.json", root=ROOT):
         (source / Path(*relative(name).parts)).write_bytes(after)
         rows.append({"kind": "edited", "path": name, "sha256_before": sha(row["before"]), "sha256": sha(after),
                      "size_bytes": len(after)})
-    return {"patch_set_sha256": sha(Path(patches_path).read_bytes()), "edits": [e["name"] for e in patches["edits"]],
-            "files": rows}
+    return {"patch_sets": [{"path": str(path.relative_to(root)) if path.is_relative_to(root) else str(path),
+                            "sha256": sha(path.read_bytes())} for path, _ in sets],
+            "edits": names, "files": rows}
 
 
 if __name__ == "__main__":
