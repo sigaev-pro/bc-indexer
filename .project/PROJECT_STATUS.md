@@ -154,7 +154,7 @@ then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
 Status: IN_PROGRESS (part of #17), draft PR #159 on branch
 `claude/e01-02-decision-bsc`, started on main `add17e6` (block 0 merged in
-PR #157). Measured head `6ab370b`; later commits change only docs.
+PR #157). Measured head `61cbfa3`; later commits change only docs.
 
 Scope: every plan row marked BSC or "each client block":
 - the `decision` install;
@@ -177,16 +177,24 @@ Client code is under `adapters/bsc/decision/native/`, the BSC admission seam
 Design: [BSC decision README](../adapters/bsc/decision/native/README.md).
 Evidence: [E01-02.decision_bridge.bsc](evidence/E01-02.decision_bridge.bsc.md).
 
-Records at `6ab370b`: preparation 01 PASS and run 01 PASS. The Go and Python
-mutant records and the BSC admission non-regression records are listed in
-the evidence.
+Records:
+- at `61cbfa3`: preparation 02, run 02 (10 Go tests) and the Python
+  mutants (107 killed, 1 labeled equivalent), all PASS;
+- at `6ab370b`, which has byte-identical Go code, driver and Go table: the
+  Go mutants (45 killed, 3 labeled equivalent) and the BSC admission
+  non-regression (29 native tests), all PASS.
+
+The `6ab370b` preparation, run and Python records are kept under D83.
+
+Reviews: Spec and Standards PASS on `61cbfa3`. The earlier review rounds
+found wording, Python mutant granularity and doc gaps; all are fixed.
 
 qa verdict (private BSC slot): AC-CAP-07-01, 07-02, 07-03 and 07-06 PASS.
 07-06 uses the native outcome fixture, the bad-block record. `bsc-mainnet`
 and `bsc-testnet` stay NOT_RUN (D96, D98, D99).
 
-Next: Spec and Standards reviews, hosted CI, the final review comment, then
-READY to the coordinator.
+Next: hosted CI on the final head, the final review comment, then READY to
+the coordinator.
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
