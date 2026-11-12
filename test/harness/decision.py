@@ -8,7 +8,9 @@ bytes of the fixed vector inputs, computed here from the formulas in the
 package README, independently of the Go code; the Go tests read the same
 values from `vectors.json`, and a portable test checks that they match.
 `assemble DIR` lays out source_inputs, admission, decision and the test glue
-under `extractor/` in a new Go module named like the native trees.
+under `extractor/` in a new Go module named like the native trees; the Go
+mutant table of the decision package runs only there, because the package
+imports admission at its native path.
 """
 
 import argparse
@@ -24,7 +26,7 @@ import admission  # noqa: E402
 ROOT = admission.ROOT
 FAMILIES = admission.FAMILIES
 FAMILY_DIR = admission.FAMILY_DIR
-PACKAGE_FILES = ("decision.go", "decision_test.go", "vectors.json")
+PACKAGE_FILES = ("decision.go", "decision.mutants.json", "decision_test.go", "vectors.json")
 GLUE_FILES = ("binding.go", "binding_test.go")
 
 
@@ -160,9 +162,8 @@ def check_identical(root=ROOT):
 def assemble(target, root=ROOT):
     """Write the test module into the new directory target and return its package directories."""
     target = Path(target)
-    if target.exists():
-        raise ValueError(f"target exists: {target}")
     check_identical(root)
+    # admission.assemble refuses an existing target before it writes.
     packages = admission.assemble(target, root)
     extra = {
         "extractor/decision": (root / "adapters" / "geth" / "decision", PACKAGE_FILES),

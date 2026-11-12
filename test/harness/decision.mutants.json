@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.decision_bridge identity check, Python digest and marker reference, and module assembly.",
+  "language": "python",
+  "root": "../..",
+  "copy": [
+    "test/harness/admission.py",
+    "test/harness/source_inputs.py",
+    "test/harness/decision.py",
+    "test/harness/test_decision.py",
+    "adapters/*/admission/*",
+    "adapters/*/source_inputs/*",
+    "adapters/*/decision/*",
+    "test/harness/fixtures/admission_core/*",
+    "test/harness/fixtures/decision_core/*"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/test_decision.py",
+    "-v"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "intent tag",
+      "file": "test/harness/decision.py",
+      "original": "tag(\"extractor-decision-intent-v1\")",
+      "replacement": "tag(\"extractor-decision-intent-v0\")"
+    },
+    {
+      "name": "decided tag",
+      "file": "test/harness/decision.py",
+      "original": "tag(\"extractor-decision-decided-v1\")",
+      "replacement": "tag(\"extractor-decision-decided-v0\")"
+    },
+    {
+      "name": "rejected tag",
+      "file": "test/harness/decision.py",
+      "original": "tag(\"extractor-decision-rejected-v1\")",
+      "replacement": "tag(\"extractor-decision-rejected-v0\")"
+    },
+    {
+      "name": "intent omits the store id",
+      "file": "test/harness/decision.py",
+      "original": "text(record[\"native_store_id\"]) + text(record[\"producer\"])",
+      "replacement": "text(record[\"producer\"])"
+    },
+    {
+      "name": "intent omits the member count",
+      "file": "test/harness/decision.py",
+      "original": "\n            + u64(len(record[\"members\"])))",
+      "replacement": ")"
+    },
+    {
+      "name": "intent omits the child root",
+      "file": "test/harness/decision.py",
+      "original": "\n                 + raw(member[\"child_root\"]))",
+      "replacement": ")"
+    },
+    {
+      "name": "intent events byte inverted",
+      "file": "test/harness/decision.py",
+      "original": "(b\"\\x01\" if record[\"events\"] else b\"\\x00\")",
+      "replacement": "(b\"\\x00\" if record[\"events\"] else b\"\\x01\")"
+    },
+    {
+      "name": "decided omits the delivery",
+      "file": "test/harness/decision.py",
+      "original": "raw(intent) + text(delivery)).hex()",
+      "replacement": "raw(intent)).hex()"
+    },
+    {
+      "name": "rejected omits the evidence",
+      "file": "test/harness/decision.py",
+      "original": "raw(intent) + raw(evidence)).hex()",
+      "replacement": "raw(intent)).hex()"
+    },
+    {
+      "name": "marker key without sequence",
+      "file": "test/harness/decision.py",
+      "original": "{sequence:016x}\"",
+      "replacement": "{0:016x}\""
+    },
+    {
+      "name": "marker value with spaces",
+      "file": "test/harness/decision.py",
+      "original": "separators=(\",\", \":\")",
+      "replacement": "separators=(\", \", \": \")"
+    },
+    {
+      "name": "marker value field order",
+      "file": "test/harness/decision.py",
+      "original": "\"members\",\n             \"evidence_digest\", \"events\", \"digest\")",
+      "replacement": "\"evidence_digest\",\n             \"members\", \"events\", \"digest\")"
+    },
+    {
+      "name": "finality marker with members",
+      "file": "test/harness/decision.py",
+      "original": "    finality = intent_record(1, \"FINALITY\", NEW_HEAD, NEW_HEAD, [], DECISION_EVIDENCE, False)",
+      "replacement": "    finality = intent_record(1, \"FINALITY\", NEW_HEAD, NEW_HEAD, [member], DECISION_EVIDENCE, False)"
+    },
+    {
+      "name": "member digest not from admission",
+      "file": "test/harness/decision.py",
+      "original": "\"exec_ready_digest\": base[\"exec_ready_digest\"], \"child_root\": CHILD_ROOT}",
+      "replacement": "\"exec_ready_digest\": base[\"exec_digest\"], \"child_root\": CHILD_ROOT}"
+    },
+    {
+      "name": "check skips the native directory rule",
+      "file": "test/harness/decision.py",
+      "original": "if path.is_file() and path.relative_to(base).parts[0] != FAMILY_DIR}",
+      "replacement": "if path.is_file()}"
+    },
+    {
+      "name": "check accepts differing names",
+      "file": "test/harness/decision.py",
+      "original": "            raise ValueError(f\"decision file names differ: {names}\")",
+      "replacement": "            pass"
+    },
+    {
+      "name": "check accepts differing bytes",
+      "file": "test/harness/decision.py",
+      "original": "        if len(set(values.values())) != 1:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "check accepts an empty package",
+      "file": "test/harness/decision.py",
+      "original": "        raise ValueError(\"the shared package has no files\")",
+      "replacement": "        pass"
+    },
+    {
+      "name": "check accepts a missing package",
+      "file": "test/harness/decision.py",
+      "original": "        raise ValueError(f\"missing shared package: {base.relative_to(root)}\")",
+      "replacement": "        return {}"
+    },
+    {
+      "name": "assemble skips the identity check",
+      "file": "test/harness/decision.py",
+      "original": "    check_identical(root)\n    # admission.assemble refuses an existing target before it writes.\n    packages = admission.assemble(target, root)",
+      "replacement": "    packages = admission.assemble(target, root)"
+    },
+    {
+      "name": "assemble omits the mutant table",
+      "file": "test/harness/decision.py",
+      "original": "PACKAGE_FILES = (\"decision.go\", \"decision.mutants.json\", \"decision_test.go\", \"vectors.json\")",
+      "replacement": "PACKAGE_FILES = (\"decision.go\", \"decision_test.go\", \"vectors.json\")"
+    },
+    {
+      "name": "cli assemble without target",
+      "file": "test/harness/decision.py",
+      "original": "            if not args.target:\n                raise ValueError(\"assemble needs a target directory\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "cli error exit code",
+      "file": "test/harness/decision.py",
+      "original": "        print(f\"error: {error}\", file=sys.stderr)\n        return 1",
+      "replacement": "        print(f\"error: {error}\", file=sys.stderr)\n        return 0"
+    }
+  ]
+}

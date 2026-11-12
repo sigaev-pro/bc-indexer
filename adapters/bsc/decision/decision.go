@@ -686,8 +686,10 @@ func validIntent(in Intent) error {
 //
 // Every member must be an open EXEC_READY observation with this EXEC_READY
 // digest, the authoritative observation of its block (the lowest open
-// EXEC_READY sequence of that block), and its child root must be durable.
-// Intend is refused while another intent is unresolved.
+// EXEC_READY sequence of that block), and its child root must be durable. A
+// member block with an open observation that is not EXEC_READY is
+// ErrPending: that observation must first reach EXEC_READY or an admission
+// exit. Intend is refused while another intent is unresolved.
 func (b *Bridge) Intend(t *admission.Token, in Intent) (IntentRecord, error) {
 	if err := b.enter(t); err != nil {
 		return IntentRecord{}, err
@@ -720,8 +722,14 @@ func (b *Bridge) Intend(t *admission.Token, in Intent) (IntentRecord, error) {
 		}
 		keys[obs.Key], blocks[obs.Candidate.Hash] = true, true
 		for _, other := range observations {
-			if other.State == admission.ExecReady && other.Candidate.Hash == obs.Candidate.Hash &&
-				other.Sequence < obs.Sequence {
+			if other.Candidate.Hash != obs.Candidate.Hash {
+				continue
+			}
+			if other.State != admission.ExecReady {
+				return IntentRecord{}, fmt.Errorf("%w: %s of block %s is %s", ErrPending, other.Key,
+					obs.Candidate.Hash, other.State)
+			}
+			if other.Sequence < obs.Sequence {
 				return IntentRecord{}, fmt.Errorf("%w: %s is the authoritative observation of block %s",
 					ErrDuplicate, other.Key, obs.Candidate.Hash)
 			}
@@ -777,7 +785,9 @@ func (b *Bridge) Intend(t *admission.Token, in Intent) (IntentRecord, error) {
 		return IntentRecord{}, b.fail(err)
 	}
 	b.next = seq + 1
-	b.open[seq] = &Decision{Sequence: seq, State: Intended, Intent: record}
+	stored := record
+	stored.Members = append([]Member{}, record.Members...)
+	b.open[seq] = &Decision{Sequence: seq, State: Intended, Intent: stored}
 	return record, nil
 }
 

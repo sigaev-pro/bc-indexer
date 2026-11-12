@@ -83,6 +83,10 @@ type memStore struct {
 	hasErr    error
 	getErrFor string
 	writes    []string
+	// deletes counts Delete calls; maxPending is the largest number of
+	// unsynced writes seen.
+	deletes    int
+	maxPending int
 }
 
 func newStore() *memStore { return &memStore{durable: map[string][]byte{}} }
@@ -133,6 +137,7 @@ func (s *memStore) Put(key, value []byte) error {
 	}
 	s.pending = append(s.pending, write{key: string(key), value: bytes.Clone(value)})
 	s.writes = append(s.writes, string(key))
+	s.maxPending = max(s.maxPending, len(s.pending))
 	return nil
 }
 
@@ -144,6 +149,8 @@ func (s *memStore) Delete(key []byte) error {
 		return err
 	}
 	s.pending = append(s.pending, write{key: string(key), deleted: true})
+	s.deletes++
+	s.maxPending = max(s.maxPending, len(s.pending))
 	return nil
 }
 
@@ -1601,9 +1608,11 @@ func TestCleanupDeletesClosedRecords(t *testing.T) {
 	if string(f.db.durable[string(f.a.key("purged"))]) != `{"sequence":3}` {
 		t.Fatalf("purged mark %s", f.db.durable[string(f.a.key("purged"))])
 	}
+	// A reopen deletes nothing again below the purged mark.
+	deletes := f.db.deletes
 	f.reopen(f.db)
-	if got := f.states(); !slices.Equal(got, []State{ExecReady}) {
-		t.Fatalf("after reopen %v", got)
+	if got := f.states(); !slices.Equal(got, []State{ExecReady}) || f.db.deletes != deletes {
+		t.Fatalf("after reopen %v, %d deletions", got, f.db.deletes-deletes)
 	}
 }
 
@@ -1642,12 +1651,16 @@ func TestCleanupFinishesAStoreWithoutIt(t *testing.T) {
 			t.Fatalf("crash %d: %v", crash, err)
 		}
 		db = db.powerLoss(0)
+		db.maxPending = 0
 		a, err := OpenWithCleanup(f.token, db, f.producer(), newPins(), newInputs(), cleanup)
 		if err != nil {
 			t.Fatalf("crash %d: reopen: %v", crash, err)
 		}
 		if got := recordsLeft(db); got != 0 {
 			t.Fatalf("crash %d: %d records left", crash, got)
+		}
+		if db.maxPending > len(recordKinds)*pruneBatch {
+			t.Fatalf("crash %d: a prune batch held %d unsynced writes", crash, db.maxPending)
 		}
 		if string(db.durable[string(a.key("purged"))]) != fmt.Sprintf(`{"sequence":%d}`, total) {
 			t.Fatalf("crash %d: purged mark %s", crash, db.durable[string(a.key("purged"))])
@@ -1746,6 +1759,13 @@ func TestOpenRejectsCorruptDecidedRecords(t *testing.T) {
 		"DECIDED record format": func(f *fixture, key string) {
 			f.db.durable[string(f.a.recordKey(0, "decided"))] = []byte(`{"extra":1}`)
 		},
+		"DECIDED EXEC_READY digest": func(f *fixture, key string) {
+			var record DecidedRecord
+			_ = json.Unmarshal(f.db.durable[string(f.a.recordKey(0, "decided"))], &record)
+			record.ExecReadyDigest = f.v.AdmittedDigest
+			data, _ := json.Marshal(record)
+			f.db.durable[string(f.a.recordKey(0, "decided"))] = data
+		},
 	}
 	for name, damage := range cases {
 		f := newFixture(t)
@@ -1757,8 +1777,34 @@ func TestOpenRejectsCorruptDecidedRecords(t *testing.T) {
 		// Put the low-water mark back so Open reads the records again.
 		f.db.durable[string(f.a.key("lowwater"))] = []byte(`{"sequence":0}`)
 		damage(f, key)
-		if _, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs); !errors.Is(err, ErrCorrupt) {
+		_, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs)
+		if !errors.Is(err, ErrCorrupt) {
 			t.Fatalf("%s: %v", name, err)
+		}
+		if name == "DECIDED without EXEC_READY" && !strings.Contains(err.Error(), name) {
+			t.Fatalf("refusal does not name the cause: %v", err)
+		}
+	}
+	// A DECIDED record next to an ABANDONED or NATIVE_REJECTED close.
+	for _, exit := range []string{"abandoned", "rejected"} {
+		f := newFixture(t)
+		f.live()
+		key := f.begin().Key
+		if exit == "abandoned" {
+			if err := f.a.Abandon(f.token, key); err != nil {
+				t.Fatalf("abandon: %v", err)
+			}
+		} else {
+			f.prepare(key)
+			f.admit(key)
+			if _, err := f.a.Reject(f.token, key, f.v.EvidenceDigest); err != nil {
+				t.Fatalf("reject: %v", err)
+			}
+		}
+		f.db.durable[string(f.a.key("lowwater"))] = []byte(`{"sequence":0}`)
+		f.db.durable[string(f.a.recordKey(0, "decided"))] = []byte("{}")
+		if _, err := Open(f.token, f.db, f.producer(), f.pins, f.inputs); !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("DECIDED with %s: %v", exit, err)
 		}
 	}
 	f := newFixture(t)

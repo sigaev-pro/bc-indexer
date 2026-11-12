@@ -87,6 +87,8 @@ type memStore struct {
 	hasErrFor string
 	getErrFor string
 	writes    int
+	// maxPending is the largest number of unsynced writes seen.
+	maxPending int
 }
 
 func newStore() *memStore { return &memStore{durable: map[string][]byte{}} }
@@ -137,6 +139,7 @@ func (s *memStore) Put(key, value []byte) error {
 	}
 	s.pending = append(s.pending, write{key: string(key), value: bytes.Clone(value)})
 	s.writes++
+	s.maxPending = max(s.maxPending, len(s.pending))
 	return nil
 }
 
@@ -149,6 +152,7 @@ func (s *memStore) Delete(key []byte) error {
 	}
 	s.pending = append(s.pending, write{key: string(key), deleted: true})
 	s.writes++
+	s.maxPending = max(s.maxPending, len(s.pending))
 	return nil
 }
 
@@ -490,6 +494,7 @@ func TestDigestVectors(t *testing.T) {
 		func(r *IntentRecord) { r.Members[0].ExecReadyDigest = "x" },
 		func(r *IntentRecord) { r.Members[0].ChildRoot = "x" },
 		func(r *IntentRecord) { r.EvidenceDigest = "x" },
+		func(r *IntentRecord) { r.EvidenceDigest = "0" + r.EvidenceDigest },
 	} {
 		record := v.ImportIntent
 		record.Members = slices.Clone(record.Members)
@@ -555,8 +560,9 @@ func TestImportAndFinality(t *testing.T) {
 	if !slices.Equal(f.pins.released, []string{ready.Observation}) || len(f.openObservations()) != 0 {
 		t.Fatalf("pin or observation not closed: %v", f.pins.released)
 	}
-	if again := f.resolve(0); again != decided {
-		t.Fatalf("repeated resolve %+v", again)
+	writes = f.db.writes
+	if again := f.resolve(0); again != decided || f.db.writes != writes {
+		t.Fatalf("repeated resolve %+v wrote %d", again, f.db.writes-writes)
 	}
 	got := f.obligations()
 	if len(got) != 1 || got[0].Decided != decided || !reflect.DeepEqual(got[0].Intent, intent) {
@@ -615,9 +621,9 @@ func TestIntendRefusals(t *testing.T) {
 		want   error
 	}{
 		"kind":                {func(in *Intent) { in.Kind = "OTHER" }, ErrInvalid},
-		"old head":            {func(in *Intent) { in.OldHead.Hash = "AB" }, ErrInvalid},
-		"new head":            {func(in *Intent) { in.NewHead.Hash = "" }, ErrInvalid},
-		"evidence":            {func(in *Intent) { in.EvidenceDigest = "zz" }, ErrInvalid},
+		"old head hash":       {func(in *Intent) { in.OldHead.Hash = "AB" }, ErrInvalid},
+		"new head hash":       {func(in *Intent) { in.NewHead.Hash = "" }, ErrInvalid},
+		"evidence digest":     {func(in *Intent) { in.EvidenceDigest = "zz" }, ErrInvalid},
 		"import no members":   {func(in *Intent) { in.Members = nil }, ErrInvalid},
 		"side with events":    {func(in *Intent) { in.Kind, in.OldHead = Side, in.NewHead }, ErrInvalid},
 		"side moves the head": {func(in *Intent) { in.Kind, in.Events = Side, false }, ErrInvalid},
@@ -637,8 +643,14 @@ func TestIntendRefusals(t *testing.T) {
 		in.Members = slices.Clone(good.Members)
 		tc.change(&in)
 		writes := f.db.writes
-		if _, err := f.b.Intend(f.token, in); !errors.Is(err, tc.want) {
+		_, err := f.b.Intend(f.token, in)
+		if !errors.Is(err, tc.want) {
 			t.Fatalf("%s: %v, want %v", name, err, tc.want)
+		}
+		// The refusal names its cause.
+		if strings.HasSuffix(name, "hash") && !strings.Contains(err.Error(), "head hash") ||
+			name == "evidence digest" && !strings.Contains(err.Error(), "evidence digest") {
+			t.Fatalf("%s: refusal does not name the cause: %v", name, err)
 		}
 		if f.db.writes != writes {
 			t.Fatalf("%s: a refused intent wrote", name)
@@ -689,6 +701,9 @@ func TestUnadmittedObservationHasNoDecision(t *testing.T) {
 	list := f.openObservations()
 	if len(list) != 1 || list[0].State != admission.Admitted {
 		t.Fatalf("after power loss %v", list)
+	}
+	if undecided, err := f.b.Undecided(f.token); err != nil || len(undecided) != 0 {
+		t.Fatalf("an ADMITTED observation is listed as undecided: %v %v", undecided, err)
 	}
 	in := f.importIntent(admission.ExecReadyRecord{Observation: obs.Key, Digest: f.v.ExecReadyDigest})
 	if _, err := f.b.Intend(f.token, in); !errors.Is(err, ErrBinding) {
@@ -789,23 +804,37 @@ func TestNativeRejectionIsExplicit(t *testing.T) {
 	if list := f.decisions(); len(list) != 1 || list[0].State != Intended {
 		t.Fatalf("after crash %+v", list)
 	}
-	if _, err := f.b.RejectIntent(f.token, 0, "x"); !errors.Is(err, ErrInvalid) {
+	if _, err := f.b.RejectIntent(f.token, 0, "x"); !errors.Is(err, ErrInvalid) ||
+		!strings.Contains(err.Error(), "evidence digest") {
 		t.Fatalf("malformed evidence: %v", err)
 	}
 	if _, err := f.b.RejectIntent(f.token, 5, f.v.RejectionEvidence); !errors.Is(err, ErrUnknown) {
 		t.Fatalf("unknown decision: %v", err)
 	}
-	for crash := 1; crash <= 2; crash++ {
-		probe := f.db.powerLoss(0)
-		g := *f
-		g.reopen(probe)
-		g.db.crashAt = g.db.ops + crash
-		if _, err := g.b.RejectIntent(g.token, 0, f.v.RejectionEvidence); !errors.Is(err, errCrash) {
-			t.Fatalf("crash %d: %v", crash, err)
-		}
-		g.reopen(g.db.powerLoss(0))
-		if list := g.decisions(); len(list) != 1 || list[0].State != Intended {
-			t.Fatalf("crash %d: %+v", crash, list)
+	// A power loss inside RejectIntent: the observation is closed only if
+	// the rejection is durable, and a repeat completes it.
+	for crash := 1; crash <= 6; crash++ {
+		for _, keep := range []uint{0, 0b10, 0b110, ^uint(0)} {
+			g := newFixture(t)
+			g.live()
+			g.intend(g.importIntent(g.execReady(g.v.Candidate)))
+			g.db.crashAt = g.db.ops + crash
+			if _, err := g.b.RejectIntent(g.token, 0, g.v.RejectionEvidence); !errors.Is(err, errCrash) {
+				t.Fatalf("crash %d: %v", crash, err)
+			}
+			g.reopen(g.db.powerLoss(keep))
+			list := g.decisions()
+			if len(g.openObservations()) == 0 && len(list) != 0 {
+				t.Fatalf("crash %d keep %b: observation closed but the intent is %+v", crash, keep, list)
+			}
+			if len(list) == 1 {
+				if _, err := g.b.RejectIntent(g.token, 0, g.v.RejectionEvidence); err != nil {
+					t.Fatalf("crash %d keep %b: repeated reject: %v", crash, keep, err)
+				}
+			}
+			if len(g.openObservations()) != 0 || len(g.decisions()) != 0 || len(g.obligations()) != 0 {
+				t.Fatalf("crash %d keep %b: rejection not completed", crash, keep)
+			}
 		}
 	}
 	rejected, err := f.b.RejectIntent(f.token, 0, f.v.RejectionEvidence)
@@ -1026,6 +1055,30 @@ func TestOpenRejectsDamage(t *testing.T) {
 			put(f, f.b.key("counter"), `{"next":1}`)
 			put(f, f.b.recordKey(0, "intent"), `{"x":1}`)
 		}, ErrCorrupt},
+		{"intent with an extra field", func(f *fixture) {
+			f.intend(f.importIntent(f.execReady(f.v.Candidate)))
+			value := strings.Replace(string(f.db.durable[string(f.b.recordKey(0, "intent"))]), "{", `{"extra":1,`, 1)
+			put(f, f.b.recordKey(0, "intent"), value)
+		}, ErrCorrupt},
+		{"intent with trailing data", func(f *fixture) {
+			f.intend(f.importIntent(f.execReady(f.v.Candidate)))
+			put(f, f.b.recordKey(0, "intent"), string(f.db.durable[string(f.b.recordKey(0, "intent"))])+" {}")
+		}, ErrCorrupt},
+		{"decided digest field", func(f *fixture) {
+			decided(f)
+			put(f, f.b.recordKey(0, "decided"), strings.Replace(
+				string(f.db.durable[string(f.b.recordKey(0, "decided"))]), f.v.ImportDecidedDigest,
+				f.v.FinalityDecidedDigest, 1))
+		}, ErrCorrupt},
+		{"intent of another producer", func(f *fixture) {
+			f.intend(f.importIntent(f.execReady(f.v.Candidate)))
+			var record IntentRecord
+			_ = strictDecode(f.db.durable[string(f.b.recordKey(0, "intent"))], &record)
+			record.Producer = "other.run"
+			record.Digest, _ = IntentDigest(record)
+			value, _ := MarkerValue(record)
+			put(f, f.b.recordKey(0, "intent"), string(value))
+		}, ErrCorrupt},
 		{"intent digest", func(f *fixture) {
 			f.intend(f.importIntent(f.execReady(f.v.Candidate)))
 			value := strings.Replace(string(f.db.durable[string(f.b.recordKey(0, "intent"))]), `"events":true`,
@@ -1102,6 +1155,12 @@ func TestOpenRejectsDamage(t *testing.T) {
 		if err := f.tryReopen(f.db); !errors.Is(err, tc.want) {
 			t.Fatalf("%s: %v, want %v", tc.name, err, tc.want)
 		}
+	}
+	// A missing intent is named as such.
+	f0 := newFixture(t)
+	put(f0, f0.b.key("counter"), `{"next":1}`)
+	if err := f0.tryReopen(f0.db); err == nil || !strings.Contains(err.Error(), "missing intent 0") {
+		t.Fatalf("missing intent: %v", err)
 	}
 	// Mirror and store read errors pass through Open.
 	f := newFixture(t)
@@ -1294,10 +1353,11 @@ func TestDecisionsReturnCopies(t *testing.T) {
 	list[0].Decided.Digest = "changed"
 	obligations := f.obligations()
 	obligations[0].Intent.Members[0].Observation = "changed"
+	intent.Members[0].Observation = "changed"
 	again := f.decisions()
-	if again[0].Intent.Members[0].Observation != intent.Members[0].Observation ||
+	if again[0].Intent.Members[0].Observation != f.v.ImportIntent.Members[0].Observation ||
 		again[0].Decided.Digest != f.v.ImportDecidedDigest {
-		t.Fatalf("Decisions or Obligations returned shared state")
+		t.Fatalf("Intend, Decisions or Obligations returned shared state")
 	}
 }
 
@@ -1313,6 +1373,12 @@ func TestPruneInBatches(t *testing.T) {
 	}
 	// One Cleanup removes every marker and prunes in two batches.
 	base := f.db.powerLoss(0)
+	clean := *f
+	clean.reopen(base.powerLoss(0))
+	clean.cleanup()
+	if clean.db.maxPending > max(total, 3*pruneBatch+1) {
+		t.Fatalf("a prune batch held %d unsynced writes", clean.db.maxPending)
+	}
 	recordsLeft := func(db *memStore) int {
 		count := 0
 		for key := range db.durable {
@@ -1337,6 +1403,94 @@ func TestPruneInBatches(t *testing.T) {
 		}
 		if got := string(g.db.durable[string(g.b.key("purged"))]); got != fmt.Sprintf(`{"sequence":%d}`, total) {
 			t.Fatalf("crash %d: purged mark %s", crash, got)
+		}
+	}
+}
+
+// TestCleanupFinishedAfterItsSync: once the marker deletion is synced, a
+// power loss before the low-water mark moves leaves a done decision, which
+// Open does not list again.
+func TestCleanupFinishedAfterItsSync(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	f.native(f.intend(f.importIntent(f.execReady(f.v.Candidate))))
+	f.resolve(0)
+	f.mirror.apply(f.obligations())
+	f.db.crashAt = f.db.ops + 3
+	if err := f.b.Cleanup(f.token); !errors.Is(err, errCrash) {
+		t.Fatalf("crash after the marker sync: %v", err)
+	}
+	f.reopen(f.db.powerLoss(0))
+	if len(f.decisions()) != 0 || f.hasMarker(0) ||
+		string(f.db.durable[string(f.b.key("lowwater"))]) != `{"sequence":1}` {
+		t.Fatalf("done decision listed again: %+v", f.decisions())
+	}
+}
+
+// TestUnfinishedObservationOfTheBlock: a member block with an open
+// observation that is not EXEC_READY gets no intent; one that appears
+// after the intent stops Resolve with a source invariant error.
+func TestUnfinishedObservationOfTheBlock(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	ready := f.execReady(f.v.Candidate)
+	if _, err := f.adm.Begin(f.token, f.v.Candidate); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := f.b.Intend(f.token, f.importIntent(ready)); !errors.Is(err, ErrPending) {
+		t.Fatalf("intent with an unfinished observation of the block: %v", err)
+	}
+
+	g := newFixture(t)
+	g.live()
+	ready = g.execReady(g.v.Candidate)
+	intent := g.intend(g.importIntent(ready))
+	if _, err := g.adm.Begin(g.token, g.v.Candidate); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	g.native(intent)
+	if _, err := g.b.Resolve(g.token, 0); !errors.Is(err, ErrInvariant) {
+		t.Fatalf("resolve with an unfinished observation of the block: %v", err)
+	}
+}
+
+// TestPruneKeepsItsOrder: a power loss in the prune keeps any subset of its
+// unsynced writes; the purged mark never survives without the deletions it
+// covers.
+func TestPruneKeepsItsOrder(t *testing.T) {
+	setup := func() *fixture {
+		f := newFixture(t)
+		f.live()
+		for seq := range 2 {
+			f.native(f.intend(f.finalityIntent()))
+			f.resolve(uint64(seq))
+		}
+		return f
+	}
+	probe := setup()
+	start := probe.db.ops
+	probe.cleanup()
+	total := probe.db.ops - start
+	for crash := 1; crash <= total; crash++ {
+		for keep := uint(0); keep < 1<<7; keep += 0b11 {
+			f := setup()
+			f.db.crashAt = f.db.ops + crash
+			if err := f.b.Cleanup(f.token); !errors.Is(err, errCrash) {
+				t.Fatalf("crash %d: %v", crash, err)
+			}
+			db := f.db.powerLoss(keep)
+			var purged purgedRecord
+			if _, err := readRecord(db, f.b.key("purged"), &purged); err != nil {
+				t.Fatalf("crash %d keep %b: %v", crash, keep, err)
+			}
+			for seq := range purged.Sequence {
+				for _, kind := range recordKinds {
+					if _, ok := db.durable[string(f.b.recordKey(seq, kind))]; ok {
+						t.Fatalf("crash %d keep %b: purged mark %d with record %d/%s", crash, keep,
+							purged.Sequence, seq, kind)
+					}
+				}
+			}
 		}
 	}
 }

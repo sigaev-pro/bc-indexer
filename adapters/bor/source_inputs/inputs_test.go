@@ -1109,11 +1109,16 @@ func TestPurgePowerLossAtEveryPoint(t *testing.T) {
 	}
 	total := probe.ops - purgeFixture(t).ops
 	for crash := 1; crash <= total; crash++ {
-		for _, keep := range []uint{0, 1, 0b0101, ^uint(0)} {
+		// firstAndLast keeps the first and the last pending write.
+		const firstAndLast = uint(1) << 40
+		for _, keep := range []uint{0, 1, 0b10, 0b110, 0b0101, ^uint(0), firstAndLast} {
 			db := purgeFixture(t)
 			db.crashAt = db.ops + crash
 			if err := Purge(db, observation); !errors.Is(err, errCrash) {
 				t.Fatalf("crash %d: %v", crash, err)
+			}
+			if keep == firstAndLast && len(db.pending) > 0 {
+				keep = 1 | 1<<(len(db.pending)-1)
 			}
 			db = db.powerLoss(keep)
 			if left := countPrefix(db, keyPrefix+observation+"/"); left == 0 {

@@ -201,8 +201,8 @@
     {
       "name": "open keeps abandoned observations",
       "file": "admission.go",
-      "original": "\t\tif obs.State == Abandoned || obs.State == Rejected {",
-      "replacement": "\t\tif obs.State == Rejected {"
+      "original": "\t\tif obs.State == Abandoned || obs.State == Rejected || obs.State == Decided {",
+      "replacement": "\t\tif obs.State == Rejected || obs.State == Decided {"
     },
     {
       "name": "open starts live",
@@ -232,20 +232,20 @@
     {
       "name": "load accepts abandoned with admitted",
       "file": "admission.go",
-      "original": "if hasAdmitted || hasReady || hasRejected || abandoned !=",
-      "replacement": "if hasReady || hasRejected || abandoned !="
+      "original": "if hasAdmitted || hasReady || hasRejected || hasDecided ||",
+      "replacement": "if hasReady || hasRejected || hasDecided ||"
     },
     {
       "name": "load accepts abandoned with exec ready",
       "file": "admission.go",
-      "original": "if hasAdmitted || hasReady || hasRejected || abandoned !=",
-      "replacement": "if hasAdmitted || hasRejected || abandoned !="
+      "original": "if hasAdmitted || hasReady || hasRejected || hasDecided ||",
+      "replacement": "if hasAdmitted || hasRejected || hasDecided ||"
     },
     {
       "name": "load ignores the abandoned content",
       "file": "admission.go",
-      "original": "\t\tif hasAdmitted || hasReady || hasRejected || abandoned != (abandonedRecord{Observation: key, Sequence: seq}) {",
-      "replacement": "\t\tif hasAdmitted || hasReady || hasRejected {"
+      "original": "\t\t\tabandoned != (abandonedRecord{Observation: key, Sequence: seq}) {",
+      "replacement": "\t\t\tfalse {"
     },
     {
       "name": "load ignores the admitted digest",
@@ -455,8 +455,8 @@
     {
       "name": "terminate keeps the pin",
       "file": "admission.go",
-      "original": "\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}",
-      "replacement": "\t_ = a.pins"
+      "original": "\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn err\n\t}\n\tif a.cleanup == nil {",
+      "replacement": "\t_ = a.pins\n\tif a.cleanup == nil {"
     },
     {
       "name": "abandon keeps the observation open",
@@ -611,14 +611,14 @@
     {
       "name": "load accepts abandoned with rejected",
       "file": "admission.go",
-      "original": "if hasAdmitted || hasReady || hasRejected || abandoned !=",
-      "replacement": "if hasAdmitted || hasReady || abandoned !="
+      "original": "if hasAdmitted || hasReady || hasRejected || hasDecided ||",
+      "replacement": "if hasAdmitted || hasReady || hasDecided ||"
     },
     {
       "name": "load accepts rejected with exec ready",
       "file": "admission.go",
-      "original": "if !hasAdmitted || hasReady || err != nil || rejected.Observation != key",
-      "replacement": "if !hasAdmitted || err != nil || rejected.Observation != key"
+      "original": "if !hasAdmitted || hasReady || hasDecided || err != nil",
+      "replacement": "if !hasAdmitted || hasDecided || err != nil"
     },
     {
       "name": "load ignores the rejected digest",
@@ -653,14 +653,14 @@
     {
       "name": "open keeps rejected observations",
       "file": "admission.go",
-      "original": "\t\tif obs.State == Abandoned || obs.State == Rejected {",
-      "replacement": "\t\tif obs.State == Abandoned {"
+      "original": "\t\tif obs.State == Abandoned || obs.State == Rejected || obs.State == Decided {",
+      "replacement": "\t\tif obs.State == Abandoned || obs.State == Decided {"
     },
     {
       "name": "begin ignores a rejected record beyond the counter",
       "file": "admission.go",
-      "original": "\"admitted\", \"exec-ready\", \"abandoned\", \"rejected\"}",
-      "replacement": "\"admitted\", \"exec-ready\", \"abandoned\"}"
+      "original": "\"abandoned\", \"rejected\", \"decided\"}",
+      "replacement": "\"abandoned\", \"decided\"}"
     },
     {
       "name": "begin ignores a moved counter",
@@ -695,32 +695,189 @@
     {
       "name": "open skips the release of closed observations",
       "file": "admission.go",
-      "original": "\t\tif err := pins.Release(obs.Key); err != nil {\n\t\t\treturn nil, err\n\t\t}",
-      "replacement": "\t\t_ = obs"
+      "original": "\tfor _, obs := range closed {\n\t\tif err := a.release(obs); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}",
+      "replacement": "\tfor _, obs := range closed {\n\t\t_ = obs\n\t}"
     },
     {
       "name": "open ignores a release error",
       "file": "admission.go",
-      "original": "\t\tif err := pins.Release(obs.Key); err != nil {\n\t\t\treturn nil, err\n\t\t}",
-      "replacement": "\t\t_ = pins.Release(obs.Key)"
+      "original": "\tfor _, obs := range closed {\n\t\tif err := a.release(obs); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}",
+      "replacement": "\tfor _, obs := range closed {\n\t\t_ = a.release(obs)\n\t}"
     },
     {
       "name": "open does not advance the low-water mark",
       "file": "admission.go",
-      "original": "\tif err := a.advance(); err != nil {\n\t\treturn nil, err\n\t}\n\treturn a, nil",
-      "replacement": "\treturn a, nil"
+      "original": "\tif err := a.advance(); err != nil {\n\t\treturn nil, err\n\t}\n\tif err := a.prune(); err != nil {\n\t\treturn nil, err\n\t}\n\treturn a, nil",
+      "replacement": "\tif err := a.prune(); err != nil {\n\t\treturn nil, err\n\t}\n\treturn a, nil"
     },
     {
       "name": "terminate releases before the record",
       "file": "admission.go",
-      "original": "\tif err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tdelete(a.open, obs.Sequence)\n\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}",
-      "replacement": "\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tdelete(a.open, obs.Sequence)"
+      "original": "\tif err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tdelete(a.open, obs.Sequence)\n\tif err := a.release(obs); err != nil {\n\t\treturn a.fail(err)\n\t}",
+      "replacement": "\tif err := a.release(obs); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := putRecord(a.db, a.recordKey(obs.Sequence, kind), record); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tif err := a.db.SyncKeyValue(); err != nil {\n\t\treturn a.fail(err)\n\t}\n\tdelete(a.open, obs.Sequence)"
     },
     {
       "name": "terminate ignores a release error",
       "file": "admission.go",
-      "original": "\tif err := a.pins.Release(obs.Key); err != nil {\n\t\treturn a.fail(err)\n\t}\n\treturn a.advance()",
-      "replacement": "\t_ = a.pins.Release(obs.Key)\n\treturn a.advance()"
+      "original": "\tdelete(a.open, obs.Sequence)\n\tif err := a.release(obs); err != nil {\n\t\treturn a.fail(err)\n\t}",
+      "replacement": "\tdelete(a.open, obs.Sequence)\n\t_ = a.release(obs)"
+    },
+    {
+      "name": "decided tag",
+      "file": "admission.go",
+      "original": "tagDecided   = \"extractor-admission-decided-v1\"",
+      "replacement": "tagDecided   = \"extractor-admission-decided-v0\""
+    },
+    {
+      "name": "decided digest omits the decision digest",
+      "file": "admission.go",
+      "original": "return digestOf(tagged(tagDecided), raw[0], raw[1]), nil",
+      "replacement": "return digestOf(tagged(tagDecided), raw[0]), nil"
+    },
+    {
+      "name": "decided kinds omit DECIDED",
+      "file": "admission.go",
+      "original": "\"abandoned\", \"rejected\", \"decided\"}",
+      "replacement": "\"abandoned\", \"rejected\"}"
+    },
+    {
+      "name": "open with cleanup accepts a nil cleanup",
+      "file": "admission.go",
+      "original": "if db == nil || cleanup == nil {",
+      "replacement": "if db == nil {"
+    },
+    {
+      "name": "open with cleanup deletes nothing",
+      "file": "admission.go",
+      "original": "return open(t, db, db, p, pins, inputs, cleanup)",
+      "replacement": "return open(t, db, nil, p, pins, inputs, cleanup)"
+    },
+    {
+      "name": "open accepts a purged mark above the low-water mark",
+      "file": "admission.go",
+      "original": "\tif purged.Sequence > low.Sequence {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "open ignores the purged mark",
+      "file": "admission.go",
+      "original": "a.next, a.lowwater, a.purged = counter.Next, low.Sequence, purged.Sequence",
+      "replacement": "a.next, a.lowwater = counter.Next, low.Sequence"
+    },
+    {
+      "name": "open keeps decided observations open",
+      "file": "admission.go",
+      "original": "if obs.State == Abandoned || obs.State == Rejected || obs.State == Decided {",
+      "replacement": "if obs.State == Abandoned || obs.State == Rejected {"
+    },
+    {
+      "name": "open does not prune",
+      "file": "admission.go",
+      "original": "\tif err := a.prune(); err != nil {\n\t\treturn nil, err\n\t}\n\treturn a, nil",
+      "replacement": "\treturn a, nil"
+    },
+    {
+      "name": "abandoned accepts a DECIDED record",
+      "file": "admission.go",
+      "original": "if hasAdmitted || hasReady || hasRejected || hasDecided ||",
+      "replacement": "if hasAdmitted || hasReady || hasRejected ||"
+    },
+    {
+      "name": "rejected accepts a DECIDED record",
+      "file": "admission.go",
+      "original": "if !hasAdmitted || hasReady || hasDecided || err != nil",
+      "replacement": "if !hasAdmitted || hasReady || err != nil"
+    },
+    {
+      "name": "decided accepted without EXEC_READY",
+      "file": "admission.go",
+      "original": "\t\tif !hasReady {\n\t\t\treturn nil, fmt.Errorf(\"%w: DECIDED without EXEC_READY for %s\", ErrCorrupt, key)\n\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "decided accepts a wrong digest",
+      "file": "admission.go",
+      "original": "decided.ExecReadyDigest != ready.Digest || decided.Digest != want {",
+      "replacement": "decided.ExecReadyDigest != ready.Digest || (decided.Digest != want && false) {"
+    },
+    {
+      "name": "decided accepts another EXEC_READY digest",
+      "file": "admission.go",
+      "original": "decided.ExecReadyDigest != ready.Digest || decided.Digest != want {",
+      "replacement": "decided.Digest != want {"
+    },
+    {
+      "name": "decided record is not terminal",
+      "file": "admission.go",
+      "original": "\t\tobs.State = Decided\n",
+      "replacement": ""
+    },
+    {
+      "name": "decide accepts a malformed decision digest",
+      "file": "admission.go",
+      "original": "\tif !digestPattern.MatchString(decisionDigest) {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "decide accepts an ADMITTED observation",
+      "file": "admission.go",
+      "original": "\tif obs.State != ExecReady {\n\t\treturn DecidedRecord{}, fmt.Errorf(\"%w: Decide of %s in %s\", ErrState, key, obs.State)\n\t}\n",
+      "replacement": "\tif obs.ExecReady == nil {\n\t\treturn DecidedRecord{}, fmt.Errorf(\"%w: Decide of %s in %s\", ErrState, key, obs.State)\n\t}\n",
+      "equivalent": "Admission lists an observation with an EXEC_READY record exactly when its state is EXEC_READY, so the ExecReady == nil test of the mutant refuses the same observations."
+    },
+    {
+      "name": "terminate does not prune",
+      "file": "admission.go",
+      "original": "\tif err := a.advance(); err != nil {\n\t\treturn err\n\t}\n\treturn a.prune()\n}",
+      "replacement": "\treturn a.advance()\n}"
+    },
+    {
+      "name": "release skips the purge",
+      "file": "admission.go",
+      "original": "\tif a.cleanup == nil {\n\t\treturn nil\n\t}\n",
+      "replacement": "\tif a.cleanup != nil {\n\t\treturn nil\n\t}\n"
+    },
+    {
+      "name": "prune deletes no records",
+      "file": "admission.go",
+      "original": "\t\t\t\tif err := a.deleter.Delete(a.recordKey(seq, kind)); err != nil {\n\t\t\t\t\treturn a.fail(err)\n\t\t\t\t}\n",
+      "replacement": "\t\t\t\t_ = kind\n"
+    },
+    {
+      "name": "prune marks before the deletions are synced",
+      "file": "admission.go",
+      "original": "\t\tif err := a.db.SyncKeyValue(); err != nil {\n\t\t\treturn a.fail(err)\n\t\t}\n\t\tif err := putRecord(a.db, a.key(\"purged\")",
+      "replacement": "\t\tif err := putRecord(a.db, a.key(\"purged\")"
+    },
+    {
+      "name": "prune does not sync the purged mark",
+      "file": "admission.go",
+      "original": "\t\tif err := putRecord(a.db, a.key(\"purged\"), purgedRecord{Sequence: end}); err != nil {\n\t\t\treturn a.fail(err)\n\t\t}\n\t\tif err := a.db.SyncKeyValue(); err != nil {\n\t\t\treturn a.fail(err)\n\t\t}\n",
+      "replacement": "\t\tif err := putRecord(a.db, a.key(\"purged\"), purgedRecord{Sequence: end}); err != nil {\n\t\t\treturn a.fail(err)\n\t\t}\n"
+    },
+    {
+      "name": "prune ignores the batch bound",
+      "file": "admission.go",
+      "original": "end := min(a.lowwater, a.purged+pruneBatch)",
+      "replacement": "end := a.lowwater"
+    },
+    {
+      "name": "prune passes the low-water mark",
+      "file": "admission.go",
+      "original": "end := min(a.lowwater, a.purged+pruneBatch)",
+      "replacement": "end := a.purged + pruneBatch"
+    },
+    {
+      "name": "check skips the guard",
+      "file": "admission.go",
+      "original": "func (a *Admission) Check(t *Token) error { return a.enter(t) }",
+      "replacement": "func (a *Admission) Check(t *Token) error { return nil }"
+    },
+    {
+      "name": "producer is not recorded",
+      "file": "admission.go",
+      "original": "a := &Admission{db: db, deleter: deleter, cleanup: cleanup, guard: t.guard, producer: p, owner: owner,",
+      "replacement": "a := &Admission{db: db, deleter: deleter, cleanup: cleanup, guard: t.guard, owner: owner,"
     }
   ]
 }

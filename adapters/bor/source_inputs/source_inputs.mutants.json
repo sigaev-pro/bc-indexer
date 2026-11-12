@@ -422,6 +422,72 @@
       "file": "inputs.go",
       "original": "\treturn *l.closed, true\n}",
       "replacement": "\treturn Consumed{}, true\n}"
+    },
+    {
+      "name": "purge accepts an invalid id",
+      "file": "inputs.go",
+      "original": "func Purge(db Deleter, id string) error {\n\tif err := validID(id); err != nil {\n\t\treturn err\n\t}\n",
+      "replacement": "func Purge(db Deleter, id string) error {\n"
+    },
+    {
+      "name": "purge ignores a saved plan",
+      "file": "inputs.go",
+      "original": "\tok, err := readRecord(db, purgeKey(id), &plan)\n",
+      "replacement": "\t_, err := readRecord(db, purgeKey(id), &plan)\n\tok := false\n"
+    },
+    {
+      "name": "purge skips the entry at the frontier",
+      "file": "inputs.go",
+      "original": "for seq := uint64(0); seq <= durable.Count; seq++ {",
+      "replacement": "for seq := uint64(0); seq < durable.Count; seq++ {"
+    },
+    {
+      "name": "purge accepts a missing entry below the frontier",
+      "file": "inputs.go",
+      "original": "\t\t\t\tif seq < durable.Count {\n\t\t\t\t\treturn fmt.Errorf(\"%w: entry %d of %s\", ErrCorrupt, seq, id)\n\t\t\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "purge does not sync the plan",
+      "file": "inputs.go",
+      "original": "\t\tif err := putRecord(db, purgeKey(id), plan); err != nil {\n\t\t\treturn err\n\t\t}\n\t\tif err := db.SyncKeyValue(); err != nil {\n\t\t\treturn err\n\t\t}\n",
+      "replacement": "\t\tif err := putRecord(db, purgeKey(id), plan); err != nil {\n\t\t\treturn err\n\t\t}\n"
+    },
+    {
+      "name": "purge keeps the capsule",
+      "file": "inputs.go",
+      "original": "keys := [][]byte{capsuleKey(id), frontierKey(id), closedKey(id)}",
+      "replacement": "keys := [][]byte{frontierKey(id), closedKey(id)}"
+    },
+    {
+      "name": "purge keeps the item chunks",
+      "file": "inputs.go",
+      "original": "\t\t\tkeys = append(keys, itemChunkKey(id, uint64(item), chunk))\n",
+      "replacement": "\t\t\t_, _ = item, chunk\n"
+    },
+    {
+      "name": "purge keeps the response chunks",
+      "file": "inputs.go",
+      "original": "\t\t\tkeys = append(keys, responseChunkKey(id, uint64(seq), chunk))\n",
+      "replacement": ""
+    },
+    {
+      "name": "purge keeps the entries",
+      "file": "inputs.go",
+      "original": "\t\tkeys = append(keys, entryKey(id, uint64(seq)))\n",
+      "replacement": ""
+    },
+    {
+      "name": "purge deletes the plan before the keys are synced",
+      "file": "inputs.go",
+      "original": "\tif err := db.SyncKeyValue(); err != nil {\n\t\treturn err\n\t}\n\tif err := db.Delete(purgeKey(id)); err != nil {",
+      "replacement": "\tif err := db.Delete(purgeKey(id)); err != nil {"
+    },
+    {
+      "name": "purge keeps the plan",
+      "file": "inputs.go",
+      "original": "\tif err := db.Delete(purgeKey(id)); err != nil {\n\t\treturn err\n\t}\n\treturn db.SyncKeyValue()",
+      "replacement": "\treturn db.SyncKeyValue()"
     }
   ]
 }
