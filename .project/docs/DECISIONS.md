@@ -2,7 +2,7 @@
 
 ## D102 — Owners of the Ethereum post-merge protocol system calls (2026-11-13)
 
-Block 0 of E01-03.smoke_corpus (#19) marks the ETH system-action case NOT_APPLICABLE: DEVELOPMENT_PLAN E01-03 asks for native system transactions, and an Ethereum block body has none. The coordinator asked that every effect without a transaction have an owner. Withdrawals and block rewards already had one: E04-02.optional_scope, as credits outside a transaction that are off by default. No card named the Ethereum post-merge protocol system calls: EIP-4788 (beacon roots), EIP-2935 (history storage), EIP-7002 and EIP-7251 (request contracts). The coordinator asked the owner who owns them. The owner selected the coordinator's proposed option, "E04-02 + E01-05 (Recommended)":
+Block 0 of E01-03.smoke_corpus (#19) marks the ETH system-action case NOT_APPLICABLE: DEVELOPMENT_PLAN E01-03 asks for native system transactions, and a block body of the corpus fixture (London, ethash, before the merge) has none. The coordinator asked that every effect without a transaction have an owner. For withdrawals and block rewards, the block reads the E04-02.optional_scope card (outside-transaction records, off by default) as their owner; no earlier decision assigned them. No card named the Ethereum post-merge protocol system calls: EIP-4788 (beacon roots), EIP-2935 (history storage), EIP-7002 and EIP-7251 (request contracts). The coordinator asked the owner who owns them. The owner selected the coordinator's proposed option, "E04-02 + E01-05 (Recommended)":
 
 - E04-02.optional_scope owns their state effects outside a transaction, together with withdrawals and block rewards, off by default.
 - E01-05.type_paths owns their presence in the native type and path matrix.

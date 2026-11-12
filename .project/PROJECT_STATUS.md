@@ -76,7 +76,7 @@ transaction index; hashes bind the input and are not compared.
 
 | Block | Role | Output | Allowed paths |
 |---|---|---|---|
-| 0 corpus-core | qa (oracle), then native-engineer (comparator and observation format); reviewer | Oracle and reference executor for all three families, cases with provenance, observation format, comparator, portable controls and mutants; no native run | `test/native_corpus/{README.md,ORACLE.md,expected/**,*.py,*.mutants.json}`, `.project/automation/ci.py` and `test_ci_discovery.py` (discover the corpus tests), `.project/evidence/E01-03.smoke_corpus.md`, this section |
+| 0 corpus-core | qa (oracle), then native-engineer (comparator and observation format); reviewer | Oracle and reference executor for all three families, cases with provenance, observation format, comparator, portable controls and mutants; no native run | `test/native_corpus/{README.md,ORACLE.md,expected/**,*.py,*.mutants.json}`, `.project/automation/ci.py` and `test_ci_discovery.py` (discover the corpus tests), `.project/evidence/E01-03.smoke_corpus.md`, `.project/docs/DECISIONS.md` (D102), this section |
 | ETH | native-engineer; qa for the matrix | Geth corpus fixture, import with the decision bridge, observer, measured records | `test/native_corpus/eth/**`, `.project/evidence/E01-03.smoke_corpus.eth.md` |
 | BSC | native-engineer; qa for the matrix | BSC corpus fixture, import with the decision bridge, observer, measured records | `test/native_corpus/bsc/**`, `.project/evidence/E01-03.smoke_corpus.bsc.md` |
 | POLY | native-engineer; qa for the matrix | Bor corpus fixture with the Heimdall stub, import with the decision bridge, observer, measured records | `test/native_corpus/poly/**`, `.project/evidence/E01-03.smoke_corpus.poly.md` |
@@ -123,7 +123,17 @@ Ethereum post-merge protocol system calls (EIP-4788, EIP-2935, EIP-7002,
 EIP-7251), with withdrawals and block rewards, off by default;
 E01-05.type_paths owns their presence in the type and path matrix.
 
-Next: review 002, CI; then the client blocks.
+Review 002 (Spec on `ec7747d`, Standards on `e05f45e` and `ec7747d`): Standards
+PASS; Spec REQUEST_CHANGES (P2: the evidence named E03-11 as the owner of
+AC-DLV-04-03 and 05-01, while E03-03.publisher owns them and 05-02 and 05-03
+were missing; P3: D102 wording on earlier ownership and the fixture scope).
+The follow-up docs commit fixes them, warns against `--regenerate` in the
+repository, and adds DECISIONS.md to the block 0 paths. The ETH
+NOT_APPLICABLE reason in `expected/eth.json` names only EIP-4788 and 2935 and
+points to ORACLE.md for the owners; changing it would change the measured
+head, so it stays.
+
+Next: review 003, CI; then the client blocks.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 

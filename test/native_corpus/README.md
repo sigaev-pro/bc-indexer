@@ -45,6 +45,11 @@ python3 test/native_corpus/corpus_compare.py test/native_corpus/expected/eth.jso
 python3 test/mutate.py test/native_corpus/native_corpus.mutants.json --output RUN_DIR
 ```
 
+`test_native_corpus.py --regenerate` rewrites `expected/*.json` from the
+current oracle before the tests. Only the mutant table uses it, inside its
+temporary copy. Never run it in the repository: it would make
+`corpus_oracle.py check` pass on a changed oracle.
+
 ## Independence
 
 The expected files come only from `corpus_oracle.py`, `corpus_evm.py` and the rules in
