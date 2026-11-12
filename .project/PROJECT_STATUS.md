@@ -174,7 +174,9 @@ Design, in full in [adapters/bor/decision/native/README.md](../adapters/bor/deci
   checkpoint check (a refusal is `RejectIntent`), the native write whose
   final authoritative batch carries the marker (the head batch, or the block
   batch of a `SIDE` decision), `SyncKeyValue`, `Resolve` and `Cleanup`. Lock
-  order: chain lock, then guard.
+  order: chain lock, then guard. A `CANONICAL` intent also names the stored
+  side blocks of the new branch (their retained EXEC_READY observations), so
+  the decision closes them; a branch block without one refuses the intent.
 - `borimport` opens the admission with `OpenWithCleanup` and a
   `source_inputs.Purge` adapter; stores from before the switch are discarded.
 - Recovery driver (`bordecision.Start`, chain lock then guard): the admission

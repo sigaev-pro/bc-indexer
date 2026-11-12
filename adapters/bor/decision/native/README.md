@@ -53,7 +53,13 @@ lock, then guard). In protocol order:
    outweigh the head). The decider binds the authoritative EXEC_READY
    observation of the block (open, lowest sequence; a block observed twice
    gets one decision) and its state root, and records the intent
-   (`decision.Bridge.Intend`). The evidence digest binds the fork choice
+   (`decision.Bridge.Intend`). For `CANONICAL`, the stored blocks of the new
+   branch between the common ancestor and the block (known side blocks that
+   become canonical with it) are members too, ascending, before the block:
+   each is named by its authoritative EXEC_READY observation, which its
+   `SIDE` decision retained, so the decision closes it. A branch block
+   without such an observation has no corpus binding, and the intent is
+   refused (the import stops). The evidence digest binds the fork choice
    inputs (see Digests). `IMPORT` and `CANONICAL` have public events; `SIDE`
    has none.
 3. **Native check.** The native milestone and checkpoint check
@@ -96,7 +102,8 @@ native chain lock held (`ExtractorRecover`) and then the observation guard:
 3. `decider.Recover`:
    - The saved unresolved intent, if any: with its marker, `Resolve`.
      Without, native recovery completes exactly the saved transition: the
-     member observation is replayed natively from its capsule and closed log
+     last member (the executed block; earlier members are branch blocks
+     already stored) is replayed natively from its capsule and closed log
      (`ReplayHeld`: every counted read from the log, every entry consumed, the
      bound result digest), and the native import of the block runs through
      the decision path of step 2 to 4 above. The recovery decider returns
