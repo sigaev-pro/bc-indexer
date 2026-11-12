@@ -301,38 +301,38 @@
     {
       "name": "lost state",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        if state != want_state:",
-      "replacement": "        if False:"
+      "original": "    if state != want_state:\n        fail(f\"the lost observation is",
+      "replacement": "    if False:\n        fail(f\"the lost observation is"
     },
     {
       "name": "lost pin and capsule",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        if (pinned, sealed) != {\"begin\": (False, False), \"pin\": (True, False), \"seal\": (True, True)}.get(step, (True, True)):",
-      "replacement": "        if False:"
+      "original": "    if (pinned, sealed) != {\"begin\": (False, False), \"pin\": (True, False), \"seal\": (True, True)}.get(step, (True, True)):",
+      "replacement": "    if False:"
     },
     {
       "name": "lost log entries",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        if saved != want_saved:",
-      "replacement": "        if False:"
+      "original": "    if saved != want_saved:\n        fail(f\"after a loss at {step} the durable log entries",
+      "replacement": "    if False:\n        fail(f\"after a loss at {step} the durable log entries"
     },
     {
       "name": "restart reopens the run",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        if result.get(\"pending_at_open\") != pending:",
-      "replacement": "        if False:"
+      "original": "    if result.get(\"pending_at_open\") != [f\"{key} {want_state}\"]:",
+      "replacement": "    if False:"
     },
     {
       "name": "recovery abandons only",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "            if recovery.get(\"abandoned\") != [key] or recovery.get(\"exec_ready\") or recovery.get(\"rejected\"):",
-      "replacement": "            if False:"
+      "original": "        if recovery.get(\"abandoned\") != [key] or recovery.get(\"exec_ready\") or recovery.get(\"rejected\"):",
+      "replacement": "        if False:"
     },
     {
       "name": "abandoned keeps nothing",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "            if state_of(records(after), sequence) != \"ABANDONED\" or has(after, PIN + key) or log_entries(after, key):",
-      "replacement": "            if state_of(records(after), sequence) != \"ABANDONED\":"
+      "original": "        if state_of(records(snap.get(\"rows\") or []), sequence) != \"ABANDONED\" or has(after, PIN + key) or \\",
+      "replacement": "        if state_of(records(snap.get(\"rows\") or []), sequence) != \"ABANDONED\" or \\"
     },
     {
       "name": "recovery resolves to EXEC_READY",
@@ -355,7 +355,7 @@
     {
       "name": "ADMITTED record is unchanged",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "            if records(after).get((f\"{sequence:016x}\", \"admitted\")) != records(dump).get((f\"{sequence:016x}\", \"admitted\")):",
+      "original": "            if records(snap.get(\"rows\") or []).get((f\"{sequence:016x}\", \"admitted\")) != \\\n                    records(dump).get((f\"{sequence:016x}\", \"admitted\")):",
       "replacement": "            if False:"
     },
     {
@@ -363,12 +363,6 @@
       "file": "test/harness/bor_admission_probe.py",
       "original": "            if recovery.get(\"exec_ready\") or recovery.get(\"abandoned\") or key not in (recovery.get(\"kept\") or []):",
       "replacement": "            if recovery.get(\"abandoned\"):"
-    },
-    {
-      "name": "re-import rejection evidence",
-      "file": "test/harness/bor_admission_probe.py",
-      "original": "                    rejected.get(\"evidence_digest\") != rejection_digest(key_of(new), context[\"chain\"][block - 1][\"hash\"].hex(),",
-      "replacement": "                    False and rejection_digest(key_of(new), context[\"chain\"][block - 1][\"hash\"].hex(),"
     },
     {
       "name": "rejection refuses the block",
@@ -385,7 +379,7 @@
     {
       "name": "rejected keeps no pin or closed log",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        if has(dump, PIN + key) or has(dump, INPUTS + key + \"/closed\"):",
+      "original": "        if has(dump, PIN + key) or any(row[\"key\"].startswith(INPUTS + key + \"/\") for row in dump) or intents_naming(dump, key):",
       "replacement": "        if False:"
     },
     {
@@ -397,8 +391,8 @@
     {
       "name": "post-Rio recovery replays",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "               \"recovery\", context[\"body_sha256\"])\n    if (result.get(\"recovery\") or {}).get(\"exec_ready\") != [key] or \\",
-      "replacement": "               \"recovery\", context[\"body_sha256\"])\n    if False or \\"
+      "original": "    if (result.get(\"recovery\") or {}).get(\"exec_ready\") != [key] or snap is None or \\",
+      "replacement": "    if snap is None or \\"
     },
     {
       "name": "walk passes with the complete list",
@@ -601,7 +595,7 @@
     {
       "name": "replays cover every EXEC_READY",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "    if [r.get(\"key\") for r in replays] != [key_of(sequence) for sequence in ready] or len(ready) != len(numbers):",
+      "original": "    if [r.get(\"key\") for r in replays] != keys:",
       "replacement": "    if False:"
     },
     {
@@ -637,13 +631,13 @@
     {
       "name": "prune-block import is completed",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        check_completed(context, first, numbers, \"a\", fail, \"import\")",
+      "original": "        check_completed(context, lost_attempt(context, first[\"crash_result\"], first[\"store_after\"], numbers[0], last),\n                        numbers[:-1], \"a\", fail, \"import\")",
       "replacement": "        pass"
     },
     {
       "name": "prune-block needs a live pin",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        if not any(row[\"key\"].startswith(PIN) for row in first[\"store_after\"]):",
+      "original": "        if pins != [PIN + key_of(last - numbers[0])]:",
       "replacement": "        if False:"
     },
     {
@@ -751,26 +745,20 @@
     {
       "name": "frozen import is completed",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "    check_completed(context, first, list(range(steps[0][\"from\"], steps[0][\"to\"] + 1)), \"a\", fail, \"import\")\n    frozen =",
-      "replacement": "    frozen ="
+      "original": "    check_completed(context, first, list(range(steps[0][\"from\"], steps[0][\"to\"] + 1)), \"a\", fail, \"import\")\n    lost =",
+      "replacement": "    lost ="
     },
     {
       "name": "the freezer froze past the finalized block",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "    if ancients <= plan[\"finalize\"] or not any(min(p.get(\"headers\") or [ancients]) < ancients for p in pins) or \\",
-      "replacement": "    if not any(min(p.get(\"headers\") or [ancients]) < ancients for p in pins) or \\"
-    },
-    {
-      "name": "a pinned header is frozen",
-      "file": "test/harness/bor_admission_probe.py",
-      "original": "    if ancients <= plan[\"finalize\"] or not any(min(p.get(\"headers\") or [ancients]) < ancients for p in pins) or \\",
-      "replacement": "    if ancients <= plan[\"finalize\"] or \\"
+      "original": "    if (frozen.get(\"ancients\") or 0) <= plan[\"finalize\"] or any(p.get(\"verify_error\") for p in frozen.get(\"pins\") or []):",
+      "replacement": "    if any(p.get(\"verify_error\") for p in frozen.get(\"pins\") or []):"
     },
     {
       "name": "frozen pins stay readable",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "            any(p.get(\"verify_error\") for p in pins):\n        fail(f\"the native freezer",
-      "replacement": "            False:\n        fail(f\"the native freezer"
+      "original": "    if (frozen.get(\"ancients\") or 0) <= plan[\"finalize\"] or any(p.get(\"verify_error\") for p in frozen.get(\"pins\") or []):",
+      "replacement": "    if (frozen.get(\"ancients\") or 0) <= plan[\"finalize\"]:"
     },
     {
       "name": "patched refusal over the frozen store",
@@ -787,14 +775,14 @@
     {
       "name": "frozen refusal changes no ancient file",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "    if patched[\"store_after\"] != patched[\"store_before\"] or patched[\"ancient_after\"] != patched[\"ancient_before\"] or \\\n            not patched[\"ancient_before\"]:",
-      "replacement": "    if patched[\"store_after\"] != patched[\"store_before\"] or \\\n            not patched[\"ancient_before\"]:"
+      "original": "    if patched[\"store_before\"] != lost[\"store_after\"] or patched[\"store_after\"] != patched[\"store_before\"] or \\\n            patched[\"ancient_after\"] != patched[\"ancient_before\"] or not patched[\"ancient_before\"]:",
+      "replacement": "    if patched[\"store_before\"] != lost[\"store_after\"] or patched[\"store_after\"] != patched[\"store_before\"] or \\\n            not patched[\"ancient_before\"]:"
     },
     {
       "name": "the freezer is not empty",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "            not patched[\"ancient_before\"]:\n        fail(\"the refused prune-block changed",
-      "replacement": "            False:\n        fail(\"the refused prune-block changed"
+      "original": "            patched[\"ancient_after\"] != patched[\"ancient_before\"] or not patched[\"ancient_before\"]:",
+      "replacement": "            patched[\"ancient_after\"] != patched[\"ancient_before\"]:"
     },
     {
       "name": "accepted stops at the native open",
@@ -811,8 +799,248 @@
     {
       "name": "pins stay readable after the prune attempts",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "    if not after.get(\"pins\") or any(p.get(\"verify_error\") for p in after[\"pins\"]):",
-      "replacement": "    if not after.get(\"pins\"):"
+      "original": "    if after.get(\"pins\") is None or any(p.get(\"verify_error\") for p in after[\"pins\"]):",
+      "replacement": "    if after.get(\"pins\") is None:"
+    },
+    {
+      "name": "decision evidence tag",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "TAG_EVIDENCE = \"extractor-bor-decision-evidence-v1\"",
+      "replacement": "TAG_EVIDENCE = \"extractor-bor-decision-evidence-v0\""
+    },
+    {
+      "name": "decision rejection tag",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "TAG_DECISION_REJECTION = \"extractor-bor-decision-rejection-v1\"",
+      "replacement": "TAG_DECISION_REJECTION = \"extractor-bor-decision-rejection-v0\""
+    },
+    {
+      "name": "total difficulty skips genesis",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    total = int.from_bytes(decoded_header(context[\"genesis_header\"])[7], \"big\")\n",
+      "replacement": "    total = 0\n"
+    },
+    {
+      "name": "total difficulty counts one block too many",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    for row in context[\"chain\"][:number]:",
+      "replacement": "    for row in context[\"chain\"][:number + 1]:"
+    },
+    {
+      "name": "intent kind",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "\"sequence\": sequence, \"kind\": \"IMPORT\",",
+      "replacement": "\"sequence\": sequence, \"kind\": \"CANONICAL\","
+    },
+    {
+      "name": "intent child root is the parent root",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    child = context[\"chain\"][number - 1][\"state_root\"].hex()\n",
+      "replacement": "    child = context[\"chain\"][number - 2][\"state_root\"].hex()\n"
+    },
+    {
+      "name": "intent events",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "\"evidence_digest\": evidence, \"events\": True}",
+      "replacement": "\"evidence_digest\": evidence, \"events\": False}"
+    },
+    {
+      "name": "evidence drops the extern difficulty",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "str(total_difficulty(context, number - 1)),\n                             str(total_difficulty(context, number)))",
+      "replacement": "str(total_difficulty(context, number - 1)))"
+    },
+    {
+      "name": "one decision per block",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if len(found) != 1:\n        fail(f\"{label}: block {number} has decisions",
+      "replacement": "    if not found:\n        fail(f\"{label}: block {number} has decisions"
+    },
+    {
+      "name": "intent is not compared",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if intent != want:\n        fail(f\"{label}: the intent of block",
+      "replacement": "    if False:\n        fail(f\"{label}: the intent of block"
+    },
+    {
+      "name": "decided delivery",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "\"delivery\": \"BATCH\",\n                  \"digest\": decision.decided_digest(want[\"digest\"], \"BATCH\")}",
+      "replacement": "\"delivery\": \"CHECKPOINT\",\n                  \"digest\": decision.decided_digest(want[\"digest\"], \"CHECKPOINT\")}"
+    },
+    {
+      "name": "decided marker is not checked",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if marker != decision.marker_value(want).decode():",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "rejection allows a marker",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if rejected != record or decided is not None or marker is not None:",
+      "replacement": "        if rejected != record or decided is not None:"
+    },
+    {
+      "name": "rejection evidence binds no error",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "evidence = tagged_digest(TAG_DECISION_REJECTION, want[\"digest\"], context[\"oracle\"][\"decision_rejection_error\"])",
+      "replacement": "evidence = tagged_digest(TAG_DECISION_REJECTION, want[\"digest\"])"
+    },
+    {
+      "name": "decided observation may keep its pin",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if has(dump, PIN + key) or any(row[\"key\"].startswith(INPUTS + key + \"/\") for row in dump) or \\\n            (left is not None",
+      "replacement": "    if any(row[\"key\"].startswith(INPUTS + key + \"/\") for row in dump) or \\\n            (left is not None"
+    },
+    {
+      "name": "decided observation may keep its inputs",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if has(dump, PIN + key) or any(row[\"key\"].startswith(INPUTS + key + \"/\") for row in dump) or \\\n            (left is not None",
+      "replacement": "    if has(dump, PIN + key) or \\\n            (left is not None"
+    },
+    {
+      "name": "two decisions for one block pass",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if len(blocks) != len(set(blocks)):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "obligations are not compared",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if sorted(result.get(\"obligations\") or []) != batch:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "decision recovery report is not compared",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if report != expected:\n        fail(f\"{label}: the decision recovery did",
+      "replacement": "    if False:\n        fail(f\"{label}: the decision recovery did"
+    },
+    {
+      "name": "EXEC_READY is not checked on the snapshot",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if snap is None or check_observation(context, snap[\"rows\"], sequence, number, variant, fail,\n                                             f\"{label}: block {number}\") != \"EXEC_READY\":",
+      "replacement": "        if snap is None:"
+    },
+    {
+      "name": "checkpoints ignore the snapshots",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                if snap.get(\"block\"):\n                    rows.append",
+      "replacement": "                if False:\n                    rows.append"
+    },
+    {
+      "name": "lost block may have a decision",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if intents_naming(dump, key):\n        fail(\"the lost observation has a decision before the restart\")",
+      "replacement": "    if False:\n        fail(\"the lost observation has a decision before the restart\")"
+    },
+    {
+      "name": "lost child state may be durable",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "            if (result.get(\"child_roots_at_open\") or {}).get(key) is not False:",
+      "replacement": "            if (result.get(\"child_roots_at_open\") or {}).get(key) is True:"
+    },
+    {
+      "name": "lost block may be stored at the restart",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if block in (result.get(\"stored_at_open\") or []) or result.get(\"head_number_at_open\") != block - 1:\n            fail(\"the lost block was stored before the recovery\")",
+      "replacement": "        if False:\n            fail(\"the lost block was stored before the recovery\")"
+    },
+    {
+      "name": "decided block may be observed again",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if block in observations_of(result):\n            fail(\"the block decided in recovery was observed again by the live import\")",
+      "replacement": "        if False:\n            fail(\"the block decided in recovery was observed again by the live import\")"
+    },
+    {
+      "name": "saved intent is not compared",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if found != [seq] or recs.get((seq, \"intent\")) != want_intent:",
+      "replacement": "        if found != [seq]:"
+    },
+    {
+      "name": "marker expected at every step",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        want_marker = {\"intent\": None, \"block-batch\": None}.get(step, decision.marker_value(want_intent).decode())",
+      "replacement": "        want_marker = decision.marker_value(want_intent).decode()"
+    },
+    {
+      "name": "block stored only after the head batch",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        want_stored = step in (\"block-batch\", \"marker\", \"decided\")",
+      "replacement": "        want_stored = step in (\"marker\", \"decided\")"
+    },
+    {
+      "name": "head moves at the block batch",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        want_head = block if step in (\"marker\", \"decided\") else block - 1",
+      "replacement": "        want_head = block if step in (\"block-batch\", \"marker\", \"decided\") else block - 1"
+    },
+    {
+      "name": "intent loss reported as resolved",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        report = {\"intent\": {\"completed\": [seq]},",
+      "replacement": "        report = {\"intent\": {\"resolved\": [seq]},"
+    },
+    {
+      "name": "child state at the barrier may be volatile",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if (result.get(\"child_roots_at_open\") or {}).get(key) is not True or stored or head != block - 1:",
+      "replacement": "        if stored or head != block - 1:"
+    },
+    {
+      "name": "decision-crash replays are not checked",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    replays = [\"replay\"] * len(want) if step in (\"child-root\", \"intent\", \"block-batch\") else []",
+      "replacement": "    replays = [\"replay\"] * len(want) if step in (\"child-root\", \"intent\", \"block-batch\", \"marker\") else []"
+    },
+    {
+      "name": "refused intent may have a marker",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "                recs.get((seq, \"rejected\")) or recs.get((seq, \"decided\")) or seq in markers(dump):",
+      "replacement": "                recs.get((seq, \"rejected\")) or recs.get((seq, \"decided\")):"
+    },
+    {
+      "name": "refused block may be stored at the restart",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if block in (result.get(\"stored_at_open\") or []) or result.get(\"head_number_at_open\") != block - 1:\n            fail(\"the refused block was stored before the recovery\")",
+      "replacement": "        if False:\n            fail(\"the refused block was stored before the recovery\")"
+    },
+    {
+      "name": "refused restart report is not the rejection",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        check_decision_recovery(result, fail, \"restart\", rejected=[seq])",
+      "replacement": "        check_decision_recovery(result, fail, \"restart\", completed=[seq])"
+    },
+    {
+      "name": "refused import may continue",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if context[\"oracle\"][\"decision_rejection_error\"] not in (result.get(\"import_error\") or \"\") or \\",
+      "replacement": "    if False or \\"
+    },
+    {
+      "name": "rejected intent may have an obligation",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if seq in (result.get(\"obligations\") or []):\n        fail(\"the rejected intent has a delivery obligation\")",
+      "replacement": "    if False:\n        fail(\"the rejected intent has a delivery obligation\")"
+    },
+    {
+      "name": "refused block observed again",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if block in observations_of(result):\n            fail(\"the refused block opened a new observation after the restart\")",
+      "replacement": "        if False:\n            fail(\"the refused block opened a new observation after the restart\")"
+    },
+    {
+      "name": "re-import may observe",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if result.get(\"observations\") or result.get(\"reimport_error\") or \\",
+      "replacement": "    if result.get(\"reimport_error\") or \\"
+    },
+    {
+      "name": "re-import may change records",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "    if counters(after) != counters(before) or decision_records(after) != decision_records(before) or \\",
+      "replacement": "    if counters(after) != counters(before) or \\"
     }
   ]
 }

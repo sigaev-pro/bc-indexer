@@ -75,7 +75,8 @@ type ExtractorIntent interface {
 // the import path (the probe's crash points): "child-root" after the
 // child-root barrier, "native-rejected" after a native refusal and before
 // Reject, "block-batch" after the block batch and before the final head
-// batch, "marker" after the final batch with the marker and before its sync.
+// batch, "marker" after the final batch with the marker is synced and before
+// Resolve.
 var ExtractorDecisionStep func(step string, block common.Hash)
 
 func extractorStep(step string, block *types.Block) {
