@@ -150,6 +150,42 @@ passed and are superseded and kept.
 Next: confirmation of the final head by both reviewers and hosted CI on it,
 then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
+## E01-02.decision_bridge — BSC block
+
+Status: IN_PROGRESS (part of #17), draft PR #159 on branch
+`claude/e01-02-decision-bsc`, started on main `add17e6` (block 0 merged in
+PR #157). Measured head `6ab370b`; later commits change only docs.
+
+Scope: every plan row marked BSC or "each client block":
+- the `decision` install;
+- the native marker patch (patch 07);
+- the child-root barrier;
+- the import-path calls;
+- `OpenWithCleanup` with a `Purge` adapter;
+- the recovery driver and `decision.Bridge.GoLive`;
+- the re-import proof after a restart;
+- the BSC finality result and fork choice as decision evidence, with reads
+  below the capsule window failing closed;
+- the qa AC-CAP-07 matrix for the private BSC slot.
+
+Client code is under `adapters/bsc/decision/native/`, the BSC admission seam
+(`adapters/bsc/admission/native/go/seam.go`) and `test/harness/`. Shared
+`admission`, `decision` and `source_inputs` files are unchanged.
+
+Design: [BSC decision README](../adapters/bsc/decision/native/README.md).
+Evidence: [E01-02.decision_bridge.bsc](evidence/E01-02.decision_bridge.bsc.md).
+
+Records at `6ab370b`: preparation 01 PASS and run 01 PASS. The Go and Python
+mutant records and the BSC admission non-regression records are listed in
+the evidence.
+
+qa verdict (private BSC slot): AC-CAP-07-01, 07-02, 07-03 and 07-06 PASS.
+07-06 uses the native outcome fixture, the bad-block record. `bsc-mainnet`
+and `bsc-testnet` stay NOT_RUN (D96, D98, D99).
+
+Next: Spec and Standards reviews, hosted CI, the final review comment, then
+READY to the coordinator.
+
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
 Status: ACCEPTED (2026-11-12); #16 closes when this record merges. Merged
