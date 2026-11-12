@@ -16,8 +16,9 @@ and exports the native output. It then writes the observation
 (`observation.json`, README "Observation format" of test/native_corpus) and
 compares it with `expected/poly.json` (`corpus_compare.compare`).
 
-`observe DIR` rebuilds the observation of a retained run directory from its
-probe outputs and compares it again, without Docker.
+`observe DIR --output NEW` rebuilds the observation of a retained run
+directory from its probe outputs and compares it again with the expected file
+that run used, without Docker; it writes only into the new directory NEW.
 
 The expected file is never read for a value: the driver takes from it only
 the corpus accounts to add to the genesis and the account list to read.
@@ -299,6 +300,10 @@ def bridge_checks(imported, reimported):
         failures.append("the delivery obligations are not the IMPORT decisions")
     if reimported["decisions_before"] != imported["decisions"]:
         failures.append("the restart changed the decisions before the re-import")
+    if reimported["decisions_after"] != reimported["decisions_before"]:
+        failures.append("the re-import changed the decisions")
+    if reimported["obligations"] != imported["obligations"]:
+        failures.append("the re-import changed the delivery obligations")
     if reimported.get("reimport_error"):
         failures.append(f"the re-import failed: {reimported['reimport_error']}")
     if imported["head_hash"] != reimported["head_hash"]:
@@ -306,20 +311,39 @@ def bridge_checks(imported, reimported):
     return failures
 
 
-def observe(directory, expected, source):
-    """Write observation.json and comparison.json of a run directory; return
-    the comparison and the bridge check failures."""
+def write_new(path, value):
+    """Write JSON to a new file; an existing file (a retained record) is never replaced."""
+    with open(path, "x") as handle:
+        handle.write(json.dumps(value, indent=1, sort_keys=True) + "\n")
+
+
+def observe(directory, expected, source, output):
+    """Build the observation from the probe outputs in directory, compare it
+    with expected, and write observation.json and comparison.json as new
+    files in output. Return the comparison and the bridge check failures."""
     imported = load(directory / "import.json", 16 * 1024 * 1024)
     reimported = load(directory / "reimport.json", 64 * 1024 * 1024)
     observation = observation_of(imported, reimported, source)
-    (directory / "observation.json").write_text(json.dumps(observation, indent=1, sort_keys=True) + "\n")
     try:
         comparison = corpus_compare.compare(expected, observation)
     except corpus_compare.FormatError as error:
         comparison = {"schema_version": 1, "kind": "native-corpus-comparison", "family": "poly", "result": "FAIL",
                       "format_error": str(error), "cases": [], "differences": []}
-    (directory / "comparison.json").write_text(json.dumps(comparison, indent=1, sort_keys=True) + "\n")
+    write_new(output / "observation.json", observation)
+    write_new(output / "comparison.json", comparison)
     return comparison, bridge_checks(imported, reimported)
+
+
+def verdict(comparison, failures):
+    """The run result and the per-case verdicts. A bridge failure is a
+    whole-observation difference, so it fails every applicable case."""
+    cases = []
+    for row in comparison["cases"]:
+        if failures and row["verdict"] == "PASS":
+            row = {**row, "verdict": "FAIL", "bridge_failures": len(failures)}
+        cases.append(row)
+    passed = comparison["result"] == "PASS" and not failures and bool(cases)
+    return ("PASS" if passed else "FAIL"), cases
 
 
 # ---------------------------------------------------------------------------
@@ -388,14 +412,12 @@ def run(preparation_path, expected_sha, output):
                       "installed": reference(preparation_path, deadline=deadline), "tracer": TRACER,
                       "state_reads": STATE_READS, "import": record["outputs"]["import.json"],
                       "reimport": record["outputs"]["reimport.json"]}
-            comparison, failures = observe(output, expected, source)
+            comparison, failures = observe(output, expected, source, output)
             record["observation"] = reference(output / "observation.json", deadline=deadline)
             record["comparison"] = reference(output / "comparison.json", deadline=deadline)
-            record["cases"] = comparison["cases"]
+            record["result"], record["cases"] = verdict(comparison, failures)
             record["differences"] = len(comparison["differences"])
             record["bridge_failures"] = failures
-            if comparison["result"] == "PASS" and not failures:
-                record["result"] = "PASS"
         except (Interrupted, Exception) as error:
             record["error"] = f"{type(error).__name__}: {error}"
         finally:
@@ -414,8 +436,9 @@ def main(argv=None):
     measured.add_argument("preparation", type=Path)
     measured.add_argument("--sha256", required=True)
     measured.add_argument("--output", type=Path, required=True)
-    offline = commands.add_parser("observe")
+    offline = commands.add_parser("observe", help="compare a retained run again; writes to a new directory")
     offline.add_argument("directory", type=Path)
+    offline.add_argument("--output", type=Path, required=True)
     derive = commands.add_parser("derive", help="write the corpus genesis items from a source genesis (development)")
     derive.add_argument("source_genesis", type=Path)
     derive.add_argument("output", type=Path)
@@ -431,14 +454,23 @@ def main(argv=None):
         (args.output / "chain-config.json").write_bytes(config)
         return 0
     else:
-        expected = json.loads(EXPECTED.read_text())
-        previous = args.directory / "observation.json"
-        # A retained run keeps its source; a development directory has none.
-        source = load(previous, 64 * 1024 * 1024)["source"] if previous.exists() else {"development": "not measured"}
-        comparison, failures = observe(args.directory, expected, source)
-        print(json.dumps({"result": comparison["result"], "cases": comparison["cases"],
-                          "differences": comparison["differences"][:20], "bridge_failures": failures}, indent=1))
-        return 0 if comparison["result"] == "PASS" and not failures else 1
+        # The expected file the run used, when the directory is a retained run.
+        record_path = args.directory / "run-record.json"
+        if record_path.exists():
+            run_record = load(record_path, 16 * 1024 * 1024)
+            expected_path = Path(run_record["expected"]["path"])
+            source = load(args.directory / "observation.json", 64 * 1024 * 1024)["source"]
+        else:
+            expected_path, source = EXPECTED, {"development": "not measured"}
+        expected = json.loads(expected_path.read_text())
+        output = new_output(args.output)
+        comparison, failures = observe(args.directory, expected, source, output)
+        result, cases = verdict(comparison, failures)
+        report = {"result": result, "cases": cases, "expected": reference(expected_path), "directory": str(args.directory),
+                  "differences": comparison["differences"], "bridge_failures": failures}
+        write_new(output / "observe.json", report)
+        print(json.dumps({**report, "differences": report["differences"][:20]}, indent=1))
+        return 0 if result == "PASS" else 1
     print(json.dumps({"result": record["result"], "output": str(output), "error": record.get("error")}))
     return 0 if record["result"] == "PASS" else 1
 

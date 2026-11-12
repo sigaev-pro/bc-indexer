@@ -36,6 +36,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -234,6 +235,18 @@ func shutdown(stack *node.Node, backend *eth.Ethereum) {
 	stack.Close()
 }
 
+// preTransaction applies the system calls that the native processor
+// (core.StateProcessor.Process) applies before the transactions of a block:
+// the beacon root (none on Bor) and, from Prague on, the parent block hash.
+func preTransaction(evm *vm.EVM, config *params.ChainConfig, header *types.Header) {
+	if header.ParentBeaconRoot != nil {
+		core.ProcessBeaconBlockRoot(*header.ParentBeaconRoot, evm)
+	}
+	if config.IsPrague(header.Number) || config.IsVerkle(header.Number) {
+		core.ProcessParentBlockHash(header.ParentHash, evm)
+	}
+}
+
 // corpusTransactions are the block 1 transactions of ORACLE.md, Polygon PoS.
 func corpusTransactions(config *params.ChainConfig, key *ecdsa.PrivateKey) (types.Transactions, error) {
 	coin := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
@@ -335,9 +348,11 @@ func generate(args []string) error {
 		body := &types.Body{}
 		var receipts []*types.Receipt
 		if number == 1 {
-			// The native block producer applies the transactions with the
-			// signer as the execution beneficiary.
+			// The probe applies the transactions with native
+			// core.ApplyTransaction, the signer as the execution beneficiary
+			// (Bor's miner is not used); FinalizeAndAssemble and Seal follow.
 			evm := vm.NewEVM(core.NewEVMBlockContext(header, chain, &author), statedb, config, vm.Config{})
+			preTransaction(evm, config, header)
 			pool := new(core.GasPool).AddGas(header.GasLimit)
 			used := uint64(0)
 			for i, tx := range txs {
@@ -459,11 +474,11 @@ func (o counted) Fail(err error) error {
 
 // DecisionRow is one decision the bridge lists.
 type DecisionRow struct {
-	Sequence uint64       `json:"sequence"`
-	State    string       `json:"state"`
-	Kind     string       `json:"kind"`
-	Members  []MemberRow  `json:"members"`
-	Marker   bool         `json:"marker"`
+	Sequence uint64      `json:"sequence"`
+	State    string      `json:"state"`
+	Kind     string      `json:"kind"`
+	Members  []MemberRow `json:"members"`
+	Marker   bool        `json:"marker"`
 }
 
 // MemberRow is one member of a decision's intent.
@@ -482,12 +497,12 @@ type StateSyncRow struct {
 }
 
 type nodeRun struct {
-	stack  *node.Node
-	eth    *eth.Ethereum
-	chain  *core.BlockChain
-	import_ *borimport.Node
+	stack   *node.Node
+	eth     *eth.Ethereum
+	chain   *core.BlockChain
+	imp     *borimport.Node
 	decided *bordecision.Node
-	count  *counter
+	count   *counter
 }
 
 // start opens the native node on dataDir with the admission and the decision
@@ -517,7 +532,7 @@ func start(in inputs, bodies, dataDir, commit string, result map[string]any) (*n
 		shutdown(stack, backend)
 		return nil, err
 	}
-	run := &nodeRun{stack: stack, eth: backend, chain: chain, import_: imp,
+	run := &nodeRun{stack: stack, eth: backend, chain: chain, imp: imp,
 		count: &counter{node: imp, seen: []uint64{}, keys: map[uint64][]string{}, errs: []string{}}}
 	decided, report, err := bordecision.Start(imp, nil)
 	result["admission_recovery"] = report
@@ -540,7 +555,7 @@ func (r *nodeRun) close() {
 }
 
 func (r *nodeRun) decisions() ([]DecisionRow, []uint64, error) {
-	token := r.import_.Driver.Guard.Acquire()
+	token := r.imp.Driver.Guard.Acquire()
 	decisions, err := r.decided.Bridge.Decisions(token)
 	var obligations []uint64
 	if err == nil {
@@ -697,18 +712,18 @@ type TxRow struct {
 
 // BlockRow is the native output of one block.
 type BlockRow struct {
-	Number       uint64             `json:"number"`
-	Hash         string             `json:"hash"`
-	StateRoot    string             `json:"state_root"`
-	BaseFee      *string            `json:"base_fee"`
-	GasLimit     uint64             `json:"gas_limit"`
-	GasUsed      uint64             `json:"gas_used"`
-	BodyTxCount  int                `json:"body_tx_count"`
-	Transactions []TxRow            `json:"transactions"`
-	BorReceipt   []LogRow           `json:"state_sync_receipt_logs"`
-	HasBorReceipt bool              `json:"state_sync_receipt"`
-	LastStateID  string             `json:"state_receiver_last_state_id"`
-	StateAfter   map[string]Account `json:"state_after_block"`
+	Number        uint64             `json:"number"`
+	Hash          string             `json:"hash"`
+	StateRoot     string             `json:"state_root"`
+	BaseFee       *string            `json:"base_fee"`
+	GasLimit      uint64             `json:"gas_limit"`
+	GasUsed       uint64             `json:"gas_used"`
+	BodyTxCount   int                `json:"body_tx_count"`
+	Transactions  []TxRow            `json:"transactions"`
+	BorReceipt    []LogRow           `json:"state_sync_receipt_logs"`
+	HasBorReceipt bool               `json:"state_sync_receipt"`
+	LastStateID   string             `json:"state_receiver_last_state_id"`
+	StateAfter    map[string]Account `json:"state_after_block"`
 }
 
 func exportChain(run *nodeRun, blocks []*types.Block, addresses []common.Address) ([]BlockRow, error) {
@@ -744,6 +759,7 @@ func exportChain(run *nodeRun, blocks []*types.Block, addresses []common.Address
 		// native processor applies it (author nil: the engine's author, the
 		// recovered signer).
 		evm := vm.NewEVM(core.NewEVMBlockContext(header, chain, nil), statedb, config, vm.Config{})
+		preTransaction(evm, config, header)
 		pool := new(core.GasPool).AddGas(header.GasLimit)
 		used := uint64(0)
 		signer := types.MakeSigner(config, header.Number, header.Time)
@@ -780,14 +796,16 @@ func exportChain(run *nodeRun, blocks []*types.Block, addresses []common.Address
 			if err != nil {
 				return nil, fmt.Errorf("re-execute block %d transaction %d: %w", number, i, err)
 			}
-			// The re-execution must reproduce the stored receipt.
+			// The re-execution must reproduce the stored receipt (the
+			// effective gas price is derived from the transaction and the base
+			// fee, not executed, so it is not compared).
 			if receipt.Status != stored.Status || receipt.GasUsed != stored.GasUsed ||
 				receipt.CumulativeGasUsed != stored.CumulativeGasUsed || len(receipt.Logs) != len(stored.Logs) {
 				return nil, fmt.Errorf("block %d transaction %d: the re-execution differs from the stored receipt", number, i)
 			}
 			for j := range receipt.Logs {
 				a, b := receipt.Logs[j], stored.Logs[j]
-				if a.Address != b.Address || !bytes.Equal(a.Data, b.Data) || len(a.Topics) != len(b.Topics) {
+				if a.Address != b.Address || !bytes.Equal(a.Data, b.Data) || !slices.Equal(a.Topics, b.Topics) {
 					return nil, fmt.Errorf("block %d transaction %d log %d: the re-execution differs", number, i, j)
 				}
 			}

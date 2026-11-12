@@ -29,10 +29,14 @@ states. One chain-config value is added too: `bor.stateSyncConfirmationDelay`
 `{"0": 0}`. The test genesis activates Indore at block 3 and sets no delay,
 and native Bor then panics at the first state sync after Indore
 (`CalculateStateSyncDelay` reads an empty map, `params/config.go`
-`borKeyValueConfigHelper`). The accepted admission fixture derives the same
-value (`test/harness/bor_admission_probe.py` `derived_inputs`, D99 item 3).
-With delay 0 the state sync query ends at the block time, so the value
-changes no expected result. The genesis timestamp, the gas limit and every
+`borKeyValueConfigHelper`). The accepted admission fixture uses the same
+value (`state_sync_delay` 0 in `test/harness/fixtures/admission_bor/expected.json`,
+added by `derived_inputs` in `test/harness/bor_admission_probe.py`). With
+delay 0 the state sync query of block 4 ends at its time, nine seconds after
+the genesis, and the stub's event (one second after the genesis) lands at
+block 4 as the oracle states; any delay of at most seven seconds would give
+the same result. ORACLE.md "Fixtures" lists only the accounts; this value is
+the one fixture input it does not name, and the evidence records it. The genesis timestamp, the gas limit and every
 fork block stay as in the test genesis.
 
 The Heimdall stub is the in-process stub of the E01-02.inputs Bor probe (D98
@@ -48,8 +52,12 @@ runtime image:
 
 1. **generate:** a native Bor node seals blocks 1 to 4 with the tracked span-0
    test signer, as the admission probe does. Block 1 holds the four corpus
-   transactions signed with public test key 1; the native producer path
-   applies them with the signer as the execution beneficiary. Blocks 2 and 3
+   transactions signed with public test key 1. The probe applies them with
+   native `core.ApplyTransaction` (the signer as the execution beneficiary),
+   then native `FinalizeAndAssemble` and `Seal`; Bor's miner is not used, and
+   the probe sets the header fields (the time, the base fee and, at the
+   London block, the gas limit of 20,000,000) that native verification then
+   accepts on import. Blocks 2 and 3
    are empty, and block 4, the first sprint start, commits the state sync
    event that the stub serves.
 2. **import:** a new native node on a new instance starts with the admission
@@ -68,9 +76,12 @@ runtime image:
    - header fields and receipts from the native database;
    - call frames from the native `callTracer` through `tracers.API.TraceTransaction`;
    - state before and after each transaction, from a native re-execution of
-     the block prefix on the parent state (`core.ApplyTransaction`, author
-     from the engine, the recovered signer). Each re-executed receipt must
-     equal the stored receipt;
+     the block prefix on the parent state (the processor's pre-transaction
+     system calls, then `core.ApplyTransaction`, author from the engine, the
+     recovered signer). Each re-executed receipt must match the stored one in
+     status, gas used, cumulative gas and every log (address, topics and
+     data); the effective gas price is derived, not executed, and is read
+     from the stored receipt;
    - block-end state at the block root;
    - the state sync receipt (`rawdb.ReadBorReceipt`) and `lastStateId()` of
      `0x1001` through the native genesis contracts client.
@@ -87,8 +98,11 @@ wrong:
 - each block has exactly one observation;
 - the decision members are those observations;
 - the obligations are the `IMPORT` decisions;
-- the restart did not change the decisions;
+- neither the restart nor the re-import changed the decisions or the
+  obligations;
 - the re-import moved no head and reported no error.
+
+A bridge failure also marks every case FAIL in the run record.
 
 The expected file gives the driver only the corpus accounts to add and the
 account list to read, never a value.
@@ -100,7 +114,7 @@ From the repository root (`M` is the accepted BuildManifest of D95):
 ```sh
 python3 test/native_corpus/poly/poly_corpus.py prepare --build-manifest M --sha256 SHA --output PREP
 python3 test/native_corpus/poly/poly_corpus.py run PREP/preparation.json --sha256 SHA_OF_PREP --output RUN
-python3 test/native_corpus/poly/poly_corpus.py observe RUN
+python3 test/native_corpus/poly/poly_corpus.py observe RUN --output NEW
 python3 test/native_corpus/poly/test_poly_corpus.py
 python3 test/mutate.py test/native_corpus/poly/poly_corpus.mutants.json --output DIR
 ```
@@ -119,6 +133,11 @@ comparison are.
 - The state before and after each transaction comes from a native
   re-execution of the block prefix, not from the import itself; the
   re-execution must reproduce every stored receipt.
+- `observe` compares a retained run again with the expected file that run
+  used and writes only into a new directory; a retained record is never
+  rewritten.
+- A bridge failure fails the run and every case (a whole-observation
+  difference, as block 0's comparator treats one).
 - The state sync event comes from the engine's `Finalize` record. The
   `BlockChain` state sync feed is not used, because this native import path
   never sets the data it sends.

@@ -241,6 +241,54 @@
       "file": "test/native_corpus/poly/poly_corpus.py",
       "original": "if imported[\"head_hash\"] != reimported[\"head_hash\"]:",
       "replacement": "if False:"
+    },
+    {
+      "name": "check reimport decisions",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if reimported[\"decisions_after\"] != reimported[\"decisions_before\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check reimport obligations",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if reimported[\"obligations\"] != imported[\"obligations\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "verdict ignores bridge",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = comparison[\"result\"] == \"PASS\" and bool(cases)"
+    },
+    {
+      "name": "verdict ignores comparison",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = not failures and bool(cases)"
+    },
+    {
+      "name": "verdict without cases",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = comparison[\"result\"] == \"PASS\" and not failures"
+    },
+    {
+      "name": "cases keep PASS on bridge failure",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "        if failures and row[\"verdict\"] == \"PASS\":\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "write replaces",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    with open(path, \"x\") as handle:",
+      "replacement": "    with open(path, \"w\") as handle:"
+    },
+    {
+      "name": "format error escapes",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    except corpus_compare.FormatError as error:",
+      "replacement": "    except KeyError as error:"
     }
   ]
 }

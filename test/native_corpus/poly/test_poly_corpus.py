@@ -10,6 +10,7 @@ bridge checks, each against a single changed probe field.
 import copy
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -266,8 +267,78 @@ class BridgeTests(unittest.TestCase):
     def test_reimport_error(self):
         self.check(lambda i, r: r.__setitem__("reimport_error", "x"), "re-import failed")
 
+    def test_reimport_changed_a_decision(self):
+        self.check(lambda i, r: r["decisions_after"][1].__setitem__("marker", False), "re-import changed the decisions")
+
+    def test_reimport_changed_obligations(self):
+        self.check(lambda i, r: r.__setitem__("obligations", r["obligations"][:-1]),
+                   "re-import changed the delivery obligations")
+
     def test_head_moved(self):
         self.check(lambda i, r: r.__setitem__("head_hash", "0x00"), "moved the head")
+
+
+class VerdictTests(unittest.TestCase):
+    def comparison(self):
+        imported, reimported = sample()
+        return corpus_compare.compare(expected(), poly_corpus.observation_of(imported, reimported, SOURCE))
+
+    def test_pass_needs_the_comparison_and_the_bridge(self):
+        result, cases = poly_corpus.verdict(self.comparison(), [])
+        self.assertEqual(result, "PASS")
+        self.assertTrue(all(row["verdict"] == "PASS" for row in cases))
+
+    def test_bridge_failure_fails_the_run_and_every_case(self):
+        result, cases = poly_corpus.verdict(self.comparison(), ["the re-import moved the head"])
+        self.assertEqual(result, "FAIL")
+        self.assertEqual({row["verdict"] for row in cases}, {"FAIL"})
+        self.assertEqual(cases[0]["bridge_failures"], 1)
+
+    def test_comparison_failure_fails_the_run(self):
+        comparison = self.comparison()
+        comparison["result"] = "FAIL"
+        self.assertEqual(poly_corpus.verdict(comparison, [])[0], "FAIL")
+
+    def test_no_case_is_no_pass(self):
+        comparison = self.comparison()
+        comparison["cases"] = []
+        self.assertEqual(poly_corpus.verdict(comparison, [])[0], "FAIL")
+
+
+class ObserveTests(unittest.TestCase):
+    def directory(self, change=None):
+        root = Path(tempfile.mkdtemp()).resolve()
+        imported, reimported = sample()
+        if change:
+            change(imported, reimported)
+        (root / "import.json").write_text(json.dumps(imported))
+        (root / "reimport.json").write_text(json.dumps(reimported))
+        return root
+
+    def test_writes_new_files(self):
+        root = self.directory()
+        output = root / "out"
+        output.mkdir()
+        comparison, failures = poly_corpus.observe(root, expected(), SOURCE, output)
+        self.assertEqual((comparison["result"], failures), ("PASS", []))
+        self.assertEqual(json.loads((output / "comparison.json").read_text()), comparison)
+        self.assertEqual(json.loads((output / "observation.json").read_text())["source"], SOURCE)
+
+    def test_never_replaces_a_retained_file(self):
+        root = self.directory()
+        (root / "comparison.json").write_text("retained")
+        with self.assertRaises(FileExistsError):
+            poly_corpus.observe(root, expected(), SOURCE, root)
+        self.assertEqual((root / "comparison.json").read_text(), "retained")
+
+    def test_format_error_is_a_failed_comparison(self):
+        root = self.directory(lambda i, r: r["blocks"][0].__setitem__("hash", "not hex"))
+        output = root / "out"
+        output.mkdir()
+        comparison, _ = poly_corpus.observe(root, expected(), SOURCE, output)
+        self.assertEqual(comparison["result"], "FAIL")
+        self.assertIn("hash", comparison["format_error"])
+        self.assertEqual(poly_corpus.verdict(comparison, [])[0], "FAIL")
 
 
 if __name__ == "__main__":
