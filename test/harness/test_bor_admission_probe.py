@@ -314,20 +314,22 @@ class JudgeTests(unittest.TestCase):
         self.assertFails(name, kept_record, "kept a pin, inputs or another admission record")
 
         def obligations(o, c):
-            o["attempts"][0]["result"]["obligations"].pop()
+            o["attempts"][1]["result"]["obligations"].pop()
         self.assertFails(name, obligations, "are not the BATCH decisions")
 
         def same_block(o, c):
-            other = intent_row(dump(o), probe.key_of(3))
-            update_json(other, lambda r: r["members"][0].update(block=json.loads(intent_row(dump(o), key)["value"])[
+            final = o["attempts"][1]["store_after"]
+            other = intent_row(final, probe.key_of(3))
+            update_json(other, lambda r: r["members"][0].update(block=json.loads(intent_row(final, key)["value"])[
                 "members"][0]["block"]))
         self.assertFails(name, same_block, "a block has two decisions")
 
     def test_lost_before_admitted(self):
         def state(o, c):
             dump = o["attempts"][0]["store_after"]
-            admitted = copy.deepcopy(row_of(dump, "0000000000000003/preparing"))
-            admitted["key"] = admitted["key"].replace("/preparing", "/admitted")
+            admitted = copy.deepcopy(row_of(snap_rows(o["attempts"][0]["crash_result"], probe.key_of(2)),
+                                            "0000000000000002/admitted"))
+            admitted["key"] = admitted["key"].replace("0000000000000002", "0000000000000003")
             dump.append(admitted)
         self.assertFails("ac-cap-02-01-seal", state, "the lost observation is ADMITTED")
 
@@ -630,9 +632,11 @@ class JudgeTests(unittest.TestCase):
             o["attempts"][1]["result"]["decision_recovery"]["rejected"] = []
         self.assertFails(name, report, "the decision recovery did")
 
-        def again(o, c):
-            o["attempts"][1]["result"]["observations"].append({"block": 4, "key": probe.key_of(4), "counted_calls": []})
-        self.assertFails(name, again, "opened a new observation after the restart")
+        def again_decided(o, c):
+            dump = o["attempts"][1]["store_after"]
+            rec = json.loads(intent_row(dump, probe.key_of(4))["value"])
+            dump.append({"key": f"{probe.DECISION}{rec['sequence']:016x}/decided", "value": "{}", "value_sha256": "00"})
+        self.assertFails(name, again_decided, "re-import: block 4 is not a native rejection")
 
     def test_known_block(self):
         name = "known-block-restart"
@@ -830,7 +834,7 @@ class JudgeTests(unittest.TestCase):
 
     def test_malformed_observation(self):
         def broken(o, c):
-            o["attempts"][1]["store_after"] = None
+            o["attempts"][1]["result"]["snapshots"] = 5
         self.assertTrue(judge("native-rejection", broken)[0].startswith("native-rejection: malformed observation"))
 
 

@@ -1025,10 +1025,10 @@
       "replacement": "    if False:\n        fail(\"the rejected intent has a delivery obligation\")"
     },
     {
-      "name": "refused block observed again",
+      "name": "re-imported refused block may be decided",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "        if block in observations_of(result):\n            fail(\"the refused block opened a new observation after the restart\")",
-      "replacement": "        if False:\n            fail(\"the refused block opened a new observation after the restart\")"
+      "original": "                check_decision(context, final[\"store_after\"], block, again[\"key\"], ready_of(snap, again[\"key\"]), fail,\n                               \"re-import\", outcome=\"REJECTED\")",
+      "replacement": "                pass"
     },
     {
       "name": "re-import may observe",

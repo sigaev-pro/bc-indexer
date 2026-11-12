@@ -609,6 +609,9 @@ def check_decision(context, dump, number, key, ready_digest, fail, label, outcom
     no marker. The observation is closed: no pin, capsule or log remains, and
     an admission record that remains is the DECIDED record with the decision
     digest. Returns the decision sequence."""
+    if ready_digest is None:
+        fail(f"{label}: block {number} has no EXEC_READY digest to bind")
+        return None
     found = intents_naming(dump, key)
     if len(found) != 1:
         fail(f"{label}: block {number} has decisions {found} over {key}, expected one")
@@ -646,15 +649,17 @@ def check_decision(context, dump, number, key, ready_digest, fail, label, outcom
 
 
 def check_decisions_once(context, dump, fail, label, result=None):
-    """One decision per block in the store, and one delivery obligation per
-    NATIVE_DECIDED BATCH decision (the bridge's list, when given)."""
+    """One NATIVE_DECIDED decision per block in the store (a rejected intent
+    decides nothing, so a later application of the same block is a new
+    decision), and one delivery obligation per NATIVE_DECIDED BATCH decision
+    (the bridge's list, when given)."""
     recs = decision_records(dump)
-    blocks = [m["block"] for (seq, *kind), value in recs.items() if kind == ["intent"]
+    blocks = [m["block"] for (seq, *kind), value in recs.items() if kind == ["intent"] and (seq, "decided") in recs
               for m in value.get("members") or []]
     if len(blocks) != len(set(blocks)):
         fail(f"{label}: a block has two decisions")
     if result is not None:
-        batch = sorted(seq for (seq, *kind), value in recs.items() if kind == ["decided"] and value["delivery"] == "BATCH")
+        batch = sorted(seq for (seq, *kind), value in recs.items() if kind == ["decided"] and value.get("delivery") == "BATCH")
         if sorted(result.get("obligations") or []) != batch:
             fail(f"{label}: the obligations {result.get('obligations')} are not the BATCH decisions {batch}")
 
@@ -981,8 +986,18 @@ def check_decision_rejected(context, plan, attempts, block, fail):
         want = expected_requests(context["oracle"], context["config"], context["chain"][block - 1], "a")
         check_rows(result.get("recovery_counted_calls"), want, ["replay"] * len(want), fail, "recovery",
                    context["body_sha256"])
-        if block in observations_of(result):
-            fail("the refused block opened a new observation after the restart")
+        # Native Bor's pre-import check passes the block (the head is below the
+        # milestone), so the live import may execute it again: a new
+        # observation and a new intent that the native check refuses again.
+        again = observations_of(result).get(block)
+        if again is not None:
+            snap = snapshot_of(result, again.get("key") or "")
+            if snap is None or check_observation(context, snap["rows"], int(again["key"].rsplit(".", 1)[1], 16), block,
+                                                 "a", fail, "re-import") != "EXEC_READY":
+                fail("the re-imported refused block did not reach EXEC_READY")
+            else:
+                check_decision(context, final["store_after"], block, again["key"], ready_of(snap, again["key"]), fail,
+                               "re-import", outcome="REJECTED")
     else:
         final = first
         result = final["result"] or {}
