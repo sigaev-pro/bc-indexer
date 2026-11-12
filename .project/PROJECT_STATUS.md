@@ -150,6 +150,45 @@ passed and are superseded and kept.
 Next: confirmation of the final head by both reviewers and hosted CI on it,
 then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
+## E01-02.decision_bridge — Bor block
+
+Status: IN_PROGRESS (part of #17). Base `add17e6` (block 0 merged in PR
+#157). Branch/worktree: `claude/e01-02-decision-bor` /
+`e01-02-admission-bor-b95e1c`. Allowed paths: `adapters/bor/decision/native/**`,
+`adapters/bor/admission/native/**` (the switch to `OpenWithCleanup` and the
+recovery hooks), `test/harness/fixtures/admission_bor/**`,
+`test/harness/bor_admission_probe.py`, `test/harness/test_bor_admission_probe.py`,
+`test/harness/bor_admission_tree.py`, `test/harness/bor_decision.py`,
+`.project/evidence/E01-02.decision_bridge.bor.md` and this section. The
+shared `admission`, `decision` and `source_inputs` files are unchanged.
+Profile: POLY private local (fixture chain 15001); every public cell stays
+NOT_RUN (D96, D98, D99).
+
+Design, in full in [adapters/bor/decision/native/README.md](../adapters/bor/decision/native/README.md):
+
+- Import path (`insertChain`, edit `decision-import-write`): child-root
+  barrier (StateDB commit, `triedb.Commit(root)`, `SyncKeyValue`; native code
+  then reuses that commit, edit `decision-commit-once`), the intent of the
+  authoritative EXEC_READY observation with the transition the native fork
+  choice predicts (`IMPORT`, `CANONICAL` or `SIDE`), the native milestone and
+  checkpoint check (a refusal is `RejectIntent`), the native write whose
+  final authoritative batch carries the marker (the head batch, or the block
+  batch of a `SIDE` decision), `SyncKeyValue`, `Resolve` and `Cleanup`. Lock
+  order: chain lock, then guard.
+- `borimport` opens the admission with `OpenWithCleanup` and a
+  `source_inputs.Purge` adapter; stores from before the switch are discarded.
+- Recovery driver (`bordecision.Start`, chain lock then guard): the admission
+  recovery, `decision.Open`, then `decider.Recover` settles the unresolved
+  intent from native evidence (marker: `Resolve`; else native-only replay of
+  the member from its capsule and closed log and the native import of exactly
+  the saved transition, or its native rejection; anything else stops the
+  start) and completes the native import of every EXEC_READY observation
+  without a decision in RECOVERY_ONLY, then `decision.Bridge.GoLive`. The
+  re-executed obligation of the admission recovery is therefore imported
+  natively before the node goes live, not left for a later live import.
+- `NoMirror` until E05-01.registry: every `BATCH` decision keeps one
+  obligation and its marker.
+
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
 Status: ACCEPTED (2026-11-12); #16 closes when this record merges. Merged

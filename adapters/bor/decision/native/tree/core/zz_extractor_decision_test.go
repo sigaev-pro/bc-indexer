@@ -4,6 +4,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
@@ -173,7 +174,7 @@ func TestExtractorDecisionSideAndCanonical(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := c.decider(t)
-	steps := recordSteps(t)
+	recorded := recordSteps(t)
 	for _, block := range side {
 		if _, err := c.bc.InsertChain(types.Blocks{block}, false); err != nil {
 			t.Fatal(err)
@@ -183,23 +184,39 @@ func TestExtractorDecisionSideAndCanonical(t *testing.T) {
 	for _, tr := range d.intents {
 		kinds = append(kinds, tr.Kind)
 	}
-	// side[0] and side[1] do not outweigh the head; side[2] does, on another
-	// branch.
-	if !slices.Equal(kinds, []string{ExtractorSide, ExtractorSide, ExtractorCanonical}) {
-		t.Fatalf("kinds %v", kinds)
+	// side[0] does not outweigh the head. side[1] ties with canon[1] at
+	// height 2: the native tie-break takes it when the head hash is lower.
+	// side[2] then extends the head (IMPORT) or outweighs it from another
+	// branch (CANONICAL).
+	tieTaken := bytes.Compare(canon[1].Hash().Bytes(), side[1].Hash().Bytes()) < 0
+	want := []string{ExtractorSide, ExtractorSide, ExtractorCanonical}
+	steps := []string{"child-root", "marker", "child-root", "marker", "child-root", "block-batch", "marker"}
+	if tieTaken {
+		want = []string{ExtractorSide, ExtractorCanonical, ExtractorImport}
+		steps = []string{"child-root", "marker", "child-root", "block-batch", "marker", "child-root", "block-batch", "marker"}
 	}
-	for i, tr := range d.intents[:2] {
-		if tr.OldHead.Hash() != canon[1].Hash() || tr.NewHead.Hash() != canon[1].Hash() {
-			t.Fatalf("SIDE intent %d moves the head", i)
+	if !slices.Equal(kinds, want) {
+		t.Fatalf("kinds %v, want %v", kinds, want)
+	}
+	for i, tr := range d.intents {
+		switch tr.Kind {
+		case ExtractorSide:
+			if tr.OldHead.Hash() != tr.NewHead.Hash() {
+				t.Fatalf("SIDE intent %d moves the head", i)
+			}
+		case ExtractorImport:
+			if tr.Block.ParentHash() != tr.OldHead.Hash() || tr.NewHead.Hash() != tr.Block.Hash() {
+				t.Fatalf("IMPORT intent %d does not extend the head", i)
+			}
+		case ExtractorCanonical:
+			if tr.Block.ParentHash() == tr.OldHead.Hash() || tr.NewHead.Hash() != tr.Block.Hash() {
+				t.Fatalf("CANONICAL intent %d does not move the head onto another branch", i)
+			}
 		}
 	}
-	if tr := d.intents[2]; tr.OldHead.Hash() != canon[1].Hash() || tr.NewHead.Hash() != side[2].Hash() {
-		t.Fatal("the CANONICAL intent does not move the head onto the branch")
-	}
-	// A SIDE marker is in the block batch, a CANONICAL one in the final head batch.
-	want := []string{"child-root", "marker", "child-root", "marker", "child-root", "block-batch", "marker"}
-	if !slices.Equal(*steps, want) {
-		t.Fatalf("steps %v, want %v", *steps, want)
+	// A SIDE marker is in the block batch, the others in the final head batch.
+	if !slices.Equal(*recorded, steps) {
+		t.Fatalf("steps %v, want %v", *recorded, steps)
 	}
 	if len(d.resolved) != 3 || c.bc.CurrentBlock().Hash() != side[2].Hash() {
 		t.Fatalf("resolved %d, head %x", len(d.resolved), c.bc.CurrentBlock().Hash())
@@ -276,7 +293,8 @@ func TestExtractorRecoverImportsUnderTheChainLock(t *testing.T) {
 	blocks := c.blocks(1, 0x01)
 	d := &testDecider{t: t, bc: c.bc, db: c.db}
 	err := c.bc.ExtractorRecover(func(r *ExtractorRecovery) error {
-		if c.bc.chainmu.TryLock() {
+		// TryLock waits for the lock; TryLockNow does not.
+		if c.bc.chainmu.TryLockNow() {
 			c.bc.chainmu.Unlock()
 			return errors.New("the chain lock is not held")
 		}
@@ -303,7 +321,7 @@ func TestExtractorRecoverImportsUnderTheChainLock(t *testing.T) {
 		t.Fatalf("events %v", d.events)
 	}
 	// Outside ExtractorRecover the lock is free again.
-	if !c.bc.chainmu.TryLock() {
+	if !c.bc.chainmu.TryLockNow() {
 		t.Fatal("ExtractorRecover kept the chain lock")
 	}
 	c.bc.chainmu.Unlock()
@@ -336,7 +354,10 @@ func TestExtractorCommitOnceUsesTheBarrierCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := 0
-	commit := func(uint64, bool, bool) (common.Hash, int, error) { calls++; return common.Hash{byte(calls)}, calls, nil }
+	commit := func(uint64, bool, bool) (common.Hash, int, error) {
+		calls++
+		return common.Hash{byte(calls)}, calls, nil
+	}
 	if _, err := extractorCommitBefore(statedb, commit, 1, true, true); err != nil {
 		t.Fatal(err)
 	}

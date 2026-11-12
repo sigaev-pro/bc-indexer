@@ -802,32 +802,6 @@
      "tool_args": "",
      "milestone_conflict": 0,
      "reimport": false
-    },
-    {
-     "base": 1020,
-     "from": 1021,
-     "to": 1040,
-     "variant": "a",
-     "crash": "",
-     "set_head": -1,
-     "walk_check": 0,
-     "stale_prune_dir": "",
-     "prune_state": "",
-     "store_id": "",
-     "batch": false,
-     "tool_command": "",
-     "unobserved": false,
-     "rpc_during": 0,
-     "replay": false,
-     "rpc_control": 0,
-     "rpc_before": 0,
-     "expired_fetch": 0,
-     "finalize": 0,
-     "await_frozen": 0,
-     "verify_pins": false,
-     "tool_args": "",
-     "milestone_conflict": 0,
-     "reimport": false
     }
    ],
    "ac": [

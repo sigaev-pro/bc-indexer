@@ -330,7 +330,9 @@ func (bc *BlockChain) ExtractorRecover(fn func(*ExtractorRecovery) error) error 
 func (r *ExtractorRecovery) Head() *types.Header { return r.bc.CurrentBlock() }
 
 // Stored reports whether the block (header and body) is stored natively.
-func (r *ExtractorRecovery) Stored(hash common.Hash, number uint64) bool { return r.bc.HasBlock(hash, number) }
+func (r *ExtractorRecovery) Stored(hash common.Hash, number uint64) bool {
+	return r.bc.HasBlock(hash, number)
+}
 
 // Import completes the native import of an executed block from recovery
 // through the decision path of the import path (extractorWriteDecided).

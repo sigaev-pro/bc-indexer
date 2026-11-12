@@ -21,6 +21,7 @@ import bor_admission_probe as probe
 import bor_admission_tree as tree
 
 FIXTURE = Path(__file__).with_name("fixtures") / "admission_bor"
+ROOT = Path(__file__).resolve().parents[2]
 COMMIT = "3a018e38467594508ca31ebeaf804837fb92834a"
 
 
@@ -813,6 +814,25 @@ class TreeTests(unittest.TestCase):
             self.fake_tree(source)
             with self.assertRaises(tree.TreeError):
                 tree.install(source, patch_sets=(tree.NATIVE / "patches.json", tree.NATIVE / "patches.json"))
+
+    def test_bor_decision_assemble(self):
+        import bor_decision
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "module"
+            packages = bor_decision.assemble(target)
+            self.assertIn("extractor/decision/native/decider", packages)
+            self.assertIn("extractor/decision", packages)
+            for name in bor_decision.DECIDER:
+                self.assertEqual((target / "extractor/decision/native/decider" / name).read_bytes(),
+                                 (ROOT / "adapters/bor/decision/native/decider" / name).read_bytes())
+            table = json.loads((target / "extractor/decision/native/decider/decider.mutants.json").read_text())
+            self.assertEqual(table["root"], "../../../..")
+            self.assertTrue((target / "extractor/decision/native/decider" / table["root"] / "go.mod").is_file())
+            for mutant in table["mutants"]:
+                source = (target / "extractor/decision/native/decider" / table["root"] / mutant["file"]).read_text()
+                self.assertEqual(source.count(mutant["original"]), 1, mutant["name"])
+            with self.assertRaises(ValueError):
+                bor_decision.assemble(target)
 
     def test_install_never_replaces_a_native_file(self):
         patches = tree.load_patches()

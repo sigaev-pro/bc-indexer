@@ -585,15 +585,15 @@ type attemptResult struct {
 	// Decision bridge (E01-02.decision_bridge).
 	DecisionRecovery *decider.Report      `json:"decision_recovery,omitempty"`
 	Snapshots        map[string]*Snapshot `json:"snapshots"`
-	ChildRootsAtOpen map[string]bool `json:"child_roots_at_open"`
+	ChildRootsAtOpen map[string]bool      `json:"child_roots_at_open"`
 	// HeadAtOpen and StoredAtOpen are the native head and the stored blocks
 	// of the range when the node started, before the recovery.
-	HeadAtOpen   uint64   `json:"head_number_at_open"`
-	StoredAtOpen []uint64 `json:"stored_at_open"`
-	Decisions        []DecisionRow   `json:"decisions"`
-	Obligations      []uint64        `json:"obligations"`
-	Reimported       int             `json:"reimported"`
-	ReimportError    string          `json:"reimport_error,omitempty"`
+	HeadAtOpen    uint64        `json:"head_number_at_open"`
+	StoredAtOpen  []uint64      `json:"stored_at_open"`
+	Decisions     []DecisionRow `json:"decisions"`
+	Obligations   []uint64      `json:"obligations"`
+	Reimported    int           `json:"reimported"`
+	ReimportError string        `json:"reimport_error,omitempty"`
 }
 
 // DecisionRow is one decision that the bridge lists after the import.
@@ -1254,11 +1254,11 @@ type recorder struct {
 	milestone func(uint64, common.Hash)
 	// walk is the block whose native snapshot walk is checked from its
 	// capsule at EXEC_READY.
-	walk uint64
-	eth  *eth.Ethereum
-	mu        sync.Mutex
-	result    *attemptResult
-	window    []obligation.Row // counted calls of the open window, for crash points
+	walk   uint64
+	eth    *eth.Ethereum
+	mu     sync.Mutex
+	result *attemptResult
+	window []obligation.Row // counted calls of the open window, for crash points
 }
 
 type recorded struct {

@@ -13,7 +13,9 @@ import (
 	"github.com/ethereum/go-ethereum/extractor/decision"
 )
 
-func decisionObservation() admission.Observation { return admission.Observation{Key: "bor.run-1.0000000000000000"} }
+func decisionObservation() admission.Observation {
+	return admission.Observation{Key: "bor.run-1.0000000000000000"}
+}
 
 func TestTransitionCarriesTheNativeFields(t *testing.T) {
 	parent := &types.Header{Number: big.NewInt(4), Difficulty: big.NewInt(1)}

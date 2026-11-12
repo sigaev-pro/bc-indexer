@@ -1016,7 +1016,9 @@ def check_checkpoint_rio(context, plan, attempts, block, fail):
     the native snapshot walk, and the retention guards while a pin is live:
     SetHead before the recovery (the saved obligation keeps its pin), then a
     loss after the EXEC_READY of the last block keeps that pin live for the
-    store identity, startup prune recovery and prune-state refusals."""
+    store identity, startup prune recovery and prune-state refusals (the last
+    block stays undecided: the leftover state bloom filter of attempt 3 would
+    refuse every later start while its pin is live)."""
     lost, second = attempts[0], attempts[1]
     first = plan["attempts"][0]["from"]
     last = plan["attempts"][1]["to"]
@@ -1064,12 +1066,7 @@ def check_checkpoint_rio(context, plan, attempts, block, fail):
         fail("the patched bor snapshot prune-state did not refuse the live pins")
     if accepted.get("refused_live_pins") is not False:
         fail("the accepted bor binary refused the live pins, so the refusal does not prove the patch")
-    end = attempts[6]
-    ready = (records(final).get((f"{last - first:016x}", "exec-ready")) or {}).get("digest")
-    seq = check_decision(context, end["store_after"], last, pinned, ready, fail, "final recovery")
-    check_decision_recovery(end["result"], fail, "final restart",
-                            imported=[{"observation": pinned, "sequence": seq, "outcome": "NATIVE_DECIDED"}])
-    check_decisions_once(context, end["store_after"], fail, "final", end["result"])
+    check_decisions_once(context, final, fail, "final")
 
 
 def request_path(request):
