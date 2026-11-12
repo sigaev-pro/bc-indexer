@@ -2,17 +2,31 @@
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
-Status: IN_PROGRESS; #17 stays open. Merged: block 0 decision-core in PR
-#157 at `add17e6`, BSC in PR #159 at `3cc16fe`, Bor in PR #160 at `a7f21ef`
-and Geth in PR #158 at `7ee8eb0`. The acceptance audit found no qa verdict
-for the ETH slot. D101 records the owner's answers: long runs are gated on
-E05-01.registry and E05-01.activation_gc, and the other limits have owners.
-Still open before #17 closes: the qa AC-CAP-07 verdict for the private ETH
-slot (Geth session). BSC and POLY have explicit verdicts. Dependencies
-E01-02.admission (#16, PR #155 at `2a644f8`) and BOOT-09 are accepted. Plan agreed with the
-owner on 2026-11-12, the same split as #16: block 0 core (architect, then
-native-engineer), then parallel Geth, BSC and Bor blocks (native-engineer
-each) with qa for the AC matrix; reviewer for the Spec and Standards reviews.
+Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
+blocks:
+
+- block 0 decision-core: PR #157 at `add17e6`;
+- BSC: PR #159 at `3cc16fe`;
+- Bor: PR #160 at `a7f21ef`;
+- Geth: PR #158 at `7ee8eb0`, and the qa ETH verdict in PR #162 at
+  `2684a23`;
+- D101 and the acceptance audit: PR #161 at `b651e05`.
+
+Every row of the plan table below is met by its block, or is marked "Not
+decision_bridge" with an existing owner card. AC-CAP-07-01, 07-02, 07-03
+and 07-06 pass on every applicable private local slot, each with an explicit
+qa verdict: ETH (Geth records 03 at `ca88680`, PR #162), BSC (run 02 at
+`61cbfa3`) and POLY (run 03 at `10f90e9`). The cases that rest on a native
+test or a native outcome fixture are named in each verdict (D101). Every
+public cell stays NOT_RUN for E06 and E07 (D96, D98, D99). D101 gates every
+long-running, load or product run on E05-01.registry and
+E05-01.activation_gc, and names the owner of every other limit.
+
+Dependencies E01-02.admission (#16, PR #155 at `2a644f8`) and BOOT-09 are
+accepted. Plan agreed with the owner on 2026-11-12, the same split as #16:
+block 0 core (architect, then native-engineer), then parallel Geth, BSC and
+Bor blocks (native-engineer each) with qa for the AC matrix; reviewer for
+the Spec and Standards reviews.
 
 ### Block 0: decision-core
 
@@ -156,15 +170,16 @@ passed and are superseded and kept.
 Merged in PR #157 at `add17e6` (final head `6d40601`, Spec and Standards
 PASS, hosted CI passed).
 
-Next: the ETH qa verdict, then the acceptance record; #17 closes when that
-record merges.
+Next: none for E01-02.decision_bridge. Its dependent tasks
+E01-02.lifecycle_seams, E01-03.smoke_corpus and E02-01.semantic_descriptors
+are unlocked when #17 closes.
 
 ## E01-02.decision_bridge — Geth block
 
 Status: ACCEPTED in PR #158 at merge `7ee8eb0` (final head `5087db5`, Part
 of #17). The qa AC-CAP-07 verdict for the private ETH slot (D101) is below,
-from draft PR #162 on branch `claude/e01-02-decision-geth-qa` (base main
-`7ee8eb0`). Base main `add17e6` (block 0, PR #157). Branch/worktree:
+merged in PR #162 at `2684a23` (branch `claude/e01-02-decision-geth-qa`).
+Base main `add17e6` (block 0, PR #157). Branch/worktree:
 `claude/e01-02-decision-geth` / `e01-02-admission-geth-95b3ee`. Evidence:
 [E01-02.decision_bridge.geth](evidence/E01-02.decision_bridge.geth.md);
 design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/native/README.md).
@@ -204,8 +219,8 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
   mirror before E05-01.registry; head changes without a new block wait for
   E01-02.lifecycle_seams.
 
-Next: Spec and Standards confirmation of PR #162 on its final head, hosted CI,
-then merge with the owner's permission for that PR.
+PR #162 final head `7803e0d`: Spec and Standards PASS; hosted CI passed.
+Merged at `2684a23`.
 
 ## E01-02.decision_bridge — BSC block
 
