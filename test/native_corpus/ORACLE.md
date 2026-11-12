@@ -106,10 +106,10 @@ fixture has none. Two kinds of effects without a transaction exist on
 Ethereum, and neither is a system transaction:
 - post-merge protocol system calls (EIP-4788 beacon roots and EIP-2935
   history storage from Cancun and Prague, and the EIP-7002 and EIP-7251
-  request contracts). No TASK_DECOMPOSITION card names them; the proposed
-  owners, still to be confirmed by the coordinator, are E04-02.optional_scope
-  for their effects outside a transaction and E01-05.type_paths for the
-  current-fork system paths. This pre-merge fixture runs none of them;
+  request contracts). D102 assigns their state effects outside a
+  transaction to E04-02.optional_scope (off by default) and their presence
+  in the type and path matrix to E01-05.type_paths. This pre-merge fixture
+  runs none of them;
 - withdrawals and block rewards, which are credits outside a transaction.
   Line 89 checks them only when that extension is implemented; their owner is
   E04-02.optional_scope (outside-transaction records, off by default, enabled

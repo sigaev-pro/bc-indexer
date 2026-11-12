@@ -117,6 +117,12 @@ Measured head `8146ef7`: records 02 portable (37 tests), oracle-check and
 Python mutants (115 killed, none labeled equivalent), all PASS. Later block 0
 commits change only docs.
 
+D102 (owner decision, 2026-11-13, recorded in DECISIONS by this block):
+E04-02.optional_scope owns the state effects outside a transaction of the
+Ethereum post-merge protocol system calls (EIP-4788, EIP-2935, EIP-7002,
+EIP-7251), with withdrawals and block rewards, off by default;
+E01-05.type_paths owns their presence in the type and path matrix.
+
 Next: review 002, CI; then the client blocks.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
