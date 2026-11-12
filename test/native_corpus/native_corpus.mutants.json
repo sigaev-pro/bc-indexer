@@ -1,0 +1,606 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../..",
+  "description": "One mutant per checked condition of the E01-03.smoke_corpus comparator, reference executor and oracle fee rules.",
+  "copy": [
+    "test/native_corpus/*.py",
+    "test/native_corpus/*.md",
+    "test/native_corpus/expected/*"
+  ],
+  "test": [
+    "{python}",
+    "test/native_corpus/test_native_corpus.py",
+    "-v"
+  ],
+  "import": [
+    "corpus_compare",
+    "corpus_evm",
+    "corpus_oracle"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "format schema version",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "observation.get(\"schema_version\") == 1 and observation.get(\"kind\")",
+      "replacement": "True and observation.get(\"kind\")"
+    },
+    {
+      "name": "format kind",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "observation.get(\"kind\") == \"native-corpus-observation\",",
+      "replacement": "True,"
+    },
+    {
+      "name": "format family",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(observation.get(\"family\") in (\"eth\", \"bsc\", \"poly\"), \"unknown family\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format chain id",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(isinstance(observation.get(\"chain_id\"), int), \"chain_id must be an integer\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format source non-empty",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "isinstance(source, dict) and source,",
+      "replacement": "isinstance(source, dict),"
+    },
+    {
+      "name": "format blocks non-empty",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "isinstance(observation.get(\"blocks\"), list) and observation[\"blocks\"],",
+      "replacement": "isinstance(observation.get(\"blocks\"), list),"
+    },
+    {
+      "name": "format block hash",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_hex(block.get(\"hash\"), 64) and is_hex(block.get(\"state_root\"), 64)",
+      "replacement": "require(is_hex(block.get(\"state_root\"), 64)"
+    },
+    {
+      "name": "format base fee",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(block.get(\"base_fee\") is None or is_decimal(block[\"base_fee\"]), f\"{where}: base_fee\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format gas used",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "isinstance(block.get(\"gas_limit\"), int) and isinstance(block.get(\"gas_used\"), int),",
+      "replacement": "isinstance(block.get(\"gas_limit\"), int),"
+    },
+    {
+      "name": "format lists",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(isinstance(block.get(key), list), f\"{where}: {key} must be a list\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format tx hash",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_hex(tx.get(\"hash\"), 64), f\"{tx_where}: hash\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format receipt integers",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(isinstance(receipt.get(key), int), f\"{tx_where}: receipt {key}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format effective price",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_decimal(receipt.get(\"effective_gas_price\")), f\"{tx_where}: effective_gas_price\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format log fields",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "isinstance(log, dict) and set(log) == {\"address\", \"topics\", \"data\"}",
+      "replacement": "isinstance(log, dict)"
+    },
+    {
+      "name": "format frame value",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_decimal(frame[\"value\"]), f\"{where}: frame value\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format frame keys",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(key in frame, f\"{where}: frame lacks {key}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format balance",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_decimal(row.get(\"balance\")), f\"{where}: balance must be a decimal string\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format storage word",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "slot.isdigit() and is_hex(value, 64)",
+      "replacement": "slot.isdigit()"
+    },
+    {
+      "name": "format block state address",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_hex(address, 40), f\"{where}: state_after_block address\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format decisions",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(isinstance(decisions, list), \"decisions must be a list\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format reimport decisions",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "isinstance(reimport.get(\"new_decisions\"), int), \"reimport",
+      "replacement": "True, \"reimport"
+    },
+    {
+      "name": "format decimal leading zero",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "value.isdigit() and (value == \"0\" or not value.startswith(\"0\"))",
+      "replacement": "value.isdigit()"
+    },
+    {
+      "name": "format hex lowercase",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "set(value) <= HEX and len(value) % 2 == 0",
+      "replacement": "len(value) % 2 == 0"
+    },
+    {
+      "name": "format tx state address",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "require(is_hex(address, 40), f\"{tx_where}: {key} address\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "format frame calls",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "    for number, call in enumerate(frame[\"calls\"]):\n        check_frame(call, f\"{where}.calls[{number}]\")",
+      "replacement": "    pass"
+    },
+    {
+      "name": "diff body tx count",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"body_tx_count\", expected[\"tx_count\"], observed[\"body_tx_count\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff base fee",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"base_fee\", expected[\"base_fee\"], observed[\"base_fee\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff gas limit",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"gas_limit\", expected[\"gas_limit\"], observed[\"gas_limit\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff gas used",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"gas_used\", expected[\"gas_used\"], observed[\"gas_used\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff transaction fields",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, f\"transaction.{key}\", transaction[key], observed.get(key))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff receipt status",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "for key in (\"status\", \"gas_used\", \"cumulative_gas_used\", \"logs\"):",
+      "replacement": "for key in (\"gas_used\", \"cumulative_gas_used\", \"logs\"):"
+    },
+    {
+      "name": "diff receipt gas_used",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "for key in (\"status\", \"gas_used\", \"cumulative_gas_used\", \"logs\"):",
+      "replacement": "for key in (\"status\", \"cumulative_gas_used\", \"logs\"):"
+    },
+    {
+      "name": "diff receipt cumulative_gas_used",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "for key in (\"status\", \"gas_used\", \"cumulative_gas_used\", \"logs\"):",
+      "replacement": "for key in (\"status\", \"gas_used\", \"logs\"):"
+    },
+    {
+      "name": "diff receipt logs",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "for key in (\"status\", \"gas_used\", \"cumulative_gas_used\", \"logs\"):",
+      "replacement": "for key in (\"status\", \"gas_used\", \"cumulative_gas_used\"):"
+    },
+    {
+      "name": "diff effective price",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"receipt.effective_gas_price\", expected[\"effective_gas_price\"],\n               observed[\"receipt\"][\"effective_gas_price\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff frame",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"frame\", frame_view(expected[\"frame\"]), frame_view(observed[\"frame\"]))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff frame nested calls",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "\"calls\": [frame_view(call) for call in frame[\"calls\"]]}",
+      "replacement": "\"calls\": []}"
+    },
+    {
+      "name": "diff account balance",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "for key in (\"balance\", \"nonce\", \"code\"):",
+      "replacement": "for key in (\"nonce\", \"code\"):"
+    },
+    {
+      "name": "diff account nonce",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "for key in (\"balance\", \"nonce\", \"code\"):",
+      "replacement": "for key in (\"balance\", \"code\"):"
+    },
+    {
+      "name": "diff account code",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "for key in (\"balance\", \"nonce\", \"code\"):",
+      "replacement": "for key in (\"balance\", \"nonce\"):"
+    },
+    {
+      "name": "diff account storage",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, f\"{field}.{address}.storage.{slot}\", value, got.get(\"storage\", {}).get(slot))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff missing account",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.add(place, f\"{field}.{address}\", row, None)",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff state before",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "compare_accounts(diff, place, \"state_before\", expected[\"state_before\"], observed[\"state_before\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff state after",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "compare_accounts(diff, place, \"state_after\", expected[\"state_after\"], observed[\"state_after\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff transaction indexes",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"transaction indexes\", [tx[\"index\"] for tx in expected[\"transactions\"]],\n               [tx[\"index\"] for tx in observed[\"transactions\"]])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff system count",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"system transaction count\", len(kinds), len(observed[\"system_transactions\"]))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff system index",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(system_place, \"index\", first_system + offset, got[\"index\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff system fields",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "            diff.equal(system_place, key, row[key], got[key])",
+      "replacement": "            pass"
+    },
+    {
+      "name": "diff state sync count",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"state sync count\", len(syncs), len(observed[\"state_sync\"]))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff state sync id",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(sync_place, \"id\", row[\"event\"][\"id\"], got[\"id\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff state sync logs",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(sync_place, \"logs\", row[\"logs\"], got.get(\"logs\"))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff state sync last id",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(sync_place, \"state_receiver_last_state_id\", row[\"state_receiver_last_state_id\"],\n                   got.get(\"state_receiver_last_state_id\"))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff system nonce",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, f\"system nonce {address}\", nonce, observed.get(\"system_nonce_after\", {}).get(address))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff block state",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "compare_accounts(diff, place, \"state_after_block\", expected[\"state_after_block\"], observed[\"state_after_block\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff unchanged root",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(place, \"state_root equals the parent root\", parent[\"state_root\"] if parent else None,\n                   observed[\"state_root\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff family",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(whole, \"family\", expected[\"family\"], observation[\"family\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff chain id",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(whole, \"chain_id\", expected[\"chain_id\"], observation[\"chain_id\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff block numbers",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(whole, \"block numbers\", [b[\"number\"] for b in expected[\"blocks\"]],\n               [b[\"number\"] for b in observation[\"blocks\"]])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff decisions",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal([block[\"number\"], None], \"decisions\", [\"IMPORT\"], decided.get(block[\"number\"]))",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff reimport observations",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(whole, \"reimport.new_observations\", 0, observation[\"reimport\"][\"new_observations\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "diff reimport decisions",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "diff.equal(whole, \"reimport.new_decisions\", 0, observation[\"reimport\"][\"new_decisions\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "case place attribution",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "row[\"place\"] in places or\n",
+      "replacement": "\n"
+    },
+    {
+      "name": "case block attribution",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "(row[\"place\"][1] is None and row[\"place\"][0] in blocks)",
+      "replacement": "False"
+    },
+    {
+      "name": "case whole attribution",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "rows = [row for row in diff.rows if row[\"place\"] == whole or row[\"place\"] in places or",
+      "replacement": "rows = [row for row in diff.rows if row[\"place\"] in places or"
+    },
+    {
+      "name": "result needs no difference",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "result = \"PASS\" if not diff.rows and all(",
+      "replacement": "result = \"PASS\" if all("
+    },
+    {
+      "name": "exit code",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "return 0 if report[\"result\"] == \"PASS\" else 1",
+      "replacement": "return 0"
+    },
+    {
+      "name": "report never overwritten",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "open(report_path, \"x\")",
+      "replacement": "open(report_path, \"w\")"
+    },
+    {
+      "name": "usage needs two files",
+      "file": "test/native_corpus/corpus_compare.py",
+      "original": "    if len(args) != 2:\n        print(__doc__, file=sys.stderr)\n        return 2",
+      "replacement": "    pass"
+    },
+    {
+      "name": "evm cold account",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                    use(2500)",
+      "replacement": "                    use(0)"
+    },
+    {
+      "name": "evm sstore set",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                return cold + 20000",
+      "replacement": "                return cold + 5000"
+    },
+    {
+      "name": "evm cold slot",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                cold = 2100",
+      "replacement": "                cold = 0"
+    },
+    {
+      "name": "evm stipend",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                    call_gas += 2300",
+      "replacement": "                    call_gas += 0"
+    },
+    {
+      "name": "evm value transfer gas",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                    base += 9000",
+      "replacement": "                    base += 0"
+    },
+    {
+      "name": "evm new account gas",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                        base += 25000",
+      "replacement": "                        base += 0"
+    },
+    {
+      "name": "evm all but one 64th",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "available = gas - gas // 64",
+      "replacement": "available = gas"
+    },
+    {
+      "name": "evm revert keeps gas",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "return False, gas_left, output, frame",
+      "replacement": "return False, 0, output, frame"
+    },
+    {
+      "name": "evm revert discards state",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "        if reverted:\n            self.revert(snap)",
+      "replacement": "        if reverted:\n            pass"
+    },
+    {
+      "name": "evm log topic gas",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "use(375 + 375 * count + 8 * size",
+      "replacement": "use(375 + 8 * size"
+    },
+    {
+      "name": "evm memory quadratic",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "return 3 * words + words * words // 512",
+      "replacement": "return 3 * words"
+    },
+    {
+      "name": "evm london clears refund",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "clears = 100, 5000 - 2100, (4800 if rules.london else 15000)",
+      "replacement": "clears = 100, 5000 - 2100, 15000"
+    },
+    {
+      "name": "evm reset refund",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "                self.refund += 20000 - read",
+      "replacement": "                self.refund += 20000"
+    },
+    {
+      "name": "evm sentry",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "        if gas_left <= 2300:",
+      "replacement": "        if gas_left < 2300:"
+    },
+    {
+      "name": "evm warm recipient",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "tx.warm_accounts.update((sender, to, *PRECOMPILES))",
+      "replacement": "tx.warm_accounts.update((sender, *PRECOMPILES))"
+    },
+    {
+      "name": "evm refund cap",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "refund = min(tx.refund, used // rules.refund_quotient)",
+      "replacement": "refund = tx.refund"
+    },
+    {
+      "name": "evm return data on revert",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "if success or child[\"error\"] == \"execution reverted\":",
+      "replacement": "if success:"
+    },
+    {
+      "name": "evm istanbul call base",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "use(100 if rules.berlin else 700)",
+      "replacement": "use(100)"
+    },
+    {
+      "name": "evm empty call creates nothing",
+      "file": "test/native_corpus/corpus_evm.py",
+      "original": "        if not self.exists(to) and value == 0:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "oracle london tip",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "tip = used * (price - base_fee if rules.london else price)",
+      "replacement": "tip = used * price"
+    },
+    {
+      "name": "oracle bor burn",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "state.setdefault(burn, Account()).balance += burnt",
+      "replacement": "pass"
+    },
+    {
+      "name": "oracle bor fee log only with a tip",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "        if tip > 0:\n            logs.append(",
+      "replacement": "        if tip > 10 ** 30:\n            logs.append("
+    },
+    {
+      "name": "oracle bsc reward share",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "reward = fees >> 4",
+      "replacement": "reward = fees >> 3"
+    },
+    {
+      "name": "oracle bhilai denominator",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "base4 = base_fee_next(base3, gas_limit, 0, 64)",
+      "replacement": "base4 = base_fee_next(base3, gas_limit, 0, 16)"
+    },
+    {
+      "name": "oracle unused gas returned",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "state[tx[\"from\"]].balance += (tx[\"gas\"] - used) * price",
+      "replacement": "pass"
+    },
+    {
+      "name": "oracle effective price cap",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "return min(tx[\"max_fee_per_gas\"], base_fee + tx[\"max_priority_fee_per_gas\"])",
+      "replacement": "return base_fee + tx[\"max_priority_fee_per_gas\"]"
+    },
+    {
+      "name": "oracle bor transfer log",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "    hook = bor_transfer_hook if family == \"poly\" else None",
+      "replacement": "    hook = None"
+    },
+    {
+      "name": "oracle fee log uses the initial balance",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "(tip, initial_sender, initial_coinbase,",
+      "replacement": "(tip, state[tx[\"from\"]].balance, initial_coinbase,"
+    },
+    {
+      "name": "oracle eth reward",
+      "file": "test/native_corpus/corpus_oracle.py",
+      "original": "    state[ETH_COINBASE].balance += ETH_REWARD\n    block1.update(",
+      "replacement": "    block1.update("
+    }
+  ]
+}

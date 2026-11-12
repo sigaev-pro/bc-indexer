@@ -41,7 +41,8 @@ private fixture of its family (ETH chain 31337, BSC chain 714, Bor chain
 ### Independent expected results
 
 The qa role writes the oracle before any native generation or run. It is
-fixed in `test/native_corpus/oracle/`: literal expected values, the written
+fixed in `test/native_corpus/` (ORACLE.md, `corpus_oracle.py`,
+`corpus_evm.py` and `expected/`): literal expected values, the written
 arithmetic, and a small reference executor in Python for the few opcodes the
 contracts use, with the gas rules of each active fork (Istanbul for BSC
 blocks before Berlin, London for ETH and Bor). It never reads a native
@@ -67,7 +68,7 @@ call frames from the client's call tracer. A comparator in
 
 | Block | Role | Output | Allowed paths |
 |---|---|---|---|
-| 0 corpus-core | qa (oracle), then native-engineer (comparator and observation schema); reviewer | Oracle and reference executor for all three families, case catalog with provenance, observation schema, comparator, portable controls and mutants; no native run | `test/native_corpus/{README.md,oracle/**,catalog.json,*.py,*.mutants.json}`, `.project/evidence/E01-03.smoke_corpus.md`, this section |
+| 0 corpus-core | qa (oracle), then native-engineer (comparator and observation format); reviewer | Oracle and reference executor for all three families, cases with provenance, observation format, comparator, portable controls and mutants; no native run | `test/native_corpus/{README.md,ORACLE.md,expected/**,*.py,*.mutants.json}`, `.project/automation/ci.py` and `test_ci_discovery.py` (discover the corpus tests), `.project/evidence/E01-03.smoke_corpus.md`, this section |
 | ETH | native-engineer; qa for the matrix | Geth corpus fixture, import with the decision bridge, observer, measured records | `test/native_corpus/eth/**`, `.project/evidence/E01-03.smoke_corpus.eth.md` |
 | BSC | native-engineer; qa for the matrix | BSC corpus fixture, import with the decision bridge, observer, measured records | `test/native_corpus/bsc/**`, `.project/evidence/E01-03.smoke_corpus.bsc.md` |
 | POLY | native-engineer; qa for the matrix | Bor corpus fixture with the Heimdall stub, import with the decision bridge, observer, measured records | `test/native_corpus/poly/**`, `.project/evidence/E01-03.smoke_corpus.poly.md` |
@@ -81,7 +82,19 @@ E01-02.lifecycle_seams (D96), and the AC-CAP-07 verdicts were issued by
 E01-02.decision_bridge, so this task issues no new verdict for them. Its qa
 verdict is per case and family: PASS, FAIL or NOT_APPLICABLE with a reason.
 
-Next: block 0.
+### Block 0: corpus-core
+
+Branch `claude/e01-03-smoke-corpus` (this worktree). Design:
+[test/native_corpus/README.md](../test/native_corpus/README.md) and
+[ORACLE.md](../test/native_corpus/ORACLE.md). Contracts are hand-assembled
+(child: store, log, revert; parent: store, call the child with value and
+30,000 gas, record the failure, log; Bor receiver: store the state sync id,
+caller and data, log). The nested transaction uses 142,655 gas under London
+and 130,255 under Istanbul; the direct revert 43,883 and 41,783. Checks: 33
+portable tests and 97 Python mutants, all killed in a local run.
+
+Next: block 0 records, reviews, CI; then the client blocks after the
+coordinator approves the split.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 

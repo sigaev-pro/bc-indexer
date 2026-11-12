@@ -51,6 +51,7 @@ def test_modules(paths, root=ROOT):
     return [path for path in paths if path.name.startswith("test_") and path.suffix == ".py"
             and (path.is_relative_to(root / ".project") or
                  path.is_relative_to(root / "test/harness") or
+                 path.is_relative_to(root / "test/native_corpus") or
                  path.parent == root / "test")]
 
 
