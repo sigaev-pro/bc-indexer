@@ -406,9 +406,8 @@ func (s *Seam) Replay(chain *core.BlockChain, block *types.Block) (core.Extracto
 	if s.token == nil {
 		return nil, ErrGuard
 	}
-	n := block.NumberU64()
-	parent := chain.GetHeader(block.ParentHash(), n-1)
-	if n == 0 || parent == nil || !chain.HasState(parent.Root) {
+	n, parent := block.NumberU64(), chain.GetHeaderByHash(block.ParentHash())
+	if n == 0 || parent == nil || parent.Number.Uint64() != n-1 || !chain.HasState(parent.Root) {
 		return nil, fmt.Errorf("%w: block %d has no parent with state", ErrImportProfile, n)
 	}
 	if head := chain.CurrentBlock(); head == nil || head.Hash() != parent.Hash() {

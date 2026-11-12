@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/bsc"
+	"github.com/ethereum/go-ethereum/extractor/decision"
 	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -246,7 +247,11 @@ func (s *probeStore) write(key, value []byte) error {
 
 func (s *probeStore) Put(key, value []byte) error {
 	scope, owner, kind := recordKind(key)
-	s.emit(bsc.Event{"event": "put", "scope": scope, "owner": owner, "record": kind})
+	event := bsc.Event{"event": "put", "scope": scope, "owner": owner, "record": kind}
+	if scope == "decision" || (scope == "admission" && (kind == "exec-ready" || kind == "decided")) {
+		event["value"] = string(value)
+	}
+	s.emit(event)
 	if err := s.write(key, bytes.Clone(value)); err != nil {
 		return err
 	}
@@ -444,7 +449,7 @@ type scenario struct {
 	Observations   []observationRow           `json:"observations"`
 	Admission      map[string]json.RawMessage `json:"admission_records"`
 	Decisions      map[string]json.RawMessage `json:"decision_records"`
-	Markers        map[string]json.RawMessage `json:"markers"`
+	Markers        map[string]string          `json:"markers"`
 	Obligations    []obligationRow            `json:"obligations"`
 	Capsules       []string                   `json:"capsules"`
 	Pins           []string                   `json:"pins"`
@@ -479,7 +484,13 @@ func (n *node) finish(sc *scenario) {
 	run := probeProducer.ProducerID + "." + probeProducer.RunID + "/"
 	sc.Admission = n.prefixed("extractor-admission-v1/" + run)
 	sc.Decisions = n.prefixed("extractor-decision-v1/" + run)
-	sc.Markers = n.prefixed("extractor-decision-marker-v1/" + run)
+	sc.Markers = map[string]string{}
+	markers := []byte("extractor-decision-marker-v1/" + run)
+	it := n.db.NewIterator(markers, nil)
+	for it.Next() {
+		sc.Markers[strings.TrimPrefix(string(it.Key()), string(markers))] = hex.EncodeToString(it.Value())
+	}
+	it.Release()
 	sc.Capsules = []string{}
 	for key := range n.prefixed("extractor-source-inputs-v1/") {
 		if strings.HasSuffix(key, "/capsule") {
@@ -678,6 +689,12 @@ func TestNativeBSCDecision(t *testing.T) {
 			t.Fatal(err)
 		}
 		sc := &scenario{Name: "live", ModeAtStart: n.mode(), Extra: map[string]string{}}
+		// A hook call without the observation guard is refused.
+		_, err = n.hook.Begin(n.chain, fx.blocks[0])
+		sc.Extra["begin_without_guard"] = errText(err)
+		if !errors.Is(err, bsc.ErrGuard) {
+			t.Fatalf("begin without the guard: %v", err)
+		}
 		// A block before recovery is refused: the bridge is not open and
 		// admission is RECOVERY_ONLY.
 		_, err = n.chain.InsertChain(fx.blocks[:1])
@@ -732,6 +749,9 @@ func TestNativeBSCDecision(t *testing.T) {
 			}
 			return err
 		})
+		if mode == "intent-synced" {
+			pendingChecks(t, fx, n, sc)
+		}
 		onDisk := rawdb.HasLegacyTrieNode(n.db, fx.blocks[0].Root())
 		sc.RootAtRestart = &onDisk
 		headAtRestart := n.chain.CurrentBlock().Number.Uint64()
@@ -759,6 +779,29 @@ func TestNativeBSCDecision(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(work, "report.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// pendingChecks runs, at the restart after "intent-synced", the refusals of
+// the hook before recovery settles the intent: a block with an EXEC_READY
+// observation is not replayed before the bridge opens (ErrDeferred), and with
+// the bridge open, another block is refused while the intent of block 1 is
+// unresolved (ErrPending). The bridge is then closed again for Recover.
+func pendingChecks(t *testing.T, fx fixture, n *node, sc *scenario) {
+	_, err := n.chain.InsertChain(fx.blocks[:1])
+	sc.Extra["before_bridge"] = errText(err)
+	if !errors.Is(err, ErrDeferred) {
+		t.Fatalf("EXEC_READY block before the bridge opens: %v", err)
+	}
+	n.guarded(func(adm *admission.Admission, token *admission.Token) (err error) {
+		n.hook.bridge, err = decision.Open(token, n.hook.store, adm, n.hook.storeID, n.hook.roots, n.hook.mirror)
+		return err
+	})
+	_, err = n.chain.InsertChain(fx.blocks[1:])
+	sc.Extra["other_block_while_pending"] = errText(err)
+	if !errors.Is(err, decision.ErrPending) {
+		t.Fatalf("another block while an intent is unresolved: %v", err)
+	}
+	n.hook.bridge = nil
 }
 
 // checkReport checks the outcome of every scenario; the driver checks the
@@ -795,7 +838,11 @@ func checkReport(t *testing.T, fx fixture, scenarios []*scenario) {
 		if fmt.Sprint(got) != fmt.Sprint(append([]uint64{}, obligations...)) {
 			t.Errorf("%s: obligations %v", sc.Name, got)
 		}
-		gotMarkers := keysOf(sc.Markers)
+		gotMarkers := []string{}
+		for key := range sc.Markers {
+			gotMarkers = append(gotMarkers, key)
+		}
+		sort.Strings(gotMarkers)
 		if fmt.Sprint(gotMarkers) != fmt.Sprint(append([]string{}, markers...)) {
 			t.Errorf("%s: markers %v", sc.Name, gotMarkers)
 		}
