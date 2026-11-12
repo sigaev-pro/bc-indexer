@@ -216,6 +216,12 @@
       "replacement": "intent.Sequence != seq || (intent.Digest != want && false) {"
     },
     {
+      "name": "load accepts a malformed intent",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%w: intent %d: %v\", ErrCorrupt, seq, err)\n\t}\n",
+      "replacement": ""
+    },
+    {
       "name": "load accepts decided with rejected",
       "file": "extractor/decision/decision.go",
       "original": "\t\tif hasRejected || err != nil || decided.Sequence != seq",
@@ -378,7 +384,7 @@
       "replacement": ""
     },
     {
-      "name": "intend accepts a non EXEC_READY member",
+      "name": "intend checks the EXEC_READY record instead of the state",
       "file": "extractor/decision/decision.go",
       "original": "if obs == nil || obs.State != admission.ExecReady || obs.ExecReady.Digest != m.ExecReadyDigest {",
       "replacement": "if obs == nil || obs.ExecReady == nil || obs.ExecReady.Digest != m.ExecReadyDigest {",
@@ -407,6 +413,43 @@
       "file": "extractor/decision/decision.go",
       "original": "\t\t\tif other.State != admission.ExecReady {\n",
       "replacement": "\t\t\tif false {\n"
+    },
+    {
+      "name": "side closes its members",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif d.Intent.Kind == Side {\n\t\t\t// The side block",
+      "replacement": "\t\tif false {\n\t\t\t// The side block"
+    },
+    {
+      "name": "retains ignores the kind",
+      "file": "extractor/decision/decision.go",
+      "original": "\tif d.Intent.Kind != Side {\n\t\treturn false\n\t}\n",
+      "replacement": "",
+      "equivalent": "Only a SIDE decision leaves a member open after its close: a NATIVE_DECIDED IMPORT or CANONICAL decision closes its members before Cleanup can remove its marker, and Open finishes interrupted closes before it checks retention, so retains never sees an open member of another kind."
+    },
+    {
+      "name": "retains nothing",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\tif obs.Key == m.Observation {\n\t\t\t\treturn true\n",
+      "replacement": "\t\t\tif obs.Key == m.Observation {\n\t\t\t\treturn false\n"
+    },
+    {
+      "name": "open drops retained side decisions",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif d.State == Decided && !d.Marker && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d",
+      "replacement": "\t\tif false && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d"
+    },
+    {
+      "name": "cleanup keeps finished side decisions",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\tif d.State == Decided && !d.Marker && !retains(d, observations) {",
+      "replacement": "\t\tif d.State == Decided && !d.Marker && d.Intent.Kind != Side && !retains(d, observations) {"
+    },
+    {
+      "name": "undecided names only the unresolved intent",
+      "file": "extractor/decision/decision.go",
+      "original": "\tfor _, d := range b.open {\n\t\tfor _, m := range d.Intent.Members {\n\t\t\tnamed[m.Observation] = true",
+      "replacement": "\tfor _, d := range b.open {\n\t\tfor _, m := range d.Intent.Members {\n\t\t\tnamed[m.Observation] = d.State == Intended"
     },
     {
       "name": "intend stores the returned members",
@@ -561,14 +604,20 @@
     {
       "name": "cleanup does not sync the deletions",
       "file": "extractor/decision/decision.go",
-      "original": "\tif err := b.db.SyncKeyValue(); err != nil {\n\t\treturn b.fail(err)\n\t}\n\tfor _, d := range done {",
-      "replacement": "\tfor _, d := range done {"
+      "original": "\tif len(done) != 0 {\n\t\tif err := b.db.SyncKeyValue(); err != nil {\n\t\t\treturn b.fail(err)\n\t\t}\n",
+      "replacement": "\tif len(done) != 0 {\n"
     },
     {
       "name": "cleanup keeps done decisions open",
       "file": "extractor/decision/decision.go",
-      "original": "\t\tdelete(b.open, d.Sequence)\n\t}\n\tif err := b.advance(); err != nil {\n\t\treturn err\n\t}\n\treturn b.prune()",
-      "replacement": "\t}\n\tif err := b.advance(); err != nil {\n\t\treturn err\n\t}\n\treturn b.prune()"
+      "original": "\t\t\tdelete(b.open, seq)\n",
+      "replacement": "\t\t\t_ = seq\n"
+    },
+    {
+      "name": "cleanup removes a marker twice",
+      "file": "extractor/decision/decision.go",
+      "original": "if !ok || d.State != Decided || !d.Marker {",
+      "replacement": "if !ok || d.State != Decided {"
     },
     {
       "name": "advance passes an open decision",

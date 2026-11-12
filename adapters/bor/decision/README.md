@@ -51,7 +51,11 @@ verdict.
   through the hash provider and `SyncKeyValue` (the child-root barrier).
 - `Mirror` (E05-01.registry): `Applied(sequence, decidedDigest)` reports
   whether the mirror durably applied the decision, so that its
-  applied-decision frontier covers it.
+  applied-decision frontier covers it. The bridge asks it only about
+  NATIVE_DECIDED `BATCH` decisions. Decision sequences are not contiguous
+  for the mirror: a `CHECKPOINT` decision or a rejected intent never reaches
+  it, so its frontier is per decision sequence and digest, never a
+  contiguous prefix.
 - The native decision marker. The native patch of each client writes
   `MarkerValue(intent)` under `MarkerKey(producer, sequence)` in the final
   authoritative native batch of the decision (with the head, canonical or
@@ -113,9 +117,10 @@ The caller holds the observation guard. One decision, in protocol order:
 4. `Resolve(n)`: the marker must be present with exactly the intent bytes.
    It writes `/<n>/decided` with `BATCH` if the intent has public events and
    `CHECKPOINT` otherwise, and syncs. This sync is the commit point of the
-   authoritative decision and its single delivery obligation. Then it closes
-   the resolved observations with `Admission.Decide`, which releases their
-   parent pins: the child root and the decision are durable now.
+   authoritative decision and its single delivery obligation. Then, except
+   for `SIDE`, it closes the resolved observations with `Admission.Decide`,
+   which releases their parent pins: the child root and the decision are
+   durable now. A `SIDE` decision retains its members (see "Side blocks").
 5. Delivery (E02-01, E05-01, E03): `Obligations` lists each NATIVE_DECIDED
    `BATCH` decision that the mirror has not applied. The mirror allocates
    the batch for it atomically, builds the descriptors and closes READY.
@@ -124,9 +129,30 @@ The caller holds the observation guard. One decision, in protocol order:
    `/lowwater` and deletes the records below it (`/purged`).
 
 `RejectIntent(n, evidence)` records the native rejection of an unresolved
-intent (for example a fork choice that the native side refused) when no
-marker exists. It closes the members with `Admission.Decide` using the
-rejection digest. No NATIVE_DECIDED record, obligation or Applied follows.
+intent when no marker exists: the native side never applied the transition
+and kept none of its member blocks (for example a native validation or
+commit failure after EXEC_READY). It closes the members with
+`Admission.Decide` using the rejection digest. No NATIVE_DECIDED record,
+obligation or Applied follows. A valid block that loses the fork choice is
+stored natively as a side block, so its intent is a `SIDE` decision, never
+a rejection.
+
+### Side blocks
+
+A known side block can become canonical later without a new execution
+(NATIVE_CAPTURE_PROTOCOL, "known branch"); its corpus binding, pin and
+inputs must still exist then. So a `SIDE` decision does not close its
+members: they stay EXEC_READY with their pins, capsules and logs, the
+admission low-water mark stays below them, and the decision stays listed
+in `Decisions` (NATIVE_DECIDED, its marker removed by `Cleanup`) while it
+retains a member. `Undecided` and `GoLive` treat retained members as
+decided. A later `CANONICAL` or `IMPORT` decision that names a retained
+member closes it, and the `SIDE` decision is then done. The release of side
+blocks that never become canonical belongs to E05-01.activation_gc, which
+adds its step to this package (never by writing these keys) and releases
+only on the irreversible anchor of the native profile. Until then the
+retained state grows with the number of stored side blocks, as the GC rule
+requires.
 
 ### Delivery obligation
 
@@ -170,8 +196,12 @@ decision in `[lowwater, counter)` with its marker:
 | NATIVE_DECIDED without marker, or rejected | Done |
 
 `Open` then closes, again, every open observation of a resolved decision
-(finishing a close that a power loss interrupted), advances `/lowwater` and
-deletes the records below it.
+other than `SIDE` (finishing a close that a power loss interrupted),
+advances `/lowwater` and deletes the records below it. The client recovery
+driver opens the admission, finishes its ADMITTED obligations (`ExecReady`
+or `Reject`) and abandons INPUT_PREPARING observations before it opens the
+bridge: an observation of a decided block that is not EXEC_READY stops
+`Open` with `ErrInvariant`.
 
 An absent marker never proves a decision. The client recovery driver first
 runs the native DB recovery, then, for an unresolved intent, either
@@ -192,6 +222,7 @@ Crash points of one decision (unit form):
 | Before EXEC_READY is durable (AC-CAP-07-01) | ADMITTED | `Intend` refuses it; admission recovers the same obligation |
 | After EXEC_READY, child root volatile (AC-CAP-07-02) | EXEC_READY, undecided | `Intend` refuses (`ErrChildRoot`) until native-only replay makes the same root durable |
 | In `Intend`, before the counter sync | No decision | An orphan intent is overwritten |
+| Process crash in `Intend` after the counter write, before its sync | Unresolved intent without marker (`Open` syncs the visible counter) | Recovery completes or rejects it, as after any unresolved intent |
 | After `Intend`, inside the native mutation (AC-CAP-07-03) | Unresolved intent, no marker | `Resolve` is `ErrNoMarker`; native recovery completes the saved transition |
 | After a native rejection, before `RejectIntent` (AC-CAP-07-06) | Unresolved intent, no marker | `RejectIntent` records the rejection; no obligation |
 | After the marker, before the decided sync | Unresolved intent with marker | `Resolve` completes it |
@@ -229,8 +260,9 @@ inside a digest input is its 32 raw bytes; `head = u64(number) || hash`.
 ### Bounds and concurrency
 
 The guard serializes all calls. One intent is unresolved at a time, so
-`Open` reads at most the decisions whose markers are not yet removed, which
-the mirror bounds. Records of done decisions are deleted in batches of 256
+`Open` reads the decisions whose markers are not yet removed, which the
+mirror bounds, and the `SIDE` decisions that still retain a member, which
+E05-01.activation_gc bounds. Records of done decisions are deleted in batches of 256
 sequences per sync; a power loss repeats a batch.
 
 ## Checks

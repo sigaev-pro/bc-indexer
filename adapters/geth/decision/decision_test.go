@@ -248,6 +248,8 @@ func (r *fakeRoots) Durable(root string) (bool, error) { return r.durable[root],
 // fakeMirror is the applied-decision frontier of the mirror.
 type fakeMirror struct {
 	applied map[uint64]string
+	// applies counts how often each decision was applied.
+	applies map[uint64]int
 	calls   int
 	err     error
 }
@@ -265,6 +267,7 @@ func (m *fakeMirror) Applied(seq uint64, digest string) (bool, error) {
 func (m *fakeMirror) apply(obligations []Obligation) {
 	for _, o := range obligations {
 		m.applied[o.Decided.Sequence] = o.Decided.Digest
+		m.applies[o.Decided.Sequence]++
 	}
 }
 
@@ -289,7 +292,8 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{t: t, v: loadVectors(t), db: newStore(),
 		pins:   &fakePins{roots: map[string]string{}, digests: map[string]string{}},
 		inputs: &fakeInputs{capsules: map[string]string{}, consumed: map[string]admission.Consumed{}},
-		roots:  &fakeRoots{durable: map[string]bool{}}, mirror: &fakeMirror{applied: map[uint64]string{}}}
+		roots:  &fakeRoots{durable: map[string]bool{}},
+		mirror: &fakeMirror{applied: map[uint64]string{}, applies: map[uint64]int{}}}
 	f.token = admission.NewGuard().Acquire()
 	f.reopen(f.db)
 	return f
@@ -813,7 +817,14 @@ func TestNativeRejectionIsExplicit(t *testing.T) {
 	}
 	// A power loss inside RejectIntent: the observation is closed only if
 	// the rejection is durable, and a repeat completes it.
-	for crash := 1; crash <= 6; crash++ {
+	probe := newFixture(t)
+	probe.live()
+	probe.intend(probe.importIntent(probe.execReady(probe.v.Candidate)))
+	start := probe.db.ops
+	if _, err := probe.b.RejectIntent(probe.token, 0, probe.v.RejectionEvidence); err != nil {
+		t.Fatalf("probe reject: %v", err)
+	}
+	for crash := 1; crash <= probe.db.ops-start; crash++ {
 		for _, keep := range []uint{0, 0b10, 0b110, ^uint(0)} {
 			g := newFixture(t)
 			g.live()
@@ -944,7 +955,7 @@ func TestPowerLossAtEveryStep(t *testing.T) {
 			}
 			f.reopen(f.db.powerLoss(keep))
 			f.recoverAll()
-			if len(f.mirror.applied) != 1 || f.mirror.applied[0] != f.v.ImportDecidedDigest {
+			if len(f.mirror.applied) != 1 || f.mirror.applied[0] != f.v.ImportDecidedDigest || f.mirror.applies[0] != 1 {
 				t.Fatalf("crash %d keep %b: applied %v", crash, keep, f.mirror.applied)
 			}
 			if len(f.decisions()) != 0 || len(f.openObservations()) != 0 || f.hasMarker(0) || f.hasMarker(1) ||
@@ -1070,6 +1081,11 @@ func TestOpenRejectsDamage(t *testing.T) {
 				string(f.db.durable[string(f.b.recordKey(0, "decided"))]), f.v.ImportDecidedDigest,
 				f.v.FinalityDecidedDigest, 1))
 		}, ErrCorrupt},
+		{"intent with a malformed head", func(f *fixture) {
+			f.intend(f.importIntent(f.execReady(f.v.Candidate)))
+			put(f, f.b.recordKey(0, "intent"), strings.Replace(string(f.db.durable[string(f.b.recordKey(0, "intent"))]),
+				f.v.OldHead.Hash, "AB", 1))
+		}, ErrCorrupt},
 		{"intent of another producer", func(f *fixture) {
 			f.intend(f.importIntent(f.execReady(f.v.Candidate)))
 			var record IntentRecord
@@ -1155,6 +1171,15 @@ func TestOpenRejectsDamage(t *testing.T) {
 		if err := f.tryReopen(f.db); !errors.Is(err, tc.want) {
 			t.Fatalf("%s: %v, want %v", tc.name, err, tc.want)
 		}
+	}
+	// A malformed intent names the cause.
+	fm := newFixture(t)
+	fm.live()
+	fm.intend(fm.importIntent(fm.execReady(fm.v.Candidate)))
+	put(fm, fm.b.recordKey(0, "intent"), strings.Replace(string(fm.db.durable[string(fm.b.recordKey(0, "intent"))]),
+		fm.v.OldHead.Hash, "AB", 1))
+	if err := fm.tryReopen(fm.db); err == nil || !strings.Contains(err.Error(), `digest "AB"`) {
+		t.Fatalf("malformed intent: %v", err)
 	}
 	// A missing intent is named as such.
 	f0 := newFixture(t)
@@ -1256,6 +1281,11 @@ func TestArgumentsGuardAndStoreErrors(t *testing.T) {
 	f.db.syncErr = errDisk
 	if _, err := Open(f.token, f.db, f.adm, f.v.StoreID, f.roots, f.mirror); !errors.Is(err, errDisk) {
 		t.Fatalf("sync error: %v", err)
+	}
+	// The guard is checked before the store is touched.
+	if _, err := Open(admission.NewGuard().Acquire(), f.db, f.adm, f.v.StoreID, f.roots, f.mirror); !errors.Is(err,
+		admission.ErrGuard) {
+		t.Fatalf("foreign token: %v", err)
 	}
 	f.db.syncErr = nil
 	other := admission.NewGuard().Acquire()
@@ -1492,5 +1522,64 @@ func TestPruneKeepsItsOrder(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestSideRetainsItsMembers: a SIDE decision keeps its observations
+// EXEC_READY with their pins, so the known side block can become canonical
+// later without a new execution; the later decision closes them.
+func TestSideRetainsItsMembers(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	ready := f.execReady(f.v.Candidate)
+	side := f.importIntent(ready)
+	side.Kind, side.Events, side.OldHead = Side, false, side.NewHead
+	record := f.intend(side)
+	f.native(record)
+	if decided := f.resolve(0); decided.Delivery != Checkpoint {
+		t.Fatalf("SIDE delivery %s", decided.Delivery)
+	}
+	f.cleanup()
+	writes := f.db.writes
+	f.cleanup()
+	if f.db.writes != writes {
+		t.Fatalf("a repeated cleanup of a retained SIDE decision wrote %d times", f.db.writes-writes)
+	}
+	list := f.openObservations()
+	if len(list) != 1 || list[0].Key != ready.Observation || len(f.pins.released) != 0 {
+		t.Fatalf("SIDE closed its member: %v, released %v", list, f.pins.released)
+	}
+	if f.hasMarker(0) || len(f.obligations()) != 0 {
+		t.Fatalf("SIDE kept its marker or has an obligation")
+	}
+	for _, reopen := range []bool{false, true} {
+		if reopen {
+			f.reopen(f.db)
+		}
+		decisions := f.decisions()
+		if len(decisions) != 1 || decisions[0].State != Decided || decisions[0].Marker {
+			t.Fatalf("reopen %v: retained SIDE decision %+v", reopen, decisions)
+		}
+		if undecided, _ := f.b.Undecided(f.token); len(undecided) != 0 {
+			t.Fatalf("reopen %v: a retained member is undecided", reopen)
+		}
+		f.live()
+	}
+	// The side block becomes canonical without a new execution.
+	canonical := f.importIntent(ready)
+	canonical.Kind = Canonical
+	record = f.intend(canonical)
+	f.native(record)
+	f.resolve(1)
+	if len(f.openObservations()) != 0 || !slices.Equal(f.pins.released, []string{ready.Observation}) {
+		t.Fatalf("the canonical decision did not close the member")
+	}
+	if got := f.admissionDecided(0); got == f.v.ImportDecidedDigest || got == "" {
+		t.Fatalf("member closed with %s", got)
+	}
+	f.mirror.apply(f.obligations())
+	f.cleanup()
+	if len(f.decisions()) != 0 || string(f.db.durable[string(f.b.key("lowwater"))]) != `{"sequence":2}` {
+		t.Fatalf("decisions left %+v", f.decisions())
 	}
 }

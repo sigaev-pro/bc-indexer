@@ -439,6 +439,17 @@ func Open(t *admission.Token, db admission.DeleteStore, adm *admission.Admission
 			return nil, err
 		}
 	}
+	// A NATIVE_DECIDED SIDE decision without marker stays open while one of
+	// its members is retained.
+	observations, err := adm.Observations(t)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range resolved {
+		if d.State == Decided && !d.Marker && retains(d, observations) {
+			b.open[d.Sequence] = d
+		}
+	}
 	if err := b.advance(); err != nil {
 		return nil, err
 	}
@@ -459,7 +470,10 @@ func (b *Bridge) load(seq uint64) (*Decision, error) {
 		return nil, fmt.Errorf("%w: missing intent %d", ErrCorrupt, seq)
 	}
 	want, err := IntentDigest(intent)
-	if err != nil || intent.NativeStoreID != b.storeID || intent.Producer != b.producer.ProducerID+"."+b.producer.RunID ||
+	if err != nil {
+		return nil, fmt.Errorf("%w: intent %d: %v", ErrCorrupt, seq, err)
+	}
+	if intent.NativeStoreID != b.storeID || intent.Producer != b.producer.ProducerID+"."+b.producer.RunID ||
 		intent.Sequence != seq || intent.Digest != want {
 		return nil, fmt.Errorf("%w: intent %d", ErrCorrupt, seq)
 	}
@@ -532,6 +546,24 @@ func (b *Bridge) marker(intent IntentRecord) (bool, error) {
 	return true, nil
 }
 
+// retains reports whether a SIDE decision still retains an open member. A
+// SIDE decision keeps its members EXEC_READY, with their pins and inputs,
+// because a known side block can later become canonical without a new
+// execution (NATIVE_CAPTURE_PROTOCOL, known branch).
+func retains(d *Decision, observations []admission.Observation) bool {
+	if d.Intent.Kind != Side {
+		return false
+	}
+	for _, m := range d.Intent.Members {
+		for _, obs := range observations {
+			if obs.Key == m.Observation {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func delivery(intent IntentRecord) Delivery {
 	if intent.Events {
 		return Batch
@@ -593,8 +625,9 @@ func (b *Bridge) Decisions(t *admission.Token) ([]Decision, error) {
 	return out, nil
 }
 
-// Undecided lists the EXEC_READY observations of the admission that no
-// open intent names. Each needs a decision before GoLive.
+// Undecided lists the EXEC_READY observations of the admission that no open
+// decision names: neither an unresolved intent nor a SIDE decision that
+// retains them. Each needs a decision before GoLive.
 func (b *Bridge) Undecided(t *admission.Token) ([]admission.Observation, error) {
 	if err := b.enter(t); err != nil {
 		return nil, err
@@ -604,7 +637,7 @@ func (b *Bridge) Undecided(t *admission.Token) ([]admission.Observation, error) 
 		return nil, err
 	}
 	named := map[string]bool{}
-	if d := b.unresolved(); d != nil {
+	for _, d := range b.open {
 		for _, m := range d.Intent.Members {
 			named[m.Observation] = true
 		}
@@ -901,6 +934,12 @@ func (b *Bridge) RejectIntent(t *admission.Token, seq uint64, evidenceDigest str
 func (b *Bridge) closeMembers(t *admission.Token, d *Decision) error {
 	digest := ""
 	if d.Decided != nil {
+		if d.Intent.Kind == Side {
+			// The side block may become canonical later without a new
+			// execution: its observations stay EXEC_READY with their pins
+			// and inputs, and the SIDE decision retains them.
+			return nil
+		}
 		digest = d.Decided.Digest
 	} else {
 		digest = d.Rejected.Digest
@@ -958,7 +997,9 @@ func (b *Bridge) Obligations(t *admission.Token) ([]Obligation, error) {
 // applied. It deletes the markers and syncs in one separate step, then
 // advances the low-water mark. After a power loss before that sync the
 // markers stay, and the mirror's applied frontier keeps their decisions out
-// of Obligations until Cleanup runs again.
+// of Obligations until Cleanup runs again. A SIDE decision stays open
+// without its marker while it retains a member; it is done once a later
+// decision closed every member.
 func (b *Bridge) Cleanup(t *admission.Token) error {
 	if err := b.enter(t); err != nil {
 		return err
@@ -966,7 +1007,7 @@ func (b *Bridge) Cleanup(t *admission.Token) error {
 	var done []*Decision
 	for seq := b.lowwater; seq < b.next; seq++ {
 		d, ok := b.open[seq]
-		if !ok || d.State != Decided {
+		if !ok || d.State != Decided || !d.Marker {
 			continue
 		}
 		if d.Decided.Delivery == Batch {
@@ -983,15 +1024,22 @@ func (b *Bridge) Cleanup(t *admission.Token) error {
 		}
 		done = append(done, d)
 	}
-	if len(done) == 0 {
-		return nil
+	if len(done) != 0 {
+		if err := b.db.SyncKeyValue(); err != nil {
+			return b.fail(err)
+		}
+		for _, d := range done {
+			d.Marker = false
+		}
 	}
-	if err := b.db.SyncKeyValue(); err != nil {
-		return b.fail(err)
+	observations, err := b.adm.Observations(t)
+	if err != nil {
+		return err
 	}
-	for _, d := range done {
-		d.Marker = false
-		delete(b.open, d.Sequence)
+	for seq, d := range b.open {
+		if d.State == Decided && !d.Marker && !retains(d, observations) {
+			delete(b.open, seq)
+		}
 	}
 	if err := b.advance(); err != nil {
 		return err

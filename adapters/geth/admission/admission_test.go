@@ -1516,7 +1516,18 @@ func TestDecideNeedsExecReady(t *testing.T) {
 
 func TestDecidePowerLoss(t *testing.T) {
 	for _, cleanup := range []bool{false, true} {
-		for crash := 0; crash <= 8; crash++ {
+		// The crash range is the number of store operations of a clean Decide.
+		probe := newFixture(t)
+		if cleanup {
+			probe = newCleanupFixture(t)
+		}
+		probe.live()
+		probeKey := probe.execReadyObservation()
+		start := probe.db.ops
+		if _, err := probe.a.Decide(probe.token, probeKey, probe.v.DecisionDigest); err != nil {
+			t.Fatalf("probe decide: %v", err)
+		}
+		for crash := 0; crash <= probe.db.ops-start; crash++ {
 			for _, keep := range []uint{0, 1, ^uint(0)} {
 				f := newFixture(t)
 				if cleanup {

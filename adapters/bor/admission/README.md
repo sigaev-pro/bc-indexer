@@ -143,8 +143,8 @@ releases the pin of every closed observation above `/lowwater` again
 No other step releases a pin.
 
 Records of closed observations (D100). An admission opened with
-`OpenWithCleanup(t, db, producer, pins, inputs, cleanup)` also deletes
-them: after the release, `cleanup.Purge(key)` deletes the capsule and the
+`OpenWithCleanup(t, db, producer, pins, inputs, purger)` (an `InputPurger`) also deletes
+them: after the release, `purger.Purge(key)` deletes the capsule and the
 dependency log (`source_inputs.Purge`; nil when nothing is left), and after
 `/lowwater` passes a sequence, its records under this package are deleted in
 batches of 256 sequences, each batch syncing its deletions before it advances

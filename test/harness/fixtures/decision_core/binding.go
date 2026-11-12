@@ -1,5 +1,5 @@
 // Package decisionbinding adapts the source inputs core (E01-02.inputs) to
-// the Cleanup interface of the admission core, so that closing an
+// the InputPurger interface of the admission core, so that closing an
 // observation deletes its capsule and dependency log (D100).
 //
 // This is test-only glue for block 0 of E01-02.decision_bridge. `python3
@@ -11,12 +11,12 @@ package decisionbinding
 
 import sourceinputs "github.com/ethereum/go-ethereum/extractor/source_inputs"
 
-// Cleanup deletes the inputs of a closed observation from the native store.
-type Cleanup struct {
+// Purger deletes the inputs of a closed observation from the native store.
+type Purger struct {
 	DB sourceinputs.Deleter
 }
 
 // Purge deletes the capsule and dependency log of the observation.
-func (c Cleanup) Purge(observation string) error {
+func (c Purger) Purge(observation string) error {
 	return sourceinputs.Purge(c.DB, observation)
 }

@@ -46,10 +46,10 @@ type DeleteStore interface {
 	Delete(key []byte) error
 }
 
-// Cleanup deletes the capsule and dependency log records of a closed
+// InputPurger deletes the capsule and dependency log records of a closed
 // observation (D100); source_inputs.Purge does this. It must return nil when
 // nothing is left to delete.
-type Cleanup interface {
+type InputPurger interface {
 	Purge(observation string) error
 }
 
@@ -414,7 +414,7 @@ func putRecord(db Store, key []byte, value any) error {
 type Admission struct {
 	db       Store
 	deleter  DeleteStore
-	cleanup  Cleanup
+	cleanup  InputPurger
 	guard    *Guard
 	producer Producer
 	owner    string
@@ -463,14 +463,14 @@ func Open(t *Token, db Store, p Producer, pins Pins, inputs Inputs) (*Admission,
 // released, cleanup.Purge deletes its capsule and dependency log; after the
 // low-water mark passes it, its own records under this package are deleted.
 // Open repeats both for closes that a power loss interrupted.
-func OpenWithCleanup(t *Token, db DeleteStore, p Producer, pins Pins, inputs Inputs, cleanup Cleanup) (*Admission, error) {
+func OpenWithCleanup(t *Token, db DeleteStore, p Producer, pins Pins, inputs Inputs, cleanup InputPurger) (*Admission, error) {
 	if db == nil || cleanup == nil {
 		return nil, fmt.Errorf("%w: missing store or cleanup", ErrInvalid)
 	}
 	return open(t, db, db, p, pins, inputs, cleanup)
 }
 
-func open(t *Token, db Store, deleter DeleteStore, p Producer, pins Pins, inputs Inputs, cleanup Cleanup) (*Admission, error) {
+func open(t *Token, db Store, deleter DeleteStore, p Producer, pins Pins, inputs Inputs, cleanup InputPurger) (*Admission, error) {
 	if t == nil || t.guard == nil {
 		return nil, ErrGuard
 	}

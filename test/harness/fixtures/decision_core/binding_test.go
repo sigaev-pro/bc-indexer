@@ -209,7 +209,7 @@ type node struct {
 func (n *node) open(db *memStore) error {
 	n.db = db
 	adm, err := admission.OpenWithCleanup(n.token, db, admission.Producer{ProducerID: n.v.Producer, RunID: n.v.Run},
-		&storePins{db: db}, admissionbinding.Inputs{DB: db}, Cleanup{DB: db})
+		&storePins{db: db}, admissionbinding.Inputs{DB: db}, Purger{DB: db})
 	if err != nil {
 		return err
 	}

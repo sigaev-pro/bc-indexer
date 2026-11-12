@@ -819,7 +819,7 @@
       "replacement": "\tif false {\n"
     },
     {
-      "name": "decide accepts an ADMITTED observation",
+      "name": "decide checks the EXEC_READY record instead of the state",
       "file": "admission.go",
       "original": "\tif obs.State != ExecReady {\n\t\treturn DecidedRecord{}, fmt.Errorf(\"%w: Decide of %s in %s\", ErrState, key, obs.State)\n\t}\n",
       "replacement": "\tif obs.ExecReady == nil {\n\t\treturn DecidedRecord{}, fmt.Errorf(\"%w: Decide of %s in %s\", ErrState, key, obs.State)\n\t}\n",

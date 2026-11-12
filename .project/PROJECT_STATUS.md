@@ -58,6 +58,14 @@ Design (architect), in full in the package README
   observation (`source_inputs.Purge`, crash-safe through a synced plan) and
   deletes the admission records below its low-water mark; the bridge deletes
   its own records below its low-water mark.
+- Side blocks: a `SIDE` decision (a valid block stored without a head
+  change, including one that lost the fork choice) keeps its members
+  EXEC_READY with their pins and inputs, so the known branch can become
+  canonical later without execution; a later `CANONICAL` or `IMPORT`
+  decision closes them. This is a technical decision within the known-branch
+  retention rule: these observations are not closed in the D100 sense, and
+  their release belongs to E05-01.activation_gc. `RejectIntent` is only for a
+  transition the native side never applied and whose blocks it kept none of.
 - One decision per block (D100): the authoritative observation of a block is
   its open EXEC_READY observation with the lowest sequence; `Intend` refuses
   any other, and resolving a decision closes every open EXEC_READY
@@ -90,17 +98,32 @@ or `test/harness/fixtures/`. qa owns the AC-CAP-07 matrix.
 | BSC finality result of `GetFinalizedHeader` and the fork choice after EXEC_READY, recorded in the decision evidence; a read below the capsule window fails closed | D100, D99 item 2 | BSC (the native finality paths stay with E05-01.bsc_finality) |
 | AC-CAP-07-01, 07-02, 07-03 and 07-06 per network, private local | TASK_DECOMPOSITION card | Geth (ETH), BSC (BSC), Bor (POLY); qa owns the matrix |
 | Canonical and finality callers without a new block (Engine forkchoice, `SetCanonical`, finality setters, known branch, StateSync, whitelist): every one passes the decision bridge | NATIVE_CAPTURE_PROTOCOL; TASK_DECOMPOSITION | Not decision_bridge: E01-02.lifecycle_seams (caller map), using the `CANONICAL` and `FINALITY` intents of block 0 |
-| Mirror, registry generation, READY, applied-decision frontier; AC-CAP-07-04 and 07-05 | TASK_DECOMPOSITION REQ-CAP-07 rows | Not decision_bridge: E05-01.registry (implements `Mirror`) |
+| Mirror, registry generation, READY, applied-decision frontier; AC-CAP-07-04 and 07-05 | TASK_DECOMPOSITION REQ-CAP-07 rows | Not decision_bridge: E05-01.registry (implements `Mirror`; its frontier is per decision sequence and digest, because `CHECKPOINT` decisions and rejected intents never reach it) |
 | Decision to batch ID allocation and semantic descriptors | CONTROL_WIRE_CONTRACT, TASK_DECOMPOSITION | Not decision_bridge: E02-01.semantic_descriptors |
 | Native finality paths (safe and finalized setters, VotePool, Polygon checkpoints) | D100 | Not decision_bridge: E05-01.eth_finality, E05-01.bsc_finality, E05-01.polygon_observer |
-| Retained replay pins for branches and lifecycle GC | NATIVE_CAPTURE_PROTOCOL GC | Not decision_bridge: E05-01.activation_gc |
+| Release of retained side blocks: a `SIDE` decision keeps its members EXEC_READY with pins and inputs (block 0); their release on the irreversible anchor, as a step added to `decision`, and the other retained replay pins and lifecycle GC | NATIVE_CAPTURE_PROTOCOL known branch and GC | Not decision_bridge: E05-01.activation_gc |
 | Record corpus digest (`exec_digest`) and normalization profile | D100 | Not decision_bridge: E04-01.block_record |
 
 #17 closes only when every client block is accepted and AC-CAP-07-01,
 07-02, 07-03 and 07-06 pass for every applicable private slot under the D96
 boundary.
 
-Next: native-engineer implementation, Spec and Standards reviews.
+Review 001 (head `5b4665a`): Spec REQUEST_CHANGES (P1: a `SIDE` decision
+closed its members, so their pins, inputs and EXEC_READY binding were gone
+when the known side block later became canonical; P2: the `Mirror` contract
+did not say that `CHECKPOINT` sequences never reach it; P3: the rejection
+example, a process-crash row, the recovery driver order, inputs closed before
+the switch to `OpenWithCleanup`) and Standards PASS with P3 notes (the
+"applied once" assertion, fixed crash ranges, two equivalent mutant names,
+the stale next action, the `Cleanup` name, the intent decode error). The
+follow-up commit retains the members of `SIDE` decisions (technical decision
+above; release with E05-01.activation_gc), states the per-sequence `Mirror`
+contract, documents the rest, renames `admission.Cleanup` to `InputPurger`,
+and adds the tests and mutants. Retained record 01 of `5b4665a` passed and
+is superseded and kept.
+
+Next: Spec and Standards review 002 and hosted CI on the exact head, then
+READY to the coordinator; then the Geth, BSC and Bor blocks.
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
