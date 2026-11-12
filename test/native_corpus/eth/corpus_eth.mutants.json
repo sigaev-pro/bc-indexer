@@ -1,0 +1,152 @@
+{
+ "schema_version": 1,
+ "language": "python",
+ "root": "../../..",
+ "description": "Single-check mutants of the ETH corpus driver: the native self-checks of the probe output, the source rule, and the comparison of the install with the accepted install record. The comparison of native output with the oracle is block 0's comparator, whose mutants are in test/native_corpus/native_corpus.mutants.json.",
+ "copy": [
+  "test/native_corpus/eth/*",
+  "test/native_corpus/expected/eth.json",
+  "test/native_corpus/*.py",
+  "test/harness/*.py",
+  "test/harness/fixtures/admission_geth/*",
+  "test/harness/fixtures/genesis.json",
+  "adapters/geth/**"
+ ],
+ "test": [
+  "{python}",
+  "test/native_corpus/eth/test_corpus_eth.py",
+  "-v"
+ ],
+ "import": [
+  "corpus_eth"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "attach error ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if row.get(\"attach_error\") is not None:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "insert error ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if row.get(\"insert_error\") is not None:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "head not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if (row.get(\"head\") or {}).get(\"number\") != block_count:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "restart import not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "for name in (\"live_import\", \"restart_import\"):",
+   "replacement": "for name in (\"live_import\",):"
+  },
+  {
+   "name": "live import not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "for name in (\"live_import\", \"restart_import\"):\n        row",
+   "replacement": "for name in (\"restart_import\",):\n        row"
+  },
+  {
+   "name": "records before ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if live.get(\"admission_records_before\") or live.get(\"decision_records_before\"):",
+   "replacement": "if live.get(\"admission_records_before\"):"
+  },
+  {
+   "name": "admission records before ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if live.get(\"admission_records_before\") or live.get(\"decision_records_before\"):",
+   "replacement": "if live.get(\"decision_records_before\"):"
+  },
+  {
+   "name": "no decision record ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if not live.get(\"decision_records_after\"):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "check count ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if not isinstance(checks, list) or [row.get(\"number\") for row in checks] != list(range(1, block_count + 1)):",
+   "replacement": "if not isinstance(checks, list):"
+  },
+  {
+   "name": "root not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if row.get(\"root_equal\") is not True:",
+   "replacement": "if row.get(\"root_equal\") is False:"
+  },
+  {
+   "name": "gas not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if row.get(\"cumulative_gas_used\") != row.get(\"header_gas_used\"):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "receipt not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if receipt.get(\"receipt_equal\") is not True:",
+   "replacement": "if receipt.get(\"receipt_equal\") is False:"
+  },
+  {
+   "name": "missing native accepted",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if not isinstance(native, dict):\n        return [\"observation has no native section\"]",
+   "replacement": "if not isinstance(native, dict):\n        return []"
+  },
+  {
+   "name": "probe source kept",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "require(\"source\" not in observation, \"The probe must not write the source\")",
+   "replacement": ""
+  },
+  {
+   "name": "install patches ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return [key for key in (\"patches\", \"files\", \"packages\") if want[key] != got[key]]",
+   "replacement": "return [key for key in (\"files\", \"packages\") if want[key] != got[key]]"
+  },
+  {
+   "name": "install files ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return [key for key in (\"patches\", \"files\", \"packages\") if want[key] != got[key]]",
+   "replacement": "return [key for key in (\"patches\", \"packages\") if want[key] != got[key]]"
+  },
+  {
+   "name": "install packages ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return [key for key in (\"patches\", \"files\", \"packages\") if want[key] != got[key]]",
+   "replacement": "return [key for key in (\"patches\", \"files\") if want[key] != got[key]]"
+  },
+  {
+   "name": "decision patches ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "for row in record[\"patches\"] + record[\"decision\"][\"patches\"]]",
+   "replacement": "for row in record[\"patches\"]]"
+  },
+  {
+   "name": "decision files ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "for row in record[\"files\"] + record[\"decision\"][\"files\"])",
+   "replacement": "for row in record[\"files\"])"
+  },
+  {
+   "name": "probe package not excluded",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if not row[\"relative\"].startswith(\"cmd/\"))",
+   "replacement": ")"
+  },
+  {
+   "name": "repository equality by name",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "current.is_file() and \\\n            hashlib.sha256(current.read_bytes()).hexdigest() == row[\"copy\"][\"sha256\"]",
+   "replacement": "current.is_file()"
+  }
+ ]
+}
