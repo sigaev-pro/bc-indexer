@@ -101,7 +101,7 @@ or `test/harness/fixtures/`. qa owns the AC-CAP-07 matrix.
 | Mirror, registry generation, READY, applied-decision frontier; AC-CAP-07-04 and 07-05 | TASK_DECOMPOSITION REQ-CAP-07 rows | Not decision_bridge: E05-01.registry (implements `Mirror`; its frontier is per decision sequence and digest, because `CHECKPOINT` decisions and rejected intents never reach it) |
 | Decision to batch ID allocation and semantic descriptors | CONTROL_WIRE_CONTRACT, TASK_DECOMPOSITION | Not decision_bridge: E02-01.semantic_descriptors |
 | Native finality paths (safe and finalized setters, VotePool, Polygon checkpoints) | D100 | Not decision_bridge: E05-01.eth_finality, E05-01.bsc_finality, E05-01.polygon_observer |
-| Release of retained side blocks: a `SIDE` decision keeps its members EXEC_READY with pins and inputs (block 0); their release on the irreversible anchor, as a step added to `decision`, and the other retained replay pins and lifecycle GC | NATIVE_CAPTURE_PROTOCOL known branch and GC | Not decision_bridge: E05-01.activation_gc |
+| Release of retained side blocks: a `SIDE` decision keeps its members EXEC_READY with pins and inputs (block 0), which keeps the pin-ledger guards engaged and stops both low-water marks and their record deletion at the oldest retained block; their release on the irreversible anchor, as a step added to `decision`, and the other retained replay pins and lifecycle GC | NATIVE_CAPTURE_PROTOCOL known branch and GC | Not decision_bridge: E05-01.activation_gc |
 | Record corpus digest (`exec_digest`) and normalization profile | D100 | Not decision_bridge: E04-01.block_record |
 
 #17 closes only when every client block is accepted and AC-CAP-07-01,

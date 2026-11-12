@@ -1570,16 +1570,114 @@ func TestSideRetainsItsMembers(t *testing.T) {
 	canonical.Kind = Canonical
 	record = f.intend(canonical)
 	f.native(record)
-	f.resolve(1)
+	closing := f.resolve(1)
 	if len(f.openObservations()) != 0 || !slices.Equal(f.pins.released, []string{ready.Observation}) {
 		t.Fatalf("the canonical decision did not close the member")
 	}
-	if got := f.admissionDecided(0); got == f.v.ImportDecidedDigest || got == "" {
-		t.Fatalf("member closed with %s", got)
+	if got := f.admissionDecided(0); got != closing.Digest {
+		t.Fatalf("member closed with %s, want %s", got, closing.Digest)
 	}
 	f.mirror.apply(f.obligations())
 	f.cleanup()
 	if len(f.decisions()) != 0 || string(f.db.durable[string(f.b.key("lowwater"))]) != `{"sequence":2}` {
 		t.Fatalf("decisions left %+v", f.decisions())
+	}
+}
+
+// TestRejectedIntentKeepsRetainedSideBlocks: a canonical switch to a
+// retained side block that the native side refuses leaves the block
+// retained by its SIDE decision.
+func TestRejectedIntentKeepsRetainedSideBlocks(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	ready := f.execReady(f.v.Candidate)
+	side := f.importIntent(ready)
+	side.Kind, side.Events, side.OldHead = Side, false, side.NewHead
+	f.native(f.intend(side))
+	f.resolve(0)
+	f.cleanup()
+	canonical := f.importIntent(ready)
+	canonical.Kind = Canonical
+	f.intend(canonical)
+	if _, err := f.b.RejectIntent(f.token, 1, f.v.RejectionEvidence); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	if list := f.openObservations(); len(list) != 1 || len(f.pins.released) != 0 {
+		t.Fatalf("the rejection closed a retained side block: %v, released %v", list, f.pins.released)
+	}
+	f.reopen(f.db)
+	if decisions := f.decisions(); len(decisions) != 1 || decisions[0].Intent.Kind != Side {
+		t.Fatalf("the SIDE decision no longer retains its member: %+v", decisions)
+	}
+	f.live()
+}
+
+// TestSidePowerLoss: a power loss at every store operation of a SIDE
+// decision, from Intend through Resolve and Cleanup, with four subsets of
+// unsynced writes kept; after recovery the member is EXEC_READY with its
+// pin and a SIDE decision retains it.
+func TestSidePowerLoss(t *testing.T) {
+	sideIntent := func(f *fixture, ready admission.ExecReadyRecord) Intent {
+		in := f.importIntent(ready)
+		in.Kind, in.Events, in.OldHead = Side, false, in.NewHead
+		return in
+	}
+	run := func(f *fixture, ready admission.ExecReadyRecord) error {
+		record, err := f.b.Intend(f.token, sideIntent(f, ready))
+		if err != nil {
+			return err
+		}
+		value, _ := MarkerValue(record)
+		if err := f.db.Put(MarkerKey(f.producer(), 0), value); err != nil {
+			return err
+		}
+		if err := f.db.SyncKeyValue(); err != nil {
+			return err
+		}
+		if _, err := f.b.Resolve(f.token, 0); err != nil {
+			return err
+		}
+		return f.b.Cleanup(f.token)
+	}
+	probe := newFixture(t)
+	probe.live()
+	ready := probe.execReady(probe.v.Candidate)
+	start := probe.db.ops
+	if err := run(probe, ready); err != nil {
+		t.Fatalf("clean run: %v", err)
+	}
+	total := probe.db.ops - start
+	for crash := 1; crash <= total; crash++ {
+		for _, keep := range []uint{0, 1, 0b0110, ^uint(0)} {
+			f := newFixture(t)
+			f.live()
+			ready := f.execReady(f.v.Candidate)
+			f.db.crashAt = f.db.ops + crash
+			if err := run(f, ready); !errors.Is(err, errCrash) {
+				t.Fatalf("crash %d: %v", crash, err)
+			}
+			f.reopen(f.db.powerLoss(keep))
+			for _, d := range f.decisions() {
+				if d.State == Intended {
+					if !d.Marker {
+						f.native(d.Intent)
+					}
+					f.resolve(d.Sequence)
+				}
+			}
+			if undecided, _ := f.b.Undecided(f.token); len(undecided) != 0 {
+				f.native(f.intend(sideIntent(f, ready)))
+				f.resolve(0)
+			}
+			f.cleanup()
+			f.reopen(f.db)
+			list := f.decisions()
+			if len(list) != 1 || list[0].Intent.Kind != Side || list[0].Marker || len(f.openObservations()) != 1 ||
+				len(f.pins.released) != 0 {
+				t.Fatalf("crash %d keep %b: decisions %+v, observations %v, released %v", crash, keep, list,
+					f.openObservations(), f.pins.released)
+			}
+			f.live()
+		}
 	}
 }

@@ -147,12 +147,21 @@ admission low-water mark stays below them, and the decision stays listed
 in `Decisions` (NATIVE_DECIDED, its marker removed by `Cleanup`) while it
 retains a member. `Undecided` and `GoLive` treat retained members as
 decided. A later `CANONICAL` or `IMPORT` decision that names a retained
-member closes it, and the `SIDE` decision is then done. The release of side
+member closes it, and the `SIDE` decision is then done; if the native side
+refuses that later transition, `RejectIntent` leaves the retained block
+with its `SIDE` decision. The release of side
 blocks that never become canonical belongs to E05-01.activation_gc, which
 adds its step to this package (never by writing these keys) and releases
-only on the irreversible anchor of the native profile. Until then the
-retained state grows with the number of stored side blocks, as the GC rule
-requires.
+only on the irreversible anchor of the native profile. Until then, as the
+GC rule requires, each retained side block keeps its parent pin live (so the
+pin-ledger guards of the native retention patch stay engaged: the freezer
+limit, `PruneState`, `RequireRewindAllowed`, and the BSC rewind by
+timestamp), and the admission and decision low-water marks stop at the
+oldest retained block. Behind that mark, records of later closed
+observations and done decisions are not deleted and every `Open` reads them
+(their capsules and logs are still purged at the close). The cost grows with
+the blocks imported since the oldest retained side block, until
+E05-01.activation_gc releases it.
 
 ### Delivery obligation
 
@@ -193,10 +202,12 @@ decision in `[lowwater, counter)` with its marker:
 | NATIVE_DECIDED `BATCH` without marker that the mirror has not applied | `ErrInvariant` (the marker was removed before the mirror) |
 | Unresolved intent, with or without marker | Listed in `Decisions` |
 | NATIVE_DECIDED with marker | Listed; `Obligations` lists it until the mirror applies it |
-| NATIVE_DECIDED without marker, or rejected | Done |
+| NATIVE_DECIDED `SIDE` without marker that retains a member | Listed in `Decisions`; its members are not undecided |
+| Other NATIVE_DECIDED without marker, or rejected | Done |
 
-`Open` then closes, again, every open observation of a resolved decision
-other than `SIDE` (finishing a close that a power loss interrupted),
+`Open` then lists the `SIDE` decisions that retain a member and closes,
+again, every open observation of a resolved decision other than `SIDE`,
+except blocks a `SIDE` decision retains (finishing a close that a power loss interrupted),
 advances `/lowwater` and deletes the records below it. The client recovery
 driver opens the admission, finishes its ADMITTED obligations (`ExecReady`
 or `Reject`) and abandons INPUT_PREPARING observations before it opens the
@@ -260,9 +271,10 @@ inside a digest input is its 32 raw bytes; `head = u64(number) || hash`.
 ### Bounds and concurrency
 
 The guard serializes all calls. One intent is unresolved at a time, so
-`Open` reads the decisions whose markers are not yet removed, which the
-mirror bounds, and the `SIDE` decisions that still retain a member, which
-E05-01.activation_gc bounds. Records of done decisions are deleted in batches of 256
+without retained side blocks `Open` reads the decisions whose markers are
+not yet removed, which the mirror bounds. With a retained side block it
+reads every decision from the oldest retained one on (see "Side blocks"),
+which E05-01.activation_gc bounds. Records of done decisions are deleted in batches of 256
 sequences per sync; a power loss repeats a batch.
 
 ## Checks

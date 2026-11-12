@@ -432,15 +432,9 @@ func Open(t *admission.Token, db admission.DeleteStore, adm *admission.Admission
 			b.open[seq] = d
 		}
 	}
-	// Finish the closes that a power loss interrupted after the decided or
-	// rejected record was synced.
-	for _, d := range resolved {
-		if err := b.closeMembers(t, d); err != nil {
-			return nil, err
-		}
-	}
 	// A NATIVE_DECIDED SIDE decision without marker stays open while one of
-	// its members is retained.
+	// its members is retained. It is listed before the closes below, so a
+	// rejected intent leaves the blocks it retains.
 	observations, err := adm.Observations(t)
 	if err != nil {
 		return nil, err
@@ -448,6 +442,13 @@ func Open(t *admission.Token, db admission.DeleteStore, adm *admission.Admission
 	for _, d := range resolved {
 		if d.State == Decided && !d.Marker && retains(d, observations) {
 			b.open[d.Sequence] = d
+		}
+	}
+	// Finish the closes that a power loss interrupted after the decided or
+	// rejected record was synced.
+	for _, d := range resolved {
+		if err := b.closeMembers(t, d); err != nil {
+			return nil, err
 		}
 	}
 	if err := b.advance(); err != nil {
@@ -610,8 +611,8 @@ func copyDecision(d *Decision) Decision {
 }
 
 // Decisions lists every open decision in sequence order: an unresolved
-// intent, and NATIVE_DECIDED decisions whose native marker is not yet
-// removed.
+// intent, NATIVE_DECIDED decisions whose native marker is not yet removed,
+// and NATIVE_DECIDED SIDE decisions that still retain a member.
 func (b *Bridge) Decisions(t *admission.Token) ([]Decision, error) {
 	if err := b.enter(t); err != nil {
 		return nil, err
@@ -948,12 +949,24 @@ func (b *Bridge) closeMembers(t *admission.Token, d *Decision) error {
 	for _, m := range d.Intent.Members {
 		blocks[m.Block] = true
 	}
+	// A rejected intent leaves every block that an open SIDE decision
+	// retains: the native side still stores it as a side block.
+	retained := map[string]bool{}
+	if d.Rejected != nil {
+		for _, other := range b.open {
+			if other.Intent.Kind == Side && other.State == Decided {
+				for _, m := range other.Intent.Members {
+					retained[m.Block] = true
+				}
+			}
+		}
+	}
 	observations, err := b.adm.Observations(t)
 	if err != nil {
 		return err
 	}
 	for _, obs := range observations {
-		if !blocks[obs.Candidate.Hash] {
+		if !blocks[obs.Candidate.Hash] || retained[obs.Candidate.Hash] {
 			continue
 		}
 		if obs.State != admission.ExecReady {

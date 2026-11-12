@@ -425,7 +425,7 @@
       "file": "extractor/decision/decision.go",
       "original": "\tif d.Intent.Kind != Side {\n\t\treturn false\n\t}\n",
       "replacement": "",
-      "equivalent": "Only a SIDE decision leaves a member open after its close: a NATIVE_DECIDED IMPORT or CANONICAL decision closes its members before Cleanup can remove its marker, and Open finishes interrupted closes before it checks retention, so retains never sees an open member of another kind."
+      "equivalent": "retains is asked only about NATIVE_DECIDED decisions without a marker. A NATIVE_DECIDED IMPORT or CANONICAL decision loses its marker only in Cleanup, which runs after Resolve or Open closed its members, so retains never sees an open member of another kind."
     },
     {
       "name": "retains nothing",
@@ -450,6 +450,19 @@
       "file": "extractor/decision/decision.go",
       "original": "\tfor _, d := range b.open {\n\t\tfor _, m := range d.Intent.Members {\n\t\t\tnamed[m.Observation] = true",
       "replacement": "\tfor _, d := range b.open {\n\t\tfor _, m := range d.Intent.Members {\n\t\t\tnamed[m.Observation] = d.State == Intended"
+    },
+    {
+      "name": "reject closes retained side blocks",
+      "file": "extractor/decision/decision.go",
+      "original": "\t\t\t\t\tretained[m.Block] = true\n",
+      "replacement": "\t\t\t\t\tretained[m.Block] = false\n"
+    },
+    {
+      "name": "reject retains blocks of decided imports",
+      "file": "extractor/decision/decision.go",
+      "original": "if other.Intent.Kind == Side && other.State == Decided {",
+      "replacement": "if other.State == Decided {",
+      "equivalent": "A NATIVE_DECIDED decision of another kind has already closed every open observation of its blocks, so adding its blocks to the retained set skips no observation."
     },
     {
       "name": "intend stores the returned members",
@@ -568,8 +581,8 @@
     {
       "name": "close skips duplicate observations",
       "file": "extractor/decision/decision.go",
-      "original": "\t\tif !blocks[obs.Candidate.Hash] {\n",
-      "replacement": "\t\tif !blocks[obs.Candidate.Hash] || obs.Key != d.Intent.Members[0].Observation {\n"
+      "original": "if !blocks[obs.Candidate.Hash] || retained[obs.Candidate.Hash] {",
+      "replacement": "if !blocks[obs.Candidate.Hash] || retained[obs.Candidate.Hash] || obs.Key != d.Intent.Members[0].Observation {"
     },
     {
       "name": "close accepts a non EXEC_READY observation",
