@@ -90,11 +90,14 @@ Branch `claude/e01-03-smoke-corpus` (this worktree). Design:
 (child: store, log, revert; parent: store, call the child with value and
 30,000 gas, record the failure, log; Bor receiver: store the state sync id,
 caller and data, log). The nested transaction uses 142,655 gas under London
-and 130,255 under Istanbul; the direct revert 43,883 and 41,783. Checks: 33
-portable tests and 97 Python mutants, all killed in a local run.
+and 130,255 under Istanbul; the direct revert 43,883 and 41,783.
 
-Next: block 0 records, reviews, CI; then the client blocks after the
-coordinator approves the split.
+Measured head `3346a4a`: records portable-01 (33 tests), oracle-check-01 and
+python-mutants-01 (97 killed, none labeled equivalent), all PASS. Later
+block 0 commits change only docs.
+
+Next: block 0 reviews and CI; then the client blocks after the coordinator
+approves the split.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
