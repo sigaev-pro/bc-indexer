@@ -113,7 +113,11 @@ observations give a report; the tests read the oracle's output and the
 mutant table regenerates the expected files first; new controls and
 mutants; the doc fixes above.
 
-Next: records 02 at the fix head, review 002, CI; then the client blocks.
+Measured head `8146ef7`: records 02 portable (37 tests), oracle-check and
+Python mutants (115 killed, none labeled equivalent), all PASS. Later block 0
+commits change only docs.
+
+Next: review 002, CI; then the client blocks.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
