@@ -296,7 +296,7 @@ func (w *write) Intend(root common.Hash, head *types.Header) ([]byte, []byte, er
 		return nil, nil, err
 	}
 	d.a.trace("intent", map[string]any{"sequence": w.intent.Sequence, "kind": string(w.intent.Kind),
-		"digest": w.intent.Digest})
+		"digest": w.intent.Digest, "marker": string(value)})
 	return decision.MarkerKey(d.a.producer, w.intent.Sequence), value, nil
 }
 

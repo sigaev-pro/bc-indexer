@@ -62,7 +62,10 @@
     "recovery": "admitted obligation was not resolved",
     "bound": "store is bound to capture producer store",
     "bound_import": "store is bound to capture producer store",
-    "open_obligation": "open admission obligations forbid this native database write"
+    "open_obligation": "open admission obligations forbid this native database write",
+    "refused": "native outcome fixture: transition refused",
+    "legacy_store": "native data does not settle the decision",
+    "known_block": "block is already in the chain with its state"
   },
   "shipped": {
     "prune-state": "live_pins",
@@ -87,7 +90,8 @@
     "admitted-db-import-badblocks": "live_pins",
     "admitted-bintrie-convert": "live_pins",
     "admitted-snapshot-prune-state": "live_pins",
-    "admitted-snapshot-generate-trie": "live_pins"
+    "admitted-snapshot-generate-trie": "live_pins",
+    "decision-legacy-store": "legacy_store"
   },
   "store_unchanged": [
     "removedb-open-obligation",
@@ -117,7 +121,15 @@
     "reject_live",
     "reject_after_admit",
     "without_set_head",
-    "freezer"
+    "freezer",
+    "decision_clean",
+    "decision_exec_ready",
+    "decision_child_root",
+    "decision_intent",
+    "decision_mutation",
+    "decision_marker",
+    "decision_rejected",
+    "decision_reject_live"
   ],
   "attempts": {
     "clean": [
@@ -162,6 +174,37 @@
     ],
     "removedb_allowed": [
       "removedb-allowed-1-crash"
+    ],
+    "decision_clean": [
+      "decision-clean-1",
+      "decision-clean-2-restart"
+    ],
+    "decision_exec_ready": [
+      "decision-exec-ready-1-crash",
+      "decision-exec-ready-2-recover"
+    ],
+    "decision_child_root": [
+      "decision-child-root-1-crash",
+      "decision-child-root-2-recover"
+    ],
+    "decision_intent": [
+      "decision-intent-1-crash",
+      "decision-intent-2-recover"
+    ],
+    "decision_mutation": [
+      "decision-mutation-1-crash",
+      "decision-mutation-2-recover"
+    ],
+    "decision_marker": [
+      "decision-marker-1-crash",
+      "decision-marker-2-recover"
+    ],
+    "decision_rejected": [
+      "decision-rejected-1-crash",
+      "decision-rejected-2-recover"
+    ],
+    "decision_reject_live": [
+      "decision-reject-live-1"
     ]
   }
 }

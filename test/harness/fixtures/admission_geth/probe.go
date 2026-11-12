@@ -1,5 +1,6 @@
-// This test-only probe runs the E01-02.admission Geth wiring on the product
-// import path of the accepted Geth tree. Preparation copies it to
+// This test-only probe runs the E01-02.admission Geth wiring, and with
+// Decisions the E01-02.decision_bridge wiring, on the product import path of
+// the accepted Geth tree. Preparation copies it to
 // cmd/extractor-admission-probe and installs the product patch set and the
 // extractor packages (adapters/geth/admission/native). The probe imports
 // blocks with core.BlockChain.InsertChain, so every observation goes through
@@ -25,6 +26,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -121,6 +123,18 @@ type Spec struct {
 	Freezer bool `json:"freezer"`
 	// Items reports the bytes of every capsule item.
 	Items bool `json:"items"`
+	// Decisions attaches the decision bridge (AttachDecisions, the shipped
+	// configuration) instead of the admission alone.
+	Decisions bool `json:"decisions"`
+	// MirrorApplied is the answer of the probe mirror: whether it applied
+	// every NATIVE_DECIDED decision it is asked about.
+	MirrorApplied bool `json:"mirror_applied"`
+	// CrashPoint kills the process at this named point of a decided write
+	// ("committed", "mutated", "refused").
+	CrashPoint string `json:"crash_point"`
+	// Refuse names the blocks whose transition the native outcome fixture
+	// refuses after the intent.
+	Refuse []string `json:"refuse"`
 }
 
 // chainInputs builds the deterministic genesis and blocks 1..target+1, and
@@ -209,14 +223,17 @@ type powerLossStore struct {
 }
 
 func (s *powerLossStore) Has(key []byte) (bool, error) {
-	if _, ok := s.pending[string(key)]; ok {
-		return true, nil
+	if value, ok := s.pending[string(key)]; ok {
+		return value != nil, nil
 	}
 	return s.db.Has(key)
 }
 
 func (s *powerLossStore) Get(key []byte) ([]byte, error) {
 	if value, ok := s.pending[string(key)]; ok {
+		if value == nil {
+			return nil, fmt.Errorf("deleted key %q", key)
+		}
 		return append([]byte{}, value...), nil
 	}
 	return s.db.Get(key)
@@ -229,6 +246,17 @@ func (s *powerLossStore) Put(key, value []byte) error {
 	}
 	s.pending[k] = append([]byte{}, value...)
 	s.log.add(map[string]any{"op": "put", "key": k, "length": len(value)})
+	return nil
+}
+
+// Delete keeps the deletion in memory until SyncKeyValue, like a write.
+func (s *powerLossStore) Delete(key []byte) error {
+	k := string(key)
+	if _, ok := s.pending[k]; !ok {
+		s.order = append(s.order, k)
+	}
+	s.pending[k] = nil
+	s.log.add(map[string]any{"op": "delete", "key": k})
 	return nil
 }
 
@@ -247,7 +275,13 @@ func (s *powerLossStore) SyncKeyValue() error {
 	}
 	after := s.matches(s.spec.CrashAfterSync)
 	for _, key := range s.order {
-		if err := s.db.Put([]byte(key), s.pending[key]); err != nil {
+		var err error
+		if value := s.pending[key]; value == nil {
+			err = s.db.Delete([]byte(key))
+		} else {
+			err = s.db.Put([]byte(key), value)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -324,6 +358,18 @@ func (s *safePoint) finish() []string {
 	return out
 }
 
+// mirror is the probe decision mirror: it answers every query with
+// spec.MirrorApplied and logs it.
+type mirror struct {
+	log     *events
+	applied bool
+}
+
+func (m mirror) Applied(sequence uint64, digest string) (bool, error) {
+	m.log.add(map[string]any{"op": "mirror", "sequence": sequence, "digest": digest, "applied": m.applied})
+	return m.applied, nil
+}
+
 // prefixed returns every key and value under prefix, values as text.
 func prefixed(db ethdb.Database, prefix string) map[string]string {
 	out := map[string]string{}
@@ -381,6 +427,14 @@ func attempt(specPath string) {
 	}
 	check(extractorgeth.Preflight(filepath.Join(spec.Datadir, "geth"), cfg))
 	db := openStore(spec.Datadir)
+	// Which child roots are on disk before the chain opens: a volatile child
+	// root (AC-CAP-07-02) is not.
+	roots := map[string]bool{}
+	for name, block := range map[string]*types.Block{"target": blocks[target-1], "next": blocks[target]} {
+		roots[name] = rawdb.HasLegacyTrieNode(db, block.Root())
+	}
+	result["roots_at_start"] = roots
+	result["records_at_start"] = prefixed(db, "extractor-admission-v1/")
 	chain := newChain(db, genesis)
 	store := &powerLossStore{db: db, log: log, pending: map[string][]byte{}, spec: spec}
 	safe := newSafePoint()
@@ -391,8 +445,32 @@ func attempt(specPath string) {
 		}
 		log.add(row)
 	}
-	a, err := extractorgeth.Attach(chain, db, cfg, extractorgeth.Options{Store: store, RunID: runID,
-		SafePoint: safe.at, Trace: trace, SkipRecovery: spec.Hold})
+	opts := extractorgeth.Options{Store: store, RunID: runID, SafePoint: safe.at, Trace: trace, SkipRecovery: spec.Hold}
+	var a *extractorgeth.Admission
+	if spec.Decisions {
+		refused := map[common.Hash]bool{}
+		for _, name := range spec.Refuse {
+			refused[map[string]*types.Block{"target": blocks[target-1], "next": blocks[target]}[name].Hash()] = true
+		}
+		dopts := extractorgeth.DecisionOptions{Mirror: mirror{log: log, applied: spec.MirrorApplied},
+			Outcome: func(block *types.Block) error {
+				if refused[block.Hash()] {
+					return errors.New("native outcome fixture: transition refused")
+				}
+				return nil
+			},
+			Point: func(name string) {
+				if name == spec.CrashPoint {
+					crash(log, "native/"+name)
+				}
+			}}
+		var d *extractorgeth.Decisions
+		if d, err = extractorgeth.AttachDecisions(chain, db, cfg, opts, dopts); d != nil {
+			a = d.Admission()
+		}
+	} else {
+		a, err = extractorgeth.Attach(chain, db, cfg, opts)
+	}
 	if err != nil {
 		result["attach_error"] = err.Error()
 	} else {
@@ -477,6 +555,23 @@ func attempt(specPath string) {
 	}
 	sort.Strings(sorted)
 	result["capsules"] = capsules(db, sorted, spec.Items)
+	if spec.Decisions {
+		result["decision_records"] = prefixed(db, "extractor-decision-v1/")
+		result["markers"] = prefixed(db, "extractor-decision-marker-v1/")
+		bad := map[string]bool{}
+		for name, block := range map[string]*types.Block{"target": blocks[target-1], "next": blocks[target]} {
+			bad[name] = rawdb.ReadBadBlock(db, block.Hash()) != nil
+		}
+		result["bad_blocks"] = bad
+		// Inputs left of every observation that this or an earlier attempt
+		// began: closed observations have none (OpenWithCleanup).
+		left := map[string]int{}
+		for key := range prefixed(db, "extractor-source-inputs-v1/") {
+			parts := strings.SplitN(strings.TrimPrefix(key, "extractor-source-inputs-v1/"), "/", 2)
+			left[parts[0]]++
+		}
+		result["inputs_left"] = left
+	}
 	check(db.Close())
 	writeResult(spec, result, file)
 }
@@ -730,6 +825,13 @@ func run(genesisPath, work, output, commit, geth string) {
 	writeConfig(other, genesis, commit, storeID, "geth-other")
 	shippedRuns = append(shippedRuns, shipped(geth, "other-producer", []string{extractorgeth.ConfigEnv + "=" + other}, node...))
 	shippedRuns = append(shippedRuns, shipped(geth, "no-config", nil, node...))
+	// E01-02.decision_bridge: the shipped node attaches the decision bridge.
+	// A store whose blocks were written before the switch, without a
+	// decision, is refused at startup.
+	config := filepath.Join(work, "capture-store.json")
+	writeConfig(config, genesis, commit, storeID, producerID)
+	shippedRuns = append(shippedRuns, shipped(geth, "decision-legacy-store", []string{extractorgeth.ConfigEnv + "=" + config},
+		node...))
 	rewind := runAttempt(work, "clean-3-rewind", with(clean, func(s *Spec) { s.Rewind, s.Witness = true, true }))
 	scenario("clean", first, restart, rewind)
 
@@ -856,6 +958,62 @@ func run(genesisPath, work, output, commit, geth string) {
 	})))
 
 	scenario("freezer", runAttempt(work, "freezer-1", with(base, func(s *Spec) { s.Datadir = dir("freezer"); s.Freezer = true })))
+
+	// E01-02.decision_bridge: the same import path with the decision bridge
+	// (AttachDecisions, the shipped configuration). The mirror has applied
+	// nothing unless MirrorApplied.
+	decided := with(base, func(s *Spec) { s.Decisions = true })
+	dclean := with(decided, func(s *Spec) { s.Datadir = dir("decision_clean") })
+	scenario("decision_clean",
+		runAttempt(work, "decision-clean-1", with(dclean, func(s *Spec) { s.Imports = []string{"target", "next"} })),
+		// After a restart the blocks are in the chain with their state:
+		// importing them again opens no observation and no decision. The
+		// mirror has applied both decisions, so Cleanup removes the markers.
+		runAttempt(work, "decision-clean-2-restart", with(dclean, func(s *Spec) {
+			s.Imports, s.MirrorApplied = []string{"target", "next"}, true
+		})))
+	// The AC-CAP-07 crash points. Each recover attempt imports the next
+	// block where the recovered decision leaves it importable.
+	for _, row := range []struct {
+		name, before, after, point string
+		refuse                     []string
+		imports                    []string
+	}{
+		// AC-CAP-07-01: power loss before the closing EXEC_READY sync.
+		{name: "decision_exec_ready", before: "/exec-ready", imports: []string{"next"}},
+		// AC-CAP-07-02: EXEC_READY durable, the child root still volatile.
+		{name: "decision_child_root", after: "/exec-ready", imports: []string{"next"}},
+		// AC-CAP-07-03: the intent is durable, nothing native is written yet.
+		{name: "decision_intent", after: "-decision-v1/" + producerID + "." + runID + "/counter",
+			imports: []string{"next"}},
+		// AC-CAP-07-03: power loss inside the native mutation, after the
+		// block batch and before the head batch with the marker.
+		{name: "decision_mutation", point: "mutated", imports: []string{"target", "next"}},
+		// The marker is durable, the NATIVE_DECIDED record is not.
+		{name: "decision_marker", before: "-decision-v1/" + producerID + "." + runID + "/0000000000000000/decided",
+			imports: []string{"next"}},
+		// AC-CAP-07-06: the native side refused the transition after the
+		// intent; power loss before the rejection is recorded.
+		{name: "decision_rejected", before: "-decision-v1/" + producerID + "." + runID + "/0000000000000000/rejected",
+			refuse: []string{"target"}},
+	} {
+		spec := with(decided, func(s *Spec) {
+			s.Datadir = dir(row.name)
+			s.Imports = []string{"target"}
+			s.CrashBeforeSync, s.CrashAfterSync, s.CrashPoint, s.Refuse = row.before, row.after, row.point, row.refuse
+		})
+		prefix := strings.ReplaceAll(row.name, "_", "-")
+		scenario(row.name,
+			runAttempt(work, prefix+"-1-crash", spec),
+			runAttempt(work, prefix+"-2-recover", with(spec, func(s *Spec) {
+				s.Imports, s.CrashBeforeSync, s.CrashAfterSync, s.CrashPoint, s.Refuse = row.imports, "", "", "", nil
+			})))
+	}
+	// AC-CAP-07-06 live: the native refusal is recorded at once.
+	scenario("decision_reject_live", runAttempt(work, "decision-reject-live-1", with(decided, func(s *Spec) {
+		s.Datadir = dir("decision_reject_live")
+		s.Imports, s.Refuse = []string{"target"}, []string{"target"}
+	})))
 
 	result := map[string]any{
 		"family":            "geth",

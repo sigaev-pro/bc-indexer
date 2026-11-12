@@ -32,6 +32,7 @@ sys.path.insert(0, str(HARNESS))
 from artifacts import artifact, check_deadline, copy_artifact, json_artifact, load, pinned_json, read_bytes, reference, require  # noqa: E402
 import admission  # noqa: E402
 import capture_probe  # noqa: E402
+import decision  # noqa: E402
 from capture_probe import Interrupted, block_stops, single_writer, unblock_stops, write_until_done  # noqa: E402
 from native import Native, new_output  # noqa: E402
 import source_inputs  # noqa: E402
@@ -533,6 +534,340 @@ def scenario_removedb_allowed(c, oracle, observation, attempts, commit):
     check_trace(c, "removedb-allowed-1", crash, ["opened", "live"])
 
 
+# ---------------------------------------------------------------- decision bridge (E01-02.decision_bridge)
+
+
+def events_of(attempt, name):
+    return [row for row in attempt.get("events") or [] if row.get("op") == "trace" and row.get("event") == name]
+
+
+def header_root(observation, number):
+    """The state root of generated block number, read from its header."""
+    return header_fields(bytes.fromhex(observation["generated_headers"][number - 1]))[STATE_ROOT].hex()
+
+
+def block_hash(observation, number):
+    return observation["generated_hashes"][number][2:]
+
+
+def intent_evidence(kind, block, number, root):
+    """Independent form of IntentEvidence of the Geth decision wiring."""
+    data = admission.tag("extractor-geth-intent-evidence-v1") + admission.u64(len(kind)) + kind.encode()
+    return hashlib.sha256(data + bytes.fromhex(block) + admission.u64(number) + bytes.fromhex(root)).hexdigest()
+
+
+def refusal_evidence(block):
+    """Independent form of RefusalEvidence: the refused block recorded as a bad block."""
+    return hashlib.sha256(admission.tag("extractor-geth-native-refusal-v1") + bytes.fromhex(block)).hexdigest()
+
+
+def exec_ready_digests(attempts):
+    """The EXEC_READY digest of every observation that reached EXEC_READY in these attempts."""
+    out = {}
+    for attempt in attempts:
+        for row in events_of(attempt, "exec_ready"):
+            out[row.get("observation")] = row.get("digest")
+    return out
+
+
+def expected_intent(oracle, observation, sequence, kind, old, new, members, ready):
+    """The intent record of the Geth write, built from the generated chain: heads and members are block numbers,
+    members are (observation sequence, block number) pairs; ready maps observation keys to EXEC_READY digests."""
+    rows = []
+    for obs, number in members:
+        key = key_of(oracle, obs)
+        rows.append({"observation": key, "block": block_hash(observation, number),
+                     "exec_ready_digest": ready.get(key, "0" * 64), "child_root": header_root(observation, number)})
+    first = members[0][1]
+    record = {"native_store_id": oracle["store_id"], "producer": f"{oracle['producer_id']}.{oracle['run_id']}",
+              "sequence": sequence, "kind": kind,
+              "old_head": {"number": old, "hash": block_hash(observation, old)},
+              "new_head": {"number": new, "hash": block_hash(observation, new)}, "members": rows,
+              "evidence_digest": intent_evidence(kind, block_hash(observation, first), first,
+                                                 header_root(observation, first)),
+              "events": kind != "SIDE"}
+    record["digest"] = decision.intent_digest(record)
+    return record
+
+
+def check_decisions(c, label, attempt, want):
+    """want lists the decisions of the attempt in order: (expected intent record, outcome), outcome "BATCH",
+    "CHECKPOINT" or "REJECTED". Each intent marker equals the independent marker bytes, and each NATIVE_DECIDED or
+    rejected digest recomputes from it. Return the intent markers seen."""
+    intents, decided = events_of(attempt, "intent"), events_of(attempt, "decided")
+    rejected = events_of(attempt, "intent_rejected")
+    if len(intents) != len(want):
+        c.fail(label, f"{len(intents)} intents, want {len(want)}")
+        return []
+    closing = iter(decided)
+    refusals = iter(rejected)
+    for row, (record, outcome) in zip(intents, want):
+        if row.get("marker") != decision.marker_value(record).decode() or row.get("digest") != record["digest"] or \
+                row.get("sequence") != record["sequence"] or row.get("kind") != record["kind"]:
+            c.fail(label, f"intent {record['sequence']} differs from the independent {record['kind']} intent")
+            continue
+        if outcome == "REJECTED":
+            done = next(refusals, {})
+            evidence = refusal_evidence(record["members"][0]["block"])
+            if done.get("sequence") != record["sequence"] or \
+                    done.get("digest") != decision.rejected_digest(record["digest"], evidence):
+                c.fail(label, f"intent {record['sequence']} was not rejected with the native refusal evidence")
+        else:
+            done = next(closing, {})
+            if done.get("sequence") != record["sequence"] or done.get("delivery") != outcome or \
+                    done.get("digest") != decision.decided_digest(record["digest"], outcome):
+                c.fail(label, f"intent {record['sequence']} was not decided as {outcome}")
+    if next(closing, None) is not None or next(refusals, None) is not None:
+        c.fail(label, "a decision was recorded without its intent in this attempt")
+    return [row.get("marker") for row in intents]
+
+
+def check_resolved_after(c, label, attempt, sequence, record, outcome, evidence):
+    """A recovery settles saved intent sequence (written by an earlier attempt) from native evidence, without a new
+    intent, as outcome."""
+    rows = [row for row in events_of(attempt, "settling") if row.get("sequence") == sequence]
+    if [row.get("evidence") for row in rows] != [evidence]:
+        c.fail(label, f"intent {sequence} was settled from {[row.get('evidence') for row in rows]}, want {evidence}")
+    if outcome == "REJECTED":
+        done = [row for row in events_of(attempt, "intent_rejected") if row.get("sequence") == sequence]
+        want = decision.rejected_digest(record["digest"], refusal_evidence(record["members"][0]["block"]))
+        if [row.get("digest") for row in done] != [want]:
+            c.fail(label, f"intent {sequence} was not rejected once with the native refusal evidence")
+        return
+    done = [row for row in events_of(attempt, "decided") if row.get("sequence") == sequence]
+    if [(row.get("delivery"), row.get("digest")) for row in done] != [(outcome, decision.decided_digest(record["digest"],
+                                                                                                       outcome))]:
+        c.fail(label, f"intent {sequence} was not decided once as {outcome}")
+
+
+def decision_counter(result):
+    value = (result.get("decision_records") or {}).get(f"extractor-decision-v1/geth-probe.r1/counter")
+    return json.loads(value)["next"] if value else 0
+
+
+def check_decision_end(c, label, oracle, result, counter, admitted, markers, pins=(), stored=None):
+    """End state of a decision attempt: the decision and admission counters, the native markers left, the live pins
+    (observation sequences), and no inputs of closed observations."""
+    if decision_counter(result) != counter:
+        c.fail(label, f"decision counter {decision_counter(result)}, want {counter}")
+    if records(result)[1] != admitted:
+        c.fail(label, f"admission counter {records(result)[1]}, want {admitted}")
+    want = sorted(decision.marker_key(oracle["producer_id"], oracle["run_id"], seq) for seq in markers)
+    if sorted(result.get("markers") or {}) != want:
+        c.fail(label, f"markers {sorted(result.get('markers') or {})}, want {want}")
+    check_pins(c, label, oracle, result, list(pins))
+    left = sorted(result.get("inputs_left") or {})
+    if left != sorted(key_of(oracle, seq) for seq in pins):
+        c.fail(label, f"inputs of closed observations are left: {left}")
+    if stored is not None and result.get("stored") != stored:
+        c.fail(label, f"stored blocks {result.get('stored')}, want {stored}")
+
+
+def check_mirror(c, label, attempt, allowed):
+    """The mirror is asked only about NATIVE_DECIDED BATCH sequences, never about a rejected intent."""
+    asked = sorted({row.get("sequence") for row in attempt.get("events") or [] if row.get("op") == "mirror"})
+    if any(seq not in allowed for seq in asked):
+        c.fail(label, f"the mirror was asked about sequences {asked}, allowed {sorted(allowed)}")
+
+
+LIVE_IMPORT = ["begin", "pinned", "sealed", "admitted", "exec_ready", "committed", "intent", "mutated", "decided"]
+
+
+def scenario_decision_clean(c, oracle, observation, attempts, commit):
+    first, restart = attempts
+    t = oracle["target"]
+    result = ended(c, "decision-clean-1", first)
+    if result:
+        check_live_result(c, "decision-clean-1", oracle, result)
+        if imports(result) != [("target", None), ("next", None)]:
+            c.fail("decision-clean-1", f"imports {imports(result)}")
+        check_trace(c, "decision-clean-1", first, ["opened", "bridge_opened", "live"] + LIVE_IMPORT * 2)
+        ready = exec_ready_digests([first])
+        check_decisions(c, "decision-clean-1", first, [
+            (expected_intent(oracle, observation, 0, "IMPORT", t - 1, t, [(0, t)], ready), "BATCH"),
+            (expected_intent(oracle, observation, 1, "IMPORT", t, t + 1, [(1, t + 1)], ready), "BATCH")])
+        # The mirror has applied nothing: both obligations keep their markers.
+        check_decision_end(c, "decision-clean-1", oracle, result, 2, 2, [0, 1])
+        check_mirror(c, "decision-clean-1", first, {0, 1})
+        check_head(c, "decision-clean-1", oracle, observation, result, t + 1)
+        check_lookups(c, "decision-clean-1", oracle, observation, first, [t, t + 1])
+        check_captured(c, "decision-clean-1", result, [t, t + 1])
+        check_closing_sync(c, "decision-clean-1", first)
+    later = ended(c, "decision-clean-2", restart)
+    if not later:
+        return
+    check_live_result(c, "decision-clean-2", oracle, later)
+    # Known blocks: no observation, no decision, no execution.
+    if imports(later) != [("target", None), ("next", None)]:
+        c.fail("decision-clean-2", f"imports {imports(later)}")
+    check_trace(c, "decision-clean-2", restart, ["opened", "bridge_opened", "live"])
+    check_decision_end(c, "decision-clean-2", oracle, later, 2, 2, [])
+    check_mirror(c, "decision-clean-2", restart, {0, 1})
+    done = {f"extractor-decision-v1/geth-probe.r1/{name}": json.dumps({field: 2}, separators=(",", ":"))
+            for name, field in (("counter", "next"), ("lowwater", "sequence"), ("purged", "sequence"))}
+    if later.get("decision_records") != done:
+        c.fail("decision-clean-2", "the applied decisions were not cleaned up to the counter")
+    check_head(c, "decision-clean-2", oracle, observation, later, t + 1)
+    check_captured(c, "decision-clean-2", later, [])
+
+
+def recovered_side_then_canonical(c, label, oracle, observation, attempt, result, ready, prefix):
+    """After recovery the saved EXEC_READY observation 0 of the target is decided as SIDE; the import of the next
+    block makes it canonical with one CANONICAL decision that closes both."""
+    t = oracle["target"]
+    check_trace(c, label, attempt, prefix + ["replaying", "replayed", "committed", "intent", "mutated", "decided",
+                                             "live"] + LIVE_IMPORT)
+    ready = dict(ready, **exec_ready_digests([attempt]))
+    check_decisions(c, label, attempt, [
+        (expected_intent(oracle, observation, 0, "SIDE", t - 1, t - 1, [(0, t)], ready), "CHECKPOINT"),
+        (expected_intent(oracle, observation, 1, "CANONICAL", t - 1, t + 1, [(1, t + 1), (0, t)], ready), "BATCH")])
+    check_decision_end(c, label, oracle, result, 2, 2, [1])
+    check_head(c, label, oracle, observation, result, t + 1)
+    if (result.get("roots_at_start") or {}).get("target") is not False:
+        c.fail(label, "the child root of the target was durable before the replay")
+
+
+def scenario_decision_exec_ready(c, oracle, observation, attempts, commit, clean_exec):
+    """AC-CAP-07-01: power loss before the closing EXEC_READY sync. Nothing is decided; recovery re-executes the same
+    ADMITTED obligation (the write waits for the bridge), then replays it natively and decides it."""
+    crash, recover = attempts
+    t = oracle["target"]
+    ended(c, "decision-exec-ready-1", crash, "before_sync/exec-ready")
+    check_trace(c, "decision-exec-ready-1", crash, ["opened", "bridge_opened", "live", "begin", "pinned", "sealed",
+                                                    "admitted"])
+    result = ended(c, "decision-exec-ready-2", recover)
+    if not result:
+        return
+    recovered_side_then_canonical(c, "decision-exec-ready-2", oracle, observation, recover, result, {},
+                                  ["opened", "recovering", "resumed", "exec_ready", "deferred", "recovered",
+                                   "bridge_opened"])
+    execs = [row.get("exec") for row in events_of(recover, "exec_ready") if row.get("observation") == key_of(oracle, 0)]
+    if clean_exec is None or execs != [clean_exec]:
+        c.fail("decision-exec-ready-2", "the recovered execution digest differs from the clean decision import")
+    # The capture runs once for the recovered obligation and once for the new block; the replay captures nothing.
+    check_captured(c, "decision-exec-ready-2", result, [t, t + 1])
+
+
+def scenario_decision_child_root(c, oracle, observation, attempts, commit):
+    """AC-CAP-07-02: EXEC_READY is durable, the child root is not. Native-only replay makes the same root durable;
+    the EXEC_READY record and the observation stay."""
+    crash, recover = attempts
+    t = oracle["target"]
+    ended(c, "decision-child-root-1", crash, "after_sync/exec-ready")
+    # The crash comes right after the EXEC_READY sync, before its trace event.
+    check_trace(c, "decision-child-root-1", crash, ["opened", "bridge_opened", "live", "begin", "pinned", "sealed",
+                                                    "admitted"])
+    result = ended(c, "decision-child-root-2", recover)
+    if not result:
+        return
+    # The durable EXEC_READY record found at the restart binds the admitted record and the closed consumed manifest;
+    # the replayed decision names exactly this record.
+    saved, _ = records({"records": result.get("records_at_start")})
+    rows = saved.get(0, {})
+    ready = rows.get("exec-ready") or {}
+    capsule = (rows.get("admitted") or {}).get("capsule_digest", "0" * 64)
+    consumed = source_inputs.consumed_digest(bytes.fromhex(capsule), 0,
+                                             source_inputs.chain_start(bytes.fromhex(capsule))).hex()
+    if set(rows) != {"preparing", "admitted", "exec-ready"} or ready.get("consumed_digest") != consumed or \
+            ready.get("digest") != admission.exec_ready_digest(rows["admitted"].get("digest", "0" * 64), consumed,
+                                                               ready.get("exec_digest", "0" * 64)):
+        c.fail("decision-child-root-2", "the restart did not find the durable EXEC_READY record of the target")
+    recovered_side_then_canonical(c, "decision-child-root-2", oracle, observation, recover, result,
+                                  {key_of(oracle, 0): ready.get("digest")}, ["opened", "bridge_opened"])
+    # The replay neither captures nor answers BLOCKHASH from the capsule: only the next block does.
+    check_captured(c, "decision-child-root-2", result, [t + 1])
+    check_lookups(c, "decision-child-root-2", oracle, observation, recover, [t + 1])
+
+
+def scenario_decision_completed(name, point, evidence, prefix_events, crash_events, recover_imports):
+    """AC-CAP-07-03 and the marker crash: the saved IMPORT intent of the target is completed from native evidence,
+    with the intent bytes of the clean decision import, then the next block is imported."""
+    label = name.replace("_", "-")
+
+    def check(c, oracle, observation, attempts, commit, clean_markers):
+        crash, recover = attempts
+        t = oracle["target"]
+        ended(c, f"{label}-1", crash, point)
+        check_trace(c, f"{label}-1", crash, ["opened", "bridge_opened", "live", "begin", "pinned", "sealed",
+                                             "admitted", "exec_ready", "committed"] + crash_events)
+        result = ended(c, f"{label}-2", recover)
+        if not result:
+            return
+        ready = exec_ready_digests([crash, recover])
+        record = expected_intent(oracle, observation, 0, "IMPORT", t - 1, t, [(0, t)], ready)
+        markers = [row.get("marker") for row in events_of(crash, "intent")] + \
+            [row.get("marker") for row in events_of(recover, "intent") if row.get("sequence") == 0]
+        if not clean_markers or any(marker != clean_markers[0] for marker in markers) or \
+                clean_markers[0] != decision.marker_value(record).decode():
+            c.fail(f"{label}-2", "the completed intent differs from the intent of the clean decision import")
+        check_resolved_after(c, f"{label}-2", recover, 0, record, "BATCH", evidence)
+        check_trace(c, f"{label}-2", recover, ["opened", "bridge_opened", "settling"] + prefix_events +
+                    ["decided", "live"] + LIVE_IMPORT)
+        rows = imports(result)
+        if [name for name, _ in rows] != [name for name, _ in recover_imports] or \
+                any((error is None) != (want is None) or (want is not None and oracle["messages"][want] not in error)
+                    for (_, error), (_, want) in zip(rows, recover_imports)):
+            c.fail(f"{label}-2", f"imports {rows}, want {recover_imports}")
+        nxt = expected_intent(oracle, observation, 1, "IMPORT", t, t + 1, [(1, t + 1)], ready)
+        intents = [row for row in events_of(recover, "intent") if row.get("sequence") == 1]
+        if [row.get("marker") for row in intents] != [decision.marker_value(nxt).decode()]:
+            c.fail(f"{label}-2", "the next block was not imported as decision 1")
+        check_decision_end(c, f"{label}-2", oracle, result, 2, 2, [0, 1])
+        check_head(c, f"{label}-2", oracle, observation, result, t + 1)
+    return check
+
+
+def scenario_decision_rejected(c, oracle, observation, attempts, commit, live_rejection):
+    """AC-CAP-07-06: the native side refused the transition after the intent and recorded the bad block; the
+    rejection of the intent was lost. Recovery records the rejection from the native evidence: no NATIVE_DECIDED,
+    no marker, no obligation, the mirror is never asked."""
+    crash, recover = attempts
+    t = oracle["target"]
+    ended(c, "decision-rejected-1", crash,
+          f"before_sync-decision-v1/{oracle['producer_id']}.{oracle['run_id']}/0000000000000000/rejected")
+    check_trace(c, "decision-rejected-1", crash, ["opened", "bridge_opened", "live", "begin", "pinned", "sealed",
+                                                  "admitted", "exec_ready", "committed", "intent", "refused"])
+    result = ended(c, "decision-rejected-2", recover)
+    if not result:
+        return
+    record = expected_intent(oracle, observation, 0, "IMPORT", t - 1, t, [(0, t)], exec_ready_digests([crash]))
+    if [row.get("marker") for row in events_of(crash, "intent")] != [decision.marker_value(record).decode()]:
+        c.fail("decision-rejected-1", "the refused intent differs from the independent IMPORT intent")
+    check_resolved_after(c, "decision-rejected-2", recover, 0, record, "REJECTED", "bad_block")
+    check_trace(c, "decision-rejected-2", recover, ["opened", "bridge_opened", "settling", "intent_rejected", "live"])
+    rejected = [row.get("digest") for row in events_of(recover, "intent_rejected")]
+    if rejected != [live_rejection]:
+        c.fail("decision-rejected-2", "the recovered rejection differs from the live rejection")
+    check_mirror(c, "decision-rejected-2", recover, set())
+    check_decision_end(c, "decision-rejected-2", oracle, result, 1, 1, [],
+                       stored={"target": False, "next": False, "bad": False})
+    if result.get("bad_blocks") != {"target": True, "next": False}:
+        c.fail("decision-rejected-2", "the refused block is not recorded natively as a bad block")
+    check_head(c, "decision-rejected-2", oracle, observation, result, t - 1)
+
+
+def scenario_decision_reject_live(c, oracle, observation, attempts, commit):
+    (attempt,) = attempts
+    t = oracle["target"]
+    result = ended(c, "decision-reject-live-1", attempt)
+    if not result:
+        return
+    rows = imports(result)
+    if len(rows) != 1 or rows[0][0] != "target" or oracle["messages"]["refused"] not in str(rows[0][1]):
+        c.fail("decision-reject-live-1", f"imports {rows}")
+    check_trace(c, "decision-reject-live-1", attempt, ["opened", "bridge_opened", "live", "begin", "pinned", "sealed",
+                                                       "admitted", "exec_ready", "committed", "intent", "refused",
+                                                       "intent_rejected"])
+    record = expected_intent(oracle, observation, 0, "IMPORT", t - 1, t, [(0, t)], exec_ready_digests([attempt]))
+    check_decisions(c, "decision-reject-live-1", attempt, [(record, "REJECTED")])
+    check_mirror(c, "decision-reject-live-1", attempt, set())
+    check_decision_end(c, "decision-reject-live-1", oracle, result, 1, 1, [],
+                       stored={"target": False, "next": False, "bad": False})
+    if result.get("bad_blocks") != {"target": True, "next": False}:
+        c.fail("decision-reject-live-1", "the refused block is not recorded natively as a bad block")
+    check_head(c, "decision-reject-live-1", oracle, observation, result, t - 1)
+
+
 CHECKS = {
     "clean": scenario_clean,
     "begin_before_counter_sync": scenario_crash_before_admission("begin-before-counter-sync", "before_sync/counter",
@@ -547,6 +882,23 @@ CHECKS = {
     "reject_after_admit": scenario_reject_after_admit,
     "without_set_head": scenario_without_set_head,
     "freezer": scenario_freezer,
+    "decision_clean": scenario_decision_clean,
+    "decision_child_root": scenario_decision_child_root,
+    "decision_reject_live": scenario_decision_reject_live,
+}
+
+COMPLETED = {
+    "decision_intent": scenario_decision_completed(
+        "decision_intent", "after_sync-decision-v1/geth-probe.r1/counter", "reimport",
+        ["replaying", "replayed", "committed", "intent", "mutated"], [], [("next", None)]),
+    "decision_mutation": scenario_decision_completed(
+        "decision_mutation", "native/mutated", "stored_block", [], ["intent", "mutated"],
+        # The target is the head now without its snapshot layer: Geth would re-execute it, and the known-block
+        # guard refuses to open a second observation of it.
+        [("target", "known_block"), ("next", None)]),
+    "decision_marker": scenario_decision_completed(
+        "decision_marker", "before_sync-decision-v1/geth-probe.r1/0000000000000000/decided", "marker", [],
+        ["intent", "mutated"], [("next", None)]),
 }
 
 
@@ -573,9 +925,19 @@ def compare(observation, oracle, commit):
         if [row.get("name") for row in attempts] != oracle["attempts"][name]:
             c.fail(name, "attempts differ from the oracle")
             continue
+        clean_decisions = scenarios["decision_clean"][0]
         if name == "exec_ready_before_sync":
             clean = records(scenarios["clean"][0].get("result") or {})[0].get(0, {}).get("exec-ready", {})
             scenario_exec_ready_before_sync(c, oracle, observation, attempts, commit, clean.get("exec_digest"))
+        elif name == "decision_exec_ready":
+            execs = [row.get("exec") for row in events_of(clean_decisions, "exec_ready")]
+            scenario_decision_exec_ready(c, oracle, observation, attempts, commit, execs[0] if execs else None)
+        elif name in COMPLETED:
+            COMPLETED[name](c, oracle, observation, attempts, commit,
+                            [row.get("marker") for row in events_of(clean_decisions, "intent")])
+        elif name == "decision_rejected":
+            live = [row.get("digest") for row in events_of(scenarios["decision_reject_live"][0], "intent_rejected")]
+            scenario_decision_rejected(c, oracle, observation, attempts, commit, live[0] if live else None)
         else:
             CHECKS[name](c, oracle, observation, attempts, commit)
     check_shipped(c, oracle, observation)
