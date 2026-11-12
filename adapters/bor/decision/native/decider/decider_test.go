@@ -825,3 +825,46 @@ func TestRecoverRefusesAnObservationThatStaysUndecided(t *testing.T) {
 		t.Fatal("recovery did not stop on an observation that stays undecided")
 	}
 }
+
+func TestLiveDecisionsRetainNothing(t *testing.T) {
+	f := newFixture(t)
+	for number := uint64(3); number < 13; number++ {
+		f.execReady(number)
+		rec := f.intend(importOf(number))
+		f.write(rec)
+		if err := f.d.Resolve(f.token, rec.Sequence); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.execReady(13)
+	rec := f.intend(importOf(13))
+	if err := f.d.Reject(f.token, rec, head(13), errors.New("refused")); err != nil {
+		t.Fatal(err)
+	}
+	if f.d.outcomes != nil {
+		t.Fatalf("live decisions retained %d outcomes", len(f.d.outcomes))
+	}
+	// A recovery completion collects its outcome and then retains nothing.
+	f.execReady(14)
+	if _, _, err := f.d.complete(f.token, f.observation(probeKey(f, 14))); err != nil {
+		t.Fatal(err)
+	}
+	if f.d.outcomes != nil {
+		t.Fatal("a completion retained its outcomes")
+	}
+}
+
+// probeKey returns the key of the open EXEC_READY observation of block number.
+func probeKey(f *fixture, number uint64) string {
+	observations, err := f.adm.Observations(f.token)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	for _, obs := range observations {
+		if obs.Candidate.Number == number {
+			return obs.Key
+		}
+	}
+	f.t.Fatalf("no observation of block %d", number)
+	return ""
+}

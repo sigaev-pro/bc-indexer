@@ -60,7 +60,7 @@ NATIVE_TESTS = ("TestExtractorFreezeThreshold", "TestExtractorGoroutineIDs", "Te
                 "TestExtractorDecisionNativeRejection", "TestExtractorDecisionIntendFailureWritesNothing",
                 "TestExtractorDecisionWithoutDeciderIsNative", "TestExtractorRecoverImportsUnderTheChainLock",
                 "TestExtractorMarkBatchOnlyMarksTheArmedBatch", "TestExtractorCommitOnceUsesTheBarrierCommit",
-                "TestExtractorRootDurable")
+                "TestExtractorRootDurable", "TestExtractorRecoverCompletesAnInterruptedReorg")
 PACKAGE = "github.com/ethereum/go-ethereum"
 BODY_FILES = ("span-0.json", "span-1.json", "span-latest.json", "status.json", "clerk-a-from-1.json",
               "clerk-b-from-1.json", "clerk-empty.json")
@@ -992,7 +992,9 @@ def check_decision_rejected(context, plan, attempts, block, fail):
         # milestone), so the live import may execute it again: a new
         # observation and a new intent that the native check refuses again.
         again = observations_of(result).get(block)
-        if again is not None:
+        if again is None:
+            fail("the live import did not execute the refused block again after the restart")
+        else:
             snap = snapshot_of(result, again.get("key") or "")
             if snap is None or check_observation(context, snap["rows"], int(again["key"].rsplit(".", 1)[1], 16), block,
                                                  "a", fail, "re-import") != "EXEC_READY":

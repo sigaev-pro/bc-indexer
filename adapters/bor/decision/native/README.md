@@ -106,7 +106,9 @@ native chain lock held (`ExtractorRecover`) and then the observation guard:
      already stored) is replayed natively from its capsule and closed log
      (`ReplayHeld`: every counted read from the log, every entry consumed, the
      bound result digest), and the native import of the block runs through
-     the decision path of step 2 to 4 above. The recovery decider returns
+     the decision path of step 2 to 4 above, with the transition predicted
+     from the saved old head (the native head must be that head or on the
+     saved branch). The recovery decider returns
      the saved intent only if it is exactly the predicted transition (kind,
      heads, member, child root, evidence); anything else is a source
      invariant error. A native refusal records the rejection; an intent
@@ -129,7 +131,7 @@ the node imports again:
 | EXEC_READY (AC-CAP-07-02) | EXEC_READY, child state volatile | Native-only replay, then the native import with a new intent |
 | The child-root barrier | EXEC_READY, child state durable | The same |
 | The intent (AC-CAP-07-03) | Unresolved intent, no marker, block not stored | Native recovery completes the saved transition |
-| The block batch (AC-CAP-07-03) | Unresolved intent, no marker, block stored if the block batch reached the disk, head not moved | The same; the write repeats the block batch |
+| The block batch (AC-CAP-07-03) | Unresolved intent, no marker, block stored if the block batch reached the disk; for `CANONICAL`, the head may already be on the branch (native reorg writes the head of each branch block before the final head batch) | The same, from the saved old head; the write repeats the block batch and the final head batch |
 | The head batch with the marker | Unresolved intent with marker | `Resolve` |
 | The decided sync | NATIVE_DECIDED, observation open | `decision.Open` closes it |
 | A native refusal, before `RejectIntent` (AC-CAP-07-06) | Unresolved intent, no marker, block not stored | The native check refuses again (the whitelisted milestone is stored natively); `RejectIntent` |
@@ -184,8 +186,10 @@ obligation; `Cleanup` removes their marker at once.
 - The native rejection fixture is a whitelisted milestone that conflicts
   with the block and arrives after its EXEC_READY; it is stored natively, so
   the restart refuses the same transition again.
-- Process loss in the probe is a real SIGKILL at a decision step; a process
-  kill keeps unsynced writes, so loss of unsynced writes is covered only by
+- Process loss in the probe is a real SIGKILL at a decision step. Pebble may
+  lose writes it has not synced when the process dies, so the `block-batch`
+  step syncs the store first (the product write path does not sync there);
+  every other step fires after a sync. Loss of unsynced writes is covered only by
   the unit tests of the shared core.
 - Without E05-01.registry no obligation is applied and no `BATCH` marker is
   removed (see Mirror).
@@ -197,6 +201,18 @@ obligation; `Cleanup` removes their marker at once.
   profile (`state_provider.CheckProfile`); a block observed on one of them
   would reach EXEC_READY without a decision, and the next start would stop
   (the block is stored without a decision, a source invariant error).
+- The native glue (`bordecision`, `core/zz_extractor_decision.go`) has no
+  mutant table: each mutant would need a full Bor build and probe run. The
+  native tests and the probe cover it; the probe chain has one branch, so
+  the `SIDE`/`CANONICAL` status check of the write and the partial-reorg
+  completion are covered by the native tests only.
+- Recovery completes an import with `setHead` true. A block imported with
+  `setHead` false (`InsertBlockWithoutSetHead`, not used by the Bor import of
+  the capture profile) would be predicted again with a head change; such a
+  saved intent stops the start (source invariant error).
+- A completed interrupted reorganization repeats the final head write only;
+  stale canonical indexes above the new head that the interrupted native
+  reorg had not yet deleted stay as native Bor leaves them after such a loss.
 - Blocks that the node seals itself reach the chain through
   `WriteBlockAndSetHead` without an observation or a decision; the capture
   profile imports blocks, it does not produce them. Canonical and finality

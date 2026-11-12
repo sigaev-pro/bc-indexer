@@ -1041,6 +1041,12 @@
       "file": "test/harness/bor_admission_probe.py",
       "original": "    if counters(after) != counters(before) or decision_records(after) != decision_records(before) or \\",
       "replacement": "    if counters(after) != counters(before) or \\"
+    },
+    {
+      "name": "refused block need not be re-executed",
+      "file": "test/harness/bor_admission_probe.py",
+      "original": "        if again is None:\n            fail(\"the live import did not execute the refused block again after the restart\")",
+      "replacement": "        if again is None:\n            pass"
     }
   ]
 }

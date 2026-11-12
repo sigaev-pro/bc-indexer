@@ -29,6 +29,9 @@ type testDecider struct {
 	events   []string
 	intend   func(ExtractorTransition) error
 	resolved []common.Hash
+	// partial is set while recovery completes a CANONICAL write that a loss
+	// interrupted after the intermediate head writes of its branch.
+	partial bool
 }
 
 type testIntent struct {
@@ -50,7 +53,7 @@ func (d *testDecider) Intend(t ExtractorTransition) (ExtractorIntent, error) {
 	if d.bc.HasBlock(t.Block.Hash(), number) || d.bc.GetTd(t.Block.Hash(), number) != nil {
 		d.t.Errorf("block %d is stored before its intent", number)
 	}
-	if d.bc.CurrentBlock().Hash() != t.OldHead.Hash() {
+	if !d.partial && d.bc.CurrentBlock().Hash() != t.OldHead.Hash() {
 		d.t.Errorf("block %d: head moved before its intent", number)
 	}
 	if d.intend != nil {
@@ -322,7 +325,7 @@ func TestExtractorRecoverImportsUnderTheChainLock(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if err := r.Import(d, blocks[0], receipts, logs, statedb); err != nil {
+		if err := r.Import(d, blocks[0], receipts, logs, statedb, common.Hash{}); err != nil {
 			return err
 		}
 		if !r.Stored(blocks[0].Hash(), 1) || r.Head().Hash() != blocks[0].Hash() {
@@ -394,5 +397,74 @@ func TestExtractorRootDurable(t *testing.T) {
 		if got, err := c.bc.ExtractorRootDurable(root); err != nil || got != want {
 			t.Fatalf("root %x durable %v, %v; want %v", root, got, err, want)
 		}
+	}
+}
+
+// TestExtractorRecoverCompletesAnInterruptedReorg: native reorg writes the
+// head of every branch block before the final head batch with the marker. A
+// loss in between leaves the native head on the branch; recovery completes
+// the saved CANONICAL transition from its saved old head.
+func TestExtractorRecoverCompletesAnInterruptedReorg(t *testing.T) {
+	c := newDecisionChain(t)
+	canon, side := c.blocks(2, 0x01), c.blocks(3, 0x02)
+	if _, err := c.bc.InsertChain(canon, false); err != nil {
+		t.Fatal(err)
+	}
+	// Side blocks A1 and A2 stored with their state, without a head change
+	// (one block per native call).
+	var err error
+	for _, block := range side[:2] {
+		if !c.bc.chainmu.TryLock() {
+			t.Fatal("chain lock")
+		}
+		_, _, err = c.bc.insertChain(types.Blocks{block}, false, false)
+		c.bc.chainmu.Unlock()
+		if err != nil || !c.bc.HasState(block.Root()) {
+			t.Fatalf("side import of block %d: %v", block.NumberU64(), err)
+		}
+	}
+	if c.bc.CurrentBlock().Hash() != canon[1].Hash() {
+		t.Fatal("the side import moved the head")
+	}
+	d := &testDecider{t: t, bc: c.bc, db: c.db, partial: true}
+	err = c.bc.ExtractorRecover(func(r *ExtractorRecovery) error {
+		// A native head (C2) that is neither the saved old head (C1) nor on
+		// the branch of A3 is refused before the intent.
+		receipts, logs, _, statedb, _, err := c.bc.ProcessBlock(side[2], side[1].Header(), nil, nil, nil)
+		if err != nil {
+			return err
+		}
+		if err := r.Import(d, side[2], receipts, logs, statedb, canon[0].Hash()); !errors.Is(err, ErrExtractorDecision) {
+			return fmt.Errorf("a native head off the branch: %v", err)
+		}
+		if len(d.intents) != 0 {
+			return errors.New("an intent was recorded for a native head off the branch")
+		}
+		// The interrupted reorg onto A3 wrote the heads of A1 and A2.
+		c.bc.writeHeadBlock(side[0])
+		c.bc.writeHeadBlock(side[1])
+		receipts, logs, _, statedb, _, err = c.bc.ProcessBlock(side[2], side[1].Header(), nil, nil, nil)
+		if err != nil {
+			return err
+		}
+		return r.Import(d, side[2], receipts, logs, statedb, canon[1].Hash())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.intents) != 1 {
+		t.Fatalf("%d intents", len(d.intents))
+	}
+	tr := d.intents[0]
+	branch := []common.Hash{}
+	for _, h := range tr.Branch {
+		branch = append(branch, h.Hash())
+	}
+	if tr.Kind != ExtractorCanonical || tr.OldHead.Hash() != canon[1].Hash() || tr.NewHead.Hash() != side[2].Hash() ||
+		!slices.Equal(branch, []common.Hash{side[0].Hash(), side[1].Hash()}) {
+		t.Fatalf("completed transition %s over %x with branch %x", tr.Kind, tr.OldHead.Hash(), branch)
+	}
+	if c.bc.CurrentBlock().Hash() != side[2].Hash() || len(d.resolved) != 1 {
+		t.Fatalf("head %x, resolved %d", c.bc.CurrentBlock().Hash(), len(d.resolved))
 	}
 }

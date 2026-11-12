@@ -255,7 +255,8 @@ be discarded, not reused. `Recover` abandons each INPUT_PREPARING
 observation, and for each ADMITTED obligation opens its log window, purges the
 caches, verifies the header from the capsule and re-executes the capsule
 block with `ProcessBlock` on the pinned parent state; then `ExecReady` or
-`Reject`. Only then does it switch to LIVE and install the observer. Any
+`Reject`. Only then does it switch to LIVE (through the decision bridge,
+below) and install the observer. Any
 other failure leaves the admission in RECOVERY_ONLY. Re-execution in this
 step writes no block.
 
@@ -405,5 +406,5 @@ adapter, and the native tests drive them with a real EVM run.
   shipped binary itself runs `snapshot prune-state`, and the preparation
   records that `./cmd/cli` depends on `borwire`.
 - Process loss in the probe is a real SIGKILL right after a sync, not a power
-  cut; a process kill keeps unsynced writes, so loss of unsynced writes is
+  cut; the records that matter are synced before the loss, so loss of unsynced writes is
   covered only by the unit tests of the shared core.

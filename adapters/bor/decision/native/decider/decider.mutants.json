@@ -205,10 +205,10 @@
       "replacement": ""
     },
     {
-      "name": "complete keeps earlier outcomes",
+      "name": "complete keeps its outcomes",
       "file": "extractor/decision/native/decider/decider.go",
-      "original": "\td.outcomes = nil\n\tif err := d.Native.Complete(t, obs)",
-      "replacement": "\tif err := d.Native.Complete(t, obs)"
+      "original": "\tdefer func() { d.outcomes = nil }()\n",
+      "replacement": ""
     },
     {
       "name": "complete accepts no outcome",
@@ -307,6 +307,18 @@
       "file": "extractor/decision/native/decider/decider.go",
       "original": "\t\t\tExecReadyDigest: obs.ExecReady.Digest, ChildRoot: b.Root})",
       "replacement": "\t\t\tExecReadyDigest: obs.ExecReady.Digest, ChildRoot: tr.ChildRoot})"
+    },
+    {
+      "name": "live decisions record outcomes",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif d.outcomes != nil {\n\t\td.outcomes[seq] = outcome\n\t}",
+      "replacement": "\tif d.outcomes == nil {\n\t\td.outcomes = map[uint64]Outcome{}\n\t}\n\td.outcomes[seq] = outcome"
+    },
+    {
+      "name": "complete starts without a map",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\td.outcomes = map[uint64]Outcome{}\n\tdefer",
+      "replacement": "\tdefer"
     }
   ]
 }

@@ -647,6 +647,11 @@ class JudgeTests(unittest.TestCase):
             dump.append({"key": f"{probe.DECISION}{rec['sequence']:016x}/decided", "value": "{}", "value_sha256": "00"})
         self.assertFails(name, again_decided, "re-import: block 4 is not a native rejection")
 
+        def not_again(o, c):
+            result = o["attempts"][1]["result"]
+            result["observations"] = [obs for obs in result["observations"] if obs["block"] != 4]
+        self.assertFails(name, not_again, "did not execute the refused block again")
+
     def test_known_block(self):
         name = "known-block-restart"
 

@@ -124,14 +124,15 @@ type Decider struct {
 	Admission *admission.Admission
 	Bridge    *decision.Bridge
 	Native    Native
-	outcomes  map[uint64]Outcome
+	// outcomes collects the decisions settled during one recovery
+	// completion; it is nil otherwise, so live decisions retain nothing.
+	outcomes map[uint64]Outcome
 }
 
 func (d *Decider) record(seq uint64, outcome Outcome) {
-	if d.outcomes == nil {
-		d.outcomes = map[uint64]Outcome{}
+	if d.outcomes != nil {
+		d.outcomes[seq] = outcome
 	}
-	d.outcomes[seq] = outcome
 }
 
 // authoritative returns the open EXEC_READY observation of block with the
@@ -286,7 +287,8 @@ type Imported struct {
 // complete runs the native completion of obs and returns the one decision
 // it settled.
 func (d *Decider) complete(t *admission.Token, obs admission.Observation) (uint64, Outcome, error) {
-	d.outcomes = nil
+	d.outcomes = map[uint64]Outcome{}
+	defer func() { d.outcomes = nil }()
 	if err := d.Native.Complete(t, obs); err != nil {
 		return 0, "", err
 	}

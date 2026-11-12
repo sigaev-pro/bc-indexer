@@ -206,11 +206,30 @@ func (t extractorTD) GetTd(hash common.Hash, number uint64) *big.Int {
 	return t.bc.GetTd(hash, number)
 }
 
+// extractorAncestor reports whether h is head or one of its ancestors.
+func (bc *BlockChain) extractorAncestor(head, h *types.Header) bool {
+	for head != nil && head.Number.Uint64() > h.Number.Uint64() {
+		head = bc.GetHeader(head.ParentHash, head.Number.Uint64()-1)
+	}
+	return head != nil && head.Hash() == h.Hash()
+}
+
 // extractorTransition predicts the native write of block: SIDE without a
 // head change (setHead false, or the native fork choice keeps the head),
-// IMPORT onto a child of the head, CANONICAL onto another branch.
-func (bc *BlockChain) extractorTransition(block *types.Block, setHead bool) (ExtractorTransition, error) {
+// IMPORT onto a child of the head, CANONICAL onto another branch. The old
+// head is the native head, or from when recovery completes a saved
+// transition: native reorg writes the head of every branch block before
+// the final head batch with the marker, so a loss inside a CANONICAL write
+// leaves the native head on the branch, between from and block.
+func (bc *BlockChain) extractorTransition(block *types.Block, setHead bool, from *types.Header) (ExtractorTransition, error) {
 	current := bc.CurrentBlock()
+	if from != nil && from.Hash() != current.Hash() {
+		if !bc.extractorAncestor(block.Header(), current) {
+			return ExtractorTransition{}, fmt.Errorf("%w: the native head %d is neither the saved old head nor on the branch of block %d",
+				ErrExtractorDecision, current.Number.Uint64(), block.NumberU64())
+		}
+		current = from
+	}
 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 	localTD := bc.GetTd(current.Hash(), current.Number.Uint64())
 	if ptd == nil || localTD == nil {
@@ -238,7 +257,7 @@ func (bc *BlockChain) extractorTransition(block *types.Block, setHead bool) (Ext
 		if header == nil {
 			return ExtractorTransition{}, consensus.ErrUnknownAncestor
 		}
-		if bc.GetCanonicalHash(header.Number.Uint64()) == header.Hash() {
+		if bc.extractorAncestor(current, header) {
 			break
 		}
 		t.Branch = append([]*types.Header{header}, t.Branch...)
@@ -262,7 +281,7 @@ func (bc *BlockChain) extractorTransition(block *types.Block, setHead bool) (Ext
 //
 // It returns the native write status and the duration of the native check.
 func (bc *BlockChain) extractorWriteDecided(decider ExtractorDecider, block *types.Block, receipts []*types.Receipt,
-	logs []*types.Log, statedb *state.StateDB, setHead bool) (WriteStatus, time.Duration, error) {
+	logs []*types.Log, statedb *state.StateDB, setHead bool, from *types.Header) (WriteStatus, time.Duration, error) {
 	defer extractorCommits.Delete(statedb)
 	root, err := extractorCommitBefore(statedb, statedb.CommitWithUpdate, block.NumberU64(),
 		bc.chainConfig.IsEIP158(block.Number()), bc.chainConfig.IsCancun(block.Number()))
@@ -280,7 +299,7 @@ func (bc *BlockChain) extractorWriteDecided(decider ExtractorDecider, block *typ
 		return NonStatTy, 0, err
 	}
 	extractorStep("child-root", block)
-	t, err := bc.extractorTransition(block, setHead)
+	t, err := bc.extractorTransition(block, setHead, from)
 	if err != nil {
 		return NonStatTy, 0, err
 	}
@@ -351,8 +370,16 @@ func (r *ExtractorRecovery) Stored(hash common.Hash, number uint64) bool {
 
 // Import completes the native import of an executed block from recovery
 // through the decision path of the import path (extractorWriteDecided).
+// from, if not zero, is the old head of the saved transition being
+// completed (see extractorTransition); zero means the native head.
 func (r *ExtractorRecovery) Import(decider ExtractorDecider, block *types.Block, receipts types.Receipts, logs []*types.Log,
-	statedb *state.StateDB) error {
-	_, _, err := r.bc.extractorWriteDecided(decider, block, receipts, logs, statedb, true)
+	statedb *state.StateDB, from common.Hash) error {
+	var old *types.Header
+	if from != (common.Hash{}) {
+		if old = r.bc.GetHeaderByHash(from); old == nil {
+			return fmt.Errorf("%w: the saved old head %x is not stored", ErrExtractorDecision, from)
+		}
+	}
+	_, _, err := r.bc.extractorWriteDecided(decider, block, receipts, logs, statedb, true, old)
 	return err
 }

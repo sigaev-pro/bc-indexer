@@ -268,9 +268,25 @@ func (r recovery) Complete(token *admission.Token, obs admission.Observation) er
 	}
 	// A native refusal returns the native error after the rejection was
 	// recorded: the decision is settled, so recovery goes on.
+	// A saved unresolved intent of this observation is completed from its
+	// saved old head (a loss inside a CANONICAL write can leave the native
+	// head on its branch); any other completion starts from the native head.
+	var from common.Hash
+	decisions, err := r.d.Bridge.Decisions(token)
+	if err != nil {
+		return err
+	}
+	for _, dec := range decisions {
+		members := dec.Intent.Members
+		if dec.State == decision.Intended && len(members) > 0 && members[len(members)-1].Observation == obs.Key {
+			if from, err = hashOf(dec.Intent.OldHead.Hash); err != nil {
+				return err
+			}
+		}
+	}
 	rejected := false
-	err := r.rec.Import(recoveryDecider{d: r.d, token: token, rejected: &rejected}, run.block, run.receipts, run.logs,
-		run.statedb)
+	err = r.rec.Import(recoveryDecider{d: r.d, token: token, rejected: &rejected}, run.block, run.receipts, run.logs,
+		run.statedb, from)
 	if err != nil && rejected {
 		return nil
 	}

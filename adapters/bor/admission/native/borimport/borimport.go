@@ -327,16 +327,13 @@ func checkConfig(cfg Config, running *params.ChainConfig) error {
 	return nil
 }
 
-// Recover runs the recovery driver, then installs the observer on the chain
-// so every later import runs per-block observations.
-func (n *Node) Recover() (obligation.Report, error) {
-	return n.RecoverThen(n.Driver.Admission.GoLive)
-}
-
-// RecoverThen is Recover with live in place of the admission's GoLive
-// (obligation.Driver.RecoverThen): the decision bridge decides the
-// EXEC_READY observations and then switches to LIVE. The observer is
-// installed only after live succeeded.
+// RecoverThen runs the recovery driver with live in place of the
+// admission's GoLive (obligation.Driver.RecoverThen), then installs the
+// observer on the chain so every later import runs per-block observations.
+// The product start is bordecision.Start, whose live decides every
+// EXEC_READY observation before it switches to LIVE; a start that went live
+// with the admission's GoLive alone would store later blocks without a
+// decision. The observer is installed only after live succeeded.
 func (n *Node) RecoverThen(live func(*admission.Token) error) (obligation.Report, error) {
 	report, err := n.Driver.RecoverThen(n, live)
 	if err != nil {
