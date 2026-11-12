@@ -137,8 +137,11 @@ refused without an observation.
   block (like an archive node) until E05-01.activation_gc releases it.
 - Without a mirror (the shipped binary until E05-01.registry), every
   NATIVE_DECIDED `IMPORT` and `CANONICAL` decision keeps its delivery
-  obligation and its marker, and `decision.Open` reads all of them at each
-  start.
+  obligation and its marker, and the decision low-water mark does not move:
+  `decision.Open` at each start and the `Cleanup` after each decided block
+  visit every decision since the first one, so their cost grows with the
+  blocks imported. A long-running or product run needs E05-01.registry, as
+  it needs E05-01.activation_gc for retained side blocks (block 0).
 - A `SIDE` decision retains its member, pin and inputs until a `CANONICAL`
   decision names it or E05-01.activation_gc releases it (block 0). Head
   changes without a new block (`SetCanonical`, a known block above the head

@@ -62,7 +62,7 @@ HARNESS_FILES = ("source_inputs_geth.py", "source_inputs.py", "admission.py", "c
 PROBE_PATH = "cmd/extractor-admission-probe/probe.go"
 UNIT_PACKAGES = ("./extractor/admission/...", "./extractor/source_inputs", "./extractor/decision")
 PREPARATION_SECONDS = 5400
-RUN_SECONDS = 3600
+RUN_SECONDS = 1800
 BINARY_LIMIT = 512 * 1024 * 1024
 OBSERVATION_LIMIT = 64 * 1024 * 1024
 

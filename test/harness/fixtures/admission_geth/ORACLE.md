@@ -1,4 +1,4 @@
-# Oracle of the E01-02.admission Geth probe
+# Oracle of the E01-02.admission and E01-02.decision_bridge Geth probe
 
 The probe (`probe.go`) imports blocks through the patched Geth
 `InsertChain` and reports what happened. The oracle (`compare` in
@@ -88,10 +88,52 @@ Before a crash inside Begin no trace event is written; a crash in Admit comes
 after `begin`, `pinned` and `sealed`, and no `admitted` or `exec_ready` event
 appears before it.
 
+## Decision bridge scenarios (E01-02.decision_bridge)
+
+These attempts attach the decision bridge (`AttachDecisions`, the shipped
+configuration): the admission opens with `OpenWithCleanup`, the probe mirror
+answers every query with `mirror_applied` (false unless stated) and logs it,
+a native crash point kills the process at a named point of a decided write,
+and the native outcome fixture refuses a named block after its intent. The
+scenarios above keep the admission alone, so their expectations are those of
+the admission block.
+
+Every intent is checked against an intent record built here from the
+generated chain: the native store ID, the producer run, the sequence, the
+kind, the old and new heads, the members (observation key, block hash,
+EXEC_READY digest from the trace or the saved record, child root from the
+generated header), the Geth evidence digest
+`H(tag("extractor-geth-intent-evidence-v1") || u64(len(kind)) || kind ||
+block hash || u64(number) || child root)` and the events flag. The marker in
+the trace must equal `decision.marker_value` of that record byte for byte,
+and its digest `decision.intent_digest`. A NATIVE_DECIDED trace must carry
+`decided_digest(intent, delivery)` with `BATCH` for `IMPORT` and `CANONICAL`
+and `CHECKPOINT` for `SIDE`; a rejection must carry `rejected_digest(intent,
+H(tag("extractor-geth-native-refusal-v1") || block hash))`. The end state
+of each attempt: the decision counter, the admission counter, the markers
+left, the live pins, and no source inputs of closed observations.
+
+| Scenario | Attempts | Expected |
+|---|---|---|
+| `decision_clean` | `decision-clean-1` imports 300 and 301; `decision-clean-2-restart` restarts with a mirror that applied both and imports 300 and 301 again | Two `IMPORT` decisions (`BATCH`), markers kept, no pin, no inputs, head 301; after the restart the imports are skipped natively with no observation, decision or execution, and `Cleanup` leaves only the counter, low-water mark and purge mark at 2 |
+| `decision_exec_ready` (AC-CAP-07-01) | Power loss before the EXEC_READY sync; recover and import 301 | Nothing is decided before EXEC_READY; recovery re-executes the same ADMITTED obligation with the execution digest of `decision-clean-1`, defers the write, replays the block natively and decides it as `SIDE` (`CHECKPOINT`); 301 is then one `CANONICAL` decision that names 301 and the retained 300 and closes both |
+| `decision_child_root` (AC-CAP-07-02) | Power loss right after the EXEC_READY sync; recover and import 301 | The child root of 300 is not on disk at the restart; the durable EXEC_READY record found there recomputes; native-only replay (no capture, no BLOCKHASH answer from the capsule) decides 300 as `SIDE` with exactly that EXEC_READY digest; then the `CANONICAL` decision as above |
+| `decision_intent` (AC-CAP-07-03) | Power loss right after the decision counter sync of `Intend`; recover and import 301 | The child root of 300 is on disk; recovery settles intent 0 by re-import (`reimport`) with the intent bytes of `decision-clean-1`, `IMPORT`, `BATCH`; 301 is decision 1 |
+| `decision_mutation` (AC-CAP-07-03) | Native crash after the block batch, before the head batch with the marker; recover, import 300 and 301 | Recovery completes the head from the stored block (`stored_block`) with the same intent; the import of 300 is refused with `block is already in the chain with its state` and opens no observation; 301 is decision 1 |
+| `decision_marker` | Power loss before the NATIVE_DECIDED sync, after the marker; recover and import 301 | Recovery resolves intent 0 from its marker (`marker`) |
+| `decision_rejected` (AC-CAP-07-06) | The outcome fixture refuses 300 after its intent; power loss before the rejection sync; recover | Recovery settles intent 0 from the native bad-block record (`bad_block`) with the rejection digest of `decision_reject_live`; no NATIVE_DECIDED, no marker, the mirror is never asked, 300 is not stored, head 299, counters 1 and 1 |
+| `decision_reject_live` | The outcome fixture refuses 300 | The import fails with the fixture error; the intent is rejected at once with the native refusal evidence; the same end state |
+
+The shipped run `decision-legacy-store` starts the patched `geth` with the
+capture config on the `clean` store, whose blocks were written by the
+admission alone: startup stops with `native data does not settle the
+decision`.
+
 ## Mutants
 
-`native_mutants.json` lists native mutants of the patch set and of
-`geth.go`. Each must compile and must fail this oracle in the measured run.
+`native_mutants.json` lists native mutants of both patch sets, `geth.go`,
+`decision.go` and `core/extractor_decision.go`. Each must compile and must
+fail this oracle in the measured run.
 
 The removedb block (D100 item 3) retired the mutant `prune_state_skipped` of
 the Geth block (PR #147). The manual database guard now refuses

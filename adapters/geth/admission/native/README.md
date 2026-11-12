@@ -148,6 +148,17 @@ import:
 Any other block, a new H, is refused with `admission.ErrMode` while an
 obligation is open, and `GoLive` is refused with `admission.ErrPending`.
 
+The shipped node uses `AttachDecisions` of the decision bridge
+([`../../decision/native/README.md`](../../decision/native/README.md),
+E01-02.decision_bridge) instead of `Attach`: it opens the admission with
+`OpenWithCleanup`, runs steps 1 and 2 above (`RecoverObligations`; the block
+is written later, with its decision), then the decision recovery driver,
+which ends with `decision.Bridge.GoLive`. For that driver, `resume` also
+accepts an EXEC_READY observation that the driver marks for native-only
+replay (no admission step, no capture hook), and `Begin` in LIVE refuses a
+block that the store already holds with its state (`ErrKnownBlock`), so a
+known block never opens a second observation.
+
 ## Startup identity
 
 The shipped binary reads the admission config from the file named by
