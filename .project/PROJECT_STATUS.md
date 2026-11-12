@@ -140,6 +140,38 @@ the client sessions start goes to the coordinator.
 Next: hosted CI and the final review comment on the final head; then the
 three client blocks after block 0 merges.
 
+### ETH block (Geth)
+
+Status: IN_PROGRESS in draft PR (pending), branch
+`claude/e01-03-smoke-corpus-eth` from main `3cc31ec` (block 0 merged in PR
+#164 at `3cc31ec`). Part of #19. Role: native-engineer, and qa for the
+matrix; Spec and Standards reviewers read-only. D97: as the coordinator
+records it, the owner agreed on 2026-11-13 to the #16-style split (block 0
+core, then one native-engineer session per family, qa for the per-case
+matrix, two read-only reviewers) and said "Очищай лишнее и запускай все".
+Allowed paths: `test/native_corpus/eth/**`,
+`.project/evidence/E01-03.smoke_corpus.eth.md` and this subsection.
+
+Evidence: [E01-03.smoke_corpus.eth](evidence/E01-03.smoke_corpus.eth.md);
+design in [test/native_corpus/eth/README.md](../test/native_corpus/eth/README.md).
+The probe is built from the accepted Geth decision-bridge preparation of
+records 03 at `ca88680` (same source, patch sets and packages, checked
+against its install record) and imports the Geth-generated corpus blocks
+through `AttachDecisions` with the shipped options, then restarts and
+re-imports. It exports receipts, `callTracer` frames and native state reads.
+
+Measured head `44f87ae`: preparation 01, run 01 (comparison PASS, 0
+differences, no native self-check failure), portable 01 (14 tests) and
+driver mutants 01 (21 killed), all PASS. Later commits change only docs.
+
+qa verdict, ETH private local: transfer, nested-revert, fee and empty-block
+PASS; system-action NOT_APPLICABLE (ORACLE.md, D102); family PASS. Public
+`ethereum-*` cells stay NOT_RUN (D96). The state before and after each
+transaction comes from a native re-execution that must reproduce the
+imported receipts and roots.
+
+Next: Spec and Standards reviews, hosted CI, the final review comment.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
