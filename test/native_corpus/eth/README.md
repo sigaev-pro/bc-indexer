@@ -37,35 +37,55 @@ cache.
    with coinbase `0x2000…0000`. Block 1 holds the four corpus transactions,
    signed with key 1: the transfer, the dynamic-fee transfer, the call of
    the parent and the direct call of the child. Block 2 is empty.
-2. Live import. It opens a new node store as the shipped node does
-   (`Preflight`, `core.NewBlockChain`, then `AttachDecisions` with `Options{}`
-   and `DecisionOptions{}`, the arguments of the `backend_attach_decisions`
-   patch). It then imports both blocks with `InsertChain`, so each block goes
+2. Live import. It opens a new node store with the shipped attach calls
+   (`Preflight` on the instance directory, `core.NewBlockChain`, then
+   `AttachDecisions` with `Options{}` and `DecisionOptions{}`, the arguments
+   of the `backend_attach_decisions` patch). The blockchain config is
+   `core.DefaultConfig()` (hash state scheme), not the node's flags, and the
+   engine is the ethash faker. It then imports both blocks with `InsertChain`, so each block goes
    through the patched `ProcessBlock`: admission, EXEC_READY, intent, native
    write and NATIVE_DECIDED. The chain is stopped and the store closed.
 3. Restart and re-import. It opens the same store the same way, which runs
-   the recovery driver, and imports the same two blocks again.
+   the recovery driver, and imports the same two blocks again. Both blocks
+   are canonical with their state, so Geth skips them natively as known
+   blocks before `ProcessBlock`; the check is that the restart opens no
+   observation and no decision and leaves the decision records unchanged
+   (the decision-bridge README, "One decision per block").
 4. Export, on the restarted chain:
    - blocks, receipts and logs, read with `rawdb.ReadBlock` and
      `rawdb.ReadReceipts`;
-   - `frame`, from the native `callTracer`
-     (`tracers.DefaultDirectory.New("callTracer")`) of each transaction;
-   - `state_before` and `state_after`, from a native re-execution of each
-     block on its parent state with `core.ApplyTransactionWithEVM`. The
-     probe reads the five corpus accounts (balance, nonce, code, and slots 0
-     to 3 of the contracts) before and after each transaction. The
-     re-execution then applies the ethash `Finalize` (the block reward); its
-     receipts must equal the imported receipts and its root the header root;
+   - `frame` and `state_before`/`state_after`, from one native
+     re-execution of each block on its parent state with
+     `core.ApplyTransactionWithEVM`, traced by the native `callTracer`
+     (`tracers.DefaultDirectory.New("callTracer")`). The probe reads the five
+     corpus accounts (balance, nonce, code, and slots 0 to 3 of the
+     contracts) before and after each transaction. The re-execution then
+     applies the ethash `Finalize` (the block reward). Each re-executed
+     receipt must equal the imported one in status, gas used, cumulative
+     gas, logs, bloom, type and effective gas price (computed from the
+     transaction and the base fee, since `ApplyTransactionWithEVM` leaves it
+     unset), and the final root must equal the header root;
    - `state_after_block`, native reads at the block root;
    - `decisions`, one row per decision record with an intent and a
      NATIVE_DECIDED record from the live import, naming the chain number of
-     its first member;
+     its single member (an intent with another member count stops the
+     probe; an intent without a NATIVE_DECIDED record is listed in
+     `native.undecided_intents`);
    - `reimport`, the growth of the admission and decision counters during
      the restart import.
 
 The probe writes no expected value. The `native` section of the
 observation keeps the import results, the full admission and decision
 records before and after each import, and the re-execution checks.
+
+The driver refuses a PASS (`native_failures`, `verdict`) unless both imports
+attached and inserted without error up to block 2; the store held no
+extractor record before the live import; the admission and decision
+counters each count one sequence per block; the restart saw exactly the
+records the live import left and did not change the decision records; no
+intent is undecided; the re-execution checks one receipt per body
+transaction of every block, each equal, with equal gas and roots; and the
+comparison is PASS with exit 0.
 
 ## Commands
 
@@ -92,6 +112,10 @@ PASS and every native self-check holds.
   parent state, which the observation format allows and `source.tool`
   names. The re-execution must reproduce the imported receipts and root.
 - The probe runs the live import and the re-import in one process and calls
-  `AttachDecisions` directly; it does not start the `geth` command.
+  `AttachDecisions` directly with `core.DefaultConfig()`; it does not start
+  the `geth` command.
+- The re-import is skipped natively as known blocks, so it shows that the
+  restart adds nothing, not that `ProcessBlock` refuses a second decision;
+  the decision-bridge probe covers the known-block refusal.
 - System-action is NOT_APPLICABLE for ETH (ORACLE.md). The fixture is before
   the merge. Every public cell (`ethereum-*`) stays NOT_RUN (D96).

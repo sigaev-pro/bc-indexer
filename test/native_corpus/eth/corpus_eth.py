@@ -75,10 +75,24 @@ def native_failures(observation, block_count):
         if (row.get("head") or {}).get("number") != block_count:
             failures.append(f"{name}: head is not block {block_count}")
     live = native.get("live_import") or {}
+    restart = native.get("restart_import") or {}
     if live.get("admission_records_before") or live.get("decision_records_before"):
         failures.append("live_import: the store held extractor records before the first import")
-    if not live.get("decision_records_after"):
-        failures.append("live_import: no decision record was written")
+    for kind in ("admission", "decision"):
+        # One observation and one decision per corpus block, read from the counter records.
+        if counted(live.get(f"{kind}_records_after")) != block_count:
+            failures.append(f"live_import: the {kind} counters do not count {block_count} sequences")
+        # The restart reopened the store that the live import left.
+        if restart.get(f"{kind}_records_before") != live.get(f"{kind}_records_after"):
+            failures.append(f"restart_import: the {kind} records at the restart differ from the live import")
+    if restart.get("decision_records_after") != restart.get("decision_records_before"):
+        failures.append("restart_import: the re-import changed the decision records")
+    if native.get("undecided_intents") != []:
+        failures.append("live_import: an intent has no NATIVE_DECIDED record")
+    sizes = {}
+    for block in observation.get("blocks") or []:
+        if isinstance(block, dict):
+            sizes[block.get("number")] = block.get("body_tx_count")
     checks = native.get("reexecution")
     if not isinstance(checks, list) or [row.get("number") for row in checks] != list(range(1, block_count + 1)):
         failures.append("reexecution: not one check per block")
@@ -88,10 +102,28 @@ def native_failures(observation, block_count):
             failures.append(f"reexecution: block {row.get('number')} root differs from the imported root")
         if row.get("cumulative_gas_used") != row.get("header_gas_used"):
             failures.append(f"reexecution: block {row.get('number')} gas differs from the header")
-        for receipt in row.get("receipts") or []:
+        receipts = row.get("receipts") or []
+        if not isinstance(sizes.get(row.get("number")), int) or \
+                [receipt.get("index") for receipt in receipts] != list(range(sizes[row.get("number")])):
+            failures.append(f"reexecution: block {row.get('number')} does not check one receipt per transaction")
+        for receipt in receipts:
             if receipt.get("receipt_equal") is not True:
                 failures.append(f"reexecution: block {row.get('number')} receipt {receipt.get('index')} differs")
     return failures
+
+
+def counted(records):
+    """The sum of the "next" values of the counter records in a record set (key to JSON text)."""
+    total = 0
+    for key, value in (records if isinstance(records, dict) else {}).items():
+        if key.endswith("/counter"):
+            total += json.loads(value)["next"]
+    return total
+
+
+def verdict(report, returncode, failures):
+    """PASS only when the comparison is PASS, the comparator exited 0 and no native self-check failed."""
+    return "PASS" if report.get("result") == "PASS" and returncode == 0 and not failures else "FAIL"
 
 
 def with_source(observation, source):
@@ -126,11 +158,16 @@ def repository_equal(rows):
         origin = Path(row["origin"]["path"])
         parts = origin.parts
         # The origin was a frozen worktree; its path from "adapters" on names the repository file.
-        relative = Path(*parts[parts.index("adapters"):])
+        relative = Path(*parts[len(parts) - 1 - parts[::-1].index("adapters"):])
         current = ROOT / relative
         out[relative.as_posix()] = current.is_file() and \
             hashlib.sha256(current.read_bytes()).hexdigest() == row["copy"]["sha256"]
     return out
+
+
+def code_equal(equal):
+    """Whether every retained code file equals the repository; README text may differ."""
+    return all(same for name, same in equal.items() if not name.endswith(".md"))
 
 
 def install(source, copies):
@@ -201,8 +238,8 @@ def prepare(accepted_path, expected_sha, output):
                     "The oracle names another Geth source")
             copies, rows = verified_copies(accepted, deadline)
             record["repository_equal"] = repository_equal(rows)
-            code = {name: same for name, same in record["repository_equal"].items() if not name.endswith(".md")}
-            require(all(code.values()), "The repository Geth adapter code differs from the accepted preparation")
+            require(code_equal(record["repository_equal"]),
+                    "The repository Geth adapter code differs from the accepted preparation")
             _, manifest = json_artifact(accepted["build_manifest"], 64 * 1024 * 1024, deadline=deadline)
             compiler = accepted["compiler_image"]
             require(manifest["image_inputs"]["golang-build-image"]["reference"] == compiler, "Compiler mismatch")
@@ -316,15 +353,16 @@ def run(preparation_path, expected_sha, output):
             report_path = output / "comparison.json"
             compared = subprocess.run([sys.executable, "-I", str(compare_path[0]), str(expected_path),
                                        str(observation_path), "--report", str(report_path)],
-                                      capture_output=True, text=True, timeout=120)
+                                      capture_output=True, text=True,
+                                      timeout=max(1, deadline - time.monotonic() - 40))
+            check_deadline(deadline)
             record["comparison"] = reference(report_path, OBSERVATION_LIMIT, deadline)
             report = load(report_path, OBSERVATION_LIMIT, deadline)
             record["comparison_exit"] = compared.returncode
             record["cases"] = {row["case"]: row["verdict"] for row in report["cases"]}
             record["differences"] = len(report["differences"])
             record["comparison_result"] = report["result"]
-            if report["result"] == "PASS" and compared.returncode == 0 and not record["native_failures"]:
-                record["result"] = "PASS"
+            record["result"] = verdict(report, compared.returncode, record["native_failures"])
         except (Interrupted, Exception) as error:
             record["error"] = f"{type(error).__name__}: {error}"
         finally:

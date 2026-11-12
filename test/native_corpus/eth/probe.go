@@ -335,10 +335,18 @@ func exportBlocks(chain *core.BlockChain, db ethdb.Database, count int) map[stri
 			row["state_before"] = before
 			row["state_after"] = accounts(statedb)
 			transactions = append(transactions, row)
-			again := receiptView(receipt)
-			again["effective_gas_price"] = stored[index].EffectiveGasPrice.String()
+			// ApplyTransactionWithEVM leaves EffectiveGasPrice unset in this
+			// Geth version; the re-execution computes it from the
+			// transaction and the base fee (EIP-1559) and compares it with
+			// the value ReadReceipts derives for the imported receipt.
+			tip, err := tx.EffectiveGasTip(header.BaseFee)
+			check(err)
+			receipt.EffectiveGasPrice = new(big.Int).Add(tip, header.BaseFee)
+			again, imported := receiptView(receipt), receiptView(stored[index])
+			again["bloom"], imported["bloom"] = hex.EncodeToString(receipt.Bloom[:]), hex.EncodeToString(stored[index].Bloom[:])
+			again["type"], imported["type"] = receipt.Type, stored[index].Type
 			reexecuted = append(reexecuted, map[string]any{"index": index,
-				"receipt_equal": fmt.Sprint(again) == fmt.Sprint(receiptView(stored[index]))})
+				"receipt_equal": fmt.Sprint(again) == fmt.Sprint(imported)})
 		}
 		// The block reward, outside any transaction, then the root.
 		chain.Engine().Finalize(chain, header, statedb, block.Body())
@@ -375,26 +383,30 @@ type intentRow struct {
 
 // decisions derives the NATIVE_DECIDED decisions from the retained decision
 // records: one row per sequence with an intent and a decided record, naming
-// the number of its first member (the written block) in the chain.
-func decisions(records map[string]string, numbers map[string]uint64) []any {
+// the chain number of its single member (the written block; every decision
+// of this corpus import has one member). It also returns the keys of
+// intents without a decided record, which the driver refuses.
+func decisions(records map[string]string, numbers map[string]uint64) ([]any, []string) {
 	type row struct {
 		key   string
 		block uint64
 		kind  string
 	}
 	rows := []row{}
+	undecided := []string{}
 	for key, value := range records {
 		if !strings.HasSuffix(key, "/intent") {
 			continue
 		}
 		base := strings.TrimSuffix(key, "/intent")
 		if _, ok := records[base+"/decided"]; !ok {
+			undecided = append(undecided, key)
 			continue
 		}
 		var intent intentRow
 		check(json.Unmarshal([]byte(value), &intent))
-		if len(intent.Members) == 0 {
-			panic("decided intent without members: " + key)
+		if len(intent.Members) != 1 {
+			panic(fmt.Sprintf("decided intent %s has %d members, want 1", key, len(intent.Members)))
 		}
 		number, ok := numbers[strings.ToLower(strings.TrimPrefix(intent.Members[0].Block, "0x"))]
 		if !ok {
@@ -407,7 +419,8 @@ func decisions(records map[string]string, numbers map[string]uint64) []any {
 	for _, r := range rows {
 		out = append(out, map[string]any{"block": r.block, "kind": r.kind})
 	}
-	return out
+	sort.Strings(undecided)
+	return out, undecided
 }
 
 // counted returns the sum of the "next" values of every counter record under
@@ -449,12 +462,13 @@ func run(genesisPath, work, output, commit string) {
 	export := restart["export"].(map[string]any)
 	delete(restart, "export")
 	liveRecords := live["decision_records_after"].(map[string]string)
+	decided, undecided := decisions(liveRecords, numbers)
 	observation := map[string]any{
 		"schema_version": 1, "kind": "native-corpus-observation", "family": "eth",
 		"chain_id": genesis.Config.ChainID.Int64(),
 		"blocks":   export["blocks"],
 		// NATIVE_DECIDED records of the live import.
-		"decisions": decisions(liveRecords, numbers),
+		"decisions": decided,
 		// After the restart and the re-import of the same blocks.
 		"reimport": map[string]any{
 			"new_observations": counted(restart["admission_records_after"].(map[string]string)) -
@@ -465,6 +479,7 @@ func run(genesisPath, work, output, commit string) {
 		"native": map[string]any{
 			"native_commit": commit, "genesis_hash": genesis.ToBlock().Hash().Hex(), "generated": inputs,
 			"live_import": live, "restart_import": restart, "reexecution": export["reexecution"],
+			"undecided_intents": undecided,
 		},
 	}
 	data, err := json.MarshalIndent(observation, "", " ")

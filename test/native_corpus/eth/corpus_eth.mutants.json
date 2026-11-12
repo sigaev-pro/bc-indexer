@@ -65,12 +65,6 @@
    "replacement": "if live.get(\"decision_records_before\"):"
   },
   {
-   "name": "no decision record ignored",
-   "file": "test/native_corpus/eth/corpus_eth.py",
-   "original": "if not live.get(\"decision_records_after\"):",
-   "replacement": "if False:"
-  },
-  {
    "name": "check count ignored",
    "file": "test/native_corpus/eth/corpus_eth.py",
    "original": "if not isinstance(checks, list) or [row.get(\"number\") for row in checks] != list(range(1, block_count + 1)):",
@@ -147,6 +141,96 @@
    "file": "test/native_corpus/eth/corpus_eth.py",
    "original": "current.is_file() and \\\n            hashlib.sha256(current.read_bytes()).hexdigest() == row[\"copy\"][\"sha256\"]",
    "replacement": "current.is_file()"
+  },
+  {
+   "name": "counter check ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if counted(live.get(f\"{kind}_records_after\")) != block_count:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "admission counter not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "for kind in (\"admission\", \"decision\"):\n        # One",
+   "replacement": "for kind in (\"decision\",):\n        # One"
+  },
+  {
+   "name": "decision counter not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "for kind in (\"admission\", \"decision\"):\n        # One",
+   "replacement": "for kind in (\"admission\",):\n        # One"
+  },
+  {
+   "name": "restart store not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if restart.get(f\"{kind}_records_before\") != live.get(f\"{kind}_records_after\"):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "re-import decisions not checked",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if restart.get(\"decision_records_after\") != restart.get(\"decision_records_before\"):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "undecided intents ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if native.get(\"undecided_intents\") != []:",
+   "replacement": "if native.get(\"undecided_intents\"):"
+  },
+  {
+   "name": "receipt coverage ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if not isinstance(sizes.get(row.get(\"number\")), int) or \\\n                [receipt.get(\"index\") for receipt in receipts] != list(range(sizes[row.get(\"number\")])):",
+   "replacement": "if not isinstance(sizes.get(row.get(\"number\")), int):"
+  },
+  {
+   "name": "block size not required",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if not isinstance(sizes.get(row.get(\"number\")), int) or \\\n                [receipt",
+   "replacement": "if not isinstance(sizes.get(row.get(\"number\"), 0), int) or \\\n                [receipt"
+  },
+  {
+   "name": "counter key not filtered",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "if key.endswith(\"/counter\"):",
+   "replacement": "if True:"
+  },
+  {
+   "name": "verdict ignores the report",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return \"PASS\" if report.get(\"result\") == \"PASS\" and returncode == 0 and not failures else \"FAIL\"",
+   "replacement": "return \"PASS\" if returncode == 0 and not failures else \"FAIL\""
+  },
+  {
+   "name": "verdict ignores the exit",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return \"PASS\" if report.get(\"result\") == \"PASS\" and returncode == 0 and not failures else \"FAIL\"",
+   "replacement": "return \"PASS\" if report.get(\"result\") == \"PASS\" and not failures else \"FAIL\""
+  },
+  {
+   "name": "verdict ignores native failures",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return \"PASS\" if report.get(\"result\") == \"PASS\" and returncode == 0 and not failures else \"FAIL\"",
+   "replacement": "return \"PASS\" if report.get(\"result\") == \"PASS\" and returncode == 0 else \"FAIL\""
+  },
+  {
+   "name": "readme filter widened",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return all(same for name, same in equal.items() if not name.endswith(\".md\"))",
+   "replacement": "return all(same for name, same in equal.items() if name.endswith(\".go\"))"
+  },
+  {
+   "name": "code equality ignored",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "return all(same for name, same in equal.items() if not name.endswith(\".md\"))",
+   "replacement": "return True"
+  },
+  {
+   "name": "first adapters directory",
+   "file": "test/native_corpus/eth/corpus_eth.py",
+   "original": "relative = Path(*parts[len(parts) - 1 - parts[::-1].index(\"adapters\"):])",
+   "replacement": "relative = Path(*parts[parts.index(\"adapters\"):])"
   }
  ]
 }

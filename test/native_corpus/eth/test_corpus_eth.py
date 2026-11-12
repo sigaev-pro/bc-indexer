@@ -19,15 +19,21 @@ PROBE = (corpus_eth.ETH / "probe.go").read_text()
 
 def good_probe():
     """A probe output whose native self-checks all hold."""
-    records = {"extractor-decision-v1/geth-corpus.r/counter": "{\"next\":2}"}
+    decided = {"extractor-decision-v1/geth-corpus.r/counter": "{\"next\":2}",
+               "extractor-decision-v1/geth-corpus.r/0000000000000000/intent": "{}"}
+    admitted = {"extractor-admission-v1/geth-corpus.r/counter": "{\"next\":2}"}
     imports = {"attach_error": None, "insert_error": None, "head": {"number": 2, "hash": "0x01"},
-               "admission_records_before": {}, "decision_records_before": {}, "decision_records_after": records}
-    restart = dict(imports, admission_records_before={"a": "1"}, decision_records_before=records)
+               "admission_records_before": {}, "decision_records_before": {},
+               "admission_records_after": admitted, "decision_records_after": decided}
+    restart = dict(imports, admission_records_before=dict(admitted), decision_records_before=dict(decided),
+                   admission_records_after=dict(admitted), decision_records_after=dict(decided))
     checks = [{"number": 1, "root_equal": True, "cumulative_gas_used": 228538, "header_gas_used": 228538,
                "receipts": [{"index": n, "receipt_equal": True} for n in range(4)]},
               {"number": 2, "root_equal": True, "cumulative_gas_used": 0, "header_gas_used": 0, "receipts": []}]
     return {"schema_version": 1, "kind": "native-corpus-observation", "family": "eth",
-            "native": {"live_import": imports, "restart_import": restart, "reexecution": checks}}
+            "blocks": [{"number": 1, "body_tx_count": 4}, {"number": 2, "body_tx_count": 0}],
+            "native": {"live_import": imports, "restart_import": restart, "reexecution": checks,
+                       "undecided_intents": []}}
 
 
 class NativeChecks(unittest.TestCase):
@@ -41,17 +47,42 @@ class NativeChecks(unittest.TestCase):
             "head is not block 2": lambda n: n["restart_import"].update(head={"number": 1}),
             "held extractor records": lambda n: n["live_import"].update(admission_records_before={"k": "v"}),
             "held extractor records ": lambda n: n["live_import"].update(decision_records_before={"k": "v"}),
-            "no decision record": lambda n: n["live_import"].update(decision_records_after={}),
+            "decision counters do not count  ": lambda n: n["live_import"].update(decision_records_after={}),
             "root differs": lambda n: n["reexecution"][0].update(root_equal=False),
             "gas differs": lambda n: n["reexecution"][1].update(cumulative_gas_used=1),
             "receipt 2 differs": lambda n: n["reexecution"][0]["receipts"][2].update(receipt_equal=False),
             "not one check per block": lambda n: n["reexecution"].pop(),
+            "block 1 does not check one receipt": lambda n: n["reexecution"][0].update(receipts=[]),
+            "block 1 does not check one receipt ": lambda n: n["reexecution"][0]["receipts"].pop(1),
+            "admission counters do not count": lambda n: n["live_import"].update(admission_records_after={}),
+            "decision counters do not count": lambda n: n["live_import"]["decision_records_after"].update(
+                {"extractor-decision-v1/geth-corpus.r/counter": "{\"next\":3}"}),
+            "admission records at the restart differ": lambda n: n["restart_import"].update(
+                admission_records_before={}),
+            "decision records at the restart differ": lambda n: n["restart_import"].update(
+                decision_records_before={}, decision_records_after={}),
+            "re-import changed the decision records": lambda n: n["restart_import"]["decision_records_after"].update(
+                {"extractor-decision-v1/geth-corpus.r/0000000000000002/intent": "{}"}),
+            "intent has no NATIVE_DECIDED": lambda n: n.update(
+                undecided_intents=["extractor-decision-v1/geth-corpus.r/0000000000000002/intent"]),
+            "intent has no NATIVE_DECIDED ": lambda n: n.pop("undecided_intents"),
         }
         for message, change in defects.items():
             probe = good_probe()
             change(probe["native"])
             failures = corpus_eth.native_failures(probe, 2)
             self.assertTrue(any(message.strip() in row for row in failures), (message, failures))
+
+    def test_receipt_check_needs_the_block_size(self):
+        probe = good_probe()
+        probe["blocks"] = [{"number": 1, "body_tx_count": 4}]
+        self.assertEqual(corpus_eth.native_failures(probe, 2),
+                         ["reexecution: block 2 does not check one receipt per transaction"])
+
+    def test_counted(self):
+        self.assertEqual(corpus_eth.counted({"a/counter": "{\"next\":2}", "b/counter": "{\"next\":1}",
+                                             "a/0/intent": "{\"next\":9}"}), 3)
+        self.assertEqual(corpus_eth.counted(None), 0)
 
     def test_missing_native_section(self):
         self.assertEqual(corpus_eth.native_failures({}, 2), ["observation has no native section"])
@@ -63,6 +94,20 @@ class NativeChecks(unittest.TestCase):
         probe = good_probe()
         del probe["native"]["reexecution"][0]["receipts"][1]["receipt_equal"]
         self.assertEqual(corpus_eth.native_failures(probe, 2), ["reexecution: block 1 receipt 1 differs"])
+
+
+class Verdict(unittest.TestCase):
+    def test_each_condition(self):
+        self.assertEqual(corpus_eth.verdict({"result": "PASS"}, 0, []), "PASS")
+        self.assertEqual(corpus_eth.verdict({"result": "FAIL"}, 0, []), "FAIL")
+        self.assertEqual(corpus_eth.verdict({"result": "PASS"}, 1, []), "FAIL")
+        self.assertEqual(corpus_eth.verdict({"result": "PASS"}, 0, ["x"]), "FAIL")
+        self.assertEqual(corpus_eth.verdict({}, 0, []), "FAIL")
+
+    def test_code_equal(self):
+        self.assertTrue(corpus_eth.code_equal({"a/README.md": False, "a/x.go": True}))
+        self.assertFalse(corpus_eth.code_equal({"a/README.md": True, "a/x.go": False}))
+        self.assertFalse(corpus_eth.code_equal({"a/patches.json": False}))
 
 
 class Source(unittest.TestCase):
@@ -99,7 +144,8 @@ class Install(unittest.TestCase):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         path = corpus_eth.ROOT / "adapters" / "geth" / "decision" / "decision.go"
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        origin = str(root / "measured" / "adapters" / "geth" / "decision" / "decision.go")
+        # An earlier directory named "adapters" in the frozen path is not the repository one.
+        origin = str(root / "adapters" / "measured" / "adapters" / "geth" / "decision" / "decision.go")
         rows = [{"origin": {"path": origin}, "copy": {"sha256": digest}},
                 {"origin": {"path": origin.replace("decision.go", "README.md")}, "copy": {"sha256": "00"}}]
         self.assertEqual(corpus_eth.repository_equal(rows), {"adapters/geth/decision/decision.go": True,
@@ -156,7 +202,6 @@ class CommandLine(unittest.TestCase):
         with unittest.mock.patch("sys.stdout") as stdout:
             self.assertEqual(corpus_eth.main(["run", "relative.json", "--sha256", "0" * 64, "--output", "/tmp/x"]), 2)
         self.assertIn("valid", "".join(call.args[0] for call in stdout.write.call_args_list))
-
 
 
 if __name__ == "__main__":
