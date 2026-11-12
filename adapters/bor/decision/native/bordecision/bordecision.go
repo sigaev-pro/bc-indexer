@@ -79,7 +79,9 @@ type Node struct {
 // recovery (decider.Recover: the saved intent settled, the native import of
 // every EXEC_READY observation without a decision completed from its saved
 // inputs) and GoLive. Only then does it install the decider and the
-// observer. mirror nil is NoMirror.
+// observer. mirror nil is NoMirror. On an error the node stays in
+// RECOVERY_ONLY without a decider or observer; the returned node then only
+// carries what the decision recovery reported before the error.
 func Start(n *borimport.Node, mirror decision.Mirror) (*Node, obligation.Report, error) {
 	if mirror == nil {
 		mirror = NoMirror{}
@@ -109,9 +111,8 @@ func Start(n *borimport.Node, mirror decision.Mirror) (*Node, obligation.Report,
 	})
 	if err != nil {
 		chain.SetExtractorDecider(nil)
-		return nil, report, err
 	}
-	return node, report, nil
+	return node, report, err
 }
 
 // Detach removes the decider and the observer.
