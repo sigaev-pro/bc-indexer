@@ -204,6 +204,9 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
   mirror before E05-01.registry; head changes without a new block wait for
   E01-02.lifecycle_seams.
 
+Next: Spec and Standards confirmation of PR #162 on its final head, hosted CI,
+then merge with the owner's permission for that PR.
+
 ## E01-02.decision_bridge — BSC block
 
 Status: ACCEPTED in PR #159 at merge `3cc16fe` (part of #17), branch
