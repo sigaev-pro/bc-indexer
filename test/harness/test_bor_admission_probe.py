@@ -240,7 +240,7 @@ class JudgeTests(unittest.TestCase):
             ready = copy.deepcopy(row_of(snap_rows(o["attempts"][0]["result"], probe.key_of(2)), "0000000000000002/exec-ready"))
             ready["key"] = ready["key"].replace("0000000000000002", "0000000000000003")
             rows.append(ready)
-        self.assertFails("native-rejection", rejected_ready, "kept EXEC_READY or its pin")
+        self.assertFails("native-rejection", rejected_ready, "NATIVE_REJECTED kept EXEC_READY")
 
         def checkpoint(o, c):
             c["checkpoints"] = {key: b"{}" for key in c["checkpoints"]}
@@ -474,6 +474,10 @@ class JudgeTests(unittest.TestCase):
             result(o)["child_roots_at_open"][probe.key_of(3)] = True
         self.assertFails(name, durable, "the child state of the lost block was durable")
 
+        def unknown(o, c):
+            result(o)["child_roots_at_open"] = {}
+        self.assertFails(name, unknown, "the child state of the lost block was durable")
+
         def fetched(o, c):
             result(o)["recovery_counted_calls"][0]["origin"] = "fetch"
         self.assertFails(name, fetched, "completion replay: call 0 origin fetch")
@@ -505,6 +509,11 @@ class JudgeTests(unittest.TestCase):
             rows = snap_rows(o["attempts"][0]["result"], probe.key_of(3))
             rows.remove(row_of(rows, "0000000000000003/rejected"))
         self.assertFails("native-rejection", state, "is not NATIVE_REJECTED")
+
+        def kept_pin(o, c):
+            o["attempts"][0]["store_after"].append({"key": probe.PIN + probe.key_of(3), "value_sha256": "00" * 32,
+                                                    "value_length": 1})
+        self.assertFails("native-rejection", kept_pin, "kept its pin or inputs, or has a decision")
 
     def test_decision_crash(self):
         """AC-CAP-07-02 (child root durable) and AC-CAP-07-03 (losses inside a decision)."""

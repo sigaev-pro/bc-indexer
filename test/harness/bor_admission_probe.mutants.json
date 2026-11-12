@@ -209,10 +209,10 @@
       "replacement": "        if False:\n            fail(f\"{label}: {key} EXEC_READY lost its pin\")"
     },
     {
-      "name": "rejected releases the pin",
+      "name": "rejected observation may keep its pin",
       "file": "test/harness/bor_admission_probe.py",
-      "original": "if rejected is not None and (ready is not None or pin is not None):",
-      "replacement": "if rejected is not None and ready is not None:"
+      "original": "        if has(dump, PIN + key) or any(row[\"key\"].startswith(INPUTS + key + \"/\") for row in dump) or intents_naming(dump, key):",
+      "replacement": "        if any(row[\"key\"].startswith(INPUTS + key + \"/\") for row in dump) or intents_naming(dump, key):"
     },
     {
       "name": "candidate check",
@@ -377,10 +377,10 @@
       "replacement": "        if not rejected or False and rejection_digest(key, context[\"chain\"][block - 1][\"hash\"].hex(),"
     },
     {
-      "name": "rejected keeps no pin or closed log",
+      "name": "rejected observation may keep its inputs",
       "file": "test/harness/bor_admission_probe.py",
       "original": "        if has(dump, PIN + key) or any(row[\"key\"].startswith(INPUTS + key + \"/\") for row in dump) or intents_naming(dump, key):",
-      "replacement": "        if False:"
+      "replacement": "        if has(dump, PIN + key) or intents_naming(dump, key):"
     },
     {
       "name": "post-Rio lost state",

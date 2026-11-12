@@ -535,8 +535,10 @@ def check_observation(context, dump, sequence, number, variant, fail, label):
         if pin is None:
             fail(f"{label}: {key} EXEC_READY lost its pin")
     rejected = recs.get((seq, "rejected"))
-    if rejected is not None and (ready is not None or pin is not None):
-        fail(f"{label}: {key} NATIVE_REJECTED kept EXEC_READY or its pin")
+    # The pin of a rejected observation is released after the rejected sync;
+    # its release is checked on the store after the attempt.
+    if rejected is not None and ready is not None:
+        fail(f"{label}: {key} NATIVE_REJECTED kept EXEC_READY")
     return state
 
 
