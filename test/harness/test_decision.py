@@ -46,7 +46,8 @@ class SharedCopies(unittest.TestCase):
             decision.check_identical(root)
         root = self.copy_tree()
         native = root / "adapters" / "geth" / "decision" / "native"
-        native.mkdir()
+        # The client blocks add their own native/ directory.
+        native.mkdir(exist_ok=True)
         (native / "patch.diff").write_text("geth only\n")
         self.assertEqual(sorted(decision.check_identical(root)), SHARED)
         (root / "adapters" / "geth" / "decision" / "native.go").write_text("package decision\n")
