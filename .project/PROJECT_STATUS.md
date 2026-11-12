@@ -9,8 +9,7 @@ for the ETH slot. D101 records the owner's answers: long runs are gated on
 E05-01.registry and E05-01.activation_gc, and the other limits have owners.
 Still open before #17 closes: the qa AC-CAP-07 verdict for the private ETH
 slot (Geth session). BSC and POLY have explicit verdicts. Dependencies
-E01-02.admission
-(#16, PR #155 at `2a644f8`) and BOOT-09 are accepted. Plan agreed with the
+E01-02.admission (#16, PR #155 at `2a644f8`) and BOOT-09 are accepted. Plan agreed with the
 owner on 2026-11-12, the same split as #16: block 0 core (architect, then
 native-engineer), then parallel Geth, BSC and Bor blocks (native-engineer
 each) with qa for the AC matrix; reviewer for the Spec and Standards reviews.
@@ -162,8 +161,9 @@ record merges.
 
 ## E01-02.decision_bridge — Geth block
 
-Status: READY for review (draft PR #158, Part of #17). Base main `add17e6`
-(block 0, PR #157). Branch/worktree: `claude/e01-02-decision-geth` /
+Status: merged in PR #158 at `7ee8eb0` (final head `5087db5`, Part of #17).
+Open: the qa AC-CAP-07 verdict for the private ETH slot (D101). Base main
+`add17e6` (block 0, PR #157). Branch/worktree: `claude/e01-02-decision-geth` /
 `e01-02-admission-geth-95b3ee`. Evidence:
 [E01-02.decision_bridge.geth](evidence/E01-02.decision_bridge.geth.md);
 design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/native/README.md).
