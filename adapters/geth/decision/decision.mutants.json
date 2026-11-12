@@ -461,8 +461,13 @@
       "name": "reject retains blocks of decided imports",
       "file": "extractor/decision/decision.go",
       "original": "if other.Intent.Kind == Side && other.State == Decided {",
-      "replacement": "if other.State == Decided {",
-      "equivalent": "A NATIVE_DECIDED decision of another kind has already closed every open observation of its blocks, so adding its blocks to the retained set skips no observation."
+      "replacement": "if other.State == Decided {"
+    },
+    {
+      "name": "open finishes closes before listing retained side decisions",
+      "file": "extractor/decision/decision.go",
+      "original": "\tfor _, d := range resolved {\n\t\tif d.State == Decided && !d.Marker && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d\n\t\t}\n\t}\n\t// Finish the closes that a power loss interrupted after the decided or\n\t// rejected record was synced.\n\tfor _, d := range resolved {\n\t\tif err := b.closeMembers(t, d); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}",
+      "replacement": "\tfor _, d := range resolved {\n\t\tif err := b.closeMembers(t, d); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tfor _, d := range resolved {\n\t\tif d.State == Decided && !d.Marker && retains(d, observations) {\n\t\t\tb.open[d.Sequence] = d\n\t\t}\n\t}"
     },
     {
       "name": "intend stores the returned members",

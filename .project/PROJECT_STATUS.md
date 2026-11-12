@@ -122,8 +122,26 @@ contract, documents the rest, renames `admission.Cleanup` to `InputPurger`,
 and adds the tests and mutants. Retained record 01 of `5b4665a` passed and
 is superseded and kept.
 
-Next: Spec and Standards review 002 and hosted CI on the exact head, then
-READY to the coordinator; then the Geth, BSC and Bor blocks.
+Review 002 (head `551af6c`): Spec REQUEST_CHANGES (P2: a rejected intent
+naming a retained side block closed it; P2: one retained side block stops
+both low-water marks and record deletion, which the README understated; P3:
+retained pins keep the pin-ledger guards engaged) and Standards
+REQUEST_CHANGES (the same rejection P2, and P3 notes). Commit `45ae35d` makes
+a rejected intent and `Open` leave blocks that a `SIDE` decision retains,
+documents the real bound in the README, evidence and the activation_gc row,
+and adds tests. Retained record 02 of `551af6c` passed and is superseded and
+kept.
+
+Review 003 (head `45ae35d`): Spec PASS, accepting the documented bound for
+block 0 on the condition that E05-01.activation_gc lands before any
+long-running or product run and lets pruning and the low-water marks pass
+released side blocks; Standards REQUEST_CHANGES (P2: one mutant was labeled
+equivalent but a reachable test kills it; P3: a test result listed as a
+limit). The follow-up commit adds that test, removes the label, adds the
+optional ordering mutant from the Spec review, and changes no code.
+
+Next: confirmation of the final head by both reviewers and hosted CI on it,
+then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 

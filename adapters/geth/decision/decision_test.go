@@ -1609,6 +1609,9 @@ func TestRejectedIntentKeepsRetainedSideBlocks(t *testing.T) {
 	if decisions := f.decisions(); len(decisions) != 1 || decisions[0].Intent.Kind != Side {
 		t.Fatalf("the SIDE decision no longer retains its member: %+v", decisions)
 	}
+	if list := f.openObservations(); len(list) != 1 || len(f.pins.released) != 0 {
+		t.Fatalf("the reopen closed a retained side block: %v, released %v", list, f.pins.released)
+	}
 	f.live()
 }
 
@@ -1679,5 +1682,25 @@ func TestSidePowerLoss(t *testing.T) {
 			}
 			f.live()
 		}
+	}
+}
+
+// TestRejectedIntentClosesBlocksOfDecidedImports: only SIDE decisions retain
+// blocks. A new observation of a block whose IMPORT decision still has its
+// marker is closed when its own intent is rejected.
+func TestRejectedIntentClosesBlocksOfDecidedImports(t *testing.T) {
+	f := newFixture(t)
+	f.live()
+	f.native(f.intend(f.importIntent(f.execReady(f.v.Candidate))))
+	f.resolve(0)
+	again := f.execReady(f.v.Candidate)
+	canonical := f.importIntent(again)
+	canonical.Kind, canonical.Events = Canonical, false
+	f.intend(canonical)
+	if _, err := f.b.RejectIntent(f.token, 1, f.v.RejectionEvidence); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	if list := f.openObservations(); len(list) != 0 {
+		t.Fatalf("the rejected observation stayed open: %v", list)
 	}
 }
