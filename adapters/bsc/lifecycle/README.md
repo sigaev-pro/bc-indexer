@@ -139,7 +139,8 @@ client block checks its order with a deadlock test.
   intent; otherwise it is `ErrBypass`. A `CANONICAL` intent covers every
   write of its reorganization. A `FINALITY` intent, or a no-op rewrite of an
   unchanged reference (below), allows exactly one finality write, so each
-  setter call of one request needs its own intent.
+  setter call of one request needs its own intent, made right before its
+  own write.
 - `Coverage()` counts passes, intents and refusals per caller, and
   `Gaps(map, client, coverage)` lists every `OBSERVATION` caller without a
   pass, every `DECISION` caller without an intent, and every `REFUSE` caller
@@ -166,8 +167,9 @@ store (`roots.Durable`: flushed through the hash provider and synced;
 `ErrRoot` otherwise), so native startup repair cannot rewind below H; then it
 writes the boundary record with the head and its root and syncs it, then
 calls `decision.Bridge.GoLive`. The client block passes the state root of
-the H header itself, read under the guard. With a boundary (a restart, or a crash after the
-boundary sync) it keeps the stored H and never sets a new one. If the bridge
+the H header itself, read under the guard. With a boundary (a restart, or a
+crash after the boundary sync) it keeps the stored H and never sets a new
+one. If the bridge
 refuses, the gate stays in `RECOVERY`. A failed boundary write stops the
 gate; a power loss before its sync leaves no boundary, so the next start is
 `BOOTSTRAP` again and nothing was captured.
@@ -197,10 +199,18 @@ rewrite the same reference once, because Geth calls `SetFinalized` on every
 forkchoice update with a non-zero hash; that write carries no marker. The
 client block reads the old reference under the guard from the same native
 field the setter writes, so a real change is never taken for an unchanged
-one. A zero hash allows no write, because no setter runs. A setter that ran stays decided even if a later step of the same
-request fails and the request returns an error; a setter that did not run
-makes no decision (AC-LIF-05-03). A decided record cannot be rejected
-afterwards.
+one. A zero hash allows no write, because no setter runs. A setter that ran
+stays decided even if a later step of the same request fails and the request
+returns an error; a setter that did not run makes no decision (AC-LIF-05-03).
+A decided record cannot be rejected afterwards.
+
+A rewind that clears safe or finalized (`SetSafe(nil)`, `SetFinalized(nil)`
+in the `*.set-head` callers) is a real native write, not the Engine API
+"no change" of a zero hash. `Pass.Finality` does not cover it, because
+`FinalityDigest` treats a zero new hash as a no-op. The client block records
+one FINALITY intent per cleared field through `Pass.Intend`, with its own
+clear-evidence digest. Until it does, the clear fails closed at the choke
+point (`ErrBypass`).
 
 `ReadAttestation(snapshot, genesis)` is the error-aware read of the BSC
 Parlia vote attestation: the target is the justified block, the source the
