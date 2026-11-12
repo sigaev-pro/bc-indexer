@@ -32,7 +32,7 @@ Design (architect), in full in the package README
   except `native/`. It imports the standard library and the shared
   admission and decision packages at their native paths; `python3
   test/harness/lifecycle.py assemble DIR` builds the test layout.
-- Caller map `callers.json`: 70 callers (Geth 25, BSC 19, Bor 26) of the
+- Caller map `callers.json`: 73 callers (Geth 26, BSC 20, Bor 27) of the
   accepted native trees, each with source function, entry points, effects
   (EXECUTION, SYSTEM, CANONICAL, FINALITY), trigger (including no new block,
   known branch, side chain, reorg, startup), route, decision kinds, status
@@ -55,13 +55,17 @@ Design (architect), in full in the package README
 - Gate: a mapped caller enters with the held guard token (nested calls
   re-enter with the same token, last in first out); native write choke
   points call `Require(effect)`, which fails closed and stops the gate when
-  no open pass of a caller with that effect exists; `Coverage` and `Gaps`
-  give the AC-CAP-01-01 check that no required caller was missed.
+  no open pass of a caller with that effect exists, or when an observing
+  `DECISION` pass writes before its intent; `Coverage` and `Gaps` give the
+  AC-CAP-01-01 check that no required caller was missed (a `DECISION`
+  caller counts only with an intent).
 - Phases and the live boundary H: BOOTSTRAP (no boundary; initial native
   sync passes without capture), RECOVERY (every restart; only the startup
-  driver and callers nested in its pass), LIVE, DRAIN. `GoLive` syncs the
-  boundary record (the native head read under the guard) before
-  `decision.Bridge.GoLive`; a restart keeps H and never sets a new one.
+  driver and callers nested in its pass), LIVE, DRAIN. `GoLive` refuses
+  while a pass is open, requires the state root of H to be durable (so
+  startup repair cannot rewind below H), and syncs the boundary record (the
+  native head read under the guard) before `decision.Bridge.GoLive`; a
+  restart keeps H and never sets a new one.
 - Finality evidence: one FINALITY decision per native setter call, a zero
   new hash is a no-op (AC-LIF-05-02 unit form), a setter that ran stays
   decided when a later step of the request fails (AC-LIF-05-03 unit form);
@@ -84,7 +88,8 @@ D99). `python3 test/harness/lifecycle.py table` prints the full map.
 | Item | Source | Block |
 |---|---|---|
 | Caller map with routes, map rules, gate, choke-point check, coverage gaps, boundary H and phases, finality evidence rules (unit forms of AC-LIF-05-02, 05-03, 06-04, 06-05) | TASK_DECOMPOSITION card, NATIVE_CAPTURE_PROTOCOL | 0 |
-| Node wiring: the flag that installs the seams (and refuses snap sync, `--dev`, mining roles on a capture store), the caller of `Start`, where H is read (after the initial native sync, under the guard) | D100 | Geth, BSC, Bor |
+| Node wiring: the flag that installs the seams, the caller of `Start`, where H is read (after the initial native sync, under the guard, with H's state root flushed and synced before `GoLive`) | D100 | Geth, BSC, Bor |
+| The node flag check refuses snap sync, `--dev`, Geth `--synctarget` (synthesized finality) and mining, voting and builder roles on a capture store. Refusing snap sync also during BOOTSTRAP is stricter than the protocol, which only says that sync before H is not captured; it is a technical decision of block 0, and a client block may relax it with evidence that the state of H and the pins are complete | D100; NATIVE_CAPTURE_PROTOCOL profile | Geth, BSC, Bor |
 | Geth `SetCanonical` (forkchoice) as a `CANONICAL` decision; the head change after a retained `SIDE` block names it | NATIVE_CAPTURE_PROTOCOL; D100 | Geth (`geth.set-canonical`) |
 | Geth `recoverAncestors` re-execution exercised | D100 | Geth (`geth.recover-ancestors`) |
 | Geth `native-commit` identity from the binary (`internal/version` VCS revision or an extractor `-X` stamp), not the config file | D100 | Geth |
@@ -92,13 +97,20 @@ D99). `python3 test/harness/lifecycle.py table` prints the full map.
 | BSC Parlia `ethAPI` over `SystemCallBackend` (built before `CreateConsensusEngine`, bound after `NewBlockChain`), and the miner, bid and node-ID limit | D100 | BSC (`bsc.system-call-api`, `bsc.sealing`) |
 | BSC `SIDE` path events: the accepted tree has no `chainSideFeed`; the decided `SIDE` path must send what native sends (`chainBlockFeed` from `insertChain`, the verified-header feed) | D101 | BSC (`bsc.import`) |
 | BSC side branches and reorgs: the seam admits only blocks on the head today, so a side branch fails closed at `Begin` | NATIVE_CAPTURE_PROTOCOL known branch | BSC (`bsc.side-chain`) |
-| BSC fast finality (`NotifyFinalized` from VotePool) as FINALITY decisions; AC-LIF-06-04 and 06-05 through `ReadAttestation` on native Parlia snapshots | ACCEPTANCE_CASES | BSC; qa verdict BSC |
+| BSC finality evidence of the import decision (`SetFinalized` in `writeBlockAndSetHead`, from `GetJustifiedNumberAndHash` and `GetFinalizedHeader`) read through `ReadAttestation`; AC-LIF-06-04 and 06-05 on native Parlia snapshots | ACCEPTANCE_CASES | BSC (`bsc.import`, `bsc.attestation-read`); qa verdict BSC |
+| BSC `NotifyFinalized` from VotePool writes no native state (no batch for a marker); it is early evidence | D100 | Not lifecycle_seams: E05-01.bsc_finality (`bsc.notify-finalized`, READ_ONLY) |
 | BSC hash-scheme `Stop` head rewrite; `debug_executionWitness` reading the observation without `chainmu` | source review | BSC (`bsc.shutdown`, `bsc.execution-witness`) |
 | Bor `bor server` profile check (`state_provider.CheckProfile`) after `buildEth`, before `eth.New`; `Start` after `eth.New`, before `node.Start` | D100 | Bor |
 | Bor self-sealed blocks (`WriteBlockAndSetHead` from the miner) refused on a capture node | D101 | Bor (`bor.seal-write`) |
 | Bor milestone reorganization (`reorgToFinalized`: rewind, `insertFinalized`, `SetCanonical`, each with its own `chainmu`) as one decision or fail closed; milestone and checkpoint whitelist changes as FINALITY decisions, the guard taken before the whitelist lock | NATIVE_CAPTURE_PROTOCOL; source review | Bor |
 | Bor parallel EVM (on by default), preconf, pipelined and stateless paths refused by the profile check (D60) | NATIVE_CAPTURE_PROTOCOL | Bor |
-| Known-block activation (`writeKnownBlock`), `SetHead` rewinds (guard after the `chainmu` TryLock), side-chain writes and startup repair reconciled inside the recovery pass, in every client | NATIVE_CAPTURE_PROTOCOL startup and known branch | Geth, BSC, Bor |
+| Known-block activation (`writeKnownBlock`) as a `CANONICAL` decision | NATIVE_CAPTURE_PROTOCOL known branch | Geth, BSC, Bor (`*.known-block`) |
+| Known-branch corpus rule: before a canonical transition, each branch block has its corpus (a retained EXEC_READY observation); a block without one (stored during BOOTSTRAP or without state) gets a targeted native replay from retained inputs and state, or the transition is a source error, never a silent activation | NATIVE_CAPTURE_PROTOCOL known branch | Geth, BSC, Bor |
+| `SetHead` rewinds as decisions (in Bor the guard goes right after the `chainmu` TryLock) | NATIVE_CAPTURE_PROTOCOL | Geth, BSC, Bor (`*.set-head`) |
+| Side-chain writes without state (`insertSideChain`) reach no head or canonical choke point; their re-execution passes the import | source review | Geth, BSC, Bor (`*.side-chain`) |
+| Startup repair (before the gate opens) decided inside the recovery pass from native evidence, or a source invariant error; a native head below H that no decision explains is a source invariant error | NATIVE_CAPTURE_PROTOCOL startup | Geth, BSC, Bor (`*.startup-reconcile`) |
+| Manual commands that delete or rewrite chaindata (BSC `removedb`, `db delete`, `db put`, `db import`, `db delete-trie-state`, `prune-history`, `init`; Bor `removedb`, `purge-whitelisted-entries`) refused on a capture store with live pins or obligations, as D100 item 3 does for Geth. Technical decision of block 0: such a command is a caller that would lose obligations, and refusing it changes no guarantee | D100 item 3; this card | BSC (`bsc.database-commands`), Bor (`bor.manual-commands`) |
+| Lock order and deadlock check per client: guard then `chainmu` in Geth and BSC; `chainmu`, guard, whitelist lock in Bor; the guard is never held across a call that takes `chainmu` itself or taken under a whitelist lock | NATIVE_CAPTURE_PROTOCOL (caller map and deadlock check are E01) | Geth, BSC, Bor |
 | AC-CAP-01-01 per family: the same scenario through the harness and the real native caller reaches the bridge on both paths with the same native result, and `Gaps` is empty | ACCEPTANCE_CASES | Geth (ETH), BSC (BSC), Bor (POLY); qa owns the matrix |
 | Typed safe and finalized observations, restart and regression semantics (AC-LIF-05-01, 05-04), GC anchor | TASK_DECOMPOSITION | Not lifecycle_seams: E05-01.eth_finality |
 | VotePool early evidence and header-attested GC source (AC-LIF-06-01 to 06-03) | TASK_DECOMPOSITION | Not lifecycle_seams: E05-01.bsc_finality |
@@ -113,8 +125,39 @@ for BSC, on the private local slots under the D96 boundary.
 
 Evidence: [E01-02.lifecycle_seams](evidence/E01-02.lifecycle_seams.md).
 
-Next: Spec and Standards review of block 0, hosted CI, then the client
-blocks.
+Review 001 (head `0b55619`): Spec REQUEST_CHANGES and Standards
+REQUEST_CHANGES.
+- Spec P2:
+  - the evidence file was missing (added with record 01);
+  - H was stored but not enforced;
+  - a `DECISION` caller could write before its intent, and `Gaps` counted
+    passes, not intents;
+  - BSC `NotifyFinalized` writes nothing and belongs to E05-01.bsc_finality;
+  - Geth `--synctarget` finality is synthesized;
+  - BSC and Bor manual database commands were missing;
+  - the known-branch corpus rule was missing;
+  - the lock order contradicted the Bor rows.
+- Spec P3: refusals outside the gate, the unchanged finality setter, the
+  startup exception, the owner meaning, snap sync during BOOTSTRAP, and the
+  identifier `Lifer`.
+- Standards P2:
+  - `GoLive` accepted an open bootstrap pass;
+  - a mutant was labeled for a rule no test checked (one block hash at two
+    numbers).
+- Standards P3: mutant names and gaps, Go and Python validator parity, README
+  wording, and test tidiness.
+
+The follow-up commit fixes all of them. `GoLive` now refuses an open pass and
+needs a durable state root of H. `Require` needs the pass's intent for each
+effect, and an unchanged finality setter may rewrite without an intent.
+`Gaps` counts intents. The map rows and plan rows above are updated, the
+per-client lock order is in the README, both validators require every
+caller field, a new hash equal to the old at another number is `ErrInvalid`,
+and new tests and mutants were added. Retained record 01 of `0b55619`
+passed; it is superseded and kept.
+
+Next: re-review of the follow-up head, its retained record, hosted CI, then
+the client blocks.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 

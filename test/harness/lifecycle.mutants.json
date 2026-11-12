@@ -187,12 +187,6 @@
       "replacement": "    if False:"
     },
     {
-      "name": "schema not checked",
-      "file": "test/harness/lifecycle.py",
-      "original": " or data[\"schema_version\"] != 1",
-      "replacement": ""
-    },
-    {
       "name": "sources not checked",
       "file": "test/harness/lifecycle.py",
       "original": "if sorted(data[\"sources\"]) != sorted(CLIENTS) or not all(COMMIT.fullmatch(v) for v in data[\"sources\"].values()):",
@@ -233,6 +227,24 @@
       "file": "test/harness/lifecycle.py",
       "original": "    for name in PACKAGE_FILES:\n",
       "replacement": "    for name in PACKAGE_FILES[1:]:\n"
+    },
+    {
+      "name": "schema not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": " or version != 1:",
+      "replacement": ":"
+    },
+    {
+      "name": "schema accepts true",
+      "file": "test/harness/lifecycle.py",
+      "original": "type(version) is not int or ",
+      "replacement": ""
+    },
+    {
+      "name": "finality same hash at two numbers",
+      "file": "test/harness/lifecycle.py",
+      "original": "if new[\"hash\"] == old[\"hash\"] and new[\"number\"] != old[\"number\"]:",
+      "replacement": "if False:"
     }
   ]
 }

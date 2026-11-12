@@ -72,6 +72,9 @@ class IndependentVectors(unittest.TestCase):
                                       {"number": 9, "hash": lifecycle.ZERO})
         with self.assertRaisesRegex(ValueError, "no-op"):
             lifecycle.finality_digest("SAFE", v["fcu_caller"], v["old_finalized"], v["old_finalized"])
+        moved = dict(v["old_finalized"], number=v["old_finalized"]["number"] + 1)
+        with self.assertRaisesRegex(ValueError, "two numbers"):
+            lifecycle.finality_digest("SAFE", v["fcu_caller"], v["old_finalized"], moved)
 
     def test_digests_bind_their_fields(self):
         v = lifecycle.vectors()
@@ -102,8 +105,9 @@ class CallerMap(unittest.TestCase):
     def test_d100_and_d101_items_are_mapped(self):
         """Every item that D100 and D101 hand to E01-02.lifecycle_seams has a caller row."""
         notes = {c["id"]: c for c in self.data["callers"]}
-        for caller_id in ("geth.set-canonical", "geth.recover-ancestors", "bsc.import", "bsc.system-call-api",
-                          "bor.seal-write", "bor.milestone", "bsc.notify-finalized"):
+        for caller_id in ("geth.set-canonical", "geth.recover-ancestors", "geth.sync-target", "bsc.import",
+                          "bsc.system-call-api", "bsc.database-commands", "bor.seal-write", "bor.milestone",
+                          "bor.manual-commands"):
             self.assertIn(caller_id, notes)
 
     def broken(self, index, **change):
@@ -139,7 +143,7 @@ class CallerMap(unittest.TestCase):
             "read-only effect": self.broken(ro, effects=["CANONICAL"]),
             "route": self.broken(ref, route="BYPASS", refusal=""),
             "status": self.broken(obs, status="DONE"),
-            "planned status": self.broken(dec, status="DONE"),
+            "status with no patch": self.broken(dec, status="DONE"),
             "guarded without patch": self.broken(obs, status="GUARDED", patch=""),
             "planned with patch": self.broken(obs, status="PLANNED", patch="x"),
             "owner": self.broken(obs, owner="lifecycle"),
@@ -160,10 +164,11 @@ class CallerMap(unittest.TestCase):
         data["sources"]["bor"] = "abc"
         with self.assertRaisesRegex(ValueError, "sources"):
             lifecycle.check_map(data)
-        data = copy.deepcopy(self.data)
-        data["schema_version"] = 2
-        with self.assertRaisesRegex(ValueError, "schema"):
-            lifecycle.check_map(data)
+        for version in (2, True, "1"):
+            data = copy.deepcopy(self.data)
+            data["schema_version"] = version
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "schema"):
+                lifecycle.check_map(data)
 
     def test_table_lists_every_caller(self):
         text = lifecycle.table(self.data)

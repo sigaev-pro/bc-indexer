@@ -171,6 +171,14 @@ type allRoots struct{}
 
 func (allRoots) Durable(string) (bool, error) { return true, nil }
 
+// someRoots reports the roots it holds as durable, or fails with err.
+type someRoots struct {
+	durable map[string]bool
+	err     error
+}
+
+func (r someRoots) Durable(root string) (bool, error) { return r.durable[root], r.err }
+
 type noMirror struct{}
 
 func (noMirror) Applied(uint64, string) (bool, error) { return false, nil }
@@ -250,7 +258,10 @@ func hash(seed string) string {
 	return (out.String() + strings.Repeat("0", 64))[:63] + "1"
 }
 
-var head7 = decision.Head{Number: 7, Hash: hash("head-7")}
+var (
+	head7 = decision.Head{Number: 7, Hash: hash("head-7")}
+	root7 = hash("root-7")
+)
 
 func mustErr(t *testing.T, err, want error) {
 	t.Helper()
@@ -347,6 +358,22 @@ func TestParseMapStrict(t *testing.T) {
 	}
 	if _, err := ParseMap(append(valid, []byte(" {}")...)); !errors.Is(err, ErrMap) {
 		t.Fatalf("valid map with trailing data: %v", err)
+	}
+	var raw map[string]any
+	_ = json.Unmarshal(valid, &raw)
+	delete(raw["callers"].([]any)[3].(map[string]any), "note")
+	missing, _ := json.Marshal(raw)
+	if _, err := ParseMap(missing); !errors.Is(err, ErrMap) {
+		t.Fatalf("a caller without a note: %v", err)
+	}
+	for _, field := range []string{"schema_version", "sources", "callers"} {
+		var top map[string]any
+		_ = json.Unmarshal(valid, &top)
+		delete(top, field)
+		data, _ := json.Marshal(top)
+		if _, err := ParseMap(data); !errors.Is(err, ErrMap) {
+			t.Fatalf("a map without %s: %v", field, err)
+		}
 	}
 	data := `{"schema_version":1,"sources":{"geth":"` + strings.Repeat("a", 40) + `"},"callers":[]}`
 	if _, err := ParseMap([]byte(data)); !errors.Is(err, ErrMap) {
@@ -445,7 +472,7 @@ func TestOpenPhases(t *testing.T) {
 	if g := f.open(t, "geth", true); g.Phase() != Drain {
 		t.Fatalf("drain phase %s", g.Phase())
 	}
-	if _, err := g.GoLive(f.token, head7, f.bridge(t)); err != nil {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, f.bridge(t)); err != nil {
 		t.Fatal(err)
 	}
 	if g := f.open(t, "geth", false); g.Phase() != Recovery {
@@ -494,7 +521,7 @@ func TestOpenArguments(t *testing.T) {
 func TestEnterRoutes(t *testing.T) {
 	f := newFixture(t, newStore())
 	g := f.open(t, "geth", false)
-	if _, err := g.GoLive(f.token, head7, f.bridge(t)); err != nil {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, f.bridge(t)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Enter(f.token, "bsc.import"); !errors.Is(err, ErrUnmapped) {
@@ -558,7 +585,7 @@ func TestBootstrapDoesNotObserve(t *testing.T) {
 func TestRecoveryAdmitsOnlyStartup(t *testing.T) {
 	f := newFixture(t, newStore())
 	g := f.open(t, "geth", false)
-	if _, err := g.GoLive(f.token, head7, f.bridge(t)); err != nil {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, f.bridge(t)); err != nil {
 		t.Fatal(err)
 	}
 	for _, drain := range []bool{false, true} {
@@ -598,23 +625,148 @@ func TestRecoveryAdmitsOnlyStartup(t *testing.T) {
 	}
 }
 
-func TestRecoveryAfterRefusedGoLiveWithOpenPass(t *testing.T) {
-	f := newFixture(t, newStore())
+func TestGoLiveRefusesOpenPass(t *testing.T) {
+	db := newStore()
+	f := newFixture(t, db)
 	g := f.open(t, "geth", false)
+	b := f.bridge(t)
 	outer, err := g.Enter(f.token, "geth.import")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.GoLive(f.token, head7, failingLife{}); !errors.Is(err, decision.ErrPending) {
-		t.Fatalf("refused GoLive: %v", err)
+	syncs := db.syncs
+	// A bootstrap pass must not carry uncaptured mutations past H.
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, b); !errors.Is(err, ErrOrder) {
+		t.Fatalf("GoLive under an open pass: %v", err)
 	}
-	// The open bootstrap pass is not a startup pass: nothing nests under it.
-	if _, err := g.Enter(f.token, "geth.set-canonical"); !errors.Is(err, ErrPhase) {
-		t.Fatalf("nested entry under a bootstrap pass in RECOVERY: %v", err)
+	if _, ok := g.Boundary(); ok || db.syncs != syncs || g.Phase() != Bootstrap {
+		t.Fatalf("a refused GoLive wrote a boundary or changed the phase %s", g.Phase())
 	}
 	if err := outer.Exit(); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, b); err != nil {
+		t.Fatalf("GoLive after the pass closed: %v", err)
+	}
+}
+
+func TestGoLiveNeedsDurableRoot(t *testing.T) {
+	db := newStore()
+	f := newFixture(t, db)
+	g := f.open(t, "geth", false)
+	b := f.bridge(t)
+	cases := map[string]struct {
+		root  string
+		roots decision.Roots
+		want  error
+	}{
+		"nil roots":       {root7, nil, ErrInvalid},
+		"malformed root":  {"x", allRoots{}, ErrInvalid},
+		"volatile root":   {root7, someRoots{}, ErrRoot},
+		"roots error":     {root7, someRoots{err: errDisk}, errDisk},
+		"other root kept": {root7, someRoots{durable: map[string]bool{hash("other"): true}}, ErrRoot},
+	}
+	for name, tc := range cases {
+		if _, err := g.GoLive(f.token, head7, tc.root, tc.roots, b); !errors.Is(err, tc.want) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, ok := g.Boundary(); ok || len(db.pending) != 0 {
+		t.Fatal("a boundary was written without a durable root")
+	}
+	got, err := g.GoLive(f.token, head7, root7, someRoots{durable: map[string]bool{root7: true}}, b)
+	if err != nil || got.Head != head7 {
+		t.Fatalf("GoLive with a durable root: %+v %v", got, err)
+	}
+	// A restart keeps H and does not check a root again.
+	f2 := newFixture(t, db.powerLoss())
+	g2 := f2.open(t, "geth", false)
+	if _, err := g2.GoLive(f2.token, head7, root7, someRoots{}, f2.bridge(t)); err != nil {
+		t.Fatalf("restart GoLive: %v", err)
+	}
+}
+
+func TestDecisionPassNeedsIntent(t *testing.T) {
+	f, g, b := liveGeth(t)
+	p, err := g.Enter(f.token, "geth.engine-forkchoice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustErr(t, g.Require(Canonical), ErrBypass)
+	f, g, b = liveGeth(t)
+	p, _ = g.Enter(f.token, "geth.engine-forkchoice")
+	canonical := decision.Intent{Kind: decision.Canonical, OldHead: head7,
+		NewHead: decision.Head{Number: 8, Hash: hash("head-8")}, EvidenceDigest: hash("evidence"), Events: true}
+	if _, err := p.Intend(b, canonical); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Require(Canonical); err != nil {
+		t.Fatalf("canonical write after its intent: %v", err)
+	}
+	// The CANONICAL intent does not allow a finality write.
+	mustErr(t, g.Require(Finality), ErrBypass)
+	if g.Coverage()["geth.engine-forkchoice"] != (Reach{Passes: 1, Intents: 1}) {
+		t.Fatalf("coverage %v", g.Coverage())
+	}
+}
+
+func TestFailedIntentGrantsNothing(t *testing.T) {
+	f, g, b := liveGeth(t)
+	p, err := g.Enter(f.token, "geth.set-canonical")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The bridge refuses an intent with a malformed head.
+	_, err = p.Intend(b, decision.Intent{Kind: decision.Canonical, OldHead: head7, NewHead: decision.Head{Hash: "x"},
+		EvidenceDigest: hash("evidence")})
+	mustErr(t, err, decision.ErrInvalid)
+	if g.Coverage()["geth.set-canonical"].Intents != 0 {
+		t.Fatal("a refused intent was counted")
+	}
+	mustErr(t, g.Require(Canonical), ErrBypass)
+}
+
+func TestUnchangedFinalityAllowsRewrite(t *testing.T) {
+	v := loadVectors(t)
+	f, g, b := liveGeth(t)
+	p, err := g.Enter(f.token, "geth.engine-forkchoice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zero := FinalityChange{Field: Finalized, Caller: "geth.engine-forkchoice", Old: v.OldFinalized,
+		New: decision.Head{Hash: ZeroHash}}
+	_, err = p.Finality(b, head7, zero, true)
+	mustErr(t, err, ErrNoop)
+	// No setter runs for a zero hash, so no write is allowed.
+	mustErr(t, g.Require(Finality), ErrBypass)
+	f, g, b = liveGeth(t)
+	p, _ = g.Enter(f.token, "geth.engine-forkchoice")
+	same := FinalityChange{Field: Finalized, Caller: "geth.engine-forkchoice", Old: v.OldFinalized,
+		New: v.OldFinalized}
+	_, err = p.Finality(b, head7, same, true)
+	mustErr(t, err, ErrNoop)
+	if err := g.Require(Finality); err != nil {
+		t.Fatalf("rewrite of an unchanged reference: %v", err)
+	}
+	if ds, _ := b.Decisions(f.token); len(ds) != 0 {
+		t.Fatalf("an unchanged reference made a decision: %+v", ds)
+	}
+	// A caller that may not make FINALITY gets no rewrite either.
+	f, g, b = liveGeth(t)
+	q, _ := g.Enter(f.token, "geth.set-canonical")
+	same.Caller = "geth.set-canonical"
+	_, err = q.Finality(b, head7, same, true)
+	mustErr(t, err, ErrKind)
+	_ = q.Exit()
+	_, err = q.Finality(b, head7, same, true)
+	mustErr(t, err, ErrOrder)
+	f, g, b = liveGeth(t)
+	r, _ := g.Enter(f.token, "geth.engine-forkchoice")
+	same.Caller = "geth.engine-forkchoice"
+	other := admission.NewGuard().Acquire()
+	r2 := &Pass{gate: g, caller: r.caller, token: other, granted: map[Effect]bool{}}
+	_, err = r2.Finality(b, head7, same, true)
+	mustErr(t, err, admission.ErrGuard)
 }
 
 func TestRequire(t *testing.T) {
@@ -642,14 +794,19 @@ func TestRequire(t *testing.T) {
 	}
 	_, err = inner.Intend(nil, decision.Intent{Kind: decision.Canonical})
 	mustErr(t, err, ErrFailed)
-	_ = p
+	if err := inner.Exit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Exit(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRequireWithoutPass(t *testing.T) {
 	f := newFixture(t, newStore())
 	g := f.open(t, "bsc", false)
 	mustErr(t, g.Require(Finality), ErrBypass)
-	if _, err := g.GoLive(f.token, head7, f.bridge(t)); !errors.Is(err, ErrFailed) {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, f.bridge(t)); !errors.Is(err, ErrFailed) {
 		t.Fatalf("GoLive after a bypass: %v", err)
 	}
 }
@@ -658,7 +815,7 @@ func TestIntendKinds(t *testing.T) {
 	f := newFixture(t, newStore())
 	g := f.open(t, "bor", false)
 	b := f.bridge(t)
-	if _, err := g.GoLive(f.token, head7, b); err != nil {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, b); err != nil {
 		t.Fatal(err)
 	}
 	p, err := g.Enter(f.token, "bor.set-canonical")
@@ -696,17 +853,17 @@ func TestGoLiveBoundary(t *testing.T) {
 	f := newFixture(t, db)
 	g := f.open(t, "geth", false)
 	b := f.bridge(t)
-	if _, err := g.GoLive(f.token, head7, nil); !errors.Is(err, ErrInvalid) {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("nil bridge: %v", err)
 	}
-	if _, err := g.GoLive(f.token, decision.Head{Number: 7, Hash: "x"}, b); !errors.Is(err, ErrInvalid) {
+	if _, err := g.GoLive(f.token, decision.Head{Number: 7, Hash: "x"}, root7, allRoots{}, b); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("bad head: %v", err)
 	}
-	if _, err := g.GoLive(nil, head7, b); !errors.Is(err, admission.ErrGuard) {
+	if _, err := g.GoLive(nil, head7, root7, allRoots{}, b); !errors.Is(err, admission.ErrGuard) {
 		t.Fatalf("no token: %v", err)
 	}
 	syncs := db.syncs
-	got, err := g.GoLive(f.token, head7, b)
+	got, err := g.GoLive(f.token, head7, root7, allRoots{}, b)
 	if err != nil || got.Head != head7 || got.NativeStoreID != "native-store-1" || got.Producer != "producer-1.run-1" {
 		t.Fatalf("GoLive %+v %v", got, err)
 	}
@@ -716,7 +873,7 @@ func TestGoLiveBoundary(t *testing.T) {
 	if mode, _ := f.adm.Mode(f.token); mode != admission.Live || g.Phase() != Live {
 		t.Fatalf("mode %s phase %s", mode, g.Phase())
 	}
-	again, err := g.GoLive(f.token, decision.Head{Number: 9, Hash: hash("head-9")}, b)
+	again, err := g.GoLive(f.token, decision.Head{Number: 9, Hash: hash("head-9")}, root7, allRoots{}, b)
 	if err != nil || again != got {
 		t.Fatalf("second GoLive %+v %v", again, err)
 	}
@@ -726,14 +883,14 @@ func TestGoLiveBoundary(t *testing.T) {
 	if stored, ok := g2.Boundary(); !ok || stored != got {
 		t.Fatalf("stored boundary %+v %v", stored, ok)
 	}
-	later, err := g2.GoLive(f2.token, decision.Head{Number: 20, Hash: hash("head-20")}, f2.bridge(t))
+	later, err := g2.GoLive(f2.token, decision.Head{Number: 20, Hash: hash("head-20")}, root7, allRoots{}, f2.bridge(t))
 	if err != nil || later != got || g2.Phase() != Live {
 		t.Fatalf("restart GoLive %+v %v %s", later, err, g2.Phase())
 	}
 	// Drain never goes live.
 	f3 := newFixture(t, db.powerLoss())
 	g3 := f3.open(t, "geth", true)
-	if _, err := g3.GoLive(f3.token, head7, f3.bridge(t)); !errors.Is(err, ErrPhase) {
+	if _, err := g3.GoLive(f3.token, head7, root7, allRoots{}, f3.bridge(t)); !errors.Is(err, ErrPhase) {
 		t.Fatalf("drain GoLive: %v", err)
 	}
 }
@@ -751,7 +908,7 @@ func TestGoLiveCrashPoints(t *testing.T) {
 	g := f.open(t, "geth", false)
 	b := f.bridge(t)
 	db.crashAt = db.ops + 2
-	if _, err := g.GoLive(f.token, head7, b); !errors.Is(err, errCrash) {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, b); !errors.Is(err, errCrash) {
 		t.Fatalf("crash at sync: %v", err)
 	}
 	if _, err := g.Enter(f.token, "geth.import"); !errors.Is(err, ErrFailed) {
@@ -767,7 +924,7 @@ func TestGoLiveCrashPoints(t *testing.T) {
 	g = f.open(t, "geth", false)
 	b = f.bridge(t)
 	db.crashAt = db.ops + 1
-	if _, err := g.GoLive(f.token, head7, b); !errors.Is(err, errCrash) {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, b); !errors.Is(err, errCrash) {
 		t.Fatalf("crash at put: %v", err)
 	}
 	if _, err := g.Enter(f.token, "geth.import"); !errors.Is(err, ErrFailed) {
@@ -778,7 +935,7 @@ func TestGoLiveCrashPoints(t *testing.T) {
 	db = newStore()
 	f = newFixture(t, db)
 	g = f.open(t, "geth", false)
-	if _, err := g.GoLive(f.token, head7, failingLife{}); !errors.Is(err, decision.ErrPending) {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, failingLife{}); !errors.Is(err, decision.ErrPending) {
 		t.Fatalf("bridge refusal: %v", err)
 	}
 	if g.Phase() != Recovery {
@@ -789,7 +946,7 @@ func TestGoLiveCrashPoints(t *testing.T) {
 	}
 	f2 = newFixture(t, db.powerLoss())
 	g2 := f2.open(t, "geth", false)
-	got, err := g2.GoLive(f2.token, decision.Head{Number: 8, Hash: hash("head-8")}, f2.bridge(t))
+	got, err := g2.GoLive(f2.token, decision.Head{Number: 8, Hash: hash("head-8")}, root7, allRoots{}, f2.bridge(t))
 	if err != nil || got.Head != head7 {
 		t.Fatalf("restart keeps H: %+v %v", got, err)
 	}
@@ -799,7 +956,7 @@ func TestBoundaryRecordChecks(t *testing.T) {
 	db := newStore()
 	f := newFixture(t, db)
 	g := f.open(t, "geth", false)
-	if _, err := g.GoLive(f.token, head7, f.bridge(t)); err != nil {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, f.bridge(t)); err != nil {
 		t.Fatal(err)
 	}
 	key := string(g.key)
@@ -807,21 +964,21 @@ func TestBoundaryRecordChecks(t *testing.T) {
 	if _, err := OpenMap(f.token, db, f.adm, "native-store-2", "geth", false, testMap()); !errors.Is(err, ErrInvariant) {
 		t.Fatalf("other store: %v", err)
 	}
-	other := &namedProducer{f.adm, "producer-1", "run-1"}
 	var b Boundary
 	_ = strictDecode(good, &b)
 	b.Producer = "producer-2.run-1"
 	b.Digest, _ = BoundaryDigest(b)
 	db.durable[key] = []byte(fmt.Sprintf(`{"native_store_id":%q,"producer":%q,"head":{"number":7,"hash":%q},"digest":%q}`,
 		b.NativeStoreID, b.Producer, b.Head.Hash, b.Digest))
-	if _, err := OpenMap(f.token, db, other, "native-store-1", "geth", false, testMap()); !errors.Is(err, ErrInvariant) {
+	if _, err := OpenMap(f.token, db, f.adm, "native-store-1", "geth", false, testMap()); !errors.Is(err, ErrInvariant) {
 		t.Fatalf("other producer: %v", err)
 	}
 	for name, value := range map[string][]byte{
-		"digest":  bytes.Replace(good, []byte(`"number":7`), []byte(`"number":8`), 1),
-		"field":   bytes.Replace(good, []byte(`{`), []byte(`{"x":1,`), 1),
-		"garbage": []byte("{"),
-		"hash":    bytes.Replace(good, []byte(head7.Hash), []byte("zz"), 1),
+		"digest":   bytes.Replace(good, []byte(`"number":7`), []byte(`"number":8`), 1),
+		"field":    bytes.Replace(good, []byte(`{`), []byte(`{"x":1,`), 1),
+		"garbage":  []byte("{"),
+		"trailing": append(bytes.Clone(good), []byte(" {}")...),
+		"hash":     bytes.Replace(good, []byte(head7.Hash), []byte("zz"), 1),
 	} {
 		db.durable[key] = value
 		if _, err := OpenMap(f.token, db, f.adm, "native-store-1", "geth", false, testMap()); !errors.Is(err, ErrCorrupt) {
@@ -842,10 +999,12 @@ func TestGaps(t *testing.T) {
 		t.Fatalf("gaps without coverage %v", got)
 	}
 	cov := map[string]Reach{"geth.import": {Passes: 1}, "geth.recovery": {Passes: 2},
-		"geth.set-canonical": {Passes: 1}, "geth.engine-forkchoice": {Passes: 1}, "geth.miner": {Passes: 1}}
-	if got := Gaps(m, "geth", cov); !slices.Equal(got, []string{"geth.miner"}) {
-		t.Fatalf("a refused caller needs a refusal: %v", got)
+		"geth.set-canonical": {Passes: 1, Intents: 1}, "geth.engine-forkchoice": {Passes: 1},
+		"geth.miner": {Passes: 1}}
+	if got := Gaps(m, "geth", cov); !slices.Equal(got, []string{"geth.engine-forkchoice", "geth.miner"}) {
+		t.Fatalf("a decision caller needs an intent, a refused caller a refusal: %v", got)
 	}
+	cov["geth.engine-forkchoice"] = Reach{Passes: 1, Intents: 1}
 	cov["geth.miner"] = Reach{Refusals: 1}
 	cov["geth.import"] = Reach{Refusals: 1}
 	if got := Gaps(m, "geth", cov); !slices.Equal(got, []string{"geth.import"}) {
@@ -858,15 +1017,31 @@ func TestGaps(t *testing.T) {
 	// End to end: a gate run that reaches every caller has no gaps.
 	f := newFixture(t, newStore())
 	g := f.open(t, "bsc", false)
-	if _, err := g.GoLive(f.token, head7, f.bridge(t)); err != nil {
+	b := f.bridge(t)
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, b); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"bsc.import", "bsc.set-canonical", "bsc.engine-forkchoice"} {
+	p, err := g.Enter(f.token, "bsc.import")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = p.Exit()
+	for i, id := range []string{"bsc.set-canonical", "bsc.engine-forkchoice"} {
 		p, err := g.Enter(f.token, id)
 		if err != nil {
 			t.Fatal(err)
 		}
+		next := decision.Head{Number: uint64(8 + i), Hash: hash(fmt.Sprintf("head-%d", 8+i))}
+		rec, err := p.Intend(b, decision.Intent{Kind: decision.Canonical, OldHead: head7, NewHead: next,
+			EvidenceDigest: hash("evidence"), Events: true})
+		if err != nil {
+			t.Fatal(err)
+		}
 		_ = p.Exit()
+		// No native write follows, so the intent is rejected before the next.
+		if _, err := b.RejectIntent(f.token, rec.Sequence, hash("no-write")); err != nil {
+			t.Fatal(err)
+		}
 	}
 	_, _ = g.Enter(f.token, "bsc.miner")
 	if got := Gaps(m, "bsc", g.Coverage()); !slices.Equal(got, []string{"bsc.recovery"}) {
@@ -913,6 +1088,10 @@ func TestFinalityDigestRules(t *testing.T) {
 		"new hash":      {func(c *FinalityChange) { c.New.Hash = "x" }, ErrInvalid},
 		"zero new hash": {func(c *FinalityChange) { c.New = decision.Head{Number: 9, Hash: ZeroHash} }, ErrNoop},
 		"unchanged":     {func(c *FinalityChange) { c.New = c.Old }, ErrNoop},
+		"same hash, other number": {func(c *FinalityChange) {
+			c.New = decision.Head{Number: c.Old.Number + 1,
+				Hash: c.Old.Hash}
+		}, ErrInvalid},
 	}
 	for name, tc := range cases {
 		c := base
@@ -1007,7 +1186,7 @@ func liveGeth(t *testing.T) (*fixture, *Gate, *decision.Bridge) {
 	f := newFixture(t, newStore())
 	g := f.open(t, "geth", false)
 	b := f.bridge(t)
-	if _, err := g.GoLive(f.token, head7, b); err != nil {
+	if _, err := g.GoLive(f.token, head7, root7, allRoots{}, b); err != nil {
 		t.Fatal(err)
 	}
 	return f, g, b
@@ -1152,9 +1331,8 @@ func TestAttestationGenesisFallback(t *testing.T) {
 		t.Fatalf("genesis lookup error lost: %v", err)
 	}
 	for name, genesis := range map[string]func() (string, error){
-		"genesis lookup error": func() (string, error) { return "", errDisk },
-		"zero genesis":         func() (string, error) { return ZeroHash, nil },
-		"malformed genesis":    func() (string, error) { return "0x00", nil },
+		"zero genesis":      func() (string, error) { return ZeroHash, nil },
+		"malformed genesis": func() (string, error) { return "0x00", nil },
 	} {
 		if _, err := ReadAttestation(func() (*Attestation, error) { return nil, nil }, genesis); !errors.Is(err, ErrSource) {
 			t.Errorf("%s: %v", name, err)

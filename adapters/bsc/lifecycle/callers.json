@@ -153,7 +153,7 @@
       "owner": "E01-02.lifecycle_seams",
       "patch": "",
       "refusal": "",
-      "note": "A stored block with state becomes the head with no execution. Today it bypasses: no intent, no marker. The CANONICAL intent names the retained SIDE observations of the branch."
+      "note": "A stored block with state becomes the head with no execution. Today it bypasses: no intent, no marker. The CANONICAL intent names the retained SIDE observations of the branch. Before the transition the bridge checks that each block of the branch has its corpus (a retained EXEC_READY observation); a block without one (stored during BOOTSTRAP or without state) needs a targeted native replay from retained inputs and state, or the transition is a source error, never a silent activation."
     },
     {
       "id": "geth.manual-commands",
@@ -327,8 +327,7 @@
       "client": "geth",
       "source": "core/blockchain.go:SetFinalized",
       "entry": [
-        "engine_forkchoiceUpdatedV1-4 (non-zero finalized hash)",
-        "eth/syncer (--synctarget)"
+        "engine_forkchoiceUpdatedV1-4 (non-zero finalized hash)"
       ],
       "effects": [
         "FINALITY"
@@ -374,8 +373,7 @@
       "client": "geth",
       "source": "core/blockchain.go:SetSafe",
       "entry": [
-        "engine_forkchoiceUpdatedV1-4 (non-zero safe hash)",
-        "eth/syncer (--synctarget)"
+        "engine_forkchoiceUpdatedV1-4 (non-zero safe hash)"
       ],
       "effects": [
         "FINALITY"
@@ -519,6 +517,27 @@
       "note": "A second in-memory execution; the patch removes the BLOCKHASH answers and the safe point from it."
     },
     {
+      "id": "geth.sync-target",
+      "client": "geth",
+      "source": "eth/syncer/syncer.go:run",
+      "entry": [
+        "--synctarget",
+        "syncer Sync API"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "SYNC_MODE",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the node flag check refuses --synctarget on a capture store",
+      "note": "Sets finalized to the head minus two epochs and safe to the head minus one epoch without a consensus client: synthesized finality, never native finality evidence."
+    },
+    {
       "id": "geth.trace-state",
       "client": "geth",
       "source": "eth/state_accessor.go:hashState",
@@ -556,6 +575,32 @@
       "patch": "",
       "refusal": "",
       "note": "Native callers turn a lookup error into 0 or genesis. Finality evidence reads it through ReadAttestation: no attestation is GENESIS_FALLBACK, a lookup error is a source error."
+    },
+    {
+      "id": "bsc.database-commands",
+      "client": "bsc",
+      "source": "cmd/geth/dbcmd.go:removeDB",
+      "entry": [
+        "geth removedb",
+        "geth db delete",
+        "geth db put",
+        "geth db import",
+        "geth db delete-trie-state",
+        "geth prune-history",
+        "geth init"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "MANUAL_COMMAND",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "refused on a capture store with live pins or obligations, as D100 item 3 does for geth removedb",
+      "note": "Technical decision within this card: a command that deletes or rewrites chaindata is a caller that would lose obligations, so it fails closed like the Geth guard of D100 item 3."
     },
     {
       "id": "bsc.engine-api",
@@ -682,7 +727,7 @@
       "owner": "E01-02.lifecycle_seams",
       "patch": "",
       "refusal": "",
-      "note": "Begin opens no observation for a block with state, and writeKnownBlock, reorg and writeHeadBlock run with no intent or marker; this bypasses today."
+      "note": "Begin opens no observation for a block with state, and writeKnownBlock, reorg and writeHeadBlock run with no intent or marker; this bypasses today. Before the transition the bridge checks that each block of the branch has its corpus (a retained EXEC_READY observation); a block without one (stored during BOOTSTRAP or without state) needs a targeted native replay from retained inputs and state, or the transition is a source error, never a silent activation."
     },
     {
       "id": "bsc.manual-commands",
@@ -713,19 +758,15 @@
         "insertChain deferred finality notice",
         "VotePool vote transfer and PutVote goroutines"
       ],
-      "effects": [
-        "FINALITY"
-      ],
+      "effects": [],
       "trigger": "NO_NEW_BLOCK",
-      "route": "DECISION",
-      "kinds": [
-        "FINALITY"
-      ],
+      "route": "READ_ONLY",
+      "kinds": [],
       "status": "PLANNED",
-      "owner": "E01-02.lifecycle_seams",
+      "owner": "E05-01.bsc_finality",
       "patch": "",
       "refusal": "",
-      "note": "Fast finality from VotePool votes changes finality without a new block; it bypasses today. Its evidence uses the error-aware ReadAttestation (AC-LIF-06-04, 06-05). Typed early and header evidence: E05-01.bsc_finality."
+      "note": "Updates only the in-memory notified height and sends the finalized-header feed; it writes no native state, so there is no batch for a marker. This is VotePool early evidence (AC-LIF-06-01 to 06-03). The native finalized write is SetFinalized inside writeBlockAndSetHead (bsc.import), whose evidence uses ReadAttestation (AC-LIF-06-04, 06-05)."
     },
     {
       "id": "bsc.prefetch",
@@ -1094,15 +1135,15 @@
       "owner": "E01-02.lifecycle_seams",
       "patch": "",
       "refusal": "",
-      "note": "Bypasses today. The guard goes after the chainmu TryLock (lock order chainmu, guard)."
+      "note": "Bypasses today. The guard goes after the chainmu TryLock (lock order chainmu, guard). Before the transition the bridge checks that each block of the branch has its corpus (a retained EXEC_READY observation); a block without one (stored during BOOTSTRAP or without state) needs a targeted native replay from retained inputs and state, or the transition is a source error, never a silent activation."
     },
     {
       "id": "bor.manual-commands",
       "client": "bor",
-      "source": "internal/cli/purge_whitelisted_entries.go:Run",
+      "source": "internal/cli/removedb.go:Run",
       "entry": [
-        "bor purge-whitelisted-entries",
-        "bor snapshot prune-block"
+        "bor removedb",
+        "bor purge-whitelisted-entries"
       ],
       "effects": [
         "CANONICAL",
@@ -1115,7 +1156,7 @@
       "owner": "E01-02.lifecycle_seams",
       "patch": "",
       "refusal": "refused on a capture store with live pins or obligations, as D100 item 3 does for geth removedb",
-      "note": "prune-block is guarded already (retention-prune-block, E01-02.admission); the whitelist purge command is the Bor block."
+      "note": "Technical decision within this card: a command that deletes or rewrites chaindata is a caller that would lose obligations, so it fails closed like the Geth guard of D100 item 3."
     },
     {
       "id": "bor.milestone",
@@ -1138,7 +1179,7 @@
       "owner": "E01-02.lifecycle_seams",
       "patch": "",
       "refusal": "",
-      "note": "Bor finality is the whitelisted milestone. Take the guard in handleMilestone before the whitelist call, never under the whitelist finality lock (the decision path holds chainmu, guard, then finality.RLock). Typed observations: E05-01.polygon_observer."
+      "note": "Bor finality is the whitelisted milestone. Take the guard in handleMilestone around the whitelist call, never under the whitelist finality lock (the decision path holds chainmu, guard, then finality.RLock), and never across borVerify and reorgToFinalized, which take chainmu themselves. Typed observations: E05-01.polygon_observer."
     },
     {
       "id": "bor.milestone-lock",
@@ -1266,6 +1307,26 @@
       "owner": "E01-02.lifecycle_seams",
       "patch": "",
       "refusal": "the bor server profile check refuses the preconf and sequencer roles; import-path-observation skips claimPreconf while observing",
+      "note": ""
+    },
+    {
+      "id": "bor.prune-commands",
+      "client": "bor",
+      "source": "internal/cli/snapshot.go:Run",
+      "entry": [
+        "bor snapshot prune-state",
+        "bor snapshot prune-block"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "MANUAL_COMMAND",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "retention-prune-state, retention-prune-block",
+      "refusal": "the retention guards refuse pruning pinned state and headers",
       "note": ""
     },
     {

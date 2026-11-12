@@ -18,8 +18,9 @@ REQ-CAP-01 (AC-CAP-01-01), REQ-LIF-05 (AC-LIF-05-02, 05-03) and REQ-LIF-06
   FINALITY decision per native setter call, a zero hash as a no-op, and the
   error-aware BSC attestation read.
 
-It implements the "Один observation guard", "Startup, known branch и
-lifecycle GC" and decision-marker rules of
+It implements the observation-guard rule ("Один observation guard", one
+observation guard), the startup and known-branch rules ("Startup, known branch
+и lifecycle GC") and the decision-marker rules of
 [NATIVE_CAPTURE_PROTOCOL](../../../.project/docs/NATIVE_CAPTURE_PROTOCOL.md),
 with the items that D100 and D101 hand to this task.
 
@@ -65,7 +66,7 @@ portable test checks `sources` against
 | `route` | how it passes the guard (below) |
 | `kinds` | the decision kinds it may make |
 | `status` | `GUARDED` (a merged patch routes it; `patch` names the edit) or `PLANNED` (the owner routes it) |
-| `owner` | the task that guards it or must |
+| `owner` | the task that guards it, or that must still route or exercise it (a GUARDED row may name the task that exercises a merged patch) |
 | `refusal` | the fail-closed mechanism of a `REFUSE` caller |
 | `note` | why the route is right, and what is not this task's |
 
@@ -79,7 +80,10 @@ Routes. There is no bypass route: a caller that mutates chain state is
   execution, through a decision intent before the native mutation and a
   marker in its final native batch. Its effects are `CANONICAL` and/or
   `FINALITY`, and its kinds are exactly the matching `CANONICAL` and
-  `FINALITY`.
+  `FINALITY`. Exception: the `*.startup-reconcile` rows. Their native
+  mutation (startup repair) runs before the gate opens, so no choke point
+  sees it; the recovery driver decides it afterwards from native evidence,
+  inside its startup pass, or stops with a source invariant error.
 - `REFUSE`: the capture profile forbids it (miner, snap sync, manual
   rewrites of chaindata, parallel or pipelined import). It has effects, no
   kinds and a `refusal` that names the mechanism (the gate, the profile
@@ -88,9 +92,10 @@ Routes. There is no bypass route: a caller that mutates chain state is
   tracing, payload building, prefetch). No effects, no kinds, no pass; it is
   never a capture point.
 
-Map rules (`Validate` in Go, `check_map` in Python, independently): schema
-version 1; exactly the three clients, each pinned to a 40-digit commit;
-unknown fields refused; each caller valid as above, with a `patch` exactly
+Map rules (`ParseMap` and `Validate` in Go, `check_map` in Python,
+independently): schema version the integer 1; exactly the three clients,
+each pinned to a 40-digit commit; every field present and unknown fields
+refused; each caller valid as above, with a `patch` exactly
 when `GUARDED` and a task-ID owner; unique IDs; and for every client the
 `OBSERVATION` and `DECISION` callers together cover all four effects. The
 map rows are source review of the pinned commits; each client block checks
@@ -99,8 +104,19 @@ its rows against its native tree and exercises them.
 ## Gate
 
 `Open(token, store, admission, storeID, client, drain)` loads the map rows
-of the client and the stored boundary. Every call except `Require` needs the
-held guard token; the lock order stays guard, then native locks.
+of the client and the stored boundary. Every call that changes gate state,
+except `Require`, needs the held guard token; `Phase`, `Boundary`,
+`Coverage` and `Gaps` only read.
+
+Lock order. NATIVE_CAPTURE_PROTOCOL puts the observation guard before native
+locks, and Geth and BSC keep that order (guard, then `chainmu`). Bor takes
+the guard inside `processBlockForImport` with `chainmu` already held, so in
+Bor the order is `chainmu`, then guard, then the whitelist finality lock;
+the Bor callers that take `chainmu` with `TryLock` themselves (`SetHead`,
+`SetCanonical`, `writeKnownBlock`) take the guard right after it. No caller
+may take the guard while it holds a whitelist lock, or hold the guard across
+a call that takes `chainmu` itself (`borVerify`, `reorgToFinalized`). Each
+client block checks its order with a deadlock test.
 
 - `Enter(token, id)` opens a pass for a mapped caller. An unmapped ID is
   `ErrUnmapped`; a `REFUSE` caller is `ErrRefused` and its refusal is
@@ -116,12 +132,20 @@ held guard token; the lock order stays guard, then native locks.
   write from another goroutine while a pass is open is not caught here and
   stays a source-review item of each client block.
 - `Pass.Intend(bridge, intent)` records the decision intent of the innermost
-  pass, if its caller may make that kind; `Pass.Finality` builds it for one
-  finality setter call.
-- `Coverage()` counts passes and refusals per caller, and `Gaps(map, client,
-  coverage)` lists every `OBSERVATION` or `DECISION` caller without a pass
-  and every `REFUSE` caller without a refusal: the AC-CAP-01-01 check that no
-  required caller was missed. An empty list is required for a PASS.
+  pass, if its caller may make that kind, and counts it. `Pass.Finality`
+  builds it for one finality setter call. An observing pass of a `DECISION`
+  caller must record an intent before it writes: `Require(CANONICAL)` needs a
+  `CANONICAL` intent of that pass and `Require(FINALITY)` a `FINALITY`
+  intent; otherwise it is `ErrBypass`. The one exception is a finality setter
+  that rewrites an unchanged reference (below).
+- `Coverage()` counts passes, intents and refusals per caller, and
+  `Gaps(map, client, coverage)` lists every `OBSERVATION` caller without a
+  pass, every `DECISION` caller without an intent, and every `REFUSE` caller
+  without a refusal: the AC-CAP-01-01 check that no required caller was
+  missed. An empty list is required for a PASS. Refusals that happen outside
+  the gate (the profile check, the node flag check, a refused command in its
+  own process) do not reach `Enter`; the client block adds their evidence to
+  the coverage map before it calls `Gaps`.
 
 ### Phases and the live boundary H
 
@@ -132,9 +156,13 @@ held guard token; the lock order stays guard, then native locks.
 | `LIVE` | after `GoLive` | every routed caller, observing |
 | `DRAIN` | opened with `drain` | as `RECOVERY`; `GoLive` is refused |
 
-`GoLive(token, head, bridge)` runs under the guard after the current native
-mutations finished, with the native head read under the guard. Without a
-boundary it writes the boundary record and syncs it, then calls
+`GoLive(token, head, root, roots, bridge)` runs under the guard with no
+pass open (`ErrOrder` otherwise, so no bootstrap pass carries uncaptured
+mutations past H), with the native head and its state root read under the
+guard. Without a boundary it requires the root to be durable in the native
+store (`roots.Durable`: flushed through the hash provider and synced;
+`ErrRoot` otherwise), so native startup repair cannot rewind below H; then it
+writes the boundary record and syncs it, then calls
 `decision.Bridge.GoLive`. With a boundary (a restart, or a crash after the
 boundary sync) it keeps the stored H and never sets a new one. If the bridge
 refuses, the gate stays in `RECOVERY`. A failed boundary write stops the
@@ -155,8 +183,14 @@ new hash is `ErrNoop`: the Engine API uses it for "no change", so the old
 native reference stays and nothing is declared final (AC-LIF-05-02). An
 unchanged reference is `ErrNoop` too. An old zero hash means "none yet".
 
+A new hash equal to the old one at another number is `ErrInvalid` (one block
+cannot have two numbers).
+
 `Pass.Finality` makes one FINALITY intent per setter call, before the
-setter runs, with the unchanged head. The native setter then writes its
+setter runs, with the unchanged head. For an unchanged reference it makes no
+intent but lets the pass rewrite the same reference, because Geth calls
+`SetFinalized` on every forkchoice update with a non-zero hash; that write
+carries no marker. A zero hash allows no write, because no setter runs. The native setter then writes its
 reference and the marker in one batch and syncs, and the caller resolves the
 decision. A setter that ran stays decided even if a later step of the same
 request fails and the request returns an error; a setter that did not run

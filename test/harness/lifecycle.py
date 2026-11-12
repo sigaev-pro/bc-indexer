@@ -122,7 +122,8 @@ def check_caller(c):
 
 def check_map(data):
     """Return the per-client summary; raise ValueError unless the map follows every rule."""
-    if sorted(data) != ["callers", "schema_version", "sources"] or data["schema_version"] != 1:
+    version = data.get("schema_version")
+    if sorted(data) != ["callers", "schema_version", "sources"] or type(version) is not int or version != 1:
         raise ValueError("map fields or schema version")
     if sorted(data["sources"]) != sorted(CLIENTS) or not all(COMMIT.fullmatch(v) for v in data["sources"].values()):
         raise ValueError("sources must pin every client to a 40-digit commit")
@@ -173,6 +174,8 @@ def boundary_digest(store_id, producer, number, block):
 
 
 def finality_digest(field, caller, old, new):
+    if new["hash"] == old["hash"] and new["number"] != old["number"]:
+        raise ValueError("one block at two numbers")
     if new["hash"] == ZERO or new == old:
         raise ValueError("no-op finality change")
     return sha(tag("extractor-lifecycle-finality-v1") + text(field) + text(caller) + head(old) + head(new)).hex()

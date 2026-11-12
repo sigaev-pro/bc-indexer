@@ -65,6 +65,9 @@ func FinalityDigest(c FinalityChange) (string, error) {
 	if c.New.Hash == ZeroHash {
 		return "", fmt.Errorf("%w: zero %s hash", ErrNoop, c.Field)
 	}
+	if c.New.Hash == c.Old.Hash && c.New.Number != c.Old.Number {
+		return "", fmt.Errorf("%w: block %s at two numbers", ErrInvalid, c.New.Hash)
+	}
 	if c.New == c.Old {
 		return "", fmt.Errorf("%w: %s unchanged", ErrNoop, c.Field)
 	}
@@ -76,7 +79,10 @@ func FinalityDigest(c FinalityChange) (string, error) {
 // the setter mutates native state. Each setter call is its own decision, so
 // a setter that ran stays decided even if a later step of the same native
 // request fails, and a setter that did not run makes no decision. The head
-// is the unchanged native head.
+// is the unchanged native head. For an unchanged reference it returns
+// ErrNoop and makes no intent, but lets the pass rewrite the same reference:
+// the native setter may still write it, with no marker. A zero new hash
+// returns ErrNoop and allows nothing, because no setter runs.
 func (p *Pass) Finality(bridge Intender, head decision.Head, c FinalityChange, events bool) (decision.IntentRecord,
 	error) {
 	if c.Caller != p.caller.ID {
@@ -84,6 +90,11 @@ func (p *Pass) Finality(bridge Intender, head decision.Head, c FinalityChange, e
 			p.caller.ID)
 	}
 	digest, err := FinalityDigest(c)
+	if errors.Is(err, ErrNoop) && c.New.Hash != ZeroHash {
+		if gerr := p.grant(Finality); gerr != nil {
+			return decision.IntentRecord{}, gerr
+		}
+	}
 	if err != nil {
 		return decision.IntentRecord{}, err
 	}

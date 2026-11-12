@@ -61,6 +61,8 @@ var (
 	// ErrBypass reports a native mutation without an open pass of a caller
 	// with that effect. It stops the gate.
 	ErrBypass = errors.New("native mutation bypassed the gate")
+	// ErrRoot rejects a boundary whose native head state is not durable.
+	ErrRoot = errors.New("boundary state root is not durable")
 	// ErrCorrupt reports a damaged boundary record.
 	ErrCorrupt = errors.New("corrupt lifecycle record")
 	// ErrInvariant reports a boundary record of another store or producer.
@@ -192,10 +194,38 @@ func strictDecode(data []byte, value any) error {
 	return nil
 }
 
-// ParseMap decodes and validates a caller map.
+// callerFields are the JSON names of the Caller fields; every caller must
+// carry all of them.
+var callerFields = []string{"id", "client", "source", "entry", "effects", "trigger", "route", "kinds", "status",
+	"owner", "patch", "refusal", "note"}
+
+// present checks that every caller carries every field, so a missing field
+// is not read as its zero value. A map without its schema version, sources or
+// callers fails Validate.
+func present(data []byte) error {
+	var raw struct {
+		Callers []map[string]json.RawMessage `json:"callers"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for i, c := range raw.Callers {
+		for _, name := range callerFields {
+			if _, ok := c[name]; !ok {
+				return fmt.Errorf("caller %d has no %q", i, name)
+			}
+		}
+	}
+	return nil
+}
+
+// ParseMap decodes and validates a caller map. Every field must be present.
 func ParseMap(data []byte) (Map, error) {
 	var m Map
 	if err := strictDecode(data, &m); err != nil {
+		return Map{}, fmt.Errorf("%w: %v", ErrMap, err)
+	}
+	if err := present(data); err != nil {
 		return Map{}, fmt.Errorf("%w: %v", ErrMap, err)
 	}
 	if err := Validate(m); err != nil {
@@ -371,8 +401,9 @@ type Intender interface {
 	Intend(t *admission.Token, in decision.Intent) (decision.IntentRecord, error)
 }
 
-// Lifer switches the decision bridge to LIVE; *decision.Bridge implements it.
-type Lifer interface {
+// LiveSwitcher switches the decision bridge to LIVE; *decision.Bridge
+// implements it.
+type LiveSwitcher interface {
 	GoLive(t *admission.Token) error
 }
 
@@ -423,10 +454,11 @@ func BoundaryDigest(b Boundary) (string, error) {
 	return digestOf(tagBoundary, str(b.NativeStoreID), str(b.Producer), head), nil
 }
 
-// Reach counts how often a caller entered the gate and how often the gate
-// refused it.
+// Reach counts how often a caller entered the gate, how often it recorded a
+// decision intent through its pass, and how often the gate refused it.
 type Reach struct {
 	Passes   uint64
+	Intents  uint64
 	Refusals uint64
 }
 
@@ -449,12 +481,16 @@ type Gate struct {
 	err      error
 }
 
-// Pass is one open entry of a mapped caller into the gate.
+// Pass is one open entry of a mapped caller into the gate. Methods on a nil
+// Pass panic.
 type Pass struct {
 	gate    *Gate
 	caller  Caller
 	token   *admission.Token
 	observe bool
+	// granted lists the effects that an intent (or an unchanged finality
+	// setter) of this pass allows at the choke points.
+	granted map[Effect]bool
 }
 
 // Open syncs the store and opens the gate of client for the producer run of
@@ -586,14 +622,14 @@ func (g *Gate) Enter(t *admission.Token, id string) (*Pass, error) {
 	case ReadOnly:
 		return nil, fmt.Errorf("%w: read-only caller %s needs no pass", ErrInvalid, id)
 	}
-	if g.phase == Recovery || g.phase == Drain {
-		if c.Trigger != Startup && (len(g.stack) == 0 || g.stack[0].caller.Trigger != Startup) {
-			return nil, fmt.Errorf("%w: %s in %s", ErrPhase, id, g.phase)
-		}
+	// The phase changes only in GoLive, with no pass open. So in Recovery
+	// and Drain the outermost open pass is always a Startup pass.
+	if (g.phase == Recovery || g.phase == Drain) && c.Trigger != Startup && len(g.stack) == 0 {
+		return nil, fmt.Errorf("%w: %s in %s", ErrPhase, id, g.phase)
 	}
 	r.Passes++
 	g.reached[id] = r
-	p := &Pass{gate: g, caller: c, token: t, observe: g.phase != Bootstrap}
+	p := &Pass{gate: g, caller: c, token: t, observe: g.phase != Bootstrap, granted: map[Effect]bool{}}
 	g.stack = append(g.stack, p)
 	return p, nil
 }
@@ -651,11 +687,49 @@ func (p *Pass) Intend(bridge Intender, in decision.Intent) (decision.IntentRecor
 		g.mu.Unlock()
 		return decision.IntentRecord{}, fmt.Errorf("%w: %s may not make %s", ErrKind, p.caller.ID, in.Kind)
 	}
-	g.mu.Unlock()
 	if bridge == nil {
+		g.mu.Unlock()
 		return decision.IntentRecord{}, fmt.Errorf("%w: missing bridge", ErrInvalid)
 	}
-	return bridge.Intend(p.token, in)
+	// The bridge writes and syncs the intent; the gate lock is not held
+	// across that I/O, so Require from a native write path does not wait on
+	// it. The guard token still serializes the patched callers.
+	g.mu.Unlock()
+	rec, err := bridge.Intend(p.token, in)
+	if err != nil {
+		return decision.IntentRecord{}, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	r := g.reached[p.caller.ID]
+	r.Intents++
+	g.reached[p.caller.ID] = r
+	if effect, ok := kindEffects[in.Kind]; ok {
+		p.granted[effect] = true
+	}
+	return rec, nil
+}
+
+// kindEffects maps the kinds of a Decision route to the effect they allow.
+var kindEffects = map[decision.Kind]Effect{decision.Canonical: Canonical, decision.Finality: Finality}
+
+// grant records that the innermost pass may write effect without an intent:
+// the native setter rewrites an unchanged reference.
+func (p *Pass) grant(effect Effect) error {
+	g := p.gate
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.enter(p.token); err != nil {
+		return err
+	}
+	if err := p.innermost(); err != nil {
+		return err
+	}
+	if !slices.Contains(p.caller.Kinds, decision.Finality) {
+		return fmt.Errorf("%w: %s may not make %s", ErrKind, p.caller.ID, decision.Finality)
+	}
+	p.granted[effect] = true
+	return nil
 }
 
 // Require is called by a native write choke point before a mutation with
@@ -680,23 +754,34 @@ func (g *Gate) Require(effect Effect) error {
 		g.err = fmt.Errorf("%w: %s under %s", ErrBypass, effect, top.caller.ID)
 		return g.err
 	}
+	// An observing Decision pass must record its intent before it mutates.
+	if top.caller.Route == Decision && top.observe && !top.granted[effect] {
+		g.err = fmt.Errorf("%w: %s under %s without an intent", ErrBypass, effect, top.caller.ID)
+		return g.err
+	}
 	return nil
 }
 
 // GoLive records the live boundary H, if the run has none, and switches the
-// bridge and the gate to Live. The caller holds the guard, has finished the
-// current native mutations and passes the native head it read under the
-// guard. The boundary record is synced before the bridge goes live. A run
-// that already has a boundary keeps it: a restart never sets a new H. Drain
-// never goes live.
-func (g *Gate) GoLive(t *admission.Token, head decision.Head, bridge Lifer) (Boundary, error) {
+// bridge and the gate to Live. The caller holds the guard, has closed every
+// pass (the current native mutations are finished) and passes the native head
+// it read under the guard with its state root. That root must be durable in
+// the native store (flushed through the hash provider and synced), so native
+// startup repair cannot rewind below H. The boundary record is synced before
+// the bridge goes live. A run that already has a boundary keeps it: a restart
+// never sets a new H. Drain never goes live.
+func (g *Gate) GoLive(t *admission.Token, head decision.Head, root string, roots decision.Roots,
+	bridge LiveSwitcher) (Boundary, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if err := g.enter(t); err != nil {
 		return Boundary{}, err
 	}
-	if bridge == nil {
-		return Boundary{}, fmt.Errorf("%w: missing bridge", ErrInvalid)
+	if bridge == nil || roots == nil {
+		return Boundary{}, fmt.Errorf("%w: missing bridge or roots", ErrInvalid)
+	}
+	if len(g.stack) != 0 {
+		return Boundary{}, fmt.Errorf("%w: GoLive under the open pass of %s", ErrOrder, g.stack[0].caller.ID)
 	}
 	switch g.phase {
 	case Drain:
@@ -709,6 +794,16 @@ func (g *Gate) GoLive(t *admission.Token, head decision.Head, bridge Lifer) (Bou
 		digest, err := BoundaryDigest(b)
 		if err != nil {
 			return Boundary{}, err
+		}
+		if !digestPattern.MatchString(root) {
+			return Boundary{}, fmt.Errorf("%w: root %q", ErrInvalid, root)
+		}
+		durable, err := roots.Durable(root)
+		if err != nil {
+			return Boundary{}, fmt.Errorf("%w: %s: %w", ErrRoot, root, err)
+		}
+		if !durable {
+			return Boundary{}, fmt.Errorf("%w: %s", ErrRoot, root)
 		}
 		b.Digest = digest
 		data, err := json.Marshal(b)
@@ -746,9 +841,11 @@ func (g *Gate) Coverage() map[string]Reach {
 }
 
 // Gaps returns, in order, the callers of client in m that a run did not
-// reach as required: an OBSERVATION or DECISION caller without a pass, and a
-// REFUSE caller without a refusal. READ_ONLY callers need nothing. An empty
-// result means no required caller was missed.
+// reach as required: an OBSERVATION caller without a pass, a DECISION caller
+// without an intent recorded through its pass, and a REFUSE caller without a
+// refusal. READ_ONLY callers need nothing. An empty result means no required
+// caller was missed. A client block may add refusals that happen outside the
+// gate (the profile check, a refused command) to coverage before the call.
 func Gaps(m Map, client string, coverage map[string]Reach) []string {
 	gaps := []string{}
 	for _, c := range m.Callers {
@@ -757,7 +854,9 @@ func Gaps(m Map, client string, coverage map[string]Reach) []string {
 		}
 		r := coverage[c.ID]
 		switch {
-		case (c.Route == Observation || c.Route == Decision) && r.Passes == 0:
+		case c.Route == Observation && r.Passes == 0:
+			gaps = append(gaps, c.ID)
+		case c.Route == Decision && r.Intents == 0:
 			gaps = append(gaps, c.ID)
 		case c.Route == Refuse && r.Refusals == 0:
 			gaps = append(gaps, c.ID)
