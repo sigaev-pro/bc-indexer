@@ -57,14 +57,17 @@ def base_context():
 CACHE = {}
 
 
+SCENARIOS = {plan["name"]: scenario(plan["name"]) for plan in ORACLE["plans"]}
+
+
 def contexts():
     """Built on first use, so a failure names the test that needed it."""
     if not CACHE:
         base = base_context()
         CACHE.update({plan["name"]: {**base, "checkpoints": probe.checkpoints(
-            json.loads(SAMPLE[f"scenarios/{plan['name']}/checkpoints.json"]))} for plan in ORACLE["plans"]})
+            json.loads(SAMPLE[f"scenarios/{plan['name']}/checkpoints.json"]), SCENARIOS[plan["name"]])}
+            for plan in ORACLE["plans"]})
     return CACHE
-SCENARIOS = {plan["name"]: scenario(plan["name"]) for plan in ORACLE["plans"]}
 
 
 def judge(name, change=None):

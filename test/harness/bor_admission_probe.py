@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Build and run the E01-02.admission Bor probe and judge its AC matrix.
+"""Build and run the E01-02.admission and E01-02.decision_bridge Bor probe and
+judge its AC matrix.
 
 `prepare` installs the Bor block into the accepted Bor source tree
 (bor_admission_tree.py), runs the native Go tests of the installed packages in
@@ -11,8 +12,10 @@ scenario, and compares the result with values computed here from the stub
 files, the sealed blocks and the README formulas, not from the probe output.
 Preparation is not part of the measured run.
 
-The judge is the qa oracle of AC-CAP-02-01, AC-CAP-02-02 (POLY, private local)
-and of the real EXEC_READY binding credited to AC-CAP-04-03 (D98 item 7).
+The judge is the qa oracle of AC-CAP-02-01, AC-CAP-02-02 (POLY, private local),
+of the real EXEC_READY binding credited to AC-CAP-04-03 (D98 item 7), and of
+AC-CAP-07-01, AC-CAP-07-02, AC-CAP-07-03 and AC-CAP-07-06 (E01-02.decision_bridge,
+POLY, private local).
 """
 
 import argparse
@@ -135,7 +138,7 @@ def prepare(manifest_path, expected_sha, output):
             record["stub_bodies"] = capture_probe.copy_sources(BODY_FILES, FIXTURE / "stub", output / "stub", deadline)
             record["harness_code"] = capture_probe.copy_sources(
                 ("bor_admission_probe.py", "bor_admission_tree.py", "bor_source_inputs_probe.py", "admission.py",
-                 "source_inputs.py", "capture_probe.py", "native.py", "owned.py", "artifacts.py"),
+                 "decision.py", "source_inputs.py", "capture_probe.py", "native.py", "owned.py", "artifacts.py"),
                 Path(__file__).parent, output / "harness-code", deadline)
             compiler = manifest["image_inputs"]["golang-build-image"]["reference"]
             require(re.fullmatch(r"docker.io/library/golang@sha256:[0-9a-f]{64}", compiler), "Unpinned compiler")

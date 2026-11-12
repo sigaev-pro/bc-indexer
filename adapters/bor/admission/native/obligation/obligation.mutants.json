@@ -293,7 +293,7 @@
     {
       "name": "recovery goes live",
       "file": "native/obligation/obligation.go",
-      "original": "\t\terr = d.Admission.GoLive(token)",
+      "original": "\t\terr = live(token)",
       "replacement": "\t\terr = nil"
     },
     {

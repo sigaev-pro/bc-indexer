@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Single-check mutants of the E01-02.admission Bor driver, judge and tree installer.",
+  "description": "Single-check mutants of the E01-02.admission and E01-02.decision_bridge Bor driver, judge and tree installer.",
   "language": "python",
   "root": "../..",
   "copy": [
@@ -16,18 +16,16 @@
     "test/harness/owned.py",
     "test/harness/fixtures/admission_bor/*",
     "test/harness/fixtures/admission_bor/stub/*",
-    "adapters/bor/admission/*.go",
-    "adapters/bor/admission/vectors.json",
-    "adapters/bor/admission/native/patches.json",
-    "adapters/bor/admission/native/tree/*/*.go",
-    "adapters/bor/admission/native/tree/*/*/*.go",
-    "adapters/bor/admission/native/tree/*/*/*/*.go",
-    "adapters/bor/admission/native/obligation/*.go",
-    "adapters/bor/admission/native/borimport/*.go",
-    "adapters/bor/source_inputs/*.go",
     "adapters/bor/state_provider/*.go",
     "adapters/bor/state_provider/native_overlay/internal/cli/server/*.go",
-    "core/capture/*.go"
+    "core/capture/*.go",
+    "test/harness/decision.py",
+    "test/harness/bor_decision.py",
+    "test/harness/fixtures/admission_core/*",
+    "test/harness/fixtures/decision_core/*",
+    "adapters/*/admission/*",
+    "adapters/*/decision/*",
+    "adapters/*/source_inputs/*"
   ],
   "test": [
     "{python}",
