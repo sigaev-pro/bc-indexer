@@ -1176,3 +1176,84 @@ func TestReplayRefusesWhatItCannotCheck(t *testing.T) {
 	f.driver.Router.open = false
 	requireGuardFree(t, f)
 }
+
+func TestRecoverThenRunsLiveWithTheTokenAfterResolving(t *testing.T) {
+	f := newFixture(t)
+	leaveAdmitted(t, f)
+	r := &reexec{result: ResultDigest("h", "s", "r", "2")}
+	var states map[string]admission.State
+	report, err := f.driver.RecoverThen(r, func(token *admission.Token) error {
+		// The saved obligation is resolved, the guard is still held, and the
+		// admission is not live yet.
+		saved, err := f.driver.Admission.Observations(token)
+		if err != nil {
+			return err
+		}
+		states = map[string]admission.State{}
+		for _, obs := range saved {
+			states[obs.Key] = obs.State
+		}
+		if mode, err := f.driver.Admission.Mode(token); err != nil || mode != admission.RecoveryOnly {
+			return fmt.Errorf("mode %v %v before live", mode, err)
+		}
+		return f.driver.Admission.GoLive(token)
+	})
+	requireGuardFree(t, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if states[key0] != admission.ExecReady || !slices.Equal(report.ExecReady, []string{key0}) || f.mode() != admission.Live {
+		t.Fatalf("states %v report %+v", states, report)
+	}
+}
+
+func TestRecoverThenStaysInRecoveryWhenLiveFails(t *testing.T) {
+	f := newFixture(t)
+	leaveAdmitted(t, f)
+	refused := errors.New("an EXEC_READY observation has no decision")
+	_, err := f.driver.RecoverThen(&reexec{result: ResultDigest("h", "s", "r", "2")}, func(*admission.Token) error {
+		return refused
+	})
+	requireGuardFree(t, f)
+	if !errors.Is(err, refused) || f.mode() != admission.RecoveryOnly {
+		t.Fatalf("err %v mode %v", err, f.mode())
+	}
+	// live does not run after a failed resolution.
+	f = newFixture(t)
+	leaveAdmitted(t, f)
+	called := false
+	_, err = f.driver.RecoverThen(&reexec{err: errors.New("disk")}, func(*admission.Token) error {
+		called = true
+		return nil
+	})
+	requireGuardFree(t, f)
+	if err == nil || called {
+		t.Fatalf("err %v, live called %v", err, called)
+	}
+}
+
+func TestReplayHeldUsesTheCallersToken(t *testing.T) {
+	f := newFixture(t)
+	result := ResultDigest("h", "s", "r", "2")
+	execReady(t, f, result, "/bor/spans/1", "/status")
+	r := &reexec{result: result, before: func() {
+		for _, path := range []string{"/bor/spans/1", "/status"} {
+			if _, err := get(t, path); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}}
+	token := f.guard.Acquire()
+	err := f.driver.ReplayHeld(token, key0, r)
+	if releaseErr := token.Release(); releaseErr != nil {
+		t.Fatal(releaseErr)
+	}
+	requireGuardFree(t, f)
+	if err != nil || !slices.Equal(r.keys, []string{key0}) {
+		t.Fatalf("replay with a held token: %v, keys %v", err, r.keys)
+	}
+	// A released token is refused.
+	if err := f.driver.ReplayHeld(token, key0, r); err == nil {
+		t.Fatal("replay with a released token passed")
+	}
+}

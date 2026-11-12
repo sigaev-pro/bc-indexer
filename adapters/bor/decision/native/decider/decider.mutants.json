@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the Bor decision rules (E01-02.decision_bridge, Bor block). The table runs in the module from `python3 test/harness/bor_decision.py assemble DIR`, at extractor/decision/native/decider, because the package imports admission and decision at their native paths.",
+  "language": "go",
+  "root": "../../../..",
+  "copy": [
+    "go.mod",
+    "extractor/*.go",
+    "extractor/*/vectors.json"
+  ],
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "-timeout",
+    "120s",
+    "./extractor/decision/native/decider/"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "evidence tag",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "tagEvidence  = \"extractor-bor-decision-evidence-v1\"",
+      "replacement": "tagEvidence  = \"extractor-bor-decision-evidence-v0\""
+    },
+    {
+      "name": "rejection tag",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "tagRejection = \"extractor-bor-decision-rejection-v1\"",
+      "replacement": "tagRejection = \"extractor-bor-decision-rejection-v0\""
+    },
+    {
+      "name": "field length shift",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tlength >>= 8\n",
+      "replacement": "\t\tlength >>= 1\n"
+    },
+    {
+      "name": "field length byte",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tout[i] = byte(length)\n",
+      "replacement": "\t\tout[i] = byte(length) + 1\n"
+    },
+    {
+      "name": "tag separator",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "h.Write(append([]byte(tag), 0))",
+      "replacement": "h.Write(append([]byte(tag), 1))"
+    },
+    {
+      "name": "evidence drops the extern difficulty",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tt.NewHead.Hash, t.LocalTD, t.ExternTD)",
+      "replacement": "\t\tt.NewHead.Hash, t.LocalTD)"
+    },
+    {
+      "name": "evidence drops the child root",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "t.Block.Hash, t.ChildRoot,\n",
+      "replacement": "t.Block.Hash,\n"
+    },
+    {
+      "name": "rejection drops the error",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "return digest(tagRejection, intentDigest, nativeError)",
+      "replacement": "return digest(tagRejection, intentDigest)"
+    },
+    {
+      "name": "authoritative ignores the state",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "if obs.State != admission.ExecReady || obs.Candidate.Hash",
+      "replacement": "if obs.Candidate.Hash"
+    },
+    {
+      "name": "authoritative ignores the hash",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "|| obs.Candidate.Hash != block.Hash ||",
+      "replacement": "||"
+    },
+    {
+      "name": "authoritative ignores the number",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "|| obs.Candidate.Number != block.Number {",
+      "replacement": "{"
+    },
+    {
+      "name": "authoritative takes the highest sequence",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "if found == nil || obs.Sequence < found.Sequence {",
+      "replacement": "if found == nil || obs.Sequence > found.Sequence {"
+    },
+    {
+      "name": "side has events",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "EvidenceDigest: EvidenceDigest(tr), Events: tr.Kind != decision.Side}",
+      "replacement": "EvidenceDigest: EvidenceDigest(tr), Events: true}"
+    },
+    {
+      "name": "intent evidence",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "EvidenceDigest: EvidenceDigest(tr), Events",
+      "replacement": "EvidenceDigest: EvidenceDigest(Transition{}), Events"
+    },
+    {
+      "name": "matches ignores the kind",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "if saved.Kind != in.Kind || saved.OldHead",
+      "replacement": "if saved.OldHead"
+    },
+    {
+      "name": "matches ignores the old head",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "|| saved.OldHead != in.OldHead ||",
+      "replacement": "||"
+    },
+    {
+      "name": "matches ignores the new head",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "|| saved.NewHead != in.NewHead ||\n",
+      "replacement": "||\n"
+    },
+    {
+      "name": "matches ignores the evidence",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "saved.EvidenceDigest != in.EvidenceDigest || saved.Events",
+      "replacement": "saved.Events"
+    },
+    {
+      "name": "matches ignores the events",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "|| saved.Events != in.Events ||",
+      "replacement": "||"
+    },
+    {
+      "name": "matches ignores the member count",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "|| len(saved.Members) != len(in.Members) {",
+      "replacement": "{"
+    },
+    {
+      "name": "matches ignores a member",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tif saved.Members[i] != m {\n",
+      "replacement": "\t\tif saved.Members[i] != m && false {\n"
+    },
+    {
+      "name": "recovering is ignored",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif recovering {\n\t\tsaved, err := d.unresolved(t)",
+      "replacement": "\tif false {\n\t\tsaved, err := d.unresolved(t)"
+    },
+    {
+      "name": "live intents act as recovering",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif recovering {\n\t\tsaved, err := d.unresolved(t)",
+      "replacement": "\tif true {\n\t\tsaved, err := d.unresolved(t)"
+    },
+    {
+      "name": "another saved transition is accepted",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tif !matches(saved.Intent, in) {",
+      "replacement": "\t\t\tif false {"
+    },
+    {
+      "name": "resolve records no outcome",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\td.record(seq, Decided)\n",
+      "replacement": ""
+    },
+    {
+      "name": "resolve skips the cleanup",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\td.record(seq, Decided)\n\treturn d.Bridge.Cleanup(t)",
+      "replacement": "\td.record(seq, Decided)\n\treturn nil"
+    },
+    {
+      "name": "reject without a native error",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif nativeErr == nil {\n\t\treturn fmt.Errorf(\"%w: rejection of intent",
+      "replacement": "\tif false {\n\t\treturn fmt.Errorf(\"%w: rejection of intent"
+    },
+    {
+      "name": "reject ignores a stored block",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif stored {\n\t\treturn fmt.Errorf(\"%w: intent %d was refused",
+      "replacement": "\tif stored && false {\n\t\treturn fmt.Errorf(\"%w: intent %d was refused"
+    },
+    {
+      "name": "reject ignores a store error",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tstored, err := d.Native.Stored(block)\n\tif err != nil {\n\t\treturn err\n\t}\n\tif stored {",
+      "replacement": "\tstored, _ := d.Native.Stored(block)\n\tif stored {"
+    },
+    {
+      "name": "rejection binds the evidence instead of the intent",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "RejectionDigest(rec.Digest, nativeErr.Error())",
+      "replacement": "RejectionDigest(rec.EvidenceDigest, nativeErr.Error())"
+    },
+    {
+      "name": "reject records no outcome",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\td.record(rec.Sequence, Rejected)\n",
+      "replacement": ""
+    },
+    {
+      "name": "complete keeps its outcomes",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tdefer func() { d.outcomes = nil }()\n",
+      "replacement": ""
+    },
+    {
+      "name": "complete accepts no outcome",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif len(d.outcomes) != 1 {",
+      "replacement": "\tif len(d.outcomes) > 1 {"
+    },
+    {
+      "name": "complete ignores a native failure",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif err := d.Native.Complete(t, obs); err != nil {\n\t\treturn 0, \"\", err\n\t}",
+      "replacement": "\t_ = d.Native.Complete(t, obs)"
+    },
+    {
+      "name": "a marker is not resolved",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tif saved.Marker {",
+      "replacement": "\t\tif !saved.Marker {"
+    },
+    {
+      "name": "an intent without members is completed",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tif len(saved.Intent.Members) == 0 {",
+      "replacement": "\t\t\tif false {"
+    },
+    {
+      "name": "another settled decision is accepted",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tif settled != seq {",
+      "replacement": "\t\t\tif false {"
+    },
+    {
+      "name": "rejected reported as completed",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tif outcome == Decided {",
+      "replacement": "\t\t\tif outcome == Decided || true {"
+    },
+    {
+      "name": "an observation that stays undecided loops",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tif seen[obs.Key] {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "a stored block without decision is imported",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tif stored {\n\t\t\treturn report, fmt.Errorf(\"%w: block %d of %s is stored",
+      "replacement": "\t\tif stored && false {\n\t\t\treturn report, fmt.Errorf(\"%w: block %d of %s is stored"
+    },
+    {
+      "name": "recovery ignores a store error",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\tstored, err := d.Native.Stored(decision.Head{Number: obs.Candidate.Number, Hash: obs.Candidate.Hash})\n\t\tif err != nil {\n\t\t\treturn report, err\n\t\t}",
+      "replacement": "\t\tstored, _ := d.Native.Stored(decision.Head{Number: obs.Candidate.Number, Hash: obs.Candidate.Hash})"
+    },
+    {
+      "name": "recovery does not go live",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\treturn report, d.Bridge.GoLive(t)",
+      "replacement": "\treturn report, nil"
+    },
+    {
+      "name": "imported is not reported",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\treport.Imported = append(report.Imported, Imported{Observation: obs.Key, Sequence: seq, Outcome: outcome})\n",
+      "replacement": "\t\t_, _ = seq, outcome\n"
+    },
+    {
+      "name": "a member that is not EXEC_READY is completed",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tif obs.State != admission.ExecReady {",
+      "replacement": "\t\t\tif false {",
+      "equivalent": "an open intent's member stays EXEC_READY: only the bridge closes it (admission.Decide), and decision.Open refuses a decided block whose observation is in another state"
+    },
+    {
+      "name": "a member that is not open is completed",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\treturn admission.Observation{}, fmt.Errorf(\"%w: member %s is not open\", decision.ErrInvariant, key)",
+      "replacement": "\treturn admission.Observation{Key: key, State: admission.ExecReady}, nil",
+      "equivalent": "an open intent's member is open: the admission closes an EXEC_READY observation only through the bridge, which resolves the intent first"
+    },
+    {
+      "name": "branch blocks are not members",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tfor _, b := range append(append([]BranchBlock{}, tr.Branch...), BranchBlock{Block: tr.Block, Root: tr.ChildRoot}) {",
+      "replacement": "\tfor _, b := range []BranchBlock{{Block: tr.Block, Root: tr.ChildRoot}} {"
+    },
+    {
+      "name": "recovery completes the first member",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tlast := saved.Intent.Members[len(saved.Intent.Members)-1]",
+      "replacement": "\t\t\tlast := saved.Intent.Members[0]"
+    },
+    {
+      "name": "branch member binds the executed root",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tExecReadyDigest: obs.ExecReady.Digest, ChildRoot: b.Root})",
+      "replacement": "\t\t\tExecReadyDigest: obs.ExecReady.Digest, ChildRoot: tr.ChildRoot})"
+    },
+    {
+      "name": "live decisions record outcomes",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tif d.outcomes != nil {\n\t\td.outcomes[seq] = outcome\n\t}",
+      "replacement": "\tif d.outcomes == nil {\n\t\td.outcomes = map[uint64]Outcome{}\n\t}\n\td.outcomes[seq] = outcome"
+    },
+    {
+      "name": "complete starts without a map",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\td.outcomes = map[uint64]Outcome{}\n\tdefer",
+      "replacement": "\tdefer"
+    }
+  ]
+}
