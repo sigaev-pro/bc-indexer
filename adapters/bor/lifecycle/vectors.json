@@ -1,0 +1,33 @@
+{
+  "attested_digest": "1309f8e3a60733bcf0c50b42cf12f8af91016de0d17dcbd4dd77e27beeb25381",
+  "boundary_digest": "9131d39ec37a850e4b081a404251cc23efc6f5932126dac69ea4d301a47f9abd",
+  "boundary_key": "extractor-lifecycle-v1/producer-1.run-1/boundary",
+  "fallback_digest": "a1509fc23bef78bd4b3ad3bbdedf0001cd32f970ed9a6c21f3591132350c37a7",
+  "fcu_caller": "geth.engine-forkchoice",
+  "finalized_digest": "b374c3f56287cf7818c1cc5d1807c6d83de77fcb3d67998cc0b2990ec54f38ac",
+  "first_safe_digest": "3bb57a4df9484a533fda5d606479d9cbae9e37a06490fad6412fe9ffdad66cef",
+  "genesis": "aeebad4a796fcc2e15dc4c6061b45ed9b373f26adfc798ca7d2d8cc58182718e",
+  "head": {
+    "hash": "3972906ec6261de2ed2258dc9d8e0a30ee4839d88279f222d207a1062e7d140e",
+    "number": 7
+  },
+  "new_finalized": {
+    "hash": "473ae6f80e73bd717a6c1afa74ede04c86236d6c1c8a6faaf5f33b80ca640d55",
+    "number": 5
+  },
+  "old_finalized": {
+    "hash": "0a4f88e04b578e42ff125845c9b27ba749498ed4b68a20c94cf0e195aae9cbc4",
+    "number": 3
+  },
+  "producer": "producer-1",
+  "run": "run-1",
+  "source": {
+    "hash": "51b0b105bb16ebcd60cfee5ea698e21a60300ce6aee537045cb725bbb5b308a1",
+    "number": 4
+  },
+  "store_id": "native-store-1",
+  "target": {
+    "hash": "473ae6f80e73bd717a6c1afa74ede04c86236d6c1c8a6faaf5f33b80ca640d55",
+    "number": 5
+  }
+}

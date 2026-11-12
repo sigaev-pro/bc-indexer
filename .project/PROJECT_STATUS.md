@@ -1,5 +1,121 @@
 # Состояние проекта
 
+## E01-02.lifecycle_seams — Map all required native lifecycle callers (issue #18)
+
+Status: IN_PROGRESS. Block 0 (lifecycle-core) is in review; the Geth, BSC and
+Bor blocks start after it merges. Dependencies E01-02.decision_bridge (#17,
+merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Plan from the
+coordinator on 2026-11-13, approved by the owner, the same split as #16 and
+#17: block 0 core (architect, then native-engineer), then parallel Geth, BSC
+and Bor blocks (native-engineer each), qa for the AC matrix, and two
+independent read-only reviewers for Spec and Standards. D101 forbids long,
+load or product runs until E05-01.registry and E05-01.activation_gc are
+accepted; the client blocks use short measured runs only.
+
+### Block 0: lifecycle-core
+
+Base `a7ea231`. Branch/worktree: `claude/e01-02-lifecycle-core` /
+`e01-02-admission-core-a0420b`. Allowed paths:
+`adapters/{geth,bsc,bor}/lifecycle/**` (`native/` reserved for the client
+blocks), `test/harness/lifecycle.py`, `test/harness/test_lifecycle.py`,
+`test/harness/lifecycle.mutants.json`,
+`.project/evidence/E01-02.lifecycle_seams.md` and this section. Profiles:
+none. Client-independent unit tests on an in-memory power-loss store model
+with the real admission and decision packages, so every AC-CAP-01-01,
+AC-LIF-05-02, 05-03, AC-LIF-06-04 and 06-05 cell stays NOT_RUN and the block
+gives no AC verdict.
+
+Design (architect), in full in the package README
+[adapters/geth/lifecycle/README.md](../adapters/geth/lifecycle/README.md):
+
+- New shared package `lifecycle`, byte-identical in the three clients
+  except `native/`. It imports the standard library and the shared
+  admission and decision packages at their native paths; `python3
+  test/harness/lifecycle.py assemble DIR` builds the test layout.
+- Caller map `callers.json`: 70 callers (Geth 25, BSC 19, Bor 26) of the
+  accepted native trees, each with source function, entry points, effects
+  (EXECUTION, SYSTEM, CANONICAL, FINALITY), trigger (including no new block,
+  known branch, side chain, reorg, startup), route, decision kinds, status
+  (GUARDED by a merged patch, or PLANNED) and owner. Routes: OBSERVATION
+  (new execution under an admission observation), DECISION (canonical or
+  finality change without a new execution, through a `CANONICAL` or
+  `FINALITY` intent), REFUSE (forbidden in the capture profile, with the
+  fail-closed mechanism named), READ_ONLY. There is no bypass route. The map
+  rules are checked in Go (`Validate`) and independently in Python
+  (`lifecycle.py callers`); each client's routed callers must cover all four
+  effects.
+- Source pins: the map pins the accepted native trees of
+  `.project/bootstrap/components/candidate-lock.json` (Geth `1df30b18`, BSC
+  `54afaff4`, Bor `3a018e38`), the trees every merged patch applies to. The
+  NATIVE_CAPTURE_PROTOCOL table names earlier candidates (`9dffe6e9`,
+  `cdb7548b`, `a16f123d`); for BSC the difference is large (v1.7.8 against
+  v1.8.2). Every source function was checked against the accepted trees.
+  This is a technical decision within the protocol text ("versions remain
+  candidates"), not a change of guarantees.
+- Gate: a mapped caller enters with the held guard token (nested calls
+  re-enter with the same token, last in first out); native write choke
+  points call `Require(effect)`, which fails closed and stops the gate when
+  no open pass of a caller with that effect exists; `Coverage` and `Gaps`
+  give the AC-CAP-01-01 check that no required caller was missed.
+- Phases and the live boundary H: BOOTSTRAP (no boundary; initial native
+  sync passes without capture), RECOVERY (every restart; only the startup
+  driver and callers nested in its pass), LIVE, DRAIN. `GoLive` syncs the
+  boundary record (the native head read under the guard) before
+  `decision.Bridge.GoLive`; a restart keeps H and never sets a new one.
+- Finality evidence: one FINALITY decision per native setter call, a zero
+  new hash is a no-op (AC-LIF-05-02 unit form), a setter that ran stays
+  decided when a later step of the request fails (AC-LIF-05-03 unit form);
+  `ReadAttestation` is the error-aware BSC attestation read
+  (GENESIS_FALLBACK with the real genesis hash, AC-LIF-06-04; a lookup error
+  is a source error, AC-LIF-06-05).
+
+### Plan for the per-client blocks
+
+The three blocks start after block 0 merges and are independent of each
+other. Each installs `lifecycle` under `extractor/` next to `admission` and
+`decision` in its accepted native tree, opens the gate at node start, calls
+`Require` at its write choke points (state commit, head and canonical-hash
+writers, finality setters), routes every PLANNED row of its client in
+`callers.json`, and records private local evidence. Family-only files go
+under `adapters/<client>/lifecycle/native/` or `test/harness/fixtures/`. qa
+owns the AC matrix. Public cells stay NOT_RUN for E06 and E07 (D96, D98,
+D99). `python3 test/harness/lifecycle.py table` prints the full map.
+
+| Item | Source | Block |
+|---|---|---|
+| Caller map with routes, map rules, gate, choke-point check, coverage gaps, boundary H and phases, finality evidence rules (unit forms of AC-LIF-05-02, 05-03, 06-04, 06-05) | TASK_DECOMPOSITION card, NATIVE_CAPTURE_PROTOCOL | 0 |
+| Node wiring: the flag that installs the seams (and refuses snap sync, `--dev`, mining roles on a capture store), the caller of `Start`, where H is read (after the initial native sync, under the guard) | D100 | Geth, BSC, Bor |
+| Geth `SetCanonical` (forkchoice) as a `CANONICAL` decision; the head change after a retained `SIDE` block names it | NATIVE_CAPTURE_PROTOCOL; D100 | Geth (`geth.set-canonical`) |
+| Geth `recoverAncestors` re-execution exercised | D100 | Geth (`geth.recover-ancestors`) |
+| Geth `native-commit` identity from the binary (`internal/version` VCS revision or an extractor `-X` stamp), not the config file | D100 | Geth |
+| Geth `SetFinalized` and `SetSafe` as FINALITY decisions per setter call, marker batched with the native write; AC-LIF-05-02 and 05-03 on the native forkchoice path | ACCEPTANCE_CASES | Geth; qa verdict ETH |
+| BSC Parlia `ethAPI` over `SystemCallBackend` (built before `CreateConsensusEngine`, bound after `NewBlockChain`), and the miner, bid and node-ID limit | D100 | BSC (`bsc.system-call-api`, `bsc.sealing`) |
+| BSC `SIDE` path events: the accepted tree has no `chainSideFeed`; the decided `SIDE` path must send what native sends (`chainBlockFeed` from `insertChain`, the verified-header feed) | D101 | BSC (`bsc.import`) |
+| BSC side branches and reorgs: the seam admits only blocks on the head today, so a side branch fails closed at `Begin` | NATIVE_CAPTURE_PROTOCOL known branch | BSC (`bsc.side-chain`) |
+| BSC fast finality (`NotifyFinalized` from VotePool) as FINALITY decisions; AC-LIF-06-04 and 06-05 through `ReadAttestation` on native Parlia snapshots | ACCEPTANCE_CASES | BSC; qa verdict BSC |
+| BSC hash-scheme `Stop` head rewrite; `debug_executionWitness` reading the observation without `chainmu` | source review | BSC (`bsc.shutdown`, `bsc.execution-witness`) |
+| Bor `bor server` profile check (`state_provider.CheckProfile`) after `buildEth`, before `eth.New`; `Start` after `eth.New`, before `node.Start` | D100 | Bor |
+| Bor self-sealed blocks (`WriteBlockAndSetHead` from the miner) refused on a capture node | D101 | Bor (`bor.seal-write`) |
+| Bor milestone reorganization (`reorgToFinalized`: rewind, `insertFinalized`, `SetCanonical`, each with its own `chainmu`) as one decision or fail closed; milestone and checkpoint whitelist changes as FINALITY decisions, the guard taken before the whitelist lock | NATIVE_CAPTURE_PROTOCOL; source review | Bor |
+| Bor parallel EVM (on by default), preconf, pipelined and stateless paths refused by the profile check (D60) | NATIVE_CAPTURE_PROTOCOL | Bor |
+| Known-block activation (`writeKnownBlock`), `SetHead` rewinds (guard after the `chainmu` TryLock), side-chain writes and startup repair reconciled inside the recovery pass, in every client | NATIVE_CAPTURE_PROTOCOL startup and known branch | Geth, BSC, Bor |
+| AC-CAP-01-01 per family: the same scenario through the harness and the real native caller reaches the bridge on both paths with the same native result, and `Gaps` is empty | ACCEPTANCE_CASES | Geth (ETH), BSC (BSC), Bor (POLY); qa owns the matrix |
+| Typed safe and finalized observations, restart and regression semantics (AC-LIF-05-01, 05-04), GC anchor | TASK_DECOMPOSITION | Not lifecycle_seams: E05-01.eth_finality |
+| VotePool early evidence and header-attested GC source (AC-LIF-06-01 to 06-03) | TASK_DECOMPOSITION | Not lifecycle_seams: E05-01.bsc_finality |
+| Polygon checkpoint and milestone observations as typed evidence | TASK_DECOMPOSITION | Not lifecycle_seams: E05-01.polygon_observer |
+| Mirror and applied-decision frontier; release of retained side blocks | D101 | Not lifecycle_seams: E05-01.registry, E05-01.activation_gc |
+| Geth parallel processor for admitted blocks | D100 | Not lifecycle_seams: E04-04.import_pressure |
+| Power-loss evidence of the H seam and the full fault matrix | TASK_DECOMPOSITION | Not lifecycle_seams: E01-04.early_faults |
+
+#18 closes only when every client block is accepted and AC-CAP-01-01 passes
+for every family, AC-LIF-05-02 and 05-03 for ETH, and AC-LIF-06-04 and 06-05
+for BSC, on the private local slots under the D96 boundary.
+
+Evidence: [E01-02.lifecycle_seams](evidence/E01-02.lifecycle_seams.md).
+
+Next: Spec and Standards review of block 0, hosted CI, then the client
+blocks.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
