@@ -1,0 +1,255 @@
+diff --git a/core/blockchain.go b/core/blockchain.go
+index 78802db..952a1c8 100644
+--- a/core/blockchain.go
++++ b/core/blockchain.go
+@@ -414,6 +414,8 @@ type BlockChain struct {
+ 	// block being imported (read and written with chainmu held).
+ 	extractorHook        atomic.Pointer[ExtractorHook]
+ 	extractorObservation ExtractorObservation
++	// Extractor patch: the decision marker that the next head batch writes.
++	extractorMarker *extractorMarker
+ 
+ 	highestVerifiedHeader atomic.Pointer[types.Header]
+ 	highestVerifiedBlock  atomic.Pointer[types.Header]
+@@ -1532,6 +1534,8 @@ func (bc *BlockChain) writeHeadBlock(block *types.Block) {
+ 		rawdb.WriteHeadHeaderHash(batch, block.Hash())
+ 		rawdb.WriteHeadBlockHash(batch, block.Hash())
+ 		rawdb.WriteHeadFastBlockHash(batch, block.Hash())
++		// Extractor patch: the native decision marker joins the head batch.
++		bc.extractorHeadMarker(batch, block)
+ 		// Flush the whole batch into the disk, exit the node if failed
+ 		if err := batch.Write(); err != nil {
+ 			log.Crit("Failed to update chain indexes and markers in block db", "err", err)
+@@ -1971,6 +1975,10 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
+ // writeBlockWithState writes block, metadata and corresponding state data to the
+ // database.
+ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {
++	// Extractor patch: an observed block is written only by its decision step.
++	if bc.extractorObservation != nil {
++		return fmt.Errorf("%w: block %d written without a head decision", ErrExtractorDecision, block.NumberU64())
++	}
+ 	// Calculate the total difficulty of the block
+ 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+ 	if ptd == nil {
+@@ -2136,6 +2144,11 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
+ 	if err != nil {
+ 		return NonStatTy, err
+ 	}
++	// Extractor patch: an observed block is written by its decision step,
++	// after the child-root barrier and the transition intent.
++	if bc.extractorObservation != nil {
++		return bc.extractorWriteBlockAndSetHead(block, receipts, logs, state, currentBlock, reorg)
++	}
+ 	if reorg {
+ 		bc.highestVerifiedBlock.Store(types.CopyHeader(block.Header()))
+ 		bc.highestVerifiedBlockFeed.Send(HighestVerifiedBlockEvent{Header: block.Header()})
+@@ -3412,6 +3425,12 @@ func (bc *BlockChain) skipBlock(err error, it *insertIterator) bool {
+ 	if !errors.Is(err, ErrKnownBlock) {
+ 		return false
+ 	}
++	// Extractor patch: an observed block is always executed. Only the
++	// native-only replay of an EXEC_READY observation observes a block that
++	// is already stored; skipping it would move the head without a decision.
++	if bc.extractorObservation != nil {
++		return false
++	}
+ 	// If we're not using snapshots, we can skip this, since we have both block
+ 	// and (trie-) state
+ 	if bc.snaps == nil {
+diff --git a/core/extractor_decision.go b/core/extractor_decision.go
+new file mode 100644
+index 0000000..de6f893
+--- /dev/null
++++ b/core/extractor_decision.go
+@@ -0,0 +1,191 @@
++// Extractor patch (E01-02.decision_bridge, BSC block): the decision step of
++// an observed block.
++//
++// After native validation and EXEC_READY, an observed block is written only
++// by its decision step, in the order of the decision bridge: the native fork
++// choice, the child-root barrier (state commit, trie flush, sync), the
++// transition intent, the block batch, then the head batch with the native
++// decision marker, a sync, and the NATIVE_DECIDED record. The adapter
++// implements ExtractorDecider on its observation; core cannot import it.
++
++package core
++
++import (
++	"errors"
++	"fmt"
++	"math/big"
++
++	"github.com/ethereum/go-ethereum/core/rawdb"
++	"github.com/ethereum/go-ethereum/core/state"
++	"github.com/ethereum/go-ethereum/core/types"
++	"github.com/ethereum/go-ethereum/ethdb"
++	"github.com/ethereum/go-ethereum/log"
++)
++
++// ErrExtractorDecision refuses the write of an observed block outside its
++// decision step: an observation without one, or a write path that skips it.
++var ErrExtractorDecision = errors.New("extractor: observed block written outside its decision step")
++
++// ExtractorDecider is the decision step of an admitted observation.
++type ExtractorDecider interface {
++	// Intend runs after EXEC_READY, the native fork choice and the child-root
++	// barrier, before any write of the block. canonical is the fork choice:
++	// true makes the block the head (on top of head), false stores it as a
++	// side block. Intend records the transition intent durably, or returns
++	// the unresolved intent of the same transition saved before a restart.
++	// An error stops the import before any write.
++	Intend(chain *BlockChain, block *types.Block, head *types.Header, canonical bool) (ExtractorDecision, error)
++}
++
++// ExtractorDecision is one transition intent of an observed block.
++type ExtractorDecision interface {
++	// Marker is the native decision marker: the key and the value that the
++	// final authoritative batch of the decision writes.
++	Marker() (key, value []byte)
++	// Finalized is the finalized header of the decision evidence, which the
++	// native finality setter receives, or nil.
++	Finalized() *types.Header
++	// Written reports a native write of the decision: "block" after the
++	// block batch, "head" after the head batch, both before the sync.
++	Written(stage string)
++	// Resolve runs after the final batch is synced; it records the decision.
++	Resolve() error
++}
++
++// extractorMarker is the decision marker of a pending head batch.
++type extractorMarker struct {
++	block      [32]byte
++	key, value []byte
++}
++
++// extractorHeadMarker adds the pending decision marker of block to its head
++// batch.
++func (bc *BlockChain) extractorHeadMarker(batch ethdb.KeyValueWriter, block *types.Block) {
++	if marker := bc.extractorMarker; marker != nil && marker.block == block.Hash() {
++		if err := batch.Put(marker.key, marker.value); err != nil {
++			log.Crit("Failed to write the extractor decision marker", "err", err)
++		}
++	}
++}
++
++// extractorWriteBlockAndSetHead writes an observed block through its
++// decision step. The chain mutex is held; reorg is the native fork choice
++// against current. Every error before the head batch leaves the head and
++// the marker unwritten: an intent then stays unresolved for recovery.
++func (bc *BlockChain) extractorWriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log,
++	statedb *state.StateDB, current *types.Header, reorg bool) (WriteStatus, error) {
++	decider, ok := bc.extractorObservation.(ExtractorDecider)
++	if !ok {
++		return NonStatTy, fmt.Errorf("%w: block %d has no decision step", ErrExtractorDecision, block.NumberU64())
++	}
++	if reorg && block.ParentHash() != current.Hash() {
++		return NonStatTy, fmt.Errorf("%w: block %d needs a reorganization", ErrExtractorDecision, block.NumberU64())
++	}
++	if err := bc.extractorBarrier(block, statedb); err != nil {
++		return NonStatTy, err
++	}
++	decision, err := decider.Intend(bc, block, current, reorg)
++	if err != nil {
++		return NonStatTy, err
++	}
++	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
++	if ptd == nil {
++		return NonStatTy, errors.New("extractor: parent total difficulty is missing")
++	}
++	key, value := decision.Marker()
++	// The writes of writeBlockWithState; for a side block this batch is the
++	// final one and carries the marker.
++	externTd := new(big.Int).Add(block.Difficulty(), ptd)
++	batch := bc.db.NewBatch()
++	rawdb.WriteTd(batch, block.Hash(), block.NumberU64(), externTd)
++	rawdb.WriteBlock(batch, block)
++	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)
++	if bc.chainConfig.IsCancun(block.Number(), block.Time()) {
++		rawdb.WriteBlobSidecars(batch, block.Hash(), block.NumberU64(), block.Sidecars())
++	}
++	rawdb.WritePreimages(batch, statedb.Preimages())
++	if !reorg {
++		if err := batch.Put(key, value); err != nil {
++			return NonStatTy, err
++		}
++	}
++	err = batch.Write()
++	batch.Close()
++	if err != nil {
++		return NonStatTy, err
++	}
++	bc.hc.tdCache.Add(block.Hash(), externTd)
++	bc.blockCache.Add(block.Hash(), block)
++	bc.cacheReceipts(block.Hash(), receipts, block)
++	if bc.chainConfig.IsCancun(block.Number(), block.Time()) {
++		bc.sidecarsCache.Add(block.Hash(), block.Sidecars())
++	}
++	decision.Written("block")
++	status := SideStatTy
++	if reorg {
++		bc.highestVerifiedBlock.Store(types.CopyHeader(block.Header()))
++		bc.extractorMarker = &extractorMarker{block: block.Hash(), key: key, value: value}
++		bc.writeHeadBlock(block)
++		bc.extractorMarker = nil
++		decision.Written("head")
++		status = CanonStatTy
++	}
++	if err := bc.db.SyncKeyValue(); err != nil {
++		return NonStatTy, err
++	}
++	if err := decision.Resolve(); err != nil {
++		return NonStatTy, err
++	}
++	bc.futureBlocks.Remove(block.Hash())
++	if status == CanonStatTy {
++		bc.chainFeed.Send(ChainEvent{Header: block.Header(), Receipts: receipts, Transactions: block.Transactions()})
++		if len(logs) > 0 {
++			bc.logsFeed.Send(logs)
++		}
++		if finalized := decision.Finalized(); finalized != nil {
++			bc.SetFinalized(finalized)
++		}
++	}
++	return status, nil
++}
++
++// extractorBarrier is the child-root barrier of an observed block: it
++// commits the state, flushes the child root through the hash trie database
++// and syncs the store, so the child state is durable before the intent.
++func (bc *BlockChain) extractorBarrier(block *types.Block, statedb *state.StateDB) error {
++	if bc.triedb.Scheme() != rawdb.HashScheme {
++		return fmt.Errorf("%w: the child-root barrier needs the hash scheme", ErrExtractorDecision)
++	}
++	var (
++		root     = block.Root()
++		isEIP158 = bc.chainConfig.IsEIP158(block.Number())
++		isCancun = bc.chainConfig.IsCancun(block.Number(), block.Time())
++		err      error
++	)
++	if hasStateHook, hasStateSizer := bc.logger != nil && bc.logger.OnStateUpdate != nil, bc.stateSizer != nil; hasStateHook || hasStateSizer {
++		var update *state.StateUpdate
++		root, update, err = statedb.CommitWithUpdate(block.NumberU64(), isEIP158, isCancun)
++		if err != nil {
++			return err
++		}
++		if hasStateHook {
++			trUpdate, err := update.ToTracingUpdate()
++			if err != nil {
++				return err
++			}
++			bc.logger.OnStateUpdate(trUpdate)
++		}
++		if hasStateSizer {
++			bc.stateSizer.Notify(update)
++		}
++	} else if root, err = statedb.Commit(block.NumberU64(), isEIP158, isCancun); err != nil {
++		return err
++	}
++	if root != block.Root() {
++		return fmt.Errorf("%w: committed root %x, block root %x", ErrExtractorDecision, root, block.Root())
++	}
++	if err := bc.triedb.Commit(root, false); err != nil {
++		return err
++	}
++	return bc.db.SyncKeyValue()
++}

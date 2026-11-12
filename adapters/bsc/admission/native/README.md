@@ -327,6 +327,19 @@ the saved responses, so the obligation reaches EXEC_READY or NATIVE_REJECTED.
 Then it calls `GoLive`. While the admission is RECOVERY_ONLY, a live import
 of any other block is refused (`ErrMode`).
 
+E01-02.decision_bridge adds four things to the seam
+([README](../../decision/native/README.md)). Without the decision hook the
+seam behaves as above.
+- `Config.Cleanup`: with an `InputPurger`, `Start` opens the admission with
+  `admission.OpenWithCleanup` (D100).
+- `Seam.Replay`: the native-only replay of an EXEC_READY observation. Its
+  `Validated` checks the consumed and exec digests against the EXEC_READY
+  record (`ErrReplay`) and writes nothing.
+- `Seam.RecoverObligations`: the admission part of `Recover`, without
+  `GoLive`, for the decision bridge's recovery driver.
+- Accessors: the admission and token, the store, the capsule (`Static`) and
+  the genesis.
+
 ## Checks
 
 `go/unit_test.go` covers the observation reader, the snapshot log, the
