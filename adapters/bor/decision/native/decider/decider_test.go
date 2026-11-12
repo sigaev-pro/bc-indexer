@@ -96,6 +96,15 @@ func importOf(number uint64) Transition {
 		NewHead: head(number), LocalTD: fmt.Sprint(number - 1), ExternTD: fmt.Sprint(number)}
 }
 
+// canonicalOf is the CANONICAL transition onto block number whose branch is
+// block number-1, a known side block.
+func canonicalOf(number uint64) Transition {
+	tr := importOf(number)
+	tr.Kind, tr.OldHead = decision.Canonical, head(number+10)
+	tr.Branch = []BranchBlock{{Block: head(number - 1), Root: childRoot(number - 1)}}
+	return tr
+}
+
 // native is the fake native side. Complete plays the import path: the
 // transition of the block, Intend (recovering), then the native refusal and
 // Reject, or the write with the marker and Resolve.
@@ -107,6 +116,9 @@ type native struct {
 	fail      error
 	skip      bool
 	kind      decision.Kind
+	// branch makes Complete a CANONICAL transition whose branch is the
+	// block below.
+	branch bool
 	// other, if set, makes Complete settle that earlier decision instead.
 	other     *uint64
 	completed []string
@@ -126,6 +138,9 @@ func (n *native) Complete(t *admission.Token, obs admission.Observation) error {
 		return n.f.d.Resolve(t, *n.other)
 	}
 	tr := importOf(obs.Candidate.Number)
+	if n.branch {
+		tr = canonicalOf(obs.Candidate.Number)
+	}
 	if n.kind != "" {
 		tr.Kind = n.kind
 	}
@@ -578,22 +593,70 @@ func TestRecoverStopsWhenNativeRecoveryDoesNotSettle(t *testing.T) {
 	}
 }
 
-func TestRecoverRefusesAnIntentWithTwoMembers(t *testing.T) {
+func TestIntendNamesTheKnownBranch(t *testing.T) {
 	f := newFixture(t)
-	a, b := f.execReady(3), f.execReady(4)
-	in := decision.Intent{Kind: decision.Import, OldHead: head(2), NewHead: head(4), EvidenceDigest: hexOf("e"),
-		Events: true, Members: []decision.Member{
-			{Observation: a.Key, ExecReadyDigest: a.ExecReady.Digest, ChildRoot: childRoot(3)},
-			{Observation: b.Key, ExecReadyDigest: b.ExecReady.Digest, ChildRoot: childRoot(4)}}}
-	if _, err := f.b.Intend(f.token, in); err != nil {
+	side := f.execReady(3)
+	tip := f.execReady(4)
+	rec := f.intend(canonicalOf(4))
+	want := []decision.Member{
+		{Observation: side.Key, Block: blockHash(3), ExecReadyDigest: side.ExecReady.Digest, ChildRoot: childRoot(3)},
+		{Observation: tip.Key, Block: blockHash(4), ExecReadyDigest: tip.ExecReady.Digest, ChildRoot: childRoot(4)}}
+	if !slices.Equal(rec.Members, want) || rec.Kind != decision.Canonical || !rec.Events {
+		t.Fatalf("intent %+v, want members %+v", rec, want)
+	}
+	f.write(rec)
+	if err := f.d.Resolve(f.token, rec.Sequence); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{side.Key, tip.Key} {
+		if obs := f.observation(key); obs.State != "" {
+			t.Fatalf("%s is still %s after the CANONICAL decision", key, obs.State)
+		}
+	}
+}
+
+func TestIntendRefusesABranchBlockWithoutObservation(t *testing.T) {
+	f := newFixture(t)
+	f.execReady(4)
+	if _, err := f.d.Intend(f.token, canonicalOf(4), false); !errors.Is(err, ErrNoObservation) {
+		t.Fatalf("intent with a branch block that has no observation: %v", err)
+	}
+	if len(f.decisions()) != 0 {
+		t.Fatal("a refused intent was recorded")
+	}
+}
+
+func TestRecoverCompletesTheExecutedMemberOfACanonicalIntent(t *testing.T) {
+	f := newFixture(t)
+	side := f.execReady(3)
+	tip := f.execReady(4)
+	rec := f.intend(canonicalOf(4))
+	f.reopen()
+	f.native.branch = true
+	report, err := f.d.Recover(f.token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.native.completed, []string{tip.Key}) || !slices.Equal(report.Completed, []uint64{rec.Sequence}) {
+		t.Fatalf("report %+v, completions %v", report, f.native.completed)
+	}
+	if obs := f.observation(side.Key); obs.State != "" {
+		t.Fatalf("the branch member is still %s", obs.State)
+	}
+}
+
+func TestRecoverRefusesAnIntentWithoutMembers(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.b.Intend(f.token, decision.Intent{Kind: decision.Finality, OldHead: head(2), NewHead: head(2),
+		EvidenceDigest: hexOf("e")}); err != nil {
 		t.Fatal(err)
 	}
 	f.reopen()
 	if _, err := f.d.Recover(f.token); !errors.Is(err, decision.ErrInvariant) {
-		t.Fatalf("recovery of a two-member intent: %v", err)
+		t.Fatalf("recovery of an intent without members: %v", err)
 	}
 	if len(f.native.completed) != 0 {
-		t.Fatal("recovery completed a member of a two-member intent")
+		t.Fatal("recovery completed an intent without members")
 	}
 }
 

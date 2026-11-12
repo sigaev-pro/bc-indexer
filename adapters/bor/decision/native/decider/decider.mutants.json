@@ -229,10 +229,10 @@
       "replacement": "\t\tif !saved.Marker {"
     },
     {
-      "name": "an intent with two members is completed",
+      "name": "an intent without members is completed",
       "file": "extractor/decision/native/decider/decider.go",
-      "original": "\t\t\tif len(saved.Intent.Members) != 1 {",
-      "replacement": "\t\t\tif len(saved.Intent.Members) < 1 {"
+      "original": "\t\t\tif len(saved.Intent.Members) == 0 {",
+      "replacement": "\t\t\tif false {"
     },
     {
       "name": "another settled decision is accepted",
@@ -289,6 +289,24 @@
       "original": "\treturn admission.Observation{}, fmt.Errorf(\"%w: member %s is not open\", decision.ErrInvariant, key)",
       "replacement": "\treturn admission.Observation{Key: key, State: admission.ExecReady}, nil",
       "equivalent": "an open intent's member is open: the admission closes an EXEC_READY observation only through the bridge, which resolves the intent first"
+    },
+    {
+      "name": "branch blocks are not members",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\tfor _, b := range append(append([]BranchBlock{}, tr.Branch...), BranchBlock{Block: tr.Block, Root: tr.ChildRoot}) {",
+      "replacement": "\tfor _, b := range []BranchBlock{{Block: tr.Block, Root: tr.ChildRoot}} {"
+    },
+    {
+      "name": "recovery completes the first member",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tlast := saved.Intent.Members[len(saved.Intent.Members)-1]",
+      "replacement": "\t\t\tlast := saved.Intent.Members[0]"
+    },
+    {
+      "name": "branch member binds the executed root",
+      "file": "extractor/decision/native/decider/decider.go",
+      "original": "\t\t\tExecReadyDigest: obs.ExecReady.Digest, ChildRoot: b.Root})",
+      "replacement": "\t\t\tExecReadyDigest: obs.ExecReady.Digest, ChildRoot: tr.ChildRoot})"
     }
   ]
 }

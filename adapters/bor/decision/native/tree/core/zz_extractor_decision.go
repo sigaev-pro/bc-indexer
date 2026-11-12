@@ -40,8 +40,12 @@ var ErrExtractorDecision = errors.New("extractor decision: native write does not
 // executed block proposes, predicted with the native fork choice before the
 // write.
 type ExtractorTransition struct {
-	Kind     string
-	Block    *types.Block
+	Kind  string
+	Block *types.Block
+	// Branch lists, for CANONICAL, the stored blocks of the new branch below
+	// Block and above the common ancestor with the canonical chain, in
+	// ascending order: known side blocks that become canonical with Block.
+	Branch   []*types.Header
 	OldHead  *types.Header
 	NewHead  *types.Header
 	LocalTD  *big.Int
@@ -226,8 +230,18 @@ func (bc *BlockChain) extractorTransition(block *types.Block, setHead bool) (Ext
 	t.NewHead = block.Header()
 	if block.ParentHash() == current.Hash() {
 		t.Kind = ExtractorImport
-	} else {
-		t.Kind = ExtractorCanonical
+		return t, nil
+	}
+	t.Kind = ExtractorCanonical
+	for header := bc.GetHeader(block.ParentHash(), block.NumberU64()-1); ; {
+		if header == nil {
+			return ExtractorTransition{}, consensus.ErrUnknownAncestor
+		}
+		if bc.GetCanonicalHash(header.Number.Uint64()) == header.Hash() {
+			break
+		}
+		t.Branch = append([]*types.Header{header}, t.Branch...)
+		header = bc.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	}
 	return t, nil
 }

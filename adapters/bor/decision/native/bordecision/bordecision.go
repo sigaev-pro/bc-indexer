@@ -128,8 +128,12 @@ func (n *Node) Attach(observer core.ExtractorObserver) {
 }
 
 func transition(t core.ExtractorTransition) decider.Transition {
-	return decider.Transition{Kind: decision.Kind(t.Kind), Block: headOf(t.Block.Header()), ChildRoot: hexOf(t.Block.Root()),
+	tr := decider.Transition{Kind: decision.Kind(t.Kind), Block: headOf(t.Block.Header()), ChildRoot: hexOf(t.Block.Root()),
 		OldHead: headOf(t.OldHead), NewHead: headOf(t.NewHead), LocalTD: t.LocalTD.String(), ExternTD: t.ExternTD.String()}
+	for _, h := range t.Branch {
+		tr.Branch = append(tr.Branch, decider.BranchBlock{Block: headOf(h), Root: hexOf(h.Root)})
+	}
+	return tr
 }
 
 // intent implements core.ExtractorIntent over a recorded intent.

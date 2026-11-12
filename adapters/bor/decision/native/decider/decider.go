@@ -64,17 +64,28 @@ type Transition struct {
 	// hex digits), durable after the child-root barrier.
 	Block     decision.Head
 	ChildRoot string
-	OldHead   decision.Head
-	NewHead   decision.Head
+	// Branch lists, for CANONICAL, the stored blocks of the new branch below
+	// Block, ascending, with their state roots: known side blocks that
+	// become canonical with Block.
+	Branch  []BranchBlock
+	OldHead decision.Head
+	NewHead decision.Head
 	// LocalTD and ExternTD are the total difficulties of the old head and of
 	// the block (decimal), the inputs of the native fork choice.
 	LocalTD  string
 	ExternTD string
 }
 
+// BranchBlock is one stored block of the new branch of a CANONICAL
+// transition.
+type BranchBlock struct {
+	Block decision.Head
+	Root  string
+}
+
 // EvidenceDigest is the digest of the native evidence of a transition: the
 // kind, the block, its child root, the old and new heads and the fork choice
-// inputs.
+// inputs. The branch blocks are members of the intent.
 func EvidenceDigest(t Transition) string {
 	return digest(tagEvidence, string(t.Kind), strconv.FormatUint(t.Block.Number, 10), t.Block.Hash, t.ChildRoot,
 		strconv.FormatUint(t.OldHead.Number, 10), t.OldHead.Hash, strconv.FormatUint(t.NewHead.Number, 10),
@@ -146,16 +157,23 @@ func (d *Decider) authoritative(t *admission.Token, block decision.Head) (admiss
 	return *found, nil
 }
 
-// intent builds the transition intent of t over the authoritative
-// observation of its block. Only IMPORT and CANONICAL have public events.
+// intent builds the transition intent of t: one member per block, the
+// authoritative observation of each branch block (a known side block that a
+// SIDE decision retains) in ascending order, then that of the executed
+// block. A branch block without an EXEC_READY observation has no corpus
+// binding, so the intent is refused. Only IMPORT and CANONICAL have public
+// events.
 func (d *Decider) intent(t *admission.Token, tr Transition) (decision.Intent, error) {
-	obs, err := d.authoritative(t, tr.Block)
-	if err != nil {
-		return decision.Intent{}, err
+	members := []decision.Member{}
+	for _, b := range append(append([]BranchBlock{}, tr.Branch...), BranchBlock{Block: tr.Block, Root: tr.ChildRoot}) {
+		obs, err := d.authoritative(t, b.Block)
+		if err != nil {
+			return decision.Intent{}, err
+		}
+		members = append(members, decision.Member{Observation: obs.Key, Block: obs.Candidate.Hash,
+			ExecReadyDigest: obs.ExecReady.Digest, ChildRoot: b.Root})
 	}
-	return decision.Intent{Kind: tr.Kind, OldHead: tr.OldHead, NewHead: tr.NewHead,
-		Members: []decision.Member{{Observation: obs.Key, Block: obs.Candidate.Hash,
-			ExecReadyDigest: obs.ExecReady.Digest, ChildRoot: tr.ChildRoot}},
+	return decision.Intent{Kind: tr.Kind, OldHead: tr.OldHead, NewHead: tr.NewHead, Members: members,
 		EvidenceDigest: EvidenceDigest(tr), Events: tr.Kind != decision.Side}, nil
 }
 
@@ -303,11 +321,14 @@ func (d *Decider) Recover(t *admission.Token) (Report, error) {
 			}
 			report.Resolved = append(report.Resolved, seq)
 		} else {
-			if len(saved.Intent.Members) != 1 {
-				return report, fmt.Errorf("%w: intent %d has %d members", decision.ErrInvariant, seq,
-					len(saved.Intent.Members))
+			// The executed block is the last member; the others are known
+			// side blocks that the transition makes canonical. This driver
+			// never writes an intent without a member.
+			if len(saved.Intent.Members) == 0 {
+				return report, fmt.Errorf("%w: intent %d has no member", decision.ErrInvariant, seq)
 			}
-			obs, err := d.observation(t, saved.Intent.Members[0].Observation)
+			last := saved.Intent.Members[len(saved.Intent.Members)-1]
+			obs, err := d.observation(t, last.Observation)
 			if err != nil {
 				return report, err
 			}

@@ -199,6 +199,9 @@ func TestExtractorDecisionSideAndCanonical(t *testing.T) {
 		t.Fatalf("kinds %v, want %v", kinds, want)
 	}
 	for i, tr := range d.intents {
+		if tr.Kind != ExtractorCanonical && len(tr.Branch) != 0 {
+			t.Fatalf("%s intent %d has a branch", tr.Kind, i)
+		}
 		switch tr.Kind {
 		case ExtractorSide:
 			if tr.OldHead.Hash() != tr.NewHead.Hash() {
@@ -211,6 +214,19 @@ func TestExtractorDecisionSideAndCanonical(t *testing.T) {
 		case ExtractorCanonical:
 			if tr.Block.ParentHash() == tr.OldHead.Hash() || tr.NewHead.Hash() != tr.Block.Hash() {
 				t.Fatalf("CANONICAL intent %d does not move the head onto another branch", i)
+			}
+			// The branch is the stored side blocks below the block, down to
+			// the common ancestor (genesis), ascending.
+			branch := []common.Hash{}
+			for _, h := range tr.Branch {
+				branch = append(branch, h.Hash())
+			}
+			want := []common.Hash{}
+			for _, b := range side[:tr.Block.NumberU64()-1] {
+				want = append(want, b.Hash())
+			}
+			if !slices.Equal(branch, want) {
+				t.Fatalf("CANONICAL intent %d has branch %x, want %x", i, branch, want)
 			}
 		}
 	}
