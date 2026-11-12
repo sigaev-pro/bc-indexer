@@ -154,7 +154,7 @@ then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
 Status: block merged in PR #158 at `7ee8eb0` (Part of #17). Base main `add17e6`
 (block 0, PR #157). Branch/worktree: `claude/e01-02-decision-geth` /
-`e01-02-admission-geth-95b3ee`. qa verdict block: IN_PROGRESS on branch
+`e01-02-admission-geth-95b3ee`. qa verdict block: draft PR #162 on branch
 `claude/e01-02-decision-geth-qa` from main `7ee8eb0` (Part of #17). Evidence:
 [E01-02.decision_bridge.geth](evidence/E01-02.decision_bridge.geth.md);
 design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/native/README.md).
