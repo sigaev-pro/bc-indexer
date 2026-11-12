@@ -198,8 +198,8 @@ the coordinator.
 
 ## E01-02.decision_bridge — Bor block
 
-Status: IN_PROGRESS (part of #17). Base `add17e6` (block 0 merged in PR
-#157). Branch/worktree: `claude/e01-02-decision-bor` /
+Status: IN_PROGRESS (part of #17), draft PR #160. Base `add17e6` (block 0
+merged in PR #157). Branch/worktree: `claude/e01-02-decision-bor` /
 `e01-02-admission-bor-b95e1c`. Allowed paths: `adapters/bor/decision/native/**`,
 `adapters/bor/admission/native/**` (the switch to `OpenWithCleanup` and the
 recovery hooks), `test/harness/fixtures/admission_bor/**`,
@@ -236,6 +236,31 @@ Design, in full in [adapters/bor/decision/native/README.md](../adapters/bor/deci
   natively before the node goes live, not left for a later live import.
 - `NoMirror` until E05-01.registry: every `BATCH` decision keeps one
   obligation and its marker.
+
+Draft PR #160. Measured head `10f90e9` (origin/main `3cc16fe` merged); later
+commits change only docs. Evidence:
+[E01-02.decision_bridge.bor](evidence/E01-02.decision_bridge.bor.md).
+
+Records at `10f90e9`, all PASS: preparation 03, run 03 (21 scenarios), and
+the mutants: gate 22 killed, obligation 71 killed, decider 48 killed and 2
+labeled equivalent, Python judge 169 killed. Kept under D83: preparation 01
+and run 01 on `ae9e447` (PASS, superseded) and preparation 02 on `b1dc393`
+(interrupted by the author when review 001 superseded that head).
+
+Reviews: Spec PASS on `10f90e9` (review 001 P1-1, the interrupted
+`CANONICAL` reorg, is fixed). Standards: every code finding is fixed; P2-3
+(the run records) is closed by the evidence above. Two comment-only notes
+(the wording of one judge comment and the place of one comment in
+`bordecision.go`) stay open, so that the commits after the measured head
+change only docs.
+
+qa verdict (POLY private local): AC-CAP-07-01, 07-02, 07-03 and 07-06 PASS.
+07-06 uses a whitelisted milestone that conflicts with the block as the
+native outcome fixture. Polygon Mainnet and Amoy stay NOT_RUN (D96, D98,
+D99).
+
+Next: the docs-only confirmation review, hosted CI on the final head, the
+final review comment, then READY to the coordinator.
 
 ## E01-02.admission — Guard, pin and ADMITTED seam (issue #16)
 
