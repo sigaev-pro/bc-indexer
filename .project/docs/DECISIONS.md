@@ -1,5 +1,22 @@
 # Дерево решений и журнал интервью
 
+## D101 — Long runs gated on E05; owners of the remaining decision_bridge limits (2026-11-12)
+
+After the four E01-02.decision_bridge blocks merged (PRs #157, #159, #160 and #158), the coordinator asked a read-only Spec reviewer to audit their evidence and README limits for the acceptance record. The audit found three gaps. First, the ETH slot has no explicit qa verdict. Second, the condition that E05-01.registry and E05-01.activation_gc must land before any long-running run was recorded only as prose. Third, several smaller limits had no owner. The coordinator asked the owner two questions; for each, the owner selected the coordinator's proposed option (marked as recommended):
+
+1. Long runs: "Gate long runs (Recommended)". Without E05-01.registry (the mirror and the applied-decision frontier) and E05-01.activation_gc (release of retained side blocks and lifecycle GC), the pins, native state, markers and obligations of decision_bridge grow without limit. No long-running, load or product run of the capture path may start until both cards are accepted. Short measured test runs, such as the bounded E04 cases, stay allowed. The task order of DEVELOPMENT_PLAN does not change. The first task that needs a long run, for example E04-04.import_pressure, records a BLOCKED_DECISION if these cards are not yet accepted.
+2. Owners of the other limits: "Agree (Recommended)". The coordinator's proposed assignments are accepted:
+   - A BSC native bad-block record is keyed by block hash only, so a stale record turns a durable intent into a rejection. This fails closed, because a re-import makes a new observation. It is accepted as recorded in the BSC native README.
+   - E01-02.lifecycle_seams: the BSC `SIDE` path does not send `chainSideFeed`, which differs from native behavior, and Bor self-sealed blocks are written through `WriteBlockAndSetHead` without an observation or decision.
+   - E05-01.activation_gc: the orphan capsule chunks of an interrupted `SealCapsule`, which are never purged.
+   - E01-04.early_faults: paths checked by source review only. These are the Geth mid-reorg completion with a longer old branch, the BSC store and write errors, and `skipBlock`.
+
+Recorded technical decisions, not owner answers:
+
+- The ETH slot gets an explicit qa AC-CAP-07 verdict from the accepted Geth records 03 in a small qa block before #17 closes, as PR #152 did for admission. This is in scope and needs no owner decision.
+- The POLY verdict rests on the probe for the cases the single-branch probe chain can reach. The `SIDE` and `CANONICAL` crash paths and the partial-reorg completion rest on native tests in the Bor graph (Bor native README limits). The BSC 07-06 case uses a native bad-block record written by the fixture, which ACCEPTANCE_CASES allows.
+- As with D96 to D100, TASK_DECOMPOSITION is a normative mirror and is not edited. The cards named above are read through this decision. This decision assigns owners and adds a gate on long runs. It does not change product guarantees or acceptance cases. Every public cell stays NOT_RUN.
+
 ## D100 — Bor hazards fixed in E01-02.admission; owners of the remaining admission limits (2026-11-11)
 
 After all five E01-02.admission blocks merged (PRs #146 to #150), the coordinator audited their evidence and native README limits for the acceptance record (PR #151). The Spec review of that record found limits that are neither owned nor accepted. The coordinator asked the owner three questions; for each, the owner selected the coordinator's proposed option (marked as recommended):
