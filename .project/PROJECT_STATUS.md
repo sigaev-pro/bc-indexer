@@ -140,6 +140,55 @@ the client sessions start goes to the coordinator.
 Next: hosted CI and the final review comment on the final head; then the
 three client blocks after block 0 merges.
 
+### POLY block
+
+Owner agreement under D97: on 2026-11-13 the owner agreed the roles and the
+split for the client blocks, replying "clean up the rest and start
+everything" after approving the #16-style split. That means block 0 core,
+then one native-engineer session per family, with qa for the per-case matrix
+and two read-only reviewers.
+
+Status: IN_PROGRESS (part of #19), draft PR #166 on branch
+`claude/e01-03-smoke-corpus-poly`, from main `3cc31ec` (block 0 merged in
+PR #164). Measured head `3943c7f`; later commits change only docs. Paths:
+`test/native_corpus/poly/**`,
+`.project/evidence/E01-03.smoke_corpus.poly.md` and this subsection.
+
+Design ([POLY README](../test/native_corpus/poly/README.md)):
+- A probe in the accepted Bor module graph with the E01-02.admission and
+  decision_bridge patch sets seals blocks 1 to 4 on the private fixture. The
+  block 4 state sync comes from the in-process Heimdall stub (D98 item 6).
+- A new node imports the blocks through `borimport.Start` and
+  `bordecision.Start`, restarts, and imports them again.
+- It then exports the receipts, the native `callTracer` frames, the state
+  before and after each transaction (native re-execution checked against the
+  stored receipts), the block-end state, the state sync receipt and
+  `lastStateId()`.
+- The driver builds the observation and runs block 0's comparator.
+- One fixture input is not named in ORACLE.md:
+  `stateSyncConfirmationDelay` `{"0": 0}`. Native Bor panics without it, the
+  admission fixture uses the same value, and no expected value depends on it
+  (evidence).
+
+Evidence: [E01-03.smoke_corpus.poly](evidence/E01-03.smoke_corpus.poly.md).
+Records at `3943c7f`, all PASS: preparation 03, run 03 (five cases, 0
+differences, no bridge failure), 46 portable tests, 46 Python mutants killed.
+Earlier records on `073517c` (all PASS) and `d2208f8` (tests and mutants
+PASS, preparation never started) are kept under D83.
+
+Reviews:
+- 001 on `073517c`: Spec PASS with P3s; Standards REQUEST_CHANGES (P2:
+  `observe` rewrote retained records). All fixed.
+- 002 on `d2208f8`: both PASS, with two Standards P3s, now fixed.
+- 003 on `3943c7f`: both PASS, with no open finding.
+
+qa verdict (POLY private local): transfer, nested-revert, fee,
+system-action (StateSync before Madhugiri) and empty-block PASS; family POLY
+PASS. Polygon Mainnet and Amoy stay NOT_RUN (D96).
+
+Next: a docs-only confirmation review, hosted CI on the final head, the final
+review comment, then READY to the coordinator.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
