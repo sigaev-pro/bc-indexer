@@ -161,10 +161,11 @@ record merges.
 
 ## E01-02.decision_bridge — Geth block
 
-Status: merged in PR #158 at `7ee8eb0` (final head `5087db5`, Part of #17).
-Open: the qa AC-CAP-07 verdict for the private ETH slot (D101). Base main
-`add17e6` (block 0, PR #157). Branch/worktree: `claude/e01-02-decision-geth` /
-`e01-02-admission-geth-95b3ee`. Evidence:
+Status: ACCEPTED in PR #158 at merge `7ee8eb0` (final head `5087db5`, Part
+of #17). The qa AC-CAP-07 verdict for the private ETH slot (D101) is below,
+from draft PR #162 on branch `claude/e01-02-decision-geth-qa` (base main
+`7ee8eb0`). Base main `add17e6` (block 0, PR #157). Branch/worktree:
+`claude/e01-02-decision-geth` / `e01-02-admission-geth-95b3ee`. Evidence:
 [E01-02.decision_bridge.geth](evidence/E01-02.decision_bridge.geth.md);
 design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/native/README.md).
 
@@ -186,8 +187,11 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
   - run 03 PASS in 1,282 seconds: the probe passed and 41 of 41 native
     mutants were killed;
   - Python mutants: 96 of 96 killed.
-  - AC-CAP-07-01, 07-02, 07-03 and 07-06 pass for the private local ETH slot
-    only. Every public cell stays NOT_RUN (D96, D98, D99).
+- qa verdict (private local ETH slot, from records 03; nothing rerun):
+  AC-CAP-07-01, 07-02, 07-03 and 07-06 PASS. 07-06 uses the probe's native
+  outcome fixture after the intent. At the native crash points of 07-03 the
+  probe keeps every native write made so far. `ethereum-mainnet`,
+  `ethereum-sepolia` and `ethereum-hoodi` stay NOT_RUN (D96, D98, D99).
 - Kept attempts (D83):
   - preparation 01 (`2ce8eee`) failed on a `go vet` deadline under host load;
   - preparation 02 (`d04b20b`) passed but was superseded before its run.
@@ -199,6 +203,9 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
 - Limits (README): the hash scheme only; decided state is kept on disk; no
   mirror before E05-01.registry; head changes without a new block wait for
   E01-02.lifecycle_seams.
+
+Next: Spec and Standards confirmation of PR #162 on its final head, hosted CI,
+then merge with the owner's permission for that PR.
 
 ## E01-02.decision_bridge — BSC block
 
