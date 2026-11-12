@@ -366,6 +366,45 @@ func TestUnitRecoveryCompletesTheSavedIntent(t *testing.T) {
 	}
 }
 
+func TestUnitCanonicalMarkerIsInTheFinalHeadBatch(t *testing.T) {
+	f := newFixture(t, 5)
+	db := rawdb.NewMemoryDatabase()
+	chain := newChain(t, db, f)
+	if _, err := chain.InsertChain(f.blocks[:3]); err != nil {
+		t.Fatal(err)
+	}
+	attachDecisions(t, chain, db, f, Options{}, DecisionOptions{Point: func(name string) {
+		if name == "intermediate" {
+			panic(crashed{"intermediate"})
+		}
+	}})
+	if _, err := chain.InsertBlockWithoutSetHead(context.Background(), f.blocks[3], false); err != nil {
+		t.Fatal(err)
+	}
+	// reorg writes the head batch of the side block 4 first; the crash comes
+	// after it, before the head batch of 5.
+	crashAt(t, "intermediate", func() { _, _ = chain.InsertChain(f.blocks[4:]) })
+	if keys := markers(t, db); len(keys) != 0 {
+		t.Fatalf("the marker was written before the final head batch: %v", keys)
+	}
+	if rawdb.ReadHeadBlockHash(db) != f.blocks[3].Hash() {
+		t.Fatal("the crash did not come after the intermediate head batch")
+	}
+	chain = newChain(t, db, f)
+	defer chain.Stop()
+	d, events := attachDecisions(t, chain, db, f, Options{}, DecisionOptions{})
+	if got := strings.Join(*events, ","); got != "opened,bridge_opened,settling,decided,live" {
+		t.Fatalf("events %s", got)
+	}
+	list := decisions(t, d)
+	if len(list) != 1 || list[0].Intent.Kind != decision.Canonical || list[0].Decided == nil {
+		t.Fatalf("decisions: %+v", list)
+	}
+	if chain.CurrentBlock().Hash() != f.blocks[4].Hash() || len(livePins(t, db)) != 0 {
+		t.Fatal("recovery did not complete the CANONICAL head change")
+	}
+}
+
 func TestUnitRecoveryReplaysAVolatileChildRoot(t *testing.T) {
 	f := newFixture(t, 5)
 	db := rawdb.NewMemoryDatabase()

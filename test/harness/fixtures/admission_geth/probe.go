@@ -135,6 +135,8 @@ type Spec struct {
 	// Refuse names the blocks whose transition the native outcome fixture
 	// refuses after the intent.
 	Refuse []string `json:"refuse"`
+	// CrashSkip lets this many matching crash triggers pass before the crash.
+	CrashSkip int `json:"crash_skip"`
 }
 
 // chainInputs builds the deterministic genesis and blocks 1..target+1, and
@@ -220,6 +222,20 @@ type powerLossStore struct {
 	pending map[string][]byte
 	order   []string
 	spec    Spec
+	skipped int
+}
+
+// trigger reports whether a matching crash trigger crashes now, after
+// spec.CrashSkip matches have passed.
+func (s *powerLossStore) trigger(match bool) bool {
+	if !match {
+		return false
+	}
+	if s.skipped < s.spec.CrashSkip {
+		s.skipped++
+		return false
+	}
+	return true
 }
 
 func (s *powerLossStore) Has(key []byte) (bool, error) {
@@ -270,10 +286,10 @@ func (s *powerLossStore) matches(suffix string) bool {
 }
 
 func (s *powerLossStore) SyncKeyValue() error {
-	if s.matches(s.spec.CrashBeforeSync) {
+	if s.trigger(s.matches(s.spec.CrashBeforeSync)) {
 		crash(s.log, "before_sync"+s.spec.CrashBeforeSync)
 	}
-	after := s.matches(s.spec.CrashAfterSync)
+	after := s.trigger(s.matches(s.spec.CrashAfterSync))
 	for _, key := range s.order {
 		var err error
 		if value := s.pending[key]; value == nil {
@@ -460,7 +476,7 @@ func attempt(specPath string) {
 				return nil
 			},
 			Point: func(name string) {
-				if name == spec.CrashPoint {
+				if store.trigger(name == spec.CrashPoint) {
 					crash(log, "native/"+name)
 				}
 			}}
@@ -1009,6 +1025,40 @@ func run(genesisPath, work, output, commit, geth string) {
 				s.Imports, s.CrashBeforeSync, s.CrashAfterSync, s.CrashPoint, s.Refuse = row.imports, "", "", "", nil
 			})))
 	}
+	// AC-CAP-07-03 on a CANONICAL write: the target is first written as a
+	// SIDE decision (engine newPayload), then the next block moves the head
+	// over it with one CANONICAL decision whose members are 301 and the
+	// retained 300. Its native mutation has three batches: the block batch of
+	// 301, the head batch of 300 inside reorg, and the head batch of 301 with
+	// the marker.
+	for _, row := range []struct {
+		name, after, point string
+	}{
+		// The intent is durable, nothing native of 301 is written.
+		{name: "decision_canonical_intent", after: "-decision-v1/" + producerID + "." + runID + "/counter"},
+		// After the block batch of 301.
+		{name: "decision_canonical_mutated", point: "mutated"},
+		// After the intermediate head batch of 300, before the final one.
+		{name: "decision_canonical_intermediate", point: "intermediate"},
+	} {
+		spec := with(decided, func(s *Spec) {
+			s.Datadir = dir(row.name)
+			s.Imports = []string{"target-without-head", "next"}
+			s.CrashAfterSync, s.CrashPoint = row.after, row.point
+			// The SIDE write of 300 passes the same trigger once ("intermediate"
+			// has no earlier match).
+			if row.point != "intermediate" {
+				s.CrashSkip = 1
+			}
+		})
+		prefix := strings.ReplaceAll(row.name, "_", "-")
+		scenario(row.name,
+			runAttempt(work, prefix+"-1-crash", spec),
+			runAttempt(work, prefix+"-2-recover", with(spec, func(s *Spec) {
+				s.Imports, s.CrashAfterSync, s.CrashPoint, s.CrashSkip = nil, "", "", 0
+			})))
+	}
+
 	// AC-CAP-07-06 live: the native refusal is recorded at once.
 	scenario("decision_reject_live", runAttempt(work, "decision-reject-live-1", with(decided, func(s *Spec) {
 		s.Datadir = dir("decision_reject_live")

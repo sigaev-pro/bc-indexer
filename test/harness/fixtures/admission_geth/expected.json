@@ -129,6 +129,9 @@
     "decision_mutation",
     "decision_marker",
     "decision_rejected",
+    "decision_canonical_intent",
+    "decision_canonical_mutated",
+    "decision_canonical_intermediate",
     "decision_reject_live"
   ],
   "attempts": {
@@ -205,6 +208,18 @@
     ],
     "decision_reject_live": [
       "decision-reject-live-1"
+    ],
+    "decision_canonical_intent": [
+      "decision-canonical-intent-1-crash",
+      "decision-canonical-intent-2-recover"
+    ],
+    "decision_canonical_mutated": [
+      "decision-canonical-mutated-1-crash",
+      "decision-canonical-mutated-2-recover"
+    ],
+    "decision_canonical_intermediate": [
+      "decision-canonical-intermediate-1-crash",
+      "decision-canonical-intermediate-2-recover"
     ]
   }
 }

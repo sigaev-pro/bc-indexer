@@ -30,7 +30,7 @@ in RECOVERY_ONLY, the observation key, and the known-block refusal of
 | `blockchain_decision_field` | `core/blockchain.go` | `BlockChain` holds the decision seam and the decision of the write in progress |
 | `process_block_decision` | `core/blockchain.go` `ProcessBlock` | After `ExecReady`, an observed state write starts a decision (`Write`); before the bridge is open (the admission part of recovery) the block is not written |
 | `write_block_decision` | `core/blockchain.go` `writeBlockWithState` | A decided write runs `extractorWriteBlockWithState`: this is the side-chain write of `InsertBlockWithoutSetHead` and the block batch of a head change |
-| `head_batch_marker` | `core/blockchain.go` `writeHeadBlock` | The head batch of `writeBlockAndSetHead` carries the native decision marker, then `SyncKeyValue` |
+| `head_batch_marker` | `core/blockchain.go` `writeHeadBlock` | Only the head batch of the decided block carries the native decision marker, then `SyncKeyValue`; the head batches that `reorg` writes for lower blocks of the new branch carry none |
 | `process_block_resolve` | `core/blockchain.go` `ProcessBlock` | `Resolve` after the batch with the marker is durable, then `Cleanup` |
 | `backend_attach_decisions` | `eth/backend.go` | The shipped node calls `AttachDecisions` instead of `Attach` |
 
@@ -63,7 +63,10 @@ observation is EXEC_READY.
 4. The native mutation: the block batch (block, receipts, preimages; for
    `SIDE` also the marker) is written and synced; for a head change,
    `writeBlockAndSetHead` reorganizes if needed and `writeHeadBlock` writes
-   the head batch with the marker, then syncs. The marker is
+   the head batch with the marker, then syncs. `reorg` first writes a head
+   batch for every lower block of the new branch; the marker is bound to the
+   hash of the decided block, so only its own head batch, the final one,
+   carries it. The marker is
    `decision.MarkerValue(intent)` under `decision.MarkerKey`.
 5. `Resolve` writes NATIVE_DECIDED and closes the members with
    `Admission.Decide` (except `SIDE`), which releases their pins and, with
@@ -96,13 +99,16 @@ before any import:
    - the written block is stored with its state (the block batch is durable,
      the final batch is not): `ExtractorCompleteHead` reorganizes if needed
      and writes the head batch with the saved marker (`SIDE`:
-     `ExtractorWriteMarker`), then `Resolve` (AC-CAP-07-03);
+     `ExtractorWriteMarker`), then `Resolve` (AC-CAP-07-03). The head must be
+     the saved old head or, for `CANONICAL`, a lower block of the new branch
+     that an interrupted `reorg` already made the head;
    - nothing of the block is stored: the saved block (from its capsule) is
      re-imported natively, through `InsertChain` for a head change and
      `InsertBlockWithoutSetHead` for `SIDE`, with native-only replay of its
      EXEC_READY observation; the write must intend exactly the saved
      transition (same kind, heads, members and evidence) and reuses its
-     record (AC-CAP-07-03);
+     record (AC-CAP-07-03). A native refusal during the re-import records the
+     rejection, which also settles the intent;
    - anything else (a bad block that is also stored, a head that is not the
      saved old head, a write that would intend another transition) stops
      startup with `ErrDecisionRecovery`, a source invariant error.

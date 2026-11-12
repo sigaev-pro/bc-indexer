@@ -52,8 +52,12 @@ type ExtractorWrite interface {
 type extractorWriting struct {
 	write   ExtractorWrite
 	setHead bool
-	// marker is the native decision marker that writeHeadBlock puts into its
-	// batch: the final authoritative batch of a head change.
+	// target is the block of the decision. Only the head batch of target is
+	// the final authoritative batch of a head change: reorg writes a head
+	// batch for every lower block of the new branch first.
+	target common.Hash
+	// marker is the native decision marker that writeHeadBlock of target
+	// puts into its batch.
 	marker [][]byte
 }
 
@@ -145,17 +149,17 @@ func (bc *BlockChain) extractorWriteBlockWithState(w *extractorWriting, block *t
 		return err
 	}
 	if w.setHead {
-		w.marker = [][]byte{key, value}
+		w.target, w.marker = block.Hash(), [][]byte{key, value}
 	}
 	w.write.Point("mutated")
 	return nil
 }
 
-// extractorHeadMarker returns the marker that the current head batch must
-// carry, once.
-func (bc *BlockChain) extractorHeadMarker() [][]byte {
+// extractorHeadMarker returns the marker that the head batch of head must
+// carry: only the head batch of the decided block carries it, once.
+func (bc *BlockChain) extractorHeadMarker(head common.Hash) [][]byte {
 	w := bc.extractorWriting
-	if w == nil || w.marker == nil {
+	if w == nil || w.marker == nil || head != w.target {
 		return nil
 	}
 	marker := w.marker
@@ -163,11 +167,20 @@ func (bc *BlockChain) extractorHeadMarker() [][]byte {
 	return marker
 }
 
+// extractorHeadWritten reports an intermediate head batch of a decided head
+// change (a lower block of the new branch in reorg), for probes.
+func (bc *BlockChain) extractorHeadWritten(head common.Hash) {
+	if w := bc.extractorWriting; w != nil && w.write != nil && w.marker != nil && head != w.target {
+		w.write.Point("intermediate")
+	}
+}
+
 // ExtractorCompleteHead completes a saved head transition whose block is
 // already stored with its state: the recovery driver calls it for an
 // unresolved IMPORT or CANONICAL intent after a crash between the block
-// batch and the head batch. It reorganizes if the block does not extend the
-// head and writes the head batch with the marker, then syncs.
+// batch and the final head batch, including a crash inside reorg. It
+// reorganizes if the block does not extend the head and writes the head
+// batch of the block with the marker, then syncs.
 func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, key, value []byte) error {
 	if !bc.chainmu.TryLock() {
 		return errChainStopped
@@ -182,7 +195,7 @@ func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, key, value []byt
 			return err
 		}
 	}
-	bc.extractorWriting = &extractorWriting{marker: [][]byte{key, value}}
+	bc.extractorWriting = &extractorWriting{target: block.Hash(), marker: [][]byte{key, value}}
 	defer func() { bc.extractorWriting = nil }()
 	bc.writeHeadBlock(block)
 	return nil

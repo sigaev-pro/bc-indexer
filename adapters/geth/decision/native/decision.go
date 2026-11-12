@@ -54,8 +54,9 @@ type DecisionOptions struct {
 	Outcome func(block *types.Block) error
 	// Point is called at the named points of a decided write ("committed"
 	// before the child-root barrier, "mutated" after the block batch,
-	// "refused" after the bad-block record of a native refusal), for probes
-	// that crash there. Nil in the shipped binary.
+	// "intermediate" after a head batch that reorg writes for a lower block
+	// of the new branch, "refused" after the bad-block record of a native
+	// refusal), for probes that crash there. Nil in the shipped binary.
 	Point func(name string)
 }
 
@@ -187,7 +188,7 @@ func (d *Decisions) execReady(token *admission.Token, key string) (string, error
 	return "", fmt.Errorf("%w: %s is not EXEC_READY", decision.ErrBinding, key)
 }
 
-// intent builds the transition intent of the write: SIDE without a head
+// build returns the transition intent of the write: SIDE without a head
 // change, IMPORT when the block extends the head, CANONICAL when the head
 // moves to another branch. A CANONICAL intent also names every block of the
 // new branch that a SIDE decision retains.
@@ -370,9 +371,12 @@ func (d *Decisions) Recover() error {
 	if err := d.a.RecoverObligations(); err != nil {
 		return err
 	}
+	store, ok := d.a.store.(admission.DeleteStore)
+	if !ok {
+		return fmt.Errorf("%w: the decision store cannot delete", ErrConfig)
+	}
 	token := d.a.guard.Acquire()
-	bridge, err := decision.Open(token, d.a.store.(admission.DeleteStore), d.a.core, d.a.cfg.StoreID,
-		Roots{DB: d.a.db}, d.opts.Mirror)
+	bridge, err := decision.Open(token, store, d.a.core, d.a.cfg.StoreID, Roots{DB: d.a.db}, d.opts.Mirror)
 	if releaseErr := token.Release(); err == nil {
 		err = releaseErr
 	}
@@ -445,8 +449,9 @@ func (d *Decisions) settleIntent() error {
 		return errors.Join(fmt.Errorf("%w: block %d of intent %d is both bad and stored", ErrDecisionRecovery,
 			block.NumberU64(), saved.Sequence), token.Release())
 	}
-	key, value := decision.MarkerKey(d.a.producer, saved.Sequence), []byte(nil)
-	if value, err = decision.MarkerValue(saved.Intent); err != nil {
+	key := decision.MarkerKey(d.a.producer, saved.Sequence)
+	value, err := decision.MarkerValue(saved.Intent)
+	if err != nil {
 		return errors.Join(err, token.Release())
 	}
 	if err := token.Release(); err != nil {
@@ -459,9 +464,9 @@ func (d *Decisions) settleIntent() error {
 		if saved.Intent.Kind == decision.Side {
 			err = d.a.chain.ExtractorWriteMarker(block, key, value)
 		} else {
-			if head := d.a.chain.CurrentBlock(); hexHash(head.Hash()) != saved.Intent.OldHead.Hash {
-				return fmt.Errorf("%w: head %s is not the saved old head of intent %d", ErrDecisionRecovery,
-					head.Hash(), saved.Sequence)
+			if !d.completable(saved.Intent, block) {
+				return fmt.Errorf("%w: head %s is neither the saved old head of intent %d nor on its new branch",
+					ErrDecisionRecovery, d.a.chain.CurrentBlock().Hash(), saved.Sequence)
 			}
 			err = d.a.chain.ExtractorCompleteHead(block, key, value)
 		}
@@ -482,18 +487,38 @@ func (d *Decisions) settleIntent() error {
 		_, err = d.a.chain.InsertChain(types.Blocks{block})
 	}
 	d.completing, d.a.replay = nil, nil
-	if err != nil {
-		return fmt.Errorf("%w: re-import of intent %d: %v", ErrDecisionRecovery, saved.Sequence, err)
-	}
+	importErr := err
+	// The re-import settles the intent: Resolve after the native write, or
+	// RejectIntent when the native side refuses the transition again.
 	token = d.a.guard.Acquire()
 	left, err := d.unresolved(token)
 	if releaseErr := token.Release(); err == nil {
 		err = releaseErr
 	}
 	if err == nil && left != nil {
-		err = fmt.Errorf("%w: intent %d stays unresolved", ErrDecisionRecovery, left.Sequence)
+		err = errors.Join(fmt.Errorf("%w: intent %d stays unresolved after its re-import", ErrDecisionRecovery,
+			left.Sequence), importErr)
 	}
 	return err
+}
+
+// completable reports whether the native head allows completing the saved
+// head change to block: the head is the saved old head, or a block of the
+// new branch below block that an interrupted reorg already made the head.
+func (d *Decisions) completable(intent decision.IntentRecord, block *types.Block) bool {
+	chain := d.a.chain
+	head := chain.CurrentBlock()
+	if hexHash(head.Hash()) == intent.OldHead.Hash {
+		return true
+	}
+	if head.Number.Uint64() >= block.NumberU64() {
+		return false
+	}
+	ancestor := chain.GetHeader(block.ParentHash(), block.NumberU64()-1)
+	for ancestor != nil && ancestor.Number.Uint64() > head.Number.Uint64() {
+		ancestor = chain.GetHeader(ancestor.ParentHash, ancestor.Number.Uint64()-1)
+	}
+	return ancestor != nil && ancestor.Hash() == head.Hash() && intent.Kind == decision.Canonical
 }
 
 // replayUndecided re-executes every EXEC_READY observation without a
@@ -523,7 +548,7 @@ func (d *Decisions) replayUndecided() error {
 		_, err = d.a.chain.InsertBlockWithoutSetHead(context.Background(), block, false)
 		d.a.replay = nil
 		if err != nil {
-			return fmt.Errorf("%w: replay of %s: %v", ErrDecisionRecovery, obs.Key, err)
+			return fmt.Errorf("%w: replay of %s: %w", ErrDecisionRecovery, obs.Key, err)
 		}
 	}
 	return nil

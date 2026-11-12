@@ -582,6 +582,18 @@
    "file": "test/harness/fixtures/admission_geth/admission_geth.py",
    "original": "    check_trace(c, \"decision-clean-2\", restart, [\"opened\", \"bridge_opened\", \"live\"])\n",
    "replacement": ""
+  },
+  {
+   "name": "decision canonical early decision unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if any(row.get(\"sequence\") == 1 for row in events_of(crash, \"decided\")):\n",
+   "replacement": "        if False:\n"
+  },
+  {
+   "name": "decision canonical intents unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if markers != [decision.marker_value(side).decode(), decision.marker_value(canonical).decode()]:\n",
+   "replacement": "        if len(markers) != 2:\n"
   }
  ]
 }

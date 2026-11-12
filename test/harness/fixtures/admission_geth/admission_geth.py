@@ -678,6 +678,9 @@ def check_mirror(c, label, attempt, allowed):
 
 
 LIVE_IMPORT = ["begin", "pinned", "sealed", "admitted", "exec_ready", "committed", "intent", "mutated", "decided"]
+# A CANONICAL write over the retained side block 300: reorg writes the head batch of 300 (without the marker) before
+# the final head batch of 301 with the marker.
+LIVE_CANONICAL = LIVE_IMPORT[:-1] + ["intermediate", "decided"]
 
 
 def scenario_decision_clean(c, oracle, observation, attempts, commit):
@@ -723,7 +726,7 @@ def recovered_side_then_canonical(c, label, oracle, observation, attempt, result
     block makes it canonical with one CANONICAL decision that closes both."""
     t = oracle["target"]
     check_trace(c, label, attempt, prefix + ["replaying", "replayed", "committed", "intent", "mutated", "decided",
-                                             "live"] + LIVE_IMPORT)
+                                             "live"] + LIVE_CANONICAL)
     ready = dict(ready, **exec_ready_digests([attempt]))
     check_decisions(c, label, attempt, [
         (expected_intent(oracle, observation, 0, "SIDE", t - 1, t - 1, [(0, t)], ready), "CHECKPOINT"),
@@ -824,6 +827,40 @@ def scenario_decision_completed(name, point, evidence, prefix_events, crash_even
     return check
 
 
+def scenario_decision_canonical(name, point, evidence, crash_events, settle_events):
+    """AC-CAP-07-03 on a CANONICAL write: 300 is decided SIDE, then the import of 301 crashes inside its CANONICAL
+    decision (members 301 and the retained 300); recovery completes exactly the saved transition."""
+    label = name.replace("_", "-")
+
+    def check(c, oracle, observation, attempts, commit):
+        crash, recover = attempts
+        t = oracle["target"]
+        ended(c, f"{label}-1", crash, point)
+        check_trace(c, f"{label}-1", crash, ["opened", "bridge_opened", "live"] + LIVE_IMPORT +
+                    ["begin", "pinned", "sealed", "admitted", "exec_ready", "committed"] + crash_events)
+        result = ended(c, f"{label}-2", recover)
+        if not result:
+            return
+        ready = exec_ready_digests([crash])
+        side = expected_intent(oracle, observation, 0, "SIDE", t - 1, t - 1, [(0, t)], ready)
+        canonical = expected_intent(oracle, observation, 1, "CANONICAL", t - 1, t + 1, [(1, t + 1), (0, t)], ready)
+        markers = [row.get("marker") for row in events_of(crash, "intent") + events_of(recover, "intent")]
+        if markers != [decision.marker_value(side).decode(), decision.marker_value(canonical).decode()]:
+            c.fail(f"{label}-2", "the intents differ from the independent SIDE and CANONICAL intents")
+        sides = [row for row in events_of(crash, "decided") if row.get("sequence") == 0]
+        if [(row.get("delivery"), row.get("digest")) for row in sides] != \
+                [("CHECKPOINT", decision.decided_digest(side["digest"], "CHECKPOINT"))]:
+            c.fail(f"{label}-1", "the side block was not decided as SIDE before the crash")
+        if any(row.get("sequence") == 1 for row in events_of(crash, "decided")):
+            c.fail(f"{label}-1", "the CANONICAL decision was recorded before the crash")
+        check_resolved_after(c, f"{label}-2", recover, 1, canonical, "BATCH", evidence)
+        check_trace(c, f"{label}-2", recover, ["opened", "bridge_opened", "settling"] + settle_events + ["decided",
+                                                                                                         "live"])
+        check_decision_end(c, f"{label}-2", oracle, result, 2, 2, [1])
+        check_head(c, f"{label}-2", oracle, observation, result, t + 1)
+    return check
+
+
 def scenario_decision_rejected(c, oracle, observation, attempts, commit, live_rejection):
     """AC-CAP-07-06: the native side refused the transition after the intent and recorded the bad block; the
     rejection of the intent was lost. Recovery records the rejection from the native evidence: no NATIVE_DECIDED,
@@ -893,6 +930,17 @@ CHECKS = {
     "decision_child_root": scenario_decision_child_root,
     "decision_reject_live": scenario_decision_reject_live,
 }
+
+CHECKS.update({
+    "decision_canonical_intent": scenario_decision_canonical(
+        "decision_canonical_intent", "after_sync-decision-v1/geth-probe.r1/counter", "reimport", [],
+        ["replaying", "replayed", "committed", "intent", "mutated", "intermediate"]),
+    "decision_canonical_mutated": scenario_decision_canonical(
+        "decision_canonical_mutated", "native/mutated", "stored_block", ["intent", "mutated"], []),
+    "decision_canonical_intermediate": scenario_decision_canonical(
+        "decision_canonical_intermediate", "native/intermediate", "stored_block",
+        ["intent", "mutated", "intermediate"], []),
+})
 
 COMPLETED = {
     "decision_intent": scenario_decision_completed(

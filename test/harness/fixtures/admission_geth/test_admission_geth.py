@@ -312,11 +312,12 @@ def geth_intent(s, sequence, kind, old, new, members):
     return record
 
 
-def intent_events(record, delivery, point_after="mutated"):
+def intent_events(record, delivery, point_after="mutated", points=()):
     rows = [trace("committed"), trace("intent", sequence=record["sequence"], kind=record["kind"],
                                      digest=record["digest"], marker=decision.marker_value(record).decode())]
     if point_after:
         rows.append(trace(point_after))
+    rows += [trace(point) for point in points]
     if delivery:
         rows.append(trace("decided", sequence=record["sequence"], delivery=delivery,
                           digest=decision.decided_digest(record["digest"], delivery)))
@@ -369,7 +370,7 @@ def decision_scenarios(s):
     side = geth_intent(s, 0, "SIDE", T - 1, T - 1, [(0, T)])
     canonical = geth_intent(s, 1, "CANONICAL", T - 1, T + 1, [(1, T + 1), (0, T)])
     replayed = [trace("replaying"), trace("replayed")] + intent_events(side, "CHECKPOINT") + [trace("live")] + \
-        admitted_events(s, T + 1, 1) + intent_events(canonical, "BATCH")
+        admitted_events(s, T + 1, 1) + intent_events(canonical, "BATCH", points=("intermediate",))
     early = base + [trace("begin"), trace("pinned"), trace("sealed"), trace("admitted")]
     recovered = decision_result(s, 2, 2, T + 1, [T, T + 1], [1], [("next", None)])
     out.append({"name": "decision_exec_ready", "attempts": [
@@ -395,7 +396,7 @@ def decision_scenarios(s):
         attempt("decision-child-root-2-recover", child,
                 [trace("opened"), trace("bridge_opened"), trace("replaying"), trace("replayed")] +
                 intent_events(side_saved, "CHECKPOINT") + [trace("live")] + admitted_events(s, T + 1, 1) +
-                intent_events(canonical_saved, "BATCH"))]})
+                intent_events(canonical_saved, "BATCH", points=("intermediate",)))]})
     live = base + admitted_events(s, T, 0)
     nxt = [trace("live")] + admitted_events(s, T + 1, 1) + intent_events(i1, "BATCH")
     completed = decision_result(s, 2, 2, T + 1, [T, T + 1], [0, 1], [("next", None)],
@@ -429,6 +430,30 @@ def decision_scenarios(s):
         attempt("decision-rejected-2-recover", refused,
                 [trace("opened"), trace("bridge_opened"), trace("settling", sequence=0, evidence="bad_block"),
                  rejection(i0), trace("live")])]})
+    # AC-CAP-07-03 on a CANONICAL write over the retained side block 300.
+    before = base + admitted_events(s, T, 0) + intent_events(side, "CHECKPOINT") + admitted_events(s, T + 1, 1)
+    finished = decision_result(s, 2, 2, T + 1, [T, T + 1], [1])
+    settled_canonical = [trace("decided", sequence=1, delivery="BATCH",
+                               digest=decision.decided_digest(canonical["digest"], "BATCH"))]
+    out.append({"name": "decision_canonical_intent", "attempts": [
+        attempt("decision-canonical-intent-1-crash", events=before + [trace("committed")],
+                crash=f"after_sync-decision-v1/{PRODUCER}/counter"),
+        attempt("decision-canonical-intent-2-recover", finished,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=1, evidence="reimport"),
+                 trace("replaying"), trace("replayed")] +
+                intent_events(canonical, "BATCH", points=("intermediate",)) + [trace("live")])]})
+    out.append({"name": "decision_canonical_mutated", "attempts": [
+        attempt("decision-canonical-mutated-1-crash", events=before + intent_events(canonical, None),
+                crash="native/mutated"),
+        attempt("decision-canonical-mutated-2-recover", finished,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=1, evidence="stored_block")] +
+                settled_canonical + [trace("live")])]})
+    out.append({"name": "decision_canonical_intermediate", "attempts": [
+        attempt("decision-canonical-intermediate-1-crash",
+                events=before + intent_events(canonical, None, points=("intermediate",)), crash="native/intermediate"),
+        attempt("decision-canonical-intermediate-2-recover", finished,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=1, evidence="stored_block")] +
+                settled_canonical + [trace("live")])]})
     refused_live = copy.deepcopy(refused)
     refused_live["imports"] = [{"name": "target", "error": ORACLE["messages"]["refused"] + "\nx"}]
     out.append({"name": "decision_reject_live", "attempts": [
@@ -1027,6 +1052,24 @@ class OracleTests(unittest.TestCase):
         scenario(observation, "decision_rejected")[1]["result"]["markers"] = {
             decision.marker_key(ORACLE["producer_id"], ORACLE["run_id"], 0): "{}"}
         self.assertFails(observation, "decision-rejected-2: markers")
+
+    def test_canonical_crash_inside_reorg(self):
+        observation = fresh()
+        scenario(observation, "decision_canonical_intermediate")[0]["events"].insert(
+            -1, trace("decided", sequence=1, delivery="BATCH", digest="0" * 64))
+        self.assertFails(observation, "the CANONICAL decision was recorded before the crash")
+        observation = fresh()
+        self.edit_event(observation, "decision_canonical_intermediate", 1, "settling", evidence="marker")
+        self.assertFails(observation, "intent 1 was settled from ['marker'], want stored_block")
+        observation = fresh()
+        row = [r for r in self.events(observation, "decision_canonical_mutated", 0) if r.get("event") == "intent"][1]
+        marker = json.loads(row["marker"])
+        marker["members"] = marker["members"][:1]
+        row["marker"] = json.dumps(marker, separators=(",", ":"))
+        self.assertFails(observation, "the intents differ from the independent SIDE and CANONICAL intents")
+        observation = fresh()
+        scenario(observation, "decision_canonical_intent")[1]["result"]["head_number"] = T
+        self.assertFails(observation, "decision-canonical-intent-2: head")
 
     def test_decision_exec_ready_recovery(self):
         observation = fresh()

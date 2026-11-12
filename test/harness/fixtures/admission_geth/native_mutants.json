@@ -277,8 +277,8 @@
     {
       "name": "head_marker_omitted",
       "file": "core/blockchain.go",
-      "original": "\tmarker := bc.extractorHeadMarker()\n",
-      "replacement": "\tmarker := bc.extractorHeadMarker()\n\tmarker = nil\n",
+      "original": "\tmarker := bc.extractorHeadMarker(block.Hash())\n",
+      "replacement": "\tmarker := bc.extractorHeadMarker(block.Hash())\n\tmarker = nil\n",
       "binaries": [
         "probe"
       ],
@@ -393,6 +393,26 @@
         "geth"
       ],
       "reason": "The shipped node attaches the admission without the decision bridge."
+    },
+    {
+      "name": "marker_in_intermediate_head_batch",
+      "file": "core_decision.go.txt",
+      "original": "\tif w == nil || w.marker == nil || head != w.target {\n",
+      "replacement": "\tif w == nil || w.marker == nil {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The marker goes into the first head batch of a reorg, before the head reaches the decided block: a crash after it would resolve a head change that never finished."
+    },
+    {
+      "name": "mid_reorg_head_refused",
+      "file": "decision.go",
+      "original": "\treturn ancestor != nil && ancestor.Hash() == head.Hash() && intent.Kind == decision.Canonical\n",
+      "replacement": "\treturn false\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Recovery refuses to complete a CANONICAL head change that an interrupted reorg left on a lower block of the new branch."
     }
   ]
 }
