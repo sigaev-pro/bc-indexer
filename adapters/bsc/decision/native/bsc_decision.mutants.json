@@ -1,0 +1,298 @@
+{
+  "schema_version": 1,
+  "language": "go-native-bsc-decision",
+  "description": "Single-check mutants of the BSC decision package, the BSC admission seam additions and the decision patch; each must be killed by the native probe, the unit tests or the driver's checks.",
+  "mutants": [
+    {
+      "name": "hook guard",
+      "file": "go/bridge.go",
+      "original": "\tif token == nil {\n\t\treturn nil, bsc.ErrGuard\n\t}\n\tpending, err := h.unresolved(token)",
+      "replacement": "\tpending, err := h.unresolved(token)"
+    },
+    {
+      "name": "hook pending refusal",
+      "file": "go/bridge.go",
+      "original": "if pending != nil && !names(pending.Intent, block.Hash()) {",
+      "replacement": "if false && pending != nil && !names(pending.Intent, block.Hash()) {"
+    },
+    {
+      "name": "hook member of the pending intent",
+      "file": "go/bridge.go",
+      "original": "\t\tif m.Block == want {\n\t\t\treturn true",
+      "replacement": "\t\tif m.Block != want {\n\t\t\treturn true"
+    },
+    {
+      "name": "hook deferred replay",
+      "file": "go/bridge.go",
+      "original": "\tif ready != nil && h.bridge == nil {",
+      "replacement": "\tif false && ready != nil && h.bridge == nil {"
+    },
+    {
+      "name": "hook replay of an EXEC_READY block",
+      "file": "go/bridge.go",
+      "original": "\tif ready != nil {\n\t\tinner, err = h.seam.Replay(chain, block)",
+      "replacement": "\tif false && ready != nil {\n\t\tinner, err = h.seam.Replay(chain, block)"
+    },
+    {
+      "name": "start mirror",
+      "file": "go/bridge.go",
+      "original": "\tif cfg.Mirror == nil {\n\t\treturn nil, fmt.Errorf(\"%w: missing mirror\", decision.ErrInvalid)\n\t}",
+      "replacement": "\tif false && cfg.Mirror == nil {\n\t\treturn nil, fmt.Errorf(\"%w: missing mirror\", decision.ErrInvalid)\n\t}"
+    },
+    {
+      "name": "start store without delete",
+      "file": "go/bridge.go",
+      "original": "\t\tif !ok {\n\t\t\treturn nil, fmt.Errorf(\"%w: the store cannot delete records\", decision.ErrInvalid)",
+      "replacement": "\t\tif false && !ok {\n\t\t\treturn nil, fmt.Errorf(\"%w: the store cannot delete records\", decision.ErrInvalid)"
+    },
+    {
+      "name": "start cleanup",
+      "file": "go/bridge.go",
+      "original": "seamConfig.Store, seamConfig.Cleanup = store, Purger{DB: store}",
+      "replacement": "seamConfig.Store = store"
+    },
+    {
+      "name": "purger",
+      "file": "go/bridge.go",
+      "original": "func (p Purger) Purge(observation string) error { return sourceinputs.Purge(p.DB, observation) }",
+      "replacement": "func (p Purger) Purge(observation string) error { return nil }"
+    },
+    {
+      "name": "roots synced",
+      "file": "go/bridge.go",
+      "original": "\treturn synced && rawdb.HasLegacyTrieNode(r.db, hash), nil",
+      "replacement": "\treturn (synced || true) && rawdb.HasLegacyTrieNode(r.db, hash), nil"
+    },
+    {
+      "name": "roots on disk",
+      "file": "go/bridge.go",
+      "original": "\treturn synced && rawdb.HasLegacyTrieNode(r.db, hash), nil",
+      "replacement": "\treturn synced && (true || rawdb.HasLegacyTrieNode(r.db, hash)), nil"
+    },
+    {
+      "name": "roots length",
+      "file": "go/bridge.go",
+      "original": "if err != nil || len(raw) != common.HashLength {",
+      "replacement": "if err != nil {"
+    },
+    {
+      "name": "intend before the bridge",
+      "file": "go/bridge.go",
+      "original": "\tif h.bridge == nil {\n\t\treturn nil, ErrDeferred\n\t}\n\tadm, token := h.seam.Admission()",
+      "replacement": "\tadm, token := h.seam.Admission()"
+    },
+    {
+      "name": "intend barrier record",
+      "file": "go/bridge.go",
+      "original": "\th.roots.Synced(block.Root())\n",
+      "replacement": ""
+    },
+    {
+      "name": "intend member observation",
+      "file": "go/bridge.go",
+      "original": "\tif ready == nil {\n\t\treturn nil, fmt.Errorf(\"%w: block %d has no EXEC_READY observation\", decision.ErrBinding, block.NumberU64())\n\t}",
+      "replacement": "\tif ready == nil {\n\t\treturn nil, nil\n\t}",
+      "equivalent": "Core calls Intend only from the write of an observed block, after Validated: Validated writes EXEC_READY (or, in a replay, requires the open EXEC_READY observation), so the observation is always found. The check guards a wiring error that the import path cannot produce."
+    },
+    {
+      "name": "intend events",
+      "file": "go/bridge.go",
+      "original": "EvidenceDigest: evidence.Digest, Events: evidence.Kind == decision.Import}",
+      "replacement": "EvidenceDigest: evidence.Digest, Events: evidence.Kind != decision.Import}"
+    },
+    {
+      "name": "intend reuses a pending intent",
+      "file": "go/bridge.go",
+      "original": "\tif pending != nil {\n\t\tif !sameTransition(",
+      "replacement": "\tif false && pending != nil {\n\t\tif !sameTransition("
+    },
+    {
+      "name": "same transition kind",
+      "file": "go/bridge.go",
+      "original": "\tif saved.Kind != in.Kind || saved.OldHead",
+      "replacement": "\tif saved.OldHead"
+    },
+    {
+      "name": "same transition member",
+      "file": "go/bridge.go",
+      "original": "\treturn m.Observation == want.Observation && m.Block == block && m.ExecReadyDigest == want.ExecReadyDigest &&",
+      "replacement": "\treturn m.Observation == want.Observation && m.ExecReadyDigest == want.ExecReadyDigest &&"
+    },
+    {
+      "name": "step marker",
+      "file": "go/bridge.go",
+      "original": "key: decision.MarkerKey(adm.Producer(), record.Sequence), value: marker}",
+      "replacement": "key: decision.MarkerKey(adm.Producer(), record.Sequence+1), value: marker}"
+    },
+    {
+      "name": "evidence digest kind",
+      "file": "go/evidence.go",
+      "original": "\tdata = append(data, u64(uint64(len(e.Kind)))...)\n\tdata = append(data, e.Kind...)\n",
+      "replacement": ""
+    },
+    {
+      "name": "evidence digest heads",
+      "file": "go/evidence.go",
+      "original": "[]decision.Head{e.OldHead, e.NewHead, e.Justified, e.Finalized}",
+      "replacement": "[]decision.Head{e.OldHead, e.NewHead, e.Finalized}"
+    },
+    {
+      "name": "evidence fork choice",
+      "file": "go/evidence.go",
+      "original": "\tif canonical {\n\t\te.Kind, e.NewHead = decision.Import, head(header)",
+      "replacement": "\tif !canonical {\n\t\te.Kind, e.NewHead = decision.Import, head(header)"
+    },
+    {
+      "name": "evidence justified error",
+      "file": "go/evidence.go",
+      "original": "\tif err != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: justified block: %w\", ErrFinality, err)\n\t}",
+      "replacement": "\tif false && err != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: justified block: %w\", ErrFinality, err)\n\t}"
+    },
+    {
+      "name": "evidence window",
+      "file": "go/evidence.go",
+      "original": "\tif refused := reader.Err(); refused != nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: %w\", ErrFinality, refused)\n\t}",
+      "replacement": ""
+    },
+    {
+      "name": "evidence no finalized block",
+      "file": "go/evidence.go",
+      "original": "\tif finalized == nil {\n\t\treturn Evidence{}, fmt.Errorf(\"%w: no finalized block for %d\", ErrFinality, header.Number.Uint64())\n\t}",
+      "replacement": "\tif finalized == nil {\n\t\treturn Evidence{}, nil\n\t}"
+    },
+    {
+      "name": "evidence reader genesis",
+      "file": "go/evidence.go",
+      "original": "append([]*types.Header{static.Parent, block, genesis}, static.Ancestors...)",
+      "replacement": "append([]*types.Header{static.Parent, block}, static.Ancestors...)"
+    },
+    {
+      "name": "evidence reader header number",
+      "file": "go/evidence.go",
+      "original": "\tif header := r.byHash[hash]; header != nil && header.Number.Uint64() == number {\n\t\treturn header\n\t}\n\tr.refuse(fmt.Errorf(\"%w: %d %x\", bsc.ErrUndeclaredHeader, number, hash))",
+      "replacement": "\tif header := r.byHash[hash]; header != nil {\n\t\treturn header\n\t}\n\tr.refuse(fmt.Errorf(\"%w: %d %x\", bsc.ErrUndeclaredHeader, number, hash))"
+    },
+    {
+      "name": "evidence reader by number",
+      "file": "go/evidence.go",
+      "original": "\tr.refuse(fmt.Errorf(\"%w: number %d\", bsc.ErrUndeclaredHeader, number))\n",
+      "replacement": ""
+    },
+    {
+      "name": "evidence reader total difficulty",
+      "file": "go/evidence.go",
+      "original": "\tr.refuse(fmt.Errorf(\"%w: GetTd %d\", bsc.ErrUndeclaredRead, number))\n",
+      "replacement": ""
+    },
+    {
+      "name": "evidence reader snapshot window",
+      "file": "go/evidence.go",
+      "original": "\tif header := r.byHash[hash]; header == nil || header.Number.Uint64() != number {\n\t\terr := fmt.Errorf(\"%w: snapshot of %d %x\", bsc.ErrUndeclaredHeader, number, hash)",
+      "replacement": "\tif header := r.byHash[hash]; false && (header == nil || header.Number.Uint64() != number) {\n\t\terr := fmt.Errorf(\"%w: snapshot of %d %x\", bsc.ErrUndeclaredHeader, number, hash)"
+    },
+    {
+      "name": "evidence native sees the block",
+      "file": "go/evidence.go",
+      "original": "\treturn compute(withBlock{ExtractorReader: r.native, block: r.block})",
+      "replacement": "\treturn compute(r.native)"
+    },
+    {
+      "name": "evidence capsule block",
+      "file": "go/evidence.go",
+      "original": "\tif static.Block.Hash() != block.Hash() {",
+      "replacement": "\tif false && static.Block.Hash() != block.Hash() {",
+      "equivalent": "Intend finds the observation by the block hash of its candidate, and ADMITTED binds the capsule digest of that candidate's block (ReadStatic checks the capsule), so the capsule always holds this block. The check guards a wiring error the import path cannot produce."
+    },
+    {
+      "name": "recover settle",
+      "file": "go/recover.go",
+      "original": "\tif err := h.settle(chain); err != nil {\n\t\treturn errors.Join(append(kept, err)...)\n\t}",
+      "replacement": ""
+    },
+    {
+      "name": "recover undecided replay",
+      "file": "go/recover.go",
+      "original": "\tfor _, key := range undecided {\n\t\tif err := h.reimport(chain, key, \"replay-undecided\"); err != nil {",
+      "replacement": "\tfor _, key := range undecided[:0] {\n\t\tif err := h.reimport(chain, key, \"replay-undecided\"); err != nil {"
+    },
+    {
+      "name": "settle marker",
+      "file": "go/recover.go",
+      "original": "\tif pending.Marker {\n\t\th.emit(",
+      "replacement": "\tif false && pending.Marker {\n\t\th.emit("
+    },
+    {
+      "name": "settle bad block",
+      "file": "go/recover.go",
+      "original": "\tcase bad != nil:\n",
+      "replacement": "\tcase false:\n"
+    },
+    {
+      "name": "settle members",
+      "file": "go/recover.go",
+      "original": "\t\tlen(pending.Intent.Members) != 1 {",
+      "replacement": "\t\tlen(pending.Intent.Members) == 0 {",
+      "equivalent": "Every intent that this block writes has exactly one member (Intend builds it from the one observed block), and decision.Open refuses an intent whose digest does not recompute, so an IMPORT or SIDE intent with two members cannot reach settle."
+    },
+    {
+      "name": "bad-block evidence hash",
+      "file": "go/recover.go",
+      "original": "\tdata = append(data, block.Hash().Bytes()...)\n\tdata = append(data, body[:]...)",
+      "replacement": "\tdata = append(data, body[:]...)"
+    },
+    {
+      "name": "seam cleanup",
+      "file": "seam/seam.go",
+      "original": "\tif cfg.Cleanup == nil {\n\t\ts.adm, err = admission.Open(",
+      "replacement": "\tif true {\n\t\ts.adm, err = admission.Open("
+    },
+    {
+      "name": "seam replay head",
+      "file": "seam/seam.go",
+      "original": "\tif head := chain.CurrentBlock(); head == nil || head.Hash() != parent.Hash() {\n\t\treturn nil, fmt.Errorf(\"%w: block %d is not on top of the head\", ErrImportProfile, n)\n\t}\n\tcandidate := Candidate(block, parent)\n\tobservations, err := s.adm.Observations(s.token)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfor _, obs := range observations {\n\t\tif obs.State != admission.ExecReady",
+      "replacement": "\tcandidate := Candidate(block, parent)\n\tobservations, err := s.adm.Observations(s.token)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tfor _, obs := range observations {\n\t\tif obs.State != admission.ExecReady"
+    },
+    {
+      "name": "seam replay keeps EXEC_READY",
+      "file": "seam/seam.go",
+      "original": "\t\to.replay = &record\n",
+      "replacement": "\t\t_ = record\n"
+    },
+    {
+      "name": "core decision redirect",
+      "file": "native/core/blockchain.go",
+      "original": "\tif bc.extractorObservation != nil {\n\t\treturn bc.extractorWriteBlockAndSetHead(",
+      "replacement": "\tif false && bc.extractorObservation != nil {\n\t\treturn bc.extractorWriteBlockAndSetHead("
+    },
+    {
+      "name": "core head marker",
+      "file": "native/core/blockchain.go",
+      "original": "\t\tbc.extractorHeadMarker(batch, block)\n",
+      "replacement": ""
+    },
+    {
+      "name": "core barrier flush",
+      "file": "native/core/extractor_decision.go",
+      "original": "\tif err := bc.triedb.Commit(root, false); err != nil {\n\t\treturn err\n\t}",
+      "replacement": ""
+    },
+    {
+      "name": "core barrier sync",
+      "file": "native/core/extractor_decision.go",
+      "original": "\t\treturn err\n\t}\n\treturn bc.db.SyncKeyValue()\n}",
+      "replacement": "\t\treturn err\n\t}\n\treturn nil\n}"
+    },
+    {
+      "name": "core intent before writes",
+      "file": "native/core/extractor_decision.go",
+      "original": "\tdecision, err := decider.Intend(bc, block, current, reorg)\n\tif err != nil {\n\t\treturn NonStatTy, err\n\t}",
+      "replacement": "\tdecision, err := decider.Intend(bc, block, current, reorg)\n\tif false && err != nil {\n\t\treturn NonStatTy, err\n\t}"
+    },
+    {
+      "name": "core resolve after the sync",
+      "file": "native/core/extractor_decision.go",
+      "original": "\tif err := bc.db.SyncKeyValue(); err != nil {\n\t\treturn NonStatTy, err\n\t}\n\tif err := decision.Resolve(); err != nil {",
+      "replacement": "\tif err := decision.Resolve(); err != nil {"
+    }
+  ]
+}
