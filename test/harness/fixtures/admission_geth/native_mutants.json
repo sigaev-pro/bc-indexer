@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Native mutants of the E01-02.admission Geth block. Each must compile in the patched Geth tree and must fail the oracle in the measured run. file is a tree path changed by patches.json, or geth.go (extractor/admission/native/geth.go); binaries names what is rebuilt; the rest come from the base build.",
+  "description": "Native mutants of the E01-02.admission Geth block and the E01-02.decision_bridge Geth block. Each must compile in the patched Geth tree and must fail the oracle in the measured run. file is a tree path changed by patches.json of either block, geth.go (extractor/admission/native/geth.go), decision.go (extractor/admission/native/decision.go) or core_decision.go.txt (core/extractor_decision.go); binaries names what is rebuilt; the rest come from the base build.",
   "mutants": [
     {
       "name": "begin_hook_skipped",
@@ -263,6 +263,156 @@
         "geth"
       ],
       "reason": "geth snapshot generate-trie opens the source store and its chain freezer for writing while a pin is live and an obligation is ADMITTED."
+    },
+    {
+      "name": "barrier_skipped",
+      "file": "core_decision.go.txt",
+      "original": "\tif err := bc.triedb.Commit(root, false); err != nil {\n\t\treturn err\n\t}\n",
+      "replacement": "",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "No child-root barrier: the child root is not durable at the intent, which Intend refuses (ErrChildRoot)."
+    },
+    {
+      "name": "head_marker_omitted",
+      "file": "core/blockchain.go",
+      "original": "\tmarker := bc.extractorHeadMarker(block.Hash())\n",
+      "replacement": "\tmarker := bc.extractorHeadMarker(block.Hash())\n\tmarker = nil\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The head batch carries no native decision marker, so Resolve finds none (ErrNoMarker)."
+    },
+    {
+      "name": "side_marker_omitted",
+      "file": "core_decision.go.txt",
+      "original": "\tif !w.setHead {\n\t\tif err := batch.Put(key, value); err != nil {",
+      "replacement": "\tif false {\n\t\tif err := batch.Put(key, value); err != nil {",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "A SIDE write stores its block without the marker, so the recovered SIDE decision cannot be resolved."
+    },
+    {
+      "name": "resolve_skipped",
+      "file": "core/blockchain.go",
+      "original": "\t\tif extractorWrite != nil {\n\t\t\tif err := extractorWrite.Resolve(); err != nil {",
+      "replacement": "\t\tif false {\n\t\t\tif err := extractorWrite.Resolve(); err != nil {",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The live write path never records NATIVE_DECIDED: the intent stays unresolved and the next intent is refused."
+    },
+    {
+      "name": "refusal_without_evidence",
+      "file": "core_decision.go.txt",
+      "original": "\t\trawdb.WriteBadBlock(bc.db, block)\n",
+      "replacement": "",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "A native refusal leaves no bad-block record, so recovery cannot settle the lost rejection from native evidence."
+    },
+    {
+      "name": "recovery_ignores_marker",
+      "file": "decision.go",
+      "original": "\tif saved.Marker {\n",
+      "replacement": "\tif false {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Recovery does not resolve an intent from its durable marker."
+    },
+    {
+      "name": "recovery_rejects_without_evidence",
+      "file": "decision.go",
+      "original": "\tif bad && !stored {\n",
+      "replacement": "\tif !stored {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Recovery rejects a saved intent whose block is merely not stored, without the native refusal evidence (AC-CAP-07-03 vs 07-06)."
+    },
+    {
+      "name": "replay_skipped",
+      "file": "decision.go",
+      "original": "\tfor _, obs := range undecided {\n\t\tblock, err := d.a.savedBlock(obs.Key)\n",
+      "replacement": "\tfor _, obs := range undecided[:0] {\n\t\tblock, err := d.a.savedBlock(obs.Key)\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "No native-only replay of an undecided EXEC_READY observation (AC-CAP-07-02): GoLive is refused."
+    },
+    {
+      "name": "known_block_allowed",
+      "file": "geth.go",
+      "original": "\tif a.chain.HasBlockAndState(block.Hash(), block.NumberU64()) {\n",
+      "replacement": "\tif false {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Begin opens a second observation of a block that is already in the chain with its state."
+    },
+    {
+      "name": "canonical_omits_retained",
+      "file": "decision.go",
+      "original": "\t\tin.Members = append(in.Members, retained...)\n",
+      "replacement": "\t\t_ = retained\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "A CANONICAL write does not name the side block it makes canonical, so that block keeps its SIDE retention and pin."
+    },
+    {
+      "name": "recovery_cleanup_skipped",
+      "file": "decision.go",
+      "original": "\terr = d.bridge.Cleanup(token)\n\tif err == nil {\n\t\terr = d.bridge.GoLive(token)\n",
+      "replacement": "\terr = nil\n\tif err == nil {\n\t\terr = d.bridge.GoLive(token)\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Recovery keeps the markers of decisions that the mirror applied."
+    },
+    {
+      "name": "admission_without_cleanup",
+      "file": "decision.go",
+      "original": "\ta, err := attach(chain, db, cfg, opts, true)\n",
+      "replacement": "\ta, err := attach(chain, db, cfg, opts, false)\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The admission is opened without OpenWithCleanup: closed observations keep their capsules and logs (D100)."
+    },
+    {
+      "name": "backend_without_decisions",
+      "file": "eth/backend.go",
+      "original": "\t\tif _, err := extractorgeth.AttachDecisions(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{},\n\t\t\textractorgeth.DecisionOptions{}); err != nil {\n",
+      "replacement": "\t\tif _, err := extractorgeth.Attach(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{}); err != nil {\n",
+      "binaries": [
+        "geth"
+      ],
+      "reason": "The shipped node attaches the admission without the decision bridge."
+    },
+    {
+      "name": "marker_in_intermediate_head_batch",
+      "file": "core_decision.go.txt",
+      "original": "\tif w == nil || w.marker == nil || head != w.target {\n",
+      "replacement": "\tif w == nil || w.marker == nil {\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "The marker goes into the first head batch of a reorg, before the head reaches the decided block: a crash after it would resolve a head change that never finished."
+    },
+    {
+      "name": "mid_reorg_head_refused",
+      "file": "decision.go",
+      "original": "\treturn ancestor != nil && ancestor.Hash() == head.Hash() && intent.Kind == decision.Canonical\n",
+      "replacement": "\treturn false\n",
+      "binaries": [
+        "probe"
+      ],
+      "reason": "Recovery refuses to complete a CANONICAL head change that an interrupted reorg left on a lower block of the new branch."
     }
   ]
 }

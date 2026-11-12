@@ -150,6 +150,46 @@ passed and are superseded and kept.
 Next: confirmation of the final head by both reviewers and hosted CI on it,
 then READY to the coordinator; then the Geth, BSC and Bor blocks.
 
+## E01-02.decision_bridge — Geth block
+
+Status: READY for review (draft PR #158, Part of #17). Base main `add17e6`
+(block 0, PR #157). Branch/worktree: `claude/e01-02-decision-geth` /
+`e01-02-admission-geth-95b3ee`. Evidence:
+[E01-02.decision_bridge.geth](evidence/E01-02.decision_bridge.geth.md);
+design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/native/README.md).
+
+- Every plan row marked Geth or "each client block" is done:
+  - `decision` is installed under `extractor/`;
+  - the marker goes in the head batch of the decided block in
+    `writeBlockAndSetHead`, and in the block batch of the side-chain write;
+  - the child-root barrier runs before `Intend`;
+  - the import path calls `Intend`, `Resolve`, `RejectIntent` (after a Geth
+    bad-block record) and `Cleanup`;
+  - the admission opens with `OpenWithCleanup` and a `Purge` adapter;
+  - the recovery driver ends with `decision.Bridge.GoLive`;
+  - after a restart, a block that is already in the chain opens no new
+    observation, on the import path;
+  - the AC-CAP-07-01, 07-02, 07-03 and 07-06 matrix is measured.
+- Records 03 at clean `ca88680`:
+  - preparation 03 PASS: 23 admission and 6 decision patches, 112 top-level
+    unit tests (115 with subtests), 41 mutant builds;
+  - run 03 PASS in 1,282 seconds: the probe passed and 41 of 41 native
+    mutants were killed;
+  - Python mutants: 96 of 96 killed.
+  - AC-CAP-07-01, 07-02, 07-03 and 07-06 pass for the private local ETH slot
+    only. Every public cell stays NOT_RUN (D96, D98, D99).
+- Kept attempts (D83):
+  - preparation 01 (`2ce8eee`) failed on a `go vet` deadline under host load;
+  - preparation 02 (`d04b20b`) passed but was superseded before its run.
+- Reviews:
+  - Review 001: Spec and Standards REQUEST_CHANGES. The P1: the `CANONICAL`
+    marker went into an intermediate `reorg` head batch.
+  - Review 002: both PASS, each with one point; both points are fixed.
+  - Review 003 (`ca88680`): Spec PASS and Standards PASS.
+- Limits (README): the hash scheme only; decided state is kept on disk; no
+  mirror before E05-01.registry; head changes without a new block wait for
+  E01-02.lifecycle_seams.
+
 ## E01-02.decision_bridge — BSC block
 
 Status: IN_PROGRESS (part of #17), draft PR #159 on branch

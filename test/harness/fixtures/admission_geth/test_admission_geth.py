@@ -22,7 +22,7 @@ import zlib
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import admission_geth  # noqa: E402
-from admission_geth import admission, source_inputs  # noqa: E402
+from admission_geth import admission, decision, source_inputs  # noqa: E402
 from source_inputs_geth import keccak256  # noqa: E402
 
 ORACLE = json.loads((HERE / "expected.json").read_text())
@@ -263,6 +263,7 @@ def synthetic_observation():
         attempt("without-set-head-1", without, opened + s.admission_events([T]))]})
     scenarios.append({"name": "freezer", "attempts": [attempt("freezer-1", {
         "frozen": ORACLE["side_fork"] + 1, "side_header_kept": True, "canonical_fork_kept": True})]})
+    scenarios += decision_scenarios(s)
     store = ["000004.log 120 " + "ab" * 32, "CURRENT 16 " + "cd" * 32, "ancient/chain/headers.0000.cdat 9 " + "ef" * 32]
     shipped = []
     for name, kind in ORACLE["shipped"].items():
@@ -276,6 +277,189 @@ def synthetic_observation():
         shipped.append(row)
     return {"family": "geth", "target": T, "lookbacks": ORACLE["lookbacks"], "generated_hashes": s.hashes,
             "generated_headers": s.headers, "bad_hash": s.bad_hash, "scenarios": scenarios, "shipped": shipped}
+
+
+PRODUCER = f"{ORACLE['producer_id']}.{ORACLE['run_id']}"
+
+
+def root_of(number):
+    """The state root field of synthetic header number."""
+    return hashlib.sha256(b"root" + number_bytes(number)).hexdigest()
+
+
+def ready_of(number):
+    """Synthetic EXEC_READY digest of the observation of block number."""
+    return sha(b"ready" + number_bytes(number))
+
+
+def exec_of(number):
+    return sha(b"exec" + number_bytes(number))
+
+
+def geth_intent(s, sequence, kind, old, new, members):
+    """An intent record from the Geth intent rules, members as (observation sequence, block number)."""
+    first = members[0][1]
+    evidence = hashlib.sha256(b"extractor-geth-intent-evidence-v1\x00" + len(kind).to_bytes(8, "big") + kind.encode() +
+                              bytes.fromhex(s.hashes[first][2:]) + first.to_bytes(8, "big") +
+                              bytes.fromhex(root_of(first))).hexdigest()
+    record = {"native_store_id": ORACLE["store_id"], "producer": PRODUCER, "sequence": sequence, "kind": kind,
+              "old_head": {"number": old, "hash": s.hashes[old][2:]},
+              "new_head": {"number": new, "hash": s.hashes[new][2:]},
+              "members": [{"observation": admission_geth.key_of(ORACLE, obs), "block": s.hashes[n][2:],
+                           "exec_ready_digest": ready_of(n), "child_root": root_of(n)} for obs, n in members],
+              "evidence_digest": evidence, "events": kind != "SIDE"}
+    record["digest"] = decision.intent_digest(record)
+    return record
+
+
+def intent_events(record, delivery, point_after="mutated", points=()):
+    rows = [trace("committed"), trace("intent", sequence=record["sequence"], kind=record["kind"],
+                                     digest=record["digest"], marker=decision.marker_value(record).decode())]
+    if point_after:
+        rows.append(trace(point_after))
+    rows += [trace(point) for point in points]
+    if delivery:
+        rows.append(trace("decided", sequence=record["sequence"], delivery=delivery,
+                          digest=decision.decided_digest(record["digest"], delivery)))
+    return rows
+
+
+def rejection(record):
+    evidence = hashlib.sha256(b"extractor-geth-native-refusal-v1\x00" +
+                              bytes.fromhex(record["members"][0]["block"])).hexdigest()
+    return trace("intent_rejected", sequence=record["sequence"],
+                 digest=decision.rejected_digest(record["digest"], evidence))
+
+
+def admitted_events(s, n, sequence, lookup=True):
+    """A live admission of block n up to EXEC_READY."""
+    rows = [trace("begin"), trace("pinned"), {"op": "put", "key": "x/capsule"}, trace("sealed"),
+            {"op": "put", "key": f"x/{sequence:016x}/admitted"}, {"op": "sync"}, trace("admitted")]
+    rows += s.lookups([n]) if lookup else []
+    return rows + [trace("exec_ready", observation=admission_geth.key_of(ORACLE, sequence), digest=ready_of(n),
+                         exec=exec_of(n))]
+
+
+def decision_result(s, counter, admitted, head, executed, markers, imports=(), **extra):
+    result = s.result([], admitted, head, executed, imports=[{"name": name, "error": error} for name, error in imports])
+    del result["records"]
+    result["records"] = {f"extractor-admission-v1/{PRODUCER}/counter": json.dumps({"next": admitted})}
+    result.update(markers={decision.marker_key(ORACLE["producer_id"], ORACLE["run_id"], seq): "{}" for seq in markers},
+                  decision_records={f"extractor-decision-v1/{PRODUCER}/counter": json.dumps({"next": counter})},
+                  inputs_left={}, bad_blocks={"target": False, "next": False},
+                  roots_at_start={"target": False, "next": False})
+    result.update(extra)
+    return result
+
+
+def decision_scenarios(s):
+    """The decision scenarios of the probe, built from the decision and Geth intent rules."""
+    base = [trace("opened"), trace("bridge_opened"), trace("live")]
+    out = []
+    i0 = geth_intent(s, 0, "IMPORT", T - 1, T, [(0, T)])
+    i1 = geth_intent(s, 1, "IMPORT", T, T + 1, [(1, T + 1)])
+    clean = decision_result(s, 2, 2, T + 1, [T, T + 1], [0, 1], [("target", None), ("next", None)])
+    done = {f"extractor-decision-v1/{PRODUCER}/{name}": json.dumps({field: 2}, separators=(",", ":"))
+            for name, field in (("counter", "next"), ("lowwater", "sequence"), ("purged", "sequence"))}
+    restart = decision_result(s, 2, 2, T + 1, [], [], [("target", None), ("next", None)], decision_records=done)
+    out.append({"name": "decision_clean", "attempts": [
+        attempt("decision-clean-1", clean, base + admitted_events(s, T, 0) + intent_events(i0, "BATCH") +
+                admitted_events(s, T + 1, 1) + intent_events(i1, "BATCH") +
+                [{"op": "mirror", "sequence": 0}, {"op": "mirror", "sequence": 1}]),
+        attempt("decision-clean-2-restart", restart, base + [{"op": "mirror", "sequence": 0}])]})
+    side = geth_intent(s, 0, "SIDE", T - 1, T - 1, [(0, T)])
+    canonical = geth_intent(s, 1, "CANONICAL", T - 1, T + 1, [(1, T + 1), (0, T)])
+    replayed = [trace("replaying"), trace("replayed")] + intent_events(side, "CHECKPOINT") + [trace("live")] + \
+        admitted_events(s, T + 1, 1) + intent_events(canonical, "BATCH", points=("intermediate",))
+    early = base + [trace("begin"), trace("pinned"), trace("sealed"), trace("admitted")]
+    recovered = decision_result(s, 2, 2, T + 1, [T, T + 1], [1], [("next", None)])
+    out.append({"name": "decision_exec_ready", "attempts": [
+        attempt("decision-exec-ready-1-crash", events=early, crash="before_sync/exec-ready"),
+        attempt("decision-exec-ready-2-recover", recovered,
+                [trace("opened"), trace("recovering"), trace("resumed")] + s.lookups([T]) +
+                [trace("exec_ready", observation=admission_geth.key_of(ORACLE, 0), digest=ready_of(T), exec=exec_of(T)),
+                 trace("deferred"), trace("recovered", state="EXEC_READY"), trace("bridge_opened")] + replayed)]})
+    rows, _, _, _ = s.observation_records(0, T, "EXEC_READY")
+    for key, value in rows.items():
+        if key.endswith("/exec-ready"):
+            ready = value["digest"]
+    side_saved = copy.deepcopy(side)
+    side_saved["members"][0]["exec_ready_digest"] = ready
+    side_saved["digest"] = decision.intent_digest(side_saved)
+    canonical_saved = copy.deepcopy(canonical)
+    canonical_saved["members"][1]["exec_ready_digest"] = ready
+    canonical_saved["digest"] = decision.intent_digest(canonical_saved)
+    child = decision_result(s, 2, 2, T + 1, [T + 1], [1], [("next", None)],
+                            records_at_start={key: json.dumps(value, separators=(",", ":")) for key, value in rows.items()})
+    out.append({"name": "decision_child_root", "attempts": [
+        attempt("decision-child-root-1-crash", events=early, crash="after_sync/exec-ready"),
+        attempt("decision-child-root-2-recover", child,
+                [trace("opened"), trace("bridge_opened"), trace("replaying"), trace("replayed")] +
+                intent_events(side_saved, "CHECKPOINT") + [trace("live")] + admitted_events(s, T + 1, 1) +
+                intent_events(canonical_saved, "BATCH", points=("intermediate",)))]})
+    live = base + admitted_events(s, T, 0)
+    nxt = [trace("live")] + admitted_events(s, T + 1, 1) + intent_events(i1, "BATCH")
+    completed = decision_result(s, 2, 2, T + 1, [T, T + 1], [0, 1], [("next", None)],
+                                roots_at_start={"target": True, "next": False})
+    out.append({"name": "decision_intent", "attempts": [
+        attempt("decision-intent-1-crash", events=live + [trace("committed")],
+                crash=f"after_sync-decision-v1/{PRODUCER}/counter"),
+        attempt("decision-intent-2-recover", completed,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=0, evidence="reimport"),
+                 trace("replaying"), trace("replayed")] + intent_events(i0, "BATCH") + nxt)]})
+    settled = [trace("decided", sequence=0, delivery="BATCH", digest=decision.decided_digest(i0["digest"], "BATCH"))]
+    mutation = copy.deepcopy(completed)
+    mutation["imports"] = [{"name": "target", "error": ORACLE["messages"]["known_block"] + ": block 300"},
+                           {"name": "next", "error": None}]
+    out.append({"name": "decision_mutation", "attempts": [
+        attempt("decision-mutation-1-crash", events=live + intent_events(i0, None), crash="native/mutated"),
+        attempt("decision-mutation-2-recover", mutation,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=0, evidence="stored_block")] +
+                settled + nxt)]})
+    out.append({"name": "decision_marker", "attempts": [
+        attempt("decision-marker-1-crash", events=live + intent_events(i0, None),
+                crash=f"before_sync-decision-v1/{PRODUCER}/0000000000000000/decided"),
+        attempt("decision-marker-2-recover", completed,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=0, evidence="marker")] +
+                settled + nxt)]})
+    refused = decision_result(s, 1, 1, T - 1, [], [], (), stored={"target": False, "next": False, "bad": False},
+                              bad_blocks={"target": True, "next": False})
+    out.append({"name": "decision_rejected", "attempts": [
+        attempt("decision-rejected-1-crash", events=live + intent_events(i0, None, "refused"),
+                crash=f"before_sync-decision-v1/{PRODUCER}/0000000000000000/rejected"),
+        attempt("decision-rejected-2-recover", refused,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=0, evidence="bad_block"),
+                 rejection(i0), trace("live")])]})
+    # AC-CAP-07-03 on a CANONICAL write over the retained side block 300.
+    before = base + admitted_events(s, T, 0) + intent_events(side, "CHECKPOINT") + admitted_events(s, T + 1, 1)
+    finished = decision_result(s, 2, 2, T + 1, [T, T + 1], [1], head_at_start=s.hashes[T - 1])
+    mid_reorg = decision_result(s, 2, 2, T + 1, [T, T + 1], [1], head_at_start=s.hashes[T])
+    settled_canonical = [trace("decided", sequence=1, delivery="BATCH",
+                               digest=decision.decided_digest(canonical["digest"], "BATCH"))]
+    out.append({"name": "decision_canonical_intent", "attempts": [
+        attempt("decision-canonical-intent-1-crash", events=before + [trace("committed")],
+                crash=f"after_sync-decision-v1/{PRODUCER}/counter"),
+        attempt("decision-canonical-intent-2-recover", finished,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=1, evidence="reimport"),
+                 trace("replaying"), trace("replayed")] +
+                intent_events(canonical, "BATCH", points=("intermediate",)) + [trace("live")])]})
+    out.append({"name": "decision_canonical_mutated", "attempts": [
+        attempt("decision-canonical-mutated-1-crash", events=before + intent_events(canonical, None),
+                crash="native/mutated"),
+        attempt("decision-canonical-mutated-2-recover", finished,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=1, evidence="stored_block")] +
+                settled_canonical + [trace("live")])]})
+    out.append({"name": "decision_canonical_intermediate", "attempts": [
+        attempt("decision-canonical-intermediate-1-crash",
+                events=before + intent_events(canonical, None, points=("intermediate",)), crash="native/intermediate"),
+        attempt("decision-canonical-intermediate-2-recover", mid_reorg,
+                [trace("opened"), trace("bridge_opened"), trace("settling", sequence=1, evidence="stored_block")] +
+                settled_canonical + [trace("live")])]})
+    refused_live = copy.deepcopy(refused)
+    refused_live["imports"] = [{"name": "target", "error": ORACLE["messages"]["refused"] + "\nx"}]
+    out.append({"name": "decision_reject_live", "attempts": [
+        attempt("decision-reject-live-1", refused_live, live + intent_events(i0, None, "refused") + [rejection(i0)])]})
+    return out
 
 
 def fresh():
@@ -757,6 +941,155 @@ class OracleTests(unittest.TestCase):
         observation["scenarios"].append({"name": "extra", "attempts": []})
         self.assertFails(observation, "scenarios")
 
+    def events(self, observation, name, index):
+        return scenario(observation, name)[index]["events"]
+
+    def edit_event(self, observation, name, index, event, **fields):
+        for row in self.events(observation, name, index):
+            if row.get("event") == event:
+                row.update(fields)
+                return
+        raise AssertionError(f"no {event} event")
+
+    def test_decision_intent_must_be_the_independent_intent(self):
+        observation = fresh()
+        row = [r for r in self.events(observation, "decision_clean", 0) if r.get("event") == "intent"][0]
+        marker = json.loads(row["marker"])
+        marker["members"][0]["child_root"] = "5" * 64
+        row["marker"] = json.dumps(marker, separators=(",", ":"))
+        self.assertFails(observation, "intent 0 differs from the independent IMPORT intent")
+        observation = fresh()
+        self.edit_event(observation, "decision_clean", 0, "intent", kind="SIDE")
+        self.assertFails(observation, "differs from the independent")
+
+    def test_decision_delivery_and_digest(self):
+        observation = fresh()
+        self.edit_event(observation, "decision_clean", 0, "decided", delivery="CHECKPOINT")
+        self.assertFails(observation, "intent 0 was not decided as BATCH")
+        observation = fresh()
+        self.edit_event(observation, "decision_child_root", 1, "decided", digest="6" * 64)
+        self.assertFails(observation, "intent 0 was not decided as CHECKPOINT")
+
+    def test_decision_end_state(self):
+        observation = fresh()
+        scenario(observation, "decision_clean")[1]["result"]["markers"] = {"x": "{}"}
+        self.assertFails(observation, "decision-clean-2: markers")
+        observation = fresh()
+        scenario(observation, "decision_intent")[1]["result"]["inputs_left"] = {"geth-probe.r1.0000000000000000": 3}
+        self.assertFails(observation, "inputs of closed observations are left")
+        observation = fresh()
+        scenario(observation, "decision_exec_ready")[1]["result"]["pins"] = {
+            ORACLE["pin_prefix"] + admission_geth.key_of(ORACLE, 0): "{}"}
+        self.assertFails(observation, "live pins")
+        observation = fresh()
+        scenario(observation, "decision_marker")[1]["result"]["decision_records"] = {}
+        self.assertFails(observation, "decision counter 0, want 2")
+        observation = fresh()
+        scenario(observation, "decision_clean")[1]["result"]["decision_records"][
+            f"extractor-decision-v1/{PRODUCER}/purged"] = '{"sequence":1}'
+        self.assertFails(observation, "were not cleaned up to the counter")
+
+    def test_known_block_opens_no_observation(self):
+        observation = fresh()
+        self.events(observation, "decision_clean", 1).append(trace("begin"))
+        self.assertFails(observation, "decision-clean-2: admission steps")
+        observation = fresh()
+        scenario(observation, "decision_clean")[1]["result"]["records"] = {
+            f"extractor-admission-v1/{PRODUCER}/counter": json.dumps({"next": 3})}
+        self.assertFails(observation, "admission counter 3, want 2")
+        observation = fresh()
+        scenario(observation, "decision_mutation")[1]["result"]["imports"][0]["error"] = None
+        self.assertFails(observation, "decision-mutation-2: imports")
+
+    def test_child_root_replay(self):
+        observation = fresh()
+        scenario(observation, "decision_child_root")[1]["result"]["roots_at_start"]["target"] = True
+        self.assertFails(observation, "was durable before the replay")
+        observation = fresh()
+        result = scenario(observation, "decision_child_root")[1]["result"]
+        key = [key for key in result["records_at_start"] if key.endswith("/exec-ready")][0]
+        record = json.loads(result["records_at_start"][key])
+        record["consumed_digest"] = "7" * 64
+        result["records_at_start"][key] = json.dumps(record)
+        self.assertFails(observation, "did not find the durable EXEC_READY record")
+        observation = fresh()
+        scenario(observation, "decision_child_root")[1]["result"]["captured_inputs"] = [f"{T:064x}", f"{T + 1:064x}"]
+        self.assertFails(observation, "decision-child-root-2: the VM safe point")
+
+    def test_completed_intent(self):
+        observation = fresh()
+        self.edit_event(observation, "decision_intent", 1, "settling", evidence="marker")
+        self.assertFails(observation, "was settled from ['marker'], want reimport")
+        observation = fresh()
+        row = [r for r in self.events(observation, "decision_clean", 0) if r.get("event") == "intent"][0]
+        row["marker"] = row["marker"].replace('"events":true', '"events":false')
+        self.assertFails(observation, "differs from the intent of the clean decision import")
+        observation = fresh()
+        row = [r for r in self.events(observation, "decision_intent", 1) if r.get("event") == "intent"][0]
+        row["marker"] = row["marker"].replace('"events":true', '"events":false')
+        self.assertFails(observation, "decision-intent-2: the completed intent differs from the intent of the clean")
+        observation = fresh()
+        scenario(observation, "decision_mutation")[1]["result"]["head_number"] = T
+        self.assertFails(observation, "decision-mutation-2: head")
+
+    def test_recovered_rejection(self):
+        observation = fresh()
+        self.edit_event(observation, "decision_rejected", 1, "intent_rejected", digest="8" * 64)
+        self.assertFails(observation, "was not rejected once with the native refusal evidence")
+        observation = fresh()
+        self.edit_event(observation, "decision_reject_live", 0, "intent_rejected", digest="8" * 64)
+        self.assertFails(observation, "the recovered rejection differs from the live rejection")
+        self.assertFails(observation, "decision-reject-live-1: intent 0 was not rejected with the native refusal")
+        observation = fresh()
+        self.events(observation, "decision_rejected", 1).append({"op": "mirror", "sequence": 0})
+        self.assertFails(observation, "the mirror was asked about sequences [0]")
+        observation = fresh()
+        scenario(observation, "decision_rejected")[1]["result"]["bad_blocks"]["target"] = False
+        self.assertFails(observation, "not recorded natively as a bad block")
+        observation = fresh()
+        scenario(observation, "decision_reject_live")[0]["result"]["stored"]["target"] = True
+        self.assertFails(observation, "stored blocks")
+        observation = fresh()
+        scenario(observation, "decision_rejected")[1]["result"]["markers"] = {
+            decision.marker_key(ORACLE["producer_id"], ORACLE["run_id"], 0): "{}"}
+        self.assertFails(observation, "decision-rejected-2: markers")
+
+    def test_canonical_crash_inside_reorg(self):
+        observation = fresh()
+        scenario(observation, "decision_canonical_intermediate")[0]["events"].insert(
+            -1, trace("decided", sequence=1, delivery="BATCH", digest="0" * 64))
+        self.assertFails(observation, "the CANONICAL decision was recorded before the crash")
+        observation = fresh()
+        self.edit_event(observation, "decision_canonical_intermediate", 1, "settling", evidence="marker")
+        self.assertFails(observation, "intent 1 was settled from ['marker'], want stored_block")
+        observation = fresh()
+        row = [r for r in self.events(observation, "decision_canonical_mutated", 0) if r.get("event") == "intent"][1]
+        marker = json.loads(row["marker"])
+        marker["members"] = marker["members"][:1]
+        row["marker"] = json.dumps(marker, separators=(",", ":"))
+        self.assertFails(observation, "the intents differ from the independent SIDE and CANONICAL intents")
+        observation = fresh()
+        scenario(observation, "decision_canonical_intent")[1]["result"]["head_number"] = T
+        self.assertFails(observation, "decision-canonical-intent-2: head")
+        observation = fresh()
+        scenario(observation, "decision_canonical_intermediate")[1]["result"]["head_at_start"] = ZERO
+        self.assertFails(observation, "the native head at the restart is not block 300")
+
+    def test_decision_exec_ready_recovery(self):
+        observation = fresh()
+        self.edit_event(observation, "decision_exec_ready", 1, "exec_ready", exec="9" * 64)
+        self.assertFails(observation, "differs from the clean decision import")
+        observation = fresh()
+        self.events(observation, "decision_exec_ready", 1)[:] = [
+            row for row in self.events(observation, "decision_exec_ready", 1) if row.get("event") != "deferred"]
+        self.assertFails(observation, "decision-exec-ready-2: admission steps")
+
+    def test_legacy_store_is_refused(self):
+        observation = fresh()
+        row = [r for r in observation["shipped"] if r["name"] == "decision-legacy-store"][0]
+        row["exit_code"] = 0
+        self.assertFails(observation, "shipped/decision-legacy-store")
+
     def test_malformed_observation_is_a_failure(self):
         observation = fresh()
         scenario(observation, "clean")[0]["result"]["records"] = {"x/y/0000000000000000/preparing": "not json"}
@@ -785,6 +1118,34 @@ class DriverTests(unittest.TestCase):
             with self.assertRaises(Exception):
                 admission_geth.apply_patches(tree, admission_geth.NATIVE)
 
+    def test_decision_patches_apply_after_the_admission_patches(self):
+        admission_table = json.loads((admission_geth.NATIVE / "patches.json").read_text())
+        table = json.loads((admission_geth.DECISION / "patches.json").read_text())
+        self.assertEqual(table["source_commit"], admission_table["source_commit"])
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Path(directory)
+            texts = {}
+            for patch in admission_table["patches"] + table["patches"]:
+                if patch in admission_table["patches"] or \
+                        not any(patch["original"] in other["replacement"] for other in admission_table["patches"]):
+                    texts.setdefault(patch["file"], "")
+                    texts[patch["file"]] += "// filler\n" + patch["original"]
+            for name, text in texts.items():
+                (tree / name).parent.mkdir(parents=True, exist_ok=True)
+                (tree / name).write_text(text)
+            admission_geth.apply_patches(tree, admission_geth.NATIVE)
+            record = admission_geth.apply_patches(tree, admission_geth.DECISION)
+            self.assertEqual([row["name"] for row in record["patches"]], [patch["name"] for patch in table["patches"]])
+            for patch in table["patches"]:
+                self.assertIn(patch["replacement"], (tree / patch["file"]).read_text())
+            for name, relative in table["files"].items():
+                self.assertEqual((tree / relative).read_bytes(), (admission_geth.DECISION / name).read_bytes())
+        names = [patch["name"] for patch in admission_table["patches"] + table["patches"]]
+        self.assertEqual(len(names), len(set(names)))
+        for patch in table["patches"]:
+            self.assertNotEqual(patch["original"], patch["replacement"])
+            self.assertTrue(patch["reason"])
+
     def test_patch_original_must_occur_exactly_once(self):
         table = json.loads((admission_geth.NATIVE / "patches.json").read_text())
         with tempfile.TemporaryDirectory() as directory:
@@ -809,16 +1170,21 @@ class DriverTests(unittest.TestCase):
     def test_mutants_target_the_patched_text(self):
         table = json.loads((HERE / "native_mutants.json").read_text())
         patches = json.loads((admission_geth.NATIVE / "patches.json").read_text())
-        targets = admission_geth.mutant_targets(table, patches)
+        decisions = json.loads((admission_geth.DECISION / "patches.json").read_text())
+        targets = admission_geth.mutant_targets(table, patches, decisions)
         self.assertEqual(sorted(targets), sorted(mutant["name"] for mutant in table["mutants"]))
+        # A decision mutant needs the decision patch set or its own file.
+        with self.assertRaises(Exception):
+            admission_geth.mutant_targets({"mutants": [m for m in table["mutants"] if m["name"] == "head_marker_omitted"]},
+                                          patches)
         broken = copy.deepcopy(table)
         broken["mutants"][0]["original"] = "no such text"
         with self.assertRaises(Exception):
-            admission_geth.mutant_targets(broken, patches)
+            admission_geth.mutant_targets(broken, patches, decisions)
         broken = copy.deepcopy(table)
         broken["mutants"][0]["binaries"] = ["other"]
         with self.assertRaises(Exception):
-            admission_geth.mutant_targets(broken, patches)
+            admission_geth.mutant_targets(broken, patches, decisions)
 
     def test_apply_mutant_restores(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -831,6 +1197,16 @@ class DriverTests(unittest.TestCase):
             self.assertEqual(path.read_text(), "a\nc\n")
             restore()
             self.assertEqual(path.read_text(), "a\nb\n")
+            for name, relative in (("decision.go", "extractor/admission/native/decision.go"),
+                                   ("core_decision.go.txt", "core/extractor_decision.go")):
+                target = tree / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("x\n")
+                restore = admission_geth.apply_mutant(tree, {"name": "m", "file": name, "original": "x\n",
+                                                             "replacement": "y\n"})
+                self.assertEqual(target.read_text(), "y\n")
+                restore()
+                self.assertEqual(target.read_text(), "x\n")
             with self.assertRaises(Exception):
                 admission_geth.apply_mutant(tree, {"name": "m", "file": "geth.go", "original": "z", "replacement": ""})
 

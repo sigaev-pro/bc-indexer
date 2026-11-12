@@ -1,0 +1,223 @@
+// This file is copied unchanged from adapters/geth/decision/native/core_decision.go.txt
+// into the accepted Geth tree as core/extractor_decision.go by the
+// E01-02.decision_bridge Geth preparation; edit it there. It is part of the
+// product native patch set of E01-02.decision_bridge.
+
+package core
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
+)
+
+// ExtractorDecision is the decision bridge seam on the block write path.
+// extractor/admission/native implements it.
+type ExtractorDecision interface {
+	// Write starts the decision of an observed block that ProcessBlock is
+	// about to write; setHead says whether the import moves the head. A nil
+	// write without an error means that the block is not written now: the
+	// admission recovery re-executes a saved ADMITTED obligation before the
+	// decision bridge opens, and the bridge decides it later.
+	Write(observation ExtractorObservation, block *types.Block, setHead bool) (ExtractorWrite, error)
+}
+
+// ExtractorWrite is the decision of one block write. Every method is called
+// with the observation guard and the chain mutex held.
+type ExtractorWrite interface {
+	// Intend records the transition intent after the child-root barrier made
+	// root durable and before the native mutation. head is the native head
+	// before the mutation. It returns the native decision marker.
+	Intend(root common.Hash, head *types.Header) (key, value []byte, err error)
+	// Outcome is the native outcome of the transition before the mutation;
+	// an error is a native refusal. The shipped binary has none.
+	Outcome() error
+	// Reject records the native refusal of the transition, after its native
+	// evidence (the bad-block record) is durable.
+	Reject(cause error) error
+	// Point reports a named point of the native mutation, for probes.
+	Point(name string)
+	// Resolve records the decision after the batch with the marker is
+	// durable.
+	Resolve() error
+}
+
+// extractorWriting is the decision of the block write in progress.
+type extractorWriting struct {
+	write   ExtractorWrite
+	setHead bool
+	// target is the block of the decision. Only the head batch of target is
+	// the final authoritative batch of a head change: reorg writes a head
+	// batch for every lower block of the new branch first.
+	target common.Hash
+	// marker is the native decision marker that writeHeadBlock of target
+	// puts into its batch.
+	marker [][]byte
+}
+
+// errExtractorScheme refuses a decision write without the hash state scheme,
+// which the child-root barrier needs.
+var errExtractorScheme = errors.New("extractor: the decision bridge needs the hash state scheme")
+
+// SetExtractorDecision installs the decision bridge seam. It must be called
+// before the first import, after SetExtractorAdmission.
+func (bc *BlockChain) SetExtractorDecision(d ExtractorDecision) { bc.extractorDecision = d }
+
+// extractorWriteBlockWithState is writeBlockWithState of a decided block. It
+// keeps the protocol order: the native StateDB commit, the child-root
+// barrier (triedb.Commit of the child root and SyncKeyValue), the transition
+// intent, then the native mutation. The block batch is the final batch of a
+// SIDE decision and carries its marker; a head change carries the marker in
+// the head batch of writeHeadBlock instead.
+func (bc *BlockChain) extractorWriteBlockWithState(w *extractorWriting, block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {
+	if !bc.HasHeader(block.ParentHash(), block.NumberU64()-1) {
+		return consensus.ErrUnknownAncestor
+	}
+	if bc.triedb.Scheme() != rawdb.HashScheme {
+		return errExtractorScheme
+	}
+	var (
+		err          error
+		root         common.Hash
+		preimages    = statedb.Preimages()
+		hasStateHook = bc.logger != nil && bc.logger.OnStateUpdate != nil
+		rules        = bc.chainConfig.Rules(block.Number(), block.Difficulty().Sign() == 0, block.Time())
+	)
+	if hasStateHook {
+		r, update, err := statedb.CommitWithUpdate(rules, block.NumberU64())
+		if err != nil {
+			return err
+		}
+		trUpdate, err := update.ToTracingUpdate()
+		if err != nil {
+			return err
+		}
+		bc.logger.OnStateUpdate(trUpdate)
+		root = r
+	} else {
+		root, err = statedb.Commit(rules, block.NumberU64())
+		if err != nil {
+			return err
+		}
+	}
+	// Child-root barrier: the child state is flushed from the hash trie
+	// database to the key-value store and synced before the intent. The root
+	// stays on disk, so it is not referenced for in-memory garbage
+	// collection.
+	w.write.Point("committed")
+	if err := bc.triedb.Commit(root, false); err != nil {
+		return err
+	}
+	if err := bc.db.SyncKeyValue(); err != nil {
+		return err
+	}
+	key, value, err := w.write.Intend(root, bc.CurrentBlock())
+	if err != nil {
+		return err
+	}
+	if cause := w.write.Outcome(); cause != nil {
+		// Native refusal: the block is not stored. The bad-block record is
+		// the durable native evidence of the refusal; the rejection of the
+		// intent follows it.
+		rawdb.WriteBadBlock(bc.db, block)
+		if err := bc.db.SyncKeyValue(); err != nil {
+			return errors.Join(cause, err)
+		}
+		w.write.Point("refused")
+		return errors.Join(cause, w.write.Reject(cause))
+	}
+	batch := bc.db.NewBatch()
+	defer batch.Close()
+	rawdb.WriteBlock(batch, block)
+	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receipts)
+	rawdb.WritePreimages(batch, preimages)
+	if !w.setHead {
+		if err := batch.Put(key, value); err != nil {
+			return err
+		}
+	}
+	if err := batch.Write(); err != nil {
+		log.Crit("Failed to write block into disk", "err", err)
+	}
+	if err := bc.db.SyncKeyValue(); err != nil {
+		return err
+	}
+	if w.setHead {
+		w.target, w.marker = block.Hash(), [][]byte{key, value}
+	}
+	w.write.Point("mutated")
+	return nil
+}
+
+// extractorHeadMarker returns the marker that the head batch of head must
+// carry: only the head batch of the decided block carries it, once.
+func (bc *BlockChain) extractorHeadMarker(head common.Hash) [][]byte {
+	w := bc.extractorWriting
+	if w == nil || w.marker == nil || head != w.target {
+		return nil
+	}
+	marker := w.marker
+	w.marker = nil
+	return marker
+}
+
+// extractorHeadWritten reports an intermediate head batch of a decided head
+// change (a lower block of the new branch in reorg), for probes.
+func (bc *BlockChain) extractorHeadWritten(head common.Hash) {
+	if w := bc.extractorWriting; w != nil && w.write != nil && w.marker != nil && head != w.target {
+		w.write.Point("intermediate")
+	}
+}
+
+// ExtractorCompleteHead completes a saved head transition from oldHead to
+// block, whose block is already stored with its state: the recovery driver
+// calls it for an unresolved IMPORT or CANONICAL intent after a crash
+// between the block batch and the final head batch, including a crash
+// inside reorg. If the block does not extend oldHead, it runs reorg from
+// oldHead again (its writes are idempotent, and its final clean-up of the
+// old branch indexes is then done), and it writes the head batch of the
+// block with the marker, then syncs.
+func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, oldHead common.Hash, key, value []byte) error {
+	if !bc.chainmu.TryLock() {
+		return errChainStopped
+	}
+	defer bc.chainmu.Unlock()
+	if !bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
+		return fmt.Errorf("extractor: block %d %s is not stored with its state", block.NumberU64(), block.Hash())
+	}
+	old := bc.GetHeaderByHash(oldHead)
+	if old == nil {
+		return fmt.Errorf("extractor: saved old head %s is not stored", oldHead)
+	}
+	if block.ParentHash() != old.Hash() {
+		if err := bc.reorg(old, block.Header()); err != nil {
+			return err
+		}
+	}
+	bc.extractorWriting = &extractorWriting{target: block.Hash(), marker: [][]byte{key, value}}
+	defer func() { bc.extractorWriting = nil }()
+	bc.writeHeadBlock(block)
+	return nil
+}
+
+// ExtractorWriteMarker writes the marker of a saved SIDE transition whose
+// block is already stored with its state, then syncs.
+func (bc *BlockChain) ExtractorWriteMarker(block *types.Block, key, value []byte) error {
+	if !bc.chainmu.TryLock() {
+		return errChainStopped
+	}
+	defer bc.chainmu.Unlock()
+	if !bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
+		return fmt.Errorf("extractor: block %d %s is not stored with its state", block.NumberU64(), block.Hash())
+	}
+	if err := bc.db.Put(key, value); err != nil {
+		return err
+	}
+	return bc.db.SyncKeyValue()
+}

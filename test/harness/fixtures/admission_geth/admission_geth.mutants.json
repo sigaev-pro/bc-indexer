@@ -1,12 +1,13 @@
 {
  "schema_version": 1,
- "description": "Single-check mutants of the E01-02.admission Geth probe oracle and driver in test/harness/fixtures/admission_geth/admission_geth.py.",
+ "description": "Single-check mutants of the E01-02.admission and E01-02.decision_bridge Geth probe oracle and driver in test/harness/fixtures/admission_geth/admission_geth.py.",
  "language": "python",
  "root": "../../../..",
  "copy": [
   "test/harness/*.py",
   "test/harness/fixtures/admission_geth/*",
-  "adapters/geth/admission/native/*"
+  "adapters/geth/admission/native/*",
+  "adapters/geth/decision/native/*"
  ],
  "test": [
   "{python}",
@@ -449,6 +450,156 @@
    "file": "test/harness/fixtures/admission_geth/admission_geth.py",
    "original": "    ended(c, \"removedb-allowed-1\", crash, \"before_sync/counter\")\n",
    "replacement": "    ended(c, \"removedb-allowed-1\", crash, None) if False else None\n"
+  },
+  {
+   "name": "decision intent marker unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if row.get(\"marker\") != decision.marker_value(record).decode() or row.get(\"digest\") != record[\"digest\"] or \\\n",
+   "replacement": "        if row.get(\"digest\") != record[\"digest\"] or \\\n"
+  },
+  {
+   "name": "decision kind unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "                row.get(\"sequence\") != record[\"sequence\"] or row.get(\"kind\") != record[\"kind\"]:\n",
+   "replacement": "                row.get(\"sequence\") != record[\"sequence\"]:\n"
+  },
+  {
+   "name": "decision delivery unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "            if done.get(\"sequence\") != record[\"sequence\"] or done.get(\"delivery\") != outcome or \\\n",
+   "replacement": "            if done.get(\"sequence\") != record[\"sequence\"] or \\\n"
+  },
+  {
+   "name": "decision live rejection digest unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "            if done.get(\"sequence\") != record[\"sequence\"] or \\\n                    done.get(\"digest\") != decision.rejected_digest(record[\"digest\"], evidence):\n",
+   "replacement": "            if done.get(\"sequence\") != record[\"sequence\"]:\n"
+  },
+  {
+   "name": "decision settling evidence unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if [row.get(\"evidence\") for row in rows] != [evidence]:\n",
+   "replacement": "    if len(rows) != 1:\n"
+  },
+  {
+   "name": "decision recovered rejection digest unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if [row.get(\"digest\") for row in done] != [want]:\n",
+   "replacement": "        if len(done) != 1:\n"
+  },
+  {
+   "name": "decision counter unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if decision_counter(result) != counter:\n",
+   "replacement": "    if decision_counter(result) < 0:\n"
+  },
+  {
+   "name": "decision admission counter unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if records(result)[1] != admitted:\n",
+   "replacement": "    if records(result)[1] is None:\n"
+  },
+  {
+   "name": "decision markers unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if sorted(result.get(\"markers\") or {}) != want:\n",
+   "replacement": "    if len(result.get(\"markers\") or {}) > len(want) + 2:\n"
+  },
+  {
+   "name": "decision inputs left unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if left != sorted(key_of(oracle, seq) for seq in pins):\n",
+   "replacement": "    if False:\n"
+  },
+  {
+   "name": "decision stored blocks unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if stored is not None and result.get(\"stored\") != stored:\n",
+   "replacement": "    if False:\n"
+  },
+  {
+   "name": "decision mirror queries unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if any(seq not in allowed for seq in asked):\n",
+   "replacement": "    if False:\n"
+  },
+  {
+   "name": "decision cleanup records unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if later.get(\"decision_records\") != done:\n",
+   "replacement": "    if not later.get(\"decision_records\"):\n"
+  },
+  {
+   "name": "decision volatile root unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if (result.get(\"roots_at_start\") or {}).get(\"target\") is not False:\n",
+   "replacement": "    if False:\n"
+  },
+  {
+   "name": "decision saved exec ready unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if set(rows) != {\"preparing\", \"admitted\", \"exec-ready\"} or ready.get(\"consumed_digest\") != consumed or \\\n",
+   "replacement": "    if False and set(rows) != {\"preparing\", \"admitted\", \"exec-ready\"} or ready.get(\"consumed_digest\") != consumed and \\\n"
+  },
+  {
+   "name": "decision replay capture unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    check_captured(c, \"decision-child-root-2\", result, [t + 1])\n",
+   "replacement": ""
+  },
+  {
+   "name": "decision clean marker comparison skipped",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if not clean_markers or any(marker != clean_markers[0] for marker in markers) or \\\n",
+   "replacement": "        if not clean_markers or \\\n"
+  },
+  {
+   "name": "decision completed imports unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if [name for name, _ in rows] != [name for name, _ in recover_imports] or \\\n",
+   "replacement": "        if False and [name for name, _ in rows] != [name for name, _ in recover_imports] or False and \\\n"
+  },
+  {
+   "name": "decision rejected live comparison skipped",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if rejected != [live_rejection]:\n",
+   "replacement": "    if not rejected:\n"
+  },
+  {
+   "name": "decision bad block unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if result.get(\"bad_blocks\") != {\"target\": True, \"next\": False}:\n        c.fail(\"decision-rejected-2\", \"the refused block is not recorded natively as a bad block\")\n",
+   "replacement": ""
+  },
+  {
+   "name": "decision exec ready recovery digest unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    if clean_exec is None or execs != [clean_exec]:\n",
+   "replacement": "    if clean_exec is None:\n"
+  },
+  {
+   "name": "decision known block restart trace unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "    check_trace(c, \"decision-clean-2\", restart, [\"opened\", \"bridge_opened\", \"live\"])\n",
+   "replacement": ""
+  },
+  {
+   "name": "decision canonical early decision unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if any(row.get(\"sequence\") == 1 for row in events_of(crash, \"decided\")):\n",
+   "replacement": "        if False:\n"
+  },
+  {
+   "name": "decision canonical intents unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if markers != [decision.marker_value(side).decode(), decision.marker_value(canonical).decode()]:\n",
+   "replacement": "        if len(markers) != 2:\n"
+  },
+  {
+   "name": "decision canonical head at restart unchecked",
+   "file": "test/harness/fixtures/admission_geth/admission_geth.py",
+   "original": "        if result.get(\"head_at_start\") != observation[\"generated_hashes\"][head_at_start]:\n",
+   "replacement": "        if False:\n"
   }
  ]
 }
