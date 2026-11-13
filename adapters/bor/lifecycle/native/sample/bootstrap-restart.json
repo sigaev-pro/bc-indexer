@@ -32,7 +32,7 @@
    ],
    "new_head": "A5",
    "old_head": "A5",
-   "sequence": 60,
+   "sequence": 0,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -43,7 +43,7 @@
    ],
    "new_head": "A5",
    "old_head": "A5",
-   "sequence": 61,
+   "sequence": 1,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -54,7 +54,7 @@
    ],
    "new_head": "A6",
    "old_head": "A5",
-   "sequence": 62,
+   "sequence": 2,
    "state": "NATIVE_DECIDED"
   }
  ],

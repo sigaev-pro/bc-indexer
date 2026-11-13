@@ -17,16 +17,23 @@
    "Refusals": 0
   },
   "bor.milestone": {
-   "Intents": 40,
-   "Passes": 20,
+   "Intents": 0,
+   "Passes": 1,
    "Refusals": 0
   },
   "bor.milestone-lock": {
-   "Intents": 20,
-   "Passes": 20,
+   "Intents": 0,
+   "Passes": 1,
    "Refusals": 0
   },
   "bor.recovery": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  }
+ },
+ "coverage_before_golive": {
+  "bor.milestone": {
    "Intents": 0,
    "Passes": 1,
    "Refusals": 0
@@ -47,7 +54,7 @@
    ],
    "new_head": "A5",
    "old_head": "A5",
-   "sequence": 60,
+   "sequence": 0,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -58,7 +65,7 @@
    ],
    "new_head": "A5",
    "old_head": "A5",
-   "sequence": 61,
+   "sequence": 1,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -69,11 +76,12 @@
    ],
    "new_head": "A6",
    "old_head": "A5",
-   "sequence": 62,
+   "sequence": 2,
    "state": "NATIVE_DECIDED"
   }
  ],
  "evidence_records": 0,
+ "golive_waited_for_vote": true,
  "head_at_golive": {
   "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
   "name": "A5",
@@ -169,6 +177,5 @@
    "head_number": 6,
    "name": "import-A6"
   }
- ],
- "whitelist_calls_during_golive": 20
+ ]
 }

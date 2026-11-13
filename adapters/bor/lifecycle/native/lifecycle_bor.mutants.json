@@ -325,16 +325,28 @@
    "replacement": ","
   },
   {
-   "name": "bootstrap whitelist calls",
+   "name": "bootstrap whitelist pass",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "check(boot.get(\"whitelist_calls_during_golive\") == 20\n",
-   "replacement": "check(True\n"
+   "original": "check(before.get(\"Passes\", 0) >= 1 and before.get(\"Intents\", 1) == 0",
+   "replacement": "check(before.get(\"Intents\", 1) == 0"
   },
   {
-   "name": "bootstrap whitelist passes",
+   "name": "bootstrap whitelist uncaptured",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "          and boot[\"coverage\"].get(\"bor.milestone\", {}).get(\"Passes\", 0) >= 20,",
+   "original": "check(before.get(\"Passes\", 0) >= 1 and before.get(\"Intents\", 1) == 0",
+   "replacement": "check(before.get(\"Passes\", 0) >= 1"
+  },
+  {
+   "name": "bootstrap golive waited",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": " and boot.get(\"golive_waited_for_vote\") is True,",
    "replacement": ","
+  },
+  {
+   "name": "bootstrap all decided",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(all(d[\"state\"] == \"NATIVE_DECIDED\" for d in boot[\"decisions\"] + again[\"decisions\"]),",
+   "replacement": "check(True,"
   },
   {
    "name": "bootstrap H",

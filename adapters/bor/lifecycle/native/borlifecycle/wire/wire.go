@@ -125,7 +125,8 @@ func Profile(config *server.Config) error {
 type Run struct {
 	Import  *borimport.Node
 	Decided *bordecision.Node
-	// Lifecycle is nil while the node waits in BOOTSTRAP.
+	// Lifecycle is nil while the node waits in BOOTSTRAP. The bor server
+	// watcher sets it at GoLive; read it after GoLive returned.
 	Lifecycle *borlifecycle.Node
 	chain     *core.BlockChain
 	stop      chan struct{}
@@ -167,7 +168,7 @@ func Start(stack *node.Node, backend *eth.Ethereum, capture Capture) (*Run, erro
 }
 
 // Bootstrapping reports whether the node waits in BOOTSTRAP.
-func (r *Run) Bootstrapping() bool { return r.Lifecycle == nil }
+func (r *Run) Bootstrapping() bool { return r.Decided.Bootstrapping() }
 
 // GoLive ends BOOTSTRAP: the recovery driver, H (the native head read under
 // chainmu and the guard, its state root flushed), GoLive, and the decider and
@@ -202,7 +203,7 @@ func (r *Run) watch(backend *eth.Ethereum) {
 			if err := r.GoLive(); err != nil {
 				log.Crit("Extractor capture could not go live after the initial sync", "err", err)
 			}
-			log.Info("Extractor capture is live", "boundary", r.Lifecycle.Report().Boundary)
+			log.Info("Extractor capture is live", "boundary", borlifecycle.Of(r.chain).Report().Boundary)
 			return
 		}
 	}

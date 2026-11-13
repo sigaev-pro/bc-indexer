@@ -118,6 +118,7 @@ func Bootstrapping(chain *core.BlockChain, db ethdb.Database, guard *admission.G
 	n := &Node{in: Inputs{Chain: chain, DB: db, Guard: guard, Admission: adm, StoreID: storeID}, gate: gate, m: m,
 		outside: map[string]uint64{}, bootstrap: true}
 	whitelist.ExtractorEnter = n.whitelist
+	n.whitelistHooked = true
 	nodes.Store(chain, n)
 	return true, nil
 }
@@ -182,6 +183,9 @@ type Node struct {
 	// bootstrap marks a gate opened at the start of a store in BOOTSTRAP,
 	// before GoLive.
 	bootstrap bool
+	// whitelistHooked reports that whitelist.ExtractorEnter points at this
+	// node.
+	whitelistHooked bool
 	// Step, if set, runs at the named steps of a lifecycle decision (the
 	// probe's crash points; test only): "write" before each choke-point
 	// check of a native write, "marker" after the native mutation and before
@@ -202,7 +206,9 @@ func Open(in Inputs, token *admission.Token) (*Node, error) {
 		// GoLive after BOOTSTRAP: the gate opened at the start goes on, with
 		// the whitelist passes it counted.
 		n = b
+		n.mu.Lock()
 		n.in, n.bootstrap = in, false
+		n.mu.Unlock()
 	} else {
 		m, err := lifecycle.Callers()
 		if err != nil {
@@ -234,7 +240,14 @@ func (n *Node) install() {
 	n.in.Chain.SetExtractorLifecycle(n)
 	rawdb.ExtractorRequire = n.Require
 	rawdb.ExtractorFinality = n.finality
-	whitelist.ExtractorEnter = n.whitelist
+	// A gate opened in BOOTSTRAP installed the whitelist hook already; the
+	// whitelist callers read it before they take the guard, so it is not
+	// written again. The rawdb hooks are written under chainmu and the guard,
+	// which every reader holds.
+	if !n.whitelistHooked {
+		whitelist.ExtractorEnter = n.whitelist
+		n.whitelistHooked = true
+	}
 	nodes.Store(n.in.Chain, n)
 }
 
@@ -269,8 +282,9 @@ func (n *Node) Abort() error {
 // GoLive runs the repair part of the startup reconcile, closes the
 // bor.recovery pass and switches the gate to LIVE with the native head read
 // under the guard as H (a restart keeps the stored H). The decision recovery
-// driver has switched the bridge to LIVE in the same guard hold, so no caller
-// can run between the bridge and the boundary.
+// driver has switched the bridge to LIVE in memory in the same guard hold;
+// the gate writes and syncs the boundary record and calls the bridge's GoLive
+// again, so no caller runs between the bridge and the boundary.
 func (n *Node) GoLive(token *admission.Token) error {
 	if n == nil {
 		return nil
@@ -368,7 +382,10 @@ func (n *Node) enter(id string, chain bool) (*pass, error) {
 	n.mu.Unlock()
 	own := token == nil
 	if own {
-		token = n.in.Guard.Acquire()
+		n.mu.Lock()
+		guard := n.in.Guard
+		n.mu.Unlock()
+		token = guard.Acquire()
 	}
 	gp, err := n.gate.Enter(token, id)
 	if err != nil {

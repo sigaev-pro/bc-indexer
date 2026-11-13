@@ -294,15 +294,17 @@ def judge(outputs, callers_map):
           and all(s["error"] == "" for s in boot["steps"])
           and [s["name"] for s in boot["steps"]][-4:] == ["golive", "import-B3", "import-B4", "import-A6"],
           "BOOTSTRAP did not sync natively and then go live")
-    check(boot.get("whitelist_calls_during_golive") == 20
-          and boot["coverage"].get("bor.milestone", {}).get("Passes", 0) >= 20,
-          "the whitelist callers did not run through the gate while BOOTSTRAP ended")
+    before = boot.get("coverage_before_golive", {}).get("bor.milestone", {})
+    check(before.get("Passes", 0) >= 1 and before.get("Intents", 1) == 0 and boot.get("golive_waited_for_vote") is True,
+          "the whitelist callers did not run through the gate in BOOTSTRAP, or GoLive did not wait for the vote")
     check(boot.get("head_at_golive", {}).get("name") == "A5"
           and boundary4.get("head", {}).get("hash") == boot["head_at_golive"]["hash"],
           "H is not the native head after the initial sync (A5)")
     check(rows(boot["decisions"]) == [("SIDE", "A5", "A5", ["B3"]), ("SIDE", "A5", "A5", ["B4"]),
                                       ("IMPORT", "A5", "A6", ["A6"])],
           "the initial sync was captured, or the imports after H were not")
+    check(all(d["state"] == "NATIVE_DECIDED" for d in boot["decisions"] + again["decisions"]),
+          "a BOOTSTRAP-store decision is not decided")
     check(not again.get("error") and again.get("bootstrap_at_start") is False
           and again["reconcile"]["phase"] == "RECOVERY" and again["phase_after_start"] == "LIVE"
           and again["reconcile"].get("boundary") == boundary4 and again["native_head"]["name"] == "A6"

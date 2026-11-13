@@ -254,9 +254,16 @@ class Judge(unittest.TestCase):
         self.assertFails(lambda o: o["bootstrap-restart"]["decisions"].pop(), "did not keep H")
         self.assertFails(lambda o: o["bootstrap-restart"].update(error="x"), "did not keep H")
         self.assertFails(lambda o: o["scenario"].update(bootstrap_at_start=False), "BOOTSTRAP to LIVE")
-        self.assertFails(lambda o: o["bootstrap"].update(whitelist_calls_during_golive=19), "while BOOTSTRAP ended")
-        self.assertFails(lambda o: o["bootstrap"].pop("whitelist_calls_during_golive"), "while BOOTSTRAP ended")
-        self.assertFails(lambda o: o["bootstrap"]["coverage"].pop("bor.milestone"), "while BOOTSTRAP ended")
+        text = "in BOOTSTRAP, or GoLive did not wait"
+        self.assertFails(lambda o: o["bootstrap"].update(golive_waited_for_vote=False), text)
+        self.assertFails(lambda o: o["bootstrap"].pop("golive_waited_for_vote"), text)
+        self.assertFails(lambda o: o["bootstrap"]["coverage_before_golive"].pop("bor.milestone"), text)
+        self.assertFails(lambda o: o["bootstrap"]["coverage_before_golive"]["bor.milestone"].update(Intents=1), text)
+        self.assertFails(lambda o: o["bootstrap"]["coverage_before_golive"]["bor.milestone"].update(Passes=0), text)
+        self.assertFails(lambda o: o["bootstrap"]["decisions"][0].update(state="NATIVE_REJECTED"),
+                         "a BOOTSTRAP-store decision is not decided")
+        self.assertFails(lambda o: o["bootstrap-restart"]["decisions"][0].update(state="INTENT"),
+                         "a BOOTSTRAP-store decision is not decided")
 
     def test_manual_messages(self):
         self.assertFails(lambda o: o["manual"]["commands"][0].update(output="flag provided but not defined"),

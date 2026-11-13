@@ -21,7 +21,7 @@ plan for the per-client blocks, every row marked Bor or each client block).
 | `lifecycle_tree.py` | | Installer: `bor_admission_tree.install` (unchanged), then the shared `lifecycle` package, the glue, the new files and the edits |
 | `probe/main.go` | `cmd/extractor-bor-lifecycle-probe` | Measured probe (test only) |
 | `lifecycle_bor.py` | | Driver: `prepare`, `run`, `observe`, `vectors`, `derive` |
-| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 29 portable controls on development outputs (`sample/`, not measured) and 86 single-check mutants |
+| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 29 portable controls on development outputs (`sample/`, not measured) and 88 single-check mutants |
 
 The installer adds a third patch set after the admission and decision patch
 sets, so it does not change their files. An anchor may sit in text that an
@@ -225,8 +225,11 @@ function. GoLive runs the deferred recovery driver under `chainmu` and the
 guard:
 1. It flushes the state root of the native head through the hash trie
    database and syncs (the initial sync keeps recent state in memory).
-2. It writes and syncs the boundary record with that head as H, after the
-   bridge's GoLive in the same guard hold.
+2. The decision recovery driver (`decider.Recover`) has switched the bridge
+   and the admission to LIVE in memory; the gate then writes and syncs the
+   boundary record with that head as H and calls the bridge's GoLive again,
+   all in the same guard hold, so no caller runs between them. A loss before
+   the boundary sync leaves no boundary: the next start is BOOTSTRAP again.
 3. It installs the decider and the observer in the same lock, so no import
    runs uncaptured after H.
 
@@ -298,7 +301,7 @@ lock:
 | 16 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New`; `NewServer` without the flag is refused on the stopped capture store |
 | 17 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
 | 18 to 20 | `restart` (stateless), `fault`, `restart` (refuse) | A third store imports A1, A2, B3, D4 and D5; D4's state root is deleted offline; `SetHead(4)` is refused before any intent and the head and decisions stay |
-| 21 to 23 | `crash` (BOOTSTRAP), `restart` (bootstrap), `restart` (bootstrap restart) | A fourth store in BOOTSTRAP imports A1 to A3 natively and the child exits uncaptured; the restart is BOOTSTRAP again (native repair rewound the unflushed state), syncs A1 to A5 natively, goes live with H at A5 while whitelist callers keep writing (20 milestone and vote calls), and captures B3 and B4 as SIDE decisions and A6 as an IMPORT decision; the next restart keeps H |
+| 21 to 23 | `crash` (BOOTSTRAP), `restart` (bootstrap), `restart` (bootstrap restart) | A fourth store in BOOTSTRAP imports A1 to A3 natively and the child exits uncaptured; the restart is BOOTSTRAP again (native repair rewound the unflushed state), syncs A1 to A5 natively, makes a whitelist milestone call through the open gate (a non-observing pass), holds a vote's lock while GoLive starts (GoLive waits for its unlock), goes live with H at A5, and captures B3 and B4 as SIDE decisions and A6 as an IMPORT decision; the next restart keeps H |
 | 24 | `gaps` | `lifecycle.Gaps` over the summed coverage |
 
 The driver then judges every output (`judge`) and writes the AC matrix of
