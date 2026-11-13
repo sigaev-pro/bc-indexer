@@ -647,7 +647,15 @@ qa verdict, private local POLY:
 
 Public POLY cells stay NOT_RUN.
 
-Next: hosted CI, the final review comment.
+Merge of main: the branch merged `origin/main` `425cf71` (#172, D104) after
+the measured round. The merge adds only BSC files and docs, so run 01 still
+describes the measured code. The owner decisions on D104 (E05-02.reorg owns
+ordinary BSC side branches and reorganizations) and on closing #18 with the
+two BSC rows deferred to E05-02.reorg change no Bor row (evidence, "Merge
+of main and later owner decisions").
+
+Next: a docs-only confirmation review of the merge, hosted CI, the final
+review comment.
 
 ### BSC block
 
