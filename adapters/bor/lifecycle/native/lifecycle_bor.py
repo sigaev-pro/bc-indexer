@@ -152,7 +152,8 @@ PROFILE_REFUSALS = {
     "mining": ["bor.seal-write"], "dev": ["bor.seal-write"], "dev-fake-author": ["bor.seal-write"],
 }
 
-COVERAGE_FILES = ("scenario", "restart", "settle", "repair", "native-caller")
+COVERAGE_FILES = ("scenario", "restart", "settle", "resolved", "imported", "repair", "native-caller", "stateless",
+                  "refuse")
 OUTSIDE_FILES = ("profile", "manual")
 
 
@@ -218,29 +219,38 @@ def judge(outputs, callers_map):
     check(rows(sc["decisions"]) == [(k, o, n, m) for k, o, n, m in SCENARIO_DECISIONS],
           "the scenario decisions differ from the expected transitions")
     check(all(d["state"] == "NATIVE_DECIDED" for d in sc["decisions"]), "a scenario decision is not decided")
-    for name, expect in (("restart", "H7"), ("settle", "H6")):
+    for name, expect in (("restart", "H7"), ("settle", "H6"), ("resolved", "H5"), ("imported", "H6"),
+                         ("repair", None)):
         out = outputs[name]
         check(not out.get("error"), f"{name} reported an error")
         check(out["reconcile"]["phase"] == "RECOVERY" and out["phase_after_start"] == "LIVE",
               f"{name} did not go from RECOVERY to LIVE")
         check(out["reconcile"].get("boundary") == boundary, f"{name} did not keep H")
-        check(out["native_head"]["name"] == expect, f"{name} ended at {out['native_head']['name']}, not {expect}")
+        check(expect is None or out["native_head"]["name"] == expect,
+              f"{name} ended at {out['native_head']['name']}, not {expect}")
+        check(all(d["state"] == "NATIVE_DECIDED" for d in out["decisions"]), f"{name} left a decision unresolved")
     check(outputs["restart"]["reconcile"]["settled"] == [] and outputs["restart"]["reconcile"]["repaired"] is None,
           "the clean restart settled or repaired something")
     check(rows(outputs["restart"]["decisions"]) == rows(sc["decisions"]), "the clean restart changed the decisions")
-    crash = outputs["crash"]
-    check(crash["exit"] == 3 and "crash point: before the marker of bor.set-head" in crash["stderr_tail"],
-          "the crash child did not stop before the set-head marker")
+    for name, line in (("crash", "crash point: marker of bor.set-head"),
+                       ("crash-resolve", "crash point: resolve of bor.set-head"),
+                       ("crash-import", "crash point: import marker of H6")):
+        check(outputs[name]["exit"] == 3 and line in outputs[name]["stderr_tail"], f"the {name} child did not stop at "
+              f"its crash point")
     settle = outputs["settle"]
     check([(r["caller"], r["outcome"]) for r in settle["reconcile"]["settled"]] == [("bor.set-head", "NATIVE_DECIDED")],
           "the restart did not settle the set-head intent as decided")
     check(rows(settle["decisions"])[-1:] == [("CANONICAL", "H7", "H6", [])],
           "the settled decision is not the set-head from H7 to H6")
+    for name, last in (("resolved", ("CANONICAL", "H6", "H5", [])), ("imported", ("IMPORT", "H5", "H6", ["H6"]))):
+        out = outputs[name]
+        check(out["reconcile"]["settled"] == [] and out["reconcile"]["repaired"] is None
+              and len((out.get("decision_recovery") or {}).get("resolved") or []) == 1,
+              f"{name}: the decision recovery did not resolve the marked intent")
+        check(rows(out["decisions"])[-1:] == [last], f"{name}: the resolved decision is not {last}")
     fault = outputs["fault"]
     check(fault["number"] == 6, "the fault did not hit the head H6")
     repair = outputs["repair"]
-    check(not repair.get("error"), "repair reported an error")
-    check(repair["reconcile"].get("boundary") == boundary, "the repair restart did not keep H")
     repaired = repair["reconcile"].get("repaired")
     check(repaired is not None and repaired["hash"] == repair["native_head_at_start"]["hash"]
           and repair["native_head_at_start"]["number"] < 6,
@@ -249,9 +259,21 @@ def judge(outputs, callers_map):
           "the repair decision is not from H6 to the repaired head")
     check(repair["coverage"].get("bor.startup-reconcile", {}).get("Intents") == 1,
           "bor.startup-reconcile made no intent")
+    stateless, refuse = outputs["stateless"], outputs["refuse"]
+    check(not stateless.get("error") and stateless["native_head"]["name"] == "D5"
+          and all(s["error"] == "" for s in stateless["steps"]), "the third store did not import A1 to D5")
+    check(outputs["fault-stateless"]["block"] == "D4", "the stateless fault did not hit D4")
+    check(not refuse.get("error") and refuse["phase_after_start"] == "LIVE"
+          and [(s["name"], s["error"]) for s in refuse["steps"]] == [("refuse-set-head-4", "")]
+          and refuse["native_head"]["name"] == "D5" and rows(refuse["decisions"]) == rows(stateless["decisions"]),
+          "the rewind to a target without state was not refused before any intent")
     manual = outputs["manual"]
     check([r["refused"] for r in manual["commands"]] == [True, True, True] and manual["chaindata_kept"],
           "a manual command was not refused, or the store is gone")
+    check([(r["caller"], (MANUAL_REFUSED if r["caller"] == "bor.manual-commands" else RETENTION_REFUSED) in r["output"])
+           for r in manual["commands"]] == [("bor.manual-commands", True), ("bor.prune-commands", True),
+                                            ("bor.manual-commands", True)],
+          "a manual command was not refused by the capture-store or retention guard")
     profile = outputs["profile"]
     got = {r["name"]: sorted(x["caller"] for x in (r.get("refusals") or [])) for r in profile["sets"]}
     check(got == {k: sorted(v) for k, v in PROFILE_REFUSALS.items()}, f"profile refusals differ: {got}")
@@ -302,8 +324,13 @@ def write_new(path, value):
 
 
 OUTPUT_FILES = {"scenario": "scenario.json", "restart": "restart.json", "crash": "crash.json", "settle": "settle.json",
-                "fault": "fault.json", "repair": "repair.json", "manual": "manual.json", "profile": "profile.json",
-                "native-caller": "native-caller.json", "gaps": "gaps.json"}
+                "crash-resolve": "crash-resolve.json", "resolved": "resolved.json", "crash-import": "crash-import.json",
+                "imported": "imported.json", "fault": "fault.json", "repair": "repair.json", "manual": "manual.json",
+                "profile": "profile.json", "native-caller": "native-caller.json", "stateless": "stateless.json",
+                "fault-stateless": "fault-stateless.json", "refuse": "refuse.json", "gaps": "gaps.json"}
+
+MANUAL_REFUSED = "manual chaindata command refused on a capture store"
+RETENTION_REFUSED = "live pins forbid this native deletion"
 
 
 def observe(directory, callers_map, output):
@@ -495,11 +522,22 @@ def run(preparation_path, expected_sha, output):
             probe("crash", "-record", "/out/crash.json", "--", *store, "-sethead", "6", "-crash", "bor.set-head",
                   "-out", "/out/crash-child.json")
             probe("restart", *store, "-out", "/out/settle.json")
+            probe("crash", "-record", "/out/crash-resolve.json", "--", *store, "-sethead", "5", "-crash",
+                  "bor.set-head", "-crash-step", "resolve", "-out", "/out/crash-resolve-child.json")
+            probe("restart", *store, "-out", "/out/resolved.json")
+            probe("crash", "-record", "/out/crash-import.json", "--", *store, "-import", "H6", "-crash-import", "H6",
+                  "-out", "/out/crash-import-child.json")
+            probe("restart", *store, "-out", "/out/imported.json")
             probe("fault", "-datadir", "/out/instance", "-out", "/out/fault.json")
             probe("restart", *store, "-out", "/out/repair.json")
             probe("manual", "-datadir", "/out/instance", "-out", "/out/manual.json")
             probe("profile", "-datadir", "/out/server", "-capture", "/out/capture.json", "-out", "/out/profile.json")
             probe("native-caller", *common, "-datadir", "/out/instance2", "-out", "/out/native-caller.json")
+            probe("restart", *common, "-datadir", "/out/instance3", "-import", "A1,A2,B3,D4,D5", "-out",
+                  "/out/stateless.json")
+            probe("fault", "-datadir", "/out/instance3", "-blocks", "/out/chain/blocks.rlp", "-block", "D4", "-out",
+                  "/out/fault-stateless.json")
+            probe("restart", *common, "-datadir", "/out/instance3", "-refuse-sethead", "4", "-out", "/out/refuse.json")
             outputs = {name: load(output / file, 16 * 1024 * 1024) for name, file in OUTPUT_FILES.items()
                        if name != "gaps"}
             write_new(output / "coverage-sum.json", summed_coverage(outputs))

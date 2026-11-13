@@ -92,14 +92,14 @@
       "file": "core/blockchain.go",
       "mode": "replace",
       "anchor": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn common.Hash{}, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n",
-      "text": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn common.Hash{}, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\treturn bc.extractorNativeSetCanonicalLocked(head)\n}\n\n// extractorNativeSetCanonicalLocked is the native body of SetCanonical; the\n// caller holds chainmu.\nfunc (bc *BlockChain) extractorNativeSetCanonicalLocked(head *types.Block) (common.Hash, error) {\n"
+      "text": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn common.Hash{}, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\treturn bc.extractorNativeSetCanonicalLocked(head)\n}\n\n// extractorNativeSetCanonicalLocked is the native body of SetCanonical; the\n// caller holds chainmu.\nfunc (bc *BlockChain) extractorNativeSetCanonicalLocked(head *types.Block) (extractorHash common.Hash, extractorErr error) {\n"
     },
     {
       "name": "lifecycle-set-canonical-begin",
       "file": "core/blockchain.go",
       "mode": "before",
       "anchor": "\t// Run the reorg if necessary and set the given block as new head.\n\tstart := time.Now()\n",
-      "text": "\t// Extractor patch (E01-02.lifecycle_seams): one CANONICAL decision of\n\t// bor.set-canonical, after the re-execution of a pruned branch (whose\n\t// imports take the guard themselves).\n\textractorDecision, err := bc.extractorBegin(\"bor.set-canonical\", \"set-canonical\", head.Header())\n\tif err != nil {\n\t\treturn common.Hash{}, err\n\t}\n\tdefer extractorDecision.end()\n\n"
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): one CANONICAL decision of\n\t// bor.set-canonical, after the re-execution of a pruned branch (whose\n\t// imports take the guard themselves).\n\textractorDecision, err := bc.extractorBegin(\"bor.set-canonical\", \"set-canonical\", head.Header())\n\tif err != nil {\n\t\treturn common.Hash{}, err\n\t}\n\tdefer func() {\n\t\tif endErr := extractorDecision.end(); endErr != nil {\n\t\t\textractorErr = errors.Join(extractorErr, endErr)\n\t\t}\n\t}()\n\n"
     },
     {
       "name": "lifecycle-set-canonical-decide",

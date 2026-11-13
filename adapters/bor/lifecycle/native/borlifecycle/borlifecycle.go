@@ -119,8 +119,9 @@ type Node struct {
 	recovery *pass
 	report   Report
 	// Step, if set, runs at the named steps of a lifecycle decision (the
-	// probe's crash points): "marker" after the native mutation and before
-	// the marker batch.
+	// probe's crash points; test only): "marker" after the native mutation
+	// and before the marker batch, "resolve" after the synced marker and
+	// before Resolve.
 	Step func(step, caller string)
 }
 
@@ -150,7 +151,7 @@ func Open(in Inputs, token *admission.Token) (*Node, error) {
 	n.held = token
 	n.install()
 	n.report = Report{Phase: string(gate.Phase()), Settled: []Settled{}}
-	if err := n.reconcile(token); err != nil {
+	if err := n.settleAll(token); err != nil {
 		return nil, errors.Join(err, n.Abort())
 	}
 	return n, nil
@@ -192,13 +193,17 @@ func (n *Node) Abort() error {
 	return err
 }
 
-// GoLive closes the bor.recovery pass and switches the gate to LIVE with the
-// native head read under the guard as H (a restart keeps the stored H). The
-// decision recovery driver has switched the bridge to LIVE in the same guard
-// hold, so no caller can run between the bridge and the boundary.
+// GoLive runs the repair part of the startup reconcile, closes the
+// bor.recovery pass and switches the gate to LIVE with the native head read
+// under the guard as H (a restart keeps the stored H). The decision recovery
+// driver has switched the bridge to LIVE in the same guard hold, so no caller
+// can run between the bridge and the boundary.
 func (n *Node) GoLive(token *admission.Token) error {
 	if n == nil {
 		return nil
+	}
+	if err := n.repair(token); err != nil {
+		return err
 	}
 	if err := n.recovery.gp.Exit(); err != nil {
 		return err
@@ -329,6 +334,13 @@ func (n *Node) Held() any {
 	return n.held
 }
 
+// Floor implements core.ExtractorLifecycle: the number of the boundary H, if
+// the run has one. No rewind may go below it.
+func (n *Node) Floor() (uint64, bool) {
+	b, ok := n.gate.Boundary()
+	return b.Head.Number, ok
+}
+
 // Require implements core.ExtractorLifecycle.
 func (n *Node) Require(effect string) error { return n.gate.Require(lifecycle.Effect(effect)) }
 
@@ -411,8 +423,10 @@ func Digest(tag string, values ...string) string {
 func headFields(h decision.Head) []string { return []string{strconv.FormatUint(h.Number, 10), h.Hash} }
 
 // Evidence is the evidence record of one lifecycle intent, synced under
-// evidence/<digest> before the intent. The startup reconcile settles an
-// unresolved intent from it and the native state.
+// evidence/<digest> before the intent and deleted once the intent is
+// resolved or rejected. The startup reconcile settles an unresolved intent
+// from it and the native state. A record left by a loss after the resolve
+// names a settled intent and is never read again.
 type Evidence struct {
 	Caller    string        `json:"caller"`
 	Kind      decision.Kind `json:"kind"`
@@ -486,7 +500,7 @@ func (n *Node) members(token *admission.Token, old, next *types.Header) ([]decis
 		return false
 	}
 	var branch []*types.Header
-	for h := next; !onOld(h); h = chain.GetHeader(h.ParentHash, h.Number.Uint64()-1) {
+	for h := next; h == nil || !onOld(h); h = chain.GetHeader(h.ParentHash, h.Number.Uint64()-1) {
 		if h == nil || h.Number.Uint64() == 0 {
 			return nil, fmt.Errorf("%w: no common ancestor of %d and %d", lifecycle.ErrInvariant,
 				old.Number.Uint64(), next.Number.Uint64())
@@ -568,10 +582,16 @@ func (p *pass) Decide() error {
 	if err := n.in.DB.SyncKeyValue(); err != nil {
 		return err
 	}
+	if n.Step != nil {
+		n.Step("resolve", p.id)
+	}
 	if _, err := n.in.Bridge.Resolve(p.token, rec.Sequence); err != nil {
 		return err
 	}
 	p.open, p.check = nil, nil
+	if err := n.in.DB.Delete(n.evidenceKey(rec.EvidenceDigest)); err != nil {
+		return err
+	}
 	return n.in.Bridge.Cleanup(p.token)
 }
 
@@ -595,6 +615,13 @@ func (n *Node) finality(name string, key, value []byte, deleted bool) (func() er
 			return nil, err
 		}
 		return func() error { return nil }, nil
+	}
+	if p.open != nil {
+		// A covered set-head inside a milestone reorganization clears a
+		// finality reference while the outer CANONICAL intent is open: the
+		// clear cannot be its own decision, so it fails closed.
+		return nil, fmt.Errorf("%w: %s %s under the open %s intent %d of %s", lifecycle.ErrOrder, name,
+			hex.EncodeToString(key), p.open.Kind, p.open.Sequence, p.id)
 	}
 	present, err := n.in.DB.Has(key)
 	if err != nil {
@@ -650,13 +677,13 @@ func (n *Node) whitelist(id string) (func() error, error) {
 // ---------------------------------------------------------------------------
 // Startup reconcile (bor.startup-reconcile).
 
-// reconcile runs inside the bor.recovery pass, before the decision recovery
-// driver: it settles an unresolved lifecycle intent from native evidence, then
-// decides a native head that differs from the last decided head (native
-// startup repair before the gate opened) as a CANONICAL decision of
-// bor.startup-reconcile. A native head below H, or native evidence that
-// matches neither side of an intent, is a source invariant error.
-func (n *Node) reconcile(token *admission.Token) error {
+// settleAll is the first part of the startup reconcile (bor.startup-reconcile).
+// It runs inside the bor.recovery pass, before the decision recovery driver,
+// and settles every unresolved lifecycle intent without a marker from native
+// evidence. An intent with a marker is left to the decision recovery driver,
+// which resolves it; an intent without an evidence record belongs to the
+// import path and is left to it too.
+func (n *Node) settleAll(token *admission.Token) error {
 	decisions, err := n.in.Bridge.Decisions(token)
 	if err != nil {
 		return err
@@ -668,18 +695,33 @@ func (n *Node) reconcile(token *admission.Token) error {
 			}
 		}
 	}
+	return nil
+}
+
+// repair is the second part of the startup reconcile. It runs after the
+// decision recovery driver, still inside the bor.recovery pass, when every
+// intent is settled: a native head that differs from the last decided head
+// is native startup repair made before the gate opened, and becomes a
+// CANONICAL decision of bor.startup-reconcile. A native head below H, or an
+// intent that is still unresolved, is a source invariant error.
+func (n *Node) repair(token *admission.Token) error {
 	b, live := n.gate.Boundary()
 	if !live {
 		return nil
 	}
-	last := b.Head
-	if decisions, err = n.in.Bridge.Decisions(token); err != nil {
+	decisions, err := n.in.Bridge.Decisions(token)
+	if err != nil {
 		return err
 	}
 	sort.Slice(decisions, func(i, j int) bool { return decisions[i].Sequence < decisions[j].Sequence })
+	last := b.Head
 	for _, d := range decisions {
-		if d.State == decision.Decided {
+		switch d.State {
+		case decision.Decided:
 			last = d.Intent.NewHead
+		case decision.Intended:
+			return fmt.Errorf("%w: intent %d is unresolved after the decision recovery", lifecycle.ErrInvariant,
+				d.Sequence)
 		}
 	}
 	native := n.in.Chain.CurrentBlock()
@@ -770,5 +812,8 @@ func (n *Node) settle(token *admission.Token, d decision.Decision) error {
 			lifecycle.ErrInvariant, d.Sequence, e.Caller)
 	}
 	n.report.Settled = append(n.report.Settled, Settled{Sequence: d.Sequence, Caller: e.Caller, Outcome: outcome})
+	if err := n.in.DB.Delete(key); err != nil {
+		return err
+	}
 	return n.in.Bridge.Cleanup(token)
 }

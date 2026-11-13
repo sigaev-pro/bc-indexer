@@ -16,6 +16,12 @@
    "Refusals": 0
   }
  },
+ "decision_recovery": {
+  "completed": [],
+  "imported": [],
+  "rejected": [],
+  "resolved": []
+ },
  "decisions": [
   {
    "kind": "IMPORT",

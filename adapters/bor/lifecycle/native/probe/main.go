@@ -89,7 +89,7 @@ var plan = []struct {
 }{
 	{"A1", "", 0, false, ""}, {"A2", "A1", 0, false, ""}, {"A3", "A2", 0, false, ""}, {"A4", "A3", 0, false, ""},
 	{"A5", "A4", 0, false, ""}, {"B3", "A2", 1, false, ""}, {"B4", "B3", 1, false, ""}, {"C4", "B3", 2, false, "B4"},
-	{"D4", "B3", 3, true, ""}, {"E4", "B3", 4, true, "D4"}, {"E5", "E4", 4, false, ""}, {"F4", "B3", 5, false, ""},
+	{"D4", "B3", 3, true, ""}, {"E4", "B3", 4, true, "D4"}, {"E5", "E4", 4, false, ""}, {"D5", "D4", 0, true, ""}, {"F4", "B3", 5, false, ""},
 	{"G4", "B3", 6, false, ""}, {"H5", "F4", 0, false, ""}, {"H6", "H5", 0, false, ""}, {"H7", "H6", 0, false, ""},
 	{"H8", "H7", 0, false, ""},
 }
@@ -512,6 +512,7 @@ func start(c common_, step func(string, string)) (*capture, error) {
 	}
 	run.Lifecycle.Step = step
 	result["reconcile"] = run.Lifecycle.Report()
+	result["decision_recovery"] = run.Decided.Report
 	result["phase_after_start"] = string(run.Lifecycle.Phase())
 	return &capture{stack: stack, eth: backend, chain: backend.BlockChain(), run: run, blocks: blocks, result: result},
 		nil
@@ -794,17 +795,20 @@ var flagOut = new(string)
 func restart(args []string) error {
 	flags := flag.NewFlagSet("restart", flag.ContinueOnError)
 	c := commonFlags(flags)
-	crash := flags.String("crash", "", "caller whose marker step exits the process (crash point)")
+	crash := flags.String("crash", "", "lifecycle caller whose crash step exits the process (crash point)")
+	crashStep := flags.String("crash-step", "marker", "lifecycle step of the crash point: marker or resolve")
+	crashImport := flags.String("crash-import", "", "block whose import exits after its synced marker (crash point)")
+	imports := flags.String("import", "", "comma-separated blocks to import after the start")
 	setHead := flags.Uint64("sethead", 0, "SetHead after the start (0: none)")
+	refuse := flags.String("refuse-sethead", "", "comma-separated SetHead targets that must be refused")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	var step func(string, string)
 	if *crash != "" {
 		step = func(name, caller string) {
-			if name == "marker" && caller == *crash {
-				// The native mutation is done; its marker is not written.
-				fmt.Fprintln(os.Stderr, "crash point: before the marker of", caller)
+			if name == *crashStep && caller == *crash {
+				fmt.Fprintf(os.Stderr, "crash point: %s of %s\n", name, caller)
 				os.Exit(3)
 			}
 		}
@@ -813,8 +817,36 @@ func restart(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *crashImport != "" {
+		target := node.blocks[*crashImport].Hash()
+		core.ExtractorDecisionStep = func(name string, block common.Hash) {
+			if name == "marker" && block == target {
+				// The head batch with the marker is synced; Resolve is not.
+				fmt.Fprintf(os.Stderr, "crash point: import marker of %s\n", *crashImport)
+				os.Exit(3)
+			}
+		}
+	}
+	if *imports != "" {
+		for _, name := range strings.Split(*imports, ",") {
+			node.insert("import-"+name, name)
+		}
+	}
 	if *setHead != 0 {
 		node.step(fmt.Sprintf("set-head-%d", *setHead), node.chain.SetHead(*setHead))
+	}
+	if *refuse != "" {
+		for _, value := range strings.Split(*refuse, ",") {
+			var target uint64
+			fmt.Sscan(value, &target)
+			err := node.chain.SetHead(target)
+			if errors.Is(err, core.ErrExtractorRefused) {
+				err = nil
+			} else {
+				err = fmt.Errorf("not refused: %v", err)
+			}
+			node.step("refuse-set-head-"+value, err)
+		}
 	}
 	return node.finish(*c.out, nil)
 }
@@ -825,6 +857,8 @@ func fault(args []string) error {
 	flags := flag.NewFlagSet("fault", flag.ContinueOnError)
 	datadir := flags.String("datadir", "", "native data directory")
 	out := flags.String("out", "", "new result file")
+	blocksPath := flags.String("blocks", "", "generated blocks.rlp (with -block)")
+	name := flags.String("block", "", "generated block whose state root to delete (default: the native head)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -835,6 +869,13 @@ func fault(args []string) error {
 	db := rawdb.NewDatabase(kv)
 	defer db.Close()
 	hash := rawdb.ReadHeadBlockHash(db)
+	if *name != "" {
+		blocks, err := readBlocks(*blocksPath)
+		if err != nil {
+			return err
+		}
+		hash = blocks[*name].Hash()
+	}
 	number, ok := rawdb.ReadHeaderNumber(db, hash)
 	if !ok {
 		return errors.New("no native head")
@@ -847,7 +888,8 @@ func fault(args []string) error {
 	if err := db.SyncKeyValue(); err != nil {
 		return err
 	}
-	return saveJSON(*out, map[string]any{"head": hexOf(hash), "number": number, "deleted_root": hexOf(header.Root)})
+	return saveJSON(*out, map[string]any{"head": hexOf(hash), "number": number, "deleted_root": hexOf(header.Root),
+		"block": *name})
 }
 
 // nativeCaller imports A1..A5 into a new capture instance through the native
@@ -887,7 +929,20 @@ func nativeCaller(args []string) error {
 // ---------------------------------------------------------------------------
 // Refusals outside a running node.
 
-// manual runs the native manual commands against a stopped capture store.
+// manualCommands are the native manual commands run against a stopped
+// capture store, each with the REFUSE caller it exercises.
+var manualCommands = []struct {
+	caller string
+	args   []string
+}{
+	{"bor.manual-commands", []string{"removedb"}},
+	{"bor.prune-commands", []string{"snapshot", "prune-state"}},
+	{"bor.manual-commands", []string{"purge-whitelisted-entries"}},
+}
+
+// manual runs each native manual command against a stopped capture store in a
+// process of its own (the native commands leave their node, and its datadir
+// lock, open), and records the exit code and the end of its output.
 func manual(args []string) error {
 	flags := flag.NewFlagSet("manual", flag.ContinueOnError)
 	datadir := flags.String("datadir", "", "native data directory")
@@ -895,24 +950,44 @@ func manual(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	// The native commands name the instance directory after the program.
-	os.Args[0] = instanceName
 	rows := []map[string]any{}
-	for _, cmd := range []struct {
-		caller string
-		args   []string
-	}{
-		{"bor.manual-commands", []string{"removedb", "--datadir", *datadir}},
-		{"bor.manual-commands", []string{"purge-whitelisted-entries", "--datadir", *datadir}},
-		{"bor.prune-commands", []string{"snapshot", "prune-state", "--datadir", *datadir}},
-	} {
-		code := cli.Run(cmd.args)
-		rows = append(rows, map[string]any{"caller": cmd.caller, "command": strings.Join(cmd.args[:len(cmd.args)-2], " "),
-			"exit": code, "refused": code != 0})
+	for i, cmd := range manualCommands {
+		child := exec.Command(os.Args[0], "manual-one", "-datadir", *datadir, "-index", fmt.Sprint(i))
+		output, err := child.CombinedOutput()
+		code := 0
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			code = exit.ExitCode()
+		} else if err != nil {
+			return err
+		}
+		if len(output) > 2048 {
+			output = output[len(output)-2048:]
+		}
+		rows = append(rows, map[string]any{"caller": cmd.caller, "command": strings.Join(cmd.args, " "), "exit": code,
+			"refused": code != 0, "output": string(output)})
 	}
 	chaindata := filepath.Join(*datadir, instanceName, "chaindata")
 	_, statErr := os.Stat(chaindata)
 	return saveJSON(*out, map[string]any{"commands": rows, "chaindata_kept": statErr == nil})
+}
+
+// manualOne runs one native manual command through the native CLI and exits
+// with its code.
+func manualOne(args []string) error {
+	flags := flag.NewFlagSet("manual-one", flag.ContinueOnError)
+	datadir := flags.String("datadir", "", "native data directory")
+	index := flags.Int("index", -1, "index of the manual command")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *index < 0 || *index >= len(manualCommands) {
+		return errors.New("unknown manual command")
+	}
+	// The native commands name the instance directory after the program.
+	os.Args[0] = instanceName
+	os.Exit(cli.Run(append(append([]string{}, manualCommands[*index].args...), "--datadir", *datadir)))
+	return nil
 }
 
 // profileCheck runs the capture profile check of `bor server` on argument
@@ -1036,11 +1111,11 @@ func crash(args []string) error {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: probe generate|scenario|restart|fault|native-caller|manual|profile|gaps ...")
+		fmt.Fprintln(os.Stderr, "usage: probe generate|scenario|restart|crash|fault|native-caller|manual|profile|gaps ...")
 		os.Exit(2)
 	}
 	commands := map[string]func([]string) error{"generate": generate, "scenario": scenario, "restart": restart,
-		"fault": fault, "crash": crash, "native-caller": nativeCaller, "manual": manual, "profile": profileCheck, "gaps": gaps}
+		"fault": fault, "crash": crash, "manual-one": manualOne, "native-caller": nativeCaller, "manual": manual, "profile": profileCheck, "gaps": gaps}
 	command, ok := commands[os.Args[1]]
 	if !ok {
 		fmt.Fprintln(os.Stderr, "unknown command", os.Args[1])

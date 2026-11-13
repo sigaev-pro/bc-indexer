@@ -21,7 +21,7 @@ plan for the per-client blocks, every row marked Bor or each client block).
 | `lifecycle_tree.py` | | Installer: `bor_admission_tree.install` (unchanged), then the shared `lifecycle` package, the glue, the new files and the edits |
 | `probe/main.go` | `cmd/extractor-bor-lifecycle-probe` | Measured probe (test only) |
 | `lifecycle_bor.py` | | Driver: `prepare`, `run`, `observe`, `vectors`, `derive` |
-| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | Portable controls on development outputs (`sample/`, not measured) and 50 single-check mutants |
+| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 25 portable controls on development outputs (`sample/`, not measured) and 61 single-check mutants |
 
 The installer adds a third patch set after the admission and decision patch
 sets, so it does not change their files. An anchor may sit in text that an
@@ -78,7 +78,7 @@ the step fails at its deadline.
 | `bor.recovery` | OBSERVATION | The gate opens inside `bordecision.Start`, with the guard and `chainmu` held (edit `lifecycle-recovery-open`). The `bor.recovery` pass covers the decision recovery; the recovery imports nest in it |
 | `bor.known-block` | DECISION | `writeKnownBlock` is one CANONICAL decision. Members are the blocks of the new branch above the common ancestor, each bound to its retained EXEC_READY observation. A block without one refuses the intent: the known-branch rule ends in a source error, never a silent activation, and no replay is made |
 | `bor.set-canonical` | DECISION | One CANONICAL decision after the pruned-branch re-execution |
-| `bor.set-head` | DECISION | One CANONICAL decision for the predicted head. The canonical part is decided before `setHeadBeyondRoot` clears a finality reference, so a cleared finalized hash is a FINALITY decision of its own |
+| `bor.set-head` | DECISION | One CANONICAL decision for the predicted head. Before any intent, a rewind is refused when the target is below H or has no state (native code would rewind further than the intent). The canonical part is decided before `setHeadBeyondRoot` clears a finality reference, so a cleared finalized hash on a standalone set-head is a FINALITY decision of its own; inside the milestone reorganization the clear fails closed (see there) |
 | `bor.milestone-reorg` | DECISION | See "Milestone reorganization" |
 | `bor.milestone`, `bor.checkpoint`, `bor.milestone-lock` | DECISION | Each patched whitelist method opens its pass before the finality lock (the vote keeps it from `LockMutex` to `UnlockMutex`). Each native finality write is a FINALITY decision of its own (see "Write choke points") |
 | `bor.startup-reconcile` | DECISION | See "Startup reconcile" |
@@ -122,35 +122,45 @@ A DECISION pass proceeds in this order:
 1. It syncs an evidence record under
    `extractor-lifecycle-bor-v1/<producer>.<run>/evidence/<digest>`.
 2. It records the intent through `Pass.Intend`. CANONICAL intents carry
-   public events; FINALITY intents do not.
+   public events; FINALITY intents do not. A finality write in a pass whose
+   CANONICAL intent is still open is refused (`ErrOrder`).
 3. The native mutation runs.
 4. It checks the native result against the intent: the head, or the
    finality value.
-5. It writes the marker in a batch of its own, then syncs, `Resolve`s and
-   `Cleanup`s.
+5. It writes the marker in a batch of its own and syncs, then `Resolve`s,
+   deletes the evidence record and `Cleanup`s.
 
 The marker is not in the final native batch. A native rewind spans many
 batches, and the whitelist writes single keys. Instead, the startup
-reconcile settles an unresolved lifecycle intent from native evidence.
+reconcile settles an unresolved lifecycle intent without a marker from
+native evidence. An intent with its marker is resolved by the decision
+recovery driver, as on the import path.
 
 ## Startup reconcile
 
-`bor.startup-reconcile` runs inside the recovery pass, before the decision
-recovery driver:
+`bor.startup-reconcile` has two parts, both inside the recovery pass:
 
-1. **Settle.** An unresolved intent without a marker whose evidence record
-   exists is a lifecycle intent:
+1. **Settle**, before the decision recovery driver. An unresolved intent
+   without a marker whose evidence record exists is a lifecycle intent:
    - native state equal to its new value: the marker is written and the
      intent is resolved;
    - native state equal to its old value: `RejectIntent`;
    - anything else: a source invariant error.
 
-   An intent without such a record belongs to the import path and stays for
-   the decision recovery driver.
-2. **Repair.** A native head that differs from the last decided head is
-   native startup repair made before the gate opened. It becomes a CANONICAL
-   decision from the last decided head to the native head.
-3. **Below H.** A native head below H is a source invariant error.
+   An intent with a marker, or without such a record, is left to the
+   decision recovery driver, which resolves a marked intent and completes an
+   import-path intent.
+2. **Repair**, after the decision recovery driver, when no intent is
+   unresolved (otherwise a source invariant error). A native head that
+   differs from the last decided head is native startup repair made before
+   the gate opened. It becomes a CANONICAL decision from the last decided
+   head to the native head. A native head below H is a source invariant
+   error.
+
+The reconcile compares the head only. Bor's native finalized hash is set
+only by the refused Engine API, and the whitelist `NewService` rewrites the
+lock record at startup only when it is corrupt; neither startup finality
+write is decided here. This is a limit of this block (see "Limits").
 
 ## Node wiring and H
 
@@ -165,10 +175,13 @@ recovery driver:
 The probe starts its capture node with the same `wire.Start`.
 
 **H.** `GoLive` runs in the same guard hold as the bridge's GoLive, after the
-recovery pass closes, with the native head read under the guard and its state
-root durable. A first start goes from BOOTSTRAP to LIVE at once. The capture
-node starts on a store whose initial native sync (if any) ran without the
-capture flag. A restart keeps the stored H.
+repair and the end of the recovery pass, with the native head read under
+the guard and its state root durable. A first start goes from BOOTSTRAP to
+LIVE at once. The admission's store preflight refuses a store that a native
+node without the capture binding filled, so on Bor the first capture start
+is on a new store and H is its genesis: the initial sync is captured. A
+restart keeps the stored H. The rewind refusal below H is a guard that the
+measured run cannot reach for that reason.
 
 ## Milestone reorganization
 
@@ -188,7 +201,12 @@ one `chainmu` hold, so no other caller runs between the steps:
 4. `SetCanonical` of the last block is a `bor.set-canonical` decision.
 
 The re-execution cannot sit inside one decision, because the observations
-take the guard.
+take the guard. As natively, the call reports a moved head once the decided
+rewind ran, even if the insert after it fails, so the verifier still purges
+the stale milestones; the insert passes the node's witness setting. A
+finalized reference above `rewindTo` would be cleared inside the covered
+set-head while the rewind intent is open; that write fails closed. It cannot
+happen on `bor server`, whose finalized hash stays zero.
 
 ## Fixture
 
@@ -216,14 +234,15 @@ lock:
 | 1 | `generate` | The fixture blocks |
 | 2 | `scenario` | First start (BOOTSTRAP, then LIVE with H at the genesis), then every caller through its native entry: imports A1 to A5; side blocks; `SetCanonical(A2)`; known blocks B3 and B4; `SetCanonical(C4)`; `SetCanonical` of the stateless D4 (recover-ancestors); E5 on the stateless E4 (side chain); the milestone reorganization to F4; the whitelist calls; the four refused entries; the deadlock check; `SetHead(7)` |
 | 3 | `restart` | RECOVERY, then LIVE with H kept and nothing to settle |
-| 4 | `crash` | A child restart runs `SetHead(6)` and exits after the native rewind, before the marker |
-| 5 | `restart` (settle) | The startup reconcile settles that intent as decided |
-| 6 | `fault` | The state root node of the head is deleted offline |
-| 7 | `restart` (repair) | Native startup repair rewinds; the startup reconcile decides it |
-| 8 | `manual` | `removedb`, `purge-whitelisted-entries` and `snapshot prune-state` are refused; the store stays |
-| 9 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New` |
-| 10 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
-| 11 | `gaps` | `lifecycle.Gaps` over the summed coverage |
+| 4, 5 | `crash`, `restart` (settle) | A child runs `SetHead(6)` and exits after the native rewind, before the marker; the restart settles the intent as decided from native evidence |
+| 6, 7 | `crash`, `restart` (resolved) | A child runs `SetHead(5)` and exits after the synced marker, before `Resolve`; the decision recovery driver resolves it |
+| 8, 9 | `crash`, `restart` (imported) | A child imports H6 and exits after the synced head batch with the marker, before `Resolve`; the decision recovery driver resolves it |
+| 10, 11 | `fault`, `restart` (repair) | The state root node of the head is deleted offline; native startup repair rewinds and the startup reconcile decides it |
+| 12 | `manual` | `removedb`, `snapshot prune-state` and `purge-whitelisted-entries`, each in its own process (the native commands leave their node open), are refused by the capture-store guard or the retention guard, by message; the store stays |
+| 13 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New` |
+| 14 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
+| 15 to 17 | `restart` (stateless), `fault`, `restart` (refuse) | A third store imports A1, A2, B3, D4 and D5; D4's state root is deleted offline; `SetHead(4)` is refused before any intent and the head and decisions stay |
+| 18 | `gaps` | `lifecycle.Gaps` over the summed coverage |
 
 The driver then judges every output (`judge`) and writes the AC matrix of
 the POLY slot:
@@ -261,6 +280,15 @@ computes the values of the Go test vectors independently.
 - **Fault model.** The startup-repair fault deletes the head state root
   offline, a process crash model. It is not a power-loss test (that is
   E01-04.early_faults).
+- **Startup finality.** The startup reconcile compares the head only (see
+  "Startup reconcile"); a native finality write made at startup before the
+  gate opens is not decided. Owner: E05-01.polygon_observer with the typed
+  finality evidence.
+- **H on Bor.** H is the genesis of a new capture store; the below-H refusal
+  is not reached by the measured run.
+- **Test-only seams.** `core.ExtractorWriteKnownBlock`,
+  `eth.ExtractorReorgToFinalized` and `Node.Step` exist for the probe; no
+  product path calls them.
 - **Not this block.** Typed finality observations are E05-01. The retained
   observations of side blocks that a rewind deleted are released by
   E05-01.activation_gc.

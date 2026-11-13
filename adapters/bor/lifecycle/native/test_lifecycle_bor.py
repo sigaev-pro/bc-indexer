@@ -76,7 +76,7 @@ class Coverage(unittest.TestCase):
         self.assertEqual(coverage["bor.parallel"], {"Passes": 0, "Intents": 0, "Refusals": 1})
         self.assertEqual(coverage["bor.seal-write"]["Refusals"], 4)
         self.assertEqual(coverage["bor.manual-commands"]["Refusals"], 2)
-        self.assertEqual(coverage["bor.recovery"]["Passes"], 5)
+        self.assertEqual(coverage["bor.recovery"]["Passes"], 9)
 
     def test_gaps_rules(self):
         coverage = lb.summed_coverage(sample())
@@ -139,8 +139,11 @@ class Judge(unittest.TestCase):
         self.assertFails(lambda o: o["restart"].update(error="x"), "restart reported an error")
 
     def test_crash_and_settle_changes(self):
-        self.assertFails(lambda o: o["crash"].update(exit=0), "did not stop before the set-head marker")
-        self.assertFails(lambda o: o["crash"].update(stderr_tail=""), "did not stop before the set-head marker")
+        for name in ("crash", "crash-resolve", "crash-import"):
+            self.assertFails(lambda o, n=name: o[n].update(exit=0), f"the {name} child did not stop")
+            self.assertFails(lambda o, n=name: o[n].update(stderr_tail=""), f"the {name} child did not stop")
+        self.assertFails(lambda o: o["crash-resolve"].update(stderr_tail="crash point: marker of bor.set-head"),
+                         "the crash-resolve child did not stop")
         self.assertFails(lambda o: o["settle"]["reconcile"]["settled"][0].update(outcome="NATIVE_REJECTED"),
                          "settle the set-head intent")
         self.assertFails(lambda o: o["settle"]["reconcile"].update(settled=[]), "settle the set-head intent")
@@ -155,8 +158,41 @@ class Judge(unittest.TestCase):
         self.assertFails(lambda o: o["repair"]["decisions"][-1].update(old_head="H7"), "repair decision")
         self.assertFails(lambda o: o["repair"]["coverage"].pop("bor.startup-reconcile"), "made no intent")
         self.assertFails(lambda o: o["repair"]["reconcile"]["boundary"]["head"].update(number=2),
-                         "repair restart did not keep H")
+                         "repair did not keep H")
+        self.assertFails(lambda o: o["repair"].update(phase_after_start="RECOVERY"), "repair did not go")
         self.assertFails(lambda o: o["repair"].update(error="x"), "repair reported an error")
+
+    def test_marked_intent_recovery_changes(self):
+        for name in ("resolved", "imported"):
+            self.assertFails(lambda o, n=name: o[n]["decision_recovery"].update(resolved=[]),
+                             f"{name}: the decision recovery did not resolve")
+            self.assertFails(lambda o, n=name: o[n]["reconcile"].update(repaired={"hash": "x"}),
+                             f"{name}: the decision recovery did not resolve")
+            self.assertFails(lambda o, n=name: o[n]["decisions"].pop(), f"{name}: the resolved decision")
+            self.assertFails(lambda o, n=name: o[n]["decisions"][-1].update(state="INTENT"),
+                             f"{name} left a decision unresolved")
+        self.assertFails(lambda o: o["resolved"]["native_head"].update(name="H6"), "resolved ended at H6")
+        self.assertFails(lambda o: o["imported"]["native_head"].update(name="H5"), "imported ended at H5")
+
+    def test_stateless_rewind_changes(self):
+        self.assertFails(lambda o: o["stateless"]["native_head"].update(name="D4"), "did not import A1 to D5")
+        self.assertFails(lambda o: o["stateless"]["steps"][3].update(error="x"), "did not import A1 to D5")
+        self.assertFails(lambda o: o["stateless"].update(error="x"), "did not import A1 to D5")
+        self.assertFails(lambda o: o["fault-stateless"].update(block="D5"), "did not hit D4")
+        self.assertFails(lambda o: o["refuse"]["steps"][0].update(error="not refused"), "was not refused")
+        self.assertFails(lambda o: o["refuse"]["native_head"].update(name="D4"), "was not refused")
+        self.assertFails(lambda o: o["refuse"]["decisions"].append(dict(o["refuse"]["decisions"][-1])),
+                         "was not refused")
+        self.assertFails(lambda o: o["refuse"].update(phase_after_start="RECOVERY"), "was not refused")
+        self.assertFails(lambda o: o["refuse"].update(error="x"), "was not refused")
+
+    def test_manual_messages(self):
+        self.assertFails(lambda o: o["manual"]["commands"][0].update(output="flag provided but not defined"),
+                         "capture-store or retention guard")
+        self.assertFails(lambda o: o["manual"]["commands"][1].update(output="datadir already used by another process"),
+                         "capture-store or retention guard")
+        self.assertFails(lambda o: o["manual"]["commands"][2].update(caller="bor.prune-commands"),
+                         "capture-store or retention guard")
 
     def test_refusal_changes(self):
         self.assertFails(lambda o: o["manual"]["commands"][2].update(refused=False), "manual command")

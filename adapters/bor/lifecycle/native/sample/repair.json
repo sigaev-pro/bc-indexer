@@ -21,6 +21,12 @@
    "Refusals": 0
   }
  },
+ "decision_recovery": {
+  "completed": [],
+  "imported": [],
+  "rejected": [],
+  "resolved": []
+ },
  "decisions": [
   {
    "kind": "IMPORT",
@@ -248,9 +254,29 @@
    "kind": "CANONICAL",
    "marker": true,
    "members": [],
-   "new_head": "B3",
+   "new_head": "H5",
    "old_head": "H6",
    "sequence": 53,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "H6"
+   ],
+   "new_head": "H6",
+   "old_head": "H5",
+   "sequence": 54,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [],
+   "new_head": "B3",
+   "old_head": "H6",
+   "sequence": 55,
    "state": "NATIVE_DECIDED"
   }
  ],

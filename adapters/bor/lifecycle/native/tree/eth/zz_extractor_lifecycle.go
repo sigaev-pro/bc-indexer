@@ -12,20 +12,26 @@ import (
 // extractorReorgToFinalized is reorgToFinalized on a capture chain: the
 // rewind and the activation of the stored canonical chain as one decision of
 // bor.milestone-reorg under one chain lock (core.ExtractorReorgToFinalized).
-// It reports whether the head moved; a refusal moves nothing.
+// It reports whether the head moved, as native reorgToFinalized does: true
+// once the decided rewind ran, even when the insert after it fails; a refused
+// rewind moves nothing.
 func extractorReorgToFinalized(eth *Ethereum, head uint64, rewindTo uint64, canonicalChain []*types.Block) bool {
 	eth.handler.downloader.Cancel()
-	if err := eth.blockchain.ExtractorReorgToFinalized(rewindTo, canonicalChain); err != nil {
-		log.Error("Extractor milestone reorganization failed closed", "head", head, "rewindTo", rewindTo, "err", err)
-		return false
+	moved, err := eth.blockchain.ExtractorReorgToFinalized(rewindTo, canonicalChain, eth.config.SyncAndProduceWitnesses)
+	if err != nil {
+		log.Error("Extractor milestone reorganization", "head", head, "rewindTo", rewindTo, "moved", moved, "err", err)
 	}
-	rewindLengthMeter.Mark(int64(head - rewindTo))
-	return true
+	if moved {
+		rewindLengthMeter.Mark(int64(head - rewindTo))
+	}
+	return moved
 }
 
-// ExtractorReorgToFinalized runs the native reorgToFinalized of eth. The
-// lifecycle probe calls it to exercise the milestone reorganization of the
-// whitelist verifier without a Heimdall milestone conflict.
+// ExtractorReorgToFinalized runs the native reorgToFinalized of eth. Test
+// only: the lifecycle probe calls it to exercise the milestone
+// reorganization of the whitelist verifier without a Heimdall milestone
+// conflict (it skips the verifier's milestone checks); no product path calls
+// it.
 func ExtractorReorgToFinalized(eth *Ethereum, head uint64, rewindTo uint64, canonicalChain []*types.Block) bool {
 	return reorgToFinalized(eth, head, rewindTo, canonicalChain)
 }

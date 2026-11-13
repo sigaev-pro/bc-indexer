@@ -41,6 +41,8 @@ type ExtractorLifecycle interface {
 	// Held returns the guard token that the current chain-lock holder lends,
 	// or nil. Only code that holds chainmu may call it.
 	Held() any
+	// Floor returns the number of the live boundary H, if the run has one.
+	Floor() (uint64, bool)
 }
 
 // ExtractorPass is one open pass of a mapped caller.
@@ -236,9 +238,9 @@ func (bc *BlockChain) extractorSetHeadLocked(head uint64, time uint64, root comm
 	if l == nil {
 		return bc.extractorNativeSetHeadLocked(head, time, root, repair)
 	}
-	target := bc.extractorRewindHeader(head, time)
-	if target == nil {
-		return 0, fmt.Errorf("%w: no canonical header for the rewind to %d (time %d)", ErrExtractorRefused, head, time)
+	target, err := bc.extractorRewindCheck(l, head, time)
+	if err != nil {
+		return 0, err
 	}
 	d, err := bc.extractorBegin("bor.set-head", "set-head", target)
 	if err != nil {
@@ -251,6 +253,25 @@ func (bc *BlockChain) extractorSetHeadLocked(head uint64, time uint64, root comm
 		return number, errors.Join(err, d.end())
 	}
 	return number, errors.Join(d.decide(), d.end())
+}
+
+// extractorRewindCheck predicts the head of a rewind and refuses, before any
+// intent or mutation, a rewind the decision could not match: no canonical
+// target, a target below the live boundary H, or a target without its state
+// (the native rewind would go further back than the intent).
+func (bc *BlockChain) extractorRewindCheck(l ExtractorLifecycle, head uint64, time uint64) (*types.Header, error) {
+	target := bc.extractorRewindHeader(head, time)
+	if target == nil {
+		return nil, fmt.Errorf("%w: no canonical header for the rewind to %d (time %d)", ErrExtractorRefused, head, time)
+	}
+	if floor, ok := l.Floor(); ok && target.Number.Uint64() < floor {
+		return nil, fmt.Errorf("%w: rewind to %d is below the live boundary %d", ErrExtractorRefused,
+			target.Number.Uint64(), floor)
+	}
+	if !bc.HasState(target.Root) {
+		return nil, fmt.Errorf("%w: rewind target %d has no state", ErrExtractorRefused, target.Number.Uint64())
+	}
+	return target, nil
 }
 
 // extractorRewindHeader predicts the head of a rewind: the canonical header
@@ -292,42 +313,45 @@ func (bc *BlockChain) extractorSetHeadDecide() error {
 // through the import path, each with its own observation and decision, and
 // SetCanonical of the last block is a decision of bor.set-canonical. The guard
 // is not held across the import, whose observations take it themselves.
-func (bc *BlockChain) ExtractorReorgToFinalized(rewindTo uint64, chain []*types.Block) error {
+// moved reports that the decided rewind ran, as native reorgToFinalized
+// reports a successful rewind even when the insert that follows fails.
+func (bc *BlockChain) ExtractorReorgToFinalized(rewindTo uint64, chain []*types.Block, makeWitness bool) (moved bool,
+	err error) {
 	if len(chain) == 0 {
-		return fmt.Errorf("%w: milestone reorganization without a chain", ErrExtractorRefused)
+		return false, fmt.Errorf("%w: milestone reorganization without a chain", ErrExtractorRefused)
 	}
 	for i, block := range chain {
 		if i > 0 && block.ParentHash() != chain[i-1].Hash() {
-			return fmt.Errorf("%w: milestone chain is not linked at %d", ErrExtractorRefused, block.NumberU64())
+			return false, fmt.Errorf("%w: milestone chain is not linked at %d", ErrExtractorRefused, block.NumberU64())
 		}
 	}
 	if err := bc.extractorRequireRewind(rewindTo); err != nil {
-		return err
+		return false, err
 	}
 	if !bc.chainmu.TryLock() {
-		return errChainStopped
+		return false, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
-	target := bc.extractorRewindHeader(rewindTo, 0)
-	if target == nil {
-		return fmt.Errorf("%w: no canonical header %d for the milestone rewind", ErrExtractorRefused, rewindTo)
+	target, err := bc.extractorRewindCheck(bc.extractorLifecycle(), rewindTo, 0)
+	if err != nil {
+		return false, err
 	}
 	d, err := bc.extractorBegin("bor.milestone-reorg", "milestone-rewind", target)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if _, err := bc.extractorSetHeadLocked(rewindTo, 0, common.Hash{}, false); err != nil {
-		return errors.Join(err, d.end())
+		return false, errors.Join(err, d.end())
 	}
 	if err := errors.Join(d.decide(), d.end()); err != nil {
-		return err
+		return false, err
 	}
 	bc.chainHeadFeed.Send(ChainHeadEvent{Header: bc.CurrentBlock()})
-	if _, _, err := bc.insertChain(chain, true, false); err != nil {
-		return err
+	if _, _, err := bc.insertChain(chain, true, makeWitness); err != nil {
+		return true, err
 	}
 	_, err = bc.extractorNativeSetCanonicalLocked(chain[len(chain)-1])
-	return err
+	return true, err
 }
 
 // ExtractorWriteKnownBlock activates a stored block with its state through
@@ -335,8 +359,9 @@ func (bc *BlockChain) ExtractorReorgToFinalized(rewindTo uint64, chain []*types.
 // do not reach writeKnownBlock: the import path inserts one block per batch,
 // and the native left-trim of insertChain replaces the known-block error with
 // the fork-choice result, so a known block that needs a reorganization is
-// executed again under a new observation. The lifecycle probe calls this hook
-// to exercise the bor.known-block decision of the patched function.
+// executed again under a new observation. Test only: the lifecycle probe
+// calls this hook to exercise the bor.known-block decision of the patched
+// function; no product path calls it.
 func (bc *BlockChain) ExtractorWriteKnownBlock(block *types.Block) error {
 	if !bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
 		return fmt.Errorf("%w: block %d is not stored with its state", ErrExtractorRefused, block.NumberU64())
