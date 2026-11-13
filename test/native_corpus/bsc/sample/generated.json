@@ -1,0 +1,21 @@
+{
+ "blocks": [
+  {
+   "gas_used": 1778833,
+   "hash": "f0289f7938e0c02083d98dcbdaa0436ba839d6d60eea3cb81221271b28d410e3",
+   "number": 1,
+   "state_root": "3235daac4b658499e1822f24410d59cec57a5d089fb4de9e5de2a39779fb8712",
+   "timestamp": 1794528839,
+   "transactions": 12
+  },
+  {
+   "gas_used": 0,
+   "hash": "4f0327aee944dc348f054c5e4cfa90f0e45319928b66826c61c9c291ecb10102",
+   "number": 2,
+   "state_root": "3235daac4b658499e1822f24410d59cec57a5d089fb4de9e5de2a39779fb8712",
+   "timestamp": 1794528842,
+   "transactions": 0
+  }
+ ],
+ "genesis_hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e"
+}

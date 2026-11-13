@@ -1,0 +1,113 @@
+{
+ "blocks": [
+  {
+   "hash": "f0289f7938e0c02083d98dcbdaa0436ba839d6d60eea3cb81221271b28d410e3",
+   "number": 1
+  },
+  {
+   "hash": "4f0327aee944dc348f054c5e4cfa90f0e45319928b66826c61c9c291ecb10102",
+   "number": 2
+  }
+ ],
+ "bridge": {
+  "admission_records": {
+   "counter": {
+    "next": 2
+   },
+   "lowwater": {
+    "sequence": 2
+   },
+   "purged": {
+    "sequence": 2
+   }
+  },
+  "decision_records": {
+   "0000000000000000/decided": {
+    "sequence": 0,
+    "intent_digest": "3f39464b2e2bd86c68dce5cec309791663b970d7a9207bd19b6f2aadad68a6d7",
+    "delivery": "BATCH",
+    "digest": "39238d9efaf8c342746cc4aa9fddf7b204206de9e6c6eed74e80c73688f60ab7"
+   },
+   "0000000000000000/intent": {
+    "native_store_id": "0123456789abcdef0123456789abcdef",
+    "producer": "bsc-probe.run-1",
+    "sequence": 0,
+    "kind": "IMPORT",
+    "old_head": {
+     "number": 0,
+     "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e"
+    },
+    "new_head": {
+     "number": 1,
+     "hash": "f0289f7938e0c02083d98dcbdaa0436ba839d6d60eea3cb81221271b28d410e3"
+    },
+    "members": [
+     {
+      "observation": "bsc-probe.run-1.0000000000000000",
+      "block": "f0289f7938e0c02083d98dcbdaa0436ba839d6d60eea3cb81221271b28d410e3",
+      "exec_ready_digest": "32250b4417da0bb218c7edfb3eb1665458b5546c0748d2825f283106f01ae02b",
+      "child_root": "3235daac4b658499e1822f24410d59cec57a5d089fb4de9e5de2a39779fb8712"
+     }
+    ],
+    "evidence_digest": "4c03a7bf09c9146a2fd2d4df92ec98e8a2d11f81d157670be7e0f7c1c5a611fe",
+    "events": true,
+    "digest": "3f39464b2e2bd86c68dce5cec309791663b970d7a9207bd19b6f2aadad68a6d7"
+   },
+   "0000000000000001/decided": {
+    "sequence": 1,
+    "intent_digest": "25844723d7f8eaae9efec72544d827691c13a8ee188f07481f2948e53ee12dd7",
+    "delivery": "BATCH",
+    "digest": "084f7ff40a3e4b1e64807b71f35b05d0374d8af459135a14dc9a56d0ad3b0abd"
+   },
+   "0000000000000001/intent": {
+    "native_store_id": "0123456789abcdef0123456789abcdef",
+    "producer": "bsc-probe.run-1",
+    "sequence": 1,
+    "kind": "IMPORT",
+    "old_head": {
+     "number": 1,
+     "hash": "f0289f7938e0c02083d98dcbdaa0436ba839d6d60eea3cb81221271b28d410e3"
+    },
+    "new_head": {
+     "number": 2,
+     "hash": "4f0327aee944dc348f054c5e4cfa90f0e45319928b66826c61c9c291ecb10102"
+    },
+    "members": [
+     {
+      "observation": "bsc-probe.run-1.0000000000000001",
+      "block": "4f0327aee944dc348f054c5e4cfa90f0e45319928b66826c61c9c291ecb10102",
+      "exec_ready_digest": "c2f5bb2d16db0d3e6501d79b1d91ef86b5d32217f3aef7bb45d0dea51d62c5f3",
+      "child_root": "3235daac4b658499e1822f24410d59cec57a5d089fb4de9e5de2a39779fb8712"
+     }
+    ],
+    "evidence_digest": "714ba6bf6d77221820760b363dcdecbff7223ca9c01922adb2c8f49126de1a31",
+    "events": true,
+    "digest": "25844723d7f8eaae9efec72544d827691c13a8ee188f07481f2948e53ee12dd7"
+   },
+   "counter": {
+    "next": 2
+   }
+  },
+  "obligations": [
+   {
+    "sequence": 0,
+    "intent_digest": "3f39464b2e2bd86c68dce5cec309791663b970d7a9207bd19b6f2aadad68a6d7",
+    "decided_digest": "39238d9efaf8c342746cc4aa9fddf7b204206de9e6c6eed74e80c73688f60ab7"
+   },
+   {
+    "sequence": 1,
+    "intent_digest": "25844723d7f8eaae9efec72544d827691c13a8ee188f07481f2948e53ee12dd7",
+    "decided_digest": "084f7ff40a3e4b1e64807b71f35b05d0374d8af459135a14dc9a56d0ad3b0abd"
+   }
+  ],
+  "open_observations": [],
+  "counters": [
+   2,
+   2
+  ],
+  "mode": "LIVE",
+  "head_number": 2,
+  "head_hash": "4f0327aee944dc348f054c5e4cfa90f0e45319928b66826c61c9c291ecb10102"
+ },
+ "error": ""
+}
