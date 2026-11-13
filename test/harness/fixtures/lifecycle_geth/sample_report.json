@@ -1,0 +1,2297 @@
+{
+ "ac_cap_01_01": {
+  "harness": {
+   "decisions": [
+    [
+     "newPayload A4",
+     [
+      [
+       "SIDE",
+       "A3",
+       "A3",
+       [
+        "A4"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice head A4",
+     [
+      [
+       "CANONICAL",
+       "A3",
+       "A4",
+       [
+        "A4"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice safe A2 finalized A1",
+     [
+      [
+       "FINALITY",
+       "A4",
+       "A4",
+       [],
+       "NATIVE_DECIDED"
+      ],
+      [
+       "FINALITY",
+       "A4",
+       "A4",
+       [],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "AC-LIF-05-02 forkchoice zero safe and finalized",
+     []
+    ],
+    [
+     "forkchoice unchanged safe A2 finalized A1",
+     []
+    ],
+    [
+     "AC-LIF-05-03 forkchoice finalized A2 then unknown safe",
+     [
+      [
+       "FINALITY",
+       "A4",
+       "A4",
+       [],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "newPayload B3",
+     [
+      [
+       "SIDE",
+       "A4",
+       "A4",
+       [
+        "B3"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "newPayload B4",
+     [
+      [
+       "SIDE",
+       "A4",
+       "A4",
+       [
+        "B4"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice reorg to B4 safe B3",
+     [
+      [
+       "CANONICAL",
+       "A4",
+       "B4",
+       [
+        "B3",
+        "B4"
+       ],
+       "NATIVE_DECIDED"
+      ],
+      [
+       "FINALITY",
+       "B4",
+       "B4",
+       [],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice back to A4 without corpus",
+     []
+    ]
+   ],
+   "errors": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true
+   ],
+   "final": {
+    "canonical": [
+     "A1",
+     "A2",
+     "B3",
+     "B4",
+     "",
+     ""
+    ],
+    "finalized": "A2",
+    "head": 4,
+    "head_hash": "B4",
+    "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+    "safe": "B3",
+    "stored_finalized": "A2"
+   }
+  },
+  "native": {
+   "decisions": [
+    [
+     "newPayload A4",
+     [
+      [
+       "SIDE",
+       "A3",
+       "A3",
+       [
+        "A4"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice head A4",
+     [
+      [
+       "CANONICAL",
+       "A3",
+       "A4",
+       [
+        "A4"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice safe A2 finalized A1",
+     [
+      [
+       "FINALITY",
+       "A4",
+       "A4",
+       [],
+       "NATIVE_DECIDED"
+      ],
+      [
+       "FINALITY",
+       "A4",
+       "A4",
+       [],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "AC-LIF-05-02 forkchoice zero safe and finalized",
+     []
+    ],
+    [
+     "forkchoice unchanged safe A2 finalized A1",
+     []
+    ],
+    [
+     "AC-LIF-05-03 forkchoice finalized A2 then unknown safe",
+     [
+      [
+       "FINALITY",
+       "A4",
+       "A4",
+       [],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "newPayload B3",
+     [
+      [
+       "SIDE",
+       "A4",
+       "A4",
+       [
+        "B3"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "newPayload B4",
+     [
+      [
+       "SIDE",
+       "A4",
+       "A4",
+       [
+        "B4"
+       ],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice reorg to B4 safe B3",
+     [
+      [
+       "CANONICAL",
+       "A4",
+       "B4",
+       [
+        "B3",
+        "B4"
+       ],
+       "NATIVE_DECIDED"
+      ],
+      [
+       "FINALITY",
+       "B4",
+       "B4",
+       [],
+       "NATIVE_DECIDED"
+      ]
+     ]
+    ],
+    [
+     "forkchoice back to A4 without corpus",
+     []
+    ]
+   ],
+   "errors": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true
+   ],
+   "final": {
+    "canonical": [
+     "A1",
+     "A2",
+     "B3",
+     "B4",
+     "",
+     ""
+    ],
+    "finalized": "A2",
+    "head": 4,
+    "head_hash": "B4",
+    "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+    "safe": "B3",
+    "stored_finalized": "A2"
+   }
+  }
+ },
+ "coverage": {
+  "geth.dev-sealing": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 2
+  },
+  "geth.import": {
+   "intents": 0,
+   "passes": 12,
+   "refusals": 0
+  },
+  "geth.insert-without-head": {
+   "intents": 0,
+   "passes": 12,
+   "refusals": 0
+  },
+  "geth.known-block": {
+   "intents": 2,
+   "passes": 2,
+   "refusals": 0
+  },
+  "geth.manual-commands": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 1
+  },
+  "geth.parallel": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 10
+  },
+  "geth.recover-ancestors": {
+   "intents": 0,
+   "passes": 1,
+   "refusals": 0
+  },
+  "geth.recovery": {
+   "intents": 0,
+   "passes": 3,
+   "refusals": 0
+  },
+  "geth.set-canonical": {
+   "intents": 13,
+   "passes": 15,
+   "refusals": 0
+  },
+  "geth.set-finalized": {
+   "intents": 2,
+   "passes": 26,
+   "refusals": 0
+  },
+  "geth.set-head": {
+   "intents": 3,
+   "passes": 1,
+   "refusals": 0
+  },
+  "geth.set-safe": {
+   "intents": 4,
+   "passes": 25,
+   "refusals": 0
+  },
+  "geth.side-chain": {
+   "intents": 0,
+   "passes": 1,
+   "refusals": 0
+  },
+  "geth.snap-sync": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 2
+  },
+  "geth.startup-reconcile": {
+   "intents": 1,
+   "passes": 1,
+   "refusals": 0
+  },
+  "geth.sync-target": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 2
+  }
+ },
+ "crashes": [
+  {
+   "attach_error": null,
+   "decisions": [],
+   "exit_code": 3,
+   "refs": {
+    "canonical": [
+     "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
+     "62fb698fda2b3554093d0f570a831b2754d76ee0512ff5f3b5bbb413be31ed98",
+     "c83294034eb1aaa2e4dcd07e517be1ce8cc375c8f9dd4426740109d99a024263",
+     "",
+     "",
+     ""
+    ],
+    "finalized": "",
+    "head": 3,
+    "head_hash": "A3",
+    "head_root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4",
+    "safe": "",
+    "stored_finalized": "-"
+   },
+   "scenario": "finality",
+   "settled": [
+    {
+     "event": "settling",
+     "evidence": "finality_not_durable",
+     "sequence": 0
+    }
+   ]
+  },
+  {
+   "attach_error": null,
+   "decisions": [
+    {
+     "evidence": "3134a8d341a6286dc91971fe5f1071acfa07d735fe6fded838fe57a2c509eec0",
+     "kind": "IMPORT",
+     "members": [
+      "A4"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A3",
+     "old_head": 3,
+     "sequence": 1,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "72cf81a4d286b2e2d6d3494118201d0ea5d21637bf08fd241a6e1cf41537fa5f",
+     "kind": "IMPORT",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 2,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "58f676b2ea723f9251e64de187256ebed9fda5d7a97900f99718fce4c454046c",
+     "kind": "CANONICAL",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 3,
+     "state": "NATIVE_DECIDED"
+    }
+   ],
+   "exit_code": 3,
+   "refs": {
+    "canonical": [
+     "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
+     "62fb698fda2b3554093d0f570a831b2754d76ee0512ff5f3b5bbb413be31ed98",
+     "c83294034eb1aaa2e4dcd07e517be1ce8cc375c8f9dd4426740109d99a024263",
+     "012b73b23036b1925dd8a2737ca2169e0d6ff123a69c17b18381956aa3efd1b5",
+     "",
+     ""
+    ],
+    "finalized": "",
+    "head": 4,
+    "head_hash": "A4",
+    "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+    "safe": "",
+    "stored_finalized": "-"
+   },
+   "scenario": "rewind",
+   "settled": [
+    {
+     "event": "settling",
+     "evidence": "native_head_is_new_head",
+     "sequence": 3
+    }
+   ]
+  },
+  {
+   "attach_error": null,
+   "decisions": [
+    {
+     "evidence": "3134a8d341a6286dc91971fe5f1071acfa07d735fe6fded838fe57a2c509eec0",
+     "kind": "IMPORT",
+     "members": [
+      "A4"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A3",
+     "old_head": 3,
+     "sequence": 1,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "72cf81a4d286b2e2d6d3494118201d0ea5d21637bf08fd241a6e1cf41537fa5f",
+     "kind": "IMPORT",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 2,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "58f676b2ea723f9251e64de187256ebed9fda5d7a97900f99718fce4c454046c",
+     "kind": "CANONICAL",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 3,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "7bfd8610174f457a4dd520c052d40a6fcdb5830c8b126e392c3b2fefbc755a30",
+     "kind": "SIDE",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 4,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "0566481b32466da89355e2c548f561ffc719926158af7207fa27a7ee36a10f4a",
+     "kind": "CANONICAL",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 5,
+     "state": "NATIVE_REJECTED"
+    }
+   ],
+   "exit_code": 3,
+   "refs": {
+    "canonical": [
+     "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
+     "62fb698fda2b3554093d0f570a831b2754d76ee0512ff5f3b5bbb413be31ed98",
+     "c83294034eb1aaa2e4dcd07e517be1ce8cc375c8f9dd4426740109d99a024263",
+     "012b73b23036b1925dd8a2737ca2169e0d6ff123a69c17b18381956aa3efd1b5",
+     "",
+     ""
+    ],
+    "finalized": "",
+    "head": 4,
+    "head_hash": "A4",
+    "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+    "safe": "",
+    "stored_finalized": "-"
+   },
+   "scenario": "canonical",
+   "settled": [
+    {
+     "event": "settling",
+     "evidence": "native_head_is_old_head",
+     "sequence": 5
+    }
+   ]
+  }
+ ],
+ "gaps": [],
+ "harness": {
+  "bootstrap": {
+   "admission_records_before_live": 0,
+   "boundary": {
+    "hash": "A3",
+    "head": 3,
+    "root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4"
+   },
+   "boundary_present": true,
+   "boundary_root_durable": true,
+   "boundary_root_is_head_root": true,
+   "decision_records_before_live": 0,
+   "golive_error": null,
+   "phase_after": "LIVE",
+   "phase_at_open": "BOOTSTRAP"
+  },
+  "steps": [
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload A1",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload A2",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload A3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload S3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload T3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap forkchoice A3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 3,
+     "head_hash": "A3",
+     "head_root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "ecf5c462826774bdf0e33cfbe4872d23b2efddfc003ee1cde352bb799c94bafb",
+      "kind": "SIDE",
+      "members": [
+       "A4"
+      ],
+      "new_hash": "A3",
+      "new_head": 3,
+      "old_hash": "A3",
+      "old_head": 3,
+      "sequence": 0,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload A4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 3,
+     "head_hash": "A3",
+     "head_root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "020f66af6bea7794714a58471b6db8063294c439aa06042990a06c5231a78aff",
+      "kind": "CANONICAL",
+      "members": [
+       "A4"
+      ],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A3",
+      "old_head": 3,
+      "sequence": 1,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice head A4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "6005ec6836edfbd4f88cfa8043ce4dfaaa053a61d946d58ba03f2d8a0b430dbc",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 2,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "8378e9377332dcb3eda3313964890ec30198955e4f0add0e41b3413831c02607",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 3,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice safe A2 finalized A1",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A1",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A1"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "AC-LIF-05-02 forkchoice zero safe and finalized",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A1",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A1"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "forkchoice unchanged safe A2 finalized A1",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A1",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A1"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "145f4b0825d75f237f48dd36775f0c5158598273528eaec5c3f10642e3c9258a",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 4,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": "Invalid forkchoice state",
+    "name": "AC-LIF-05-03 forkchoice finalized A2 then unknown safe",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "d9bc476ebdff45f5c06c267ede79ffdef931cfdf3c00701ede2e18a3875d734b",
+      "kind": "SIDE",
+      "members": [
+       "B3"
+      ],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 5,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload B3",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "e7c8b274cfa1277d143abfd7cca9938f426f939382eba088cc9941508e0f94f2",
+      "kind": "SIDE",
+      "members": [
+       "B4"
+      ],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 6,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload B4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "6baec94d4df26fd655b277a85e76838563babb5b23324d971fc688e13024b21e",
+      "kind": "CANONICAL",
+      "members": [
+       "B3",
+       "B4"
+      ],
+      "new_hash": "B4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 7,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "359e5abcfc367d359d3155e9c33790a62a2bba5f671cd95f5483c7b4db6be71d",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "B4",
+      "new_head": 4,
+      "old_hash": "B4",
+      "old_head": 4,
+      "sequence": 8,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice reorg to B4 safe B3",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "B3",
+      "B4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "B4",
+     "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [],
+    "error": "source invariant error: a branch block has no retained EXEC_READY observation: block 4 012b73b23036b1925dd8a2737ca2169e0d6ff123a69c17b18381956aa3efd1b5",
+    "name": "forkchoice back to A4 without corpus",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "B3",
+      "B4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "B4",
+     "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   }
+  ]
+ },
+ "kind": "lifecycle-geth-probe",
+ "native_caller": {
+  "bootstrap": {
+   "admission_records_before_live": 0,
+   "boundary": {
+    "hash": "A3",
+    "head": 3,
+    "root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4"
+   },
+   "boundary_present": true,
+   "boundary_root_durable": true,
+   "boundary_root_is_head_root": true,
+   "decision_records_before_live": 0,
+   "live_service_error": null,
+   "phase_after": "LIVE",
+   "phase_at_open": "BOOTSTRAP"
+  },
+  "deadlock": {
+   "callers": 5,
+   "completed": true,
+   "errors": [],
+   "iterations": 10,
+   "seconds": 0.028178117
+  },
+  "exit_errors_first_open": [],
+  "exit_errors_restart": [],
+  "outside_gate_refusals": {
+   "geth.dev-sealing": "the capture profile refuses this node configuration: --dev (geth.dev-sealing)",
+   "geth.manual-commands": "live pins forbid this native deletion: 1 live, first geth-lifecycle.ra6557a70a7e449c6.0000000000000009",
+   "geth.snap-sync": "the capture profile refuses this node configuration: sync mode \"snap\" (geth.snap-sync)",
+   "geth.sync-target": "the capture profile refuses this node configuration: --synctarget (geth.sync-target)"
+  },
+  "restart_boundary": {
+   "hash": "A3",
+   "head": 3
+  },
+  "state_after_restart": {
+   "A1": false,
+   "A2": true,
+   "A3": true,
+   "S3": false,
+   "T3": false
+  },
+  "steps": [
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload A1",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload A2",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload A3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload S3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap newPayload T3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 0,
+     "head_hash": "G0",
+     "head_root": "ab33e74ccab7c0e8acfdbe7f208835a4a19fb387e2002a4a0af29933f2f18bae",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "bootstrap forkchoice A3",
+    "phase": "BOOTSTRAP",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 3,
+     "head_hash": "A3",
+     "head_root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "ecf5c462826774bdf0e33cfbe4872d23b2efddfc003ee1cde352bb799c94bafb",
+      "kind": "SIDE",
+      "members": [
+       "A4"
+      ],
+      "new_hash": "A3",
+      "new_head": 3,
+      "old_hash": "A3",
+      "old_head": 3,
+      "sequence": 0,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload A4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 3,
+     "head_hash": "A3",
+     "head_root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "d8c01e5fe7e26a748ec669c8b9b17627958bf60dc65464acecac2d3f1d675c5c",
+      "kind": "CANONICAL",
+      "members": [
+       "A4"
+      ],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A3",
+      "old_head": 3,
+      "sequence": 1,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice head A4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "",
+     "stored_finalized": "-"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "6005ec6836edfbd4f88cfa8043ce4dfaaa053a61d946d58ba03f2d8a0b430dbc",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 2,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "8378e9377332dcb3eda3313964890ec30198955e4f0add0e41b3413831c02607",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 3,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice safe A2 finalized A1",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A1",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A1"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "AC-LIF-05-02 forkchoice zero safe and finalized",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A1",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A1"
+    }
+   },
+   {
+    "decisions": [],
+    "error": null,
+    "name": "forkchoice unchanged safe A2 finalized A1",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A1",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A1"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "145f4b0825d75f237f48dd36775f0c5158598273528eaec5c3f10642e3c9258a",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 4,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": "Invalid forkchoice state",
+    "name": "AC-LIF-05-03 forkchoice finalized A2 then unknown safe",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "d9bc476ebdff45f5c06c267ede79ffdef931cfdf3c00701ede2e18a3875d734b",
+      "kind": "SIDE",
+      "members": [
+       "B3"
+      ],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 5,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload B3",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "e7c8b274cfa1277d143abfd7cca9938f426f939382eba088cc9941508e0f94f2",
+      "kind": "SIDE",
+      "members": [
+       "B4"
+      ],
+      "new_hash": "A4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 6,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload B4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "A4",
+     "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "d6eff25efdd732e6495fa278b7527cd23e248a94531c6ffdd9494d89dee8cf29",
+      "kind": "CANONICAL",
+      "members": [
+       "B3",
+       "B4"
+      ],
+      "new_hash": "B4",
+      "new_head": 4,
+      "old_hash": "A4",
+      "old_head": 4,
+      "sequence": 7,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "359e5abcfc367d359d3155e9c33790a62a2bba5f671cd95f5483c7b4db6be71d",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "B4",
+      "new_head": 4,
+      "old_hash": "B4",
+      "old_head": 4,
+      "sequence": 8,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice reorg to B4 safe B3",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "B3",
+      "B4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "B4",
+     "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [],
+    "error": "source invariant error: a branch block has no retained EXEC_READY observation: block 3 c83294034eb1aaa2e4dcd07e517be1ce8cc375c8f9dd4426740109d99a024263",
+    "name": "forkchoice back to A4 without corpus",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "B3",
+      "B4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "B4",
+     "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "1983e935864dcc5e06259a1bd1f79157f9b74f5a8e61caaa0a0a317fc4a05098",
+      "kind": "SIDE",
+      "members": [
+       "C3"
+      ],
+      "new_hash": "B4",
+      "new_head": 4,
+      "old_hash": "B4",
+      "old_head": 4,
+      "sequence": 9,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload C3",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "B3",
+      "B4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "B4",
+     "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "5ef83f2354c04ebfeb324f108480b6ec262bfdd2dd679813b2dcf5d616fbe5e6",
+      "kind": "SIDE",
+      "members": [
+       "C4"
+      ],
+      "new_hash": "B4",
+      "new_head": 4,
+      "old_hash": "B4",
+      "old_head": 4,
+      "sequence": 10,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload C4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "B3",
+      "B4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "B4",
+     "head_root": "b568293670f64ac62b79b84969ec44d2ff4c504123392cf673a3e4bc64b138cd",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "fa44005934c2a52e788e94324612c8e80af59b94d62e5d960a6e0832e2c6ecc7",
+      "kind": "CANONICAL",
+      "members": [
+       "C3"
+      ],
+      "new_hash": "C3",
+      "new_head": 3,
+      "old_hash": "B4",
+      "old_head": 4,
+      "sequence": 11,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "9da2c4e5807c45e2ec46ea364a8b943c372a8d6f47c174b2bcf8ba9c5cc98d1c",
+      "kind": "CANONICAL",
+      "members": [
+       "C4"
+      ],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C3",
+      "old_head": 3,
+      "sequence": 12,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "InsertChain known C3 C4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [],
+    "error": "caller is refused in the capture profile: geth.snap-sync (the node flag check refuses any sync mode but full sync on a capture store)",
+    "name": "InsertReceiptChain (snap sync)",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [],
+    "error": "caller is refused in the capture profile: geth.sync-target (the node flag check refuses --synctarget on a capture store)",
+    "name": "syncer Sync (sync target)",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [],
+    "error": "caller is refused in the capture profile: geth.dev-sealing (the node flag check refuses --dev on a capture store)",
+    "name": "NewSimulatedBeacon (developer beacon)",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [],
+    "error": "extractor: a chain reset is refused on a capture store",
+    "name": "Reset",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "B3",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "f4f64a74b5b89f375450969a2b6fcf87f3ef6f7184d09f522f5e97ceeb9edc79",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 13,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice safe C4 finalized A2",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "C4",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 14,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 15,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 16,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 17,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 18,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 19,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 20,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 21,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 22,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "83735372985cadfc7a247c52a6d5360d58506fc43a6c7a2e40a20bb19f31afc4",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 23,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "after deadlock smoke",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "C4",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "38741d1187e73af256268b94784e1c46cae822221263381abd2ba2e1b3df3a59",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "C4",
+      "new_head": 4,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 24,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "restart",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "C3",
+      "C4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "C4",
+     "head_root": "7d5b1d8a056aa061cc00f0f1486e9bd8bf1409c2b71715404439481c456fc451",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "5783acd7bd14798acdf4e1d634fe7fb7811660f8717042f5d541746192237790",
+      "kind": "CANONICAL",
+      "members": [
+       "T3"
+      ],
+      "new_hash": "T3",
+      "new_head": 3,
+      "old_hash": "C4",
+      "old_head": 4,
+      "sequence": 25,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "aed050ea6e0955cef4f8499a8472c8e318f3c53af1c3ec0b905ea453e4faa23c",
+      "kind": "IMPORT",
+      "members": [
+       "T4"
+      ],
+      "new_hash": "T4",
+      "new_head": 4,
+      "old_hash": "T3",
+      "old_head": 3,
+      "sequence": 26,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "InsertChain T4 on pruned T3 (side chain)",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "T3",
+      "T4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "T4",
+     "head_root": "d281b30455a3e0fce3f42cd947badcbdc02d2d1b5c25121f809ef49a4547f41d",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "80e6264433d91ad23e81c91530a5ff543d2b3c5a5c66a98fe4f52b879c2ff7ed",
+      "kind": "SIDE",
+      "members": [
+       "S3"
+      ],
+      "new_hash": "T4",
+      "new_head": 4,
+      "old_hash": "T4",
+      "old_head": 4,
+      "sequence": 27,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "e044a1a1758d7c6a0e5e2012b19f4c196a01b8875db0669f1ed51ace034b6406",
+      "kind": "SIDE",
+      "members": [
+       "S4"
+      ],
+      "new_hash": "T4",
+      "new_head": 4,
+      "old_hash": "T4",
+      "old_head": 4,
+      "sequence": 28,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "InsertBlockWithoutSetHead S4 on pruned S3 (recover ancestors)",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "T3",
+      "T4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "T4",
+     "head_root": "d281b30455a3e0fce3f42cd947badcbdc02d2d1b5c25121f809ef49a4547f41d",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "32907c73856b38fa6e06f20de218451ef95358daa404bee5f740151718adbcd5",
+      "kind": "CANONICAL",
+      "members": [
+       "S3",
+       "S4"
+      ],
+      "new_hash": "S4",
+      "new_head": 4,
+      "old_hash": "T4",
+      "old_head": 4,
+      "sequence": 29,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice head S4",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "S3",
+      "S4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "S4",
+     "head_root": "385e851922f68b3ab3889f4a46c99ddb83a7ce7a1311cf58c57ae5acf1b35035",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "74fde06f680fa8acbf3adfaf339e249f8cb0e2c4b7483446fcf988b338315e11",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "S4",
+      "new_head": 4,
+      "old_hash": "S4",
+      "old_head": 4,
+      "sequence": 30,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "forkchoice safe S4 finalized A2",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "S3",
+      "S4",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 4,
+     "head_hash": "S4",
+     "head_root": "385e851922f68b3ab3889f4a46c99ddb83a7ce7a1311cf58c57ae5acf1b35035",
+     "safe": "S4",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "09e0b42b1459095b6536ebaa6cc4d441c6372ae14d5ddbd6ec8d41a8da635988",
+      "kind": "CANONICAL",
+      "members": [],
+      "new_hash": "S3",
+      "new_head": 3,
+      "old_hash": "S4",
+      "old_head": 4,
+      "sequence": 31,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "182a6c3f61445c1bc72c53141c2d7e35d3e4564a409a44e0860e8b209fe61591",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "S3",
+      "new_head": 3,
+      "old_hash": "S3",
+      "old_head": 3,
+      "sequence": 32,
+      "state": "NATIVE_DECIDED"
+     },
+     {
+      "evidence": "626e6ebe1e8dc7b2fd82fe1cb4f5e10b771896a77d2029458337382deb07fdcf",
+      "kind": "FINALITY",
+      "members": [],
+      "new_hash": "S3",
+      "new_head": 3,
+      "old_hash": "S3",
+      "old_head": 3,
+      "sequence": 33,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "SetHead 3",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "S3",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 3,
+     "head_hash": "S3",
+     "head_root": "f1969135115ba9305e2e7cc717657d1f3bbe87a11029b8765d968d48a399c6ec",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   },
+   {
+    "decisions": [
+     {
+      "evidence": "cf3ad6b60b57ff7762327d93a20dd3f9f57840d4bc12176705438c2882cd2920",
+      "kind": "SIDE",
+      "members": [
+       "G3"
+      ],
+      "new_hash": "S3",
+      "new_head": 3,
+      "old_hash": "S3",
+      "old_head": 3,
+      "sequence": 34,
+      "state": "NATIVE_DECIDED"
+     }
+    ],
+    "error": null,
+    "name": "newPayload G3 (retained side block)",
+    "phase": "LIVE",
+    "refs": {
+     "canonical": [
+      "A1",
+      "A2",
+      "S3",
+      "",
+      "",
+      ""
+     ],
+     "finalized": "A2",
+     "head": 3,
+     "head_hash": "S3",
+     "head_root": "f1969135115ba9305e2e7cc717657d1f3bbe87a11029b8765d968d48a399c6ec",
+     "safe": "A2",
+     "stored_finalized": "A2"
+    }
+   }
+  ]
+ },
+ "native_identity": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+ "native_identity_error": null,
+ "profile": {
+  "eth_new_snap_sync": "the capture profile refuses this node configuration: sync mode \"snap\" (geth.snap-sync)",
+  "eth_new_wrong_commit": "native commit identity: the binary is 1df30b18d9ed35ee9d28ffd4648442c2204554ad, the config names 0000000000000000000000000000000000000000",
+  "flags_dev": "the capture profile refuses this node configuration: --dev (geth.dev-sealing)",
+  "flags_full": null,
+  "flags_snap": "the capture profile refuses this node configuration: sync mode \"snap\" (geth.snap-sync)",
+  "flags_synctarget": "the capture profile refuses this node configuration: --synctarget (geth.sync-target)"
+ },
+ "routes": {
+  "geth.dev-sealing": "REFUSE",
+  "geth.eth-call": "READ_ONLY",
+  "geth.execution-witness": "READ_ONLY",
+  "geth.freezer": "READ_ONLY",
+  "geth.import": "OBSERVATION",
+  "geth.insert-without-head": "OBSERVATION",
+  "geth.known-block": "DECISION",
+  "geth.manual-commands": "REFUSE",
+  "geth.parallel": "REFUSE",
+  "geth.payload-build": "READ_ONLY",
+  "geth.prefetch": "READ_ONLY",
+  "geth.recover-ancestors": "OBSERVATION",
+  "geth.recovery": "OBSERVATION",
+  "geth.replay-bad-block": "READ_ONLY",
+  "geth.set-canonical": "DECISION",
+  "geth.set-finalized": "DECISION",
+  "geth.set-head": "DECISION",
+  "geth.set-safe": "DECISION",
+  "geth.side-chain": "OBSERVATION",
+  "geth.simulate": "READ_ONLY",
+  "geth.snap-sync": "REFUSE",
+  "geth.startup-reconcile": "DECISION",
+  "geth.stateless-payload": "READ_ONLY",
+  "geth.stateless-self-check": "READ_ONLY",
+  "geth.sync-target": "REFUSE",
+  "geth.trace-state": "READ_ONLY"
+ },
+ "schema_version": 1
+}
