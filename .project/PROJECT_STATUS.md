@@ -264,7 +264,8 @@ slot was free (D97: at most three) and started it after PR #166 merged.
 
 Status: ACCEPTED in PR #168 at merge `cfb9195` (part of #19), branch
 `claude/e01-03-smoke-corpus-bsc` from main `4208145` (POLY merged in PR
-#166). Measured head `5217fc4`; later commits change only docs. Paths: `test/native_corpus/bsc/**`,
+#166). Measured head `5217fc4`; later commits change only docs. Paths:
+`test/native_corpus/bsc/**`,
 `.project/evidence/E01-03.smoke_corpus.bsc.md` and this subsection.
 
 Design ([BSC README](../test/native_corpus/bsc/README.md)):
