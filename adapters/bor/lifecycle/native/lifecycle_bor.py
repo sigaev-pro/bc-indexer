@@ -267,12 +267,16 @@ def judge(outputs, callers_map):
           and [(s["name"], s["error"]) for s in refuse["steps"]] == [("refuse-set-head-4", "")]
           and refuse["native_head"]["name"] == "D5" and rows(refuse["decisions"]) == rows(stateless["decisions"]),
           "the rewind to a target without state was not refused before any intent")
+    check(refuse["decisions"] == stateless["decisions"]
+          and all(d["state"] == "NATIVE_DECIDED" for d in refuse["decisions"] + stateless["decisions"])
+          and refuse["coverage"].get("bor.set-head", {}).get("Intents", 0) == 0,
+          "the refused rewind left an intent or changed a decision")
     manual = outputs["manual"]
-    check([r["refused"] for r in manual["commands"]] == [True, True, True] and manual["chaindata_kept"],
+    check([r["refused"] for r in manual["commands"]] == [True, True, True, True] and manual["chaindata_kept"],
           "a manual command was not refused, or the store is gone")
     check([(r["caller"], (MANUAL_REFUSED if r["caller"] == "bor.manual-commands" else RETENTION_REFUSED) in r["output"])
            for r in manual["commands"]] == [("bor.manual-commands", True), ("bor.prune-commands", True),
-                                            ("bor.manual-commands", True)],
+                                            ("bor.manual-commands", True), ("bor.manual-commands", True)],
           "a manual command was not refused by the capture-store or retention guard")
     profile = outputs["profile"]
     got = {r["name"]: sorted(x["caller"] for x in (r.get("refusals") or [])) for r in profile["sets"]}

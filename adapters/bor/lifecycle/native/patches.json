@@ -253,7 +253,7 @@
       "file": "eth/bor_checkpoint_verifier.go",
       "mode": "replace",
       "anchor": "\tdefer pauseMiner(eth)()\n\n\tif err := rewind(eth, head, rewindTo); err != nil {\n\t\treturn false\n\t}\n\tinsertFinalized(eth, canonicalChain)\n\treturn true\n",
-      "text": "\tdefer pauseMiner(eth)()\n\n\t// Extractor patch (E01-02.lifecycle_seams): one decision of\n\t// bor.milestone-reorg on a capture chain.\n\tif eth.blockchain.ExtractorLifecycleInstalled() {\n\t\treturn extractorReorgToFinalized(eth, head, rewindTo, canonicalChain)\n\t}\n\n\tif err := rewind(eth, head, rewindTo); err != nil {\n\t\treturn false\n\t}\n\tinsertFinalized(eth, canonicalChain)\n\treturn true\n"
+      "text": "\tdefer pauseMiner(eth)()\n\n\t// Extractor patch (E01-02.lifecycle_seams): on a capture chain, the\n\t// rewind decision of bor.milestone-reorg, then import and set-canonical\n\t// decisions, under one chain lock.\n\tif eth.blockchain.ExtractorLifecycleInstalled() {\n\t\treturn extractorReorgToFinalized(eth, head, rewindTo, canonicalChain)\n\t}\n\n\tif err := rewind(eth, head, rewindTo); err != nil {\n\t\treturn false\n\t}\n\tinsertFinalized(eth, canonicalChain)\n\treturn true\n"
     },
     {
       "name": "lifecycle-recovery-open",
@@ -324,6 +324,20 @@
       "mode": "before",
       "anchor": "\t// Purge all whitelisted entries from db\n",
       "text": "\t// Extractor patch (E01-02.lifecycle_seams): refused on a capture store\n\t// with live pins or decision obligations (bor.manual-commands).\n\tif err := extractorManualCommand(\"purge-whitelisted-entries\", datadir+\"/bor/chaindata\", chaindb); err != nil {\n\t\tc.UI.Error(err.Error())\n\t\tchaindb.Close()\n\t\treturn 1\n\t}\n\n"
+    },
+    {
+      "name": "lifecycle-seal-write-pipelined",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) WriteBlockAndSetHeadPipelined(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, emitHeadEvent bool, witnessBytes []byte) (WriteStatus, error) {",
+      "text": "func (bc *BlockChain) extractorNativeWriteBlockAndSetHeadPipelined(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, emitHeadEvent bool, witnessBytes []byte) (WriteStatus, error) {"
+    },
+    {
+      "name": "lifecycle-backfill-statesync",
+      "file": "internal/cli/backfill_statesync_txs.go",
+      "mode": "replace",
+      "anchor": "\t\tc.UI.Error(\"--datadir flag is required\")\n\t\treturn 1\n\t}\n\n\tbackfillFilePath := c.backfillFile\n",
+      "text": "\t\tc.UI.Error(\"--datadir flag is required\")\n\t\treturn 1\n\t}\n\n\t// Extractor patch (E01-02.lifecycle_seams): refused on a capture store\n\t// with live pins or decision obligations (bor.manual-commands): it\n\t// rewrites StateSync receipts and lookups of decided blocks.\n\tif err := extractorManualCommand(\"backfill-statesync-txs\", datadir+\"/bor/chaindata\", nil); err != nil {\n\t\tc.UI.Error(err.Error())\n\t\treturn 1\n\t}\n\n\tbackfillFilePath := c.backfillFile\n"
     }
   ]
 }

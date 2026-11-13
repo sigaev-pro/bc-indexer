@@ -265,6 +265,24 @@
    "replacement": "and refuse[\"native_head\"][\"name\"] == \"D5\","
   },
   {
+   "name": "refuse leftover list",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(refuse[\"decisions\"] == stateless[\"decisions\"]\n",
+   "replacement": "check(True\n"
+  },
+  {
+   "name": "refuse leftover decided",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and all(d[\"state\"] == \"NATIVE_DECIDED\" for d in refuse[\"decisions\"] + stateless[\"decisions\"])\n",
+   "replacement": ""
+  },
+  {
+   "name": "refuse leftover intents",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and refuse[\"coverage\"].get(\"bor.set-head\", {}).get(\"Intents\", 0) == 0,",
+   "replacement": ","
+  },
+  {
    "name": "manual messages",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
    "original": "for r in manual[\"commands\"]] == [(\"bor.manual-commands\", True), (\"bor.prune-commands\", True),",
@@ -315,7 +333,7 @@
   {
    "name": "manual refused",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "check([r[\"refused\"] for r in manual[\"commands\"]] == [True, True, True] and manual[\"chaindata_kept\"],",
+   "original": "check([r[\"refused\"] for r in manual[\"commands\"]] == [True, True, True, True] and manual[\"chaindata_kept\"],",
    "replacement": "check(manual[\"chaindata_kept\"],"
   },
   {

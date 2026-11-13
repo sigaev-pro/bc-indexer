@@ -17,11 +17,11 @@ plan for the per-client blocks, every row marked Bor or each client block).
 | `borlifecycle/profile/` | `extractor/borlifecycle/profile` | The `bor server` capture profile check, each refusal named by its REFUSE caller |
 | `borlifecycle/wire/` | `extractor/borlifecycle/wire` | `--extractor.capture` wiring of `bor server` and the manual-command refusal; imported by the shipped main |
 | `tree/` | the same relative path | New native files (hooks of `core`, `core/rawdb`, `eth`, the whitelist, `internal/cli`, the server, and the decision bridge) |
-| `patches.json` | (applied after the admission and decision patch sets) | 45 anchored edits |
+| `patches.json` | (applied after the admission and decision patch sets) | 47 anchored edits |
 | `lifecycle_tree.py` | | Installer: `bor_admission_tree.install` (unchanged), then the shared `lifecycle` package, the glue, the new files and the edits |
 | `probe/main.go` | `cmd/extractor-bor-lifecycle-probe` | Measured probe (test only) |
 | `lifecycle_bor.py` | | Driver: `prepare`, `run`, `observe`, `vectors`, `derive` |
-| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 25 portable controls on development outputs (`sample/`, not measured) and 61 single-check mutants |
+| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 25 portable controls on development outputs (`sample/`, not measured) and 64 single-check mutants |
 
 The installer adds a third patch set after the admission and decision patch
 sets, so it does not change their files. An anchor may sit in text that an
@@ -82,9 +82,9 @@ the step fails at its deadline.
 | `bor.milestone-reorg` | DECISION | See "Milestone reorganization" |
 | `bor.milestone`, `bor.checkpoint`, `bor.milestone-lock` | DECISION | Each patched whitelist method opens its pass before the finality lock (the vote keeps it from `LockMutex` to `UnlockMutex`). Each native finality write is a FINALITY decision of its own (see "Write choke points") |
 | `bor.startup-reconcile` | DECISION | See "Startup reconcile" |
-| `bor.seal-write`, `bor.engine-api`, `bor.snap-sync`, `bor.stateless` | REFUSE | `WriteBlockAndSetHead`, `InsertBlockWithoutSetHead`, `InsertReceiptChain` and `InsertChainStateless` enter the gate, which refuses and counts them. The profile check refuses their roles too |
+| `bor.seal-write`, `bor.engine-api`, `bor.snap-sync`, `bor.stateless` | REFUSE | `WriteBlockAndSetHead`, `WriteBlockAndSetHeadPipelined`, `InsertBlockWithoutSetHead`, `InsertReceiptChain` and `InsertChainStateless` enter the gate, which refuses and counts them. The profile check refuses their roles too |
 | `bor.parallel`, `bor.pipelined`, `bor.preconf` | REFUSE | The profile check refuses them. Their native entries refuse without the guard (`RefuseOutside`), because an observation may already hold it there |
-| `bor.manual-commands` | REFUSE | `removedb` and `purge-whitelisted-entries` are refused on a store with a live pin or any decision record (no mirror until E05-01.registry, so every decision record keeps an obligation or a retained member) |
+| `bor.manual-commands` | REFUSE | `removedb`, `purge-whitelisted-entries` and `backfill-statesync-txs` (which rewrites StateSync receipts and lookups) are refused on a store with a live pin or any decision record (no mirror until E05-01.registry, so every decision record keeps an obligation or a retained member) |
 | `bor.prune-commands` | REFUSE (GUARDED) | The admission's retention guard refuses; the probe counts it |
 | READ_ONLY rows | READ_ONLY | No pass; unchanged |
 
@@ -109,7 +109,23 @@ probe exercises the patched `writeKnownBlock` through
 | The state commit of the decision path | `extractorRequire("EXECUTION")` | `Require(EXECUTION)` |
 
 A refused write stops the process (`log.Crit`), so the native write fails
-closed. The rawdb hooks are process-wide. One capture chain per process is
+closed.
+
+The finality hook records its intent in the innermost pass, which belongs to
+the guard holder. Source review of the pinned tree found every native
+finality writer on that goroutine:
+
+- the whitelist writers (`WriteLastFinality`, `DeleteLastFinality`,
+  `WriteLockField`, `WriteFutureMilestoneList`) are called only from the
+  patched milestone and checkpoint methods, inside their own pass;
+- `SetFinalized` (`WriteFinalizedBlockHash`) is called only by the set-head
+  clear, inside the set-head pass, and by the Engine API, which `bor server`
+  does not register (`bor.engine-api` is refused);
+- `NewService` writes the lock record at node start, before the hooks are
+  installed.
+
+A writer on another goroutine while a pass is open would record its intent in
+the wrong pass; none exists in the pinned tree. The rawdb hooks are process-wide. One capture chain per process is
 supported, as the admission's Heimdall transport already requires.
 
 Bor's `SetSafe` writes no native state (memory only), so a cleared safe block
@@ -128,7 +144,9 @@ A DECISION pass proceeds in this order:
 4. It checks the native result against the intent: the head, or the
    finality value.
 5. It writes the marker in a batch of its own and syncs, then `Resolve`s,
-   deletes the evidence record and `Cleanup`s.
+   deletes the evidence record and `Cleanup`s. When a crash falls between
+   the synced marker and the resolve, the decision recovery driver resolves
+   the intent and the repair step deletes its evidence record.
 
 The marker is not in the final native batch. A native rewind spans many
 batches, and the whitelist writes single keys. Instead, the startup
@@ -232,13 +250,13 @@ lock:
 | Step | Process | Proves |
 |---|---|---|
 | 1 | `generate` | The fixture blocks |
-| 2 | `scenario` | First start (BOOTSTRAP, then LIVE with H at the genesis), then every caller through its native entry: imports A1 to A5; side blocks; `SetCanonical(A2)`; known blocks B3 and B4; `SetCanonical(C4)`; `SetCanonical` of the stateless D4 (recover-ancestors); E5 on the stateless E4 (side chain); the milestone reorganization to F4; the whitelist calls; the four refused entries; the deadlock check; `SetHead(7)` |
+| 2 | `scenario` | First start (BOOTSTRAP, then LIVE with H at the genesis), then every caller through its native entry, except known-block and the milestone reorganization, which run through the test-only hooks (see "Known-block reachability" and "Milestone reorganization"): imports A1 to A5; side blocks; `SetCanonical(A2)`; known blocks B3 and B4; `SetCanonical(C4)`; `SetCanonical` of the stateless D4 (recover-ancestors); E5 on the stateless E4 (side chain); the milestone reorganization to F4; the whitelist calls; the four refused entries; the deadlock check; `SetHead(7)` |
 | 3 | `restart` | RECOVERY, then LIVE with H kept and nothing to settle |
 | 4, 5 | `crash`, `restart` (settle) | A child runs `SetHead(6)` and exits after the native rewind, before the marker; the restart settles the intent as decided from native evidence |
 | 6, 7 | `crash`, `restart` (resolved) | A child runs `SetHead(5)` and exits after the synced marker, before `Resolve`; the decision recovery driver resolves it |
 | 8, 9 | `crash`, `restart` (imported) | A child imports H6 and exits after the synced head batch with the marker, before `Resolve`; the decision recovery driver resolves it |
 | 10, 11 | `fault`, `restart` (repair) | The state root node of the head is deleted offline; native startup repair rewinds and the startup reconcile decides it |
-| 12 | `manual` | `removedb`, `snapshot prune-state` and `purge-whitelisted-entries`, each in its own process (the native commands leave their node open), are refused by the capture-store guard or the retention guard, by message; the store stays |
+| 12 | `manual` | `removedb`, `snapshot prune-state`, `purge-whitelisted-entries` and `backfill-statesync-txs`, each in its own process (the native commands leave their node open), are refused by the capture-store guard or the retention guard, by message; the store stays |
 | 13 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New` |
 | 14 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
 | 15 to 17 | `restart` (stateless), `fault`, `restart` (refuse) | A third store imports A1, A2, B3, D4 and D5; D4's state root is deleted offline; `SetHead(4)` is refused before any intent and the head and decisions stay |
@@ -284,6 +302,11 @@ computes the values of the Go test vectors independently.
   "Startup reconcile"); a native finality write made at startup before the
   gate opens is not decided. Owner: E05-01.polygon_observer with the typed
   finality evidence.
+- **Last decided head.** The repair step takes the last decided head from
+  the decisions the bridge still holds. With no mirror (until
+  E05-01.registry) every head-moving decision keeps its marker and stays
+  there. Once a mirror lets `Cleanup` drop applied decisions, the repair
+  step needs a persisted last decided head. Owner: E05-01.registry.
 - **H on Bor.** H is the genesis of a new capture store; the below-H refusal
   is not reached by the measured run.
 - **Test-only seams.** `core.ExtractorWriteKnownBlock`,

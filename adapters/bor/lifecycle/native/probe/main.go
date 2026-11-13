@@ -938,6 +938,7 @@ var manualCommands = []struct {
 	{"bor.manual-commands", []string{"removedb"}},
 	{"bor.prune-commands", []string{"snapshot", "prune-state"}},
 	{"bor.manual-commands", []string{"purge-whitelisted-entries"}},
+	{"bor.manual-commands", []string{"backfill-statesync-txs"}},
 }
 
 // manual runs each native manual command against a stopped capture store in a

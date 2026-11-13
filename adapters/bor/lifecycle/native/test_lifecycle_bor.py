@@ -75,7 +75,7 @@ class Coverage(unittest.TestCase):
         self.assertEqual(lb.gaps(CALLERS, coverage), [])
         self.assertEqual(coverage["bor.parallel"], {"Passes": 0, "Intents": 0, "Refusals": 1})
         self.assertEqual(coverage["bor.seal-write"]["Refusals"], 4)
-        self.assertEqual(coverage["bor.manual-commands"]["Refusals"], 2)
+        self.assertEqual(coverage["bor.manual-commands"]["Refusals"], 3)
         self.assertEqual(coverage["bor.recovery"]["Passes"], 9)
 
     def test_gaps_rules(self):
@@ -97,7 +97,7 @@ class Coverage(unittest.TestCase):
         outputs["manual"]["commands"][0]["refused"] = False
         outputs["profile"]["sets"][1]["refusals"] = []
         coverage = lb.summed_coverage(outputs)
-        self.assertEqual(coverage["bor.manual-commands"]["Refusals"], 1)
+        self.assertEqual(coverage["bor.manual-commands"]["Refusals"], 2)
         self.assertEqual(coverage["bor.snap-sync"]["Refusals"], 1)
 
 
@@ -185,6 +185,23 @@ class Judge(unittest.TestCase):
                          "was not refused")
         self.assertFails(lambda o: o["refuse"].update(phase_after_start="RECOVERY"), "was not refused")
         self.assertFails(lambda o: o["refuse"].update(error="x"), "was not refused")
+        for state in ("INTENT", "NATIVE_REJECTED"):
+            def leftover(o, state=state):
+                row = dict(o["refuse"]["decisions"][-1], kind="CANONICAL", new_head="D4", state=state)
+                o["refuse"]["decisions"].append(row)
+            self.assertFails(leftover, "the refused rewind left an intent")
+        self.assertFails(lambda o: o["refuse"]["coverage"].update({"bor.set-head": {"Passes": 1, "Intents": 1,
+                                                                                    "Refusals": 0}}),
+                         "the refused rewind left an intent")
+        self.assertFails(lambda o: o["stateless"]["decisions"][-1].update(state="INTENT"),
+                         "the refused rewind left an intent")
+        self.assertFails(lambda o: o["refuse"]["decisions"][-1].update(sequence=999),
+                         "the refused rewind left an intent")
+
+        def both_open(o):
+            for name in ("stateless", "refuse"):
+                o[name]["decisions"][-1]["state"] = "INTENT"
+        self.assertFails(both_open, "the refused rewind left an intent")
 
     def test_manual_messages(self):
         self.assertFails(lambda o: o["manual"]["commands"][0].update(output="flag provided but not defined"),

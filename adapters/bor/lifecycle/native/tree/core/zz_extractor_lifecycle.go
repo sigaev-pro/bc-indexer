@@ -382,6 +382,15 @@ func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types
 	return bc.extractorNativeWriteBlockAndSetHead(block, receipts, logs, state, emitHeadEvent)
 }
 
+// WriteBlockAndSetHeadPipelined is the pipelined sealing write, refused on a
+// capture chain like WriteBlockAndSetHead (bor.seal-write).
+func (bc *BlockChain) WriteBlockAndSetHeadPipelined(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, emitHeadEvent bool, witnessBytes []byte) (WriteStatus, error) {
+	if err := bc.extractorRefuse("bor.seal-write", false); err != nil {
+		return NonStatTy, err
+	}
+	return bc.extractorNativeWriteBlockAndSetHeadPipelined(block, receipts, logs, statedb, emitHeadEvent, witnessBytes)
+}
+
 // InsertBlockWithoutSetHead is the Engine API import, refused on a capture
 // chain (bor.engine-api).
 func (bc *BlockChain) InsertBlockWithoutSetHead(block *types.Block, makeWitness bool) (*stateless.Witness, error) {

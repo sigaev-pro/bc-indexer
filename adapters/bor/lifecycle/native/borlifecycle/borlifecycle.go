@@ -705,13 +705,22 @@ func (n *Node) settleAll(token *admission.Token) error {
 // CANONICAL decision of bor.startup-reconcile. A native head below H, or an
 // intent that is still unresolved, is a source invariant error.
 func (n *Node) repair(token *admission.Token) error {
-	b, live := n.gate.Boundary()
-	if !live {
-		return nil
-	}
 	decisions, err := n.in.Bridge.Decisions(token)
 	if err != nil {
 		return err
+	}
+	// The decision recovery driver resolves a lifecycle intent that has its
+	// marker; its evidence record is deleted here, as Decide would have.
+	for _, d := range decisions {
+		if d.State == decision.Decided {
+			if err := n.in.DB.Delete(n.evidenceKey(d.Intent.EvidenceDigest)); err != nil {
+				return err
+			}
+		}
+	}
+	b, live := n.gate.Boundary()
+	if !live {
+		return nil
 	}
 	sort.Slice(decisions, func(i, j int) bool { return decisions[i].Sequence < decisions[j].Sequence })
 	last := b.Head
