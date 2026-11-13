@@ -576,6 +576,57 @@ PASS. Public ETH cells stay NOT_RUN.
 
 Next: Spec and Standards reviews, hosted CI, the final review comment.
 
+### BSC block
+
+Base `51adbee` (block 0 merged in PR #165), with `origin/main` merged at
+`07ae232`. Branch/worktree: `claude/e01-02-lifecycle-bsc` /
+`e01-02-admission-bsc-14da6e`. Allowed paths:
+`adapters/bsc/lifecycle/native/**`, `test/harness/fixtures/lifecycle_bsc/**`,
+`.project/evidence/E01-02.lifecycle_seams.bsc.md`, D104 and this
+subsection. Roles and split as the coordinator records them: the owner
+agreed on 2026-11-13 to the #16-style split ("Очищай лишнее и запускай
+все"); this is the BSC native-engineer session, which also gives the qa
+matrix of the BSC slot.
+
+Design: [adapters/bsc/lifecycle/native/README.md](../adapters/bsc/lifecycle/native/README.md).
+Patch 08, applied after the admission and decision patches, routes all 20
+BSC callers:
+- passes for every OBSERVATION and DECISION caller;
+- `Require` at the state commits, the canonical-hash rewrite, the head
+  writer, a requested rewind, the shutdown head rewrite and `SetFinalized`;
+- SetHead as one CANONICAL decision (plus one FINALITY decision per
+  finalized clear), the shutdown head rewrite as one CANONICAL decision, the
+  recovery of lifecycle intents and the startup reconciliation;
+- the live boundary H, and refusals of the Engine API, snap sync, sealing,
+  the chain reset, the execution witness and the manual database commands;
+- the node wiring: the capture profile check, and Parlia with the
+  system-call API (D100);
+- the error-aware attestation read of the import decision (AC-LIF-06-04,
+  06-05), and the verified-block event of the decided write (D101).
+
+The two rows the capture path cannot route fail closed under D104 (owner
+decision of 2026-11-13, "Fail closed now, fix later"):
+- `bsc.known-block` stops with `ErrCorpus` before the head moves;
+- `bsc.side-chain` is refused at `Begin`.
+
+The targeted native replay for both is E05-02.reorg.
+
+Records at measured head `f2cffe9`: preparation 03 PASS, run 02 PASS (442
+checks, probe 7.8 s), the offline judgement of run 02, 45 portable tests, 32
+of 32 driver mutants killed (evidence:
+[E01-02.lifecycle_seams.bsc](evidence/E01-02.lifecycle_seams.bsc.md)). Kept
+under D83: two attempts refused because another runner held the host lock,
+and preparation 02 at `612d3d0`, which failed on the driver's reading of the
+`go test` summary.
+
+qa verdict, private local BSC: AC-CAP-01-01 FAIL, with `bsc.known-block` and
+`bsc.side-chain` DEFERRED under D104 and every other row PASS (four
+READ_ONLY rows by source review, `bsc.notify-finalized` NOT_APPLICABLE for
+E05-01.bsc_finality). AC-LIF-05-02 and 05-03 NOT_APPLICABLE (ETH only, D104).
+AC-LIF-06-04 PASS and AC-LIF-06-05 PASS. Public BSC cells stay NOT_RUN.
+
+Next: Spec and Standards reviews, hosted CI, the final review comment.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged

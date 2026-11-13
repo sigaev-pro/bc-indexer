@@ -1,5 +1,18 @@
 # Дерево решений и журнал интервью
 
+## D104 — BSC known blocks and pruned-parent side branches fail closed; the targeted replay goes to E05-02.reorg (2026-11-13)
+
+The BSC block of E01-02.lifecycle_seams (#18) found two rows of the shared caller map that the BSC capture path can never route through a decision: `bsc.known-block` and `bsc.side-chain`. The BSC admission seam observes only a block on top of the head with its state, so a side branch, or a branch whose parent state was pruned, is refused at `Begin`. A decision closes its observation and purges its inputs (D100), so no block of another branch ever has a retained corpus (an EXEC_READY observation). The known-branch corpus rule can therefore never be met for BSC, `lifecycle.Gaps` cannot be empty, and AC-CAP-01-01 cannot pass on the BSC slot. The coordinator asked the owner how to handle these rows. The owner selected the coordinator's proposed option, "Fail closed now, fix later (Recommended)":
+
+- In #18 the BSC block guards both paths so that they fail closed, and proves it natively. A stored block that the native fork choice would make the head without a retained corpus stops with a source invariant error (`ErrCorpus`, a `lifecycle.ErrInvariant`) before the head moves. A side branch with a pruned parent is refused at `Begin`.
+- E05-02.reorg, which owns reorg handling, owns the targeted native replay for BSC known blocks and pruned-parent side branches.
+- AC-CAP-01-01 for BSC is recorded with these two caller rows deferred under this decision. They are not marked PASS. Every other row has its own verdict.
+
+Recorded technical decisions, not owner answers:
+
+- AC-LIF-05-02 and AC-LIF-05-03 are NOT_APPLICABLE on the BSC slot, because ACCEPTANCE_CASES makes them ETH-only.
+- As with D96 to D103, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.lifecycle_seams and E05-02.reorg cards are read through this decision. This decision assigns an owner; it does not change product guarantees, acceptance cases or gates. Every public cell stays NOT_RUN.
+
 ## D103 — System-action state in the smoke corpus; owners of the remaining corpus limits (2026-11-13)
 
 After the four E01-03.smoke_corpus blocks merged (PRs #164, #166, #167 and #168), the coordinator asked a read-only Spec reviewer to audit their evidence and limits for the acceptance record. The audit found no failed case and confirmed that the expected results are independent of the native output. It found two gaps that touch the definition of done, plus several smaller limits with no owner. The coordinator asked the owner two questions. For each, the owner selected the coordinator's proposed option (marked as recommended):
