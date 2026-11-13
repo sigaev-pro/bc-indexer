@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "description": "E01-02.lifecycle_seams Geth native patch set, applied after the E01-02.admission and E01-02.decision_bridge Geth patch sets. Each original must occur exactly once in the tree those patch sets produce.",
+  "source_commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+  "files": {
+    "core_lifecycle.go.txt": "core/extractor_lifecycle.go"
+  },
+  "patches": [
+    {
+      "name": "blockchain_lifecycle_field",
+      "file": "core/blockchain.go",
+      "original": "\textractorWriting  *extractorWriting\n\n",
+      "replacement": "\textractorWriting  *extractorWriting\n\n\t// E01-02.lifecycle_seams gate seam; nil without the lifecycle.\n\textractorLifecycle ExtractorLifecycle\n\n",
+      "reason": "BlockChain holds the lifecycle gate seam."
+    },
+    {
+      "name": "insert_chain_pass",
+      "file": "core/blockchain.go",
+      "original": "\t// Pre-checks passed, start the full block imports\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\n\t_, n, err := bc.insertChain(context.Background(), chain, true, false)",
+      "replacement": "\t// E01-02.lifecycle_seams: the import enters the gate (geth.import) with\n\t// the held guard, before the chain mutex.\n\texit, err := bc.extractorEnter(\"geth.import\")\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\tdefer exit()\n\t// Pre-checks passed, start the full block imports\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\n\t_, n, err := bc.insertChain(context.Background(), chain, true, false)",
+      "reason": "InsertChain, the downloader full sync and admin_importChain pass the gate as geth.import."
+    },
+    {
+      "name": "insert_without_head_pass",
+      "file": "core/blockchain.go",
+      "original": "\tdefer spanEnd(&err)\n\tif !bc.chainmu.TryLock() {\n\t\treturn nil, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\n\twitness, _, err = bc.insertChain(ctx, types.Blocks{block}, false, makeWitness)",
+      "replacement": "\tdefer spanEnd(&err)\n\t// E01-02.lifecycle_seams: engine newPayload passes the gate as\n\t// geth.insert-without-head.\n\texit, err := bc.extractorEnter(\"geth.insert-without-head\")\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tdefer exit()\n\tif !bc.chainmu.TryLock() {\n\t\treturn nil, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\n\twitness, _, err = bc.insertChain(ctx, types.Blocks{block}, false, makeWitness)",
+      "reason": "InsertBlockWithoutSetHead passes the gate as geth.insert-without-head."
+    },
+    {
+      "name": "set_canonical_pass",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tdefer bc.extractorLock()()\n",
+      "replacement": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tdefer bc.extractorLock()()\n\t// E01-02.lifecycle_seams: forkchoice passes the gate as\n\t// geth.set-canonical; the re-execution inside is geth.recover-ancestors.\n\texit, err := bc.extractorEnter(\"geth.set-canonical\")\n\tif err != nil {\n\t\treturn common.Hash{}, err\n\t}\n\tdefer exit()\n",
+      "reason": "SetCanonical passes the gate as geth.set-canonical."
+    },
+    {
+      "name": "set_canonical_decision",
+      "file": "core/blockchain.go",
+      "original": "\t// Run the reorg if necessary and set the given block as new head.\n\tstart := time.Now()\n\tif head.ParentHash() != bc.CurrentBlock().Hash() {\n\t\tif err := bc.reorg(bc.CurrentBlock(), head.Header()); err != nil {\n\t\t\treturn common.Hash{}, err\n\t\t}\n\t}\n\tbc.writeHeadBlock(head)\n",
+      "replacement": "\t// E01-02.lifecycle_seams: the head change is one CANONICAL decision. Its\n\t// intent names the retained SIDE observations of the branch of head, the\n\t// marker joins the head batch of head, then the decision is resolved.\n\tif err := bc.extractorCanonical(head.Header()); err != nil {\n\t\treturn common.Hash{}, err\n\t}\n\t// Run the reorg if necessary and set the given block as new head.\n\tstart := time.Now()\n\tif head.ParentHash() != bc.CurrentBlock().Hash() {\n\t\tif err := bc.reorg(bc.CurrentBlock(), head.Header()); err != nil {\n\t\t\treturn common.Hash{}, bc.extractorSettle(err)\n\t\t}\n\t}\n\tbc.writeHeadBlock(head)\n\tif err := bc.extractorSettle(nil); err != nil {\n\t\treturn common.Hash{}, err\n\t}\n",
+      "reason": "SetCanonical: CANONICAL intent before the reorg, marker in the head batch, then the decision."
+    },
+    {
+      "name": "known_block_decision",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) writeKnownBlock(block *types.Block) error {\n\tcurrent := bc.CurrentBlock()\n\tif block.ParentHash() != current.Hash() {\n\t\tif err := bc.reorg(current, block.Header()); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\tbc.writeHeadBlock(block)\n\treturn nil\n}\n",
+      "replacement": "func (bc *BlockChain) writeKnownBlock(block *types.Block) error {\n\t// E01-02.lifecycle_seams: a stored block that becomes the head without an\n\t// execution is one CANONICAL decision (geth.known-block).\n\texit, err := bc.extractorEnter(\"geth.known-block\")\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer exit()\n\tif err := bc.extractorCanonical(block.Header()); err != nil {\n\t\treturn err\n\t}\n\tcurrent := bc.CurrentBlock()\n\tif block.ParentHash() != current.Hash() {\n\t\tif err := bc.reorg(current, block.Header()); err != nil {\n\t\t\treturn bc.extractorSettle(err)\n\t\t}\n\t}\n\tbc.writeHeadBlock(block)\n\treturn bc.extractorSettle(nil)\n}\n",
+      "reason": "writeKnownBlock: the known-block activation is a CANONICAL decision."
+    },
+    {
+      "name": "side_chain_pass",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) insertSideChain(ctx context.Context, block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {\n\tvar current = bc.CurrentBlock()\n",
+      "replacement": "func (bc *BlockChain) insertSideChain(ctx context.Context, block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {\n\t// E01-02.lifecycle_seams: geth.side-chain, nested in the import. Its\n\t// stateless writes reach no choke point; the re-import of the pruned\n\t// ancestors (the internal insertChain) runs nested in this pass.\n\texit, err := bc.extractorEnter(\"geth.side-chain\")\n\tif err != nil {\n\t\treturn nil, it.index, err\n\t}\n\tdefer exit()\n\tvar current = bc.CurrentBlock()\n",
+      "reason": "insertSideChain passes the gate as geth.side-chain."
+    },
+    {
+      "name": "side_chain_err_scope",
+      "file": "core/blockchain.go",
+      "original": "\terr := consensus.ErrPrunedAncestor\n\tfor ; block != nil && errors.Is(err, consensus.ErrPrunedAncestor); block, err = it.next() {",
+      "replacement": "\terr = consensus.ErrPrunedAncestor\n\tfor ; block != nil && errors.Is(err, consensus.ErrPrunedAncestor); block, err = it.next() {",
+      "reason": "The pass error above declares err in insertSideChain."
+    },
+    {
+      "name": "recover_ancestors_pass",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) recoverAncestors(ctx context.Context, block *types.Block, makeWitness bool) (common.Hash, error) {\n",
+      "replacement": "func (bc *BlockChain) recoverAncestors(ctx context.Context, block *types.Block, makeWitness bool) (common.Hash, error) {\n\t// E01-02.lifecycle_seams: geth.recover-ancestors, nested in SetCanonical\n\t// or InsertBlockWithoutSetHead; each re-executed block is a SIDE write.\n\texit, err := bc.extractorEnter(\"geth.recover-ancestors\")\n\tif err != nil {\n\t\treturn common.Hash{}, err\n\t}\n\tdefer exit()\n",
+      "reason": "recoverAncestors passes the gate as geth.recover-ancestors."
+    },
+    {
+      "name": "state_commit_choke",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {\n",
+      "replacement": "func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {\n\t// E01-02.lifecycle_seams: EXECUTION choke point before the state commit.\n\tif err := bc.extractorRequire(\"EXECUTION\"); err != nil {\n\t\treturn err\n\t}\n",
+      "reason": "The state commit of every executed block write is a choke point."
+    },
+    {
+      "name": "reorg_choke",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error {\n",
+      "replacement": "func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error {\n\t// E01-02.lifecycle_seams: CANONICAL choke point before the canonical\n\t// hashes change.\n\tif err := bc.extractorRequire(\"CANONICAL\"); err != nil {\n\t\treturn err\n\t}\n",
+      "reason": "reorg rewrites canonical hashes: a choke point."
+    },
+    {
+      "name": "head_batch_lifecycle",
+      "file": "core/blockchain.go",
+      "original": "\tmarker := bc.extractorHeadMarker(block.Hash())\n\tif marker != nil {\n\t\tif err := batch.Put(marker[0], marker[1]); err != nil {\n\t\t\tlog.Crit(\"Failed to write the extractor decision marker\", \"err\", err)\n\t\t}\n\t}\n",
+      "replacement": "\t// E01-02.lifecycle_seams: CANONICAL choke point of the head writer; the\n\t// marker of a lifecycle decision and, with any marker, the lifecycle view\n\t// record join the head batch.\n\tif err := bc.extractorRequire(\"CANONICAL\"); err != nil {\n\t\tlog.Crit(\"Extractor lifecycle refused a head write\", \"err\", err)\n\t}\n\tmarker := bc.extractorHeadRecords(block, bc.extractorHeadMarker(block.Hash()))\n\tfor i := 0; i+1 < len(marker); i += 2 {\n\t\tif err := batch.Put(marker[i], marker[i+1]); err != nil {\n\t\t\tlog.Crit(\"Failed to write the extractor decision marker\", \"err\", err)\n\t\t}\n\t}\n",
+      "reason": "writeHeadBlock: the head writer choke point and the lifecycle marker and view in the head batch."
+    },
+    {
+      "name": "set_head_decision",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SetHead(head uint64) error {\n\tif _, err := bc.setHeadBeyondRoot(head, 0, common.Hash{}, false); err != nil {\n\t\treturn err\n\t}\n\treturn bc.sendChainHeadEvent()\n}\n",
+      "replacement": "func (bc *BlockChain) SetHead(head uint64) error {\n\t// E01-02.lifecycle_seams: a runtime rewind takes the guard, passes the\n\t// gate as geth.set-head and is one CANONICAL decision, then one FINALITY\n\t// decision per finality clear.\n\tdefer bc.extractorLock()()\n\tend, err := bc.extractorBeginRewind(head, 0)\n\tif err != nil {\n\t\treturn err\n\t}\n\t_, err = bc.setHeadBeyondRoot(head, 0, common.Hash{}, false)\n\tif err = end(err); err != nil {\n\t\treturn err\n\t}\n\treturn bc.sendChainHeadEvent()\n}\n",
+      "reason": "SetHead and debug_setHead: guard, pass and decisions."
+    },
+    {
+      "name": "set_head_timestamp_decision",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SetHeadWithTimestamp(timestamp uint64) error {\n\tif _, err := bc.setHeadBeyondRoot(0, timestamp, common.Hash{}, false); err != nil {\n\t\treturn err\n\t}\n\treturn bc.sendChainHeadEvent()\n}\n",
+      "replacement": "func (bc *BlockChain) SetHeadWithTimestamp(timestamp uint64) error {\n\t// E01-02.lifecycle_seams: as SetHead.\n\tdefer bc.extractorLock()()\n\tend, err := bc.extractorBeginRewind(0, timestamp)\n\tif err != nil {\n\t\treturn err\n\t}\n\t_, err = bc.setHeadBeyondRoot(0, timestamp, common.Hash{}, false)\n\tif err = end(err); err != nil {\n\t\treturn err\n\t}\n\treturn bc.sendChainHeadEvent()\n}\n",
+      "reason": "SetHeadWithTimestamp: guard, pass and decisions."
+    },
+    {
+      "name": "set_head_choke",
+      "file": "core/blockchain.go",
+      "original": "\tif !repair {\n\t\tif err := bc.extractorRewindAllowed(head, time); err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t}\n",
+      "replacement": "\tif !repair {\n\t\tif err := bc.extractorRewindAllowed(head, time); err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t\t// E01-02.lifecycle_seams: CANONICAL choke point of a requested\n\t\t// rewind.\n\t\tif err := bc.extractorRequire(\"CANONICAL\"); err != nil {\n\t\t\treturn 0, err\n\t\t}\n\t}\n",
+      "reason": "A requested rewind is a choke point."
+    },
+    {
+      "name": "set_head_finish",
+      "file": "core/blockchain.go",
+      "original": "\t// Clear safe block, finalized block if needed\n\theadBlock := bc.CurrentBlock()\n",
+      "replacement": "\t// E01-02.lifecycle_seams: a decided rewind ends with its marker batch,\n\t// then each finality clear and the safe reload of loadLastState as its\n\t// own FINALITY decision.\n\tif bc.extractorRewinding() {\n\t\treturn rootNumber, bc.extractorFinishRewind()\n\t}\n\t// Clear safe block, finalized block if needed\n\theadBlock := bc.CurrentBlock()\n",
+      "reason": "setHeadBeyondRoot: the end of a decided rewind."
+    },
+    {
+      "name": "set_finalized_decision",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SetFinalized(header *types.Header) {\n\tbc.currentFinalBlock.Store(header)\n",
+      "replacement": "func (bc *BlockChain) SetFinalized(header *types.Header) {\n\t// E01-02.lifecycle_seams: with a seam, each setter call is one FINALITY\n\t// decision (geth.set-finalized), with the reference and its marker in one\n\t// synced batch; a refused call writes nothing.\n\tif bc.extractorLifecycle != nil {\n\t\tif err := bc.extractorSetFinality(\"FINALIZED\", header); err != nil {\n\t\t\tlog.Error(\"Extractor lifecycle refused the finalized block\", \"err\", err)\n\t\t}\n\t\treturn\n\t}\n\tbc.currentFinalBlock.Store(header)\n",
+      "reason": "SetFinalized: one FINALITY decision per setter call."
+    },
+    {
+      "name": "set_safe_decision",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SetSafe(header *types.Header) {\n\tbc.currentSafeBlock.Store(header)\n",
+      "replacement": "func (bc *BlockChain) SetSafe(header *types.Header) {\n\t// E01-02.lifecycle_seams: with a seam, each setter call is one FINALITY\n\t// decision (geth.set-safe), its marker in a batch of its own.\n\tif bc.extractorLifecycle != nil {\n\t\tif err := bc.extractorSetFinality(\"SAFE\", header); err != nil {\n\t\t\tlog.Error(\"Extractor lifecycle refused the safe block\", \"err\", err)\n\t\t}\n\t\treturn\n\t}\n\tbc.currentSafeBlock.Store(header)\n",
+      "reason": "SetSafe: one FINALITY decision per setter call."
+    },
+    {
+      "name": "reset_refused",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) ResetWithGenesisBlock(genesis *types.Block) error {\n",
+      "replacement": "func (bc *BlockChain) ResetWithGenesisBlock(genesis *types.Block) error {\n\t// E01-02.lifecycle_seams: a reset drops the canonical chain with no\n\t// decision; it is refused on a capture store.\n\tif bc.extractorLifecycle != nil {\n\t\treturn errExtractorReset\n\t}\n",
+      "reason": "A runtime chain reset is refused on a capture store."
+    },
+    {
+      "name": "snap_refused_insertreceiptchain",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain []rlp.RawValue, ancientLimit uint64) (int, error) {\n",
+      "replacement": "func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain []rlp.RawValue, ancientLimit uint64) (int, error) {\n\t// E01-02.lifecycle_seams: snap sync is refused on a capture store\n\t// (geth.snap-sync).\n\tif err := bc.ExtractorRefuse(\"geth.snap-sync\"); err != nil {\n\t\treturn 0, err\n\t}\n",
+      "reason": "InsertReceiptChain writes canonical data without execution: refused through the gate."
+    },
+    {
+      "name": "snap_refused_snapsyncstart",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SnapSyncStart() error {\n",
+      "replacement": "func (bc *BlockChain) SnapSyncStart() error {\n\t// E01-02.lifecycle_seams: snap sync is refused on a capture store\n\t// (geth.snap-sync).\n\tif err := bc.ExtractorRefuse(\"geth.snap-sync\"); err != nil {\n\t\treturn err\n\t}\n",
+      "reason": "SnapSyncStart writes canonical data without execution: refused through the gate."
+    },
+    {
+      "name": "snap_refused_snapsynccomplete",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) SnapSyncComplete(hash common.Hash, isSnapV2 bool) error {\n",
+      "replacement": "func (bc *BlockChain) SnapSyncComplete(hash common.Hash, isSnapV2 bool) error {\n\t// E01-02.lifecycle_seams: snap sync is refused on a capture store\n\t// (geth.snap-sync).\n\tif err := bc.ExtractorRefuse(\"geth.snap-sync\"); err != nil {\n\t\treturn err\n\t}\n",
+      "reason": "SnapSyncComplete writes canonical data without execution: refused through the gate."
+    },
+    {
+      "name": "snap_refused_insertheaderchain",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertHeaderChain(chain []*types.Header) (int, error) {\n",
+      "replacement": "func (bc *BlockChain) InsertHeaderChain(chain []*types.Header) (int, error) {\n\t// E01-02.lifecycle_seams: snap sync is refused on a capture store\n\t// (geth.snap-sync).\n\tif err := bc.ExtractorRefuse(\"geth.snap-sync\"); err != nil {\n\t\treturn 0, err\n\t}\n",
+      "reason": "InsertHeaderChain writes canonical data without execution: refused through the gate."
+    },
+    {
+      "name": "snap_refused_insertheadersbeforecutoff",
+      "file": "core/blockchain.go",
+      "original": "func (bc *BlockChain) InsertHeadersBeforeCutoff(headers []*types.Header) (int, error) {\n",
+      "replacement": "func (bc *BlockChain) InsertHeadersBeforeCutoff(headers []*types.Header) (int, error) {\n\t// E01-02.lifecycle_seams: snap sync is refused on a capture store\n\t// (geth.snap-sync).\n\tif err := bc.ExtractorRefuse(\"geth.snap-sync\"); err != nil {\n\t\treturn 0, err\n\t}\n",
+      "reason": "InsertHeadersBeforeCutoff writes canonical data without execution: refused through the gate."
+    },
+    {
+      "name": "process_block_observing",
+      "file": "core/blockchain.go",
+      "original": "\tif bc.extractor != nil && config.WriteState {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)",
+      "replacement": "\t// E01-02.lifecycle_seams: during the initial native sync (BOOTSTRAP) the\n\t// pass does not observe and the import runs natively, uncaptured.\n\tif bc.extractor != nil && config.WriteState && bc.extractorObserving() {\n\t\tobservation, err := bc.extractor.Begin(block, parentRoot)",
+      "reason": "ProcessBlock observes only in an observing pass."
+    },
+    {
+      "name": "process_block_bootstrap",
+      "file": "core/blockchain.go",
+      "original": "\t} else if config.WriteState && ExtractorRequireNoCapture != nil {\n",
+      "replacement": "\t} else if config.WriteState && ExtractorRequireNoCapture != nil && bc.extractor == nil {\n",
+      "reason": "A BOOTSTRAP import of the capture store itself is not a store without its admission."
+    },
+    {
+      "name": "parallel_refused",
+      "file": "core/blockchain.go",
+      "original": "\t\tvmConfig.DisableParallelExecution = true\n\t\textractorObservation = observation\n",
+      "replacement": "\t\tvmConfig.DisableParallelExecution = true\n\t\t// E01-02.lifecycle_seams: the parallel processor is refused for this\n\t\t// observed import (geth.parallel).\n\t\tbc.extractorRefused(\"geth.parallel\")\n\t\textractorObservation = observation\n",
+      "reason": "The refusal of the parallel processor is recorded where it happens."
+    },
+    {
+      "name": "complete_head_guard",
+      "file": "core/extractor_decision.go",
+      "original": "func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, oldHead common.Hash, key, value []byte) error {\n",
+      "replacement": "func (bc *BlockChain) ExtractorCompleteHead(block *types.Block, oldHead common.Hash, key, value []byte) error {\n\t// E01-02.lifecycle_seams: the completion writes the head under the guard,\n\t// inside the recovery pass of the gate.\n\tdefer bc.extractorLock()()\n",
+      "reason": "The recovery completion of a saved head change passes the gate."
+    },
+    {
+      "name": "syncer_refused",
+      "file": "eth/syncer/syncer.go",
+      "original": "func (s *Syncer) Sync(hash common.Hash) error {\n",
+      "replacement": "func (s *Syncer) Sync(hash common.Hash) error {\n\t// E01-02.lifecycle_seams: the sync target synthesizes finality; it is\n\t// refused on a capture store (geth.sync-target).\n\tif err := s.backend.BlockChain().ExtractorRefuse(\"geth.sync-target\"); err != nil {\n\t\treturn err\n\t}\n",
+      "reason": "The syncer Sync API is refused through the gate."
+    },
+    {
+      "name": "simulated_beacon_refused",
+      "file": "eth/catalyst/simulated_beacon.go",
+      "original": "func NewSimulatedBeacon(period uint64, feeRecipient common.Address, eth *eth.Ethereum) (*SimulatedBeacon, error) {\n",
+      "replacement": "func NewSimulatedBeacon(period uint64, feeRecipient common.Address, eth *eth.Ethereum) (*SimulatedBeacon, error) {\n\t// E01-02.lifecycle_seams: the developer beacon seals blocks itself; it\n\t// is refused on a capture store (geth.dev-sealing).\n\tif err := eth.BlockChain().ExtractorRefuse(\"geth.dev-sealing\"); err != nil {\n\t\treturn nil, err\n\t}\n",
+      "reason": "The developer beacon is refused through the gate."
+    },
+    {
+      "name": "backend_profile_check",
+      "file": "eth/backend.go",
+      "original": "\t\tif err := extractorgeth.Preflight(stack.ResolvePath(\"\"), *extractorConfig); err != nil {\n\t\t\treturn nil, err\n\t\t}\n",
+      "replacement": "\t\tif err := extractorgeth.Preflight(stack.ResolvePath(\"\"), *extractorConfig); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\t// E01-02.lifecycle_seams: the capture profile check refuses any sync\n\t\t// mode but full before native code opens the store.\n\t\tif err := extractorgeth.CheckSyncMode(config.SyncMode.String()); err != nil {\n\t\t\treturn nil, err\n\t\t}\n",
+      "reason": "eth.New refuses snap sync on a capture node."
+    },
+    {
+      "name": "backend_attach_lifecycle",
+      "file": "eth/backend.go",
+      "original": "\t\tif _, err := extractorgeth.AttachDecisions(eth.blockchain, chainDb, *extractorConfig, extractorgeth.Options{},\n\t\t\textractorgeth.DecisionOptions{}); err != nil {\n\t\t\treturn nil, err\n\t\t}\n",
+      "replacement": "\t\t// E01-02.lifecycle_seams: the lifecycle gate opens over the decision\n\t\t// bridge. A restart goes live at the stored boundary H; a first start\n\t\t// goes live after the initial native sync (Synced), under the guard.\n\t\textractorLifecycle, err := extractorgeth.AttachLifecycle(eth.blockchain, chainDb, *extractorConfig,\n\t\t\textractorgeth.Options{}, extractorgeth.DecisionOptions{}, extractorgeth.LifecycleOptions{})\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tstack.RegisterLifecycle(extractorLifecycle.Live(eth.Synced))\n",
+      "reason": "The shipped node attaches the lifecycle gate and starts the live boundary service."
+    },
+    {
+      "name": "geth_flags_import",
+      "file": "cmd/geth/config.go",
+      "original": "\t\"github.com/ethereum/go-ethereum/eth/syncer\"\n",
+      "replacement": "\t\"github.com/ethereum/go-ethereum/eth/syncer\"\n\textractorgeth \"github.com/ethereum/go-ethereum/extractor/admission/native\"\n",
+      "reason": "cmd/geth imports the capture profile check."
+    },
+    {
+      "name": "geth_flags_check",
+      "file": "cmd/geth/config.go",
+      "original": "func makeFullNode(ctx *cli.Context) *node.Node {\n\tstack, cfg := makeConfigNode(ctx)\n",
+      "replacement": "func makeFullNode(ctx *cli.Context) *node.Node {\n\t// E01-02.lifecycle_seams: on a capture node, the capture profile check\n\t// refuses the developer beacon, the sync target and snap sync before the\n\t// node is made.\n\textractorSyncMode := \"\"\n\tif ctx.IsSet(utils.SyncModeFlag.Name) {\n\t\textractorSyncMode = ctx.String(utils.SyncModeFlag.Name)\n\t}\n\tif err := extractorgeth.CheckFlags(ctx.Bool(utils.DeveloperFlag.Name), ctx.IsSet(utils.SyncTargetFlag.Name),\n\t\textractorSyncMode); err != nil {\n\t\tutils.Fatalf(\"%v\", err)\n\t}\n\tstack, cfg := makeConfigNode(ctx)\n",
+      "reason": "geth refuses --dev, --synctarget and snap sync on a capture node."
+    }
+  ]
+}

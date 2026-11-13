@@ -1,0 +1,363 @@
+// This file is copied unchanged from adapters/geth/lifecycle/native/core_lifecycle.go.txt
+// into the accepted Geth tree as core/extractor_lifecycle.go by the
+// E01-02.lifecycle_seams Geth preparation; edit it there. It is part of the
+// product native patch set of E01-02.lifecycle_seams, applied after the
+// admission and decision-bridge patch sets.
+
+package core
+
+import (
+	"errors"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
+)
+
+// ExtractorLifecycle is the lifecycle gate seam of E01-02.lifecycle_seams.
+// extractor/admission/native implements it. Every method except Require and
+// Refuse runs with the observation guard held by the caller.
+type ExtractorLifecycle interface {
+	// Enter opens the gate pass of the mapped caller id; exit closes it.
+	Enter(id string) (exit func(), err error)
+	// Observing reports whether the innermost pass captures: false during
+	// the initial native sync (BOOTSTRAP), where imports are not observed.
+	Observing() bool
+	// Require is the check of a native write choke point before a mutation
+	// with this effect (EXECUTION, CANONICAL, FINALITY). An error means the
+	// mutation bypassed the gate; the write must fail closed.
+	Require(effect string) error
+	// Refused records that a REFUSE caller of the capture profile was
+	// refused where its mechanism runs.
+	Refused(id string)
+	// Refuse takes the guard and refuses a REFUSE caller; it returns the
+	// refusal.
+	Refuse(id string) error
+	// Canonical records the CANONICAL intent of the innermost decision pass
+	// for a head change without a new execution, from old to head. The
+	// marker then joins the head batch of head.
+	Canonical(old, head *types.Header) error
+	// HeadMarker returns the marker key and value of the pending lifecycle
+	// decision whose head batch is the batch of head, once.
+	HeadMarker(head *types.Header) [][]byte
+	// View returns the key and value of the lifecycle view record: the head
+	// and the finality references that the decided native state holds.
+	View(head, finalized, safe *types.Header) [][]byte
+	// Finality records the FINALITY intent of one native setter call that
+	// changes field (SAFE or FINALIZED) from old to next, with the current
+	// head, finalized and safe references. It returns the marker and view
+	// records for the setter batch, nil for an unchanged reference that the
+	// setter may rewrite without a marker, or ErrExtractorNoop when the
+	// setter must not run.
+	Finality(field string, old, next, head, finalized, safe *types.Header) ([][]byte, error)
+	// Rewind records the CANONICAL intent of a SetHead rewind from old to
+	// target, the head that the native rewind will keep.
+	Rewind(old, target *types.Header) error
+	// Rewinding reports whether a decided SetHead rewind is in progress.
+	Rewinding() bool
+	// Rewound checks the rewound head against the intent and returns the
+	// marker and view records of the rewind batch.
+	Rewound(head, finalized, safe *types.Header) ([][]byte, error)
+	// Settle resolves the pending lifecycle decision after its batch is
+	// durable, or, after a native error, rejects an intent whose mutation
+	// did not happen. It returns err joined with any settle error.
+	Settle(err error) error
+}
+
+// ErrExtractorNoop is the finality no-op: the native setter must not run.
+var ErrExtractorNoop = errors.New("extractor: finality setter call is a no-op")
+
+// errExtractorReset refuses a chain reset on a capture store: it would drop
+// the canonical chain with no decision.
+var errExtractorReset = errors.New("extractor: a chain reset is refused on a capture store")
+
+// SetExtractorLifecycle installs the lifecycle gate seam. It must be called
+// before the first import.
+func (bc *BlockChain) SetExtractorLifecycle(l ExtractorLifecycle) { bc.extractorLifecycle = l }
+
+// extractorEnter opens the pass of a mapped caller if a seam is installed.
+func (bc *BlockChain) extractorEnter(id string) (func(), error) {
+	if bc.extractorLifecycle == nil {
+		return func() {}, nil
+	}
+	return bc.extractorLifecycle.Enter(id)
+}
+
+// extractorObserving reports whether an import of the current pass is
+// observed by the admission seam.
+func (bc *BlockChain) extractorObserving() bool {
+	return bc.extractorLifecycle == nil || bc.extractorLifecycle.Observing()
+}
+
+// extractorRequire is the check of a write choke point.
+func (bc *BlockChain) extractorRequire(effect string) error {
+	if bc.extractorLifecycle == nil {
+		return nil
+	}
+	return bc.extractorLifecycle.Require(effect)
+}
+
+// extractorRefused records a refusal where its mechanism runs; the guard is
+// held.
+func (bc *BlockChain) extractorRefused(id string) {
+	if bc.extractorLifecycle != nil {
+		bc.extractorLifecycle.Refused(id)
+	}
+}
+
+// ExtractorRefuse refuses a REFUSE caller of the capture profile (snap sync,
+// the sync target, the developer beacon) when a seam is installed. It takes
+// the guard, so it must be called before the chain mutex.
+func (bc *BlockChain) ExtractorRefuse(id string) error {
+	if bc.extractorLifecycle == nil {
+		return nil
+	}
+	return bc.extractorLifecycle.Refuse(id)
+}
+
+// extractorCanonical records the CANONICAL intent of a head change to head
+// without a new execution.
+func (bc *BlockChain) extractorCanonical(head *types.Header) error {
+	if bc.extractorLifecycle == nil {
+		return nil
+	}
+	return bc.extractorLifecycle.Canonical(bc.CurrentBlock(), head)
+}
+
+// extractorSettle resolves or rejects the pending lifecycle decision.
+func (bc *BlockChain) extractorSettle(err error) error {
+	if bc.extractorLifecycle == nil {
+		return err
+	}
+	return bc.extractorLifecycle.Settle(err)
+}
+
+// extractorHeadRecords returns the records of the head batch of block: the
+// decision marker (of the write in progress, or of a lifecycle decision)
+// and, with any marker, the lifecycle view record.
+func (bc *BlockChain) extractorHeadRecords(block *types.Block, marker [][]byte) [][]byte {
+	l := bc.extractorLifecycle
+	if l == nil {
+		return marker
+	}
+	if marker == nil {
+		marker = l.HeadMarker(block.Header())
+	}
+	if marker == nil {
+		return nil
+	}
+	return append(l.View(block.Header(), bc.CurrentFinalBlock(), bc.CurrentSafeBlock()), marker...)
+}
+
+// extractorWriteRecords writes records (key, value pairs) and the native
+// writes of fill in one batch, and syncs when records are present.
+func (bc *BlockChain) extractorWriteRecords(records [][]byte, fill func(batch ethdb.KeyValueWriter)) error {
+	batch := bc.db.NewBatch()
+	defer batch.Close()
+	if fill != nil {
+		fill(batch)
+	}
+	for i := 0; i+1 < len(records); i += 2 {
+		if err := batch.Put(records[i], records[i+1]); err != nil {
+			return err
+		}
+	}
+	if err := batch.Write(); err != nil {
+		return err
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return bc.db.SyncKeyValue()
+}
+
+// setFinalizedChecked is the native finalized setter behind the FINALITY
+// choke point: the reference and the records of its decision are written in
+// one batch and synced.
+func (bc *BlockChain) setFinalizedChecked(header *types.Header, records [][]byte) error {
+	if err := bc.extractorRequire("FINALITY"); err != nil {
+		return err
+	}
+	// The batch is durable before the in-memory reference moves; a failed
+	// write is fatal, as the native finalized write is.
+	if err := bc.extractorWriteRecords(records, func(batch ethdb.KeyValueWriter) {
+		if header != nil {
+			rawdb.WriteFinalizedBlockHash(batch, header.Hash())
+		} else {
+			rawdb.WriteFinalizedBlockHash(batch, common.Hash{})
+		}
+	}); err != nil {
+		log.Crit("Failed to write the finalized block and its decision marker", "err", err)
+	}
+	bc.currentFinalBlock.Store(header)
+	if header != nil {
+		headFinalizedBlockGauge.Update(int64(header.Number.Uint64()))
+	} else {
+		headFinalizedBlockGauge.Update(0)
+	}
+	return nil
+}
+
+// setSafeChecked is the native safe setter behind the FINALITY choke point.
+// Safe lives in memory; the records of its decision are a batch of their own,
+// synced before the in-memory reference moves.
+func (bc *BlockChain) setSafeChecked(header *types.Header, records [][]byte) error {
+	if err := bc.extractorRequire("FINALITY"); err != nil {
+		return err
+	}
+	if err := bc.extractorWriteRecords(records, nil); err != nil {
+		log.Crit("Failed to write the safe block decision marker", "err", err)
+	}
+	bc.currentSafeBlock.Store(header)
+	if header != nil {
+		headSafeBlockGauge.Update(int64(header.Number.Uint64()))
+	} else {
+		headSafeBlockGauge.Update(0)
+	}
+	return nil
+}
+
+// extractorSetFinality is one guarded finality setter call (SetFinalized or
+// SetSafe with a seam): the guard, the pass of its caller, the old reference
+// read under the guard from the native field the setter writes, the FINALITY
+// intent, the setter with its records, then the decision.
+func (bc *BlockChain) extractorSetFinality(field string, header *types.Header) error {
+	defer bc.extractorLock()()
+	id := "geth.set-finalized"
+	if field == "SAFE" {
+		id = "geth.set-safe"
+	}
+	exit, err := bc.extractorEnter(id)
+	if err != nil {
+		return err
+	}
+	defer exit()
+	old := bc.CurrentFinalBlock()
+	if field == "SAFE" {
+		old = bc.CurrentSafeBlock()
+	}
+	records, err := bc.extractorLifecycle.Finality(field, old, header, bc.CurrentBlock(), bc.CurrentFinalBlock(),
+		bc.CurrentSafeBlock())
+	if errors.Is(err, ErrExtractorNoop) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if field == "SAFE" {
+		err = bc.setSafeChecked(header, records)
+	} else {
+		err = bc.setFinalizedChecked(header, records)
+	}
+	return bc.extractorSettle(err)
+}
+
+// extractorRewindTarget is the head that a rewind to head (or, with time,
+// to the newest header at or below time) keeps: the native rewindHead of the
+// target, which reads only.
+func (bc *BlockChain) extractorRewindTarget(head, time uint64) *types.Header {
+	header := bc.CurrentBlock()
+	if time > 0 {
+		for header != nil && header.Number.Uint64() > 0 && header.Time > time {
+			header = bc.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+		}
+	} else if head < header.Number.Uint64() {
+		header = bc.GetHeaderByNumber(head)
+	}
+	if header == nil {
+		return nil
+	}
+	target, _ := bc.rewindHead(header, common.Hash{})
+	return target
+}
+
+// extractorBeginRewind opens the pass of a SetHead rewind and records its
+// CANONICAL intent. The returned function settles the decision and closes
+// the pass.
+func (bc *BlockChain) extractorBeginRewind(head, time uint64) (func(error) error, error) {
+	l := bc.extractorLifecycle
+	if l == nil {
+		return func(err error) error { return err }, nil
+	}
+	exit, err := l.Enter("geth.set-head")
+	if err != nil {
+		return nil, err
+	}
+	if err := l.Rewind(bc.CurrentBlock(), bc.extractorRewindTarget(head, time)); err != nil {
+		exit()
+		return nil, err
+	}
+	return func(err error) error {
+		err = l.Settle(err)
+		exit()
+		return err
+	}, nil
+}
+
+// extractorRewinding reports whether setHeadBeyondRoot runs a decided
+// rewind.
+func (bc *BlockChain) extractorRewinding() bool {
+	return bc.extractorLifecycle != nil && bc.extractorLifecycle.Rewinding()
+}
+
+// extractorFinishRewind ends a decided rewind in setHeadBeyondRoot, in the
+// native order: the rewind batch with its marker, then the safe and
+// finalized clears and the safe reload of loadLastState, each as its own
+// FINALITY decision, then loadLastState.
+func (bc *BlockChain) extractorFinishRewind() error {
+	l := bc.extractorLifecycle
+	head := bc.CurrentBlock()
+	records, err := l.Rewound(head, bc.CurrentFinalBlock(), bc.CurrentSafeBlock())
+	if err != nil {
+		return err
+	}
+	if err := bc.extractorWriteRecords(records, nil); err != nil {
+		return err
+	}
+	if err := l.Settle(nil); err != nil {
+		return err
+	}
+	if safe := bc.CurrentSafeBlock(); safe != nil && head.Number.Uint64() < safe.Number.Uint64() {
+		log.Warn("SetHead invalidated safe block")
+		if err := bc.extractorFinalityStep("SAFE", safe, nil); err != nil {
+			return err
+		}
+	}
+	if finalized := bc.CurrentFinalBlock(); finalized != nil && head.Number.Uint64() < finalized.Number.Uint64() {
+		log.Error("SetHead invalidated finalized block")
+		if err := bc.extractorFinalityStep("FINALIZED", finalized, nil); err != nil {
+			return err
+		}
+	}
+	// loadLastState sets safe to the stored finalized block.
+	if hash := rawdb.ReadFinalizedBlockHash(bc.db); hash != (common.Hash{}) {
+		if block := bc.GetBlockByHash(hash); block != nil {
+			if safe := bc.CurrentSafeBlock(); safe == nil || safe.Hash() != hash {
+				if err := bc.extractorFinalityStep("SAFE", safe, block.Header()); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return bc.loadLastState()
+}
+
+// extractorFinalityStep is one finality setter call inside a decided pass.
+func (bc *BlockChain) extractorFinalityStep(field string, old, next *types.Header) error {
+	l := bc.extractorLifecycle
+	records, err := l.Finality(field, old, next, bc.CurrentBlock(), bc.CurrentFinalBlock(), bc.CurrentSafeBlock())
+	if errors.Is(err, ErrExtractorNoop) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if field == "SAFE" {
+		err = bc.setSafeChecked(next, records)
+	} else {
+		err = bc.setFinalizedChecked(next, records)
+	}
+	return l.Settle(err)
+}
