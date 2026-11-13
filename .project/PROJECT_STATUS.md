@@ -140,6 +140,53 @@ the client sessions start goes to the coordinator.
 Next: hosted CI and the final review comment on the final head; then the
 three client blocks after block 0 merges.
 
+### ETH block (Geth)
+
+Status: IN_PROGRESS in draft PR #167, branch
+`claude/e01-03-smoke-corpus-eth` from main `3cc31ec` (block 0 merged in PR
+#164 at `3cc31ec`). Part of #19. Role: native-engineer, and qa for the
+matrix; Spec and Standards reviewers read-only. D97: as the coordinator
+records it, the owner agreed on 2026-11-13 to the #16-style split (block 0
+core, then one native-engineer session per family, qa for the per-case
+matrix, two read-only reviewers) and said "Очищай лишнее и запускай все".
+Allowed paths: `test/native_corpus/eth/**`,
+`.project/evidence/E01-03.smoke_corpus.eth.md` and this subsection.
+
+Evidence: [E01-03.smoke_corpus.eth](evidence/E01-03.smoke_corpus.eth.md);
+design in [test/native_corpus/eth/README.md](../test/native_corpus/eth/README.md).
+The probe is built from the accepted Geth decision-bridge preparation of
+records 03 at `ca88680` (same source, patch sets and packages, checked
+against its install record) and imports the Geth-generated corpus blocks
+through `AttachDecisions` with the shipped options, then restarts and
+re-imports. It exports receipts, `callTracer` frames and native state reads.
+
+Measured head `1a6bef2`: records 03 preparation, run (comparison PASS, 0
+differences, no native self-check failure), portable (18 tests) and driver
+mutants (35 killed), all PASS. Later commits change only docs. Records 01
+at `44f87ae` (all PASS) are kept and superseded; `preparation-02` was a
+wrapper usage error that never started (D83).
+
+qa verdict, ETH private local: transfer, nested-revert, fee and empty-block
+PASS; system-action NOT_APPLICABLE (ORACLE.md, D102); family PASS. Public
+`ethereum-*` cells stay NOT_RUN (D96). The state before and after each
+transaction and the frames come from a native re-execution that must
+reproduce the imported receipts and roots.
+
+Review 001 on `54e43aa`: Spec PASS (four P3s), Standards REQUEST_CHANGES
+(three P2 gaps in the driver's self-checks and tests); fixed in `1a6bef2`
+with records 03.
+
+Review 002 on `5d17e55`: Spec PASS and Standards PASS; the docs P3s are
+fixed and the code P3s are listed in the evidence as open notes that change
+no result.
+
+Review 003 on `36365e7`: Spec PASS and Standards PASS (two docs P3s,
+fixed). The branch merges main `4208145` (POLY, PR #166), which adds no ETH
+input.
+
+Next: hosted CI and the final review comment on the final head; then merge
+with the owner's permission for this PR.
+
 ### POLY block
 
 Owner agreement under D97: on 2026-11-13 the owner agreed the roles and the
@@ -387,7 +434,7 @@ The follow-up commits after `544cd49` change only the README, this section
 and the evidence.
 
 Merge of main: the branch merges `origin/main` at `4208145` (#164 and #166)
-with a merge commit. The merge adds no measured input; record 03 still
+and then at `3900d65` (#167), each with a merge commit. The merge adds no measured input; record 03 still
 describes the measured code (evidence, "Merge of main").
 
 Next: a docs-only confirmation review of the merge, hosted CI on the merge
