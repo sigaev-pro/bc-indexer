@@ -176,7 +176,12 @@ Review 001 on `54e43aa`: Spec PASS (four P3s), Standards REQUEST_CHANGES
 (three P2 gaps in the driver's self-checks and tests); fixed in `1a6bef2`
 with records 03.
 
-Next: review 002, hosted CI, the final review comment.
+Review 002 on `5d17e55`: Spec PASS and Standards PASS; the docs P3s are
+fixed and the code P3s are listed in the evidence as open notes that change
+no result.
+
+Next: hosted CI and the final review comment on the final head; then merge
+with the owner's permission for this PR.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 

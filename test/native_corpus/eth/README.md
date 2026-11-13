@@ -42,9 +42,9 @@ cache.
    `AttachDecisions` with `Options{}` and `DecisionOptions{}`, the arguments
    of the `backend_attach_decisions` patch). The blockchain config is
    `core.DefaultConfig()` (hash state scheme), not the node's flags, and the
-   engine is the ethash faker. It then imports both blocks with `InsertChain`, so each block goes
-   through the patched `ProcessBlock`: admission, EXEC_READY, intent, native
-   write and NATIVE_DECIDED. The chain is stopped and the store closed.
+   engine is the ethash faker. It then imports both blocks with
+   `InsertChain`, so each block goes through the patched `ProcessBlock`:
+   admission, EXEC_READY, intent, native write and NATIVE_DECIDED. The chain is stopped and the store closed.
 3. Restart and re-import. It opens the same store the same way, which runs
    the recovery driver, and imports the same two blocks again. Both blocks
    are canonical with their state, so Geth skips them natively as known
@@ -62,9 +62,11 @@ cache.
      contracts) before and after each transaction. The re-execution then
      applies the ethash `Finalize` (the block reward). Each re-executed
      receipt must equal the imported one in status, gas used, cumulative
-     gas, logs, bloom, type and effective gas price (computed from the
-     transaction and the base fee, since `ApplyTransactionWithEVM` leaves it
-     unset), and the final root must equal the header root;
+     gas, logs and effective gas price (computed from the transaction and
+     the base fee, since `ApplyTransactionWithEVM` leaves it unset), and the
+     final root must equal the header root. Bloom and type are compared
+     too, but both sides derive them from the logs and the transaction, so
+     they add no independent check;
    - `state_after_block`, native reads at the block root;
    - `decisions`, one row per decision record with an intent and a
      NATIVE_DECIDED record from the live import, naming the chain number of
