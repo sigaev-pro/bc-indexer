@@ -394,7 +394,7 @@ def prepare_bor(manifest, root, output, native, compiler, deadline):
     extract(read_bytes(directory / "source.tar", closure["source_archive"]["size_bytes"], deadline), source, deadline)
     row["installed"] = lifecycle_tree.install(source)
     probe = source / PROBE_DIR
-    probe.mkdir(parents=True)
+    probe.parent.mkdir(parents=True, exist_ok=True)
     row["probe_sources"] = capture_probe.copy_sources(("main.go",), NATIVE / "probe", probe, deadline)
     row["stub_sources"] = capture_probe.copy_sources(("stub.go",), STUB_SOURCES, probe / "heimdallstub", deadline)
     for name in ("bin", "build-cache", "gopath", "gotmp"):
