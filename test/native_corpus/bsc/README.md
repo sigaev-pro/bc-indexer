@@ -28,7 +28,7 @@ plus the public test-key-1 sender), with the corpus contracts of
 `expected/bsc.json` (`genesis_additions`) added to the allocation, as
 ORACLE.md "Fixtures" states. The sender is already in that genesis with the
 same 10 BNB; the driver checks that and adds only the parent and the child.
-No other fixture input is needed: the chain config, the fork blocks, the
+No other genesis or chain-config input is needed: the chain config, the fork blocks, the
 validator and the genesis timestamp stay as in the accepted fixture. One
 input is not named in ORACLE.md "Fixtures": the sealing key, the public test
 keystore of the BSC source (`bsc_admission.KEYSTORE`, password empty), whose

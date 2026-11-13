@@ -238,14 +238,18 @@ Reviews:
   obligation's NATIVE_DECIDED binding, the unnamed keystore input, the
   per-transaction states not bound to the root, the run not keeping the
   corpus files, small code notes. All fixed in `5217fc4`.
+- 002 on `8828ab8`: Spec PASS and Standards PASS, with P3 notes only: the
+  traceback on an output path with a missing parent (documented, observe
+  02), the unchecked `source` metadata that `observe` copies, and a README
+  wording fix (done in the docs commit after it).
 
 qa verdict (BSC private local): transfer, nested-revert, fee (distribution
 before Kepler), system-action (Parlia `init()` system transactions) and
 empty-block PASS; family BSC PASS. `bsc-mainnet` and `bsc-testnet` stay
 NOT_RUN (D96).
 
-Next: Spec and Standards reviews, hosted CI on the final head, the final
-review comment, then READY to the coordinator.
+Next: a docs-only confirmation review, hosted CI on the final head, the
+final review comment, then READY to the coordinator.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
