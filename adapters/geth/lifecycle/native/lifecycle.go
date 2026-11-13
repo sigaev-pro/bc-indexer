@@ -104,7 +104,8 @@ func CheckSyncMode(mode string) error {
 // node is made: on a capture node (ConfigEnv set) the developer beacon
 // (geth.dev-sealing), the sync target with its synthesized finality
 // (geth.sync-target) and any sync mode but full (geth.snap-sync) are
-// refused.
+// refused. syncMode is the --syncmode value, or empty when the flag is not
+// set.
 func CheckFlags(developer, syncTarget bool, syncMode string) error {
 	if os.Getenv(ConfigEnv) == "" {
 		return nil
@@ -114,6 +115,10 @@ func CheckFlags(developer, syncTarget bool, syncMode string) error {
 		return fmt.Errorf("%w: --dev (geth.dev-sealing)", ErrProfile)
 	case syncTarget:
 		return fmt.Errorf("%w: --synctarget (geth.sync-target)", ErrProfile)
+	case syncMode == "":
+		// Not set on the command line: eth.New checks the final sync mode
+		// (CheckSyncMode), which a --config file may set.
+		return nil
 	}
 	return CheckSyncMode(syncMode)
 }
@@ -122,8 +127,10 @@ func CheckFlags(developer, syncTarget bool, syncMode string) error {
 // passes the zero value.
 type LifecycleOptions struct {
 	// Point is called at the named points of a lifecycle decision
-	// ("intended" after its intent, "rewound" after the native rewind of a
-	// SetHead and before its marker batch, "settled" after its decision),
+	// ("intended" after its intent, "final" before the final head batch of
+	// a CANONICAL decision, after the head batches of the lower branch
+	// blocks, "rewound" after the native rewind of a SetHead and before its
+	// marker batch, "settled" after its decision),
 	// for probes that crash there. Nil in the shipped binary.
 	Point func(name string)
 }
@@ -414,9 +421,24 @@ func (l *Lifecycle) viewKey() []byte {
 	return []byte(viewPrefix + p.ProducerID + "." + p.RunID + "/view")
 }
 
-// View returns the view record of the head and finality references.
+// View returns the view record of the head and finality references. While
+// the recovery driver runs, the native finality references are not the
+// decided ones (a restart sets safe to finalized), so the view keeps the
+// stored references and changes only the head; the reconciliation then
+// decides each finality change.
 func (l *Lifecycle) View(head, finalized, safe *types.Header) [][]byte {
-	data, err := json.Marshal(viewRecord{Head: headOf(head), Finalized: optionalHead(finalized), Safe: optionalHead(safe)})
+	if l.recovering {
+		if v, ok, err := l.readView(); err == nil && ok {
+			v.Head = headOf(head)
+			return l.viewRecords(v)
+		}
+	}
+	return l.viewRecords(viewRecord{Head: headOf(head), Finalized: optionalHead(finalized), Safe: optionalHead(safe)})
+}
+
+// viewRecords returns the key and value of a view record.
+func (l *Lifecycle) viewRecords(v viewRecord) [][]byte {
+	data, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
@@ -459,13 +481,31 @@ func (l *Lifecycle) writeRecords(records [][]byte) error {
 // known-branch corpus rule); a block without one is ErrCorpus.
 func (l *Lifecycle) retainedBranch(head *types.Header) ([]decision.Member, error) {
 	token := l.a.token
+	// The branch is every block of head's chain above its common ancestor
+	// with the current head. The canonical-hash index is not used: it can
+	// outlive a head rewind (startup repair keeps it above the head).
 	branch := map[string]uint64{}
-	for header := head; header != nil && l.chain.GetCanonicalHash(header.Number.Uint64()) != header.Hash(); header =
-		l.chain.GetHeader(header.ParentHash, header.Number.Uint64()-1) {
-		branch[hexHash(header.Hash())] = header.Number.Uint64()
-		if header.Number.Uint64() == 0 {
-			break
+	parent := func(h *types.Header) *types.Header {
+		if h == nil || h.Number.Uint64() == 0 {
+			return nil
 		}
+		return l.chain.GetHeader(h.ParentHash, h.Number.Uint64()-1)
+	}
+	side, current := head, l.chain.CurrentBlock()
+	for side != nil && current != nil && side.Number.Uint64() > current.Number.Uint64() {
+		branch[hexHash(side.Hash())] = side.Number.Uint64()
+		side = parent(side)
+	}
+	for current != nil && side != nil && current.Number.Uint64() > side.Number.Uint64() {
+		current = parent(current)
+	}
+	for side != nil && current != nil && side.Hash() != current.Hash() {
+		branch[hexHash(side.Hash())] = side.Number.Uint64()
+		side, current = parent(side), parent(current)
+	}
+	if side == nil || current == nil {
+		return nil, fmt.Errorf("%w: no common ancestor of %d %s and the current head", ErrLifecycle,
+			head.Number.Uint64(), head.Hash())
 	}
 	if len(branch) == 0 {
 		return []decision.Member{}, nil
@@ -554,6 +594,9 @@ func (l *Lifecycle) HeadMarker(head *types.Header) [][]byte {
 	if pd == nil || pd.written || pd.target == (common.Hash{}) || pd.target != head.Hash() {
 		return nil
 	}
+	// The head batches that reorg writes for lower blocks of the branch are
+	// written; the final one is next.
+	l.point("final")
 	pd.written = true
 	return pd.marker
 }
@@ -570,11 +613,18 @@ func (l *Lifecycle) Finality(field string, old, next, head, finalized, safe *typ
 	if !p.Observe() {
 		return nil, nil
 	}
-	return l.finality(p, lifecycle.Field(field), headOf(old), next, head, finalized, safe)
+	// At run time every finality change is decided, so the native references
+	// are the decided ones.
+	base := viewRecord{Finalized: optionalHead(finalized), Safe: optionalHead(safe)}
+	return l.finality(p, lifecycle.Field(field), headOf(old), next, head, base, head.Hash())
 }
 
-func (l *Lifecycle) finality(p *lifecycle.Pass, field lifecycle.Field, old decision.Head, next, head, finalized,
-	safe *types.Header) ([][]byte, error) {
+// finality records the FINALITY intent of one setter call of field from old
+// to next. The view of its batch is base (the decided references) with only
+// field changed. settleHead is the native head at which a failure before the
+// batch means the setter did not take effect (see Settle).
+func (l *Lifecycle) finality(p *lifecycle.Pass, field lifecycle.Field, old decision.Head, next, head *types.Header,
+	base viewRecord, settleHead common.Hash) ([][]byte, error) {
 	caller := p.Caller().ID
 	in := decision.Intent{Kind: decision.Finality, OldHead: headOf(head), NewHead: headOf(head), Events: true}
 	if next == nil {
@@ -597,15 +647,16 @@ func (l *Lifecycle) finality(p *lifecycle.Pass, field lifecycle.Field, old decis
 		}
 		in.EvidenceDigest = evidence
 	}
+	view := viewRecord{Head: headOf(head), Finalized: base.Finalized, Safe: base.Safe}
 	if field == lifecycle.Safe {
-		safe = next
+		view.Safe = optionalHead(next)
 	} else {
-		finalized = next
+		view.Finalized = optionalHead(next)
 	}
-	if err := l.intend(p, in, common.Hash{}, head.Hash()); err != nil {
+	if err := l.intend(p, in, common.Hash{}, settleHead); err != nil {
 		return nil, err
 	}
-	return append(l.View(head, finalized, safe), l.pending.marker...), nil
+	return append(l.viewRecords(view), l.pending.marker...), nil
 }
 
 // Rewind records the CANONICAL intent of a SetHead rewind from old to
@@ -665,6 +716,9 @@ func (l *Lifecycle) Settle(err error) error {
 		return err
 	}
 	token := l.a.token
+	// The pending decision is cleared before the bridge call: a failed
+	// Resolve or RejectIntent stops the bridge, and the intent stays
+	// unresolved in the store for the next start (Intend refuses meanwhile).
 	if err == nil && (pd.written || pd.target == (common.Hash{})) {
 		l.pending = nil
 		record, rerr := l.d.bridge.Resolve(token, pd.intent.Sequence)
@@ -773,11 +827,22 @@ func (l *Lifecycle) writeIntent(intent decision.IntentRecord) bool {
 // old head, and otherwise stops startup.
 func (l *Lifecycle) settleLifecycleIntent() error {
 	release := l.Lock()
-	defer release()
+	complete, err := l.settleLocked()
+	release()
+	if err != nil || complete == nil {
+		return err
+	}
+	return complete()
+}
+
+// settleLocked settles the intent with the guard held, or returns the
+// completion of a CANONICAL intent interrupted inside its reorganization,
+// which takes the guard itself.
+func (l *Lifecycle) settleLocked() (func() error, error) {
 	token := l.a.token
 	saved, err := l.d.unresolved(token)
 	if err != nil || saved == nil || saved.Marker || l.writeIntent(saved.Intent) {
-		return err
+		return nil, err
 	}
 	head := l.chain.CurrentBlock()
 	reject := func(evidence string) error {
@@ -785,29 +850,49 @@ func (l *Lifecycle) settleLifecycleIntent() error {
 		l.a.trace("settling", map[string]any{"sequence": saved.Sequence, "evidence": evidence})
 		return err
 	}
+	value, err := decision.MarkerValue(saved.Intent)
+	if err != nil {
+		return nil, err
+	}
+	key := decision.MarkerKey(l.a.producer, saved.Sequence)
 	switch {
 	case saved.Intent.Kind == decision.Finality:
-		return reject("finality_not_durable")
+		return nil, reject("finality_not_durable")
 	case hexHash(head.Hash()) == saved.Intent.NewHead.Hash:
-		value, err := decision.MarkerValue(saved.Intent)
-		if err != nil {
-			return err
-		}
-		records := append(l.View(head, l.chain.CurrentFinalBlock(), l.chain.CurrentSafeBlock()),
-			decision.MarkerKey(l.a.producer, saved.Sequence), value)
-		if err := l.writeRecords(records); err != nil {
-			return err
+		// The view keeps the decided finality references (see View).
+		if err := l.writeRecords(append(l.View(head, nil, nil), key, value)); err != nil {
+			return nil, err
 		}
 		if _, err := l.d.bridge.Resolve(token, saved.Sequence); err != nil {
-			return err
+			return nil, err
 		}
 		l.a.trace("settling", map[string]any{"sequence": saved.Sequence, "evidence": "native_head_is_new_head"})
-		return nil
+		return nil, nil
 	case hexHash(head.Hash()) == saved.Intent.OldHead.Hash:
-		return reject("native_head_is_old_head")
+		return nil, reject("native_head_is_old_head")
 	}
-	return fmt.Errorf("%w: native head %d %s is neither the old nor the new head of intent %d", ErrLifecycle,
-		head.Number.Uint64(), head.Hash(), saved.Sequence)
+	newHead := l.chain.GetBlockByHash(common.HexToHash(saved.Intent.NewHead.Hash))
+	if newHead != nil && head.Number.Uint64() < newHead.NumberU64() && l.isAncestor(head, saved.Intent.NewHead) {
+		// A crash inside the reorganization left a lower block of the new
+		// branch as the head: complete exactly the saved transition from
+		// its old head, with its marker in the final head batch.
+		sequence := saved.Sequence
+		old := common.HexToHash(saved.Intent.OldHead.Hash)
+		return func() error {
+			if err := l.chain.ExtractorCompleteHead(newHead, old, key, value); err != nil {
+				return err
+			}
+			release := l.Lock()
+			defer release()
+			if _, err := l.d.bridge.Resolve(l.a.token, sequence); err != nil {
+				return err
+			}
+			l.a.trace("settling", map[string]any{"sequence": sequence, "evidence": "completed_inside_reorg"})
+			return nil
+		}, nil
+	}
+	return nil, fmt.Errorf("%w: native head %d %s is neither the old nor the new head of intent %d, nor on its branch",
+		ErrLifecycle, head.Number.Uint64(), head.Hash(), saved.Sequence)
 }
 
 // isAncestor reports whether a is b or an ancestor of b in the stored
@@ -858,11 +943,14 @@ func (l *Lifecycle) reconcile() error {
 		in := decision.Intent{Kind: decision.Canonical, OldHead: view.Head, NewHead: headOf(head),
 			Members: []decision.Member{}, Events: true}
 		in.EvidenceDigest = CanonicalEvidence(callerReconcile, in.OldHead, in.NewHead, nil)
-		if err := l.intend(p, in, common.Hash{}, head.Hash()); err != nil {
+		// The native change happened before the intent, so a failed batch is
+		// never a native rejection: a zero settle head leaves the intent
+		// unresolved and startup stops; the next start settles it.
+		if err := l.intend(p, in, common.Hash{}, common.Hash{}); err != nil {
 			return err
 		}
-		records := append(l.View(head, l.chain.CurrentFinalBlock(), l.chain.CurrentSafeBlock()), l.pending.marker...)
-		if err := l.Settle(l.writeRecords(records)); err != nil {
+		view.Head = headOf(head)
+		if err := l.Settle(l.writeRecords(append(l.viewRecords(view), l.pending.marker...))); err != nil {
 			return err
 		}
 	}
@@ -878,12 +966,19 @@ func (l *Lifecycle) reconcile() error {
 		if old.Hash == headOf(native).Hash {
 			continue
 		}
-		records, err := l.finality(p, field, old, native, head, l.chain.CurrentFinalBlock(), l.chain.CurrentSafeBlock())
+		// Each step's view is the stored view with only this field changed,
+		// so a crash between steps leaves the remaining changes to decide.
+		records, err := l.finality(p, field, old, native, head, view, common.Hash{})
 		if err != nil {
 			return err
 		}
 		if err := l.Settle(l.writeRecords(records)); err != nil {
 			return err
+		}
+		if field == lifecycle.Safe {
+			view.Safe = optionalHead(native)
+		} else {
+			view.Finalized = optionalHead(native)
 		}
 	}
 	return nil
@@ -957,7 +1052,9 @@ func (s *liveService) Start() error {
 					continue
 				}
 				if b, err := s.l.GoLive(); err != nil {
-					log.Error("Extractor lifecycle could not go live", "err", err)
+					// Fail closed: a node that cannot set H must not keep
+					// importing uncaptured.
+					log.Crit("Extractor lifecycle could not go live", "err", err)
 				} else {
 					log.Info("Extractor lifecycle is live", "boundary", b.Head.Number, "hash", b.Head.Hash)
 				}

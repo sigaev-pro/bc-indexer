@@ -52,7 +52,7 @@
       "name": "side_chain_pass",
       "file": "core/blockchain.go",
       "original": "func (bc *BlockChain) insertSideChain(ctx context.Context, block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {\n\tvar current = bc.CurrentBlock()\n",
-      "replacement": "func (bc *BlockChain) insertSideChain(ctx context.Context, block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {\n\t// E01-02.lifecycle_seams: geth.side-chain, nested in the import. Its\n\t// stateless writes reach no choke point; the re-import of the pruned\n\t// ancestors passes geth.import.\n\texit, err := bc.extractorEnter(\"geth.side-chain\")\n\tif err != nil {\n\t\treturn nil, it.index, err\n\t}\n\tdefer exit()\n\tvar current = bc.CurrentBlock()\n",
+      "replacement": "func (bc *BlockChain) insertSideChain(ctx context.Context, block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {\n\t// E01-02.lifecycle_seams: geth.side-chain, nested in the import. Its\n\t// stateless writes reach no choke point; the re-import of the pruned\n\t// ancestors (the internal insertChain) runs nested in this pass.\n\texit, err := bc.extractorEnter(\"geth.side-chain\")\n\tif err != nil {\n\t\treturn nil, it.index, err\n\t}\n\tdefer exit()\n\tvar current = bc.CurrentBlock()\n",
       "reason": "insertSideChain passes the gate as geth.side-chain."
     },
     {
@@ -241,7 +241,7 @@
       "name": "geth_flags_check",
       "file": "cmd/geth/config.go",
       "original": "func makeFullNode(ctx *cli.Context) *node.Node {\n\tstack, cfg := makeConfigNode(ctx)\n",
-      "replacement": "func makeFullNode(ctx *cli.Context) *node.Node {\n\t// E01-02.lifecycle_seams: on a capture node, the capture profile check\n\t// refuses the developer beacon, the sync target and snap sync before the\n\t// node is made.\n\tif err := extractorgeth.CheckFlags(ctx.Bool(utils.DeveloperFlag.Name), ctx.IsSet(utils.SyncTargetFlag.Name),\n\t\tctx.String(utils.SyncModeFlag.Name)); err != nil {\n\t\tutils.Fatalf(\"%v\", err)\n\t}\n\tstack, cfg := makeConfigNode(ctx)\n",
+      "replacement": "func makeFullNode(ctx *cli.Context) *node.Node {\n\t// E01-02.lifecycle_seams: on a capture node, the capture profile check\n\t// refuses the developer beacon, the sync target and snap sync before the\n\t// node is made.\n\textractorSyncMode := \"\"\n\tif ctx.IsSet(utils.SyncModeFlag.Name) {\n\t\textractorSyncMode = ctx.String(utils.SyncModeFlag.Name)\n\t}\n\tif err := extractorgeth.CheckFlags(ctx.Bool(utils.DeveloperFlag.Name), ctx.IsSet(utils.SyncTargetFlag.Name),\n\t\textractorSyncMode); err != nil {\n\t\tutils.Fatalf(\"%v\", err)\n\t}\n\tstack, cfg := makeConfigNode(ctx)\n",
       "reason": "geth refuses --dev, --synctarget and snap sync on a capture node."
     }
   ]

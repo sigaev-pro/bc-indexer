@@ -180,28 +180,35 @@ func (bc *BlockChain) setFinalizedChecked(header *types.Header, records [][]byte
 	if err := bc.extractorRequire("FINALITY"); err != nil {
 		return err
 	}
-	bc.currentFinalBlock.Store(header)
-	err := bc.extractorWriteRecords(records, func(batch ethdb.KeyValueWriter) {
+	// The batch is durable before the in-memory reference moves; a failed
+	// write is fatal, as the native finalized write is.
+	if err := bc.extractorWriteRecords(records, func(batch ethdb.KeyValueWriter) {
 		if header != nil {
 			rawdb.WriteFinalizedBlockHash(batch, header.Hash())
 		} else {
 			rawdb.WriteFinalizedBlockHash(batch, common.Hash{})
 		}
-	})
+	}); err != nil {
+		log.Crit("Failed to write the finalized block and its decision marker", "err", err)
+	}
+	bc.currentFinalBlock.Store(header)
 	if header != nil {
 		headFinalizedBlockGauge.Update(int64(header.Number.Uint64()))
 	} else {
 		headFinalizedBlockGauge.Update(0)
 	}
-	return err
+	return nil
 }
 
 // setSafeChecked is the native safe setter behind the FINALITY choke point.
-// Safe lives in memory; the records of its decision are a batch of their own
-// after the setter.
+// Safe lives in memory; the records of its decision are a batch of their own,
+// synced before the in-memory reference moves.
 func (bc *BlockChain) setSafeChecked(header *types.Header, records [][]byte) error {
 	if err := bc.extractorRequire("FINALITY"); err != nil {
 		return err
+	}
+	if err := bc.extractorWriteRecords(records, nil); err != nil {
+		log.Crit("Failed to write the safe block decision marker", "err", err)
 	}
 	bc.currentSafeBlock.Store(header)
 	if header != nil {
@@ -209,7 +216,7 @@ func (bc *BlockChain) setSafeChecked(header *types.Header, records [][]byte) err
 	} else {
 		headSafeBlockGauge.Update(0)
 	}
-	return bc.extractorWriteRecords(records, nil)
+	return nil
 }
 
 // extractorSetFinality is one guarded finality setter call (SetFinalized or

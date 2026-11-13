@@ -12,7 +12,8 @@
 ## What the probe does
 
 Chains: A1..A6 extend genesis; B3 B4, C3 C4, S3 S4, T3 T4 and G3 fork from
-A2, each block with one transfer, so every state root differs.
+A2, H5 H6 from A4, each block with one transfer, so every state root
+differs.
 
 1. Profile and identity, outside the gate: `CheckFlags` with `--dev`,
    `--synctarget` and snap sync; `eth.New` with snap sync; `eth.New` with a
@@ -43,11 +44,17 @@ A2, each block with one transfer, so every state root differs.
    head, members, state) and the failures, and the final native result.
 4. Coverage of both native-store opens plus the refusals outside the gate,
    and `lifecycle.Gaps` for client `geth`.
-5. Crash scenarios on a third store, each in a child process with a crash
-   point, then a restart with the shipped attach: a FINALITY intent (the
-   setter's batch never written: rejected), a SetHead rewind after the
-   native rewind and before its marker (head is the new head: completed), a
-   CANONICAL intent before the head write (head is the old head: rejected).
+5. Crash scenarios on a third store, each in a child process that syncs the
+   store at its crash point and exits, then a restart with the shipped
+   attach: a FINALITY intent (the setter's batch never written: rejected); a
+   SetHead rewind with finalized A3 and safe A5, after the native rewind and
+   before its marker (head is the new head: completed, then the safe reset is
+   decided by the reconciliation); a CANONICAL intent before the head write
+   (head is the old head: rejected); a forkchoice from A4 to H6 between the
+   head batch of H5 and the final head batch of H6 (completed from the old
+   head through `ExtractorCompleteHead`). Every FINALITY decision of the
+   main scenario is named by its field, caller and references, recomputed
+   from its evidence digest.
 
 ## Commands
 

@@ -41,8 +41,10 @@ func TestCheckFlags(t *testing.T) {
 			t.Fatalf("%+v: %v", c, err)
 		}
 	}
-	if err := CheckFlags(false, false, "full"); err != nil {
-		t.Fatalf("the capture profile refused full sync: %v", err)
+	for _, mode := range []string{"full", ""} {
+		if err := CheckFlags(false, false, mode); err != nil {
+			t.Fatalf("the capture profile refused sync mode %q: %v", mode, err)
+		}
 	}
 }
 

@@ -43,8 +43,10 @@ The shared package `extractor/lifecycle` is installed byte-identical from
   lifecycle view of H, then lets the gate write and sync the boundary record
   before `decision.Bridge.GoLive`.
 - `geth` (`cmd/geth/config.go`, `makeFullNode`): on a capture node,
-  `CheckFlags` refuses `--dev`, `--synctarget` and any sync mode but full
-  before the node is made. Geth has no mining, voting or builder role in the
+  `CheckFlags` refuses `--dev`, `--synctarget` and a `--syncmode` other than
+  full before the node is made. An unset `--syncmode` passes this stage;
+  `eth.New` then checks the final sync mode, which a `--config` file may
+  set. Geth has no mining, voting or builder role in the
   accepted tree; the only self-sealing path is the developer beacon.
 - Native-commit identity (D100): `NativeIdentity` is the extractor build
   stamp `BinaryCommit` (`-ldflags -X
@@ -52,7 +54,10 @@ The shared package `extractor/lifecycle` is installed byte-identical from
   or, without it, the clean VCS revision that the Go toolchain recorded
   (`internal/version`). `AttachLifecycle` refuses a config whose
   `native_commit` differs, and a binary with neither (`ErrIdentity`); the
-  capsule commit is therefore the binary's.
+  capsule commit is therefore the binary's. A plain build of the patched
+  tree has no clean VCS revision, so the release build of the shipped
+  `geth` must pass the stamp; that build belongs to E01-01.builds and E06
+  (D100). In this block only the probe binary is stamped.
 
 ## Gate use
 
@@ -74,9 +79,11 @@ error. Snap-sync writers and the chain reset are refused before they write.
 Decisions without a new block:
 
 - CANONICAL (`set-canonical`, `known-block`): the intent names, for every
-  block of the branch of the new head above the canonical chain, the SIDE
-  member that retains it (the known-branch corpus rule); a branch block
-  without one is `ErrCorpus`, a source error before any mutation. The marker
+  block of the branch of the new head above its common ancestor with the
+  current head, the SIDE member that retains it (the known-branch corpus
+  rule); a branch block without one is `ErrCorpus`, a source error before
+  any mutation. The branch is found from the headers, not from the
+  canonical-hash index, which can outlive a head rewind. The marker
   and the lifecycle view join the head batch of the new head, then the
   decision is resolved. Evidence: `CanonicalEvidence(caller, old, new,
   members)`.
@@ -90,8 +97,9 @@ Decisions without a new block:
 - FINALITY (`set-finalized`, `set-safe`): one decision per setter call, the
   old reference read under the guard from the field the setter writes. The
   finalized reference and its marker and view are one synced batch; safe
-  lives in memory, so its marker and view are a batch of their own after the
-  setter. An unchanged reference is rewritten without an intent or marker; a
+  lives in memory, so its marker and view are a batch of their own. In both
+  cases the batch is synced before the in-memory reference moves, and a
+  failed batch write is fatal, as the native finalized write is. An unchanged reference is rewritten without an intent or marker; a
   zero hash calls no setter (the Engine API skips it), so nothing is
   declared final (AC-LIF-05-02). A setter that ran stays decided when the
   forkchoice then fails (AC-LIF-05-03).
@@ -101,7 +109,10 @@ Decisions without a new block:
 
 The lifecycle view record (`extractor-lifecycle-geth-v1/<producer>.<run>/view`,
 JSON `{head, finalized, safe}`) is written in the batch of every decision
-marker that moves the head or a finality reference, and at H.
+marker that moves the head or a finality reference, and at H. It holds the
+decided references: while the recovery driver runs, every view write keeps
+the stored finality references and changes only the head or the field being
+decided, because a restart resets native safe to finalized.
 
 ## Recovery and startup reconciliation
 
@@ -115,8 +126,10 @@ the stored H instead of `decision.Bridge.GoLive`.
   is rejected, because its marker is in the same synced batch as the
   finalized write and safe lives in memory; a CANONICAL intent is completed
   (marker and view written, resolved) when the native head is its new head,
-  rejected when the native head is its old head, and otherwise stops startup
-  (`ErrLifecycle`).
+  rejected when the native head is its old head, completed through
+  `ExtractorCompleteHead` from its old head when a crash inside the
+  reorganization left a lower block of the new branch as the head, and
+  otherwise stops startup (`ErrLifecycle`).
 - Startup reconciliation (`geth.startup-reconcile`): native startup repair
   runs before the gate opens, so the driver compares the native head and
   finality references with the view. A head that differs and is an ancestor
@@ -135,7 +148,7 @@ Every Geth row of `callers.json`, checked against the accepted tree.
 | `geth.insert-without-head` | OBSERVATION | `InsertBlockWithoutSetHead` enters | Engine API `newPayload` |
 | `geth.recover-ancestors` | OBSERVATION | `recoverAncestors` enters, nested; each re-execution is a SIDE write (D100) | `InsertBlockWithoutSetHead` on the pruned BOOTSTRAP side block S3 |
 | `geth.recovery` | OBSERVATION | `Lifecycle.Lock` nests every guarded call of the recovery driver in its pass | each restart |
-| `geth.side-chain` | OBSERVATION | `insertSideChain` enters, nested; its stateless `writeBlockWithoutState` reaches no choke point; the pruned ancestors re-import through `geth.import` | `InsertChain` of T4 on the pruned T3 |
+| `geth.side-chain` | OBSERVATION | `insertSideChain` enters, nested; its stateless `writeBlockWithoutState` reaches no choke point; the re-import of the pruned ancestors (the internal `insertChain`) runs nested in this pass, whose map effects include EXECUTION and CANONICAL | `InsertChain` of T4 on the pruned T3 |
 | `geth.known-block` | DECISION (CANONICAL) | `writeKnownBlock` enters and makes the CANONICAL decision | `InsertChain` of the stored side blocks C3 C4 |
 | `geth.set-canonical` | DECISION (CANONICAL) | `SetCanonical` enters before `recoverAncestors`; CANONICAL decision before the reorg | Engine API forkchoice |
 | `geth.set-finalized` | DECISION (FINALITY) | `SetFinalized` takes the guard, enters, one decision per call | Engine API forkchoice |
@@ -164,17 +177,29 @@ open pass (`ErrBypass`), so a missed write cannot pass silently.
 ## Limits
 
 - Only the hash state scheme is supported (as in the decision bridge).
-- A head change to a branch whose block has no retained corpus (a block
-  stored during BOOTSTRAP, or a block whose decision closed its observation
-  and which becomes canonical again) is a source error (`ErrCorpus`); the
-  targeted native replay that would rebuild the corpus is not implemented.
+- A head change to a branch whose block has no retained corpus is a source
+  error (`ErrCorpus`); the targeted native replay is not implemented. For a
+  block stored during BOOTSTRAP there are no inputs to replay from. For a
+  block whose decision closed its observation, the close purged its capsule
+  and log and released its pin (decision bridge with input cleanup, D100), so
+  the retained inputs that the protocol's replay needs are gone; the
+  protocol then allows the source error. The effect on a live node is that a
+  reorganization back to a branch it left (A, then B, then A again) stops
+  the node from following that branch: it fails closed and keeps running.
+  Keeping the inputs of decided canonical blocks until the irreversible
+  anchor, so that such a branch can be replayed, has no owner yet; the
+  proposed owner is E05-01.activation_gc (retention until the anchor), to be
+  confirmed by the coordinator.
 - A SetHead rewind interrupted between its intent and its marker with the
   native head between the old and the new head stops the next start
-  (`ErrLifecycle`); completing a partial rewind is E01-04.early_faults.
+  (`ErrLifecycle`); completing a partial rewind is proposed for
+  E01-04.early_faults, to be confirmed by the coordinator.
 - A refused finality setter call writes nothing and logs the error; the
   Engine API response still reports the forkchoice as valid, because the
   native setters return no error. The gate is stopped after a bypass, so the
   node imports nothing more.
+- If `GoLive` fails on a first start, the live service stops the node
+  (`log.Crit`) rather than let it keep importing uncaptured.
 - `SetCanonical` of the current head rewrites the head batch natively and is
   decided as a CANONICAL decision from the head to itself.
 - A runtime chain reset (`ResetWithGenesisBlock`) is refused on a capture

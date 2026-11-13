@@ -59,7 +59,12 @@ class Judge(unittest.TestCase):
             "geth.manual-commands": lambda r: r["native_caller"]["outside_gate_refusals"].update(
                 {"geth.manual-commands": None}),
             "required callers": lambda r: r.update(gaps=["geth.side-chain"]),
+            "native: the gate is not LIVE": lambda r: r["native_caller"]["bootstrap"].update(phase_after="BOOTSTRAP"),
+            "harness: the gate is not LIVE": lambda r: r["harness"]["bootstrap"].update(boundary_present=False),
             "crash point": lambda r: r["crashes"][0].update(exit_code=0),
+            "the restart failed": lambda r: r["crashes"][3].update(attach_error="boom"),
+            "reconciliation decision": lambda r: r["crashes"][1].update(settled=r["crashes"][1]["settled"][:1]),
+            "safe is not": lambda r: r["crashes"][1]["refs"].update(safe="A5"),
             "did not settle": lambda r: r["crashes"][1].update(settled=[]),
             "native head is not": lambda r: r["crashes"][2]["refs"].update(head_hash="A5"),
             "stays unresolved": lambda r: r["crashes"][2]["decisions"][0].update(state="INTENT"),
@@ -92,6 +97,14 @@ class Judge(unittest.TestCase):
             report = copy.deepcopy(SAMPLE)
             step(report, path, "AC-LIF-05-02 forkchoice zero safe and finalized")["refs"]["safe"] = ""
             self.assertEqual(lifecycle_geth.qa_matrix(report, [])["verdicts"]["AC-LIF-05-02"], "FAIL", path)
+
+    def test_finality_rows_are_checked_by_field(self):
+        report = copy.deepcopy(SAMPLE)
+        rows = step(report, "native_caller", "SetHead 3")["decisions"]
+        rows[1]["finality"], rows[2]["finality"] = rows[2]["finality"], rows[1]["finality"]
+        failures, _, result = lifecycle_geth.judge(report)
+        self.assertEqual(result, "FAIL")
+        self.assertTrue(any("SetHead 3: decisions" in row for row in failures), failures)
 
     def test_zero_hash_noop_makes_no_decision(self):
         for path, name in (("native_caller", "AC-LIF-05-02 forkchoice zero safe and finalized"),

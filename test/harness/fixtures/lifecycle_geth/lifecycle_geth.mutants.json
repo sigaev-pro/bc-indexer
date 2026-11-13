@@ -84,8 +84,8 @@
   {
    "name": "decision shapes unchecked",
    "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
-   "original": "                                                    for x in [_shape(e) for e in EXPECTED_STEPS[name]]]:",
-   "replacement": "                                                    for x in [_shape(e) for e in EXPECTED_STEPS[name]]] and False:"
+   "original": "if [decision_shape(row) for row in rows] != [_shape(e) for e in EXPECTED_STEPS[name]]:",
+   "replacement": "if False:"
   },
   {
    "name": "unexpected error unchecked",
@@ -218,6 +218,30 @@
    "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
    "original": "\"family\": \"PASS\" if all(v == \"PASS\" for v in applicable) else \"FAIL\",",
    "replacement": "\"family\": \"PASS\","
+  },
+  {
+   "name": "live phase unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if row.get(\"phase_after\") != \"LIVE\" or row.get(\"boundary_present\") is not True:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash restart error unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if row.get(\"attach_error\") is not None:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash reconciliation unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if sum(e.get(\"event\") == \"lifecycle_decided\" for e in row.get(\"settled\") or []) != decided:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash safe unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if (row.get(\"refs\") or {}).get(\"safe\") != safe:",
+   "replacement": "if False:"
   }
  ]
 }

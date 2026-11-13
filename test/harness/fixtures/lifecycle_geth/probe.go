@@ -73,8 +73,9 @@ func hexHash(h common.Hash) string { return hex.EncodeToString(h[:]) }
 // ---------------------------------------------------------------- chains
 
 // blocks are the generated fixture chains. A1..A6 extend genesis; the
-// branches B, C, S, T (two blocks each) and G (one block) fork from A2, each
-// with its own recipient, so every state root differs.
+// branches B, C, S, T (two blocks each) and G (one block) fork from A2, H
+// (two blocks) from A4, each with its own recipient, so every state root
+// differs.
 type blocks struct {
 	genesis *core.Genesis
 	a       []*types.Block // a[i] is A(i+1)
@@ -101,7 +102,7 @@ func generate(genesis *core.Genesis) *blocks {
 		parent int
 		count  int
 		to     byte
-	}{{"B", 2, 2, 0x0b}, {"C", 2, 2, 0x0c}, {"S", 2, 2, 0x05}, {"T", 2, 2, 0x06}, {"G", 2, 1, 0x07}} {
+	}{{"B", 2, 2, 0x0b}, {"C", 2, 2, 0x0c}, {"S", 2, 2, 0x05}, {"T", 2, 2, 0x06}, {"G", 2, 1, 0x07}, {"H", 4, 2, 0x08}} {
 		parent := a[f.parent-1]
 		chain, _ := core.GenerateChain(genesis.Config, parent, engine, db, f.count, func(i int, g *core.BlockGen) {
 			g.SetCoinbase(coinbase)
@@ -275,6 +276,9 @@ type decisionRow struct {
 	Members  []string `json:"members"`
 	Evidence string   `json:"evidence"`
 	State    string   `json:"state"`
+	// Finality names a FINALITY decision as "FIELD caller old>new", found by
+	// recomputing its evidence digest over the fixture blocks.
+	Finality string `json:"finality,omitempty"`
 }
 
 // readDecisions reads every decision record of the store, keyed by
@@ -376,23 +380,52 @@ type step struct {
 type recorder struct {
 	s     *nodeStore
 	names map[string]string // block hash -> fixture name
+	heads []decision.Head   // every fixture block and the zero head
 	steps []step
 	seen  map[uint64]string
 }
 
 func newRecorder(s *nodeStore, b *blocks) *recorder {
 	r := &recorder{s: s, names: map[string]string{}, seen: map[uint64]string{}}
+	add := func(block *types.Block, name string) {
+		r.names[hexHash(block.Hash())] = name
+		r.heads = append(r.heads, decision.Head{Number: block.NumberU64(), Hash: hexHash(block.Hash())})
+	}
 	for i, block := range b.a {
-		r.names[hexHash(block.Hash())] = fmt.Sprintf("A%d", i+1)
+		add(block, fmt.Sprintf("A%d", i+1))
 	}
 	for name, chain := range b.fork {
 		for _, block := range chain {
-			r.names[hexHash(block.Hash())] = fmt.Sprintf("%s%d", name, block.NumberU64())
+			add(block, fmt.Sprintf("%s%d", name, block.NumberU64()))
 		}
 	}
-	r.names[hexHash(b.genesis.ToBlock().Hash())] = "G0"
+	add(b.genesis.ToBlock(), "G0")
 	r.names[strings.Repeat("0", 64)] = "-"
+	r.heads = append(r.heads, decision.Head{Hash: lifecycle.ZeroHash})
 	return r
+}
+
+// finality names a FINALITY evidence digest: the field, caller and old and
+// new references of the setter call whose digest it is.
+func (r *recorder) finality(evidence string) string {
+	callers := []string{"geth.set-finalized", "geth.set-safe", "geth.set-head", "geth.startup-reconcile"}
+	for _, field := range []lifecycle.Field{lifecycle.Finalized, lifecycle.Safe} {
+		for _, caller := range callers {
+			for _, old := range r.heads {
+				if extractorgeth.ClearEvidence(field, caller, old) == evidence {
+					return fmt.Sprintf("%s %s %s>-", field, caller, r.name(old.Hash))
+				}
+				for _, next := range r.heads {
+					digest, err := lifecycle.FinalityDigest(lifecycle.FinalityChange{Field: field, Caller: caller,
+						Old: old, New: next})
+					if err == nil && digest == evidence {
+						return fmt.Sprintf("%s %s %s>%s", field, caller, r.name(old.Hash), r.name(next.Hash))
+					}
+				}
+			}
+		}
+	}
+	return "unknown"
 }
 
 func (r *recorder) name(hash string) string {
@@ -420,6 +453,9 @@ func (r *recorder) record(name string, err error) step {
 			continue
 		}
 		r.seen[seq] = row.State
+		if row.Kind == "FINALITY" {
+			row.Finality = r.finality(row.Evidence)
+		}
 		row.OldHash, row.NewHash = r.name(row.OldHash), r.name(row.NewHash)
 		for i, m := range row.Members {
 			row.Members[i] = r.name(m)
@@ -616,11 +652,17 @@ func crashChild(genesisPath, configPath, dir, scenario string) {
 	b := generate(genesis)
 	db := openStore(dir)
 	chain := directChain(db, genesis)
-	want := map[string]string{"finality": "intended", "rewind": "rewound", "canonical": "intended"}[scenario]
+	want := map[string]string{"finality": "intended", "rewind": "rewound", "canonical": "intended",
+		"reorg": "final"}[scenario]
 	armed := false
 	l, err := extractorgeth.AttachLifecycle(chain, db, loadConfig(configPath), extractorgeth.Options{},
 		extractorgeth.DecisionOptions{}, extractorgeth.LifecycleOptions{Point: func(name string) {
 			if armed && name == want {
+				// Every native write before the point is made durable, then
+				// the process stops: the native mutation (or its first part)
+				// happened and the marker did not, the case recovery must
+				// complete or reject from native evidence.
+				check(db.SyncKeyValue())
 				os.Exit(3)
 			}
 		}})
@@ -636,6 +678,11 @@ func crashChild(genesisPath, configPath, dir, scenario string) {
 	case "rewind":
 		_, err = chain.InsertChain(types.Blocks{b.named("A4"), b.named("A5")})
 		check(err)
+		// Safe differs from finalized, so the restart (which sets safe to
+		// finalized) must still decide the safe change after it completes
+		// the rewind.
+		chain.SetFinalized(b.named("A3").Header())
+		chain.SetSafe(b.named("A5").Header())
 		armed = true
 		check(chain.SetHead(4))
 	case "canonical":
@@ -643,6 +690,17 @@ func crashChild(genesisPath, configPath, dir, scenario string) {
 		check(err)
 		armed = true
 		_, err = chain.SetCanonical(b.named("A5"))
+		check(err)
+	case "reorg":
+		// H5 H6 extend A4; the forkchoice to H6 writes the head batch of H5,
+		// then the final head batch of H6 with the marker. The crash comes
+		// between them.
+		for _, name := range []string{"H5", "H6"} {
+			_, err = chain.InsertBlockWithoutSetHead(context.Background(), b.named(name), false)
+			check(err)
+		}
+		armed = true
+		_, err = chain.SetCanonical(b.named("H6"))
 		check(err)
 	}
 	os.Exit(0)
@@ -667,11 +725,7 @@ func inspect(genesis *core.Genesis, configPath, dir string, b *blocks) map[strin
 	}
 	_, attachErr := extractorgeth.AttachLifecycle(chain, db, loadConfig(configPath), extractorgeth.Options{Trace: trace},
 		extractorgeth.DecisionOptions{}, extractorgeth.LifecycleOptions{})
-	r := &recorder{names: map[string]string{}}
-	for i, block := range b.a {
-		r.names[hexHash(block.Hash())] = fmt.Sprintf("A%d", i+1)
-	}
-	r.names[strings.Repeat("0", 64)] = "-"
+	r := newRecorder(nil, b)
 	rows := readDecisions(db)
 	list := []decisionRow{}
 	for _, row := range rows {
@@ -685,6 +739,7 @@ func inspect(genesis *core.Genesis, configPath, dir string, b *blocks) map[strin
 	ref := readRefs(chain, db)
 	ref.HeadHash = r.name(ref.HeadHash)
 	ref.Finalized = r.name(ref.Finalized)
+	ref.Safe = r.name(ref.Safe)
 	ref.StoredFin = r.name(ref.StoredFin)
 	chain.Stop()
 	check(db.Close())
@@ -699,7 +754,7 @@ func crashes(genesisPath string, genesis *core.Genesis, b *blocks, work string) 
 	check(err)
 	writeConfig(configPath, genesis, "cccccccccccccccccccccccccccccccc", commit)
 	out := []map[string]any{}
-	for _, scenario := range []string{"finality", "rewind", "canonical"} {
+	for _, scenario := range []string{"finality", "rewind", "canonical", "reorg"} {
 		cmd := exec.Command(os.Args[0], "crash", genesisPath, configPath, dir, scenario)
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 		err := cmd.Run()

@@ -61,20 +61,26 @@ REPORT_LIMIT = 16 * 1024 * 1024
 
 # The decisions each native-caller step must add or settle: (kind, old head,
 # new head, member blocks). Fixture names: A1..A6 extend genesis; B3 B4, C3
-# C4, S3 S4, T3 T4 and G3 fork from A2.
-FINALITY = ("FINALITY",)
+# C4, S3 S4, T3 T4 and G3 fork from A2; H5 H6 fork from A4.
+
+
+def F(text):
+    """A FINALITY decision: "FIELD caller old>new" ("-" is no reference)."""
+    return ("FINALITY", text)
+
+
 EXPECTED_STEPS = {
     "bootstrap newPayload A1": [], "bootstrap newPayload A2": [], "bootstrap newPayload A3": [],
     "bootstrap newPayload S3": [], "bootstrap newPayload T3": [], "bootstrap forkchoice A3": [],
     "newPayload A4": [("SIDE", "A3", "A3", ["A4"])],
     "forkchoice head A4": [("CANONICAL", "A3", "A4", ["A4"])],
-    "forkchoice safe A2 finalized A1": [FINALITY, FINALITY],
+    "forkchoice safe A2 finalized A1": [F("FINALIZED geth.set-finalized ->A1"), F("SAFE geth.set-safe ->A2")],
     "AC-LIF-05-02 forkchoice zero safe and finalized": [],
     "forkchoice unchanged safe A2 finalized A1": [],
-    "AC-LIF-05-03 forkchoice finalized A2 then unknown safe": [FINALITY],
+    "AC-LIF-05-03 forkchoice finalized A2 then unknown safe": [F("FINALIZED geth.set-finalized A1>A2")],
     "newPayload B3": [("SIDE", "A4", "A4", ["B3"])],
     "newPayload B4": [("SIDE", "A4", "A4", ["B4"])],
-    "forkchoice reorg to B4 safe B3": [("CANONICAL", "A4", "B4", ["B3", "B4"]), FINALITY],
+    "forkchoice reorg to B4 safe B3": [("CANONICAL", "A4", "B4", ["B3", "B4"]), F("SAFE geth.set-safe A2>B3")],
     "forkchoice back to A4 without corpus": [],
     "newPayload C3": [("SIDE", "B4", "B4", ["C3"])],
     "newPayload C4": [("SIDE", "B4", "B4", ["C4"])],
@@ -83,17 +89,17 @@ EXPECTED_STEPS = {
     "syncer Sync (sync target)": [],
     "NewSimulatedBeacon (developer beacon)": [],
     "Reset": [],
-    "forkchoice safe C4 finalized A2": [FINALITY],
+    "forkchoice safe C4 finalized A2": [F("SAFE geth.set-safe B3>C4")],
     # The concurrent callers include SetCanonical of the current head, which
     # rewrites the head batch: ten CANONICAL decisions from C4 to C4.
     "after deadlock smoke": [("CANONICAL", "C4", "C4", [])] * 10,
-    "restart": [FINALITY],
+    "restart": [F("SAFE geth.startup-reconcile C4>A2")],
     "InsertChain T4 on pruned T3 (side chain)": [("CANONICAL", "C4", "T3", ["T3"]), ("IMPORT", "T3", "T4", ["T4"])],
     "InsertBlockWithoutSetHead S4 on pruned S3 (recover ancestors)": [("SIDE", "T4", "T4", ["S3"]),
                                                                         ("SIDE", "T4", "T4", ["S4"])],
     "forkchoice head S4": [("CANONICAL", "T4", "S4", ["S3", "S4"])],
-    "forkchoice safe S4 finalized A2": [FINALITY],
-    "SetHead 3": [("CANONICAL", "S4", "S3", []), FINALITY, FINALITY],
+    "forkchoice safe S4 finalized A2": [F("SAFE geth.set-safe A2>S4")],
+    "SetHead 3": [("CANONICAL", "S4", "S3", []), F("SAFE geth.set-head S4>-"), F("SAFE geth.set-head ->A2")],
     "newPayload G3 (retained side block)": [("SIDE", "S3", "S3", ["G3"])],
 }
 # Steps that must fail, with a fragment of the error.
@@ -131,9 +137,14 @@ SHARED_STEPS = ("newPayload A4", "forkchoice head A4", "forkchoice safe A2 final
 # restart settles the crashed intent from native evidence (the recovery
 # trace names it) and leaves the native head shown.
 EXPECTED_CRASHES = {
-    "finality": ("finality_not_durable", "A3"),
-    "rewind": ("native_head_is_new_head", "A4"),
-    "canonical": ("native_head_is_old_head", "A4"),
+    "finality": ("finality_not_durable", "A3", 0, ""),
+    # The rewind ran with finalized A3 and safe A5: the restart completes it
+    # and then decides the safe reset to A3 (one more decision).
+    "rewind": ("native_head_is_new_head", "A4", 1, "A3"),
+    "canonical": ("native_head_is_old_head", "A4", 0, "A3"),
+    # A crash between the head batch of H5 and the final head batch of H6:
+    # the restart completes the saved transition from its old head A4.
+    "reorg": ("completed_inside_reorg", "H6", 0, "A3"),
 }
 OUTSIDE_REFUSALS = ("geth.manual-commands", "geth.dev-sealing", "geth.sync-target", "geth.snap-sync")
 AC_ROWS = ("AC-CAP-01-01", "AC-LIF-05-02", "AC-LIF-05-03", "AC-LIF-06-04", "AC-LIF-06-05")
@@ -144,9 +155,10 @@ PUBLIC_SLOTS = ("ethereum-mainnet", "ethereum-sepolia", "ethereum-hoodi")
 
 
 def decision_shape(row):
-    """The comparable shape of one decision row of the probe."""
+    """The comparable shape of one decision row of the probe: a FINALITY row
+    by its field, caller and references, any other by kind, heads and members."""
     if row.get("kind") == "FINALITY":
-        return FINALITY
+        return ("FINALITY", row.get("finality"))
     return (row.get("kind"), row.get("old_hash"), row.get("new_hash"), list(row.get("members") or []))
 
 
@@ -161,8 +173,7 @@ def step_failures(steps, expected_names, prefix):
         rows = st.get("decisions") or []
         if any(row.get("state") != "NATIVE_DECIDED" for row in rows):
             failures.append(f"{prefix}: {name}: a decision is not NATIVE_DECIDED")
-        if [decision_shape(row) for row in rows] != [tuple(x) if x != FINALITY else FINALITY
-                                                    for x in [_shape(e) for e in EXPECTED_STEPS[name]]]:
+        if [decision_shape(row) for row in rows] != [_shape(e) for e in EXPECTED_STEPS[name]]:
             failures.append(f"{prefix}: {name}: decisions {[decision_shape(r) for r in rows]} differ")
         fragment = EXPECTED_ERRORS.get(name)
         error = st.get("error")
@@ -179,8 +190,8 @@ def step_failures(steps, expected_names, prefix):
 
 
 def _shape(expected):
-    if expected == FINALITY:
-        return FINALITY
+    if expected[0] == "FINALITY":
+        return tuple(expected)
     kind, old, new, members = expected
     return (kind, old, new, list(members))
 
@@ -206,7 +217,7 @@ def crash_failures(rows):
     by_name = {row.get("scenario"): row for row in rows if isinstance(row, dict)}
     if sorted(by_name) != sorted(EXPECTED_CRASHES):
         return ["crashes: not one report per scenario"]
-    for name, (evidence, head) in EXPECTED_CRASHES.items():
+    for name, (evidence, head, decided, safe) in EXPECTED_CRASHES.items():
         row = by_name[name]
         if row.get("exit_code") != 3:
             failures.append(f"crashes: {name}: the child did not stop at its crash point")
@@ -219,6 +230,10 @@ def crash_failures(rows):
             failures.append(f"crashes: {name}: an intent stays unresolved")
         if (row.get("refs") or {}).get("head_hash") != head:
             failures.append(f"crashes: {name}: the native head is not {head}")
+        if sum(e.get("event") == "lifecycle_decided" for e in row.get("settled") or []) != decided:
+            failures.append(f"crashes: {name}: the restart did not make {decided} reconciliation decision(s)")
+        if (row.get("refs") or {}).get("safe") != safe:
+            failures.append(f"crashes: {name}: safe is not {safe!r} after the restart")
     return failures
 
 
