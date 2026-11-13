@@ -1,0 +1,194 @@
+{
+ "after_import": {
+  "decisions": [
+   {
+    "kind": "IMPORT",
+    "marker": true,
+    "members": [
+     "A1"
+    ],
+    "new_head": "A1",
+    "old_head": "?",
+    "sequence": 0,
+    "state": "NATIVE_DECIDED"
+   },
+   {
+    "kind": "IMPORT",
+    "marker": true,
+    "members": [
+     "A2"
+    ],
+    "new_head": "A2",
+    "old_head": "A1",
+    "sequence": 1,
+    "state": "NATIVE_DECIDED"
+   },
+   {
+    "kind": "IMPORT",
+    "marker": true,
+    "members": [
+     "A3"
+    ],
+    "new_head": "A3",
+    "old_head": "A2",
+    "sequence": 2,
+    "state": "NATIVE_DECIDED"
+   },
+   {
+    "kind": "IMPORT",
+    "marker": true,
+    "members": [
+     "A4"
+    ],
+    "new_head": "A4",
+    "old_head": "A3",
+    "sequence": 3,
+    "state": "NATIVE_DECIDED"
+   },
+   {
+    "kind": "IMPORT",
+    "marker": true,
+    "members": [
+     "A5"
+    ],
+    "new_head": "A5",
+    "old_head": "A4",
+    "sequence": 4,
+    "state": "NATIVE_DECIDED"
+   }
+  ],
+  "error": "",
+  "head": {
+   "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "name": "A5",
+   "number": 5
+  }
+ },
+ "bootstrap_at_start": true,
+ "boundary": {
+  "digest": "fe647df41f0c03478be82ab50a139f673e1c018d9d29658c512662c6bd8929a5",
+  "head": {
+   "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+   "number": 0
+  },
+  "native_store_id": "0123456789abcdef0123456789abcdef",
+  "producer": "bor.run-1",
+  "root": "ee18cfebe5674118a0edd9e90cf103fa5c9ce652c689d2562b5ef426687296b7"
+ },
+ "coverage": {
+  "bor.import": {
+   "Intents": 0,
+   "Passes": 5,
+   "Refusals": 0
+  },
+  "bor.recovery": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  }
+ },
+ "decision_recovery": {
+  "completed": [],
+  "imported": [],
+  "rejected": [],
+  "resolved": []
+ },
+ "decisions": [
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A1"
+   ],
+   "new_head": "A1",
+   "old_head": "?",
+   "sequence": 0,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A2"
+   ],
+   "new_head": "A2",
+   "old_head": "A1",
+   "sequence": 1,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A3"
+   ],
+   "new_head": "A3",
+   "old_head": "A2",
+   "sequence": 2,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A4"
+   ],
+   "new_head": "A4",
+   "old_head": "A3",
+   "sequence": 3,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A5"
+   ],
+   "new_head": "A5",
+   "old_head": "A4",
+   "sequence": 4,
+   "state": "NATIVE_DECIDED"
+  }
+ ],
+ "evidence_records": 0,
+ "head_at_golive": {
+  "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+  "name": "?",
+  "number": 0
+ },
+ "native_head": {
+  "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+  "name": "A5",
+  "number": 5
+ },
+ "native_head_at_start": {
+  "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+  "name": "?",
+  "number": 0
+ },
+ "phase_after_start": "LIVE",
+ "reconcile": {
+  "boundary": {
+   "digest": "fe647df41f0c03478be82ab50a139f673e1c018d9d29658c512662c6bd8929a5",
+   "head": {
+    "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+    "number": 0
+   },
+   "native_store_id": "0123456789abcdef0123456789abcdef",
+   "producer": "bor.run-1",
+   "root": "ee18cfebe5674118a0edd9e90cf103fa5c9ce652c689d2562b5ef426687296b7"
+  },
+  "phase": "BOOTSTRAP",
+  "repaired": null,
+  "settled": []
+ },
+ "steps": [
+  {
+   "error": "",
+   "head": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "head_name": "A5",
+   "head_number": 5,
+   "name": "admin-import-A1-A5"
+  }
+ ]
+}

@@ -1,0 +1,285 @@
+{
+ "bootstrap_at_start": false,
+ "boundary": {
+  "digest": "fe647df41f0c03478be82ab50a139f673e1c018d9d29658c512662c6bd8929a5",
+  "head": {
+   "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+   "number": 0
+  },
+  "native_store_id": "0123456789abcdef0123456789abcdef",
+  "producer": "bor.run-1",
+  "root": "ee18cfebe5674118a0edd9e90cf103fa5c9ce652c689d2562b5ef426687296b7"
+ },
+ "coverage": {
+  "bor.recovery": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  }
+ },
+ "decision_recovery": {
+  "completed": [],
+  "imported": [],
+  "rejected": [],
+  "resolved": []
+ },
+ "decisions": [
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A1"
+   ],
+   "new_head": "A1",
+   "old_head": "?",
+   "sequence": 0,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A2"
+   ],
+   "new_head": "A2",
+   "old_head": "A1",
+   "sequence": 1,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A3"
+   ],
+   "new_head": "A3",
+   "old_head": "A2",
+   "sequence": 2,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A4"
+   ],
+   "new_head": "A4",
+   "old_head": "A3",
+   "sequence": 3,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A5"
+   ],
+   "new_head": "A5",
+   "old_head": "A4",
+   "sequence": 4,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [],
+   "new_head": "A2",
+   "old_head": "A5",
+   "sequence": 7,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [
+    "B3"
+   ],
+   "new_head": "B3",
+   "old_head": "A2",
+   "sequence": 8,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [
+    "B4"
+   ],
+   "new_head": "B4",
+   "old_head": "B3",
+   "sequence": 9,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [
+    "C4"
+   ],
+   "new_head": "C4",
+   "old_head": "B4",
+   "sequence": 11,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [
+    "D4"
+   ],
+   "new_head": "D4",
+   "old_head": "C4",
+   "sequence": 13,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [
+    "E4",
+    "E5"
+   ],
+   "new_head": "E5",
+   "old_head": "D4",
+   "sequence": 15,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "SIDE",
+   "marker": false,
+   "members": [
+    "G4"
+   ],
+   "new_head": "E5",
+   "old_head": "E5",
+   "sequence": 17,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [],
+   "new_head": "B3",
+   "old_head": "E5",
+   "sequence": 18,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "F4"
+   ],
+   "new_head": "F4",
+   "old_head": "B3",
+   "sequence": 19,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [],
+   "new_head": "F4",
+   "old_head": "F4",
+   "sequence": 20,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "H5"
+   ],
+   "new_head": "H5",
+   "old_head": "F4",
+   "sequence": 35,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "H6"
+   ],
+   "new_head": "H6",
+   "old_head": "H5",
+   "sequence": 40,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "H7"
+   ],
+   "new_head": "H7",
+   "old_head": "H6",
+   "sequence": 45,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "H8"
+   ],
+   "new_head": "H8",
+   "old_head": "H7",
+   "sequence": 50,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [],
+   "new_head": "H7",
+   "old_head": "H8",
+   "sequence": 51,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [],
+   "new_head": "H6",
+   "old_head": "H7",
+   "sequence": 52,
+   "state": "NATIVE_DECIDED"
+  }
+ ],
+ "evidence_records": 0,
+ "native_head": {
+  "hash": "fed845be70dcc33eb0be4e6991c14a070e775ff7dfc7d458a89c391080874068",
+  "name": "H6",
+  "number": 6
+ },
+ "native_head_at_start": {
+  "hash": "fed845be70dcc33eb0be4e6991c14a070e775ff7dfc7d458a89c391080874068",
+  "name": "H6",
+  "number": 6
+ },
+ "phase_after_start": "LIVE",
+ "reconcile": {
+  "boundary": {
+   "digest": "fe647df41f0c03478be82ab50a139f673e1c018d9d29658c512662c6bd8929a5",
+   "head": {
+    "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+    "number": 0
+   },
+   "native_store_id": "0123456789abcdef0123456789abcdef",
+   "producer": "bor.run-1",
+   "root": "ee18cfebe5674118a0edd9e90cf103fa5c9ce652c689d2562b5ef426687296b7"
+  },
+  "phase": "RECOVERY",
+  "repaired": null,
+  "settled": [
+   {
+    "caller": "bor.set-head",
+    "completed": false,
+    "outcome": "NATIVE_DECIDED",
+    "sequence": 52
+   }
+  ]
+ },
+ "steps": null
+}

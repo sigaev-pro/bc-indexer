@@ -1,5 +1,24 @@
 # Дерево решений и журнал интервью
 
+## D105 — Bor captures after a native initial sync (BOOTSTRAP on Bor) (2026-11-13)
+
+The Spec review 003 of the Bor block of E01-02.lifecycle_seams (#18, PR #171) found that the Bor capture node had no BOOTSTRAP window. The decision block's recovery driver (`bordecision.Start`) switched the admission and the decision bridge to LIVE at the first start, so the live boundary H was always the genesis, and the whole initial sync had to be captured block by block. The lifecycle plan row (D100) reads H "after the initial native sync", and the Geth block implements that window. The coordinator asked the owner how to proceed. The owner selected the coordinator's proposed option, "Add sync-first now (Recommended)":
+
+- The Bor block of E01-02.lifecycle_seams implements the BOOTSTRAP phase as the Geth block does. A new capture store first syncs natively and uncaptured. Then H is set, and only then do the admission, the decision bridge and the lifecycle gate go live. A restart keeps the stored H.
+- The block adds measured scenarios for:
+  - a first start in BOOTSTRAP;
+  - H set after the initial sync;
+  - a restart that keeps H;
+  - a crash during BOOTSTRAP.
+- This widens the allowed scope of the Bor block to the startup and recovery driver of the Bor decision block (`adapters/bor/decision/native/**`), as far as BOOTSTRAP needs. Shared files stay byte-identical.
+
+Recorded technical decisions, not owner answers:
+
+- The Bor block reaches the decision block's startup through its own anchored patch set (`adapters/bor/lifecycle/native/patches.json`) and a new file in the installed `extractor/bordecision` package. The source files of `adapters/bor/decision/native/**` stay unchanged.
+- A new capture store stays in BOOTSTRAP: no observer, no decider and no choke-point hook. The lifecycle gate is open with non-observing passes, and only the whitelist hook is installed, so whitelist callers take the guard and never span the switch to LIVE. A store with capture records but no boundary is refused instead. `bor server --extractor.capture` calls GoLive once the native `eth.Synced()` reports the end of the initial sync; the probe calls the same function.
+- GoLive runs the deferred recovery driver under `chainmu` and the guard. It flushes the state root of the native head through the hash trie database, records it as H, and installs the decider and the observer in the same lock, so no import runs uncaptured after H.
+- As with D96 to D104, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.lifecycle_seams card is read through this decision. This decision changes when Bor capture starts; it does not change product guarantees or acceptance cases. Every public cell stays NOT_RUN.
+
 ## D104 — BSC known blocks and side branches fail closed; the targeted replay goes to E05-02.reorg (2026-11-13)
 
 The BSC block of E01-02.lifecycle_seams (#18) found two rows of the shared caller map that the BSC capture path can never route through a decision: `bsc.known-block` and `bsc.side-chain`. The BSC admission seam observes only a block on top of the head with its state, so a side branch, or a branch whose parent state was pruned, is refused at `Begin`. A decision closes its observation and purges its inputs (D100), so no block of another branch ever has a retained corpus (an EXEC_READY observation). The known-branch corpus rule can therefore never be met for BSC, `lifecycle.Gaps` cannot be empty, and AC-CAP-01-01 cannot pass on the BSC slot. The coordinator asked the owner how to handle these rows. The owner selected the coordinator's proposed option, "Fail closed now, fix later (Recommended)":

@@ -1,0 +1,181 @@
+{
+ "bootstrap_at_start": true,
+ "boundary": {
+  "digest": "d3f6b8d9f4bcd8c2b91f25cc53b98a3be05f339b49cbb8f2a8b3a675b1ebba0c",
+  "head": {
+   "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "number": 5
+  },
+  "native_store_id": "0123456789abcdef0123456789abcdef",
+  "producer": "bor.run-1",
+  "root": "7fd511c43c83795af953aff4f052ea98e0140ec972d8860249febac6c9eab99d"
+ },
+ "coverage": {
+  "bor.import": {
+   "Intents": 0,
+   "Passes": 3,
+   "Refusals": 0
+  },
+  "bor.milestone": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  },
+  "bor.milestone-lock": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  },
+  "bor.recovery": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  }
+ },
+ "coverage_before_golive": {
+  "bor.milestone": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  }
+ },
+ "decision_recovery": {
+  "completed": [],
+  "imported": [],
+  "rejected": [],
+  "resolved": []
+ },
+ "decisions": [
+  {
+   "kind": "SIDE",
+   "marker": false,
+   "members": [
+    "B3"
+   ],
+   "new_head": "A5",
+   "old_head": "A5",
+   "sequence": 0,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "SIDE",
+   "marker": false,
+   "members": [
+    "B4"
+   ],
+   "new_head": "A5",
+   "old_head": "A5",
+   "sequence": 1,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A6"
+   ],
+   "new_head": "A6",
+   "old_head": "A5",
+   "sequence": 2,
+   "state": "NATIVE_DECIDED"
+  }
+ ],
+ "evidence_records": 0,
+ "golive_waited_for_vote": true,
+ "head_at_golive": {
+  "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+  "name": "A5",
+  "number": 5
+ },
+ "native_head": {
+  "hash": "80b5d8ff3e845ab89522f0549d2ef8a0132600461fd34bd77b6ef5e4fae8009a",
+  "name": "A6",
+  "number": 6
+ },
+ "native_head_at_start": {
+  "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+  "name": "?",
+  "number": 0
+ },
+ "phase_after_start": "LIVE",
+ "reconcile": {
+  "boundary": {
+   "digest": "d3f6b8d9f4bcd8c2b91f25cc53b98a3be05f339b49cbb8f2a8b3a675b1ebba0c",
+   "head": {
+    "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+    "number": 5
+   },
+   "native_store_id": "0123456789abcdef0123456789abcdef",
+   "producer": "bor.run-1",
+   "root": "7fd511c43c83795af953aff4f052ea98e0140ec972d8860249febac6c9eab99d"
+  },
+  "phase": "BOOTSTRAP",
+  "repaired": null,
+  "settled": []
+ },
+ "steps": [
+  {
+   "error": "",
+   "head": "94a92fb98cd473561c356b29228a5b192550515a196a0f3cf8694a36e735f313",
+   "head_name": "A1",
+   "head_number": 1,
+   "name": "import-A1"
+  },
+  {
+   "error": "",
+   "head": "63b4ab8cd2aa7e2ea5e3b26d046cdc84051742277434b8e358d18b04808b5d8d",
+   "head_name": "A2",
+   "head_number": 2,
+   "name": "import-A2"
+  },
+  {
+   "error": "",
+   "head": "88cb3b9f303937dce25d625cb9603071fe83457a8fe2040348531025ce95444a",
+   "head_name": "A3",
+   "head_number": 3,
+   "name": "import-A3"
+  },
+  {
+   "error": "",
+   "head": "2c7ded631e797308a9d38ef39623b13b2f26d135e37246198af35a200fa96329",
+   "head_name": "A4",
+   "head_number": 4,
+   "name": "import-A4"
+  },
+  {
+   "error": "",
+   "head": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "head_name": "A5",
+   "head_number": 5,
+   "name": "import-A5"
+  },
+  {
+   "error": "",
+   "head": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "head_name": "A5",
+   "head_number": 5,
+   "name": "golive"
+  },
+  {
+   "error": "",
+   "head": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "head_name": "A5",
+   "head_number": 5,
+   "name": "import-B3"
+  },
+  {
+   "error": "",
+   "head": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "head_name": "A5",
+   "head_number": 5,
+   "name": "import-B4"
+  },
+  {
+   "error": "",
+   "head": "80b5d8ff3e845ab89522f0549d2ef8a0132600461fd34bd77b6ef5e4fae8009a",
+   "head_name": "A6",
+   "head_number": 6,
+   "name": "import-A6"
+  }
+ ]
+}

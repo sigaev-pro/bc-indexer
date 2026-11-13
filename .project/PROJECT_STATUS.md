@@ -320,8 +320,9 @@ PR #168 at `cfb9195`.
 
 ## E01-02.lifecycle_seams — Map all required native lifecycle callers (issue #18)
 
-Status: IN_PROGRESS. Block 0 (lifecycle-core) is in review; the Geth, BSC and
-Bor blocks start after it merges. Dependencies E01-02.decision_bridge (#17,
+Status: IN_PROGRESS. Block 0 (lifecycle-core) merged in PR #165, the Geth
+block in PR #170 and the BSC block in PR #172; the Bor block is in review
+(PR #171). Dependencies E01-02.decision_bridge (#17,
 merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Plan from the
 coordinator on 2026-11-13, approved by the owner, the same split as #16 and
 #17: block 0 core (architect, then native-engineer), then parallel Geth, BSC
@@ -575,6 +576,93 @@ AC-LIF-05-03 PASS, AC-LIF-06-04 and 06-05 NOT_APPLICABLE (BSC only); family
 PASS. Public ETH cells stay NOT_RUN.
 
 Next: Spec and Standards reviews, hosted CI, the final review comment.
+
+### Bor block
+
+Base `51adbee` (block 0 merged in PR #165); merged `origin/main` `07ae232`
+(#170) with a merge commit. Branch/worktree: `claude/e01-02-lifecycle-bor` /
+`e01-02-admission-bor-b95e1c`. Draft PR #171, Part of #18. Allowed paths:
+`adapters/bor/lifecycle/native/**`,
+`.project/evidence/E01-02.lifecycle_seams.bor.md`, this subsection, and D105.
+D105 widened them to the Bor decision block's startup and recovery driver
+as far as BOOTSTRAP needs; its sources stay unchanged. Roles and split as
+the coordinator records them: the owner agreed on 2026-11-13 to the
+#16-style split ("Очищай лишнее и запускай все", translated from Russian as
+"clean up what is extra and start everything"). This is the Bor
+native-engineer session, which also gives the qa matrix of the POLY slot.
+
+Design:
+[adapters/bor/lifecycle/native/README.md](../adapters/bor/lifecycle/native/README.md).
+A third anchored patch set (48 edits) and the `borlifecycle` glue route all
+27 Bor callers:
+- **Passes.** One pass per import decision, lent to nested calls under
+  `chainmu`.
+- **DECISION callers.** CANONICAL decisions for set-head, set-canonical,
+  known-block, the milestone rewind and the startup reconcile. One FINALITY
+  decision per native finality write of the whitelist (milestone,
+  checkpoint, vote lock) and the set-head clear, with the guard taken before
+  the whitelist lock.
+- **REFUSE callers.** Refused through the gate, the `bor server` profile
+  check, or the manual-command guard (`removedb`,
+  `purge-whitelisted-entries`, `backfill-statesync-txs`; a plain
+  `bor server` on a capture store).
+- **Startup reconcile.** It settles lifecycle intents from native evidence
+  and completes an interrupted multi-block rewind or reorganization.
+- **BOOTSTRAP (D105).** The native initial sync runs uncaptured; GoLive then
+  sets H under `chainmu` and the guard and installs the decider and the
+  observer in the same lock. `bor server` goes live at `eth.Synced()`.
+
+Technical decisions (evidence, "Technical decisions"):
+- known-block is exercised through a direct hook, because no native entry
+  reaches `writeKnownBlock` on a capture node;
+- the milestone reorganization is a rewind decision, then import and
+  set-canonical decisions, under one chain lock;
+- lifecycle markers go in a batch of their own and are settled from
+  evidence;
+- the startup reconcile compares the head only (startup finality: owner
+  E05-01.polygon_observer).
+
+Records at measured head `b4f90bd` (evidence:
+[E01-02.lifecycle_seams.bor](evidence/E01-02.lifecycle_seams.bor.md)):
+- preparation 08: PASS;
+- run 01: PASS, native 67.8 s, every judge check holds, `Gaps` empty in Go
+  and Python;
+- 29 portable tests;
+- 88 of 88 driver mutants killed.
+
+Preparations 01 to 07 are kept under D83:
+- 01 failed before the build;
+- 02 to 06 passed on superseded heads;
+- 07 failed on a full host disk.
+
+Reviews 001 to 005: Spec and Standards REQUEST_CHANGES, every finding fixed.
+D105 came from review 003. Review 006 (head `b4f90bd`): Spec PASS and
+Standards PASS, with P3 notes only. The docs notes are fixed after the
+measured head; the code notes are recorded in the evidence.
+
+qa verdict, private local POLY:
+- AC-CAP-01-01 PASS (harness and `admin_importChain` reach the bridge with
+  the same result; `Gaps` empty);
+- AC-LIF-05-02, 05-03, 06-04 and 06-05 NOT_APPLICABLE (ETH and BSC cases);
+- family PASS.
+
+Public POLY cells stay NOT_RUN.
+
+Merge of main: the branch merged `origin/main` `425cf71` (#172, D104) after
+the measured round. The merge adds only BSC files and docs, so run 01 still
+describes the measured code. The owner decisions on D104 (E05-02.reorg owns
+ordinary BSC side branches and reorganizations) and on closing #18 with the
+two BSC rows deferred to E05-02.reorg change no Bor row (evidence, "Merge
+of main and later owner decisions"). They are not yet recorded in
+DECISIONS.md; until the coordinator records them, D104 and its #18 closing
+rule stand as written.
+
+The `bor.manual-commands` row of the shared caller map does not yet name
+`bor backfill-statesync-txs`. The map is a shared file that the measured run
+reads, so the coordinator adds it in the #18 acceptance record.
+
+Next: Spec and Standards confirmation of the merge and the docs commits,
+hosted CI, the final review comment.
 
 ### BSC block
 
