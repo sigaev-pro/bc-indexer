@@ -641,13 +641,18 @@ returned PASS when the row verdicts failed. Fixed in `28b45cd` (the verdicts
 are computed before the failures), with a mutant in `8ed0f73`; the probe also
 calls `InsertHeadersBeforeCutoff` now.
 
+Review 003 (head `d38a94c`): Spec PASS and Standards PASS, no findings. One
+item for the owner: confirm that the E05-02.reorg assignment of D104 also
+covers ordinary BSC side branches and reorganizations (a technical reading
+recorded in D104). Later commits change only docs.
+
 qa verdict, private local BSC: AC-CAP-01-01 FAIL, with `bsc.known-block` and
 `bsc.side-chain` DEFERRED under D104 and every other row PASS (four
 READ_ONLY rows by source review, `bsc.notify-finalized` NOT_APPLICABLE for
 E05-01.bsc_finality). AC-LIF-05-02 and 05-03 NOT_APPLICABLE (ETH only, D104).
 AC-LIF-06-04 PASS and AC-LIF-06-05 PASS. Public BSC cells stay NOT_RUN.
 
-Next: Spec and Standards reviews, hosted CI, the final review comment.
+Next: hosted CI on the final head and the final review comment.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
