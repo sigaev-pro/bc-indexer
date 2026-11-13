@@ -117,6 +117,7 @@ NATIVE_EXTRAS = (
     ("SetCanonical (Engine API)", "ErrRefused", "bsc.engine-api"),
     ("InsertReceiptChain (snap sync)", "ErrRefused", "bsc.snap-sync"),
     ("InsertHeaderChain (header sync)", "ErrRefused", "bsc.snap-sync"),
+    ("InsertHeadersBeforeCutoff (header sync)", "ErrRefused", "bsc.snap-sync"),
     ("WriteBlockAndSetHead (miner)", "ErrRefused", "bsc.sealing"),
     ("StartMining", "ErrRefused", "bsc.sealing"),
     ("ResetWithGenesisBlock", "other", "chain reset is refused on a capture store"),
@@ -581,8 +582,9 @@ def judge(report, trace, raw_blocks, genesis_hash, callers):
     part("attestation fault", judge_attestation_fault, c, report, trace, genesis_head)
     part("events", judge_events, c, report)
     part("crashes", judge_crashes, c, report)
-    failures = c.failures()
     rows = part("rows", row_verdicts, routes, report.get("coverage", {}), callers, default={})
+    c.check("every BSC row of the map has a verdict", bool(rows) and sorted(rows) == sorted(routes), sorted(rows))
+    failures = c.failures()
     clean = not failures
     matrix = {
         "AC-CAP-01-01": {"bsc-private-local": "FAIL" if clean else "FAIL_CHECKS",

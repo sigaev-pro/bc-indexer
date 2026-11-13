@@ -267,6 +267,12 @@
       "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
       "original": "        require(artifact(record[\"outputs\"][name], 64 * 1024 * 1024) == work / name,\n                f\"The retained {name} is not the recorded one\")",
       "replacement": "        pass"
+    },
+    {
+      "name": "row verdicts present",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    c.check(\"every BSC row of the map has a verdict\", bool(rows) and sorted(rows) == sorted(routes), sorted(rows))\n",
+      "replacement": ""
     }
   ]
 }

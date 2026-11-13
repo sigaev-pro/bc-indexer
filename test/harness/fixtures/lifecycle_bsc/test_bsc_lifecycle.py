@@ -342,6 +342,15 @@ class RefusalTests(unittest.TestCase):
         summary = self.refused(change)
         self.assertTrue(any("well-formed" in f["check"] for f in summary["failures"]))
 
+    def test_row_verdicts_fail(self):
+        report, trace, raw = sample()
+        evidence = bsc_lifecycle.READ_ONLY_EVIDENCE.pop("bsc.freezer")
+        try:
+            summary = judge(report, trace, raw)
+        finally:
+            bsc_lifecycle.READ_ONLY_EVIDENCE["bsc.freezer"] = evidence
+        self.assertEqual(summary["result"], "FAIL")
+
     def test_map_differs(self):
         def change(report, trace, raw):
             report["routes"]["bsc.sealing"] = "READ_ONLY"

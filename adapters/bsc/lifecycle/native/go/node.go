@@ -258,6 +258,9 @@ func OpenObligations(db ethdb.Database) ([]string, error) {
 	if err := iterator.Error(); err != nil {
 		return nil, err
 	}
+	// A run with decision records but no counter is released: the bridge
+	// writes an intent record, syncs, then writes the counter, so such a
+	// record is an orphan intent that no native mutation followed.
 	var open []string
 	for _, owner := range order {
 		if runs[owner].low < runs[owner].next {

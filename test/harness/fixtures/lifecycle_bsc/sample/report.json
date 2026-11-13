@@ -853,7 +853,7 @@
   "bsc.snap-sync": {
    "intents": 0,
    "passes": 0,
-   "refusals": 13
+   "refusals": 14
   },
   "bsc.startup-reconcile": {
    "intents": 2,
@@ -2697,6 +2697,31 @@
     }
    },
    {
+    "name": "InsertHeadersBeforeCutoff (header sync)",
+    "error": "caller is refused in the capture profile: bsc.snap-sync (the node flag check refuses any sync mode but full sync on a capture store)",
+    "class": "ErrRefused",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
     "name": "WriteBlockAndSetHead (miner)",
     "error": "caller is refused in the capture profile: bsc.sealing (the node flag check refuses mining, voting and builder roles; SystemCallBackend refuses calls by number)",
     "class": "ErrRefused",
@@ -2836,5 +2861,5 @@
   "bsc.trace-state": "READ_ONLY"
  },
  "schema_version": 1,
- "seconds": 8.046495474
+ "seconds": 12.899947778
 }

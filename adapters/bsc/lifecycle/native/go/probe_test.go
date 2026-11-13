@@ -946,6 +946,8 @@ func TestBSCLifecycleProbe(t *testing.T) {
 	rn.record("InsertReceiptChain (snap sync)", err, nil)
 	_, err = chain.InsertHeaderChain([]*types.Header{fx.blocks["S4"].Header()})
 	rn.record("InsertHeaderChain (header sync)", err, nil)
+	_, err = chain.InsertHeadersBeforeCutoff([]*types.Header{fx.blocks["S4"].Header()})
+	rn.record("InsertHeadersBeforeCutoff (header sync)", err, nil)
 	_, err = chain.WriteBlockAndSetHead(fx.blocks["S4"], nil, nil, nil, nil)
 	rn.record("WriteBlockAndSetHead (miner)", err, nil)
 	rn.record("StartMining", n.eth.StartMining(), nil)
