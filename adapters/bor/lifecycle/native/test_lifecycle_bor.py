@@ -76,7 +76,7 @@ class Coverage(unittest.TestCase):
         self.assertEqual(coverage["bor.parallel"], {"Passes": 0, "Intents": 0, "Refusals": 1})
         self.assertEqual(coverage["bor.seal-write"]["Refusals"], 4)
         self.assertEqual(coverage["bor.manual-commands"]["Refusals"], 3)
-        self.assertEqual(coverage["bor.recovery"]["Passes"], 11)
+        self.assertEqual(coverage["bor.recovery"]["Passes"], 13)
 
     def test_gaps_rules(self):
         coverage = lb.summed_coverage(sample())
@@ -228,6 +228,32 @@ class Judge(unittest.TestCase):
                          "step known-A3-refused failed")
         self.assertFails(lambda o: o["profile"]["plain_server"].update(refused=False), "without --extractor.capture")
         self.assertFails(lambda o: o["profile"].pop("plain_server"), "without --extractor.capture")
+
+    def test_bootstrap_changes(self):
+        self.assertFails(lambda o: o["crash-bootstrap"].update(exit=1), "BOOTSTRAP child did not stop")
+        self.assertFails(lambda o: o["crash-bootstrap"].update(stderr_tail=""), "BOOTSTRAP child did not stop")
+        self.assertFails(lambda o: o["bootstrap"].update(bootstrap_at_start=False), "did not sync natively")
+        self.assertFails(lambda o: o["bootstrap"]["reconcile"].update(phase="RECOVERY"), "did not sync natively")
+        self.assertFails(lambda o: o["bootstrap"].update(phase_after_start="BOOTSTRAP"), "did not sync natively")
+        self.assertFails(lambda o: o["bootstrap"]["steps"][5].update(error="x"), "did not sync natively")
+        self.assertFails(lambda o: o["bootstrap"]["steps"].pop(5), "did not sync natively")
+        self.assertFails(lambda o: o["bootstrap"].update(error="x"), "did not sync natively")
+        self.assertFails(lambda o: o["bootstrap"]["head_at_golive"].update(name="A4"), "H is not the native head")
+        self.assertFails(lambda o: o["bootstrap"]["reconcile"]["boundary"]["head"].update(hash="00"),
+                         "H is not the native head")
+        self.assertFails(lambda o: o["bootstrap"]["decisions"].insert(0, dict(o["bootstrap"]["decisions"][0],
+                                                                              kind="IMPORT", members=["A1"])),
+                         "the initial sync was captured")
+        self.assertFails(lambda o: o["bootstrap"]["decisions"].pop(), "the initial sync was captured")
+        self.assertFails(lambda o: o["bootstrap-restart"].update(bootstrap_at_start=True), "did not keep H")
+        self.assertFails(lambda o: o["bootstrap-restart"]["reconcile"].update(phase="BOOTSTRAP"), "did not keep H")
+        self.assertFails(lambda o: o["bootstrap-restart"].update(phase_after_start="RECOVERY"), "did not keep H")
+        self.assertFails(lambda o: o["bootstrap-restart"]["reconcile"]["boundary"]["head"].update(number=4),
+                         "did not keep H")
+        self.assertFails(lambda o: o["bootstrap-restart"]["native_head"].update(name="A4"), "did not keep H")
+        self.assertFails(lambda o: o["bootstrap-restart"]["decisions"].pop(), "did not keep H")
+        self.assertFails(lambda o: o["bootstrap-restart"].update(error="x"), "did not keep H")
+        self.assertFails(lambda o: o["scenario"].update(bootstrap_at_start=False), "BOOTSTRAP to LIVE")
 
     def test_manual_messages(self):
         self.assertFails(lambda o: o["manual"]["commands"][0].update(output="flag provided but not defined"),

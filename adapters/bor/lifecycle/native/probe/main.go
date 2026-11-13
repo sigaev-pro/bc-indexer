@@ -430,14 +430,15 @@ func readBlocks(path string) (map[string]*types.Block, error) {
 // The capture node.
 
 type capture struct {
-	stack   *node.Node
-	eth     *eth.Ethereum
-	chain   *core.BlockChain
-	run     *wire.Run
-	blocks  map[string]*types.Block
-	result  map[string]any
-	steps   []Step
-	stopped bool
+	stack    *node.Node
+	eth      *eth.Ethereum
+	chain    *core.BlockChain
+	run      *wire.Run
+	blocks   map[string]*types.Block
+	result   map[string]any
+	steps    []Step
+	stopped  bool
+	stepHook func(string, string)
 }
 
 // Step is one scenario step: what ran, the native head after it, and the
@@ -474,7 +475,7 @@ func (c common_) capture() wire.Capture {
 // start opens the capture node through the capture wiring of `bor server`:
 // the profile-checked native backend, then wire.Start (admission, lifecycle
 // gate in the decision recovery driver, live observer).
-func start(c common_, step func(string, string)) (*capture, error) {
+func start(c common_, step func(string, string), stay bool) (*capture, error) {
 	in, err := loadInputs(*c.genesis, *c.config)
 	if err != nil {
 		return nil, err
@@ -510,12 +511,40 @@ func start(c common_, step func(string, string)) (*capture, error) {
 		shutdown(stack, backend)
 		return nil, fmt.Errorf("capture start: %w", err)
 	}
-	run.Lifecycle.Step = step
-	result["reconcile"] = run.Lifecycle.Report()
-	result["decision_recovery"] = run.Decided.Report
-	result["phase_after_start"] = string(run.Lifecycle.Phase())
-	return &capture{stack: stack, eth: backend, chain: backend.BlockChain(), run: run, blocks: blocks, result: result},
-		nil
+	result["bootstrap_at_start"] = run.Bootstrapping()
+	node := &capture{stack: stack, eth: backend, chain: backend.BlockChain(), run: run, blocks: blocks, result: result,
+		stepHook: step}
+	if run.Bootstrapping() {
+		result["phase_after_start"] = "BOOTSTRAP"
+		if !stay {
+			if err := node.goLive(); err != nil {
+				node.close()
+				return nil, err
+			}
+		}
+		return node, nil
+	}
+	node.live()
+	return node, nil
+}
+
+// goLive ends BOOTSTRAP (wire.Run.GoLive, the call of the bor server
+// watcher) and records the head it set as H.
+func (c *capture) goLive() error {
+	head := headRow(c.chain.CurrentBlock(), c.blocks)
+	if err := c.run.GoLive(); err != nil {
+		return err
+	}
+	c.result["head_at_golive"] = head
+	c.live()
+	return nil
+}
+
+func (c *capture) live() {
+	c.run.Lifecycle.Step = c.stepHook
+	c.result["reconcile"] = c.run.Lifecycle.Report()
+	c.result["decision_recovery"] = c.run.Decided.Report
+	c.result["phase_after_start"] = string(c.run.Lifecycle.Phase())
 }
 
 func headRow(h *types.Header, blocks map[string]*types.Block) map[string]any {
@@ -555,6 +584,10 @@ type DecisionRow struct {
 }
 
 func (c *capture) decisions() ([]DecisionRow, error) {
+	if c.run.Decided.Bridge == nil {
+		// BOOTSTRAP: the bridge is not open; nothing is decided.
+		return []DecisionRow{}, nil
+	}
 	token := c.run.Import.Driver.Guard.Acquire()
 	defer token.Release()
 	return decisionRows(c.run.Decided.Bridge, token, c.blocks)
@@ -583,8 +616,11 @@ func (c *capture) finish(out string, failure error) error {
 	rows, derr := c.decisions()
 	c.result["steps"] = c.steps
 	c.result["decisions"] = rows
-	c.result["coverage"] = c.run.Lifecycle.Coverage()
-	c.result["boundary"], _ = gateBoundary(c.run.Lifecycle)
+	c.result["coverage"] = map[string]lifecycle.Reach{}
+	if c.run.Lifecycle != nil {
+		c.result["coverage"] = c.run.Lifecycle.Coverage()
+		c.result["boundary"], _ = gateBoundary(c.run.Lifecycle)
+	}
 	c.result["native_head"] = headRow(c.chain.CurrentBlock(), c.blocks)
 	c.result["evidence_records"] = c.evidenceRecords()
 	if failure != nil {
@@ -666,7 +702,7 @@ func scenario(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	node, err := start(c, nil)
+	node, err := start(c, nil, false)
 	if err != nil {
 		return err
 	}
@@ -827,6 +863,10 @@ func restart(args []string) error {
 	imports := flags.String("import", "", "comma-separated blocks to import after the start")
 	setHead := flags.Uint64("sethead", 0, "SetHead after the start (0: none)")
 	refuse := flags.String("refuse-sethead", "", "comma-separated SetHead targets that must be refused")
+	bootstrap := flags.Bool("bootstrap", false, "on a store in BOOTSTRAP, import natively before GoLive")
+	crashBootstrap := flags.Bool("crash-bootstrap", false, "exit after the BOOTSTRAP imports (crash point)")
+	goLive := flags.Bool("golive", false, "end BOOTSTRAP (GoLive) after the imports")
+	importLive := flags.String("import-live", "", "comma-separated blocks to import after GoLive")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -850,7 +890,7 @@ func restart(args []string) error {
 			}
 		}
 	}
-	node, err := start(c, step)
+	node, err := start(c, step, *bootstrap)
 	if err != nil {
 		return err
 	}
@@ -867,6 +907,19 @@ func restart(args []string) error {
 	}
 	if *imports != "" {
 		for _, name := range strings.Split(*imports, ",") {
+			node.insert("import-"+name, name)
+		}
+	}
+	if *crashBootstrap {
+		// The native imports of BOOTSTRAP are written; nothing was captured.
+		fmt.Fprintln(os.Stderr, "crash point: during BOOTSTRAP at", headRow(node.chain.CurrentBlock(), node.blocks)["name"])
+		os.Exit(3)
+	}
+	if *goLive {
+		node.step("golive", node.goLive())
+	}
+	if *importLive != "" {
+		for _, name := range strings.Split(*importLive, ",") {
 			node.insert("import-"+name, name)
 		}
 	}
@@ -939,7 +992,7 @@ func nativeCaller(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	node, err := start(c, nil)
+	node, err := start(c, nil, false)
 	if err != nil {
 		return err
 	}

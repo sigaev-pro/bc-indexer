@@ -129,7 +129,7 @@
   {
    "name": "scenario phases",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "sc[\"reconcile\"][\"phase\"] == \"BOOTSTRAP\" and sc[\"phase_after_start\"] == \"LIVE\"",
+   "original": "sc[\"reconcile\"][\"phase\"] == \"BOOTSTRAP\"\n          and sc[\"phase_after_start\"] == \"LIVE\"",
    "replacement": "sc[\"phase_after_start\"] == \"LIVE\""
   },
   {
@@ -291,8 +291,86 @@
   {
    "name": "coverage new node files",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "\"native-caller\", \"stateless\", \"refuse\")",
-   "replacement": "\"native-caller\", \"stateless\")"
+   "original": "\"native-caller\", \"stateless\", \"refuse\", \"bootstrap\", \"bootstrap-restart\")",
+   "replacement": "\"native-caller\", \"stateless\", \"refuse\", \"bootstrap\")"
+  },
+  {
+   "name": "bootstrap crash",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(crash_boot[\"exit\"] == 3 and \"crash point: during BOOTSTRAP\" in crash_boot[\"stderr_tail\"],",
+   "replacement": "check(True,"
+  },
+  {
+   "name": "bootstrap flag",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "    check(not boot.get(\"error\") and boot.get(\"bootstrap_at_start\") is True\n",
+   "replacement": "    check(not boot.get(\"error\")\n"
+  },
+  {
+   "name": "bootstrap phases",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and boot[\"reconcile\"][\"phase\"] == \"BOOTSTRAP\" and boot[\"phase_after_start\"] == \"LIVE\"\n",
+   "replacement": ""
+  },
+  {
+   "name": "bootstrap steps",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and all(s[\"error\"] == \"\" for s in boot[\"steps\"])\n",
+   "replacement": ""
+  },
+  {
+   "name": "bootstrap golive step",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and [s[\"name\"] for s in boot[\"steps\"]][-3:] == [\"golive\", \"import-B3\", \"import-B4\"],",
+   "replacement": ","
+  },
+  {
+   "name": "bootstrap H",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(boot.get(\"head_at_golive\", {}).get(\"name\") == \"A5\"\n",
+   "replacement": "check(True\n"
+  },
+  {
+   "name": "bootstrap H boundary",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and boundary4.get(\"head\", {}).get(\"hash\") == boot[\"head_at_golive\"][\"hash\"],",
+   "replacement": ","
+  },
+  {
+   "name": "bootstrap uncaptured",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(rows(boot[\"decisions\"]) == [(\"SIDE\", \"A5\", \"A5\", [\"B3\"]), (\"SIDE\", \"A5\", \"A5\", [\"B4\"])],",
+   "replacement": "check(True,"
+  },
+  {
+   "name": "bootstrap restart flag",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "    check(not again.get(\"error\") and again.get(\"bootstrap_at_start\") is False\n",
+   "replacement": "    check(not again.get(\"error\")\n"
+  },
+  {
+   "name": "bootstrap restart phases",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and again[\"reconcile\"][\"phase\"] == \"RECOVERY\" and again[\"phase_after_start\"] == \"LIVE\"\n",
+   "replacement": ""
+  },
+  {
+   "name": "bootstrap restart H",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and again[\"reconcile\"].get(\"boundary\") == boundary4 and again[\"native_head\"][\"name\"] == \"A5\"\n",
+   "replacement": ""
+  },
+  {
+   "name": "bootstrap restart decisions",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and rows(again[\"decisions\"]) == rows(boot[\"decisions\"]),\n          \"the restart after BOOTSTRAP did not keep H\")",
+   "replacement": ",\n          \"the restart after BOOTSTRAP did not keep H\")"
+  },
+  {
+   "name": "scenario bootstrap flag",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(sc.get(\"bootstrap_at_start\") is True and sc[\"reconcile\"][\"phase\"] == \"BOOTSTRAP\"",
+   "replacement": "check(sc[\"reconcile\"][\"phase\"] == \"BOOTSTRAP\""
   },
   {
    "name": "advance imports",

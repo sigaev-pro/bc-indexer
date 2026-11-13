@@ -67,6 +67,23 @@ func Enable() { enabled.Store(true) }
 // Disable undoes Enable.
 func Disable() { enabled.Store(false) }
 
+// Bootstrapping reports whether a capture store waits in BOOTSTRAP (D105): the
+// gate is enabled and the producer run has no live boundary H yet. It takes
+// the guard for the read and changes nothing.
+func Bootstrapping(db ethdb.Database, guard *admission.Guard, adm *admission.Admission, storeID string) (bool,
+	error) {
+	if !enabled.Load() {
+		return false, nil
+	}
+	token := guard.Acquire()
+	gate, err := lifecycle.Open(token, db, adm, storeID, Client, false)
+	err = errors.Join(err, token.Release())
+	if err != nil {
+		return false, err
+	}
+	return gate.Phase() == lifecycle.Bootstrap, nil
+}
+
 // Of returns the lifecycle of a capture chain, or nil.
 func Of(chain *core.BlockChain) *Node {
 	if value, ok := nodes.Load(chain); ok {
@@ -84,6 +101,9 @@ type Inputs struct {
 	Bridge    *decision.Bridge
 	StoreID   string
 	Roots     decision.Roots
+	// Observer is installed when the gate goes live, in the same chain lock
+	// (nil: the caller attaches it).
+	Observer core.ExtractorObserver
 }
 
 // Settled is one unresolved lifecycle intent that the startup reconcile
@@ -215,11 +235,25 @@ func (n *Node) GoLive(token *admission.Token) error {
 	n.stack, n.held, n.recovery = nil, nil, nil
 	n.mu.Unlock()
 	head := n.in.Chain.CurrentBlock()
+	if _, live := n.gate.Boundary(); !live {
+		// The initial native sync keeps recent state in memory (gcmode
+		// full): H's state root is flushed through the hash trie database
+		// and synced before the boundary needs it durable.
+		if err := n.in.Chain.TrieDB().Commit(head.Root, false); err != nil {
+			return err
+		}
+		if err := n.in.DB.SyncKeyValue(); err != nil {
+			return err
+		}
+	}
 	b, err := n.gate.GoLive(token, headOf(head), hexOf(head.Root), n.in.Roots, n.in.Bridge)
 	if err != nil {
 		return err
 	}
 	n.report.Boundary = &b
+	if n.in.Observer != nil {
+		n.in.Chain.SetExtractorObserver(n.in.Observer)
+	}
 	return nil
 }
 

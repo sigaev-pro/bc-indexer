@@ -64,6 +64,7 @@
    "number": 5
   }
  },
+ "bootstrap_at_start": true,
  "boundary": {
   "digest": "fe647df41f0c03478be82ab50a139f673e1c018d9d29658c512662c6bd8929a5",
   "head": {
@@ -373,6 +374,11 @@
   }
  ],
  "evidence_records": 0,
+ "head_at_golive": {
+  "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
+  "name": "?",
+  "number": 0
+ },
  "native_head": {
   "hash": "e6503fb5ba68a5d08a785bfcd3bfa09e5a2ad73cf9f4a5f1d9f35d16eb9b0feb",
   "name": "H7",

@@ -153,7 +153,7 @@ PROFILE_REFUSALS = {
 }
 
 COVERAGE_FILES = ("scenario", "restart", "settle", "resolved", "imported", "advance", "completed", "repair",
-                  "native-caller", "stateless", "refuse")
+                  "native-caller", "stateless", "refuse", "bootstrap", "bootstrap-restart")
 OUTSIDE_FILES = ("profile", "manual")
 
 
@@ -208,8 +208,8 @@ def judge(outputs, callers_map):
 
     sc = outputs["scenario"]
     check(not sc.get("error") and not sc.get("decisions_error"), "the scenario reported an error")
-    check(sc["reconcile"]["phase"] == "BOOTSTRAP" and sc["phase_after_start"] == "LIVE",
-          "the first start did not go from BOOTSTRAP to LIVE")
+    check(sc.get("bootstrap_at_start") is True and sc["reconcile"]["phase"] == "BOOTSTRAP"
+          and sc["phase_after_start"] == "LIVE", "the first start did not go from BOOTSTRAP to LIVE")
     boundary = sc["reconcile"].get("boundary") or {}
     check(boundary.get("head", {}).get("number") == 0, "H of the first start is not the genesis")
     steps = [(s["name"], s["head_name"]) for s in sc["steps"]]
@@ -284,6 +284,26 @@ def judge(outputs, callers_map):
           and all(d["state"] == "NATIVE_DECIDED" for d in refuse["decisions"] + stateless["decisions"])
           and refuse["coverage"].get("bor.set-head", {}).get("Intents", 0) == 0,
           "the refused rewind left an intent or changed a decision")
+    boot, again = outputs["bootstrap"], outputs["bootstrap-restart"]
+    crash_boot = outputs["crash-bootstrap"]
+    check(crash_boot["exit"] == 3 and "crash point: during BOOTSTRAP" in crash_boot["stderr_tail"],
+          "the BOOTSTRAP child did not stop at its crash point")
+    boundary4 = boot.get("reconcile", {}).get("boundary") or {}
+    check(not boot.get("error") and boot.get("bootstrap_at_start") is True
+          and boot["reconcile"]["phase"] == "BOOTSTRAP" and boot["phase_after_start"] == "LIVE"
+          and all(s["error"] == "" for s in boot["steps"])
+          and [s["name"] for s in boot["steps"]][-3:] == ["golive", "import-B3", "import-B4"],
+          "BOOTSTRAP did not sync natively and then go live")
+    check(boot.get("head_at_golive", {}).get("name") == "A5"
+          and boundary4.get("head", {}).get("hash") == boot["head_at_golive"]["hash"],
+          "H is not the native head after the initial sync (A5)")
+    check(rows(boot["decisions"]) == [("SIDE", "A5", "A5", ["B3"]), ("SIDE", "A5", "A5", ["B4"])],
+          "the initial sync was captured, or the imports after H were not")
+    check(not again.get("error") and again.get("bootstrap_at_start") is False
+          and again["reconcile"]["phase"] == "RECOVERY" and again["phase_after_start"] == "LIVE"
+          and again["reconcile"].get("boundary") == boundary4 and again["native_head"]["name"] == "A5"
+          and rows(again["decisions"]) == rows(boot["decisions"]),
+          "the restart after BOOTSTRAP did not keep H")
     manual = outputs["manual"]
     check([r["refused"] for r in manual["commands"]] == [True, True, True, True] and manual["chaindata_kept"],
           "a manual command was not refused, or the store is gone")
@@ -347,7 +367,9 @@ OUTPUT_FILES = {"scenario": "scenario.json", "restart": "restart.json", "crash":
                 "imported": "imported.json", "advance": "advance.json", "crash-mid": "crash-mid.json",
                 "completed": "completed.json", "fault": "fault.json", "repair": "repair.json", "manual": "manual.json",
                 "profile": "profile.json", "native-caller": "native-caller.json", "stateless": "stateless.json",
-                "fault-stateless": "fault-stateless.json", "refuse": "refuse.json", "gaps": "gaps.json"}
+                "fault-stateless": "fault-stateless.json", "refuse": "refuse.json",
+                "crash-bootstrap": "crash-bootstrap.json", "bootstrap": "bootstrap.json",
+                "bootstrap-restart": "bootstrap-restart.json", "gaps": "gaps.json"}
 
 MANUAL_REFUSED = "manual chaindata command refused on a capture store"
 RETENTION_REFUSED = "live pins forbid this native deletion"
@@ -563,6 +585,11 @@ def run(preparation_path, expected_sha, output):
             probe("fault", "-datadir", "/out/instance3", "-blocks", "/out/chain/blocks.rlp", "-block", "D4", "-out",
                   "/out/fault-stateless.json")
             probe("restart", *common, "-datadir", "/out/instance3", "-refuse-sethead", "4", "-out", "/out/refuse.json")
+            probe("crash", "-record", "/out/crash-bootstrap.json", "--", *common, "-datadir", "/out/instance4",
+                  "-bootstrap", "-import", "A1,A2,A3", "-crash-bootstrap", "-out", "/out/crash-bootstrap-child.json")
+            probe("restart", *common, "-datadir", "/out/instance4", "-bootstrap", "-import", "A1,A2,A3,A4,A5",
+                  "-golive", "-import-live", "B3,B4", "-out", "/out/bootstrap.json")
+            probe("restart", *common, "-datadir", "/out/instance4", "-out", "/out/bootstrap-restart.json")
             outputs = {name: load(output / file, 16 * 1024 * 1024) for name, file in OUTPUT_FILES.items()
                        if name != "gaps"}
             write_new(output / "coverage-sum.json", summed_coverage(outputs))

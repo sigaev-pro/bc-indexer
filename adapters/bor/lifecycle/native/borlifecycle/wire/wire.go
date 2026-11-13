@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -29,6 +30,7 @@ import (
 	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/internal/cli"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 )
 
@@ -116,15 +118,20 @@ func Profile(config *server.Config) error {
 
 // Run is one started capture node.
 type Run struct {
-	Import    *borimport.Node
-	Decided   *bordecision.Node
+	Import  *borimport.Node
+	Decided *bordecision.Node
+	// Lifecycle is nil while the node waits in BOOTSTRAP.
 	Lifecycle *borlifecycle.Node
+	chain     *core.BlockChain
+	stop      chan struct{}
 }
 
 // Start starts the capture of a native node after eth.New and before
-// node.Start: the admission (borimport.Start), the lifecycle gate inside the
-// decision recovery driver (bordecision.Start with borlifecycle enabled),
-// then the live observer.
+// node.Start: the admission (borimport.Start), then the decision bridge with
+// the lifecycle gate enabled (bordecision.Start). A store with a live
+// boundary H recovers and goes live at once. A new capture store stays in
+// BOOTSTRAP (D105): the initial native sync runs natively and uncaptured
+// until GoLive.
 func Start(stack *node.Node, backend *eth.Ethereum, capture Capture) (*Run, error) {
 	cfg, err := capture.Config(stack.ResolvePath(""))
 	if err != nil {
@@ -142,17 +149,58 @@ func Start(stack *node.Node, backend *eth.Ethereum, capture Capture) (*Run, erro
 		imp.Detach()
 		return nil, err
 	}
-	lc := borlifecycle.Of(chain)
-	if lc == nil {
+	run := &Run{Import: imp, Decided: decided, chain: chain, stop: make(chan struct{})}
+	if decided.Bootstrapping() {
+		return run, nil
+	}
+	if run.Lifecycle = borlifecycle.Of(chain); run.Lifecycle == nil {
 		decided.Detach()
 		return nil, errors.New("capture start: the lifecycle gate did not open")
 	}
 	decided.Attach(imp)
-	return &Run{Import: imp, Decided: decided, Lifecycle: lc}, nil
+	return run, nil
+}
+
+// Bootstrapping reports whether the node waits in BOOTSTRAP.
+func (r *Run) Bootstrapping() bool { return r.Lifecycle == nil }
+
+// GoLive ends BOOTSTRAP: the recovery driver, H (the native head read under
+// chainmu and the guard, its state root flushed), GoLive, and the decider and
+// observer installed in the same lock.
+func (r *Run) GoLive() error {
+	if _, err := r.Decided.ExtractorGoLive(); err != nil {
+		return err
+	}
+	if r.Lifecycle = borlifecycle.Of(r.chain); r.Lifecycle == nil {
+		return errors.New("capture GoLive: the lifecycle gate did not open")
+	}
+	return nil
+}
+
+// watch calls GoLive once the native initial sync is done (eth.Synced).
+func (r *Run) watch(backend *eth.Ethereum) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.stop:
+			return
+		case <-ticker.C:
+			if !backend.Synced() {
+				continue
+			}
+			if err := r.GoLive(); err != nil {
+				log.Crit("Extractor capture could not go live after the initial sync", "err", err)
+			}
+			log.Info("Extractor capture is live", "boundary", r.Lifecycle.Report().Boundary)
+			return
+		}
+	}
 }
 
 // Stop detaches the capture of a stopped node.
 func (r *Run) Stop() {
+	close(r.stop)
 	r.Decided.Detach()
 	r.Lifecycle.Close()
 }
@@ -176,8 +224,14 @@ func serverStart(config *server.Config, stack *node.Node, backend *eth.Ethereum)
 	if err != nil {
 		return err
 	}
-	_, err = Start(stack, backend, capture)
-	return err
+	run, err := Start(stack, backend, capture)
+	if err != nil {
+		return err
+	}
+	if run.Bootstrapping() {
+		go run.watch(backend)
+	}
+	return nil
 }
 
 // ManualCommand refuses a manual command on a capture store with a live pin

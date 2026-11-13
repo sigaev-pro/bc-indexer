@@ -277,6 +277,13 @@
       "text": "\t\tif in, err = newIntent(l.d, token, rec, tr.Block, release); err == nil {\n\t\t\treturn in, nil\n\t\t}\n\t}\n\treturn nil, errors.Join(err, release())\n"
     },
     {
+      "name": "lifecycle-bootstrap-start",
+      "file": "extractor/bordecision/bordecision.go",
+      "mode": "replace",
+      "anchor": "func Start(n *borimport.Node, mirror decision.Mirror) (*Node, obligation.Report, error) {\n",
+      "text": "//\n// Extractor patch (E01-02.lifecycle_seams, D105): Start in\n// zz_extractor_lifecycle.go calls this body at once, or after the native\n// initial sync (BOOTSTRAP) through Node.ExtractorGoLive.\nfunc extractorStart(n *borimport.Node, mirror decision.Mirror) (*Node, obligation.Report, error) {\n"
+    },
+    {
       "name": "lifecycle-server-profile-wallet",
       "file": "internal/cli/server/server.go",
       "mode": "replace",

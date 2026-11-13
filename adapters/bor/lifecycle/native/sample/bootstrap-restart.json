@@ -1,0 +1,78 @@
+{
+ "bootstrap_at_start": false,
+ "boundary": {
+  "digest": "d3f6b8d9f4bcd8c2b91f25cc53b98a3be05f339b49cbb8f2a8b3a675b1ebba0c",
+  "head": {
+   "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+   "number": 5
+  },
+  "native_store_id": "0123456789abcdef0123456789abcdef",
+  "producer": "bor.run-1",
+  "root": "7fd511c43c83795af953aff4f052ea98e0140ec972d8860249febac6c9eab99d"
+ },
+ "coverage": {
+  "bor.recovery": {
+   "Intents": 0,
+   "Passes": 1,
+   "Refusals": 0
+  }
+ },
+ "decision_recovery": {
+  "completed": [],
+  "imported": [],
+  "rejected": [],
+  "resolved": []
+ },
+ "decisions": [
+  {
+   "kind": "SIDE",
+   "marker": false,
+   "members": [
+    "B3"
+   ],
+   "new_head": "A5",
+   "old_head": "A5",
+   "sequence": 0,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "SIDE",
+   "marker": false,
+   "members": [
+    "B4"
+   ],
+   "new_head": "A5",
+   "old_head": "A5",
+   "sequence": 1,
+   "state": "NATIVE_DECIDED"
+  }
+ ],
+ "evidence_records": 0,
+ "native_head": {
+  "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+  "name": "A5",
+  "number": 5
+ },
+ "native_head_at_start": {
+  "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+  "name": "A5",
+  "number": 5
+ },
+ "phase_after_start": "LIVE",
+ "reconcile": {
+  "boundary": {
+   "digest": "d3f6b8d9f4bcd8c2b91f25cc53b98a3be05f339b49cbb8f2a8b3a675b1ebba0c",
+   "head": {
+    "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
+    "number": 5
+   },
+   "native_store_id": "0123456789abcdef0123456789abcdef",
+   "producer": "bor.run-1",
+   "root": "7fd511c43c83795af953aff4f052ea98e0140ec972d8860249febac6c9eab99d"
+  },
+  "phase": "RECOVERY",
+  "repaired": null,
+  "settled": []
+ },
+ "steps": null
+}
