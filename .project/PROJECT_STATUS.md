@@ -520,6 +520,62 @@ measured code (evidence, "Merge of main").
 Next: a docs-only confirmation review of the merge, hosted CI on the merge
 head, the final review comment, then the client blocks after merge.
 
+### Geth block
+
+Base `51adbee` (block 0 merged in PR #165). Branch/worktree:
+`claude/e01-02-lifecycle-geth` / `e01-02-admission-geth-95b3ee`. Allowed
+paths: `adapters/geth/lifecycle/native/**`,
+`test/harness/fixtures/lifecycle_geth/**`,
+`.project/evidence/E01-02.lifecycle_seams.geth.md` and this subsection.
+Roles and split as the coordinator records them: the owner agreed on
+2026-11-13 to the #16-style split ("Очищай лишнее и запускай все"); this is
+the Geth native-engineer session, which also gives the qa matrix of the ETH
+slot.
+
+Design: [adapters/geth/lifecycle/native/README.md](../adapters/geth/lifecycle/native/README.md).
+34 anchored patches over the accepted admission and decision-bridge tree
+route all 26 Geth callers: passes for every OBSERVATION and DECISION caller,
+`Require` at the state commit, the canonical-hash rewrite, the head writer,
+a requested rewind and the finality setters, CANONICAL decisions for
+`SetCanonical` and `writeKnownBlock` that name the retained SIDE blocks of
+the branch (a branch block without one is a source error), SetHead as one
+CANONICAL decision plus one FINALITY decision per clear, one FINALITY
+decision per setter call, the recovery of lifecycle intents and the startup
+reconciliation, the live boundary H (`GoLive` after the initial sync, under
+the guard, root flushed and synced; a restart keeps H), the capture profile
+check (`--dev`, `--synctarget`, snap sync) and the native-commit identity
+from the binary (D100).
+
+Records 03 at measured head `14188b9`: preparation PASS, run PASS (probe
+7.8 s, `Gaps` empty, six crash and restart scenarios as expected), 14
+portable tests, 39 of 39 driver mutants killed (evidence:
+[E01-02.lifecycle_seams.geth](evidence/E01-02.lifecycle_seams.geth.md)).
+Records 01 at `3c89a06` and 02 at `45c087f` passed and are kept as
+superseded.
+
+Review 001 (head `b58d33a`): Spec and Standards REQUEST_CHANGES. Fixed in
+`45c087f`: the known-branch walk uses the common ancestor with the current
+head; recovery keeps the decided finality references in the lifecycle view;
+a crash inside a lifecycle reorganization is completed; the finality setters
+sync before the in-memory reference moves; a failed `GoLive` stops the node.
+Review 002 (head `caac285`): Spec and Standards REQUEST_CHANGES; fixed in
+`14188b9` (completion only from a head strictly on the new branch, a
+readable view on a restart, scenarios for a head lowered below the fork
+point and for a canonical index above the head). Owners of the two
+fail-closed limits, decided by the coordinator on 2026-11-13: the targeted
+replay of a branch block without corpus is E05-02.reorg (D104, PR from the
+#18 BSC block, applied to Geth), and the completion of an interrupted
+SetHead rewind is E01-04.early_faults.
+
+Review 003 (head `390ab5a`): Spec PASS and Standards PASS, with P3 notes
+only (D104 arrives with the #18 BSC PR; one judge check of the `repaired`
+scenario left for later). Later commits change only docs.
+qa verdict, private local ETH: AC-CAP-01-01 PASS, AC-LIF-05-02 PASS,
+AC-LIF-05-03 PASS, AC-LIF-06-04 and 06-05 NOT_APPLICABLE (BSC only); family
+PASS. Public ETH cells stay NOT_RUN.
+
+Next: Spec and Standards reviews, hosted CI, the final review comment.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
