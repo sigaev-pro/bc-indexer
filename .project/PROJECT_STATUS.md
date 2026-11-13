@@ -160,17 +160,23 @@ against its install record) and imports the Geth-generated corpus blocks
 through `AttachDecisions` with the shipped options, then restarts and
 re-imports. It exports receipts, `callTracer` frames and native state reads.
 
-Measured head `44f87ae`: preparation 01, run 01 (comparison PASS, 0
-differences, no native self-check failure), portable 01 (14 tests) and
-driver mutants 01 (21 killed), all PASS. Later commits change only docs.
+Measured head `1a6bef2`: records 03 preparation, run (comparison PASS, 0
+differences, no native self-check failure), portable (18 tests) and driver
+mutants (35 killed), all PASS. Later commits change only docs. Records 01
+at `44f87ae` (all PASS) are kept and superseded; `preparation-02` was a
+wrapper usage error that never started (D83).
 
 qa verdict, ETH private local: transfer, nested-revert, fee and empty-block
 PASS; system-action NOT_APPLICABLE (ORACLE.md, D102); family PASS. Public
 `ethereum-*` cells stay NOT_RUN (D96). The state before and after each
-transaction comes from a native re-execution that must reproduce the
-imported receipts and roots.
+transaction and the frames come from a native re-execution that must
+reproduce the imported receipts and roots.
 
-Next: Spec and Standards reviews, hosted CI, the final review comment.
+Review 001 on `54e43aa`: Spec PASS (four P3s), Standards REQUEST_CHANGES
+(three P2 gaps in the driver's self-checks and tests); fixed in `1a6bef2`
+with records 03.
+
+Next: review 002, hosted CI, the final review comment.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
