@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "description": "Single-check mutants of the POLY corpus driver: the fixture derivation, the observation built from the probe outputs, and the decision bridge checks. The portable controls in test_poly_corpus.py run on the development sample.",
+  "copy": [
+    "test/native_corpus/*.py",
+    "test/native_corpus/expected/*",
+    "test/native_corpus/poly/*.py",
+    "test/native_corpus/poly/sample/*",
+    "test/harness/*.py"
+  ],
+  "test": [
+    "{python}",
+    "test/native_corpus/poly/test_poly_corpus.py",
+    "-v"
+  ],
+  "import": [
+    "poly_corpus"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "delay value",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "config[\"bor\"][\"stateSyncConfirmationDelay\"] = dict(STATE_SYNC_DELAY)",
+      "replacement": "config[\"bor\"][\"stateSyncConfirmationDelay\"] = {\"0\": 1}"
+    },
+    {
+      "name": "delay refusal",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    require(\"stateSyncConfirmationDelay\" not in config[\"bor\"], \"The source genesis already sets the delay\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "chain refusal",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    require(config.get(\"chainId\") == expected[\"chain_id\"], \"The source genesis is not the corpus chain\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "present account refusal",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "        require(row[\"address\"] not in present, f\"The corpus account {row['address']} is already in the genesis\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "account balance",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "account = {\"balance\": hex(int(row[\"balance\"]))}",
+      "replacement": "account = {\"balance\": hex(int(row[\"balance\"]) + 1)}"
+    },
+    {
+      "name": "account code",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "            account[\"code\"] = \"0x\" + row[\"code\"]\n",
+      "replacement": "            pass\n"
+    },
+    {
+      "name": "accounts per transaction",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "listed |= set(tx[\"state_before\"]) | set(tx[\"state_after\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "accounts block end",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "listed |= set(block[\"state_after_block\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "hex refusal",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    require(re.fullmatch(r\"[0-9a-f]*\", text) is not None, f\"Bad hex {value!r}\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "hex type",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    require(isinstance(value, str), f\"Expected a hex string, got {value!r}\")\n",
+      "replacement": "    value = str(value)\n"
+    },
+    {
+      "name": "frame value base",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "str(int(value, 16)) if value else \"0\"",
+      "replacement": "str(int(value, 10)) if value else \"0\""
+    },
+    {
+      "name": "frame missing value",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "str(int(value, 16)) if value else \"0\"",
+      "replacement": "str(int(value or \"0x1\", 16))"
+    },
+    {
+      "name": "frame error",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "\"error\": trace.get(\"error\")",
+      "replacement": "\"error\": None"
+    },
+    {
+      "name": "frame calls",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "\"calls\": [frame_of(call) for call in trace.get(\"calls\", [])]",
+      "replacement": "\"calls\": []"
+    },
+    {
+      "name": "frame output",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "\"output\": hex_digits(trace.get(\"output\", \"0x\"))",
+      "replacement": "\"output\": \"\""
+    },
+    {
+      "name": "transaction fee fields",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "        if key in row:\n            tx[key] = row[key]",
+      "replacement": "        if key in row and key != \"max_fee_per_gas\":\n            tx[key] = row[key]"
+    },
+    {
+      "name": "probe error refusal",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    require(not imported.get(\"error\") and not reimported.get(\"error\"), \"A probe command reported an error\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "state sync receipt refusal",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "            require(row[\"state_sync_receipt\"], f\"Block {row['number']} has state sync events and no receipt\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "state sync block join",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "for event in syncs.get(row[\"number\"], []):",
+      "replacement": "for event in imported[\"state_sync\"]:"
+    },
+    {
+      "name": "state sync last id",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "\"state_receiver_last_state_id\": int(row[\"state_receiver_last_state_id\"])",
+      "replacement": "\"state_receiver_last_state_id\": 1"
+    },
+    {
+      "name": "state sync logs",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "\"logs\": row[\"state_sync_receipt_logs\"]",
+      "replacement": "\"logs\": []"
+    },
+    {
+      "name": "undecided decisions",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "        if row[\"state\"] != \"NATIVE_DECIDED\":\n            continue\n",
+      "replacement": ""
+    },
+    {
+      "name": "decision block join",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "by_hash.get(member[\"block\"], -1)",
+      "replacement": "by_hash.get(member[\"block\"], 1)"
+    },
+    {
+      "name": "decision kind",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "\"kind\": row[\"kind\"]})",
+      "replacement": "\"kind\": \"IMPORT\"})"
+    },
+    {
+      "name": "new decisions",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if row[\"sequence\"] not in before)",
+      "replacement": "if False)"
+    },
+    {
+      "name": "new observations",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "\"new_observations\": len(reimported[\"observed\"])",
+      "replacement": "\"new_observations\": 0"
+    },
+    {
+      "name": "check observed blocks",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if imported[\"observed\"] != numbers:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check one key",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if any(len(imported[\"keys\"].get(str(n), [])) != 1 for n in numbers):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check reimport observer errors",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if imported[\"observer_errors\"] or reimported[\"observer_errors\"]:",
+      "replacement": "if imported[\"observer_errors\"]:"
+    },
+    {
+      "name": "check import observer errors",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if imported[\"observer_errors\"] or reimported[\"observer_errors\"]:",
+      "replacement": "if reimported[\"observer_errors\"]:"
+    },
+    {
+      "name": "check decided state",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if any(row[\"state\"] != \"NATIVE_DECIDED\" or len(row[\"members\"]) != 1 for row in imported[\"decisions\"]):",
+      "replacement": "if any(len(row[\"members\"]) != 1 for row in imported[\"decisions\"]):"
+    },
+    {
+      "name": "check one member",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if any(row[\"state\"] != \"NATIVE_DECIDED\" or len(row[\"members\"]) != 1 for row in imported[\"decisions\"]):",
+      "replacement": "if any(row[\"state\"] != \"NATIVE_DECIDED\" for row in imported[\"decisions\"]):"
+    },
+    {
+      "name": "check members",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    if {m[\"observation\"] for row in imported[\"decisions\"] for m in row[\"members\"]} != keys:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "check obligations",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if sorted(imported[\"obligations\"]) != decided:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check restart decisions",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if reimported[\"decisions_before\"] != imported[\"decisions\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check reimport error",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if reimported.get(\"reimport_error\"):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check head",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if imported[\"head_hash\"] != reimported[\"head_hash\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check reimport decisions",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if reimported[\"decisions_after\"] != reimported[\"decisions_before\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "check reimport obligations",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "if reimported[\"obligations\"] != imported[\"obligations\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "verdict ignores bridge",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = comparison[\"result\"] == \"PASS\" and bool(cases)"
+    },
+    {
+      "name": "verdict ignores comparison",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = not failures and bool(cases)"
+    },
+    {
+      "name": "verdict without cases",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = comparison[\"result\"] == \"PASS\" and not failures"
+    },
+    {
+      "name": "cases keep PASS on bridge failure",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "        if failures and row[\"verdict\"] == \"PASS\":\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "write replaces",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    with open(path, \"x\") as handle:",
+      "replacement": "    with open(path, \"w\") as handle:"
+    },
+    {
+      "name": "format error escapes",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "    except corpus_compare.FormatError as error:",
+      "replacement": "    except KeyError as error:"
+    },
+    {
+      "name": "observe skips the expected digest",
+      "file": "test/native_corpus/poly/poly_corpus.py",
+      "original": "expected_path = artifact(run_record[\"expected\"], 4 * 1024 * 1024)",
+      "replacement": "expected_path = Path(run_record[\"expected\"][\"path\"])"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "event_records": [
+    {
+      "id": "1",
+      "contract": "0x3000000000000000000000000000000000000003",
+      "data": "ZXh0cmFjdG9yLWNvcnB1cy1zdGF0ZS1zeW5jLTE=",
+      "tx_hash": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "log_index": "1",
+      "bor_chain_id": "15001",
+      "record_time": "2019-05-20T10:31:46Z"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "span": {
+    "id": "1",
+    "start_block": "256",
+    "end_block": "6655",
+    "validator_set": {
+      "validators": [
+        {
+          "val_id": "1",
+          "start_epoch": "0",
+          "end_epoch": "0",
+          "nonce": "0",
+          "voting_power": "10000",
+          "signer": "0x71562b71999873db5b286df957af199ec94617f7",
+          "last_updated": "0",
+          "jailed": false,
+          "proposer_priority": "0"
+        }
+      ],
+      "proposer": {
+        "val_id": "1",
+        "start_epoch": "0",
+        "end_epoch": "0",
+        "nonce": "0",
+        "voting_power": "10000",
+        "signer": "0x71562b71999873db5b286df957af199ec94617f7",
+        "last_updated": "0",
+        "jailed": false,
+        "proposer_priority": "0"
+      },
+      "total_voting_power": "10000"
+    },
+    "selected_producers": [
+      {
+        "val_id": "1",
+        "start_epoch": "0",
+        "end_epoch": "0",
+        "nonce": "0",
+        "voting_power": "10000",
+        "signer": "0x71562b71999873db5b286df957af199ec94617f7",
+        "last_updated": "0",
+        "jailed": false,
+        "proposer_priority": "0"
+      }
+    ],
+    "bor_chain_id": "15001"
+  }
+}

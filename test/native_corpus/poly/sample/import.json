@@ -1,0 +1,117 @@
+{
+ "admission_recovery": {
+  "abandoned": [],
+  "exec_ready": [],
+  "kept": [],
+  "rejected": []
+ },
+ "args": [
+  "-genesis",
+  "/probe/genesis.json",
+  "-config",
+  "/probe/chain-config.json",
+  "-bodies",
+  "/stub",
+  "-blocks",
+  "/out/chain/blocks.rlp",
+  "-datadir",
+  "/out/instance",
+  "-commit",
+  "3a018e38467594508ca31ebeaf804837fb92834a",
+  "-out",
+  "/out/import.json"
+ ],
+ "decision_recovery": {
+  "completed": [],
+  "imported": [],
+  "rejected": [],
+  "resolved": []
+ },
+ "decisions": [
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    {
+     "block": "ec9f2e1d5cc77081c83190e9ae1a6e51353a37fbe982dc3f4278c756e7f7f64e",
+     "observation": "bor.run-1.0000000000000000"
+    }
+   ],
+   "sequence": 0,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    {
+     "block": "0c637b6eee0f9dd001537f0600e79c6ea45765a3a612fd78e07358d0142b2682",
+     "observation": "bor.run-1.0000000000000001"
+    }
+   ],
+   "sequence": 1,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    {
+     "block": "fef4b87b20a51ef4398ca84a8d3dda64e9aee6bc08287b528e25304965b31173",
+     "observation": "bor.run-1.0000000000000002"
+    }
+   ],
+   "sequence": 2,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    {
+     "block": "b480f618d09e7eb695db69c033e2617761927905ffc9732bf5e1dc7531aa7419",
+     "observation": "bor.run-1.0000000000000003"
+    }
+   ],
+   "sequence": 3,
+   "state": "NATIVE_DECIDED"
+  }
+ ],
+ "head_hash": "0xb480f618d09e7eb695db69c033e2617761927905ffc9732bf5e1dc7531aa7419",
+ "head_number": 4,
+ "keys": {
+  "1": [
+   "bor.run-1.0000000000000000"
+  ],
+  "2": [
+   "bor.run-1.0000000000000001"
+  ],
+  "3": [
+   "bor.run-1.0000000000000002"
+  ],
+  "4": [
+   "bor.run-1.0000000000000003"
+  ]
+ },
+ "obligations": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "observed": [
+  1,
+  2,
+  3,
+  4
+ ],
+ "observer_errors": [],
+ "state_sync": [
+  {
+   "block": 4,
+   "contract": "3000000000000000000000000000000000000003",
+   "data": "657874726163746f722d636f727075732d73746174652d73796e632d31",
+   "id": 1
+  }
+ ]
+}
