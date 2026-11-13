@@ -143,8 +143,10 @@ three client blocks after block 0 merges.
 ### POLY block
 
 Owner agreement under D97: on 2026-11-13 the owner agreed the roles and the
-split for the client blocks, replying "clean up the rest and start
-everything" after approving the #16-style split. That means block 0 core,
+split for the client blocks. After approving the #16-style split, the owner
+replied (translated from Russian, as the coordinator relayed it): "Очищай
+лишнее и запускай все" ("clean up what is not needed and start
+everything"). That means block 0 core,
 then one native-engineer session per family, with qa for the per-case matrix
 and two read-only reviewers.
 
@@ -167,8 +169,8 @@ Design ([POLY README](../test/native_corpus/poly/README.md)):
 - The driver builds the observation and runs block 0's comparator.
 - One fixture input is not named in ORACLE.md:
   `stateSyncConfirmationDelay` `{"0": 0}`. Native Bor panics without it, the
-  admission fixture uses the same value, and no expected value depends on it
-  (evidence).
+  admission fixture uses the same value, and no expected value changes for
+  any delay of at most seven seconds (evidence).
 
 Evidence: [E01-03.smoke_corpus.poly](evidence/E01-03.smoke_corpus.poly.md).
 Records at `3943c7f`, all PASS: preparation 03, run 03 (five cases, 0
@@ -181,6 +183,7 @@ Reviews:
   `observe` rewrote retained records). All fixed.
 - 002 on `d2208f8`: both PASS, with two Standards P3s, now fixed.
 - 003 on `3943c7f`: both PASS, with no open finding.
+- 004 on `8f6bc97` (docs only): both PASS; one Spec wording P3, fixed.
 
 qa verdict (POLY private local): transfer, nested-revert, fee,
 system-action (StateSync before Madhugiri) and empty-block PASS; family POLY
