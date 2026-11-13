@@ -1,0 +1,159 @@
+{
+ "server": {
+  "chaindata_created": false,
+  "error": "bor server configuration is outside the capture profile: mine (<nil>)",
+  "refused": true
+ },
+ "sets": [
+  {
+   "args": null,
+   "error": "",
+   "name": "capture-profile",
+   "refusals": []
+  },
+  {
+   "args": [
+    "--syncmode",
+    "snap"
+   ],
+   "error": "bor server configuration is outside the capture profile: syncmode (native profile violates capture constraints: syncmode \"snap\", want full)",
+   "name": "snap-sync",
+   "refusals": [
+    {
+     "caller": "bor.snap-sync",
+     "setting": "syncmode"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--parallelevm.enable=true"
+   ],
+   "error": "bor server configuration is outside the capture profile: parallelevm (native profile violates capture constraints: parallelevm.enable)",
+   "name": "parallel-evm",
+   "refusals": [
+    {
+     "caller": "bor.parallel",
+     "setting": "parallelevm"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--pipeline.enable-import-src"
+   ],
+   "error": "bor server configuration is outside the capture profile: pipeline.enable-import-src (native profile violates capture constraints: pipeline.enable-import-src)",
+   "name": "pipelined-import",
+   "refusals": [
+    {
+     "caller": "bor.pipelined",
+     "setting": "pipeline.enable-import-src"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--witness.parallelstatelessimport"
+   ],
+   "error": "bor server configuration is outside the capture profile: witness (native profile violates capture constraints: witness.parallelstatelessimport)",
+   "name": "stateless-import",
+   "refusals": [
+    {
+     "caller": "bor.stateless",
+     "setting": "witness"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--witness.syncwithwitnesses"
+   ],
+   "error": "bor server configuration is outside the capture profile: witness (native profile violates capture constraints: witness.syncwithwitnesses)",
+   "name": "witness-sync",
+   "refusals": [
+    {
+     "caller": "bor.stateless",
+     "setting": "witness"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--relay.enable-preconfs"
+   ],
+   "error": "bor server configuration is outside the capture profile: relay.enable-preconfs (native profile violates capture constraints: relay.enable-preconfs)",
+   "name": "preconfs",
+   "refusals": [
+    {
+     "caller": "bor.preconf",
+     "setting": "relay.enable-preconfs"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--accept-preconf-tx"
+   ],
+   "error": "bor server configuration is outside the capture profile: accept-preconf-tx (native profile violates capture constraints: accept-preconf-tx)",
+   "name": "accept-preconf-tx",
+   "refusals": [
+    {
+     "caller": "bor.preconf",
+     "setting": "accept-preconf-tx"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--sequencer.enabled"
+   ],
+   "error": "bor server configuration is outside the capture profile: sequencer.enabled (native profile violates capture constraints: sequencer.enabled)",
+   "name": "sequencer",
+   "refusals": [
+    {
+     "caller": "bor.preconf",
+     "setting": "sequencer.enabled"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--mine"
+   ],
+   "error": "bor server configuration is outside the capture profile: mine (<nil>)",
+   "name": "mining",
+   "refusals": [
+    {
+     "caller": "bor.seal-write",
+     "setting": "mine"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--dev"
+   ],
+   "error": "bor server configuration is outside the capture profile: dev (<nil>)",
+   "name": "dev",
+   "refusals": [
+    {
+     "caller": "bor.seal-write",
+     "setting": "dev"
+    }
+   ]
+  },
+  {
+   "args": [
+    "--bor.devfakeauthor"
+   ],
+   "error": "bor server configuration is outside the capture profile: bor.devfakeauthor (<nil>)",
+   "name": "dev-fake-author",
+   "refusals": [
+    {
+     "caller": "bor.seal-write",
+     "setting": "bor.devfakeauthor"
+    }
+   ]
+  }
+ ]
+}

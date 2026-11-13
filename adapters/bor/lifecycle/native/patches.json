@@ -1,0 +1,329 @@
+{
+  "schema_version": 1,
+  "files": {
+    "core/rawdb/zz_extractor_lifecycle.go": "tree/core/rawdb/zz_extractor_lifecycle.go",
+    "core/zz_extractor_lifecycle.go": "tree/core/zz_extractor_lifecycle.go",
+    "eth/downloader/whitelist/zz_extractor_lifecycle.go": "tree/eth/downloader/whitelist/zz_extractor_lifecycle.go",
+    "eth/zz_extractor_lifecycle.go": "tree/eth/zz_extractor_lifecycle.go",
+    "extractor/bordecision/zz_extractor_lifecycle.go": "tree/extractor/bordecision/zz_extractor_lifecycle.go",
+    "internal/cli/server/zz_extractor_lifecycle.go": "tree/internal/cli/server/zz_extractor_lifecycle.go",
+    "internal/cli/zz_extractor_lifecycle.go": "tree/internal/cli/zz_extractor_lifecycle.go"
+  },
+  "edits": [
+    {
+      "name": "lifecycle-import-pass",
+      "file": "core/zz_extractor_decision.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) extractorWriteDecided(decider ExtractorDecider,",
+      "text": "func (bc *BlockChain) extractorNativeWriteDecided(decider ExtractorDecider,"
+    },
+    {
+      "name": "lifecycle-require-execution",
+      "file": "core/zz_extractor_decision.go",
+      "mode": "before",
+      "anchor": "\troot, err := extractorCommitBefore(statedb, statedb.CommitWithUpdate, block.NumberU64(),",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): the state commit is an\n\t// EXECUTION write choke point.\n\tif err := bc.extractorRequire(\"EXECUTION\"); err != nil {\n\t\treturn NonStatTy, 0, err\n\t}\n"
+    },
+    {
+      "name": "lifecycle-known-block",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) writeKnownBlock(block *types.Block) error {",
+      "text": "func (bc *BlockChain) extractorNativeWriteKnownBlock(block *types.Block) error {"
+    },
+    {
+      "name": "lifecycle-recover-ancestors",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) recoverAncestors(block *types.Block, makeWitness bool) (common.Hash, error) {",
+      "text": "func (bc *BlockChain) extractorNativeRecoverAncestors(block *types.Block, makeWitness bool) (common.Hash, error) {"
+    },
+    {
+      "name": "lifecycle-side-chain",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {",
+      "text": "func (bc *BlockChain) extractorNativeInsertSideChain(block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {"
+    },
+    {
+      "name": "lifecycle-seal-write",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {",
+      "text": "func (bc *BlockChain) extractorNativeWriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {"
+    },
+    {
+      "name": "lifecycle-engine-api",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) InsertBlockWithoutSetHead(block *types.Block, makeWitness bool) (*stateless.Witness, error) {",
+      "text": "func (bc *BlockChain) extractorNativeInsertBlockWithoutSetHead(block *types.Block, makeWitness bool) (*stateless.Witness, error) {"
+    },
+    {
+      "name": "lifecycle-snap-sync",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain []rlp.RawValue, ancientLimit uint64) (int, error) {",
+      "text": "func (bc *BlockChain) extractorNativeInsertReceiptChain(blockChain types.Blocks, receiptChain []rlp.RawValue, ancientLimit uint64) (int, error) {"
+    },
+    {
+      "name": "lifecycle-stateless",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stateless.Witness) (int, error) {",
+      "text": "func (bc *BlockChain) extractorNativeInsertChainStateless(chain types.Blocks, witnesses []*stateless.Witness) (int, error) {"
+    },
+    {
+      "name": "lifecycle-set-head",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Hash, repair bool) (uint64, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n",
+      "text": "func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Hash, repair bool) (uint64, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn 0, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\t// Extractor patch (E01-02.lifecycle_seams): the set-head decision\n\t// (bor.set-head) takes the guard right after the chain lock.\n\treturn bc.extractorSetHeadLocked(head, time, root, repair)\n}\n\n// extractorNativeSetHeadLocked is the native body of setHeadBeyondRoot; the\n// caller holds chainmu.\nfunc (bc *BlockChain) extractorNativeSetHeadLocked(head uint64, time uint64, root common.Hash, repair bool) (uint64, error) {\n"
+    },
+    {
+      "name": "lifecycle-set-head-finality",
+      "file": "core/blockchain.go",
+      "mode": "before",
+      "anchor": "\t// Clear safe block, finalized block if needed\n",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): the canonical part of the\n\t// set-head decision is decided before a finality reference is cleared.\n\tif err := bc.extractorSetHeadDecide(); err != nil {\n\t\treturn 0, err\n\t}\n\n"
+    },
+    {
+      "name": "lifecycle-set-canonical",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn common.Hash{}, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n",
+      "text": "func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {\n\tif !bc.chainmu.TryLock() {\n\t\treturn common.Hash{}, errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\treturn bc.extractorNativeSetCanonicalLocked(head)\n}\n\n// extractorNativeSetCanonicalLocked is the native body of SetCanonical; the\n// caller holds chainmu.\nfunc (bc *BlockChain) extractorNativeSetCanonicalLocked(head *types.Block) (common.Hash, error) {\n"
+    },
+    {
+      "name": "lifecycle-set-canonical-begin",
+      "file": "core/blockchain.go",
+      "mode": "before",
+      "anchor": "\t// Run the reorg if necessary and set the given block as new head.\n\tstart := time.Now()\n",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): one CANONICAL decision of\n\t// bor.set-canonical, after the re-execution of a pruned branch (whose\n\t// imports take the guard themselves).\n\textractorDecision, err := bc.extractorBegin(\"bor.set-canonical\", \"set-canonical\", head.Header())\n\tif err != nil {\n\t\treturn common.Hash{}, err\n\t}\n\tdefer extractorDecision.end()\n\n"
+    },
+    {
+      "name": "lifecycle-set-canonical-decide",
+      "file": "core/blockchain.go",
+      "mode": "replace",
+      "anchor": "\tbc.writeHeadBlock(head)\n\n\t// Emit events\n\treceipts, logs := bc.collectReceiptsAndLogs(head, false)\n",
+      "text": "\tbc.writeHeadBlock(head)\n\tif err := extractorDecision.decide(); err != nil {\n\t\treturn common.Hash{}, err\n\t}\n\n\t// Emit events\n\treceipts, logs := bc.collectReceiptsAndLogs(head, false)\n"
+    },
+    {
+      "name": "lifecycle-preconf",
+      "file": "core/blockchain.go",
+      "mode": "after",
+      "anchor": "\tif bc.preconfProvider == nil || bc.logger != nil || !compatible || !bc.canClaimPreconf(requireWitness) {\n\t\treturn nil, 0, false\n\t}\n",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): preconfirmed results are\n\t// refused on a capture chain (bor.preconf); the block executes.\n\tif bc.extractorRefuseOutside(\"bor.preconf\") {\n\t\treturn nil, 0, false\n\t}\n"
+    },
+    {
+      "name": "lifecycle-pipelined",
+      "file": "core/blockchain.go",
+      "mode": "after",
+      "anchor": "func (bc *BlockChain) persistPipelinedImport(block *types.Block, parent *types.Header, statedb *state.StateDB, receipts []*types.Receipt, logs []*types.Log, start time.Time, cheapExec, validation time.Duration, makeWitness bool) (adjustBack bool, err error) {\n",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): refused on a capture chain\n\t// (bor.pipelined).\n\tif bc.extractorRefuseOutside(\"bor.pipelined\") {\n\t\treturn false, ErrExtractorRefused\n\t}\n"
+    },
+    {
+      "name": "lifecycle-parallel",
+      "file": "core/parallel_state_processor.go",
+      "mode": "after",
+      "anchor": "func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, author *common.Address, interruptCtx context.Context) (processResult *ProcessResult, err error) {\n",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): refused on a capture chain\n\t// (bor.parallel).\n\tif p.bc != nil && p.bc.extractorRefuseOutside(\"bor.parallel\") {\n\t\treturn nil, ErrExtractorRefused\n\t}\n"
+    },
+    {
+      "name": "lifecycle-rawdb-canonical-hash",
+      "file": "core/rawdb/accessors_chain.go",
+      "mode": "after",
+      "anchor": "func WriteCanonicalHash(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {\n",
+      "text": "\textractorRequireCanonical()\n"
+    },
+    {
+      "name": "lifecycle-rawdb-head-header-hash",
+      "file": "core/rawdb/accessors_chain.go",
+      "mode": "after",
+      "anchor": "func WriteHeadHeaderHash(db ethdb.KeyValueWriter, hash common.Hash) {\n",
+      "text": "\textractorRequireCanonical()\n"
+    },
+    {
+      "name": "lifecycle-rawdb-head-block-hash",
+      "file": "core/rawdb/accessors_chain.go",
+      "mode": "after",
+      "anchor": "func WriteHeadBlockHash(db ethdb.KeyValueWriter, hash common.Hash) {\n",
+      "text": "\textractorRequireCanonical()\n"
+    },
+    {
+      "name": "lifecycle-rawdb-head-fast-block-hash",
+      "file": "core/rawdb/accessors_chain.go",
+      "mode": "after",
+      "anchor": "func WriteHeadFastBlockHash(db ethdb.KeyValueWriter, hash common.Hash) {\n",
+      "text": "\textractorRequireCanonical()\n"
+    },
+    {
+      "name": "lifecycle-rawdb-finalized-block-hash",
+      "file": "core/rawdb/accessors_chain.go",
+      "mode": "after",
+      "anchor": "func WriteFinalizedBlockHash(db ethdb.KeyValueWriter, hash common.Hash) {\n",
+      "text": "\tdefer extractorFinality(\"finalized-block-hash\", headFinalizedBlockKey, hash.Bytes(), false)()\n"
+    },
+    {
+      "name": "lifecycle-rawdb-last-finality",
+      "file": "core/rawdb/milestone.go",
+      "mode": "before",
+      "anchor": "\tif err := db.Put(key, enc); err != nil {\n\t\tlog.Error(fmt.Sprintf(\"Failed to store the %s struct\", string(key)), \"err\", err)\n",
+      "text": "\tdefer extractorFinality(\"last-finality\", key, enc, false)()\n\n"
+    },
+    {
+      "name": "lifecycle-rawdb-delete-last-finality",
+      "file": "core/rawdb/milestone.go",
+      "mode": "replace",
+      "anchor": "\t_, key := getKey[T]()\n\treturn db.Delete(key)\n",
+      "text": "\t_, key := getKey[T]()\n\tdefer extractorFinality(\"last-finality\", key, nil, true)()\n\treturn db.Delete(key)\n"
+    },
+    {
+      "name": "lifecycle-rawdb-lock-field",
+      "file": "core/rawdb/milestone.go",
+      "mode": "before",
+      "anchor": "\tif err := db.Put(key, enc); err != nil {\n\t\tlog.Error(\"Failed to store the lock field struct\", \"err\", err)\n",
+      "text": "\tdefer extractorFinality(\"lock-field\", key, enc, false)()\n\n"
+    },
+    {
+      "name": "lifecycle-rawdb-future-milestones",
+      "file": "core/rawdb/milestone.go",
+      "mode": "before",
+      "anchor": "\tif err = db.Put(key, enc); err != nil {\n\t\tlog.Error(\"Failed to store the future milestone field struct\", \"err\", err)\n",
+      "text": "\tdefer extractorFinality(\"future-milestones\", key, enc, false)()\n\n"
+    },
+    {
+      "name": "lifecycle-milestone",
+      "file": "eth/downloader/whitelist/milestone.go",
+      "mode": "replace",
+      "anchor": "func (m *milestone) Process(block uint64, hash common.Hash) {\n\tm.finality.Lock()\n",
+      "text": "func (m *milestone) Process(block uint64, hash common.Hash) {\n\tdefer extractorEnter(\"bor.milestone\")()\n\tm.finality.Lock()\n"
+    },
+    {
+      "name": "lifecycle-milestone-unlock-sprint",
+      "file": "eth/downloader/whitelist/milestone.go",
+      "mode": "replace",
+      "anchor": "func (m *milestone) UnlockSprint(endBlockNum uint64) {\n\tm.finality.Lock()\n",
+      "text": "func (m *milestone) UnlockSprint(endBlockNum uint64) {\n\tdefer extractorEnter(\"bor.milestone-lock\")()\n\tm.finality.Lock()\n"
+    },
+    {
+      "name": "lifecycle-milestone-remove-id",
+      "file": "eth/downloader/whitelist/milestone.go",
+      "mode": "replace",
+      "anchor": "func (m *milestone) RemoveMilestoneID(milestoneId string) {\n\tm.finality.Lock()\n",
+      "text": "func (m *milestone) RemoveMilestoneID(milestoneId string) {\n\tdefer extractorEnter(\"bor.milestone-lock\")()\n\tm.finality.Lock()\n"
+    },
+    {
+      "name": "lifecycle-milestone-future",
+      "file": "eth/downloader/whitelist/milestone.go",
+      "mode": "replace",
+      "anchor": "func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {\n\tm.finality.Lock()\n",
+      "text": "func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {\n\tdefer extractorEnter(\"bor.milestone-lock\")()\n\tm.finality.Lock()\n"
+    },
+    {
+      "name": "lifecycle-milestone-purge-after",
+      "file": "eth/downloader/whitelist/milestone.go",
+      "mode": "replace",
+      "anchor": "func (m *milestone) PurgeAfter(block uint64) {\n\tm.finality.Lock()\n",
+      "text": "func (m *milestone) PurgeAfter(block uint64) {\n\tdefer extractorEnter(\"bor.milestone-lock\")()\n\tm.finality.Lock()\n"
+    },
+    {
+      "name": "lifecycle-milestone-vote-lock",
+      "file": "eth/downloader/whitelist/milestone.go",
+      "mode": "replace",
+      "anchor": "func (m *milestone) LockMutex(endBlockNum uint64) bool {\n\tm.finality.Lock()\n",
+      "text": "func (m *milestone) LockMutex(endBlockNum uint64) bool {\n\tm.extractorVoteEnter()\n\tm.finality.Lock()\n"
+    },
+    {
+      "name": "lifecycle-milestone-vote-unlock",
+      "file": "eth/downloader/whitelist/milestone.go",
+      "mode": "replace",
+      "anchor": "\tMilestoneIdsLengthMeter.Update(milestoneIDLength)\n\n\tm.finality.Unlock()\n}\n",
+      "text": "\tMilestoneIdsLengthMeter.Update(milestoneIDLength)\n\n\tm.finality.Unlock()\n\tm.extractorVoteExit()\n}\n"
+    },
+    {
+      "name": "lifecycle-checkpoint",
+      "file": "eth/downloader/whitelist/checkpoint.go",
+      "mode": "replace",
+      "anchor": "func (w *checkpoint) Process(block uint64, hash common.Hash) {\n\tw.finality.Lock()\n",
+      "text": "func (w *checkpoint) Process(block uint64, hash common.Hash) {\n\tdefer extractorEnter(\"bor.checkpoint\")()\n\tw.finality.Lock()\n"
+    },
+    {
+      "name": "lifecycle-milestone-reorg",
+      "file": "eth/bor_checkpoint_verifier.go",
+      "mode": "replace",
+      "anchor": "\tdefer pauseMiner(eth)()\n\n\tif err := rewind(eth, head, rewindTo); err != nil {\n\t\treturn false\n\t}\n\tinsertFinalized(eth, canonicalChain)\n\treturn true\n",
+      "text": "\tdefer pauseMiner(eth)()\n\n\t// Extractor patch (E01-02.lifecycle_seams): one decision of\n\t// bor.milestone-reorg on a capture chain.\n\tif eth.blockchain.ExtractorLifecycleInstalled() {\n\t\treturn extractorReorgToFinalized(eth, head, rewindTo, canonicalChain)\n\t}\n\n\tif err := rewind(eth, head, rewindTo); err != nil {\n\t\treturn false\n\t}\n\tinsertFinalized(eth, canonicalChain)\n\treturn true\n"
+    },
+    {
+      "name": "lifecycle-recovery-open",
+      "file": "extractor/bordecision/bordecision.go",
+      "mode": "replace",
+      "anchor": "\t\t\tnode.Bridge, node.Decider = bridge, d\n\t\t\tif node.Report, err = d.Recover(token); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n",
+      "text": "\t\t\tnode.Bridge, node.Decider = bridge, d\n\t\t\t// Extractor patch (E01-02.lifecycle_seams): the lifecycle gate and\n\t\t\t// its bor.recovery pass, then GoLive with the boundary H.\n\t\t\tlifecycle, err := extractorLifecycleOpen(n, token, bridge, chain)\n\t\t\tif err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t\tif node.Report, err = d.Recover(token); err != nil {\n\t\t\t\treturn errors.Join(err, lifecycle.Abort())\n\t\t\t}\n\t\t\tif err := lifecycle.GoLive(token); err != nil {\n\t\t\t\treturn errors.Join(err, lifecycle.Abort())\n\t\t\t}\n"
+    },
+    {
+      "name": "lifecycle-live-acquire",
+      "file": "extractor/bordecision/bordecision.go",
+      "mode": "replace",
+      "anchor": "\ttoken := l.node.Driver.Guard.Acquire()\n\ttr := transition(t)\n\trec, err := l.d.Intend(token, tr, false)\n",
+      "text": "\ttoken, release := extractorAcquire(l.node)\n\ttr := transition(t)\n\trec, err := l.d.Intend(token, tr, false)\n"
+    },
+    {
+      "name": "lifecycle-live-release",
+      "file": "extractor/bordecision/bordecision.go",
+      "mode": "replace",
+      "anchor": "\t\tif in, err = newIntent(l.d, token, rec, tr.Block, token.Release); err == nil {\n\t\t\treturn in, nil\n\t\t}\n\t}\n\treturn nil, errors.Join(err, token.Release())\n",
+      "text": "\t\tif in, err = newIntent(l.d, token, rec, tr.Block, release); err == nil {\n\t\t\treturn in, nil\n\t\t}\n\t}\n\treturn nil, errors.Join(err, release())\n"
+    },
+    {
+      "name": "lifecycle-server-profile-wallet",
+      "file": "internal/cli/server/server.go",
+      "mode": "replace",
+      "anchor": "\t\tethCfg, err = config.buildEth(stack, stack.AccountManager())\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tbackend, err := eth.New(stack, ethCfg)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tsrv.backend = backend\n",
+      "text": "\t\tethCfg, err = config.buildEth(stack, stack.AccountManager())\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\t// Extractor patch (E01-02.lifecycle_seams): capture profile check.\n\t\tif err := extractorCaptureProfile(config); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tbackend, err := eth.New(stack, ethCfg)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tsrv.backend = backend\n\t\tif err := extractorCaptureStart(config, stack, backend); err != nil {\n\t\t\treturn nil, err\n\t\t}\n"
+    },
+    {
+      "name": "lifecycle-server-profile-local",
+      "file": "internal/cli/server/server.go",
+      "mode": "replace",
+      "anchor": "\t\tethCfg, err = config.buildEth(stack, accountManager)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tbackend, err := eth.New(stack, ethCfg)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tsrv.backend = backend\n",
+      "text": "\t\tethCfg, err = config.buildEth(stack, accountManager)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\t// Extractor patch (E01-02.lifecycle_seams): capture profile check.\n\t\tif err := extractorCaptureProfile(config); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tbackend, err := eth.New(stack, ethCfg)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tsrv.backend = backend\n\t\tif err := extractorCaptureStart(config, stack, backend); err != nil {\n\t\t\treturn nil, err\n\t\t}\n"
+    },
+    {
+      "name": "lifecycle-server-config",
+      "file": "internal/cli/server/config.go",
+      "mode": "after",
+      "anchor": "\tDevFakeAuthor bool `hcl:\"devfakeauthor,optional\" toml:\"devfakeauthor,optional\"`\n",
+      "text": "\n\t// ExtractorCapture is the extractor capture configuration file\n\t// (E01-02.lifecycle_seams); empty runs the native node.\n\tExtractorCapture string `hcl:\"extractor.capture,optional\" toml:\"extractor.capture,optional\"`\n"
+    },
+    {
+      "name": "lifecycle-server-flag",
+      "file": "internal/cli/server/flags.go",
+      "mode": "after",
+      "anchor": "\t\tValue:   &c.cliConfig.DevFakeAuthor,\n\t\tDefault: c.cliConfig.DevFakeAuthor,\n\t})\n",
+      "text": "\tf.StringFlag(&flagset.StringFlag{\n\t\tName:    \"extractor.capture\",\n\t\tUsage:   \"Extractor capture configuration file: run this node as a capture node (capture profile enforced)\",\n\t\tValue:   &c.cliConfig.ExtractorCapture,\n\t\tDefault: c.cliConfig.ExtractorCapture,\n\t})\n"
+    },
+    {
+      "name": "lifecycle-shipped-binary",
+      "file": "cmd/cli/main.go",
+      "mode": "after",
+      "anchor": "\t_ \"github.com/ethereum/go-ethereum/extractor/borwire\"\n",
+      "text": "\t_ \"github.com/ethereum/go-ethereum/extractor/borlifecycle/wire\"\n"
+    },
+    {
+      "name": "lifecycle-removedb",
+      "file": "internal/cli/removedb.go",
+      "mode": "before",
+      "anchor": "\t// Remove the full node state database\n",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): refused on a capture store\n\t// with live pins or decision obligations (bor.manual-commands).\n\tif err := extractorManualCommand(\"removedb\", nodeCfg.ResolvePath(chaindataPath), nil); err != nil {\n\t\tc.UI.Error(err.Error())\n\t\treturn 1\n\t}\n\n"
+    },
+    {
+      "name": "lifecycle-purge-whitelisted",
+      "file": "internal/cli/purge_whitelisted_entries.go",
+      "mode": "before",
+      "anchor": "\t// Purge all whitelisted entries from db\n",
+      "text": "\t// Extractor patch (E01-02.lifecycle_seams): refused on a capture store\n\t// with live pins or decision obligations (bor.manual-commands).\n\tif err := extractorManualCommand(\"purge-whitelisted-entries\", datadir+\"/bor/chaindata\", chaindb); err != nil {\n\t\tc.UI.Error(err.Error())\n\t\tchaindb.Close()\n\t\treturn 1\n\t}\n\n"
+    }
+  ]
+}

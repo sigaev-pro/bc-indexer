@@ -1,0 +1,328 @@
+{
+ "schema_version": 1,
+ "language": "python",
+ "root": "../../../..",
+ "description": "Single-check mutants of the Bor lifecycle driver: the fixture derivation, the evidence digests, the coverage sum and gaps, the judge and the AC matrix. The portable controls in test_lifecycle_bor.py run on the development sample.",
+ "copy": [
+  "adapters/bor/lifecycle/*",
+  "adapters/bor/lifecycle/native/*.py",
+  "adapters/bor/lifecycle/native/patches.json",
+  "adapters/bor/lifecycle/native/sample/*",
+  "adapters/bor/lifecycle/native/tree/**",
+  "adapters/bor/lifecycle/native/borlifecycle/*",
+  "adapters/bor/admission/native/patches.json",
+  "adapters/bor/decision/native/patches.json",
+  "test/harness/*.py"
+ ],
+ "test": [
+  "{python}",
+  "adapters/bor/lifecycle/native/test_lifecycle_bor.py",
+  "-v"
+ ],
+ "import": [
+  "lifecycle_bor"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "delay value",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "config[\"bor\"][\"stateSyncConfirmationDelay\"] = dict(STATE_SYNC_DELAY)",
+   "replacement": "config[\"bor\"][\"stateSyncConfirmationDelay\"] = {\"0\": 1}"
+  },
+  {
+   "name": "delay refusal",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "    require(\"stateSyncConfirmationDelay\" not in config[\"bor\"], \"The source genesis already sets the delay\")\n",
+   "replacement": ""
+  },
+  {
+   "name": "chain refusal",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "config.get(\"chainId\") == 15001",
+   "replacement": "config.get(\"chainId\") != 1"
+  },
+  {
+   "name": "sender refusal",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "    require(SENDER not in {address.lower().removeprefix(\"0x\") for address in alloc}, \"The sender is already funded\")\n",
+   "replacement": ""
+  },
+  {
+   "name": "sender balance",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "alloc[\"0x\" + SENDER] = {\"balance\": hex(SENDER_BALANCE)}",
+   "replacement": "alloc[\"0x\" + SENDER] = {\"balance\": hex(SENDER_BALANCE - 1)}"
+  },
+  {
+   "name": "digest framing",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "h.update(struct.pack(\">Q\", len(data)) + data)",
+   "replacement": "h.update(data)"
+  },
+  {
+   "name": "digest tag byte",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "h = hashlib.sha256(tag.encode() + b\"\\0\")",
+   "replacement": "h = hashlib.sha256(tag.encode())"
+  },
+  {
+   "name": "evidence old",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "e[\"key\"], e[\"old\"],\n",
+   "replacement": "e[\"key\"], e[\"new\"],\n"
+  },
+  {
+   "name": "rows decided only",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "for d in decisions if d[\"state\"] == \"NATIVE_DECIDED\"]",
+   "replacement": "for d in decisions]"
+  },
+  {
+   "name": "coverage outside profile",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "            if refusal[\"caller\"]:\n                add(refusal[\"caller\"], \"Refusals\")\n",
+   "replacement": "            pass\n"
+  },
+  {
+   "name": "coverage outside manual",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "        if row[\"refused\"]:\n            add(row[\"caller\"], \"Refusals\")\n",
+   "replacement": "        pass\n"
+  },
+  {
+   "name": "coverage node files",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "COVERAGE_FILES = (\"scenario\", \"restart\", \"settle\", \"repair\", \"native-caller\")",
+   "replacement": "COVERAGE_FILES = (\"scenario\", \"restart\", \"settle\", \"native-caller\")"
+  },
+  {
+   "name": "gaps observation",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "caller[\"route\"] == \"OBSERVATION\" and reach[\"Passes\"] == 0",
+   "replacement": "caller[\"route\"] == \"OBSERVATION\" and reach[\"Intents\"] == 0"
+  },
+  {
+   "name": "gaps decision",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "caller[\"route\"] == \"DECISION\" and reach[\"Intents\"] == 0",
+   "replacement": "caller[\"route\"] == \"DECISION\" and reach[\"Passes\"] == 0"
+  },
+  {
+   "name": "gaps refuse",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "or caller[\"route\"] == \"REFUSE\" and reach[\"Refusals\"] == 0)",
+   "replacement": ")"
+  },
+  {
+   "name": "gaps client",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "        if caller[\"client\"] != \"bor\":\n            continue\n",
+   "replacement": ""
+  },
+  {
+   "name": "scenario error",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(not sc.get(\"error\") and not sc.get(\"decisions_error\"), \"the scenario reported an error\")",
+   "replacement": "check(True, \"the scenario reported an error\")"
+  },
+  {
+   "name": "scenario phases",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "sc[\"reconcile\"][\"phase\"] == \"BOOTSTRAP\" and sc[\"phase_after_start\"] == \"LIVE\"",
+   "replacement": "sc[\"phase_after_start\"] == \"LIVE\""
+  },
+  {
+   "name": "boundary genesis",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "boundary.get(\"head\", {}).get(\"number\") == 0",
+   "replacement": "True"
+  },
+  {
+   "name": "scenario heads",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(steps == list(SCENARIO_HEADS), f\"scenario steps or heads differ: {steps}\")",
+   "replacement": "check(len(steps) == len(SCENARIO_HEADS), f\"scenario steps or heads differ: {steps}\")"
+  },
+  {
+   "name": "step errors",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "        check(s[\"error\"] == \"\", f\"step {s['name']} failed: {s['error']}\")\n",
+   "replacement": "        pass\n"
+  },
+  {
+   "name": "scenario decisions",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(rows(sc[\"decisions\"]) == [(k, o, n, m) for k, o, n, m in SCENARIO_DECISIONS],",
+   "replacement": "check(len(rows(sc[\"decisions\"])) == len(SCENARIO_DECISIONS),"
+  },
+  {
+   "name": "restart phase",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(out[\"reconcile\"][\"phase\"] == \"RECOVERY\" and out[\"phase_after_start\"] == \"LIVE\",",
+   "replacement": "check(out[\"phase_after_start\"] == \"LIVE\","
+  },
+  {
+   "name": "restart keeps H",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(out[\"reconcile\"].get(\"boundary\") == boundary, f\"{name} did not keep H\")",
+   "replacement": "check(True, f\"{name} did not keep H\")"
+  },
+  {
+   "name": "restart head",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(out[\"native_head\"][\"name\"] == expect,",
+   "replacement": "check(True,"
+  },
+  {
+   "name": "restart error",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(not out.get(\"error\"), f\"{name} reported an error\")",
+   "replacement": "check(True, f\"{name} reported an error\")"
+  },
+  {
+   "name": "clean restart nothing",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "outputs[\"restart\"][\"reconcile\"][\"settled\"] == [] and outputs[\"restart\"][\"reconcile\"][\"repaired\"] is None",
+   "replacement": "outputs[\"restart\"][\"reconcile\"][\"settled\"] == []"
+  },
+  {
+   "name": "clean restart decisions",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(rows(outputs[\"restart\"][\"decisions\"]) == rows(sc[\"decisions\"]), \"the clean restart changed the decisions\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "crash exit",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(crash[\"exit\"] == 3 and \"crash point",
+   "replacement": "check(\"crash point"
+  },
+  {
+   "name": "settle outcome",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "== [(\"bor.set-head\", \"NATIVE_DECIDED\")],",
+   "replacement": "!= [],"
+  },
+  {
+   "name": "settle decision",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(rows(settle[\"decisions\"])[-1:] == [(\"CANONICAL\", \"H7\", \"H6\", [])],",
+   "replacement": "check(True,"
+  },
+  {
+   "name": "fault head",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(fault[\"number\"] == 6, \"the fault did not hit the head H6\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "repair error",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(not repair.get(\"error\"), \"repair reported an error\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "repair keeps H",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(repair[\"reconcile\"].get(\"boundary\") == boundary, \"the repair restart did not keep H\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "repair below",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and repair[\"native_head_at_start\"][\"number\"] < 6,",
+   "replacement": ","
+  },
+  {
+   "name": "repair decision",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(rows(repair[\"decisions\"])[-1:] == [(\"CANONICAL\", \"H6\", repair[\"native_head_at_start\"][\"name\"], [])],",
+   "replacement": "check(True,"
+  },
+  {
+   "name": "repair intent",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(repair[\"coverage\"].get(\"bor.startup-reconcile\", {}).get(\"Intents\") == 1,",
+   "replacement": "check(True,"
+  },
+  {
+   "name": "manual refused",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check([r[\"refused\"] for r in manual[\"commands\"]] == [True, True, True] and manual[\"chaindata_kept\"],",
+   "replacement": "check(manual[\"chaindata_kept\"],"
+  },
+  {
+   "name": "profile refusals",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(got == {k: sorted(v) for k, v in PROFILE_REFUSALS.items()}, f\"profile refusals differ: {got}\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "profile parse",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(not any(r.get(\"config_error\") for r in profile[\"sets\"]), \"a profile argument set did not parse\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "server refused",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(profile[\"server\"][\"refused\"] and not profile[\"server\"][\"chaindata_created\"],",
+   "replacement": "check(profile[\"server\"][\"refused\"],"
+  },
+  {
+   "name": "native same result",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and rows(native[\"after_import\"][\"decisions\"]) == rows(sc[\"after_import\"][\"decisions\"]),",
+   "replacement": ","
+  },
+  {
+   "name": "native steps",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "\"head_name\": \"A5\", \"head_number\": 5, \"error\": \"\"}],",
+   "replacement": "\"head_name\": \"A5\", \"head_number\": 5, \"error\": \"\"}] or True,"
+  },
+  {
+   "name": "native error",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(not native.get(\"error\"), \"the admin_importChain node reported an error\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "python gaps",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(python_gaps == [], f\"lifecycle gaps: {python_gaps}\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "go gaps",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(outputs[\"gaps\"][\"gaps\"] == python_gaps, \"the Go and Python gaps differ\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "matrix local",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "local = (\"PASS\" if result == \"PASS\" else \"FAIL\") if scope == \"ALL\" else \"NOT_APPLICABLE\"",
+   "replacement": "local = \"PASS\" if scope == \"ALL\" else \"NOT_APPLICABLE\""
+  },
+  {
+   "name": "matrix public",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "\"polygon_mainnet\": \"NOT_RUN\",",
+   "replacement": "\"polygon_mainnet\": \"PASS\","
+  },
+  {
+   "name": "observe result",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "result = \"PASS\" if not failures else \"FAIL\"",
+   "replacement": "result = \"PASS\""
+  },
+  {
+   "name": "write new",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "with open(path, \"x\") as handle:",
+   "replacement": "with open(path, \"w\") as handle:"
+  }
+ ]
+}

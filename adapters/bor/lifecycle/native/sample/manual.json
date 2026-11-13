@@ -1,0 +1,23 @@
+{
+ "chaindata_kept": true,
+ "commands": [
+  {
+   "caller": "bor.manual-commands",
+   "command": "removedb",
+   "exit": 1,
+   "refused": true
+  },
+  {
+   "caller": "bor.manual-commands",
+   "command": "purge-whitelisted-entries",
+   "exit": 1,
+   "refused": true
+  },
+  {
+   "caller": "bor.prune-commands",
+   "command": "snapshot prune-state",
+   "exit": 1,
+   "refused": true
+  }
+ ]
+}
