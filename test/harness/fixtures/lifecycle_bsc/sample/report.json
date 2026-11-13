@@ -1,0 +1,2856 @@
+{
+ "ac_cap_01_01": {
+  "harness": [
+   {
+    "name": "start (BOOTSTRAP)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "G",
+    "finalized": "zero",
+    "canonical": [
+     "G"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import A1 A2 A3 (BOOTSTRAP)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import S3 (BOOTSTRAP, side block)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "setHead 2 (BOOTSTRAP)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "GoLive (H)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "fixture: S3 stored above the head, as a snap-sync rollback leaves it",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "InsertChain S3 (known block)",
+    "class": "ErrCorpus",
+    "phase": "LIVE",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import A3 A4 A5",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [
+     "0 NATIVE_DECIDED IMPORT A2-\u003eA3 [A3] 54d7cf91699c489189f33ef23b6f0557946bdd08898da81594310fb3c6c88bde",
+     "1 NATIVE_DECIDED IMPORT A3-\u003eA4 [A4] 4c5501d1544c0ac25958f7b5b4fda5c2d2026dab3b733895efe17decc1cb2a2f",
+     "2 NATIVE_DECIDED IMPORT A4-\u003eA5 [A5] a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0"
+    ],
+    "open": []
+   },
+   {
+    "name": "setHead 4",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A4",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4"
+    ],
+    "decisions": [
+     "3 NATIVE_DECIDED CANONICAL A5-\u003eA4 [] 999d1b1e4ede31c2a9f88e02ef876f4f856cc8b33c407dc17297e23e2916ddb2"
+    ],
+    "open": []
+   },
+   {
+    "name": "import A5 again",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [
+     "4 NATIVE_DECIDED IMPORT A4-\u003eA5 [A5] a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0"
+    ],
+    "open": []
+   },
+   {
+    "name": "restart 1 (shutdown, RECOVERY, live at H)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [
+     "5 NATIVE_DECIDED CANONICAL A5-\u003eA5 [] 45e8b2736cd5242d9e90f10735130772bae19a4a5026b84e7b6bab621747d93c"
+    ],
+    "open": []
+   },
+   {
+    "name": "import S4 (side branch, pruned parent S3)",
+    "class": "ErrImportProfile",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import A6 A7",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "decisions": [
+     "6 NATIVE_DECIDED IMPORT A5-\u003eA6 [A6] 4b147c12a750a214e75652e009536ac60d8f86f9859e542dd94f662ba9fe4aa4",
+     "7 NATIVE_DECIDED IMPORT A6-\u003eA7 [A7] 33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982"
+    ],
+    "open": []
+   },
+   {
+    "name": "restart 2 (A7 state root deleted: startup repair and reconciliation)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A6",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6"
+    ],
+    "decisions": [
+     "8 NATIVE_DECIDED CANONICAL A7-\u003eA7 [] 231da0f11c23060490207bbc9c9964100911a26e10e39bdf052d4f461bec1edc",
+     "9 NATIVE_DECIDED CANONICAL A7-\u003eA6 [] 74f1520e23e54c66531ad388b16c1c4b91cba0989e18cdfaa46b52ec99287842"
+    ],
+    "open": []
+   },
+   {
+    "name": "InsertChain A7 (stored, its state deleted)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "decisions": [
+     "10 NATIVE_DECIDED IMPORT A6-\u003eA7 [A7] 33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982"
+    ],
+    "open": []
+   }
+  ],
+  "native": [
+   {
+    "name": "start (BOOTSTRAP)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "G",
+    "finalized": "zero",
+    "canonical": [
+     "G"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import A1 A2 A3 (BOOTSTRAP)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import S3 (BOOTSTRAP, side block)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "setHead 2 (BOOTSTRAP)",
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "GoLive (H)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "fixture: S3 stored above the head, as a snap-sync rollback leaves it",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "InsertChain S3 (known block)",
+    "class": "ErrCorpus",
+    "phase": "LIVE",
+    "head": "A2",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import A3 A4 A5",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [
+     "0 NATIVE_DECIDED IMPORT A2-\u003eA3 [A3] 54d7cf91699c489189f33ef23b6f0557946bdd08898da81594310fb3c6c88bde",
+     "1 NATIVE_DECIDED IMPORT A3-\u003eA4 [A4] 4c5501d1544c0ac25958f7b5b4fda5c2d2026dab3b733895efe17decc1cb2a2f",
+     "2 NATIVE_DECIDED IMPORT A4-\u003eA5 [A5] a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0"
+    ],
+    "open": []
+   },
+   {
+    "name": "setHead 4",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A4",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4"
+    ],
+    "decisions": [
+     "3 NATIVE_DECIDED CANONICAL A5-\u003eA4 [] 999d1b1e4ede31c2a9f88e02ef876f4f856cc8b33c407dc17297e23e2916ddb2"
+    ],
+    "open": []
+   },
+   {
+    "name": "import A5 again",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [
+     "4 NATIVE_DECIDED IMPORT A4-\u003eA5 [A5] a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0"
+    ],
+    "open": []
+   },
+   {
+    "name": "restart 1 (shutdown, RECOVERY, live at H)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [
+     "5 NATIVE_DECIDED CANONICAL A5-\u003eA5 [] 45e8b2736cd5242d9e90f10735130772bae19a4a5026b84e7b6bab621747d93c"
+    ],
+    "open": []
+   },
+   {
+    "name": "import S4 (side branch, pruned parent S3)",
+    "class": "ErrImportProfile",
+    "phase": "LIVE",
+    "head": "A5",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "decisions": [],
+    "open": []
+   },
+   {
+    "name": "import A6 A7",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "decisions": [
+     "6 NATIVE_DECIDED IMPORT A5-\u003eA6 [A6] 4b147c12a750a214e75652e009536ac60d8f86f9859e542dd94f662ba9fe4aa4",
+     "7 NATIVE_DECIDED IMPORT A6-\u003eA7 [A7] 33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982"
+    ],
+    "open": []
+   },
+   {
+    "name": "restart 2 (A7 state root deleted: startup repair and reconciliation)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A6",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6"
+    ],
+    "decisions": [
+     "8 NATIVE_DECIDED CANONICAL A7-\u003eA7 [] 231da0f11c23060490207bbc9c9964100911a26e10e39bdf052d4f461bec1edc",
+     "9 NATIVE_DECIDED CANONICAL A7-\u003eA6 [] 74f1520e23e54c66531ad388b16c1c4b91cba0989e18cdfaa46b52ec99287842"
+    ],
+    "open": []
+   },
+   {
+    "name": "InsertChain A7 (stored, its state deleted)",
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "decisions": [
+     "10 NATIVE_DECIDED IMPORT A6-\u003eA7 [A7] 33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982"
+    ],
+    "open": []
+   }
+  ]
+ },
+ "attestation_fault": {
+  "database_guard": "live pins forbid this native deletion: 1 live, first bsc-lifecycle.run-1.0000000000000000",
+  "steps": [
+   {
+    "name": "start (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "G",
+    "head_number": 0,
+    "finalized": "zero",
+    "canonical": [
+     "G"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "import A1 A2 (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "GoLive",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    }
+   },
+   {
+    "name": "import A3 with the snapshot lookup error",
+    "error": "finality evidence source error: snapshot: unknown ancestor",
+    "class": "ErrSource",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [
+     {
+      "key": "bsc-lifecycle.run-1.0000000000000000",
+      "state": "EXEC_READY",
+      "block": "A3"
+     }
+    ],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    }
+   },
+   {
+    "name": "database guard (removedb, db put) while A3 is EXEC_READY",
+    "error": "live pins forbid this native deletion: 1 live, first bsc-lifecycle.run-1.0000000000000000",
+    "class": "ErrLivePins",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [
+     {
+      "key": "bsc-lifecycle.run-1.0000000000000000",
+      "state": "EXEC_READY",
+      "block": "A3"
+     }
+    ],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    }
+   },
+   {
+    "name": "restart: recovery replays A3 without the fault",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A3",
+    "head_number": 3,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 0,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A2",
+      "new": "A2",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "1b73193f3ff27b3920d98349bd2a5e79cdbd15e6252567817f294799aeb76daf",
+      "intent_digest": "4d063c9cf6b197702deb582e1a754326638537b7f57c48120155e812e907e214",
+      "old_head": {
+       "number": 2,
+       "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
+      },
+      "new_head": {
+       "number": 2,
+       "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
+      }
+     },
+     {
+      "sequence": 1,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A2",
+      "new": "A3",
+      "members": [
+       "A3"
+      ],
+      "marker": true,
+      "evidence_digest": "54d7cf91699c489189f33ef23b6f0557946bdd08898da81594310fb3c6c88bde",
+      "intent_digest": "6d1b94ad4f7d8523cf58facd197794e9bdde3de44c4da34c20fbdd250e7f83f2",
+      "old_head": {
+       "number": 2,
+       "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
+      },
+      "new_head": {
+       "number": 3,
+       "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A3"
+    }
+   },
+   {
+    "name": "database guard after the decision",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A3",
+    "head_number": 3,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A3"
+    }
+   }
+  ]
+ },
+ "block_order": [
+  "A1",
+  "A2",
+  "A3",
+  "A4",
+  "A5",
+  "A6",
+  "A7",
+  "S3",
+  "S4"
+ ],
+ "blocks": {
+  "A1": {
+   "hash": "ce7dc0903887793f9ebf8eb2cec3f64f9272601a62b68bcece620fa2aaa73b66",
+   "number": 1,
+   "parent": "G",
+   "root": "c0c4422592337a56e98705f4fdff05d33df1453c09b647483e04c443c1b5058b",
+   "time": 1587390417
+  },
+  "A2": {
+   "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2",
+   "number": 2,
+   "parent": "A1",
+   "root": "47de06dbf5bac0bac309c31fc65a3e77a059f1abf2c5397956d5908070b67e23",
+   "time": 1587390420
+  },
+  "A3": {
+   "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248",
+   "number": 3,
+   "parent": "A2",
+   "root": "eaddcf1d1d43d53d05d3d04e66854961189ec97dc46086992540748fff2bf027",
+   "time": 1587390423
+  },
+  "A4": {
+   "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101",
+   "number": 4,
+   "parent": "A3",
+   "root": "8ed7164a6354e117415d432dbbe65f7704fb51467fb4a5cc7f5e7e9096bdc9c5",
+   "time": 1587390426
+  },
+  "A5": {
+   "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442",
+   "number": 5,
+   "parent": "A4",
+   "root": "031892c4a17c6abb1289e670dedf18b5308bf5a1a61667868a8e49a18a701089",
+   "time": 1587390429
+  },
+  "A6": {
+   "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2",
+   "number": 6,
+   "parent": "A5",
+   "root": "1e945c7ffea86c2e2fb7099d036c26dc7caaad1c37938475dbb058ead540407c",
+   "time": 1587390432
+  },
+  "A7": {
+   "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8",
+   "number": 7,
+   "parent": "A6",
+   "root": "ce73fce6bcbe4e28f09e66bfc7d56bc051112231b3e91ec924e5949ecb1978ab",
+   "time": 1587390435
+  },
+  "S3": {
+   "hash": "90808662cc7be5409092043a3d1f46b316959485b28e7124287b93dbbd681b77",
+   "number": 3,
+   "parent": "A2",
+   "root": "909ab6cb43f7abb993dd070505d904c4eb23d9493d0a54caba20d11801e2e2ab",
+   "time": 1587390424
+  },
+  "S4": {
+   "hash": "49fbf79c8668cb72f1d8538014b08439d86c9b3e04f5ec5a88728959e2ac68f0",
+   "number": 4,
+   "parent": "S3",
+   "root": "30c690edcdf7190441bd288c36d165b9c88ed0654df942c7252242043f7b7df2",
+   "time": 1587390427
+  }
+ },
+ "coverage": {
+  "bsc.attestation-read": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.database-commands": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 1
+  },
+  "bsc.engine-api": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 2
+  },
+  "bsc.eth-call": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.execution-witness": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.freezer": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.import": {
+   "intents": 0,
+   "passes": 35,
+   "refusals": 0
+  },
+  "bsc.known-block": {
+   "intents": 0,
+   "passes": 2,
+   "refusals": 0
+  },
+  "bsc.manual-commands": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 1
+  },
+  "bsc.notify-finalized": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.prefetch": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.recovery": {
+   "intents": 0,
+   "passes": 8,
+   "refusals": 0
+  },
+  "bsc.sealing": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 3
+  },
+  "bsc.set-head": {
+   "intents": 12,
+   "passes": 14,
+   "refusals": 0
+  },
+  "bsc.shutdown": {
+   "intents": 10,
+   "passes": 10,
+   "refusals": 0
+  },
+  "bsc.side-chain": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.snap-sync": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 13
+  },
+  "bsc.startup-reconcile": {
+   "intents": 2,
+   "passes": 7,
+   "refusals": 0
+  },
+  "bsc.system-call-api": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  },
+  "bsc.trace-state": {
+   "intents": 0,
+   "passes": 0,
+   "refusals": 0
+  }
+ },
+ "crashes": [
+  {
+   "child_exit": 3,
+   "decisions": [
+    {
+     "sequence": 0,
+     "state": "NATIVE_DECIDED",
+     "kind": "IMPORT",
+     "old": "A3",
+     "new": "A4",
+     "members": [
+      "A4"
+     ],
+     "marker": true,
+     "evidence_digest": "4c5501d1544c0ac25958f7b5b4fda5c2d2026dab3b733895efe17decc1cb2a2f",
+     "intent_digest": "49e7eee4012ead4df9638d1549f6eebfa47e1196a7e5eeeb9d10b1516f9ee987",
+     "old_head": {
+      "number": 3,
+      "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+     },
+     "new_head": {
+      "number": 4,
+      "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+     }
+    },
+    {
+     "sequence": 1,
+     "state": "NATIVE_DECIDED",
+     "kind": "IMPORT",
+     "old": "A4",
+     "new": "A5",
+     "members": [
+      "A5"
+     ],
+     "marker": true,
+     "evidence_digest": "a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0",
+     "intent_digest": "03c31e8a06cc4215c8f62e5412fea2c22d9ad06997b7cad804cf219706f26730",
+     "old_head": {
+      "number": 4,
+      "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+     },
+     "new_head": {
+      "number": 5,
+      "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+     }
+    }
+   ],
+   "head": "A5",
+   "head_after_crash": "A5",
+   "mode": "set-head-intended",
+   "phase": "LIVE",
+   "restart_error": null,
+   "settle": [
+    {
+     "digest": "dc4a60ab71e42ddd56a3dbb87a943108aabb64d201580451f4d2871b0543048b",
+     "event": "lifecycle-settle",
+     "evidence": "native-head-is-old-head",
+     "outcome": "rejected",
+     "scope": "crash-set-head-intended",
+     "sequence": 2
+    }
+   ],
+   "view_head": "A5"
+  },
+  {
+   "child_exit": 3,
+   "decisions": [
+    {
+     "sequence": 0,
+     "state": "NATIVE_DECIDED",
+     "kind": "IMPORT",
+     "old": "A3",
+     "new": "A4",
+     "members": [
+      "A4"
+     ],
+     "marker": true,
+     "evidence_digest": "4c5501d1544c0ac25958f7b5b4fda5c2d2026dab3b733895efe17decc1cb2a2f",
+     "intent_digest": "49e7eee4012ead4df9638d1549f6eebfa47e1196a7e5eeeb9d10b1516f9ee987",
+     "old_head": {
+      "number": 3,
+      "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+     },
+     "new_head": {
+      "number": 4,
+      "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+     }
+    },
+    {
+     "sequence": 1,
+     "state": "NATIVE_DECIDED",
+     "kind": "IMPORT",
+     "old": "A4",
+     "new": "A5",
+     "members": [
+      "A5"
+     ],
+     "marker": true,
+     "evidence_digest": "a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0",
+     "intent_digest": "03c31e8a06cc4215c8f62e5412fea2c22d9ad06997b7cad804cf219706f26730",
+     "old_head": {
+      "number": 4,
+      "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+     },
+     "new_head": {
+      "number": 5,
+      "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+     }
+    },
+    {
+     "sequence": 2,
+     "state": "NATIVE_DECIDED",
+     "kind": "CANONICAL",
+     "old": "A5",
+     "new": "A4",
+     "members": [],
+     "marker": true,
+     "evidence_digest": "999d1b1e4ede31c2a9f88e02ef876f4f856cc8b33c407dc17297e23e2916ddb2",
+     "intent_digest": "abedbd8a431874d480f5bc97cb6057092a28b042a35c56771fa6fec4331e17c1",
+     "old_head": {
+      "number": 5,
+      "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+     },
+     "new_head": {
+      "number": 4,
+      "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+     }
+    }
+   ],
+   "head": "A4",
+   "head_after_crash": "A4",
+   "mode": "set-head-rewound",
+   "phase": "LIVE",
+   "restart_error": null,
+   "settle": [
+    {
+     "digest": "3c80da7ece70dd32e18a5820dbaf5fbd2b561b2b00c5f0478546b2e3a0bf95f4",
+     "event": "lifecycle-settle",
+     "evidence": "native-head-is-new-head",
+     "outcome": "completed",
+     "scope": "crash-set-head-rewound",
+     "sequence": 2
+    }
+   ],
+   "view_head": "A4"
+  }
+ ],
+ "deadlock": {
+  "callers": 5,
+  "calls_each": 10,
+  "errors": [],
+  "finished": true,
+  "head": "A7"
+ },
+ "events": {
+  "bootstrap": {
+   "A1": [
+    "block A1",
+    "chain A1",
+    "finalized G",
+    "head A1",
+    "logs 11",
+    "verified A1"
+   ],
+   "A2": [
+    "block A2",
+    "chain A2",
+    "head A2",
+    "logs 5",
+    "verified A2"
+   ]
+  },
+  "bootstrap_error": null,
+  "decided": {
+   "A3": [
+    "block A3",
+    "chain A3",
+    "head A3",
+    "logs 5",
+    "verified A3"
+   ],
+   "A4": [
+    "block A4",
+    "chain A4",
+    "head A4",
+    "logs 5",
+    "verified A4"
+   ],
+   "A5": [
+    "block A5",
+    "chain A5",
+    "head A5",
+    "logs 5",
+    "verified A5"
+   ],
+   "A6": [
+    "block A6",
+    "chain A6",
+    "head A6",
+    "logs 5",
+    "verified A6"
+   ],
+   "A7": [
+    "block A7",
+    "chain A7",
+    "head A7",
+    "logs 5",
+    "verified A7"
+   ]
+  },
+  "decided_error": null,
+  "decisions": [
+   {
+    "sequence": 0,
+    "state": "NATIVE_DECIDED",
+    "kind": "IMPORT",
+    "old": "A2",
+    "new": "A3",
+    "members": [
+     "A3"
+    ],
+    "marker": true,
+    "evidence_digest": "54d7cf91699c489189f33ef23b6f0557946bdd08898da81594310fb3c6c88bde",
+    "intent_digest": "2a44f4424d08ad8f24221cd0f4d1fabaf6cc98b79e4d8a3bc9c6bdf363b1d14f",
+    "old_head": {
+     "number": 2,
+     "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
+    },
+    "new_head": {
+     "number": 3,
+     "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+    }
+   },
+   {
+    "sequence": 1,
+    "state": "NATIVE_DECIDED",
+    "kind": "IMPORT",
+    "old": "A3",
+    "new": "A4",
+    "members": [
+     "A4"
+    ],
+    "marker": true,
+    "evidence_digest": "4c5501d1544c0ac25958f7b5b4fda5c2d2026dab3b733895efe17decc1cb2a2f",
+    "intent_digest": "82ce128bbfc41f5afb6666fb383b830985eef1902150d06b4bad9cce39e7243e",
+    "old_head": {
+     "number": 3,
+     "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+    },
+    "new_head": {
+     "number": 4,
+     "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+    }
+   },
+   {
+    "sequence": 2,
+    "state": "NATIVE_DECIDED",
+    "kind": "IMPORT",
+    "old": "A4",
+    "new": "A5",
+    "members": [
+     "A5"
+    ],
+    "marker": true,
+    "evidence_digest": "a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0",
+    "intent_digest": "308616d83c8f8a91acb52081213f5dcf8f95fac12d668fba5916966c0083731a",
+    "old_head": {
+     "number": 4,
+     "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+    },
+    "new_head": {
+     "number": 5,
+     "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+    }
+   },
+   {
+    "sequence": 3,
+    "state": "NATIVE_DECIDED",
+    "kind": "IMPORT",
+    "old": "A5",
+    "new": "A6",
+    "members": [
+     "A6"
+    ],
+    "marker": true,
+    "evidence_digest": "4b147c12a750a214e75652e009536ac60d8f86f9859e542dd94f662ba9fe4aa4",
+    "intent_digest": "803d30db031fdaa6938e7cabf68df2f4c606cd764d9067e56987075f383ee24e",
+    "old_head": {
+     "number": 5,
+     "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+    },
+    "new_head": {
+     "number": 6,
+     "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+    }
+   },
+   {
+    "sequence": 4,
+    "state": "NATIVE_DECIDED",
+    "kind": "IMPORT",
+    "old": "A6",
+    "new": "A7",
+    "members": [
+     "A7"
+    ],
+    "marker": true,
+    "evidence_digest": "33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982",
+    "intent_digest": "c125eb7486dcac76806c3fd1df3b82d32468ccfe8fa7a06fc103ef33f4f64642",
+    "old_head": {
+     "number": 6,
+     "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+    },
+    "new_head": {
+     "number": 7,
+     "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+    }
+   }
+  ],
+  "golive_error": null,
+  "reference": {
+   "A1": [
+    "block A1",
+    "chain A1",
+    "finalized G",
+    "head A1",
+    "logs 11",
+    "verified A1"
+   ],
+   "A2": [
+    "block A2",
+    "chain A2",
+    "head A2",
+    "logs 5",
+    "verified A2"
+   ],
+   "A3": [
+    "block A3",
+    "chain A3",
+    "head A3",
+    "logs 5",
+    "verified A3"
+   ],
+   "A4": [
+    "block A4",
+    "chain A4",
+    "head A4",
+    "logs 5",
+    "verified A4"
+   ],
+   "A5": [
+    "block A5",
+    "chain A5",
+    "head A5",
+    "logs 5",
+    "verified A5"
+   ],
+   "A6": [
+    "block A6",
+    "chain A6",
+    "head A6",
+    "logs 5",
+    "verified A6"
+   ],
+   "A7": [
+    "block A7",
+    "chain A7",
+    "head A7",
+    "logs 5",
+    "verified A7"
+   ]
+  },
+  "reference_error": null
+ },
+ "gaps": [
+  "bsc.known-block",
+  "bsc.side-chain"
+ ],
+ "genesis": "16d03930cdabc5b474bb63eb69fb6e8a803f4a606310a42e743dc5bd45441e77",
+ "harness": {
+  "exit_errors": [],
+  "shared_steps": 15,
+  "steps": [
+   {
+    "name": "start (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "G",
+    "head_number": 0,
+    "finalized": "zero",
+    "canonical": [
+     "G"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "import A1 A2 A3 (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "head_number": 3,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "import S3 (BOOTSTRAP, side block)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "head_number": 3,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "setHead 2 (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "GoLive (H)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    }
+   },
+   {
+    "name": "fixture: S3 stored above the head, as a snap-sync rollback leaves it",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    },
+    "extra": {
+     "s3_has_state": true,
+     "s3_known_with_state": true
+    }
+   },
+   {
+    "name": "InsertChain S3 (known block)",
+    "error": "source invariant error: a branch block has no retained EXEC_READY observation (D104): block 3 0x90808662cc7be5409092043a3d1f46b316959485b28e7124287b93dbbd681b77, head 2 0x76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2",
+    "class": "ErrCorpus",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    }
+   },
+   {
+    "name": "import A3 A4 A5",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 0,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A2",
+      "new": "A3",
+      "members": [
+       "A3"
+      ],
+      "marker": true,
+      "evidence_digest": "54d7cf91699c489189f33ef23b6f0557946bdd08898da81594310fb3c6c88bde",
+      "intent_digest": "2a44f4424d08ad8f24221cd0f4d1fabaf6cc98b79e4d8a3bc9c6bdf363b1d14f",
+      "old_head": {
+       "number": 2,
+       "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
+      },
+      "new_head": {
+       "number": 3,
+       "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+      }
+     },
+     {
+      "sequence": 1,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A3",
+      "new": "A4",
+      "members": [
+       "A4"
+      ],
+      "marker": true,
+      "evidence_digest": "4c5501d1544c0ac25958f7b5b4fda5c2d2026dab3b733895efe17decc1cb2a2f",
+      "intent_digest": "82ce128bbfc41f5afb6666fb383b830985eef1902150d06b4bad9cce39e7243e",
+      "old_head": {
+       "number": 3,
+       "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+      },
+      "new_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      }
+     },
+     {
+      "sequence": 2,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A4",
+      "new": "A5",
+      "members": [
+       "A5"
+      ],
+      "marker": true,
+      "evidence_digest": "a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0",
+      "intent_digest": "308616d83c8f8a91acb52081213f5dcf8f95fac12d668fba5916966c0083731a",
+      "old_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      },
+      "new_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    }
+   },
+   {
+    "name": "setHead 4",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A4",
+    "head_number": 4,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 3,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A5",
+      "new": "A4",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "999d1b1e4ede31c2a9f88e02ef876f4f856cc8b33c407dc17297e23e2916ddb2",
+      "intent_digest": "b44608e806a7a89f35ebbcfaf5c28a195b0a9df829d04296bd3cefca6699a4a4",
+      "old_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      },
+      "new_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A4"
+    }
+   },
+   {
+    "name": "import A5 again",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 4,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A4",
+      "new": "A5",
+      "members": [
+       "A5"
+      ],
+      "marker": true,
+      "evidence_digest": "a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0",
+      "intent_digest": "96868e6dcfb6fcd2a249d46d1979aa8cf690cf037463d7c777745eb4e654063d",
+      "old_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      },
+      "new_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    }
+   },
+   {
+    "name": "restart 1 (shutdown, RECOVERY, live at H)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 5,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A5",
+      "new": "A5",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "45e8b2736cd5242d9e90f10735130772bae19a4a5026b84e7b6bab621747d93c",
+      "intent_digest": "1d54376de547ebb769a6990cbf1df343cafa4655df04b7982766a5c4a2ae9095",
+      "old_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      },
+      "new_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    },
+    "extra": {
+     "exit_errors_before": []
+    }
+   },
+   {
+    "name": "import S4 (side branch, pruned parent S3)",
+    "error": "block outside the sequential import profile: block 4 has no parent with state",
+    "class": "ErrImportProfile",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    },
+    "extra": {
+     "s3_has_state": false,
+     "s3_stored": true
+    }
+   },
+   {
+    "name": "import A6 A7",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 6,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A5",
+      "new": "A6",
+      "members": [
+       "A6"
+      ],
+      "marker": true,
+      "evidence_digest": "4b147c12a750a214e75652e009536ac60d8f86f9859e542dd94f662ba9fe4aa4",
+      "intent_digest": "003f3add36529eb7b7ba16e61d96f3084268fdbbea73ea5c9999c92fa8e70cd9",
+      "old_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      },
+      "new_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      }
+     },
+     {
+      "sequence": 7,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A6",
+      "new": "A7",
+      "members": [
+       "A7"
+      ],
+      "marker": true,
+      "evidence_digest": "33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982",
+      "intent_digest": "c1209b2c2ee608f29c211771f0da381f88488bf8b48f0779750c520154860b89",
+      "old_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "restart 2 (A7 state root deleted: startup repair and reconciliation)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A6",
+    "head_number": 6,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 8,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "231da0f11c23060490207bbc9c9964100911a26e10e39bdf052d4f461bec1edc",
+      "intent_digest": "e3bac94dd1261b0826b30f6adbf7ecf5b52a134a36a3f290ceda973e40f93fab",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 9,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A6",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "74f1520e23e54c66531ad388b16c1c4b91cba0989e18cdfaa46b52ec99287842",
+      "intent_digest": "ebc37f0f36aa2c21bad1bc48f3714c723fc780a2290326591bdea602643eb069",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A6"
+    },
+    "extra": {
+     "exit_errors_before": []
+    }
+   },
+   {
+    "name": "InsertChain A7 (stored, its state deleted)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 10,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A6",
+      "new": "A7",
+      "members": [
+       "A7"
+      ],
+      "marker": true,
+      "evidence_digest": "33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982",
+      "intent_digest": "6cedf11702ea98cefe3ab9177f019f8eeb4201df709a8b5a09ca06c8fd68baa1",
+      "old_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "after deadlock smoke",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 11,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "136e37574dfedbd14c2fa966bd050b5e60dbc4db4f3fa7f12ca78076a926531c",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 12,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "2dabcb707ad8767a8f7f6178fdeccefbd310809a8b9c9cfc3af0a9c5a348d01c",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 13,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "172b2474959b181c52d437941d7b689eccb4bf0e6eb241a9f207eacebbfa3f18",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 14,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "b0601795cfdab25d4ae9be5164d9beababe580311189a9b5ec5d794ea613cded",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 15,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "3d81f2295ef40451bb5f6c52e9c262a90791c5e9b2885c31e224fead189d9947",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 16,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "303f633a687df3a34e2cd3c16a450ddd62b0895a5b8aa9225445c5586dc2067c",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 17,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "7b7274d48ad878bb04a72d0fb71ee822843197d0c5e37dcea49dc626375e055a",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 18,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "b0d202c1013cabef48162758965238255f935a97e90b062615cdc6362758fc47",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 19,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "2520167495310c109fa3af70a34c3f5e662ce88832473bd17b4ee7aa003e92a8",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 20,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "12fb1189bde33352cc8594cdc2ba2dffb17d3101705efe0a4a3e16295bea511b",
+      "intent_digest": "301d2ac0505a00dd4051c544bd24e617c6adf1ae87a2e37ceee5537e36096636",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   }
+  ]
+ },
+ "kind": "bsc-lifecycle-probe",
+ "native_caller": {
+  "exit_errors": [],
+  "shared_steps": 15,
+  "steps": [
+   {
+    "name": "start (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "G",
+    "head_number": 0,
+    "finalized": "zero",
+    "canonical": [
+     "G"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "import A1 A2 A3 (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "head_number": 3,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "import S3 (BOOTSTRAP, side block)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A3",
+    "head_number": 3,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "setHead 2 (BOOTSTRAP)",
+    "error": null,
+    "class": "",
+    "phase": "BOOTSTRAP",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": null
+   },
+   {
+    "name": "GoLive (H)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    }
+   },
+   {
+    "name": "fixture: S3 stored above the head, as a snap-sync rollback leaves it",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    },
+    "extra": {
+     "s3_has_state": true,
+     "s3_known_with_state": true
+    }
+   },
+   {
+    "name": "InsertChain S3 (known block)",
+    "error": "source invariant error: a branch block has no retained EXEC_READY observation (D104): block 3 0x90808662cc7be5409092043a3d1f46b316959485b28e7124287b93dbbd681b77, head 2 0x76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2",
+    "class": "ErrCorpus",
+    "phase": "LIVE",
+    "head": "A2",
+    "head_number": 2,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A2"
+    }
+   },
+   {
+    "name": "import A3 A4 A5",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 0,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A2",
+      "new": "A3",
+      "members": [
+       "A3"
+      ],
+      "marker": true,
+      "evidence_digest": "54d7cf91699c489189f33ef23b6f0557946bdd08898da81594310fb3c6c88bde",
+      "intent_digest": "2a44f4424d08ad8f24221cd0f4d1fabaf6cc98b79e4d8a3bc9c6bdf363b1d14f",
+      "old_head": {
+       "number": 2,
+       "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
+      },
+      "new_head": {
+       "number": 3,
+       "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+      }
+     },
+     {
+      "sequence": 1,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A3",
+      "new": "A4",
+      "members": [
+       "A4"
+      ],
+      "marker": true,
+      "evidence_digest": "4c5501d1544c0ac25958f7b5b4fda5c2d2026dab3b733895efe17decc1cb2a2f",
+      "intent_digest": "82ce128bbfc41f5afb6666fb383b830985eef1902150d06b4bad9cce39e7243e",
+      "old_head": {
+       "number": 3,
+       "hash": "4ef1541f47158ef74536cb8df7dbbd93520553a765018644d7256d712ddea248"
+      },
+      "new_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      }
+     },
+     {
+      "sequence": 2,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A4",
+      "new": "A5",
+      "members": [
+       "A5"
+      ],
+      "marker": true,
+      "evidence_digest": "a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0",
+      "intent_digest": "308616d83c8f8a91acb52081213f5dcf8f95fac12d668fba5916966c0083731a",
+      "old_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      },
+      "new_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    }
+   },
+   {
+    "name": "setHead 4",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A4",
+    "head_number": 4,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 3,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A5",
+      "new": "A4",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "999d1b1e4ede31c2a9f88e02ef876f4f856cc8b33c407dc17297e23e2916ddb2",
+      "intent_digest": "b44608e806a7a89f35ebbcfaf5c28a195b0a9df829d04296bd3cefca6699a4a4",
+      "old_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      },
+      "new_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A4"
+    }
+   },
+   {
+    "name": "import A5 again",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 4,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A4",
+      "new": "A5",
+      "members": [
+       "A5"
+      ],
+      "marker": true,
+      "evidence_digest": "a8d37e3fe3693b3da7bcd53327148538ea9bc1e503f3892be7d0868c2860eca0",
+      "intent_digest": "96868e6dcfb6fcd2a249d46d1979aa8cf690cf037463d7c777745eb4e654063d",
+      "old_head": {
+       "number": 4,
+       "hash": "58960940c6ca9647b485f78610a527114ec06c9c0ba6062731f838289dcea101"
+      },
+      "new_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    }
+   },
+   {
+    "name": "restart 1 (shutdown, RECOVERY, live at H)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 5,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A5",
+      "new": "A5",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "45e8b2736cd5242d9e90f10735130772bae19a4a5026b84e7b6bab621747d93c",
+      "intent_digest": "1d54376de547ebb769a6990cbf1df343cafa4655df04b7982766a5c4a2ae9095",
+      "old_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      },
+      "new_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    },
+    "extra": {
+     "exit_errors_before": []
+    }
+   },
+   {
+    "name": "import S4 (side branch, pruned parent S3)",
+    "error": "batch 0: failed to insert: block outside the sequential import profile: block 4 has no parent with state",
+    "class": "ErrImportProfile",
+    "phase": "LIVE",
+    "head": "A5",
+    "head_number": 5,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A5"
+    },
+    "extra": {
+     "s3_has_state": false,
+     "s3_stored": true
+    }
+   },
+   {
+    "name": "import A6 A7",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 6,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A5",
+      "new": "A6",
+      "members": [
+       "A6"
+      ],
+      "marker": true,
+      "evidence_digest": "4b147c12a750a214e75652e009536ac60d8f86f9859e542dd94f662ba9fe4aa4",
+      "intent_digest": "003f3add36529eb7b7ba16e61d96f3084268fdbbea73ea5c9999c92fa8e70cd9",
+      "old_head": {
+       "number": 5,
+       "hash": "97cdd78dfbbb3f88ee8012a3f72c9fec70677c8e59d924132d9f544e9087e442"
+      },
+      "new_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      }
+     },
+     {
+      "sequence": 7,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A6",
+      "new": "A7",
+      "members": [
+       "A7"
+      ],
+      "marker": true,
+      "evidence_digest": "33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982",
+      "intent_digest": "c1209b2c2ee608f29c211771f0da381f88488bf8b48f0779750c520154860b89",
+      "old_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "restart 2 (A7 state root deleted: startup repair and reconciliation)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A6",
+    "head_number": 6,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 8,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A7",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "231da0f11c23060490207bbc9c9964100911a26e10e39bdf052d4f461bec1edc",
+      "intent_digest": "e3bac94dd1261b0826b30f6adbf7ecf5b52a134a36a3f290ceda973e40f93fab",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     },
+     {
+      "sequence": 9,
+      "state": "NATIVE_DECIDED",
+      "kind": "CANONICAL",
+      "old": "A7",
+      "new": "A6",
+      "members": [],
+      "marker": true,
+      "evidence_digest": "74f1520e23e54c66531ad388b16c1c4b91cba0989e18cdfaa46b52ec99287842",
+      "intent_digest": "ebc37f0f36aa2c21bad1bc48f3714c723fc780a2290326591bdea602643eb069",
+      "old_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      },
+      "new_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A6"
+    },
+    "extra": {
+     "exit_errors_before": []
+    }
+   },
+   {
+    "name": "InsertChain A7 (stored, its state deleted)",
+    "error": null,
+    "class": "",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [
+     {
+      "sequence": 10,
+      "state": "NATIVE_DECIDED",
+      "kind": "IMPORT",
+      "old": "A6",
+      "new": "A7",
+      "members": [
+       "A7"
+      ],
+      "marker": true,
+      "evidence_digest": "33ab671ffed2c87c005f08bef5bd555c3d963cf6fdcc5070dfa77790ab464982",
+      "intent_digest": "6cedf11702ea98cefe3ab9177f019f8eeb4201df709a8b5a09ca06c8fd68baa1",
+      "old_head": {
+       "number": 6,
+       "hash": "4d9f803a547a6c708c55850831205b5d5bd74da4693a7dd78d96a5b65db71fa2"
+      },
+      "new_head": {
+       "number": 7,
+       "hash": "2648f7dec305539416a22913f3223a1ffee1f971adc78e0b0adc60d7b5872fc8"
+      }
+     }
+    ],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "InsertBlockWithoutSetHead (Engine API)",
+    "error": "caller is refused in the capture profile: bsc.engine-api (the seam refuses ProcessBlock outside the current observation (ErrExtractorUnobserved))",
+    "class": "ErrRefused",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "SetCanonical (Engine API)",
+    "error": "caller is refused in the capture profile: bsc.engine-api (the seam refuses ProcessBlock outside the current observation (ErrExtractorUnobserved))",
+    "class": "ErrRefused",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "InsertReceiptChain (snap sync)",
+    "error": "caller is refused in the capture profile: bsc.snap-sync (the node flag check refuses any sync mode but full sync on a capture store)",
+    "class": "ErrRefused",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "InsertHeaderChain (header sync)",
+    "error": "caller is refused in the capture profile: bsc.snap-sync (the node flag check refuses any sync mode but full sync on a capture store)",
+    "class": "ErrRefused",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "WriteBlockAndSetHead (miner)",
+    "error": "caller is refused in the capture profile: bsc.sealing (the node flag check refuses mining, voting and builder roles; SystemCallBackend refuses calls by number)",
+    "class": "ErrRefused",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "StartMining",
+    "error": "caller is refused in the capture profile: bsc.sealing (the node flag check refuses mining, voting and builder roles; SystemCallBackend refuses calls by number)",
+    "class": "ErrRefused",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "ResetWithGenesisBlock",
+    "error": "extractor: a chain reset is refused on a capture store",
+    "class": "other",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   },
+   {
+    "name": "debug_executionWitness",
+    "error": "extractor: execution without a state write is refused on a capture node",
+    "class": "ErrExtractorWitness",
+    "phase": "LIVE",
+    "head": "A7",
+    "head_number": 7,
+    "finalized": "G",
+    "canonical": [
+     "G",
+     "A1",
+     "A2",
+     "A3",
+     "A4",
+     "A5",
+     "A6",
+     "A7"
+    ],
+    "new_decisions": [],
+    "open_observations": [],
+    "view": {
+     "finalized": "G",
+     "head": "A7"
+    }
+   }
+  ]
+ },
+ "outside_gate_refusals": {
+  "bsc.database-commands": "live pins forbid this native deletion: 1 live, first bsc-lifecycle.run-1.0000000000000000",
+  "bsc.manual-commands": "consensus engine is not the patched Parlia: the engine has no ethAPI for system-contract calls",
+  "bsc.sealing": "native profile violates capture constraints: vote enabled (bsc.sealing)",
+  "bsc.snap-sync": "native profile violates capture constraints: sync mode snap (bsc.snap-sync)"
+ },
+ "profile": {
+  "eth_new_snap_sync": "native profile violates capture constraints: sync mode snap (bsc.snap-sync)",
+  "full_sync": null,
+  "mev_builder": "native profile violates capture constraints: MEV builder role (bsc.sealing)",
+  "path_scheme": "native profile violates capture constraints: state scheme \"path\", want \"hash\"",
+  "snap_sync": "native profile violates capture constraints: sync mode snap (bsc.snap-sync)",
+  "start_without_eth_api": "consensus engine is not the patched Parlia: the engine has no ethAPI for system-contract calls",
+  "vote_enable": "native profile violates capture constraints: vote enabled (bsc.sealing)"
+ },
+ "routes": {
+  "bsc.attestation-read": "READ_ONLY",
+  "bsc.database-commands": "REFUSE",
+  "bsc.engine-api": "REFUSE",
+  "bsc.eth-call": "READ_ONLY",
+  "bsc.execution-witness": "READ_ONLY",
+  "bsc.freezer": "READ_ONLY",
+  "bsc.import": "OBSERVATION",
+  "bsc.known-block": "DECISION",
+  "bsc.manual-commands": "REFUSE",
+  "bsc.notify-finalized": "READ_ONLY",
+  "bsc.prefetch": "READ_ONLY",
+  "bsc.recovery": "OBSERVATION",
+  "bsc.sealing": "REFUSE",
+  "bsc.set-head": "DECISION",
+  "bsc.shutdown": "DECISION",
+  "bsc.side-chain": "OBSERVATION",
+  "bsc.snap-sync": "REFUSE",
+  "bsc.startup-reconcile": "DECISION",
+  "bsc.system-call-api": "READ_ONLY",
+  "bsc.trace-state": "READ_ONLY"
+ },
+ "schema_version": 1,
+ "seconds": 6.898868178
+}

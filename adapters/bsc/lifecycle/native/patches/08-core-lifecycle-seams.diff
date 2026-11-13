@@ -1,0 +1,930 @@
+diff --git a/cmd/geth/dbcmd.go b/cmd/geth/dbcmd.go
+index e281f5c..552811b 100644
+--- a/cmd/geth/dbcmd.go
++++ b/cmd/geth/dbcmd.go
+@@ -299,6 +299,11 @@ of ancientStore, will also displays the reserved number of blocks in ancientStor
+ 
+ func removeDB(ctx *cli.Context) error {
+ 	stack, config := makeConfigNode(ctx)
++	// Extractor patch (E01-02.lifecycle_seams): removedb is refused while an
++	// extractor pin is live (bsc.database-commands).
++	if err := utils.ExtractorGuardChaindata(ctx, stack); err != nil {
++		return err
++	}
+ 
+ 	// Resolve folder paths.
+ 	var (
+diff --git a/cmd/utils/extractor_guard.go b/cmd/utils/extractor_guard.go
+new file mode 100644
+index 0000000..9a53a66
+--- /dev/null
++++ b/cmd/utils/extractor_guard.go
+@@ -0,0 +1,28 @@
++// Extractor patch (E01-02.lifecycle_seams, BSC block): the manual database
++// guard of the shipped geth on a capture store (bsc.database-commands).
++
++package utils
++
++import (
++	"github.com/ethereum/go-ethereum/core/rawdb"
++	bsclifecycle "github.com/ethereum/go-ethereum/extractor/bsc/lifecycle"
++	"github.com/ethereum/go-ethereum/node"
++	"github.com/urfave/cli/v2"
++)
++
++// ExtractorGuardChaindata refuses a command that deletes or rewrites
++// chaindata while an extractor pin is live. MakeChainDatabase calls it
++// before every writable open and `geth removedb` before it deletes
++// anything. It opens an existing store read-only with the database flags of
++// ctx, checks it with bsclifecycle.RequireNoOpenCapture and closes it. A
++// directory without a native store passes. The caller holds the instance
++// lock of the native node (makeConfigNode), so no other geth process can
++// add a pin before the command opens the store for writing.
++func ExtractorGuardChaindata(ctx *cli.Context, stack *node.Node) error {
++	if rawdb.PreexistingDatabase(stack.ResolvePath("chaindata")) == "" {
++		return nil
++	}
++	db := MakeChainDatabase(ctx, stack, true)
++	defer db.Close()
++	return bsclifecycle.RequireNoOpenCapture(db)
++}
+diff --git a/cmd/utils/flags.go b/cmd/utils/flags.go
+index bd4862b..a107724 100644
+--- a/cmd/utils/flags.go
++++ b/cmd/utils/flags.go
+@@ -2780,6 +2780,14 @@ func SplitTagsFlag(tagsFlag string) map[string]string {
+ 
+ // MakeChainDatabase opens a database using the flags passed to the client and will hard crash if it fails.
+ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.Database {
++	// Extractor patch (E01-02.lifecycle_seams): a writable open of an
++	// existing store is refused while an extractor pin is live
++	// (bsc.database-commands).
++	if !readonly {
++		if err := ExtractorGuardChaindata(ctx, stack); err != nil {
++			Fatalf("Refusing to open a capture store for writing: %v", err)
++		}
++	}
+ 	var (
+ 		cache   = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
+ 		handles = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
+diff --git a/consensus/parlia/extractor_lifecycle.go b/consensus/parlia/extractor_lifecycle.go
+new file mode 100644
+index 0000000..30ecd9b
+--- /dev/null
++++ b/consensus/parlia/extractor_lifecycle.go
+@@ -0,0 +1,27 @@
++// Extractor patch (E01-02.lifecycle_seams, BSC block): the error-aware read
++// of the snapshot vote attestation.
++
++package parlia
++
++import (
++	"github.com/ethereum/go-ethereum/consensus"
++	"github.com/ethereum/go-ethereum/core/types"
++)
++
++// ExtractorAttestation returns the vote attestation of the Parlia snapshot
++// of header: nil for a snapshot without one, or the lookup error. Unlike
++// GetJustifiedNumberAndHash and GetFinalizedHeader, it never turns a lookup
++// error into the genesis block or into no result. It reads through chain as
++// the native lookup does (memory cache, stored checkpoint, header walk).
++func (p *Parlia) ExtractorAttestation(chain consensus.ChainHeaderReader, header *types.Header) (*types.VoteData,
++	error) {
++	snap, err := p.snapshot(chain, header.Number.Uint64(), header.Hash(), nil)
++	if err != nil {
++		return nil, err
++	}
++	if snap.Attestation == nil {
++		return nil, nil
++	}
++	att := *snap.Attestation
++	return &att, nil
++}
+diff --git a/core/blockchain.go b/core/blockchain.go
+index 952a1c8..5bd7561 100644
+--- a/core/blockchain.go
++++ b/core/blockchain.go
+@@ -416,6 +416,9 @@ type BlockChain struct {
+ 	extractorObservation ExtractorObservation
+ 	// Extractor patch: the decision marker that the next head batch writes.
+ 	extractorMarker *extractorMarker
++	// Extractor patch (E01-02.lifecycle_seams): the lifecycle gate seam; nil
++	// without the lifecycle.
++	extractorLifecycle ExtractorLifecycle
+ 
+ 	highestVerifiedHeader atomic.Pointer[types.Header]
+ 	highestVerifiedBlock  atomic.Pointer[types.Header]
+@@ -957,7 +960,16 @@ func (bc *BlockChain) initializeHistoryPruning(latest uint64) error {
+ // was snap synced or full synced and in which state, the method will try to
+ // delete minimal data from disk whilst retaining chain consistency.
+ func (bc *BlockChain) SetHead(head uint64) error {
+-	if _, err := bc.setHeadBeyondRoot(head, 0, common.Hash{}, false); err != nil {
++	// Extractor patch (E01-02.lifecycle_seams): a runtime rewind takes the
++	// guard, passes the gate as bsc.set-head and is one CANONICAL decision,
++	// then one FINALITY decision for a finalized clear.
++	defer bc.extractorLock()()
++	end, err := bc.extractorBeginRewind(head, 0)
++	if err != nil {
++		return err
++	}
++	_, err = bc.setHeadBeyondRoot(head, 0, common.Hash{}, false)
++	if err = end(err); err != nil {
+ 		return err
+ 	}
+ 	return bc.sendChainHeadEvent()
+@@ -968,7 +980,14 @@ func (bc *BlockChain) SetHead(head uint64) error {
+ // synced and in which state, the method will try to delete minimal data from
+ // disk whilst retaining chain consistency.
+ func (bc *BlockChain) SetHeadWithTimestamp(timestamp uint64) error {
+-	if _, err := bc.setHeadBeyondRoot(0, timestamp, common.Hash{}, false); err != nil {
++	// Extractor patch (E01-02.lifecycle_seams): as SetHead.
++	defer bc.extractorLock()()
++	end, err := bc.extractorBeginRewind(0, timestamp)
++	if err != nil {
++		return err
++	}
++	_, err = bc.setHeadBeyondRoot(0, timestamp, common.Hash{}, false)
++	if err = end(err); err != nil {
+ 		return err
+ 	}
+ 	return bc.sendChainHeadEvent()
+@@ -1163,6 +1182,13 @@ func (bc *BlockChain) rewindHead(head *types.Header, root common.Hash) (*types.H
+ // SetFinalized sets the finalized block.
+ // This function differs slightly from Ethereum; we fine-tune it through the outer-layer setting finalizedBlockGauge.
+ func (bc *BlockChain) SetFinalized(header *types.Header) {
++	// Extractor patch (E01-02.lifecycle_seams): FINALITY choke point. Only
++	// a pass of a caller with the FINALITY effect may write; a refused call
++	// writes nothing.
++	if err := bc.extractorRequire("FINALITY"); err != nil {
++		log.Error("Extractor lifecycle refused the finalized block", "err", err)
++		return
++	}
+ 	bc.currentFinalBlock.Store(header)
+ 	if header != nil {
+ 		rawdb.WriteFinalizedBlockHash(bc.db, header.Hash())
+@@ -1232,6 +1258,13 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
+ 	if err := bc.extractorRewind(head); err != nil {
+ 		return 0, err
+ 	}
++	// Extractor patch (E01-02.lifecycle_seams): CANONICAL choke point of a
++	// requested rewind. Startup repair runs before the gate opens.
++	if !repair {
++		if err := bc.extractorRequire("CANONICAL"); err != nil {
++			return 0, err
++		}
++	}
+ 
+ 	var (
+ 		// Track the block number of the requested root hash
+@@ -1361,6 +1394,12 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
+ 	bc.txLookupCache.Purge()
+ 	bc.futureBlocks.Purge()
+ 
++	// Extractor patch (E01-02.lifecycle_seams): a decided rewind ends with
++	// its marker batch, then the finalized clear as its own FINALITY
++	// decision, then loadLastState.
++	if bc.extractorRewinding() {
++		return rootNumber, bc.extractorFinishRewind()
++	}
+ 	headBlock := bc.CurrentBlock()
+ 	if finalized := bc.CurrentFinalBlock(); finalized != nil && headBlock.Number.Uint64() < finalized.Number.Uint64() {
+ 		log.Error("SetHead invalidated finalized block")
+@@ -1374,6 +1413,11 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
+ // optional state snapshot) to prevent potential concurrent mutations between
+ // snap sync and other chain operations.
+ func (bc *BlockChain) SnapSyncStart() error {
++	// Extractor patch (E01-02.lifecycle_seams): snap sync is refused on a
++	// capture store (bsc.snap-sync).
++	if err := bc.ExtractorRefuse("bsc.snap-sync"); err != nil {
++		return err
++	}
+ 	if !bc.chainmu.TryLock() {
+ 		return errChainStopped
+ 	}
+@@ -1402,6 +1446,11 @@ func (bc *BlockChain) SnapSyncStart() error {
+ // invoked once snap sync completes and assumes that SnapSyncStart was called
+ // previously.
+ func (bc *BlockChain) SnapSyncComplete(hash common.Hash) error {
++	// Extractor patch (E01-02.lifecycle_seams): snap sync is refused on a
++	// capture store (bsc.snap-sync).
++	if err := bc.ExtractorRefuse("bsc.snap-sync"); err != nil {
++		return err
++	}
+ 	// Make sure that both the block as well at its state trie exists
+ 	block := bc.GetBlockByHash(hash)
+ 	if block == nil {
+@@ -1446,6 +1495,11 @@ func (bc *BlockChain) Reset() error {
+ // ResetWithGenesisBlock purges the entire blockchain, restoring it to the
+ // specified genesis state.
+ func (bc *BlockChain) ResetWithGenesisBlock(genesis *types.Block) error {
++	// Extractor patch (E01-02.lifecycle_seams): a reset drops the canonical
++	// chain with no decision; it is refused on a capture store.
++	if bc.extractorLifecycle != nil {
++		return ErrExtractorReset
++	}
+ 	// Dump the entire block chain and purge the caches
+ 	if err := bc.SetHead(0); err != nil {
+ 		return err
+@@ -1523,6 +1577,13 @@ func (bc *BlockChain) ExportN(w io.Writer, first uint64, last uint64) error {
+ //
+ // Note, this function assumes that the `mu` mutex is held!
+ func (bc *BlockChain) writeHeadBlock(block *types.Block) {
++	// Extractor patch (E01-02.lifecycle_seams): CANONICAL choke point of the
++	// head writer; a head write outside the gate stops the node.
++	if err := bc.extractorRequire("CANONICAL"); err != nil {
++		log.Crit("Extractor lifecycle refused a head write", "err", err)
++	}
++	// With a decision marker, the lifecycle view record joins the head batch.
++	view := bc.extractorHeadRecords(block)
+ 	var dbWg sync.WaitGroup
+ 	dbWg.Add(2)
+ 	go func() {
+@@ -1536,6 +1597,11 @@ func (bc *BlockChain) writeHeadBlock(block *types.Block) {
+ 		rawdb.WriteHeadFastBlockHash(batch, block.Hash())
+ 		// Extractor patch: the native decision marker joins the head batch.
+ 		bc.extractorHeadMarker(batch, block)
++		for i := 0; i+1 < len(view); i += 2 {
++			if err := batch.Put(view[i], view[i+1]); err != nil {
++				log.Crit("Failed to write the extractor lifecycle view", "err", err)
++			}
++		}
+ 		// Flush the whole batch into the disk, exit the node if failed
+ 		if err := batch.Write(); err != nil {
+ 			log.Crit("Failed to update chain indexes and markers in block db", "err", err)
+@@ -1639,7 +1705,10 @@ func (bc *BlockChain) Stop() {
+ 							log.Error("Failed to commit recent state trie", "err", err)
+ 						} else {
+ 							once.Do(func() {
+-								rawdb.WriteHeadBlockHash(bc.db, recent.Hash())
++								// Extractor patch (E01-02.lifecycle_seams): with
++								// a seam, the head rewrite is a decision
++								// (bsc.shutdown).
++								bc.extractorShutdownHead(recent)
+ 							})
+ 						}
+ 					}
+@@ -1722,6 +1791,11 @@ const (
+ // The optional ancientLimit can also be specified and chain segment before that
+ // will be directly stored in the ancient, getting rid of the chain migration.
+ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain []rlp.RawValue, ancientLimit uint64) (int, error) {
++	// Extractor patch (E01-02.lifecycle_seams): snap sync is refused on a
++	// capture store (bsc.snap-sync).
++	if err := bc.ExtractorRefuse("bsc.snap-sync"); err != nil {
++		return 0, err
++	}
+ 	// Verify the supplied headers before insertion without lock
+ 	var headers []*types.Header
+ 	for _, block := range blockChain {
+@@ -1962,19 +2036,32 @@ func (bc *BlockChain) writeBlockWithoutState(block *types.Block, td *big.Int) (e
+ // writeKnownBlock updates the head block flag with a known block
+ // and introduces chain reorg if necessary.
+ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
++	// Extractor patch (E01-02.lifecycle_seams): a stored block that becomes
++	// the head without an execution is one CANONICAL decision
++	// (bsc.known-block). Without a retained corpus of the branch it stops
++	// before the head moves (D104).
++	end, err := bc.extractorKnownBlock(block)
++	if err != nil {
++		return err
++	}
+ 	current := bc.CurrentBlock()
+ 	if block.ParentHash() != current.Hash() {
+ 		if err := bc.reorg(current, block.Header()); err != nil {
+-			return err
++			return end(err)
+ 		}
+ 	}
+ 	bc.writeHeadBlock(block)
+-	return nil
++	return end(nil)
+ }
+ 
+ // writeBlockWithState writes block, metadata and corresponding state data to the
+ // database.
+ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB) error {
++	// Extractor patch (E01-02.lifecycle_seams): EXECUTION choke point before
++	// the state commit.
++	if err := bc.extractorRequire("EXECUTION"); err != nil {
++		return err
++	}
+ 	// Extractor patch: an observed block is written only by its decision step.
+ 	if bc.extractorObservation != nil {
+ 		return fmt.Errorf("%w: block %d written without a head decision", ErrExtractorDecision, block.NumberU64())
+@@ -2128,6 +2215,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
+ // WriteBlockAndSetHead writes the given block and all associated state to the database,
+ // and applies the block as the new chain head.
+ func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, sealedBlockSender *event.TypeMux) (status WriteStatus, err error) {
++	// Extractor patch (E01-02.lifecycle_seams): a self-sealed block is
++	// refused on a capture store (bsc.sealing).
++	if err := bc.ExtractorRefuse("bsc.sealing"); err != nil {
++		return NonStatTy, err
++	}
+ 	if !bc.chainmu.TryLock() {
+ 		return NonStatTy, errChainStopped
+ 	}
+@@ -2266,6 +2358,13 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+ 		release := hook.Acquire()
+ 		defer release()
+ 	}
++	// Extractor patch (E01-02.lifecycle_seams): the import enters the gate
++	// (bsc.import) with the held guard, before the chain mutex.
++	exit, err := bc.extractorEnter("bsc.import")
++	if err != nil {
++		return 0, err
++	}
++	defer exit()
+ 	// Pre-checks passed, start the full block imports
+ 	if !bc.chainmu.TryLock() {
+ 		return 0, errChainStopped
+@@ -2376,6 +2475,17 @@ func (bc *BlockChain) insertChain(ctx context.Context, chain types.Blocks, setHe
+ 				// the external consensus engine), but in order to prevent the unnecessary
+ 				// reorgs when importing known blocks, the special case is handled here.
+ 				if block.NumberU64() > current.Number.Uint64() || bc.GetCanonicalHash(block.NumberU64()) != block.Hash() {
++					// Extractor patch (E01-02.lifecycle_seams): the stored
++					// block would become the head without a new observation
++					// (bsc.known-block). Without a retained corpus of its
++					// branch it stops here, before any write (D104).
++					end, err := bc.extractorKnownBlock(block)
++					if err == nil {
++						err = end(nil)
++					}
++					if err != nil {
++						return nil, it.index, err
++					}
+ 					break
+ 				}
+ 			}
+@@ -2664,6 +2774,12 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+ 	)
+ 	defer interrupt.Store(true) // terminate the prefetch at the end
+ 
++	// Extractor patch (E01-02.lifecycle_seams): an execution without a state
++	// write (the execution witness RPC, bsc.execution-witness) is refused on
++	// a capture node.
++	if err := bc.extractorRefusedExecution(config); err != nil {
++		return nil, err
++	}
+ 	// Extractor patch: with a hook installed, only the block of the current
+ 	// admitted observation may execute.
+ 	if err := bc.extractorCheckExecution(block); err != nil {
+@@ -2910,6 +3026,21 @@ func (bc *BlockChain) ProcessBlock(ctx context.Context, parentRoot common.Hash,
+ // switch over to the new chain if the TD exceeded the current chain.
+ // insertSideChain is only used pre-merge.
+ func (bc *BlockChain) insertSideChain(ctx context.Context, block *types.Block, it *insertIterator, makeWitness bool) (*stateless.Witness, int, error) {
++	// Extractor patch (E01-02.lifecycle_seams): bsc.side-chain, nested in
++	// the import. Its stateless writes reach no choke point; the re-import
++	// of the pruned ancestors runs in a nested import pass. With a capture
++	// hook, Begin refuses a block whose parent is not the head with state,
++	// so a live import never reaches it (D104).
++	exit, err := bc.extractorEnter("bsc.side-chain")
++	if err != nil {
++		return nil, it.index, err
++	}
++	defer exit()
++	reimport, err := bc.extractorEnter("bsc.import")
++	if err != nil {
++		return nil, it.index, err
++	}
++	defer reimport()
+ 	var (
+ 		externTd  *big.Int
+ 		lastBlock = block
+@@ -2920,7 +3051,7 @@ func (bc *BlockChain) insertSideChain(ctx context.Context, block *types.Block, i
+ 	// Since we don't import them here, we expect ErrUnknownAncestor for the remaining
+ 	// ones. Any other errors means that the block is invalid, and should not be written
+ 	// to disk.
+-	err := consensus.ErrPrunedAncestor
++	err = consensus.ErrPrunedAncestor
+ 	for ; block != nil && errors.Is(err, consensus.ErrPrunedAncestor); block, err = it.next() {
+ 		// Check the canonical state root for that number
+ 		if number := block.NumberU64(); current.Number.Uint64() >= number {
+@@ -3129,6 +3260,11 @@ func (bc *BlockChain) collectReceiptsAndLogs(b *types.Block, removed bool) ([]*t
+ // Note the new head block won't be processed here, callers need to handle it
+ // externally.
+ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error {
++	// Extractor patch (E01-02.lifecycle_seams): CANONICAL choke point before
++	// the canonical hashes change.
++	if err := bc.extractorRequire("CANONICAL"); err != nil {
++		return err
++	}
+ 	var (
+ 		newChain    []*types.Header
+ 		oldChain    []*types.Header
+@@ -3320,6 +3456,11 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Header) error
+ func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *types.Block, makeWitness bool) (witness *stateless.Witness, err error) {
+ 	_, _, spanEnd := telemetry.StartSpan(ctx, "core.blockchain.InsertBlockWithoutSetHead")
+ 	defer spanEnd(&err)
++	// Extractor patch (E01-02.lifecycle_seams): the Engine API is refused
++	// on a capture store (bsc.engine-api).
++	if err := bc.ExtractorRefuse("bsc.engine-api"); err != nil {
++		return nil, err
++	}
+ 	if !bc.chainmu.TryLock() {
+ 		return nil, errChainStopped
+ 	}
+@@ -3333,6 +3474,11 @@ func (bc *BlockChain) InsertBlockWithoutSetHead(ctx context.Context, block *type
+ // block. It's possible that the state of the new head is missing, and it will
+ // be recovered in this function as well.
+ func (bc *BlockChain) SetCanonical(head *types.Block) (common.Hash, error) {
++	// Extractor patch (E01-02.lifecycle_seams): the Engine API is refused
++	// on a capture store (bsc.engine-api).
++	if err := bc.ExtractorRefuse("bsc.engine-api"); err != nil {
++		return common.Hash{}, err
++	}
+ 	if !bc.chainmu.TryLock() {
+ 		return common.Hash{}, errChainStopped
+ 	}
+@@ -3641,6 +3787,11 @@ Receipts: %v
+ // chain, possibly creating a reorg. If an error is returned, it will return the
+ // index number of the failing header as well an error describing what went wrong.
+ func (bc *BlockChain) InsertHeaderChain(chain []*types.Header) (int, error) {
++	// Extractor patch (E01-02.lifecycle_seams): header sync is refused on a
++	// capture store (bsc.snap-sync).
++	if err := bc.ExtractorRefuse("bsc.snap-sync"); err != nil {
++		return 0, err
++	}
+ 	if len(chain) == 0 {
+ 		return 0, nil
+ 	}
+diff --git a/core/extractor_decision.go b/core/extractor_decision.go
+index de6f893..c2a98d5 100644
+--- a/core/extractor_decision.go
++++ b/core/extractor_decision.go
+@@ -56,6 +56,8 @@ type ExtractorDecision interface {
+ type extractorMarker struct {
+ 	block      [32]byte
+ 	key, value []byte
++	// finalized is the finalized header of the decision evidence (E01-02.lifecycle_seams: the lifecycle view).
++	finalized *types.Header
+ }
+ 
+ // extractorHeadMarker adds the pending decision marker of block to its head
+@@ -81,6 +83,11 @@ func (bc *BlockChain) extractorWriteBlockAndSetHead(block *types.Block, receipts
+ 	if reorg && block.ParentHash() != current.Hash() {
+ 		return NonStatTy, fmt.Errorf("%w: block %d needs a reorganization", ErrExtractorDecision, block.NumberU64())
+ 	}
++	// Extractor patch (E01-02.lifecycle_seams): EXECUTION choke point before
++	// the state commit of the barrier.
++	if err := bc.extractorRequire("EXECUTION"); err != nil {
++		return NonStatTy, err
++	}
+ 	if err := bc.extractorBarrier(block, statedb); err != nil {
+ 		return NonStatTy, err
+ 	}
+@@ -124,7 +131,11 @@ func (bc *BlockChain) extractorWriteBlockAndSetHead(block *types.Block, receipts
+ 	status := SideStatTy
+ 	if reorg {
+ 		bc.highestVerifiedBlock.Store(types.CopyHeader(block.Header()))
+-		bc.extractorMarker = &extractorMarker{block: block.Hash(), key: key, value: value}
++		// Extractor patch (E01-02.lifecycle_seams, D101): the verified-block
++		// feed that the native canonical write sends.
++		bc.highestVerifiedBlockFeed.Send(HighestVerifiedBlockEvent{Header: block.Header()})
++		bc.extractorMarker = &extractorMarker{block: block.Hash(), key: key, value: value,
++			finalized: decision.Finalized()}
+ 		bc.writeHeadBlock(block)
+ 		bc.extractorMarker = nil
+ 		decision.Written("head")
+diff --git a/core/extractor_hook.go b/core/extractor_hook.go
+index 01ac673..5f0a708 100644
+--- a/core/extractor_hook.go
++++ b/core/extractor_hook.go
+@@ -141,7 +141,10 @@ func (bc *BlockChain) extractorInsert(hook ExtractorHook, chain types.Blocks) (i
+ // extractorCheckExecution refuses an execution that the current observation
+ // does not cover. It is called by ProcessBlock before execution.
+ func (bc *BlockChain) extractorCheckExecution(block *types.Block) error {
+-	if bc.extractorHookValue() == nil {
++	// Extractor patch (E01-02.lifecycle_seams): during the initial native
++	// sync (BOOTSTRAP) the gate pass does not observe, and the import runs
++	// natively, uncaptured.
++	if bc.extractorHookValue() == nil || !bc.extractorObserving() {
+ 		return nil
+ 	}
+ 	if bc.extractorObservation == nil || bc.extractorObservation.Hash() != block.Hash() {
+diff --git a/core/extractor_lifecycle.go b/core/extractor_lifecycle.go
+new file mode 100644
+index 0000000..fa873e5
+--- /dev/null
++++ b/core/extractor_lifecycle.go
+@@ -0,0 +1,340 @@
++// Extractor patch (E01-02.lifecycle_seams, BSC block): the lifecycle gate
++// seam.
++//
++// The capture adapter (extractor/bsc/lifecycle) implements
++// ExtractorLifecycle; core cannot import it. With a seam installed, every
++// mapped native caller opens a gate pass with the observation guard held,
++// every native write choke point calls Require before it mutates, and the
++// head and finality changes without a new block are decisions: an intent
++// before the native mutation and the marker in its final native batch.
++
++package core
++
++import (
++	"errors"
++	"fmt"
++
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/core/rawdb"
++	"github.com/ethereum/go-ethereum/core/types"
++	"github.com/ethereum/go-ethereum/ethdb"
++	"github.com/ethereum/go-ethereum/log"
++)
++
++// ExtractorLifecycle is the lifecycle gate seam of E01-02.lifecycle_seams.
++// Every method except Require and Refuse runs with the observation guard
++// held by the caller.
++type ExtractorLifecycle interface {
++	// Enter opens the gate pass of the mapped caller id; exit closes it.
++	Enter(id string) (exit func(), err error)
++	// Observing reports whether the innermost pass captures: false during
++	// the initial native sync (BOOTSTRAP), where imports are not observed.
++	Observing() bool
++	// Require is the check of a native write choke point before a mutation
++	// with this effect (EXECUTION, CANONICAL, FINALITY). An error means the
++	// mutation bypassed the gate; the write must fail closed.
++	Require(effect string) error
++	// Refuse takes the guard and refuses a REFUSE caller of the capture
++	// profile; it returns the refusal.
++	Refuse(id string) error
++	// Canonical records the CANONICAL intent of the innermost decision pass
++	// for a head change from old to head without a new execution. A pass
++	// that does not observe records nothing.
++	Canonical(old, head *types.Header) error
++	// Rewind records the CANONICAL intent of a SetHead rewind from old to
++	// target, the head that the native rewind keeps.
++	Rewind(old, target *types.Header) error
++	// Rewinding reports whether a SetHead rewind is in progress.
++	Rewinding() bool
++	// Rewound checks the rewound head against the intent and returns the
++	// marker and view records of the rewind batch.
++	Rewound(head *types.Header, finalized common.Hash) ([][]byte, error)
++	// Clear records the FINALITY intent of a finality clear (the native
++	// SetFinalized(nil) of a rewind) and returns its marker and view records.
++	Clear(old, head *types.Header) ([][]byte, error)
++	// Shutdown records the CANONICAL intent of the head rewrite of Stop and
++	// returns its marker and view records.
++	Shutdown(head *types.Header, finalized common.Hash) ([][]byte, error)
++	// View returns the key and value of the lifecycle view record: the head
++	// and the finalized block hash that the decided native state holds.
++	View(head *types.Header, finalized common.Hash) [][]byte
++	// Settle resolves the pending lifecycle decision after its batch is
++	// durable, or, after a native error, rejects an intent whose mutation
++	// did not happen. It returns err joined with any settle error.
++	Settle(err error) error
++}
++
++// ErrExtractorReset refuses a chain reset on a capture store: it would drop
++// the canonical chain with no decision.
++var ErrExtractorReset = errors.New("extractor: a chain reset is refused on a capture store")
++
++// ErrExtractorWitness refuses an execution without a state write (the
++// execution witness RPC) on a capture node: it would run outside the
++// observation guard and read through the current observation.
++var ErrExtractorWitness = errors.New("extractor: execution without a state write is refused on a capture node")
++
++// SetExtractorLifecycle installs the lifecycle gate seam. It must be called
++// before the first import.
++func (bc *BlockChain) SetExtractorLifecycle(l ExtractorLifecycle) { bc.extractorLifecycle = l }
++
++// extractorLock takes the observation guard of the installed hook, if any.
++// The lock order is guard, then chainmu.
++func (bc *BlockChain) extractorLock() func() {
++	if hook := bc.extractorHookValue(); hook != nil {
++		return hook.Acquire()
++	}
++	return func() {}
++}
++
++// extractorEnter opens the pass of a mapped caller if a seam is installed.
++// The guard is held.
++func (bc *BlockChain) extractorEnter(id string) (func(), error) {
++	if bc.extractorLifecycle == nil {
++		return func() {}, nil
++	}
++	return bc.extractorLifecycle.Enter(id)
++}
++
++// extractorObserving reports whether an import of the current pass is
++// observed by the admission seam.
++func (bc *BlockChain) extractorObserving() bool {
++	return bc.extractorLifecycle == nil || bc.extractorLifecycle.Observing()
++}
++
++// extractorRequire is the check of a write choke point.
++func (bc *BlockChain) extractorRequire(effect string) error {
++	if bc.extractorLifecycle == nil {
++		return nil
++	}
++	return bc.extractorLifecycle.Require(effect)
++}
++
++// ExtractorRefuse refuses a REFUSE caller of the capture profile (the
++// Engine API, snap sync, sealing) when a seam is installed. It takes the
++// guard, so it must be called before the chain mutex.
++func (bc *BlockChain) ExtractorRefuse(id string) error {
++	if bc.extractorLifecycle == nil {
++		return nil
++	}
++	return bc.extractorLifecycle.Refuse(id)
++}
++
++// extractorSettle resolves or rejects the pending lifecycle decision.
++func (bc *BlockChain) extractorSettle(err error) error {
++	if bc.extractorLifecycle == nil {
++		return err
++	}
++	return bc.extractorLifecycle.Settle(err)
++}
++
++// extractorFinalizedHash is the finalized block hash of the native store.
++func (bc *BlockChain) extractorFinalizedHash() common.Hash {
++	return rawdb.ReadFinalizedBlockHash(bc.db)
++}
++
++// extractorWriteRecords writes records (key, value pairs) and the native
++// writes of fill in one batch, and syncs when records are present.
++func (bc *BlockChain) extractorWriteRecords(records [][]byte, fill func(batch ethdb.KeyValueWriter)) error {
++	batch := bc.db.NewBatch()
++	defer batch.Close()
++	if fill != nil {
++		fill(batch)
++	}
++	for i := 0; i+1 < len(records); i += 2 {
++		if err := batch.Put(records[i], records[i+1]); err != nil {
++			return err
++		}
++	}
++	if err := batch.Write(); err != nil {
++		return err
++	}
++	if len(records) == 0 {
++		return nil
++	}
++	return bc.db.SyncKeyValue()
++}
++
++// extractorKnownBlock is the CANONICAL decision of a stored block that
++// becomes the head without an execution (bsc.known-block). It returns the
++// end of the pass, which settles the decision.
++func (bc *BlockChain) extractorKnownBlock(block *types.Block) (func(error) error, error) {
++	if bc.extractorLifecycle == nil {
++		return func(err error) error { return err }, nil
++	}
++	exit, err := bc.extractorLifecycle.Enter("bsc.known-block")
++	if err != nil {
++		return nil, err
++	}
++	if err := bc.extractorLifecycle.Canonical(bc.CurrentBlock(), block.Header()); err != nil {
++		exit()
++		return nil, err
++	}
++	return func(err error) error {
++		err = bc.extractorLifecycle.Settle(err)
++		exit()
++		return err
++	}, nil
++}
++
++// extractorRewindTarget is the head that a rewind to head (or, with time,
++// to the newest header at or below time) keeps: the native rewindHead of the
++// target, which reads only.
++func (bc *BlockChain) extractorRewindTarget(head, time uint64) *types.Header {
++	header := bc.CurrentBlock()
++	if time > 0 {
++		for header != nil && header.Number.Uint64() > 0 && header.Time > time {
++			header = bc.GetHeader(header.ParentHash, header.Number.Uint64()-1)
++		}
++	} else if head < header.Number.Uint64() {
++		header = bc.GetHeaderByNumber(head)
++	}
++	if header == nil {
++		return nil
++	}
++	target, _ := bc.rewindHead(header, common.Hash{})
++	return target
++}
++
++// extractorBeginRewind opens the pass of a SetHead rewind (bsc.set-head)
++// and records its CANONICAL intent. The returned function settles the
++// decision and closes the pass. The guard is held.
++func (bc *BlockChain) extractorBeginRewind(head, time uint64) (func(error) error, error) {
++	l := bc.extractorLifecycle
++	if l == nil {
++		return func(err error) error { return err }, nil
++	}
++	exit, err := l.Enter("bsc.set-head")
++	if err != nil {
++		return nil, err
++	}
++	if err := l.Rewind(bc.CurrentBlock(), bc.extractorRewindTarget(head, time)); err != nil {
++		exit()
++		return nil, err
++	}
++	return func(err error) error {
++		err = l.Settle(err)
++		exit()
++		return err
++	}, nil
++}
++
++// extractorRewinding reports whether setHeadBeyondRoot runs a decided
++// rewind.
++func (bc *BlockChain) extractorRewinding() bool {
++	return bc.extractorLifecycle != nil && bc.extractorLifecycle.Rewinding()
++}
++
++// extractorFinishRewind ends a decided rewind in setHeadBeyondRoot, in the
++// native order: the rewind batch with its marker, then the finalized clear
++// as its own FINALITY decision, then loadLastState.
++func (bc *BlockChain) extractorFinishRewind() error {
++	l := bc.extractorLifecycle
++	head := bc.CurrentBlock()
++	records, err := l.Rewound(head, bc.extractorFinalizedHash())
++	if err != nil {
++		return err
++	}
++	if err := bc.extractorWriteRecords(records, nil); err != nil {
++		return err
++	}
++	if err := l.Settle(nil); err != nil {
++		return err
++	}
++	if finalized := bc.CurrentFinalBlock(); finalized != nil && head.Number.Uint64() < finalized.Number.Uint64() {
++		log.Error("SetHead invalidated finalized block")
++		records, err := l.Clear(finalized, head)
++		if err != nil {
++			return err
++		}
++		if err := l.Settle(bc.setFinalizedChecked(nil, records)); err != nil {
++			return err
++		}
++	}
++	return bc.loadLastState()
++}
++
++// setFinalizedChecked is the native finalized setter behind the FINALITY
++// choke point: the reference and the records of its decision are written in
++// one batch and synced before the in-memory reference moves. A failed write
++// is fatal, as the native finalized write is.
++func (bc *BlockChain) setFinalizedChecked(header *types.Header, records [][]byte) error {
++	if err := bc.extractorRequire("FINALITY"); err != nil {
++		return err
++	}
++	if err := bc.extractorWriteRecords(records, func(batch ethdb.KeyValueWriter) {
++		if header != nil {
++			rawdb.WriteFinalizedBlockHash(batch, header.Hash())
++		} else {
++			rawdb.WriteFinalizedBlockHash(batch, common.Hash{})
++		}
++	}); err != nil {
++		log.Crit("Failed to write the finalized block and its decision marker", "err", err)
++	}
++	bc.currentFinalBlock.Store(header)
++	return nil
++}
++
++// extractorShutdownHead is the head rewrite of Stop (hash scheme) with a
++// seam: one CANONICAL decision of the head to itself (bsc.shutdown), its
++// marker and view in the batch of the head hash. A rewrite to another block
++// (the state commit of the head failed) is not decided: it is skipped, and
++// the next start repairs and reconciles the head. It takes the guard, after
++// the chain mutex is closed, so no import holds it.
++func (bc *BlockChain) extractorShutdownHead(recent *types.Block) {
++	l := bc.extractorLifecycle
++	if l == nil {
++		rawdb.WriteHeadBlockHash(bc.db, recent.Hash())
++		return
++	}
++	defer bc.extractorLock()()
++	exit, err := l.Enter("bsc.shutdown")
++	if err != nil {
++		log.Error("Extractor lifecycle refused the shutdown head write", "err", err)
++		return
++	}
++	defer exit()
++	head := bc.CurrentBlock()
++	if recent.Hash() != head.Hash() {
++		log.Error("Extractor lifecycle skipped a shutdown head write below the head", "head", head.Number,
++			"recent", recent.Number())
++		return
++	}
++	records, err := l.Shutdown(head, bc.extractorFinalizedHash())
++	if err != nil {
++		log.Error("Extractor lifecycle refused the shutdown head write", "err", err)
++		return
++	}
++	if err := bc.extractorRequire("CANONICAL"); err != nil {
++		log.Error("Extractor lifecycle refused the shutdown head write", "err", l.Settle(err))
++		return
++	}
++	err = bc.extractorWriteRecords(records, func(batch ethdb.KeyValueWriter) {
++		rawdb.WriteHeadBlockHash(batch, recent.Hash())
++	})
++	if err := l.Settle(err); err != nil {
++		log.Error("Extractor lifecycle shutdown decision failed", "err", err)
++	}
++}
++
++// extractorHeadRecords returns the lifecycle view record that joins a head
++// batch carrying a decision marker; nil without a seam or a marker.
++func (bc *BlockChain) extractorHeadRecords(block *types.Block) [][]byte {
++	marker := bc.extractorMarker
++	if bc.extractorLifecycle == nil || marker == nil || marker.block != block.Hash() {
++		return nil
++	}
++	finalized := bc.extractorFinalizedHash()
++	if marker.finalized != nil {
++		finalized = marker.finalized.Hash()
++	}
++	return bc.extractorLifecycle.View(block.Header(), finalized)
++}
++
++// extractorRefusedExecution refuses an execution without a state write on
++// a capture node.
++func (bc *BlockChain) extractorRefusedExecution(config ExecuteConfig) error {
++	if bc.extractorHookValue() != nil && !config.WriteState {
++		return fmt.Errorf("%w", ErrExtractorWitness)
++	}
++	return nil
++}
+diff --git a/eth/backend.go b/eth/backend.go
+index cb1319a..d1a4b5d 100644
+--- a/eth/backend.go
++++ b/eth/backend.go
+@@ -31,6 +31,8 @@ import (
+ 	"time"
+ 
+ 	"github.com/ethereum/go-ethereum/common/hexutil"
++	extractorbsc "github.com/ethereum/go-ethereum/extractor/bsc"
++	bsclifecycle "github.com/ethereum/go-ethereum/extractor/bsc/lifecycle"
+ 	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
+ 	"github.com/ethereum/go-ethereum/metrics"
+ 	"github.com/ethereum/go-ethereum/params"
+@@ -179,6 +181,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+ 		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", ethconfig.Defaults.Miner.GasPrice)
+ 		config.Miner.GasPrice = new(big.Int).Set(ethconfig.Defaults.Miner.GasPrice)
+ 	}
++	// Extractor patch (E01-02.lifecycle_seams): on a capture node (the
++	// config file of EXTRACTOR_BSC_CONFIG), the capture profile check runs
++	// before the store is opened.
++	extractorConfig, err := bsclifecycle.LoadConfig()
++	if err != nil {
++		return nil, err
++	}
++	if extractorConfig != nil {
++		if err := bsclifecycle.CheckProfile(config); err != nil {
++			return nil, err
++		}
++	}
+ 
+ 	chainDb, err := stack.OpenDatabaseWithFreezer(ChainData, config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, ChainDBNamespace, false)
+ 	if err != nil {
+@@ -326,6 +340,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+ 		log.Info("Unprotected transactions allowed")
+ 	}
+ 	ethAPI := ethapi.NewBlockChainAPI(eth.APIBackend)
++	// Extractor patch (E01-02.lifecycle_seams, D100): on a capture node,
++	// Parlia makes its system-contract calls through the system-call API
++	// (bsc.system-call-api), bound to the chain and the seam after
++	// NewBlockChain.
++	var extractorCalls *extractorbsc.SystemCallBackend
++	if extractorConfig != nil {
++		ethAPI, extractorCalls = extractorbsc.NewSystemCallAPI()
++	}
+ 	eth.engine, err = ethconfig.CreateConsensusEngine(chainConfig, chainDb, ethAPI, genesisHash)
+ 	if err != nil {
+ 		return nil, err
+@@ -416,6 +438,22 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	// Extractor patch (E01-02.lifecycle_seams): the admission, decision and
++	// lifecycle seams attach after the native DB recovery. A restart goes
++	// live at the stored boundary H; a first start goes live after the
++	// initial native sync (Synced), under the guard.
++	if extractorConfig != nil {
++		attachConfig, err := bsclifecycle.NodeConfig(*extractorConfig)
++		if err != nil {
++			return nil, err
++		}
++		extractorLifecycle, err := bsclifecycle.Attach(eth.blockchain, chainDb, extractorCalls, attachConfig,
++			bsclifecycle.Options{})
++		if err != nil {
++			return nil, err
++		}
++		stack.RegisterLifecycle(extractorLifecycle.Live(eth.Synced))
++	}
+ 
+ 	// Initialize filtermaps log index.
+ 	// Auto-enable checkpoint file
+@@ -811,6 +849,11 @@ func (s *Ethereum) handleAdditions(parlia *parlia.Parlia, nonce uint64, register
+ // is already running, this method adjust the number of threads allowed to use
+ // and updates the minimum price required by the transaction pool.
+ func (s *Ethereum) StartMining() error {
++	// Extractor patch (E01-02.lifecycle_seams): mining is refused on a
++	// capture store (bsc.sealing).
++	if err := s.blockchain.ExtractorRefuse("bsc.sealing"); err != nil {
++		return err
++	}
+ 	// If the miner was not running, initialize it
+ 	if !s.IsMining() {
+ 		// Propagate the initial price point to the transaction pool
