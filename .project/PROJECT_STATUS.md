@@ -2,12 +2,24 @@
 
 ## E01-03.smoke_corpus — Minimal independent native test corpus (issue #19)
 
-Status: IN_PROGRESS. The coordinator approved the split on 2026-11-13:
-block 0 in this session, then three parallel client blocks after block 0
-merges. D97 requires the roles, agent definitions and split to be agreed
-with the owner; the coordinator records that agreement when it assigns the
-client sessions. Branch `claude/e01-03-smoke-corpus` from main
-`a7ea231`. Dependencies E01-01.harness (#12), E01-02.decision_bridge (#17,
+Status: ACCEPTED (2026-11-13); #19 closes when this record merges. Merged
+blocks:
+
+- block 0 corpus-core: PR #164 at `3cc31ec`, with D102;
+- POLY: PR #166 at `4208145` (measured head `3943c7f`);
+- ETH: PR #167 at `3900d65` (measured head `1a6bef2`);
+- BSC: PR #168 at `cfb9195` (measured head `5217fc4`).
+
+qa verdicts, private local: transfer, nested-revert, fee and empty-block
+PASS for ETH, BSC and POLY; system-action PASS for BSC and POLY (checked by
+the receipt and the block-end state, D103) and NOT_APPLICABLE for ETH
+(D102). The expected results were fixed in block 0 and no client block
+changed them. Every public cell stays NOT_RUN (D96). The corpus issues no
+AC verdict and is not full production semantic coverage. D103 records the
+owner's answers on system-action state and names the owner of every other
+limit. The owner agreed the roles and the split on 2026-11-13 (D97).
+
+Dependencies E01-01.harness (#12), E01-02.decision_bridge (#17,
 merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Runs in parallel
 with #18, which another session does; no shared paths except this file.
 
@@ -137,12 +149,13 @@ Review 003 on `f5153d2`: Spec PASS and Standards PASS, with no open finding.
 The Spec note that the owner agreement under D97 must be recorded before
 the client sessions start goes to the coordinator.
 
-Next: hosted CI and the final review comment on the final head; then the
-three client blocks after block 0 merges.
+Merged in PR #164 at `3cc31ec` (final head `0b0f0fb`). Next: none for
+E01-03.smoke_corpus; with #18, it unlocks E01-04.early_faults and
+E01-05.type_paths.
 
 ### ETH block (Geth)
 
-Status: IN_PROGRESS in draft PR #167, branch
+Status: ACCEPTED in PR #167 at merge `3900d65` (final head `18ddf0d`), branch
 `claude/e01-03-smoke-corpus-eth` from main `3cc31ec` (block 0 merged in PR
 #164 at `3cc31ec`). Part of #19. Role: native-engineer, and qa for the
 matrix; Spec and Standards reviewers read-only. D97: as the coordinator
@@ -184,8 +197,8 @@ Review 003 on `36365e7`: Spec PASS and Standards PASS (two docs P3s,
 fixed). The branch merges main `4208145` (POLY, PR #166), which adds no ETH
 input.
 
-Next: hosted CI and the final review comment on the final head; then merge
-with the owner's permission for this PR.
+Final head `18ddf0d`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #167 at `3900d65`.
 
 ### POLY block
 
@@ -197,7 +210,7 @@ everything"). That means block 0 core,
 then one native-engineer session per family, with qa for the per-case matrix
 and two read-only reviewers.
 
-Status: IN_PROGRESS (part of #19), draft PR #166 on branch
+Status: ACCEPTED in PR #166 at merge `4208145` (part of #19), branch
 `claude/e01-03-smoke-corpus-poly`, from main `3cc31ec` (block 0 merged in
 PR #164). Measured head `3943c7f`; later commits change only docs. Paths:
 `test/native_corpus/poly/**`,
@@ -236,8 +249,8 @@ qa verdict (POLY private local): transfer, nested-revert, fee,
 system-action (StateSync before Madhugiri) and empty-block PASS; family POLY
 PASS. Polygon Mainnet and Amoy stay NOT_RUN (D96).
 
-Next: a docs-only confirmation review, hosted CI on the final head, the final
-review comment, then READY to the coordinator.
+Final head `d204360`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #166 at `4208145`.
 
 ### BSC block
 
@@ -247,8 +260,9 @@ everything", relayed by the coordinator after the owner approved the
 #16-style split). The coordinator queued this block until an implementer
 slot was free (D97: at most three) and started it after PR #166 merged.
 
-Status: IN_PROGRESS (part of #19), branch `claude/e01-03-smoke-corpus-bsc`
-from main `4208145` (POLY merged in PR #166), draft PR #168. Measured head
+Status: ACCEPTED in PR #168 at merge `cfb9195` (part of #19), branch
+`claude/e01-03-smoke-corpus-bsc` from main `4208145` (POLY merged in PR
+#166). Measured head
 `5217fc4`; later
 commits change only docs. Paths: `test/native_corpus/bsc/**`,
 `.project/evidence/E01-03.smoke_corpus.bsc.md` and this subsection.
@@ -300,8 +314,8 @@ Merge of main: `30bd372` merges main `3900d65` (ETH, PR #167) with a merge
 commit. It changes no BSC measured input (evidence, "Records"); the ETH and
 POLY subsections stay as on main.
 
-Next: a docs-only confirmation review of the merge, hosted CI on the final
-head, the final review comment, then READY to the coordinator.
+Final head `9611536`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #168 at `cfb9195`.
 
 ## E01-02.lifecycle_seams — Map all required native lifecycle callers (issue #18)
 

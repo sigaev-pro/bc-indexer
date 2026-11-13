@@ -1,5 +1,21 @@
 # Дерево решений и журнал интервью
 
+## D103 — System-action state in the smoke corpus; owners of the remaining corpus limits (2026-11-13)
+
+After the four E01-03.smoke_corpus blocks merged (PRs #164, #166, #167 and #168), the coordinator asked a read-only Spec reviewer to audit their evidence and limits for the acceptance record. The audit found no failed case and confirmed that the expected results are independent of the native output. It found two gaps that touch the definition of done, plus several smaller limits with no owner. The coordinator asked the owner two questions. For each, the owner selected the coordinator's proposed option (marked as recommended):
+
+1. State of system actions: "Accept, block-end state (Recommended)". DEVELOPMENT_PLAN E01-03 asks for full transaction records and the state before and after each transaction. BSC system transactions are not re-executed one by one, and a Polygon StateSync is a receipt, not an ordinary transaction. For these two, the corpus checks the receipt and the state at the end of the block. The per-transaction state before and after a system action goes to E01-05.type_paths (current-fork system paths) and E04 (native semantics).
+2. Owners of the other limits: "Agree (Recommended)". The coordinator's proposed assignments are accepted:
+   - E01-05.type_paths and E06/E07: current-fork paths. The corpus runs on older fork rules: a pre-merge ETH chain, pre-Kepler BSC fees under Istanbul gas, and pre-Madhugiri Polygon StateSync.
+   - The next E01 qa change to `test/native_corpus/ORACLE.md`: the fixture inputs that ORACLE.md does not name. These are `bor.stateSyncConfirmationDelay` `{"0": 0}` and the BSC validator keystore, which is the BSC source's public test keystore.
+   - E05-01.polygon_observer: the Polygon StateSync event is read from engine `Finalize`, because the native `BlockChain` feed is not set in the probe. There is no positive control in the same process.
+   - Accepted as recorded in the block evidence: the ETH re-import is skipped natively as known blocks. The ETH blocks are sealed by the ethash faker without a proof-of-work check. The ETH run is in-process, not the `geth` command. The state before and after each transaction comes from a native re-execution that must reproduce the imported receipts and roots. System-contract internals are not asserted. The open driver notes are listed in the evidence.
+
+Recorded technical decisions, not owner answers:
+
+- The corpus issues no AC verdict. Its qa verdicts are per case and per family. ETH system-action is NOT_APPLICABLE under DEVELOPMENT_PLAN E01-03 and D102.
+- As with D96 to D102, TASK_DECOMPOSITION is a normative mirror and is not edited. The cards named above are read through this decision. This decision does not change product guarantees or acceptance cases. Every public cell stays NOT_RUN.
+
 ## D102 — Owners of the Ethereum post-merge protocol system calls (2026-11-13)
 
 Block 0 of E01-03.smoke_corpus (#19) marks the ETH system-action case NOT_APPLICABLE: DEVELOPMENT_PLAN E01-03 asks for native system transactions, and a block body of the corpus fixture (London, ethash, before the merge) has none. The coordinator asked that every effect without a transaction have an owner. For withdrawals and block rewards, the block reads the E04-02.optional_scope card (outside-transaction records, off by default) as their owner; no earlier decision assigned them. No card named the Ethereum post-merge protocol system calls: EIP-4788 (beacon roots), EIP-2935 (history storage), EIP-7002 and EIP-7251 (request contracts). The coordinator asked the owner who owns them. The owner selected the coordinator's proposed option, "E04-02 + E01-05 (Recommended)":
