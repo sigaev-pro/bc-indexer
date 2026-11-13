@@ -192,6 +192,49 @@ PASS. Polygon Mainnet and Amoy stay NOT_RUN (D96).
 Next: a docs-only confirmation review, hosted CI on the final head, the final
 review comment, then READY to the coordinator.
 
+### BSC block
+
+Owner agreement under D97: the same agreement as the POLY block (2026-11-13,
+"Очищай лишнее и запускай все", "clean up what is not needed and start
+everything", relayed by the coordinator after the owner approved the
+#16-style split). The coordinator queued this block until an implementer
+slot was free (D97: at most three) and started it after PR #166 merged.
+
+Status: IN_PROGRESS (part of #19), branch `claude/e01-03-smoke-corpus-bsc`
+from main `4208145` (POLY merged in PR #166). Measured head `5dd8d72`; later
+commits change only docs. Paths: `test/native_corpus/bsc/**`,
+`.project/evidence/E01-03.smoke_corpus.bsc.md` and this subsection.
+
+Design ([BSC README](../test/native_corpus/bsc/README.md)):
+- A Go test, `TestBSCCorpus`, is installed in the accepted BSC decision
+  package next to the native decision probe, whose node, store and mirror
+  helpers it reuses.
+- Native Parlia seals blocks 1 and 2 on the private fixture with the public
+  test validator key. Block 1 holds the three corpus transactions and the
+  nine Parlia system transactions; block 2 is empty.
+- A new node imports the blocks through the admission and decision bridge
+  (recovery, then `GoLive`), restarts, and imports them again.
+- It then exports the receipts, the native `callTracer` frames, the state
+  before and after each user transaction (native re-execution checked
+  against the stored receipts), the system transactions, the validator nonce
+  and the block-end state.
+- The driver builds the observation and runs block 0's comparator. ORACLE.md
+  names every fixture input; no chain-config value is added.
+
+Evidence: [E01-03.smoke_corpus.bsc](evidence/E01-03.smoke_corpus.bsc.md).
+Records at `5dd8d72`, all PASS: preparation 02, run 01 (five cases, 0
+differences, no bridge failure), observe 01, 16 portable tests, 45 Python
+mutants killed. Preparation 01 never started the tool (a shell wrapper
+error) and is kept under D83.
+
+qa verdict (BSC private local): transfer, nested-revert, fee (distribution
+before Kepler), system-action (Parlia `init()` system transactions) and
+empty-block PASS; family BSC PASS. `bsc-mainnet` and `bsc-testnet` stay
+NOT_RUN (D96).
+
+Next: Spec and Standards reviews, hosted CI on the final head, the final
+review comment, then READY to the coordinator.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
