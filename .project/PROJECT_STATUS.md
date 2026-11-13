@@ -576,6 +576,79 @@ PASS. Public ETH cells stay NOT_RUN.
 
 Next: Spec and Standards reviews, hosted CI, the final review comment.
 
+### Bor block
+
+Base `51adbee` (block 0 merged in PR #165); merged `origin/main` `07ae232`
+(#170) with a merge commit. Branch/worktree: `claude/e01-02-lifecycle-bor` /
+`e01-02-admission-bor-b95e1c`. Draft PR #171, Part of #18. Allowed paths:
+`adapters/bor/lifecycle/native/**`,
+`.project/evidence/E01-02.lifecycle_seams.bor.md`, this subsection, and D105.
+D105 widened them to the Bor decision block's startup and recovery driver
+as far as BOOTSTRAP needs; its sources stay unchanged. Roles and split as
+the coordinator records them: the owner agreed on 2026-11-13 to the
+#16-style split ("Очищай лишнее и запускай все", translated from Russian as
+"clean up what is extra and start everything"). This is the Bor
+native-engineer session, which also gives the qa matrix of the POLY slot.
+
+Design:
+[adapters/bor/lifecycle/native/README.md](../adapters/bor/lifecycle/native/README.md).
+A third anchored patch set (48 edits) and the `borlifecycle` glue route all
+27 Bor callers:
+- **Passes.** One pass per import decision, lent to nested calls under
+  `chainmu`.
+- **DECISION callers.** CANONICAL decisions for set-head, set-canonical,
+  known-block, the milestone rewind and the startup reconcile. One FINALITY
+  decision per native finality write of the whitelist (milestone,
+  checkpoint, vote lock) and the set-head clear, with the guard taken before
+  the whitelist lock.
+- **REFUSE callers.** Refused through the gate, the `bor server` profile
+  check, or the manual-command guard (`removedb`,
+  `purge-whitelisted-entries`, `backfill-statesync-txs`; a plain
+  `bor server` on a capture store).
+- **Startup reconcile.** It settles lifecycle intents from native evidence
+  and completes an interrupted multi-block rewind or reorganization.
+- **BOOTSTRAP (D105).** The native initial sync runs uncaptured; GoLive then
+  sets H under `chainmu` and the guard and installs the decider and the
+  observer in the same lock. `bor server` goes live at `eth.Synced()`.
+
+Technical decisions (evidence, "Technical decisions"):
+- known-block is exercised through a direct hook, because no native entry
+  reaches `writeKnownBlock` on a capture node;
+- the milestone reorganization is a rewind decision, then import and
+  set-canonical decisions, under one chain lock;
+- lifecycle markers go in a batch of their own and are settled from
+  evidence;
+- the startup reconcile compares the head only (startup finality: owner
+  E05-01.polygon_observer).
+
+Records at measured head `b4f90bd` (evidence:
+[E01-02.lifecycle_seams.bor](evidence/E01-02.lifecycle_seams.bor.md)):
+- preparation 08: PASS;
+- run 01: PASS, native 67.8 s, every judge check holds, `Gaps` empty in Go
+  and Python;
+- 29 portable tests;
+- 88 of 88 driver mutants killed.
+
+Preparations 01 to 07 are kept under D83:
+- 01 failed before the build;
+- 02 to 06 passed on superseded heads;
+- 07 failed on a full host disk.
+
+Reviews 001 to 005: Spec and Standards REQUEST_CHANGES, every finding fixed.
+D105 came from review 003. Review 006 (head `b4f90bd`): Spec PASS and
+Standards PASS, with P3 notes only. The docs notes are fixed after the
+measured head; the code notes are recorded in the evidence.
+
+qa verdict, private local POLY:
+- AC-CAP-01-01 PASS (harness and `admin_importChain` reach the bridge with
+  the same result; `Gaps` empty);
+- AC-LIF-05-02, 05-03, 06-04 and 06-05 NOT_APPLICABLE (ETH and BSC cases);
+- family PASS.
+
+Public POLY cells stay NOT_RUN.
+
+Next: hosted CI, the final review comment.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged

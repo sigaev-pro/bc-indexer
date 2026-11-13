@@ -84,7 +84,7 @@ the step fails at its deadline.
 | `bor.startup-reconcile` | DECISION | See "Startup reconcile" |
 | `bor.seal-write`, `bor.engine-api`, `bor.snap-sync`, `bor.stateless` | REFUSE | `WriteBlockAndSetHead`, `WriteBlockAndSetHeadPipelined`, `InsertBlockWithoutSetHead`, `InsertReceiptChain` and `InsertChainStateless` enter the gate, which refuses and counts them. The profile check refuses their roles too |
 | `bor.parallel`, `bor.pipelined`, `bor.preconf` | REFUSE | The profile check refuses them. Their native entries refuse without the guard (`RefuseOutside`), because an observation may already hold it there |
-| `bor.manual-commands` | REFUSE | `removedb`, `purge-whitelisted-entries` and `backfill-statesync-txs` (which rewrites StateSync receipts and lookups) are refused on a store with a live pin or any decision record (no mirror until E05-01.registry, so every decision record keeps an obligation or a retained member) |
+| `bor.manual-commands` | REFUSE | `removedb`, `purge-whitelisted-entries` and `backfill-statesync-txs` (which rewrites StateSync receipts and lookups) are refused on a store with a live pin, any decision record (no mirror until E05-01.registry, so every decision record keeps an obligation or a retained member) or a lifecycle record such as the boundary H |
 | `bor.prune-commands` | REFUSE (GUARDED) | The admission's retention guard refuses; the probe counts it |
 | READ_ONLY rows | READ_ONLY | No pass; unchanged |
 
@@ -232,6 +232,10 @@ guard:
    the boundary sync leaves no boundary: the next start is BOOTSTRAP again.
 3. It installs the decider and the observer in the same lock, so no import
    runs uncaptured after H.
+
+`Run.GoLive` is called once per node (by the `bor server` watcher, or by
+the probe) and is not safe to call concurrently with itself or with
+`Run.Stop`.
 
 A crash during BOOTSTRAP leaves no boundary, so the next start is BOOTSTRAP
 again, and native startup repair runs uncaptured. A restart after H keeps
