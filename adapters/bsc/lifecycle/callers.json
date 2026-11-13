@@ -1,0 +1,1585 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "geth": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+    "bsc": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+    "bor": "3a018e38467594508ca31ebeaf804837fb92834a"
+  },
+  "callers": [
+    {
+      "id": "geth.dev-sealing",
+      "client": "geth",
+      "source": "eth/catalyst/simulated_beacon.go:sealBlock",
+      "entry": [
+        "--dev"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "SEALING",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the node flag check refuses --dev on a capture store",
+      "note": "Drives newPayload and forkchoice itself; the capture profile follows a consensus client."
+    },
+    {
+      "id": "geth.eth-call",
+      "client": "geth",
+      "source": "internal/ethapi/api.go:applyMessageWithEVM",
+      "entry": [
+        "eth_call",
+        "eth_estimateGas",
+        "eth_createAccessList"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "geth.execution-witness",
+      "client": "geth",
+      "source": "eth/api_debug.go:ExecutionWitness",
+      "entry": [
+        "debug_executionWitness"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "ProcessBlock with WriteState false; not observed, holds no chain lock."
+    },
+    {
+      "id": "geth.freezer",
+      "client": "geth",
+      "source": "core/rawdb/chain_freezer.go:freeze",
+      "entry": [
+        "chain freezer goroutine"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "freezer_limit",
+      "refusal": "",
+      "note": "Moves canonical data to the ancient store; the mapping keeps its meaning. freezer_limit keeps the forks of pinned side branches."
+    },
+    {
+      "id": "geth.import",
+      "client": "geth",
+      "source": "core/blockchain.go:insertChain",
+      "entry": [
+        "InsertChain",
+        "downloader importBlockResults (full sync)",
+        "admin_importChain",
+        "insertSideChain re-import"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "insert_chain_guard, process_block_begin, process_block_exec_ready, process_block_decision, write_block_decision, head_batch_marker, process_block_resolve",
+      "refusal": "",
+      "note": "ProcessBlock runs processor.Process with the system calls of PreExecution, PostExecution and Finalize under the observation; writeBlockAndSetHead and its reorg end in one IMPORT or CANONICAL decision."
+    },
+    {
+      "id": "geth.insert-without-head",
+      "client": "geth",
+      "source": "core/blockchain.go:InsertBlockWithoutSetHead",
+      "entry": [
+        "engine_newPayloadV1-5",
+        "engine_newPayloadWithWitnessV1-5",
+        "testing_commitBlockV1"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "OBSERVATION",
+      "kinds": [
+        "SIDE"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "insert_without_head_guard, write_block_decision",
+      "refusal": "",
+      "note": "Each executed block is stored without a head change and decided as SIDE; the next forkchoice moves the head (geth.set-canonical)."
+    },
+    {
+      "id": "geth.known-block",
+      "client": "geth",
+      "source": "core/blockchain.go:writeKnownBlock",
+      "entry": [
+        "InsertChain",
+        "InsertBlockWithoutSetHead (setHead is not checked)",
+        "insertChain left-trim and skipBlock"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "KNOWN_BRANCH",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "A stored block with state becomes the head with no execution. Today it bypasses: no intent, no marker. The CANONICAL intent names the retained SIDE observations of the branch. Before the transition the bridge checks that each block of the branch has its corpus (a retained EXEC_READY observation); a block without one (stored during BOOTSTRAP or without state) needs a targeted native replay from retained inputs and state, or the transition is a source error, never a silent activation."
+    },
+    {
+      "id": "geth.manual-commands",
+      "client": "geth",
+      "source": "cmd/utils/cmd.go:ImportChain",
+      "entry": [
+        "geth import",
+        "geth import-history",
+        "geth init",
+        "geth removedb",
+        "geth snapshot prune-state"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "MANUAL_COMMAND",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "writable_database_guard, removedb_guard, snapshot_prune_state",
+      "refusal": "the writable-database and removedb guards refuse a capture store with live pins or obligations",
+      "note": ""
+    },
+    {
+      "id": "geth.parallel",
+      "client": "geth",
+      "source": "core/state_processor_parallel.go:processParallel",
+      "entry": [
+        "ProcessBlock (Amsterdam BAL)"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "process_block_begin",
+      "refusal": "process_block_begin sets DisableParallelExecution for observed imports",
+      "note": "The parallel processor itself belongs to E04-04.import_pressure (D100)."
+    },
+    {
+      "id": "geth.payload-build",
+      "client": "geth",
+      "source": "miner/worker.go:generateWork",
+      "entry": [
+        "engine_forkchoiceUpdated with payloadAttributes",
+        "testing_buildBlockV1"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Builds a payload on a state copy; a built block reaches the chain only through newPayload."
+    },
+    {
+      "id": "geth.prefetch",
+      "client": "geth",
+      "source": "core/state_prefetcher.go:Prefetch",
+      "entry": [
+        "ProcessBlock prefetch goroutine"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Speculative run on a throwaway StateDB; its config is copied before Configure."
+    },
+    {
+      "id": "geth.recover-ancestors",
+      "client": "geth",
+      "source": "core/blockchain.go:recoverAncestors",
+      "entry": [
+        "SetCanonical",
+        "InsertBlockWithoutSetHead with a pruned parent"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM"
+      ],
+      "trigger": "KNOWN_BRANCH",
+      "route": "OBSERVATION",
+      "kinds": [
+        "SIDE"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "set_canonical_guard, process_block_begin, write_block_decision",
+      "refusal": "",
+      "note": "D100: guarded but not exercised; the Geth block exercises it. Each re-executed block is decided as SIDE."
+    },
+    {
+      "id": "geth.recovery",
+      "client": "geth",
+      "source": "eth/backend.go:New",
+      "entry": [
+        "extractor recovery driver after NewBlockChain"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL"
+      ],
+      "trigger": "STARTUP",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "backend_attach, backend_attach_decisions",
+      "refusal": "",
+      "note": "The recovery driver: admission recovery, decision.Open, native-only replay and the completion of the saved intent. Callers nested in its pass may enter the gate in RECOVERY."
+    },
+    {
+      "id": "geth.replay-bad-block",
+      "client": "geth",
+      "source": "eth/api_debug_replay.go:ReplayBadBlock",
+      "entry": [
+        "debug_replayBadBlock"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "geth.set-canonical",
+      "client": "geth",
+      "source": "core/blockchain.go:SetCanonical",
+      "entry": [
+        "engine_forkchoiceUpdatedV1-4",
+        "engine_forkchoiceUpdatedWithWitnessV1-4",
+        "testing_commitBlockV1"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "The main post-merge head path. set_canonical_guard holds the guard, but the reorg and writeHeadBlock make no intent or marker, so a retained SIDE block that becomes canonical stays SIDE. The re-execution inside is geth.recover-ancestors."
+    },
+    {
+      "id": "geth.set-finalized",
+      "client": "geth",
+      "source": "core/blockchain.go:SetFinalized",
+      "entry": [
+        "engine_forkchoiceUpdatedV1-4 (non-zero finalized hash)"
+      ],
+      "effects": [
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "AC-LIF-05-02 and 05-03: a zero hash calls no setter; the setter runs before the safe validation, which can fail and return an RPC error. The native write is unbatched and unsynced and holds no chain lock; the patch puts it and the marker in one synced batch. Typed observations: E05-01.eth_finality."
+    },
+    {
+      "id": "geth.set-head",
+      "client": "geth",
+      "source": "core/blockchain.go:setHeadBeyondRoot",
+      "entry": [
+        "SetHead",
+        "SetHeadWithTimestamp",
+        "debug_setHead"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "A runtime rewind deletes canonical blocks and clears safe and finalized. rewind_guard (E01-02.admission) only refuses deleting a pinned header; the Geth block adds the guard and the decision."
+    },
+    {
+      "id": "geth.set-safe",
+      "client": "geth",
+      "source": "core/blockchain.go:SetSafe",
+      "entry": [
+        "engine_forkchoiceUpdatedV1-4 (non-zero safe hash)"
+      ],
+      "effects": [
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Safe lives in memory only; its decision marker is a batch of its own after the setter. A restart sets safe to the finalized block (AC-LIF-05-01, E05-01.eth_finality)."
+    },
+    {
+      "id": "geth.side-chain",
+      "client": "geth",
+      "source": "core/blockchain.go:insertSideChain",
+      "entry": [
+        "InsertChain on ErrPrunedAncestor"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "SIDE_CHAIN",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "writeBlockWithoutState stores stateless side blocks without a decision; the re-executed ancestors pass geth.import. The Geth block confirms that the stateless writes reach no head or canonical choke point."
+    },
+    {
+      "id": "geth.simulate",
+      "client": "geth",
+      "source": "internal/ethapi/simulate.go:processBlock",
+      "entry": [
+        "eth_simulateV1"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "geth.snap-sync",
+      "client": "geth",
+      "source": "core/blockchain.go:InsertReceiptChain",
+      "entry": [
+        "downloader commitSnapSyncData and commitPivotBlock",
+        "SnapSyncStart",
+        "SnapSyncComplete",
+        "InsertHeadersBeforeCutoff",
+        "InsertHeaderChain"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "SYNC_MODE",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the node flag check refuses any sync mode but full sync on a capture store",
+      "note": "Writes canonical mappings and head markers without execution."
+    },
+    {
+      "id": "geth.startup-reconcile",
+      "client": "geth",
+      "source": "core/blockchain.go:NewBlockChain",
+      "entry": [
+        "setHeadBeyondRoot(repair)",
+        "loadLastState",
+        "ResetWithGenesisBlock",
+        "startup ancient truncation",
+        "chain config compatibility rewind",
+        "Genesis.Commit"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "STARTUP",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Native startup repair runs before the gate opens. Inside the recovery pass, the driver compares the native head and finality with the last decided ones; a difference becomes a decision from native evidence, or a source invariant error when native data cannot explain it."
+    },
+    {
+      "id": "geth.stateless-payload",
+      "client": "geth",
+      "source": "eth/catalyst/witness.go:executeStatelessPayload",
+      "entry": [
+        "engine_executeStatelessPayloadV1-5",
+        "cmd/keeper"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "geth.stateless-self-check",
+      "client": "geth",
+      "source": "core/blockchain.go:ProcessBlock",
+      "entry": [
+        "--vm.statelessselfvalidation"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "stateless_self_check",
+      "refusal": "",
+      "note": "A second in-memory execution; the patch removes the BLOCKHASH answers and the safe point from it."
+    },
+    {
+      "id": "geth.sync-target",
+      "client": "geth",
+      "source": "eth/syncer/syncer.go:run",
+      "entry": [
+        "--synctarget",
+        "syncer Sync API"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "SYNC_MODE",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the node flag check refuses --synctarget on a capture store",
+      "note": "Sets finalized to the head minus two epochs and safe to the head minus one epoch without a consensus client: synthesized finality, never native finality evidence."
+    },
+    {
+      "id": "geth.trace-state",
+      "client": "geth",
+      "source": "eth/state_accessor.go:hashState",
+      "entry": [
+        "debug_trace*",
+        "debug_intermediateRoots",
+        "debug_standardTrace*"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Re-executes on an ephemeral trie database; hooks are not installed."
+    },
+    {
+      "id": "bsc.attestation-read",
+      "client": "bsc",
+      "source": "consensus/parlia/parlia.go:GetJustifiedNumberAndHash",
+      "entry": [
+        "GetFinalizedHeader",
+        "fork choice",
+        "CurrentSafeBlock",
+        "CurrentFinalBlock"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Native callers turn a lookup error into 0 or genesis. Finality evidence reads it through ReadAttestation: no attestation is GENESIS_FALLBACK, a lookup error is a source error."
+    },
+    {
+      "id": "bsc.database-commands",
+      "client": "bsc",
+      "source": "cmd/geth/dbcmd.go:removeDB",
+      "entry": [
+        "geth removedb",
+        "geth db delete",
+        "geth db put",
+        "geth db import",
+        "geth db delete-trie-state",
+        "geth prune-history",
+        "geth init"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "MANUAL_COMMAND",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "refused on a capture store with live pins or obligations, as D100 item 3 does for geth removedb",
+      "note": "Technical decision within this card: a command that deletes or rewrites chaindata is a caller that would lose obligations, so it fails closed like the Geth guard of D100 item 3."
+    },
+    {
+      "id": "bsc.engine-api",
+      "client": "bsc",
+      "source": "core/blockchain.go:InsertBlockWithoutSetHead",
+      "entry": [
+        "eth/catalyst",
+        "SetCanonical",
+        "recoverAncestors",
+        "--dev simulated beacon"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "RPC",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "01-core-import-seam.diff",
+      "refusal": "the seam refuses ProcessBlock outside the current observation (ErrExtractorUnobserved)",
+      "note": "Parlia nodes do not use the Engine API."
+    },
+    {
+      "id": "bsc.eth-call",
+      "client": "bsc",
+      "source": "internal/ethapi/api.go:DoCall",
+      "entry": [
+        "eth_call",
+        "eth_estimateGas",
+        "eth_simulateV1"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "bsc.execution-witness",
+      "client": "bsc",
+      "source": "eth/api_debug.go:ExecutionWitness",
+      "entry": [
+        "debug_executionWitness"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Reads the current observation without chainmu; the BSC block makes it take the lock or refuse."
+    },
+    {
+      "id": "bsc.freezer",
+      "client": "bsc",
+      "source": "core/rawdb/chain_freezer.go:freeze",
+      "entry": [
+        "chain freezer goroutine"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "02-rawdb-freezer.diff",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "bsc.import",
+      "client": "bsc",
+      "source": "core/blockchain.go:insertChain",
+      "entry": [
+        "InsertChain",
+        "downloader importBlockResults",
+        "block fetcher",
+        "procFutureBlocks",
+        "admin_importChain"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "01-core-import-seam.diff, 07-core-decision-step.diff",
+      "refusal": "",
+      "note": "ProcessBlock runs Process with the system-contract upgrades and Parlia Finalize, whose system transactions go through applyTransaction (actualTx substitution, nonce and Finalise), under the observation. The decision records the native fork choice and GetFinalizedHeader result as evidence and sets the finalized marker from it. D101: the accepted tree has no chainSideFeed; natively a side block gets chainBlockFeed from insertChain and the verified-header feed from writeBlockAndSetHead, and the BSC block checks that the decided SIDE path sends the same events."
+    },
+    {
+      "id": "bsc.known-block",
+      "client": "bsc",
+      "source": "core/blockchain.go:writeKnownBlock",
+      "entry": [
+        "insertChain known-block skip and mid-batch paths"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "KNOWN_BRANCH",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Begin opens no observation for a block with state, and writeKnownBlock, reorg and writeHeadBlock run with no intent or marker; this bypasses today. Before the transition the bridge checks that each block of the branch has its corpus (a retained EXEC_READY observation); a block without one (stored during BOOTSTRAP or without state) needs a targeted native replay from retained inputs and state, or the transition is a source error, never a silent activation."
+    },
+    {
+      "id": "bsc.manual-commands",
+      "client": "bsc",
+      "source": "cmd/utils/cmd.go:ImportChain",
+      "entry": [
+        "geth import",
+        "geth snapshot prune-state"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "MANUAL_COMMAND",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "04-geth-prune-state.diff, 01-core-import-seam.diff",
+      "refusal": "Start refuses an engine without ethAPI (geth import), and the prune-state guard refuses live pins",
+      "note": ""
+    },
+    {
+      "id": "bsc.notify-finalized",
+      "client": "bsc",
+      "source": "core/blockchain.go:NotifyFinalized",
+      "entry": [
+        "insertChain deferred finality notice",
+        "VotePool vote transfer and PutVote goroutines"
+      ],
+      "effects": [],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E05-01.bsc_finality",
+      "patch": "",
+      "refusal": "",
+      "note": "Updates only the in-memory notified height and sends the finalized-header feed; it writes no native state, so there is no batch for a marker. This is VotePool early evidence (AC-LIF-06-01 to 06-03). The native finalized write is SetFinalized inside writeBlockAndSetHead (bsc.import), whose evidence uses ReadAttestation (AC-LIF-06-04, 06-05)."
+    },
+    {
+      "id": "bsc.prefetch",
+      "client": "bsc",
+      "source": "core/state_prefetcher.go:Prefetch",
+      "entry": [
+        "ProcessBlock prefetch goroutine"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "bsc.recovery",
+      "client": "bsc",
+      "source": "eth/backend.go:New",
+      "entry": [
+        "extractor Start",
+        "decision recovery driver"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL"
+      ],
+      "trigger": "STARTUP",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "07-core-decision-step.diff",
+      "refusal": "",
+      "note": "Admission and decision recovery. Callers nested in its pass may enter the gate in RECOVERY."
+    },
+    {
+      "id": "bsc.sealing",
+      "client": "bsc",
+      "source": "miner/worker.go:generateWork",
+      "entry": [
+        "StartMining",
+        "VoteManager",
+        "bid simulator",
+        "stake hub node-ID calls"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "SEALING",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the node flag check refuses mining, voting and builder roles; SystemCallBackend refuses calls by number",
+      "note": "WriteBlockAndSetHead from the miner takes no guard; the capture profile imports blocks."
+    },
+    {
+      "id": "bsc.set-head",
+      "client": "bsc",
+      "source": "core/blockchain.go:setHeadBeyondRoot",
+      "entry": [
+        "SetHead",
+        "SetHeadWithTimestamp",
+        "debug_setHead"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "The import seam's rewind guard only refuses deleting a pinned header (a rewind by timestamp is refused while any header is pinned, D100). Clears the finalized marker."
+    },
+    {
+      "id": "bsc.shutdown",
+      "client": "bsc",
+      "source": "core/blockchain.go:Stop",
+      "entry": [
+        "node shutdown (hash scheme)"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "With the hash scheme Stop commits recent states and rewrites the head block hash, a head marker change after the last decision; the BSC block decides it or the next start reconciles it."
+    },
+    {
+      "id": "bsc.side-chain",
+      "client": "bsc",
+      "source": "core/blockchain.go:insertSideChain",
+      "entry": [
+        "InsertChain on ErrPrunedAncestor",
+        "a block whose parent is not the head"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "SIDE_CHAIN",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Today the seam admits only a block on top of the head with state, so a side branch or reorg fails closed at Begin; the BSC block admits it and decides it as SIDE or CANONICAL."
+    },
+    {
+      "id": "bsc.snap-sync",
+      "client": "bsc",
+      "source": "core/blockchain.go:InsertReceiptChain",
+      "entry": [
+        "downloader snap sync",
+        "InsertHeaderChain",
+        "InsertHeadersBeforeCutoff",
+        "geth import-history"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "SYNC_MODE",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the node flag check refuses any sync mode but full sync on a capture store",
+      "note": ""
+    },
+    {
+      "id": "bsc.startup-reconcile",
+      "client": "bsc",
+      "source": "core/blockchain.go:NewBlockChain",
+      "entry": [
+        "setHeadBeyondRoot(repair)",
+        "loadLastState",
+        "startup ancient truncation",
+        "chain config compatibility rewind",
+        "genesis commit"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "STARTUP",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Native startup repair runs before the gate opens; inside the recovery pass the driver compares the native head and finality with the last decided ones (decision or source invariant error)."
+    },
+    {
+      "id": "bsc.system-call-api",
+      "client": "bsc",
+      "source": "consensus/parlia/parlia.go:getCurrentValidators",
+      "entry": [
+        "Parlia Finalize epoch, Luban, Bohr turn length and Feynman calls through ethAPI"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "System-contract reads on the parent state, inputs of the observed execution. D100: the node wiring must build Parlia with the SystemCallBackend API (eth/backend.go before CreateConsensusEngine), not the RPC backend, and bind it after NewBlockChain."
+    },
+    {
+      "id": "bsc.trace-state",
+      "client": "bsc",
+      "source": "eth/state_accessor.go:hashState",
+      "entry": [
+        "debug_trace*",
+        "stateAtTransaction"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Re-executes on the shared Parlia engine; with SystemCallBackend a system call on another block stops an active import (fail closed)."
+    },
+    {
+      "id": "bor.checkpoint",
+      "client": "bor",
+      "source": "eth/downloader/whitelist/checkpoint.go:Process",
+      "entry": [
+        "handleWhitelistCheckpoint"
+      ],
+      "effects": [
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Typed observations: E05-01.polygon_observer."
+    },
+    {
+      "id": "bor.engine-api",
+      "client": "bor",
+      "source": "core/blockchain.go:InsertBlockWithoutSetHead",
+      "entry": [
+        "eth/catalyst (not registered by bor server)"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "RPC",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "bor server does not register the catalyst API; the gate refuses this caller",
+      "note": ""
+    },
+    {
+      "id": "bor.eth-call",
+      "client": "bor",
+      "source": "internal/ethapi/api.go:doCall",
+      "entry": [
+        "eth_call",
+        "eth_estimateGas",
+        "eth_createAccessList"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "bor.execution-witness",
+      "client": "bor",
+      "source": "eth/api_debug.go:ExecutionWitness",
+      "entry": [
+        "debug_executionWitness*"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "window-gate-finalize",
+      "refusal": "",
+      "note": "Not observed; Finalize waits at the Heimdall window gate. Its arguments are swapped natively."
+    },
+    {
+      "id": "bor.freezer",
+      "client": "bor",
+      "source": "core/rawdb/chain_freezer.go:freeze",
+      "entry": [
+        "chain freezer goroutine"
+      ],
+      "effects": [],
+      "trigger": "NEW_BLOCK",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "retention-freeze-threshold",
+      "refusal": "",
+      "note": "Moves canonical data to the ancient store; the mapping keeps its meaning."
+    },
+    {
+      "id": "bor.import",
+      "client": "bor",
+      "source": "core/blockchain.go:processBlockForImport",
+      "entry": [
+        "InsertChain",
+        "InsertChainWithWitnesses",
+        "downloader importBlockResults",
+        "block fetcher",
+        "admin_importChain",
+        "insertFinalized"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "import-path-observation, import-path-one-block-batches, window-gate-finalize, decision-import-write, decision-marker-block-batch, decision-marker-head-batch",
+      "refusal": "",
+      "note": "ProcessBlock runs Finalize with checkAndCommitSpan, CommitStates (StateSync) and changeContractCodeIfNeeded under the observation. The Bor block checks that a re-execution of an already stored block (snapshot gap, insertSideChain) cannot reach a second decision."
+    },
+    {
+      "id": "bor.known-block",
+      "client": "bor",
+      "source": "core/blockchain.go:writeKnownBlock",
+      "entry": [
+        "InsertChain with a stored block and state",
+        "insertFinalized after a rewind"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "KNOWN_BRANCH",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Bypasses today. The guard goes after the chainmu TryLock (lock order chainmu, guard). Before the transition the bridge checks that each block of the branch has its corpus (a retained EXEC_READY observation); a block without one (stored during BOOTSTRAP or without state) needs a targeted native replay from retained inputs and state, or the transition is a source error, never a silent activation."
+    },
+    {
+      "id": "bor.manual-commands",
+      "client": "bor",
+      "source": "internal/cli/removedb.go:Run",
+      "entry": [
+        "bor removedb",
+        "bor purge-whitelisted-entries"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "MANUAL_COMMAND",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "refused on a capture store with live pins or obligations, as D100 item 3 does for geth removedb",
+      "note": "Technical decision within this card: a command that deletes or rewrites chaindata is a caller that would lose obligations, so it fails closed like the Geth guard of D100 item 3."
+    },
+    {
+      "id": "bor.milestone",
+      "client": "bor",
+      "source": "eth/downloader/whitelist/milestone.go:Process",
+      "entry": [
+        "handleMilestone",
+        "fetchAndHandleMilestone",
+        "subscribeAndHandleMilestone"
+      ],
+      "effects": [
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Bor finality is the whitelisted milestone. Take the guard in handleMilestone around the whitelist call, never under the whitelist finality lock (the decision path holds chainmu, guard, then finality.RLock), and never across borVerify and reorgToFinalized, which take chainmu themselves. Typed observations: E05-01.polygon_observer."
+    },
+    {
+      "id": "bor.milestone-lock",
+      "client": "bor",
+      "source": "eth/downloader/whitelist/milestone.go:PurgeAfter",
+      "entry": [
+        "ProcessFutureMilestone",
+        "UnlockSprint",
+        "LockMutex and UnlockMutex",
+        "GetVoteOnHash",
+        "PurgeMilestonesAfter"
+      ],
+      "effects": [
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Changes the milestone lock and deletes finality entries above a block; this changes what ValidateReorg accepts."
+    },
+    {
+      "id": "bor.milestone-reorg",
+      "client": "bor",
+      "source": "eth/bor_checkpoint_verifier.go:reorgToFinalized",
+      "entry": [
+        "handleMilestone",
+        "handleWhitelistCheckpoint (borVerify)"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "rewind (SetHead), insertFinalized and SetCanonical take and release chainmu one by one. The Bor block makes the whole reorganization one decision, or fails closed when another import runs between."
+    },
+    {
+      "id": "bor.parallel",
+      "client": "bor",
+      "source": "core/parallel_state_processor.go:Process",
+      "entry": [
+        "NewParallelBlockChain (ParallelEVM.Enable)"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the bor server profile check (state_provider.CheckProfile) refuses parallel EVM, which is on by default",
+      "note": "D60: --parallelevm.enable=false --parallelevm.enforce=false."
+    },
+    {
+      "id": "bor.pending-block",
+      "client": "bor",
+      "source": "miner/miner.go:Pending",
+      "entry": [
+        "eth_getBlockByNumber pending",
+        "eth_call pending"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "window-gate-finalize-and-assemble",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "bor.pipelined",
+      "client": "bor",
+      "source": "core/blockchain.go:persistPipelinedImport",
+      "entry": [
+        "EnablePipelinedImportSRC",
+        "recoverFailedPipelinedImport"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the bor server profile check refuses pipelined import",
+      "note": "Its decision and rollback would bypass the bridge."
+    },
+    {
+      "id": "bor.preconf",
+      "client": "bor",
+      "source": "core/blockchain.go:claimPreconf",
+      "entry": [
+        "Sequencer.Enabled consumer",
+        "EnablePreconfs"
+      ],
+      "effects": [
+        "EXECUTION"
+      ],
+      "trigger": "NEW_BLOCK",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the bor server profile check refuses the preconf and sequencer roles; import-path-observation skips claimPreconf while observing",
+      "note": ""
+    },
+    {
+      "id": "bor.prune-commands",
+      "client": "bor",
+      "source": "internal/cli/snapshot.go:Run",
+      "entry": [
+        "bor snapshot prune-state",
+        "bor snapshot prune-block"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "MANUAL_COMMAND",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "retention-prune-state, retention-prune-block",
+      "refusal": "the retention guards refuse pruning pinned state and headers",
+      "note": ""
+    },
+    {
+      "id": "bor.recover-ancestors",
+      "client": "bor",
+      "source": "core/blockchain.go:recoverAncestors",
+      "entry": [
+        "insertChain on a pruned ancestor without setHead",
+        "SetCanonical"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM"
+      ],
+      "trigger": "KNOWN_BRANCH",
+      "route": "OBSERVATION",
+      "kinds": [
+        "SIDE"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "import-path-observation, decision-import-write",
+      "refusal": "",
+      "note": "Observed; decided as SIDE because setHead is false."
+    },
+    {
+      "id": "bor.recovery",
+      "client": "bor",
+      "source": "eth/backend.go:New",
+      "entry": [
+        "borimport.Start",
+        "bordecision.Start"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL"
+      ],
+      "trigger": "STARTUP",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "GUARDED",
+      "owner": "E01-02.decision_bridge",
+      "patch": "decision-import-write (bordecision.Start)",
+      "refusal": "",
+      "note": "Admission recovery, decision recovery and the native import of re-executed obligations in RECOVERY_ONLY. Callers nested in its pass may enter the gate in RECOVERY."
+    },
+    {
+      "id": "bor.seal-write",
+      "client": "bor",
+      "source": "miner/worker.go:writeTaskBlock",
+      "entry": [
+        "WriteBlockAndSetHead",
+        "WriteBlockAndSetHeadPipelined",
+        "miner_start",
+        "Sealer.Enabled"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL"
+      ],
+      "trigger": "SEALING",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the bor server profile check refuses sealing, and the gate refuses miner_start at runtime",
+      "note": "D101: self-sealed blocks are written without an observation or decision; the capture profile imports blocks, it does not produce them."
+    },
+    {
+      "id": "bor.set-canonical",
+      "client": "bor",
+      "source": "core/blockchain.go:SetCanonical",
+      "entry": [
+        "insertFinalized (milestone reorg)"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Takes chainmu itself; the guard goes after its TryLock."
+    },
+    {
+      "id": "bor.set-head",
+      "client": "bor",
+      "source": "core/blockchain.go:setHeadBeyondRoot",
+      "entry": [
+        "SetHead",
+        "SetHeadWithTimestamp",
+        "debug_setHead",
+        "bor chain sethead (gRPC ChainSetHead)",
+        "milestone rewind",
+        "verifyPendingHeaders"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "NO_NEW_BLOCK",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "retention-set-head (E01-02.admission) refuses deleting a pinned header but runs before chainmu; the guard goes after the TryLock. Clears safe and finalized."
+    },
+    {
+      "id": "bor.side-chain",
+      "client": "bor",
+      "source": "core/blockchain.go:insertSideChain",
+      "entry": [
+        "InsertChain on ErrPrunedAncestor"
+      ],
+      "effects": [
+        "EXECUTION",
+        "CANONICAL"
+      ],
+      "trigger": "SIDE_CHAIN",
+      "route": "OBSERVATION",
+      "kinds": [
+        "IMPORT",
+        "SIDE",
+        "CANONICAL"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "writeBlockWithoutState stores side blocks without a decision; the re-import passes bor.import."
+    },
+    {
+      "id": "bor.simulate",
+      "client": "bor",
+      "source": "internal/ethapi/simulate.go:execute",
+      "entry": [
+        "eth_simulateV1"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "window-gate-finalize-and-assemble-for-simulation",
+      "refusal": "",
+      "note": ""
+    },
+    {
+      "id": "bor.snap-sync",
+      "client": "bor",
+      "source": "core/blockchain.go:InsertReceiptChain",
+      "entry": [
+        "downloader snap sync",
+        "SnapSyncCommitHead",
+        "InsertHeaderChain",
+        "InsertHeaderChainWithoutValidation"
+      ],
+      "effects": [
+        "CANONICAL"
+      ],
+      "trigger": "SYNC_MODE",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the bor server profile check refuses any sync mode but full sync",
+      "note": ""
+    },
+    {
+      "id": "bor.startup-reconcile",
+      "client": "bor",
+      "source": "core/blockchain.go:NewBlockChain",
+      "entry": [
+        "setHeadBeyondRoot(repair)",
+        "startup SetHead (ancient truncation, BadHashes, compatibility)",
+        "loadLastState",
+        "InitDatabaseFromFreezer",
+        "whitelist NewService"
+      ],
+      "effects": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "trigger": "STARTUP",
+      "route": "DECISION",
+      "kinds": [
+        "CANONICAL",
+        "FINALITY"
+      ],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "",
+      "note": "Runs before Start, as do the header verification loop and the milestone fetcher. Inside the recovery pass the driver compares the native head and finality with the last decided ones; a difference becomes a decision from native evidence, or a source invariant error."
+    },
+    {
+      "id": "bor.stateless",
+      "client": "bor",
+      "source": "core/blockchain.go:insertChainStatelessSequential",
+      "entry": [
+        "InsertChainStateless",
+        "downloader importBlockResultsStateless"
+      ],
+      "effects": [
+        "EXECUTION",
+        "SYSTEM",
+        "CANONICAL"
+      ],
+      "trigger": "SYNC_MODE",
+      "route": "REFUSE",
+      "kinds": [],
+      "status": "PLANNED",
+      "owner": "E01-02.lifecycle_seams",
+      "patch": "",
+      "refusal": "the bor server profile check refuses stateless and parallel-stateless import",
+      "note": ""
+    },
+    {
+      "id": "bor.trace-state",
+      "client": "bor",
+      "source": "eth/state_accessor.go:hashState",
+      "entry": [
+        "debug_trace*",
+        "stateAtTransaction"
+      ],
+      "effects": [],
+      "trigger": "RPC",
+      "route": "READ_ONLY",
+      "kinds": [],
+      "status": "GUARDED",
+      "owner": "E01-02.admission",
+      "patch": "window-gate-finalize",
+      "refusal": "",
+      "note": ""
+    }
+  ]
+}

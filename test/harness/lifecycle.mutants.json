@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E01-02.lifecycle_seams identity check, caller map validator, Python digest reference and module assembly.",
+  "language": "python",
+  "root": "../..",
+  "copy": [
+    "test/harness/admission.py",
+    "test/harness/source_inputs.py",
+    "test/harness/decision.py",
+    "test/harness/lifecycle.py",
+    "test/harness/test_lifecycle.py",
+    "adapters/*/admission/*",
+    "adapters/*/source_inputs/*",
+    "adapters/*/decision/*",
+    "adapters/*/lifecycle/*",
+    "test/harness/fixtures/admission_core/*",
+    "test/harness/fixtures/decision_core/*",
+    ".project/bootstrap/components/candidate-lock.json"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/test_lifecycle.py",
+    "-v"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "boundary tag",
+      "file": "test/harness/lifecycle.py",
+      "original": "tag(\"extractor-lifecycle-boundary-v1\")",
+      "replacement": "tag(\"extractor-lifecycle-boundary-v0\")"
+    },
+    {
+      "name": "finality tag",
+      "file": "test/harness/lifecycle.py",
+      "original": "tag(\"extractor-lifecycle-finality-v1\")",
+      "replacement": "tag(\"extractor-lifecycle-finality-v0\")"
+    },
+    {
+      "name": "attestation tag",
+      "file": "test/harness/lifecycle.py",
+      "original": "tag(\"extractor-lifecycle-attestation-v1\")",
+      "replacement": "tag(\"extractor-lifecycle-attestation-v0\")"
+    },
+    {
+      "name": "boundary omits store",
+      "file": "test/harness/lifecycle.py",
+      "original": "text(store_id) + text(producer)",
+      "replacement": "text(producer)"
+    },
+    {
+      "name": "finality omits caller",
+      "file": "test/harness/lifecycle.py",
+      "original": "text(field) + text(caller) + head(old)",
+      "replacement": "text(field) + head(old)"
+    },
+    {
+      "name": "finality zero hash allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "    if new[\"hash\"] == ZERO:\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "finality unchanged allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "    if new == old:\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "attestation omits status",
+      "file": "test/harness/lifecycle.py",
+      "original": "text(status) + head(justified)",
+      "replacement": "head(justified)"
+    },
+    {
+      "name": "fields not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "    if sorted(c) != sorted(CALLER_FIELDS):\n",
+      "replacement": "    if False:\n"
+    },
+    {
+      "name": "id prefix not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": " or not c[\"id\"].startswith(c[\"client\"] + \".\")",
+      "replacement": ""
+    },
+    {
+      "name": "source not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "    if not SOURCE.fullmatch(c[\"source\"]):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "empty entry allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "if not c[\"entry\"] or \"\" in c[\"entry\"]:",
+      "replacement": "if not c[\"entry\"]:"
+    },
+    {
+      "name": "trigger not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "    if c[\"trigger\"] not in TRIGGERS:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "repeats allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "if len(set(effects)) != len(effects) or len(set(kinds)) != len(kinds):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "unknown effect allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "if any(e not in EFFECTS for e in effects):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "refusal anywhere",
+      "file": "test/harness/lifecycle.py",
+      "original": "if c[\"refusal\"] and c[\"route\"] != \"REFUSE\":",
+      "replacement": "if False:"
+    },
+    {
+      "name": "read-only effects allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "        if effects or kinds:",
+      "replacement": "        if kinds:"
+    },
+    {
+      "name": "observation without execution",
+      "file": "test/harness/lifecycle.py",
+      "original": "if \"EXECUTION\" not in effects or not kinds",
+      "replacement": "if not kinds"
+    },
+    {
+      "name": "observation finality kind",
+      "file": "test/harness/lifecycle.py",
+      "original": "k not in (\"IMPORT\", \"SIDE\", \"CANONICAL\")",
+      "replacement": "k not in (\"IMPORT\", \"SIDE\", \"CANONICAL\", \"FINALITY\")"
+    },
+    {
+      "name": "decision execution allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "any(e not in wanted for e in effects) or ",
+      "replacement": ""
+    },
+    {
+      "name": "decision kinds not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": " or sorted(kinds) != sorted(wanted[e] for e in effects)",
+      "replacement": ""
+    },
+    {
+      "name": "refuse kinds allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "if not effects or kinds or not c[\"refusal\"]:",
+      "replacement": "if not effects or not c[\"refusal\"]:"
+    },
+    {
+      "name": "refuse without refusal",
+      "file": "test/harness/lifecycle.py",
+      "original": "if not effects or kinds or not c[\"refusal\"]:",
+      "replacement": "if not effects or kinds:"
+    },
+    {
+      "name": "unknown route allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "        raise map_error(c, f\"route {route!r}\")",
+      "replacement": "        pass"
+    },
+    {
+      "name": "status not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "    if c[\"status\"] not in STATUSES:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "patch rule not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "if (c[\"status\"] == \"GUARDED\") != bool(c[\"patch\"]):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "owner not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "    if not OWNER.fullmatch(c[\"owner\"]):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "sources not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "if sorted(data[\"sources\"]) != sorted(CLIENTS) or not all(COMMIT.fullmatch(v) for v in data[\"sources\"].values()):",
+      "replacement": "if sorted(data[\"sources\"]) != sorted(CLIENTS):"
+    },
+    {
+      "name": "duplicates allowed",
+      "file": "test/harness/lifecycle.py",
+      "original": "        if c[\"id\"] in seen:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "refused callers cover effects",
+      "file": "test/harness/lifecycle.py",
+      "original": "if c[\"route\"] in (\"OBSERVATION\", \"DECISION\"):\n            s[\"covered\"]",
+      "replacement": "if c[\"route\"] != \"READ_ONLY\":\n            s[\"covered\"]"
+    },
+    {
+      "name": "coverage not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": "        if missing:\n",
+      "replacement": "        if False:\n"
+    },
+    {
+      "name": "identity ignores native",
+      "file": "test/harness/lifecycle.py",
+      "original": "path.relative_to(base).parts[0] != FAMILY_DIR",
+      "replacement": "True"
+    },
+    {
+      "name": "identity ignores bytes",
+      "file": "test/harness/lifecycle.py",
+      "original": "        if len(set(values.values())) != 1:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "assemble skips a file",
+      "file": "test/harness/lifecycle.py",
+      "original": "    for name in PACKAGE_FILES:\n",
+      "replacement": "    for name in PACKAGE_FILES[1:]:\n"
+    },
+    {
+      "name": "schema not checked",
+      "file": "test/harness/lifecycle.py",
+      "original": " or version != 1:",
+      "replacement": ":"
+    },
+    {
+      "name": "schema accepts true",
+      "file": "test/harness/lifecycle.py",
+      "original": "type(version) is not int or ",
+      "replacement": ""
+    },
+    {
+      "name": "finality same hash at two numbers",
+      "file": "test/harness/lifecycle.py",
+      "original": "if new[\"hash\"] == old[\"hash\"] and new[\"number\"] != old[\"number\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "boundary omits root",
+      "file": "test/harness/lifecycle.py",
+      "original": "+ raw(block) + raw(root)).hex()",
+      "replacement": "+ raw(block)).hex()"
+    }
+  ]
+}

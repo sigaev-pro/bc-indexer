@@ -1,0 +1,753 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the shared E01-02.lifecycle_seams core. The table is shared byte for byte by the geth, bsc and bor copies; it runs in the module from `python3 test/harness/lifecycle.py assemble DIR`, at extractor/lifecycle, because the package imports admission and decision at their native paths.",
+  "language": "go",
+  "root": "../..",
+  "copy": [
+    "go.mod",
+    "extractor/*.go",
+    "extractor/*/vectors.json",
+    "extractor/lifecycle/callers.json"
+  ],
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "./extractor/lifecycle/"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "tag boundary",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "tagBoundary = \"extractor-lifecycle-boundary-v1\"",
+      "replacement": "tagBoundary = \"extractor-lifecycle-boundary-v0\""
+    },
+    {
+      "name": "key prefix",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "const keyPrefix = \"extractor-lifecycle-v1/\"",
+      "replacement": "const keyPrefix = \"extractor-lifecycle-v2/\""
+    },
+    {
+      "name": "store id anchors",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "`^[0-9A-Za-z][0-9A-Za-z._:-]{0,127}$`",
+      "replacement": "`[0-9A-Za-z][0-9A-Za-z._:-]{0,127}`"
+    },
+    {
+      "name": "commit pattern anchors",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "`^[0-9a-f]{40}$`",
+      "replacement": "`[0-9a-f]{40}`"
+    },
+    {
+      "name": "source pattern anchors",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "`^[A-Za-z0-9_./-]+\\.go:[A-Za-z_][A-Za-z0-9_.]*$`",
+      "replacement": "`[A-Za-z0-9_./-]+\\.go:[A-Za-z_][A-Za-z0-9_.]*`"
+    },
+    {
+      "name": "owner pattern anchors",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "`^E[0-9]{2}-[0-9]{2}\\.[a-z_]+$`",
+      "replacement": "`E[0-9]{2}-[0-9]{2}\\.[a-z_]+`"
+    },
+    {
+      "name": "id client prefix not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": " || !strings.HasPrefix(c.ID, c.Client+\".\")",
+      "replacement": " || (!strings.HasPrefix(c.ID, c.Client+\".\") && false)"
+    },
+    {
+      "name": "empty entry allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "len(c.Entry) == 0 || slices.Contains(c.Entry, \"\")",
+      "replacement": "len(c.Entry) == 0"
+    },
+    {
+      "name": "trigger not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if !slices.Contains(triggers, c.Trigger) {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "repeated kinds allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "!unique(c.Effects) || !unique(c.Kinds)",
+      "replacement": "!unique(c.Effects)"
+    },
+    {
+      "name": "unique ignores repeats",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif seen[v] {\n\t\t\treturn false",
+      "replacement": "\t\tif seen[v] && false {\n\t\t\treturn false"
+    },
+    {
+      "name": "unknown effect allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif !slices.Contains(effects, e) {\n\t\t\treturn mapErr(c, \"effect %q\", e)",
+      "replacement": "\t\tif false {\n\t\t\treturn mapErr(c, \"effect %q\", e)"
+    },
+    {
+      "name": "refusal on any route",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if c.Refusal != \"\" && c.Route != Refuse {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "read-only with effects",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if len(c.Effects) != 0 || len(c.Kinds) != 0 {",
+      "replacement": "if len(c.Kinds) != 0 {"
+    },
+    {
+      "name": "observation without execution",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if !slices.Contains(c.Effects, Execution) || len(c.Kinds) == 0 {",
+      "replacement": "if len(c.Kinds) == 0 {"
+    },
+    {
+      "name": "observation finality kind",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "k != decision.Import && k != decision.Side && k != decision.Canonical",
+      "replacement": "k != decision.Import && k != decision.Side && k != decision.Canonical && k != decision.Finality"
+    },
+    {
+      "name": "decision without effects",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if len(c.Effects) == 0 || len(c.Effects) != len(c.Kinds) {",
+      "replacement": "if len(c.Effects) != len(c.Kinds) {"
+    },
+    {
+      "name": "decision extra kinds",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if len(c.Effects) == 0 || len(c.Effects) != len(c.Kinds) {",
+      "replacement": "if len(c.Effects) == 0 {"
+    },
+    {
+      "name": "decision effect kind not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if want == \"\" || !slices.Contains(c.Kinds, want) {",
+      "replacement": "if want == \"\" {"
+    },
+    {
+      "name": "decision execution effect",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if want == \"\" || !slices.Contains(c.Kinds, want) {",
+      "replacement": "if !slices.Contains(c.Kinds, want) && want != \"\" {"
+    },
+    {
+      "name": "refuse without refusal",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "len(c.Kinds) != 0 || c.Refusal == \"\"",
+      "replacement": "len(c.Kinds) != 0"
+    },
+    {
+      "name": "refuse with kinds",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if len(c.Effects) == 0 || len(c.Kinds) != 0 || c.Refusal == \"\" {",
+      "replacement": "if len(c.Effects) == 0 || c.Refusal == \"\" {"
+    },
+    {
+      "name": "unknown route allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\treturn mapErr(c, \"route %q\", c.Route)",
+      "replacement": "\t\treturn nil"
+    },
+    {
+      "name": "guarded without patch",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif c.Patch == \"\" {\n\t\t\treturn mapErr(c, \"GUARDED without a patch\")",
+      "replacement": "\t\tif false {\n\t\t\treturn mapErr(c, \"GUARDED without a patch\")"
+    },
+    {
+      "name": "planned with patch",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif c.Patch != \"\" {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "unknown status allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\treturn mapErr(c, \"status %q\", c.Status)",
+      "replacement": "\t\treturn nil"
+    },
+    {
+      "name": "schema version not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if m.SchemaVersion != 1 {",
+      "replacement": "if m.SchemaVersion > 1 {"
+    },
+    {
+      "name": "extra sources allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if len(m.Sources) != len(Clients) {",
+      "replacement": "if len(m.Sources) < len(Clients) {"
+    },
+    {
+      "name": "duplicate ids allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif ids[c.ID] {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "refused callers count as coverage",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if c.Route == Observation || c.Route == Decision {\n\t\t\tif covered",
+      "replacement": "if c.Route != ReadOnly {\n\t\t\tif covered"
+    },
+    {
+      "name": "effect coverage not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\t\tif !covered[client][e] {",
+      "replacement": "\t\t\tif false {"
+    },
+    {
+      "name": "parse skips validation",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := Validate(m); err != nil {\n\t\treturn Map{}, err",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\treturn Map{}, err"
+    },
+    {
+      "name": "strict decode allows unknown fields",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tdecoder.DisallowUnknownFields()\n",
+      "replacement": ""
+    },
+    {
+      "name": "strict decode allows trailing data",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if _, err := decoder.Token(); err != io.EOF {",
+      "replacement": "if _, err := decoder.Token(); err != io.EOF && false {"
+    },
+    {
+      "name": "open skips map validation",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := Validate(m); err != nil {\n\t\treturn nil, err",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\treturn nil, err"
+    },
+    {
+      "name": "open skips token check",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := adm.Check(t); err != nil {\n\t\treturn nil, err",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\treturn nil, err"
+    },
+    {
+      "name": "open loads every client",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif c.Client == client {",
+      "replacement": "\t\tif true {"
+    },
+    {
+      "name": "open does not sync",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := db.SyncKeyValue(); err != nil {\n\t\treturn nil, err\n\t}\n\tok, err",
+      "replacement": "\tok, err"
+    },
+    {
+      "name": "boundary digest not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if err != nil || digest != b.Digest {",
+      "replacement": "if err != nil || (digest != b.Digest && false) {"
+    },
+    {
+      "name": "boundary store not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if b.NativeStoreID != storeID || b.Producer != g.producer {",
+      "replacement": "if b.Producer != g.producer {"
+    },
+    {
+      "name": "boundary producer not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if b.NativeStoreID != storeID || b.Producer != g.producer {",
+      "replacement": "if b.NativeStoreID != storeID {"
+    },
+    {
+      "name": "drain ignored",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tcase drain:\n\t\tg.phase = Drain\n",
+      "replacement": ""
+    },
+    {
+      "name": "restart starts live",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tcase g.boundary != nil:\n\t\tg.phase = Recovery",
+      "replacement": "\tcase g.boundary != nil:\n\t\tg.phase = Live"
+    },
+    {
+      "name": "enter skips token check",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "func (g *Gate) enter(t *admission.Token) error {\n\tif err := g.adm.Check(t); err != nil {",
+      "replacement": "func (g *Gate) enter(t *admission.Token) error {\n\tif err := error(nil); err != nil {"
+    },
+    {
+      "name": "failed gate keeps working",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif g.err != nil {\n\t\treturn fmt.Errorf(\"%w: %v\", ErrFailed, g.err)\n\t}\n\treturn nil\n}",
+      "replacement": "\treturn nil\n}"
+    },
+    {
+      "name": "refused caller passes",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tr.Refusals++\n\t\tg.reached[id] = r\n\t\treturn nil, fmt.Errorf(\"%w: %s (%s)\", ErrRefused, id, c.Refusal)",
+      "replacement": "\t\tr.Refusals++\n\t\tg.reached[id] = r"
+    },
+    {
+      "name": "refusal not counted",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tr.Refusals++\n",
+      "replacement": ""
+    },
+    {
+      "name": "read-only caller passes",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\treturn nil, fmt.Errorf(\"%w: read-only caller %s needs no pass\", ErrInvalid, id)",
+      "replacement": "\t\tbreak"
+    },
+    {
+      "name": "recovery admits every caller",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if (g.phase == Recovery || g.phase == Drain) && c.Trigger != Startup && len(g.stack) == 0 {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "drain admits every caller",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "if (g.phase == Recovery || g.phase == Drain) && c.Trigger",
+      "replacement": "if (g.phase == Recovery) && c.Trigger"
+    },
+    {
+      "name": "pass not counted",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tr.Passes++\n",
+      "replacement": ""
+    },
+    {
+      "name": "bootstrap observes",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "observe: g.phase != Bootstrap,",
+      "replacement": "observe: true,"
+    },
+    {
+      "name": "exit any order",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "g.stack[len(g.stack)-1] != p {",
+      "replacement": "false {"
+    },
+    {
+      "name": "exit skips token check",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := g.adm.Check(p.token); err != nil {\n\t\treturn err\n\t}\n\tif err := p.innermost(); err != nil {\n\t\treturn err\n\t}\n\tg.stack = g.stack[:len(g.stack)-1]",
+      "replacement": "\tif err := p.innermost(); err != nil {\n\t\treturn err\n\t}\n\tg.stack = g.stack[:len(g.stack)-1]"
+    },
+    {
+      "name": "intend outer pass",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := p.innermost(); err != nil {\n\t\tg.mu.Unlock()\n\t\treturn decision.IntentRecord{}, err",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\tg.mu.Unlock()\n\t\treturn decision.IntentRecord{}, err"
+    },
+    {
+      "name": "intend in bootstrap",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif !p.observe {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "intend any kind",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif !slices.Contains(p.caller.Kinds, in.Kind) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "require without pass",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif len(g.stack) == 0 {\n\t\tg.err",
+      "replacement": "\tif len(g.stack) == 0 && false {\n\t\tg.err"
+    },
+    {
+      "name": "require any effect",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif !slices.Contains(top.caller.Effects, effect) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "require checks outermost",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\ttop := g.stack[len(g.stack)-1]",
+      "replacement": "\ttop := g.stack[0]"
+    },
+    {
+      "name": "bypass does not stop the gate",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tg.err = fmt.Errorf(\"%w: %s under %s\", ErrBypass, effect, top.caller.ID)\n\t\treturn g.err",
+      "replacement": "\t\treturn fmt.Errorf(\"%w: %s under %s\", ErrBypass, effect, top.caller.ID)"
+    },
+    {
+      "name": "require unknown effect",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif !slices.Contains(effects, effect) {\n\t\treturn fmt.Errorf(\"%w: effect %q\", ErrInvalid, effect)",
+      "replacement": "\tif false {\n\t\treturn fmt.Errorf(\"%w: effect %q\", ErrInvalid, effect)"
+    },
+    {
+      "name": "drain goes live",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tcase Drain:\n\t\treturn Boundary{}, fmt.Errorf(\"%w: GoLive in %s\", ErrPhase, g.phase)\n",
+      "replacement": ""
+    },
+    {
+      "name": "restart sets a new boundary",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif g.boundary == nil {\n\t\tb := Boundary",
+      "replacement": "\tif true {\n\t\tb := Boundary"
+    },
+    {
+      "name": "boundary not synced before live",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif err := g.db.SyncKeyValue(); err != nil {\n\t\t\tg.err = err\n\t\t\treturn Boundary{}, err\n\t\t}\n\t\tg.boundary = &b",
+      "replacement": "\t\tg.boundary = &b"
+    },
+    {
+      "name": "boundary write error keeps gate",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif err := g.db.Put(g.key, data); err != nil {\n\t\t\tg.err = err",
+      "replacement": "\t\tif err := g.db.Put(g.key, data); err != nil {"
+    },
+    {
+      "name": "refused golive still live",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := bridge.GoLive(t); err != nil {\n\t\treturn Boundary{}, err\n\t}",
+      "replacement": "\t_ = bridge.GoLive(t)"
+    },
+    {
+      "name": "gaps ignore refused callers",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tcase c.Route == Refuse && r.Refusals == 0:",
+      "replacement": "\t\tcase false:"
+    },
+    {
+      "name": "gaps accept refusals of routed callers",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "case c.Route == Observation && r.Passes == 0:",
+      "replacement": "case c.Route == Observation && r.Passes+r.Refusals == 0:"
+    },
+    {
+      "name": "gaps of every client",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif c.Client != client {\n\t\t\tcontinue",
+      "replacement": "\t\tif false {\n\t\t\tcontinue"
+    },
+    {
+      "name": "boundary digest omits store",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "str(b.NativeStoreID), str(b.Producer), head",
+      "replacement": "str(b.Producer), head"
+    },
+    {
+      "name": "head bytes omit number",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "return append(u64(h.Number), hash...), nil",
+      "replacement": "return hash, nil"
+    },
+    {
+      "name": "finality tag",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "tagFinality    = \"extractor-lifecycle-finality-v1\"",
+      "replacement": "tagFinality    = \"extractor-lifecycle-finality-v0\""
+    },
+    {
+      "name": "attestation tag",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "tagAttestation = \"extractor-lifecycle-attestation-v1\"",
+      "replacement": "tagAttestation = \"extractor-lifecycle-attestation-v0\""
+    },
+    {
+      "name": "unknown field allowed",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "if c.Field != Safe && c.Field != Finalized {",
+      "replacement": "if c.Field == \"\" {"
+    },
+    {
+      "name": "caller not checked",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif !idPattern.MatchString(c.Caller) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "zero hash sets finality",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif c.New.Hash == ZeroHash {\n\t\treturn \"\", fmt.Errorf(\"%w: zero %s hash\", ErrNoop, c.Field)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "unchanged reference decided",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif c.New == c.Old {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "new hash not validated",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif _, err := rawHash(c.New.Hash); err != nil {\n\t\treturn \"\", err\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "digest omits field",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "str(string(c.Field)), str(c.Caller), old, next",
+      "replacement": "str(c.Caller), old, next"
+    },
+    {
+      "name": "digest omits caller",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "str(string(c.Field)), str(c.Caller), old, next",
+      "replacement": "str(string(c.Field)), old, next"
+    },
+    {
+      "name": "digest omits old",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "str(string(c.Field)), str(c.Caller), old, next",
+      "replacement": "str(string(c.Field)), str(c.Caller), old[:0], next"
+    },
+    {
+      "name": "finality change of another caller",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif c.Caller != p.caller.ID {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "finality moves the head",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "OldHead: head, NewHead: head,",
+      "replacement": "OldHead: head, NewHead: c.New,"
+    },
+    {
+      "name": "finality without events",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "EvidenceDigest: digest, Events: events})",
+      "replacement": "EvidenceDigest: digest, Events: false})"
+    },
+    {
+      "name": "snapshot error becomes fallback",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\t\treturn AttestationEvidence{}, fmt.Errorf(\"%w: snapshot: %w\", ErrSource, err)",
+      "replacement": "\t\tatt = nil"
+    },
+    {
+      "name": "genesis error tolerated",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\t\treturn AttestationEvidence{}, fmt.Errorf(\"%w: genesis: %w\", ErrSource, err)",
+      "replacement": "\t\thash = ZeroHash"
+    },
+    {
+      "name": "fallback uses another number",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "g := decision.Head{Number: 0, Hash: hash}",
+      "replacement": "g := decision.Head{Number: 1, Hash: hash}"
+    },
+    {
+      "name": "fallback status",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "e = AttestationEvidence{Status: GenesisFallback,",
+      "replacement": "e = AttestationEvidence{Status: Attested,"
+    },
+    {
+      "name": "justified is the source",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "Justified: decision.Head{Number: att.TargetNumber, Hash: att.TargetHash},",
+      "replacement": "Justified: decision.Head{Number: att.SourceNumber, Hash: att.SourceHash},"
+    },
+    {
+      "name": "source above target allowed",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\t\tif att.SourceNumber > att.TargetNumber {",
+      "replacement": "\t\tif att.SourceNumber > att.TargetNumber+1 {"
+    },
+    {
+      "name": "zero hash evidence allowed",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif h.Hash == ZeroHash {\n\t\treturn nil, fmt.Errorf(\"%w: zero hash\", ErrInvalid)",
+      "replacement": "\tif false {\n\t\treturn nil, fmt.Errorf(\"%w: zero hash\", ErrInvalid)"
+    },
+    {
+      "name": "finalized not checked",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tfinalized, err := nonZero(e.Finalized)\n\tif err != nil {",
+      "replacement": "\tfinalized, err := headBytes(e.Finalized)\n\tif err != nil {"
+    },
+    {
+      "name": "attestation digest omits status",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "digestOf(tagAttestation, str(string(e.Status)), justified, finalized)",
+      "replacement": "digestOf(tagAttestation, justified, finalized)"
+    },
+    {
+      "name": "nil readers allowed",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif snapshot == nil || genesis == nil {",
+      "replacement": "\tif snapshot == nil {"
+    },
+    {
+      "name": "same hash at two numbers allowed",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "if c.New.Hash == c.Old.Hash && c.New.Number != c.Old.Number {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "unchanged reference allows no rewrite",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif errors.Is(err, ErrNoop) && c.New.Hash != ZeroHash {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "zero hash allows a rewrite",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\tif errors.Is(err, ErrNoop) && c.New.Hash != ZeroHash {",
+      "replacement": "\tif errors.Is(err, ErrNoop) {"
+    },
+    {
+      "name": "grant error ignored",
+      "file": "extractor/lifecycle/finality.go",
+      "original": "\t\tif gerr := p.grant(Finality); gerr != nil {",
+      "replacement": "\t\tif gerr := p.grant(Finality); gerr != nil && false {"
+    },
+    {
+      "name": "golive under an open pass",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif len(g.stack) != 0 {\n\t\treturn Boundary{}, fmt.Errorf(\"%w: GoLive under",
+      "replacement": "\tif false {\n\t\treturn Boundary{}, fmt.Errorf(\"%w: GoLive under"
+    },
+    {
+      "name": "golive root not checked",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif !durable {\n\t\t\treturn Boundary{}, fmt.Errorf(\"%w: %s\", ErrRoot, root)",
+      "replacement": "\t\tif !durable && false {\n\t\t\treturn Boundary{}, fmt.Errorf(\"%w: %s\", ErrRoot, root)"
+    },
+    {
+      "name": "golive root error ignored",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif err != nil {\n\t\t\treturn Boundary{}, fmt.Errorf(\"%w: %s: %w\", ErrRoot, root, err)",
+      "replacement": "\t\tif err != nil && false {\n\t\t\treturn Boundary{}, fmt.Errorf(\"%w: %s: %w\", ErrRoot, root, err)"
+    },
+    {
+      "name": "golive nil roots",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif bridge == nil || roots == nil {",
+      "replacement": "\tif bridge == nil {"
+    },
+    {
+      "name": "decision write without intent",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif top.caller.Route == Decision && top.observe {\n\t\tif !top.granted[effect] {",
+      "replacement": "\tif top.caller.Route == Decision && top.observe {\n\t\tif false {"
+    },
+    {
+      "name": "bootstrap decision write needs intent",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif top.caller.Route == Decision && top.observe {\n\t\tif !top.granted[effect] {",
+      "replacement": "\tif top.caller.Route == Decision {\n\t\tif !top.granted[effect] {"
+    },
+    {
+      "name": "intent grants every effect",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif effect, ok := kindEffects[in.Kind]; ok {\n\t\tp.granted[effect] = true",
+      "replacement": "\tfor _, effect := range kindEffects {\n\t\tp.granted[effect] = true"
+    },
+    {
+      "name": "intent not counted",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tr.Intents++\n",
+      "replacement": ""
+    },
+    {
+      "name": "failed intent counted",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\trec, err := bridge.Intend(p.token, in)\n\tif err != nil {\n\t\treturn decision.IntentRecord{}, err\n\t}",
+      "replacement": "\trec, err := bridge.Intend(p.token, in)\n\tif err != nil && false {\n\t\treturn decision.IntentRecord{}, err\n\t}"
+    },
+    {
+      "name": "grant ignores kinds",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif !slices.Contains(p.caller.Kinds, decision.Finality) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "grant outer pass",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := p.innermost(); err != nil {\n\t\treturn err\n\t}\n\tif !slices.Contains(p.caller.Kinds, decision.Finality)",
+      "replacement": "\tif err := error(nil); err != nil {\n\t\treturn err\n\t}\n\tif !slices.Contains(p.caller.Kinds, decision.Finality)"
+    },
+    {
+      "name": "grant skips token check",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := g.enter(p.token); err != nil {\n\t\treturn err\n\t}\n\tif err := p.innermost(); err != nil {\n\t\treturn err\n\t}\n\tif !slices.Contains",
+      "replacement": "\tif err := p.innermost(); err != nil {\n\t\treturn err\n\t}\n\tif !slices.Contains"
+    },
+    {
+      "name": "gaps decision needs only a pass",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tcase c.Route == Decision && r.Intents == 0:",
+      "replacement": "\t\tcase c.Route == Decision && r.Passes == 0:"
+    },
+    {
+      "name": "missing fields allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif err := present(data); err != nil {",
+      "replacement": "\tif err := present(data); err != nil && false {"
+    },
+    {
+      "name": "missing caller field allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\t\tif _, ok := c[name]; !ok {",
+      "replacement": "\t\t\tif _, ok := c[name]; !ok && false {"
+    },
+    {
+      "name": "require ignores a failed gate",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif g.err != nil {\n\t\treturn fmt.Errorf(\"%w: %v\", ErrFailed, g.err)\n\t}\n\tif !slices.Contains(effects, effect) {",
+      "replacement": "\tif !slices.Contains(effects, effect) {"
+    },
+    {
+      "name": "bypass without pass keeps gate",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tg.err = fmt.Errorf(\"%w: %s without an open pass\", ErrBypass, effect)\n\t\treturn g.err",
+      "replacement": "\t\treturn fmt.Errorf(\"%w: %s without an open pass\", ErrBypass, effect)"
+    },
+    {
+      "name": "exit keeps the pass",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tg.stack = g.stack[:len(g.stack)-1]\n\treturn nil",
+      "replacement": "\treturn nil"
+    },
+    {
+      "name": "unmapped caller allowed",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\tif !ok {\n\t\treturn nil, fmt.Errorf(\"%w: %q of %s\", ErrUnmapped, id, g.client)",
+      "replacement": "\tif !ok && false {\n\t\treturn nil, fmt.Errorf(\"%w: %q of %s\", ErrUnmapped, id, g.client)"
+    },
+    {
+      "name": "finality grant reusable",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\t\ttop.granted[Finality] = false\n",
+      "replacement": ""
+    },
+    {
+      "name": "every grant single use",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "\t\tif effect == Finality {\n\t\t\ttop.granted[Finality] = false",
+      "replacement": "\t\tif true {\n\t\t\ttop.granted[effect] = false"
+    },
+    {
+      "name": "boundary digest omits root",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "str(b.Producer), head, root), nil",
+      "replacement": "str(b.Producer), head, root[:0]), nil"
+    },
+    {
+      "name": "boundary root not stored",
+      "file": "extractor/lifecycle/lifecycle.go",
+      "original": "Head: head, Root: root}",
+      "replacement": "Head: head, Root: strings.Repeat(\"0\", 64)}"
+    }
+  ]
+}
