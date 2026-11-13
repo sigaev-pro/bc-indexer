@@ -17,7 +17,22 @@ Recorded technical decisions, not owner answers:
 - The Bor block reaches the decision block's startup through its own anchored patch set (`adapters/bor/lifecycle/native/patches.json`) and a new file in the installed `extractor/bordecision` package. The source files of `adapters/bor/decision/native/**` stay unchanged.
 - A new capture store stays in BOOTSTRAP: no observer, no decider and no choke-point hook. The lifecycle gate is open with non-observing passes, and only the whitelist hook is installed, so whitelist callers take the guard and never span the switch to LIVE. A store with capture records but no boundary is refused instead. `bor server --extractor.capture` calls GoLive once the native `eth.Synced()` reports the end of the initial sync; the probe calls the same function.
 - GoLive runs the deferred recovery driver under `chainmu` and the guard. It flushes the state root of the native head through the hash trie database, records it as H, and installs the decider and the observer in the same lock, so no import runs uncaptured after H.
-- As with D96 to D103, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.lifecycle_seams card is read through this decision. This decision changes when Bor capture starts; it does not change product guarantees or acceptance cases. Every public cell stays NOT_RUN.
+- As with D96 to D104, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.lifecycle_seams card is read through this decision. This decision changes when Bor capture starts; it does not change product guarantees or acceptance cases. Every public cell stays NOT_RUN.
+
+## D104 — BSC known blocks and side branches fail closed; the targeted replay goes to E05-02.reorg (2026-11-13)
+
+The BSC block of E01-02.lifecycle_seams (#18) found two rows of the shared caller map that the BSC capture path can never route through a decision: `bsc.known-block` and `bsc.side-chain`. The BSC admission seam observes only a block on top of the head with its state, so a side branch, or a branch whose parent state was pruned, is refused at `Begin`. A decision closes its observation and purges its inputs (D100), so no block of another branch ever has a retained corpus (an EXEC_READY observation). The known-branch corpus rule can therefore never be met for BSC, `lifecycle.Gaps` cannot be empty, and AC-CAP-01-01 cannot pass on the BSC slot. The coordinator asked the owner how to handle these rows. The owner selected the coordinator's proposed option, "Fail closed now, fix later (Recommended)":
+
+- In #18 the BSC block guards both paths so that they fail closed, and proves it natively. A stored block that the native fork choice would make the head without a retained corpus stops with a source invariant error (`ErrCorpus`, a `lifecycle.ErrInvariant`) before the head moves. A side branch with a pruned parent is refused at `Begin`.
+- E05-02.reorg, which owns reorg handling, owns the targeted native replay for BSC known blocks and pruned-parent side branches.
+- AC-CAP-01-01 for BSC is recorded with these two caller rows deferred under this decision. They are not marked PASS. Every other row has its own verdict.
+
+Recorded technical decisions, not owner answers:
+
+- AC-LIF-05-02 and AC-LIF-05-03 are NOT_APPLICABLE on the BSC slot, because ACCEPTANCE_CASES makes them ETH-only.
+- The `bsc.side-chain` row covers every block whose parent is not the head with its state. `Begin` refuses an ordinary side branch or reorganization (a parent with its state) the same way as a pruned parent, so this decision reads the E05-02.reorg assignment as covering them too. Until then the BSC capture path follows no side branch, and the D101 plan row on the events of the decided `SIDE` path cannot run on BSC.
+- The closing rule of #18 in PROJECT_STATUS stays as it is: #18 closes when AC-CAP-01-01 passes for every family. With the BSC rows deferred to E05-02.reorg, #18 cannot close before that card fixes them, unless the owner changes the closing rule.
+- As with D96 to D103, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.lifecycle_seams and E05-02.reorg cards are read through this decision. This decision assigns an owner; it does not change product guarantees, acceptance cases or gates. Every public cell stays NOT_RUN.
 
 ## D103 — System-action state in the smoke corpus; owners of the remaining corpus limits (2026-11-13)
 
