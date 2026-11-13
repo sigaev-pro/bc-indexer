@@ -149,13 +149,15 @@ Review 003 on `f5153d2`: Spec PASS and Standards PASS, with no open finding.
 The Spec note that the owner agreement under D97 must be recorded before
 the client sessions start goes to the coordinator.
 
-Merged in PR #164 at `3cc31ec` (final head `0b0f0fb`). Next: none for
-E01-03.smoke_corpus; with #18, it unlocks E01-04.early_faults and
-E01-05.type_paths.
+Merged in PR #164 at `3cc31ec` (final head `0b0f0fb`).
+
+Next: none for E01-03.smoke_corpus. It unlocks E01-05.type_paths and
+E02-05.actions_model; E01-04.early_faults also waits for #18.
 
 ### ETH block (Geth)
 
-Status: ACCEPTED in PR #167 at merge `3900d65` (final head `18ddf0d`), branch
+Status: ACCEPTED in PR #167 at merge `3900d65` (final head `18ddf0d`, part of
+#19), branch
 `claude/e01-03-smoke-corpus-eth` from main `3cc31ec` (block 0 merged in PR
 #164 at `3cc31ec`). Part of #19. Role: native-engineer, and qa for the
 matrix; Spec and Standards reviewers read-only. D97: as the coordinator
@@ -262,9 +264,7 @@ slot was free (D97: at most three) and started it after PR #166 merged.
 
 Status: ACCEPTED in PR #168 at merge `cfb9195` (part of #19), branch
 `claude/e01-03-smoke-corpus-bsc` from main `4208145` (POLY merged in PR
-#166). Measured head
-`5217fc4`; later
-commits change only docs. Paths: `test/native_corpus/bsc/**`,
+#166). Measured head `5217fc4`; later commits change only docs. Paths: `test/native_corpus/bsc/**`,
 `.project/evidence/E01-03.smoke_corpus.bsc.md` and this subsection.
 
 Design ([BSC README](../test/native_corpus/bsc/README.md)):

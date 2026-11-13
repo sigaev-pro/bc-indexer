@@ -14,6 +14,7 @@ After the four E01-03.smoke_corpus blocks merged (PRs #164, #166, #167 and #168)
 Recorded technical decisions, not owner answers:
 
 - The corpus issues no AC verdict. Its qa verdicts are per case and per family. ETH system-action is NOT_APPLICABLE under DEVELOPMENT_PLAN E01-03 and D102.
+- Named cards for the owners in the answers: "E04 (native semantics)" in item 1 is E04-03.state_diff, which owns the before and after state at the transaction boundary. "The next E01 qa change to ORACLE.md" in item 2 is the qa role of E01-05.type_paths, the next E01 task that uses the corpus.
 - As with D96 to D102, TASK_DECOMPOSITION is a normative mirror and is not edited. The cards named above are read through this decision. This decision does not change product guarantees or acceptance cases. Every public cell stays NOT_RUN.
 
 ## D102 — Owners of the Ethereum post-merge protocol system calls (2026-11-13)
