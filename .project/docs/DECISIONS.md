@@ -1,5 +1,17 @@
 # Дерево решений и журнал интервью
 
+## D102 — Owners of the Ethereum post-merge protocol system calls (2026-11-13)
+
+Block 0 of E01-03.smoke_corpus (#19) marks the ETH system-action case NOT_APPLICABLE: DEVELOPMENT_PLAN E01-03 asks for native system transactions, and a block body of the corpus fixture (London, ethash, before the merge) has none. The coordinator asked that every effect without a transaction have an owner. For withdrawals and block rewards, the block reads the E04-02.optional_scope card (outside-transaction records, off by default) as their owner; no earlier decision assigned them. No card named the Ethereum post-merge protocol system calls: EIP-4788 (beacon roots), EIP-2935 (history storage), EIP-7002 and EIP-7251 (request contracts). The coordinator asked the owner who owns them. The owner selected the coordinator's proposed option, "E04-02 + E01-05 (Recommended)":
+
+- E04-02.optional_scope owns their state effects outside a transaction, together with withdrawals and block rewards, off by default.
+- E01-05.type_paths owns their presence in the native type and path matrix.
+
+Recorded technical decisions, not owner answers:
+
+- The E01-03.smoke_corpus ETH fixture runs before the merge, so none of these calls occurs in the corpus. Its NOT_APPLICABLE reason and owners are in `test/native_corpus/ORACLE.md` and the E01-03.smoke_corpus evidence.
+- As with D96 to D101, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E04-02.optional_scope and E01-05.type_paths cards are read through this decision. This decision assigns owners; it does not change product guarantees, acceptance cases or gates. Every public cell stays NOT_RUN.
+
 ## D101 — Long runs gated on E05; owners of the remaining decision_bridge limits (2026-11-12)
 
 After the four E01-02.decision_bridge blocks merged (PRs #157, #159, #160 and #158), the coordinator asked a read-only Spec reviewer to audit their evidence and README limits for the acceptance record. The audit found three gaps. First, the ETH slot has no explicit qa verdict. Second, the condition that E05-01.registry and E05-01.activation_gc must land before any long-running run was recorded only as prose. Third, several smaller limits had no owner. The coordinator asked the owner two questions; for each, the owner selected the coordinator's proposed option (marked as recommended):
