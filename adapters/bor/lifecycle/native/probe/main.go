@@ -91,7 +91,7 @@ var plan = []struct {
 	{"A5", "A4", 0, false, ""}, {"B3", "A2", 1, false, ""}, {"B4", "B3", 1, false, ""}, {"C4", "B3", 2, false, "B4"},
 	{"D4", "B3", 3, true, ""}, {"E4", "B3", 4, true, "D4"}, {"E5", "E4", 4, false, ""}, {"D5", "D4", 0, true, ""}, {"F4", "B3", 5, false, ""},
 	{"G4", "B3", 6, false, ""}, {"H5", "F4", 0, false, ""}, {"H6", "H5", 0, false, ""}, {"H7", "H6", 0, false, ""},
-	{"H8", "H7", 0, false, ""},
+	{"H8", "H7", 0, false, ""}, {"A6", "A5", 0, false, ""},
 }
 
 // senderKey is public test key 1; the driver funds it in the genesis.
@@ -867,6 +867,7 @@ func restart(args []string) error {
 	crashBootstrap := flags.Bool("crash-bootstrap", false, "exit after the BOOTSTRAP imports (crash point)")
 	goLive := flags.Bool("golive", false, "end BOOTSTRAP (GoLive) after the imports")
 	importLive := flags.String("import-live", "", "comma-separated blocks to import after GoLive")
+	whitelistDuring := flags.String("whitelist-during-golive", "", "block whose milestone the whitelist writes while GoLive runs")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -916,7 +917,28 @@ func restart(args []string) error {
 		os.Exit(3)
 	}
 	if *goLive {
+		done := make(chan int, 1)
+		if *whitelistDuring != "" {
+			// Whitelist callers keep writing while BOOTSTRAP ends: in
+			// BOOTSTRAP they take the guard in non-observing passes, so the
+			// switch to LIVE is serialized against them.
+			block := node.blocks[*whitelistDuring]
+			d := node.eth.Downloader()
+			go func() {
+				calls := 0
+				for i := 0; i < 20; i++ {
+					d.ProcessMilestone(block.NumberU64(), block.Hash())
+					d.LockMutex(block.NumberU64() + 10)
+					d.UnlockMutex(false, "", block.NumberU64()+10, common.Hash{})
+					calls++
+				}
+				done <- calls
+			}()
+		}
 		node.step("golive", node.goLive())
+		if *whitelistDuring != "" {
+			node.result["whitelist_calls_during_golive"] = <-done
+		}
 	}
 	if *importLive != "" {
 		for _, name := range strings.Split(*importLive, ",") {

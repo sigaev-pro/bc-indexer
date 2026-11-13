@@ -15,7 +15,7 @@ The Spec review 003 of the Bor block of E01-02.lifecycle_seams (#18, PR #171) fo
 Recorded technical decisions, not owner answers:
 
 - The Bor block reaches the decision block's startup through its own anchored patch set (`adapters/bor/lifecycle/native/patches.json`) and a new file in the installed `extractor/bordecision` package. The source files of `adapters/bor/decision/native/**` stay unchanged.
-- A new capture store stays in BOOTSTRAP: no observer, no decider and no choke-point hook. `bor server --extractor.capture` calls GoLive once the native `eth.Synced()` reports the end of the initial sync; the probe calls the same function.
+- A new capture store stays in BOOTSTRAP: no observer, no decider and no choke-point hook. The lifecycle gate is open with non-observing passes, and only the whitelist hook is installed, so whitelist callers take the guard and never span the switch to LIVE. A store with capture records but no boundary is refused instead. `bor server --extractor.capture` calls GoLive once the native `eth.Synced()` reports the end of the initial sync; the probe calls the same function.
 - GoLive runs the deferred recovery driver under `chainmu` and the guard. It flushes the state root of the native head through the hash trie database, records it as H, and installs the decider and the observer in the same lock, so no import runs uncaptured after H.
 - As with D96 to D104, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.lifecycle_seams card is read through this decision. This decision changes when Bor capture starts; it does not change product guarantees or acceptance cases. Every public cell stays NOT_RUN.
 

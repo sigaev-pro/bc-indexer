@@ -21,7 +21,7 @@ plan for the per-client blocks, every row marked Bor or each client block).
 | `lifecycle_tree.py` | | Installer: `bor_admission_tree.install` (unchanged), then the shared `lifecycle` package, the glue, the new files and the edits |
 | `probe/main.go` | `cmd/extractor-bor-lifecycle-probe` | Measured probe (test only) |
 | `lifecycle_bor.py` | | Driver: `prepare`, `run`, `observe`, `vectors`, `derive` |
-| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 29 portable controls on development outputs (`sample/`, not measured) and 84 single-check mutants |
+| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 29 portable controls on development outputs (`sample/`, not measured) and 86 single-check mutants |
 
 The installer adds a third patch set after the admission and decision patch
 sets, so it does not change their files. An anchor may sit in text that an
@@ -202,15 +202,22 @@ write is decided here. This is a limit of this block (see "Limits").
 The probe starts its capture node with the same `wire.Start`.
 
 A plain `bor server` (no `--extractor.capture`) is refused on a store with a
-live pin or a decision record, by the same check as the manual commands, so
-a capture store cannot run without the gate.
+live pin, a decision record or a lifecycle record such as the boundary H, by
+the same check as the manual commands, so a capture store cannot run without
+the gate.
 
 **BOOTSTRAP and H (D105).** A new capture store starts in BOOTSTRAP:
 `bordecision.Start` (the installed `Start` of this block, edit
-`lifecycle-bootstrap-start`) finds no live boundary H and returns at once.
-The decision block's recovery driver and GoLive wait. The initial native
-sync runs natively and uncaptured: no observer, no decider and no
-choke-point hook.
+`lifecycle-bootstrap-start`) opens the lifecycle gate, finds no live boundary
+H and returns. The decision block's recovery driver and GoLive wait. The
+initial native sync runs natively and uncaptured: no observer, no decider and
+no choke-point hook. Only the whitelist hook is installed: the whitelist
+callers enter the open gate with non-observing passes and take the guard, so
+a whitelist call never spans the switch to LIVE (GoLive takes the guard
+too), and its native writes in BOOTSTRAP stay uncaptured. GoLive goes on with
+the same gate. A store that holds capture records (a live pin or a decision
+record) but no boundary is refused instead of entering BOOTSTRAP
+(`ErrCaptureRecords`).
 
 `bor server --extractor.capture` calls `wire.Run.GoLive` once the native
 `eth.Synced()` reports the end of the initial sync; the probe calls the same
@@ -291,7 +298,7 @@ lock:
 | 16 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New`; `NewServer` without the flag is refused on the stopped capture store |
 | 17 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
 | 18 to 20 | `restart` (stateless), `fault`, `restart` (refuse) | A third store imports A1, A2, B3, D4 and D5; D4's state root is deleted offline; `SetHead(4)` is refused before any intent and the head and decisions stay |
-| 21 to 23 | `crash` (BOOTSTRAP), `restart` (bootstrap), `restart` (bootstrap restart) | A fourth store in BOOTSTRAP imports A1 to A3 natively and the child exits uncaptured; the restart is BOOTSTRAP again (native repair rewound the unflushed state), syncs A1 to A5 natively, goes live with H at A5, and captures B3 and B4 as SIDE decisions; the next restart keeps H |
+| 21 to 23 | `crash` (BOOTSTRAP), `restart` (bootstrap), `restart` (bootstrap restart) | A fourth store in BOOTSTRAP imports A1 to A3 natively and the child exits uncaptured; the restart is BOOTSTRAP again (native repair rewound the unflushed state), syncs A1 to A5 natively, goes live with H at A5 while whitelist callers keep writing (20 milestone and vote calls), and captures B3 and B4 as SIDE decisions and A6 as an IMPORT decision; the next restart keeps H |
 | 24 | `gaps` | `lifecycle.Gaps` over the summed coverage |
 
 The driver then judges every output (`judge`) and writes the AC matrix of
@@ -339,6 +346,11 @@ computes the values of the Go test vectors independently.
   E05-01.registry) every head-moving decision keeps its marker and stays
   there. Once a mirror lets `Cleanup` drop applied decisions, the repair
   step needs a persisted last decided head. Owner: E05-01.registry.
+- **The `bor server` GoLive trigger.** The measured steps call
+  `wire.Run.GoLive` directly; the `eth.Synced()` watcher of `bor server` is
+  not run. Native `Synced` becomes true after the first completed sync cycle
+  against a peer with a higher total difficulty, so a node whose peers are
+  not ahead waits in BOOTSTRAP (logged every minute) until one is.
 - **Below H.** The measured stores set H at the genesis or at A5 and no
   rewind targets a block below it, so the below-H refusal is not reached.
 - **Test-only seams.** `core.ExtractorWriteKnownBlock`,

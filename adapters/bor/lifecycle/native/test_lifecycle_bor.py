@@ -254,6 +254,9 @@ class Judge(unittest.TestCase):
         self.assertFails(lambda o: o["bootstrap-restart"]["decisions"].pop(), "did not keep H")
         self.assertFails(lambda o: o["bootstrap-restart"].update(error="x"), "did not keep H")
         self.assertFails(lambda o: o["scenario"].update(bootstrap_at_start=False), "BOOTSTRAP to LIVE")
+        self.assertFails(lambda o: o["bootstrap"].update(whitelist_calls_during_golive=19), "while BOOTSTRAP ended")
+        self.assertFails(lambda o: o["bootstrap"].pop("whitelist_calls_during_golive"), "while BOOTSTRAP ended")
+        self.assertFails(lambda o: o["bootstrap"]["coverage"].pop("bor.milestone"), "while BOOTSTRAP ended")
 
     def test_manual_messages(self):
         self.assertFails(lambda o: o["manual"]["commands"][0].update(output="flag provided but not defined"),

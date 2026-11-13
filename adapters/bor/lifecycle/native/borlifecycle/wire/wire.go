@@ -38,8 +38,13 @@ import (
 // or decision obligations.
 var ErrManualCommand = errors.New("manual chaindata command refused on a capture store")
 
-// decisionPrefix starts every record of the decision bridge (decision.go).
-const decisionPrefix = "extractor-decision-v1/"
+// decisionPrefix starts every record of the decision bridge (decision.go);
+// lifecyclePrefix every record of the lifecycle gate, the boundary H
+// included (lifecycle.go).
+const (
+	decisionPrefix  = "extractor-decision-v1/"
+	lifecyclePrefix = "extractor-lifecycle-v1/"
+)
 
 func init() {
 	server.ExtractorCaptureProfile = Profile
@@ -181,12 +186,17 @@ func (r *Run) GoLive() error {
 func (r *Run) watch(backend *eth.Ethereum) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	waited := 0
 	for {
 		select {
 		case <-r.stop:
 			return
 		case <-ticker.C:
 			if !backend.Synced() {
+				if waited++; waited%60 == 0 {
+					log.Info("Extractor capture waits in BOOTSTRAP for the end of the initial sync",
+						"head", r.chain.CurrentBlock().Number)
+				}
 				continue
 			}
 			if err := r.GoLive(); err != nil {
@@ -202,7 +212,8 @@ func (r *Run) watch(backend *eth.Ethereum) {
 func (r *Run) Stop() {
 	close(r.stop)
 	r.Decided.Detach()
-	r.Lifecycle.Close()
+	// In BOOTSTRAP the gate opened at the start holds the whitelist hook.
+	borlifecycle.Of(r.chain).Close()
 }
 
 // ErrPlainStore refuses `bor server` without --extractor.capture on a capture
@@ -235,9 +246,10 @@ func serverStart(config *server.Config, stack *node.Node, backend *eth.Ethereum)
 }
 
 // ManualCommand refuses a manual command on a capture store with a live pin
-// (state_provider.RequireNoLivePins) or any decision record: with no mirror
-// (until E05-01.registry) every decision record keeps an obligation or a
-// retained member. A directory without native chaindata passes.
+// (state_provider.RequireNoLivePins), any decision record (with no mirror
+// until E05-01.registry, every decision record keeps an obligation or a
+// retained member) or a lifecycle record such as the boundary H (the store is
+// live: changes above H must be decided). A directory without native chaindata passes.
 func ManualCommand(command, chaindata string, db ethdb.Database) error {
 	if db == nil {
 		opened, err := openReadOnly(chaindata)
@@ -250,12 +262,19 @@ func ManualCommand(command, chaindata string, db ethdb.Database) error {
 	if err := stateprovider.RequireNoLivePins(db); err != nil {
 		return fmt.Errorf("%w: %s: %w", ErrManualCommand, command, err)
 	}
-	it := db.NewIterator([]byte(decisionPrefix), nil)
-	defer it.Release()
-	if it.Next() {
-		return fmt.Errorf("%w: %s: decision record %q", ErrManualCommand, command, it.Key())
+	for _, prefix := range []string{decisionPrefix, lifecyclePrefix} {
+		it := db.NewIterator([]byte(prefix), nil)
+		found, key := it.Next(), append([]byte{}, it.Key()...)
+		err := it.Error()
+		it.Release()
+		if err != nil {
+			return err
+		}
+		if found {
+			return fmt.Errorf("%w: %s: capture record %q", ErrManualCommand, command, key)
+		}
 	}
-	return it.Error()
+	return nil
 }
 
 func openReadOnly(chaindata string) (ethdb.Database, error) {

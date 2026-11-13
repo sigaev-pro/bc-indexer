@@ -53,7 +53,7 @@ var extractorDeferred sync.Map
 // choke-point hook, and the recovery driver, H and GoLive wait for
 // ExtractorGoLive. Otherwise the recovery driver and GoLive run at once.
 func Start(n *borimport.Node, mirror decision.Mirror) (*Node, obligation.Report, error) {
-	boot, err := borlifecycle.Bootstrapping(n.DB(), n.Driver.Guard, n.Driver.Admission, n.StoreID())
+	boot, err := borlifecycle.Bootstrapping(n.Chain(), n.DB(), n.Driver.Guard, n.Driver.Admission, n.StoreID())
 	if err != nil {
 		return &Node{Import: n}, obligation.Report{}, err
 	}

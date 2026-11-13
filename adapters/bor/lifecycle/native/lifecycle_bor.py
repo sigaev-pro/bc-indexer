@@ -292,16 +292,20 @@ def judge(outputs, callers_map):
     check(not boot.get("error") and boot.get("bootstrap_at_start") is True
           and boot["reconcile"]["phase"] == "BOOTSTRAP" and boot["phase_after_start"] == "LIVE"
           and all(s["error"] == "" for s in boot["steps"])
-          and [s["name"] for s in boot["steps"]][-3:] == ["golive", "import-B3", "import-B4"],
+          and [s["name"] for s in boot["steps"]][-4:] == ["golive", "import-B3", "import-B4", "import-A6"],
           "BOOTSTRAP did not sync natively and then go live")
+    check(boot.get("whitelist_calls_during_golive") == 20
+          and boot["coverage"].get("bor.milestone", {}).get("Passes", 0) >= 20,
+          "the whitelist callers did not run through the gate while BOOTSTRAP ended")
     check(boot.get("head_at_golive", {}).get("name") == "A5"
           and boundary4.get("head", {}).get("hash") == boot["head_at_golive"]["hash"],
           "H is not the native head after the initial sync (A5)")
-    check(rows(boot["decisions"]) == [("SIDE", "A5", "A5", ["B3"]), ("SIDE", "A5", "A5", ["B4"])],
+    check(rows(boot["decisions"]) == [("SIDE", "A5", "A5", ["B3"]), ("SIDE", "A5", "A5", ["B4"]),
+                                      ("IMPORT", "A5", "A6", ["A6"])],
           "the initial sync was captured, or the imports after H were not")
     check(not again.get("error") and again.get("bootstrap_at_start") is False
           and again["reconcile"]["phase"] == "RECOVERY" and again["phase_after_start"] == "LIVE"
-          and again["reconcile"].get("boundary") == boundary4 and again["native_head"]["name"] == "A5"
+          and again["reconcile"].get("boundary") == boundary4 and again["native_head"]["name"] == "A6"
           and rows(again["decisions"]) == rows(boot["decisions"]),
           "the restart after BOOTSTRAP did not keep H")
     manual = outputs["manual"]
@@ -588,7 +592,8 @@ def run(preparation_path, expected_sha, output):
             probe("crash", "-record", "/out/crash-bootstrap.json", "--", *common, "-datadir", "/out/instance4",
                   "-bootstrap", "-import", "A1,A2,A3", "-crash-bootstrap", "-out", "/out/crash-bootstrap-child.json")
             probe("restart", *common, "-datadir", "/out/instance4", "-bootstrap", "-import", "A1,A2,A3,A4,A5",
-                  "-golive", "-import-live", "B3,B4", "-out", "/out/bootstrap.json")
+                  "-golive", "-whitelist-during-golive", "A2", "-import-live", "B3,B4,A6", "-out",
+                  "/out/bootstrap.json")
             probe("restart", *common, "-datadir", "/out/instance4", "-out", "/out/bootstrap-restart.json")
             outputs = {name: load(output / file, 16 * 1024 * 1024) for name, file in OUTPUT_FILES.items()
                        if name != "gaps"}

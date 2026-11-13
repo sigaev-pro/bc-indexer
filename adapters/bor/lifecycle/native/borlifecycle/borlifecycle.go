@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/decision"
 	"github.com/ethereum/go-ethereum/extractor/lifecycle"
+	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 )
 
 // Client is the lifecycle client of this package.
@@ -67,13 +68,30 @@ func Enable() { enabled.Store(true) }
 // Disable undoes Enable.
 func Disable() { enabled.Store(false) }
 
-// Bootstrapping reports whether a capture store waits in BOOTSTRAP (D105): the
-// gate is enabled and the producer run has no live boundary H yet. It takes
-// the guard for the read and changes nothing.
-func Bootstrapping(db ethdb.Database, guard *admission.Guard, adm *admission.Admission, storeID string) (bool,
-	error) {
+// ErrCaptureRecords refuses BOOTSTRAP on a store that already holds capture
+// records (a live pin or a decision record) but no live boundary H: an
+// uncaptured sync would run over retained obligations.
+var ErrCaptureRecords = errors.New("BOOTSTRAP refused: the store holds capture records but no live boundary")
+
+// decisionPrefix starts every record of the decision bridge (decision.go).
+const decisionPrefix = "extractor-decision-v1/"
+
+// Bootstrapping opens the lifecycle gate of a capture store at node start and
+// reports whether it waits in BOOTSTRAP (D105): the gate is enabled and the
+// producer run has no live boundary H yet. In BOOTSTRAP the gate stays open
+// with non-observing passes and only the whitelist hook is installed: the
+// whitelist callers take the guard, so they are serialized against GoLive,
+// and their native writes run uncaptured. Imports, rewinds and the finality
+// writes reach no choke point until GoLive. A store with capture records but
+// no boundary is refused (ErrCaptureRecords).
+func Bootstrapping(chain *core.BlockChain, db ethdb.Database, guard *admission.Guard, adm *admission.Admission,
+	storeID string) (bool, error) {
 	if !enabled.Load() {
 		return false, nil
+	}
+	m, err := lifecycle.Callers()
+	if err != nil {
+		return false, err
 	}
 	token := guard.Acquire()
 	gate, err := lifecycle.Open(token, db, adm, storeID, Client, false)
@@ -81,7 +99,27 @@ func Bootstrapping(db ethdb.Database, guard *admission.Guard, adm *admission.Adm
 	if err != nil {
 		return false, err
 	}
-	return gate.Phase() == lifecycle.Bootstrap, nil
+	if gate.Phase() != lifecycle.Bootstrap {
+		return false, nil
+	}
+	if err := stateprovider.RequireNoLivePins(db); err != nil {
+		return false, fmt.Errorf("%w: %w", ErrCaptureRecords, err)
+	}
+	it := db.NewIterator([]byte(decisionPrefix), nil)
+	found := it.Next()
+	err = it.Error()
+	it.Release()
+	if err != nil {
+		return false, err
+	}
+	if found {
+		return false, ErrCaptureRecords
+	}
+	n := &Node{in: Inputs{Chain: chain, DB: db, Guard: guard, Admission: adm, StoreID: storeID}, gate: gate, m: m,
+		outside: map[string]uint64{}, bootstrap: true}
+	whitelist.ExtractorEnter = n.whitelist
+	nodes.Store(chain, n)
+	return true, nil
 }
 
 // Of returns the lifecycle of a capture chain, or nil.
@@ -141,6 +179,9 @@ type Node struct {
 	outside  map[string]uint64
 	recovery *pass
 	report   Report
+	// bootstrap marks a gate opened at the start of a store in BOOTSTRAP,
+	// before GoLive.
+	bootstrap bool
 	// Step, if set, runs at the named steps of a lifecycle decision (the
 	// probe's crash points; test only): "write" before each choke-point
 	// check of a native write, "marker" after the native mutation and before
@@ -156,15 +197,24 @@ func Open(in Inputs, token *admission.Token) (*Node, error) {
 	if !enabled.Load() {
 		return nil, nil
 	}
-	m, err := lifecycle.Callers()
-	if err != nil {
-		return nil, err
+	var n *Node
+	if b := Of(in.Chain); b != nil && b.bootstrap {
+		// GoLive after BOOTSTRAP: the gate opened at the start goes on, with
+		// the whitelist passes it counted.
+		n = b
+		n.in, n.bootstrap = in, false
+	} else {
+		m, err := lifecycle.Callers()
+		if err != nil {
+			return nil, err
+		}
+		gate, err := lifecycle.Open(token, in.DB, in.Admission, in.StoreID, Client, false)
+		if err != nil {
+			return nil, err
+		}
+		n = &Node{in: in, gate: gate, m: m, outside: map[string]uint64{}}
 	}
-	gate, err := lifecycle.Open(token, in.DB, in.Admission, in.StoreID, Client, false)
-	if err != nil {
-		return nil, err
-	}
-	n := &Node{in: in, gate: gate, m: m, outside: map[string]uint64{}}
+	gate := n.gate
 	gp, err := gate.Enter(token, "bor.recovery")
 	if err != nil {
 		return nil, err

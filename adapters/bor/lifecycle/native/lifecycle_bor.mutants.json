@@ -321,7 +321,19 @@
   {
    "name": "bootstrap golive step",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "          and [s[\"name\"] for s in boot[\"steps\"]][-3:] == [\"golive\", \"import-B3\", \"import-B4\"],",
+   "original": "          and [s[\"name\"] for s in boot[\"steps\"]][-4:] == [\"golive\", \"import-B3\", \"import-B4\", \"import-A6\"],",
+   "replacement": ","
+  },
+  {
+   "name": "bootstrap whitelist calls",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(boot.get(\"whitelist_calls_during_golive\") == 20\n",
+   "replacement": "check(True\n"
+  },
+  {
+   "name": "bootstrap whitelist passes",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and boot[\"coverage\"].get(\"bor.milestone\", {}).get(\"Passes\", 0) >= 20,",
    "replacement": ","
   },
   {
@@ -339,8 +351,8 @@
   {
    "name": "bootstrap uncaptured",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "check(rows(boot[\"decisions\"]) == [(\"SIDE\", \"A5\", \"A5\", [\"B3\"]), (\"SIDE\", \"A5\", \"A5\", [\"B4\"])],",
-   "replacement": "check(True,"
+   "original": "check(rows(boot[\"decisions\"]) == [(\"SIDE\", \"A5\", \"A5\", [\"B3\"]), (\"SIDE\", \"A5\", \"A5\", [\"B4\"]),\n",
+   "replacement": "check(True or rows(boot[\"decisions\"]) == [(\"SIDE\", \"A5\", \"A5\", [\"B3\"]), (\"SIDE\", \"A5\", \"A5\", [\"B4\"]),\n"
   },
   {
    "name": "bootstrap restart flag",
@@ -357,7 +369,7 @@
   {
    "name": "bootstrap restart H",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "          and again[\"reconcile\"].get(\"boundary\") == boundary4 and again[\"native_head\"][\"name\"] == \"A5\"\n",
+   "original": "          and again[\"reconcile\"].get(\"boundary\") == boundary4 and again[\"native_head\"][\"name\"] == \"A6\"\n",
    "replacement": ""
   },
   {

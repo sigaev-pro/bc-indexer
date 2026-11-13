@@ -13,7 +13,17 @@
  "coverage": {
   "bor.import": {
    "Intents": 0,
-   "Passes": 2,
+   "Passes": 3,
+   "Refusals": 0
+  },
+  "bor.milestone": {
+   "Intents": 40,
+   "Passes": 20,
+   "Refusals": 0
+  },
+  "bor.milestone-lock": {
+   "Intents": 20,
+   "Passes": 20,
    "Refusals": 0
   },
   "bor.recovery": {
@@ -37,7 +47,7 @@
    ],
    "new_head": "A5",
    "old_head": "A5",
-   "sequence": 0,
+   "sequence": 60,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -48,7 +58,18 @@
    ],
    "new_head": "A5",
    "old_head": "A5",
-   "sequence": 1,
+   "sequence": 61,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "A6"
+   ],
+   "new_head": "A6",
+   "old_head": "A5",
+   "sequence": 62,
    "state": "NATIVE_DECIDED"
   }
  ],
@@ -59,9 +80,9 @@
   "number": 5
  },
  "native_head": {
-  "hash": "7800556ce443a35e0d932b5ad6e9c9c187a3bcacb29f4ec10cbacd5f124b34b8",
-  "name": "A5",
-  "number": 5
+  "hash": "80b5d8ff3e845ab89522f0549d2ef8a0132600461fd34bd77b6ef5e4fae8009a",
+  "name": "A6",
+  "number": 6
  },
  "native_head_at_start": {
   "hash": "00d86e62c2770f1ff2d8dd782dfa3ae73bf0e17920ea8b3ef89fe09057d931c0",
@@ -140,6 +161,14 @@
    "head_name": "A5",
    "head_number": 5,
    "name": "import-B4"
+  },
+  {
+   "error": "",
+   "head": "80b5d8ff3e845ab89522f0549d2ef8a0132600461fd34bd77b6ef5e4fae8009a",
+   "head_name": "A6",
+   "head_number": 6,
+   "name": "import-A6"
   }
- ]
+ ],
+ "whitelist_calls_during_golive": 20
 }
