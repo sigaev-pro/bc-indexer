@@ -320,8 +320,9 @@ PR #168 at `cfb9195`.
 
 ## E01-02.lifecycle_seams — Map all required native lifecycle callers (issue #18)
 
-Status: IN_PROGRESS. Block 0 (lifecycle-core) is in review; the Geth, BSC and
-Bor blocks start after it merges. Dependencies E01-02.decision_bridge (#17,
+Status: IN_PROGRESS. Block 0 (lifecycle-core) merged in PR #165, the Geth
+block in PR #170 and the BSC block in PR #172; the Bor block is in review
+(PR #171). Dependencies E01-02.decision_bridge (#17,
 merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Plan from the
 coordinator on 2026-11-13, approved by the owner, the same split as #16 and
 #17: block 0 core (architect, then native-engineer), then parallel Geth, BSC
@@ -654,8 +655,12 @@ ordinary BSC side branches and reorganizations) and on closing #18 with the
 two BSC rows deferred to E05-02.reorg change no Bor row (evidence, "Merge
 of main and later owner decisions").
 
-Next: a docs-only confirmation review of the merge, hosted CI, the final
-review comment.
+The `bor.manual-commands` row of the shared caller map does not yet name
+`bor backfill-statesync-txs`. The map is a shared file that the measured run
+reads, so the coordinator adds it in the #18 acceptance record.
+
+Next: Spec and Standards confirmation of the merge and the docs commits,
+hosted CI, the final review comment.
 
 ### BSC block
 
