@@ -611,13 +611,29 @@ decision of 2026-11-13, "Fail closed now, fix later"):
 
 The targeted native replay for both is E05-02.reorg.
 
-Records at measured head `f2cffe9`: preparation 03 PASS, run 02 PASS (442
-checks, probe 7.8 s), the offline judgement of run 02, 45 portable tests, 32
-of 32 driver mutants killed (evidence:
-[E01-02.lifecycle_seams.bsc](evidence/E01-02.lifecycle_seams.bsc.md)). Kept
-under D83: two attempts refused because another runner held the host lock,
-and preparation 02 at `612d3d0`, which failed on the driver's reading of the
+Records at measured head `092b8a9`: preparation 04 PASS, run 03 PASS (445
+checks, probe 16.2 s), the offline judgement of run 03, 54 portable tests,
+40 of 40 non-equivalent driver mutants killed (evidence:
+[E01-02.lifecycle_seams.bsc](evidence/E01-02.lifecycle_seams.bsc.md)). The
+`f2cffe9` records passed and are kept as superseded; also kept under D83 are
+two attempts refused because another runner held the host lock, and
+preparation 02 at `612d3d0`, which failed on the driver's reading of the
 `go test` summary.
+
+Review 001 (head `e3c7466`): Spec and Standards REQUEST_CHANGES. Fixed in
+`092b8a9`:
+- the manual database guard also refuses open obligations, and the probe
+  runs the shipped guard on pinned, decided and fresh stores;
+- the live service is registered after the backend, so a node stop ends it
+  before the chain closes;
+- `InsertHeadersBeforeCutoff` is refused;
+- a lifecycle intent rejected at run time is exercised;
+- the in-memory reload runs on every exit of a decided rewind;
+- the judge fails a malformed report instead of crashing.
+
+D104 now reads the side-branch row as every block whose parent is not the
+head with its state, and states that #18 cannot close before E05-02.reorg
+fixes the two BSC rows, unless the owner changes the closing rule.
 
 qa verdict, private local BSC: AC-CAP-01-01 FAIL, with `bsc.known-block` and
 `bsc.side-chain` DEFERRED under D104 and every other row PASS (four
