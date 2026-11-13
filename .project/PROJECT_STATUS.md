@@ -239,6 +239,70 @@ PASS. Polygon Mainnet and Amoy stay NOT_RUN (D96).
 Next: a docs-only confirmation review, hosted CI on the final head, the final
 review comment, then READY to the coordinator.
 
+### BSC block
+
+Owner agreement under D97: the same agreement as the POLY block (2026-11-13,
+"Очищай лишнее и запускай все", "clean up what is not needed and start
+everything", relayed by the coordinator after the owner approved the
+#16-style split). The coordinator queued this block until an implementer
+slot was free (D97: at most three) and started it after PR #166 merged.
+
+Status: IN_PROGRESS (part of #19), branch `claude/e01-03-smoke-corpus-bsc`
+from main `4208145` (POLY merged in PR #166), draft PR #168. Measured head
+`5217fc4`; later
+commits change only docs. Paths: `test/native_corpus/bsc/**`,
+`.project/evidence/E01-03.smoke_corpus.bsc.md` and this subsection.
+
+Design ([BSC README](../test/native_corpus/bsc/README.md)):
+- A Go test, `TestBSCCorpus`, is installed in the accepted BSC decision
+  package next to the native decision probe, whose node, store and mirror
+  helpers it reuses.
+- Native Parlia seals blocks 1 and 2 on the private fixture with the public
+  test validator key. Block 1 holds the three corpus transactions and the
+  nine Parlia system transactions; block 2 is empty.
+- A new node imports the blocks through the admission and decision bridge
+  (recovery, then `GoLive`), restarts, and imports them again.
+- It then exports the receipts, the native `callTracer` frames, the state
+  before and after each user transaction (native re-execution checked
+  against the stored receipts), the system transactions, the validator nonce
+  and the block-end state.
+- The driver builds the observation and runs block 0's comparator. One
+  fixture input is not named in ORACLE.md: the sealing key, the public test
+  validator keystore of the BSC source, whose address ORACLE.md names. No
+  chain-config value is added.
+
+Evidence: [E01-03.smoke_corpus.bsc](evidence/E01-03.smoke_corpus.bsc.md).
+Records at `5217fc4`, all PASS: preparation 03, run 02 (five cases, 0
+differences, no bridge failure), observe 03, 21 portable tests, 58 Python
+mutants killed. Kept under D83: the `5dd8d72` records (all PASS, superseded),
+preparation 01 (never started, a shell wrapper error) and observe 02 at
+`5217fc4` (an output path with a missing parent).
+
+Reviews:
+- 001 on `690a338`: Spec and Standards REQUEST_CHANGES. P2: the restart
+  recovery was not checked (counters, mode, open observations, admission
+  records); P2: `observe` did not bind its inputs to the run record. P3: the
+  obligation's NATIVE_DECIDED binding, the unnamed keystore input, the
+  per-transaction states not bound to the root, the run not keeping the
+  corpus files, small code notes. All fixed in `5217fc4`.
+- 002 on `8828ab8`: Spec PASS and Standards PASS, with P3 notes only: the
+  traceback on an output path with a missing parent (documented, observe
+  02), the unchecked `source` metadata that `observe` copies, and a README
+  wording fix (done in the docs commit after it).
+- 003 on `2ded48c`: Spec PASS and Standards PASS, cosmetic P3 notes only.
+
+qa verdict (BSC private local): transfer, nested-revert, fee (distribution
+before Kepler), system-action (Parlia `init()` system transactions) and
+empty-block PASS; family BSC PASS. `bsc-mainnet` and `bsc-testnet` stay
+NOT_RUN (D96).
+
+Merge of main: `30bd372` merges main `3900d65` (ETH, PR #167) with a merge
+commit. It changes no BSC measured input (evidence, "Records"); the ETH and
+POLY subsections stay as on main.
+
+Next: a docs-only confirmation review of the merge, hosted CI on the final
+head, the final review comment, then READY to the coordinator.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
