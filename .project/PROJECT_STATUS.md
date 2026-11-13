@@ -434,8 +434,9 @@ The follow-up commits after `544cd49` change only the README, this section
 and the evidence.
 
 Merge of main: the branch merges `origin/main` at `4208145` (#164 and #166)
-and then at `3900d65` (#167), each with a merge commit. The merge adds no measured input; record 03 still
-describes the measured code (evidence, "Merge of main").
+and then at `3900d65` (#167), each with a merge commit. Neither merge adds a
+measured input; record 03 still describes the measured code (evidence,
+"Merge of main").
 
 Next: a docs-only confirmation review of the merge, hosted CI on the merge
 head, the final review comment, then the client blocks after merge.
