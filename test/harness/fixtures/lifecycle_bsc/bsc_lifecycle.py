@@ -164,7 +164,10 @@ def build(runner, compiler, mounts, patched_paths):
     units = runner.command(compiler, ["/usr/local/go/bin/go", "test", "-count=1", "-v", "-run",
                                       "^(" + "|".join(UNIT_TESTS) + ")$", PACKAGE], mounts, cap=base.BUILD_CAP,
                            memory="6g", cwd="/source", environment=env)
-    pins.parse_go_test(read_bytes(units, 8 * 1024 * 1024).decode(), list(UNIT_TESTS))
+    lines = read_bytes(units, 8 * 1024 * 1024).decode().rstrip().splitlines()
+    require(lines and lines[-1].startswith("ok ") and PACKAGE.strip("./") in lines[-1],
+            "go test did not report ok for the block package")
+    pins.parse_go_test("\n".join(lines[:-1]), list(UNIT_TESTS))
     shared = runner.command(compiler, ["/usr/local/go/bin/go", "test", "-count=1", "./extractor/lifecycle/"], mounts,
                             cap=base.BUILD_CAP, memory="6g", cwd="/source", environment=env)
     require(b"\nok " in b"\n" + read_bytes(shared, 8 * 1024 * 1024), "The shared lifecycle tests did not pass")
