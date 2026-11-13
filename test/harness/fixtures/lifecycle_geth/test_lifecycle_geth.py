@@ -62,9 +62,11 @@ class Judge(unittest.TestCase):
             "native: the gate is not LIVE": lambda r: r["native_caller"]["bootstrap"].update(phase_after="BOOTSTRAP"),
             "harness: the gate is not LIVE": lambda r: r["harness"]["bootstrap"].update(boundary_present=False),
             "crash point": lambda r: r["crashes"][0].update(exit_code=0),
-            "the restart failed": lambda r: r["crashes"][3].update(attach_error="boom"),
+            "did not stop as expected": lambda r: r["crashes"][3].update(attach_error="boom"),
+            "did not stop as expected ": lambda r: r["crashes"][5].update(attach_error=None),
             "reconciliation decision": lambda r: r["crashes"][1].update(settled=r["crashes"][1]["settled"][:1]),
             "safe is not": lambda r: r["crashes"][1]["refs"].update(safe="A5"),
+            "forward forkchoice": lambda r: r["crashes"][4].update(forward_error=None),
             "did not settle": lambda r: r["crashes"][1].update(settled=[]),
             "native head is not": lambda r: r["crashes"][2]["refs"].update(head_hash="A5"),
             "stays unresolved": lambda r: r["crashes"][2]["decisions"][0].update(state="INTENT"),
@@ -74,7 +76,7 @@ class Judge(unittest.TestCase):
             change(report)
             failures, matrix, result = lifecycle_geth.judge(report)
             self.assertEqual(result, "FAIL", message)
-            self.assertTrue(any(message in row for row in failures), (message, failures))
+            self.assertTrue(any(message.strip() in row for row in failures), (message, failures))
             self.assertEqual(matrix["family"], "FAIL", message)
 
     def test_ac_cap_01_01_needs_equal_paths(self):

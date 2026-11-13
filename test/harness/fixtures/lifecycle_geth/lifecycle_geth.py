@@ -145,7 +145,20 @@ EXPECTED_CRASHES = {
     # A crash between the head batch of H5 and the final head batch of H6:
     # the restart completes the saved transition from its old head A4.
     "reorg": ("completed_inside_reorg", "H6", 0, "A3"),
+    # A head marker rewound to A4 under a canonical index that keeps H5 H6:
+    # the restart decides the rewind (no intent to settle), and the forward
+    # forkchoice to H6 is refused for lack of corpus (forward_error).
+    "index": (None, "A4", 1, "A3"),
+    # A crash before the final head batch of J6 with the head lowered to A3,
+    # below the fork point A4: the restart stops (attach error) instead of
+    # completing the reorganization from the shared chain.
+    "repaired": (None, "A3", 0, "A3"),
 }
+# The scenario whose restart must stop, and a fragment of its error.
+EXPECTED_ATTACH = {"repaired": "neither the old nor the new head"}
+# The scenario whose restart is followed by a forward forkchoice, and the
+# error that forkchoice must return.
+EXPECTED_FORWARD = {"index": "no retained EXEC_READY observation"}
 OUTSIDE_REFUSALS = ("geth.manual-commands", "geth.dev-sealing", "geth.sync-target", "geth.snap-sync")
 AC_ROWS = ("AC-CAP-01-01", "AC-LIF-05-02", "AC-LIF-05-03", "AC-LIF-06-04", "AC-LIF-06-05")
 PUBLIC_SLOTS = ("ethereum-mainnet", "ethereum-sepolia", "ethereum-hoodi")
@@ -221,12 +234,15 @@ def crash_failures(rows):
         row = by_name[name]
         if row.get("exit_code") != 3:
             failures.append(f"crashes: {name}: the child did not stop at its crash point")
-        if row.get("attach_error") is not None:
-            failures.append(f"crashes: {name}: the restart failed: {row['attach_error']}")
+        stop, attach = EXPECTED_ATTACH.get(name), row.get("attach_error")
+        if (stop is None and attach is not None) or \
+                (stop is not None and (not isinstance(attach, str) or stop not in attach)):
+            failures.append(f"crashes: {name}: the restart failed or did not stop as expected: {attach!r}")
         settled = [e for e in row.get("settled") or [] if e.get("event") == "settling"]
-        if [e.get("evidence") for e in settled] != [evidence]:
+        if [e.get("evidence") for e in settled] != ([evidence] if evidence else []):
             failures.append(f"crashes: {name}: the restart did not settle one intent as {evidence}")
-        if any(d.get("state") == "INTENT" for d in row.get("decisions") or []):
+        # A restart that must stop leaves its intent unresolved for the next start.
+        if stop is None and any(d.get("state") == "INTENT" for d in row.get("decisions") or []):
             failures.append(f"crashes: {name}: an intent stays unresolved")
         if (row.get("refs") or {}).get("head_hash") != head:
             failures.append(f"crashes: {name}: the native head is not {head}")
@@ -234,6 +250,10 @@ def crash_failures(rows):
             failures.append(f"crashes: {name}: the restart did not make {decided} reconciliation decision(s)")
         if (row.get("refs") or {}).get("safe") != safe:
             failures.append(f"crashes: {name}: safe is not {safe!r} after the restart")
+        forward, error = EXPECTED_FORWARD.get(name), row.get("forward_error")
+        if (forward is None and error is not None) or \
+                (forward is not None and (not isinstance(error, str) or forward not in error)):
+            failures.append(f"crashes: {name}: the forward forkchoice gave {error!r}")
     return failures
 
 

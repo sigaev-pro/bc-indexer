@@ -74,8 +74,8 @@ func hexHash(h common.Hash) string { return hex.EncodeToString(h[:]) }
 
 // blocks are the generated fixture chains. A1..A6 extend genesis; the
 // branches B, C, S, T (two blocks each) and G (one block) fork from A2, H
-// (two blocks) from A4, each with its own recipient, so every state root
-// differs.
+// and J (two blocks each) from A4, each with its own recipient, so every
+// state root differs.
 type blocks struct {
 	genesis *core.Genesis
 	a       []*types.Block // a[i] is A(i+1)
@@ -102,7 +102,7 @@ func generate(genesis *core.Genesis) *blocks {
 		parent int
 		count  int
 		to     byte
-	}{{"B", 2, 2, 0x0b}, {"C", 2, 2, 0x0c}, {"S", 2, 2, 0x05}, {"T", 2, 2, 0x06}, {"G", 2, 1, 0x07}, {"H", 4, 2, 0x08}} {
+	}{{"B", 2, 2, 0x0b}, {"C", 2, 2, 0x0c}, {"S", 2, 2, 0x05}, {"T", 2, 2, 0x06}, {"G", 2, 1, 0x07}, {"H", 4, 2, 0x08}, {"J", 4, 2, 0x09}} {
 		parent := a[f.parent-1]
 		chain, _ := core.GenerateChain(genesis.Config, parent, engine, db, f.count, func(i int, g *core.BlockGen) {
 			g.SetCoinbase(coinbase)
@@ -653,7 +653,7 @@ func crashChild(genesisPath, configPath, dir, scenario string) {
 	db := openStore(dir)
 	chain := directChain(db, genesis)
 	want := map[string]string{"finality": "intended", "rewind": "rewound", "canonical": "intended",
-		"reorg": "final"}[scenario]
+		"reorg": "final", "repaired": "final"}[scenario]
 	armed := false
 	l, err := extractorgeth.AttachLifecycle(chain, db, loadConfig(configPath), extractorgeth.Options{},
 		extractorgeth.DecisionOptions{}, extractorgeth.LifecycleOptions{Point: func(name string) {
@@ -662,6 +662,11 @@ func crashChild(genesisPath, configPath, dir, scenario string) {
 				// the process stops: the native mutation (or its first part)
 				// happened and the marker did not, the case recovery must
 				// complete or reject from native evidence.
+				if scenario == "repaired" {
+					// As if native startup repair had lowered the head to
+					// A3, below the fork point A4 of the reorganization.
+					rawdb.WriteHeadBlockHash(db, b.named("A3").Hash())
+				}
 				check(db.SyncKeyValue())
 				os.Exit(3)
 			}
@@ -702,13 +707,37 @@ func crashChild(genesisPath, configPath, dir, scenario string) {
 		armed = true
 		_, err = chain.SetCanonical(b.named("H6"))
 		check(err)
+	case "repaired":
+		// J5 J6 extend A4 (the head after the index scenario); the crash
+		// comes before the final head batch of J6, with the head lowered to
+		// A3, which is on the chain shared with the old head: the restart
+		// must not complete the reorganization from there.
+		for _, name := range []string{"J5", "J6"} {
+			_, err = chain.InsertBlockWithoutSetHead(context.Background(), b.named(name), false)
+			check(err)
+		}
+		armed = true
+		_, err = chain.SetCanonical(b.named("J6"))
+		check(err)
+	case "index":
+		// The outcome of a native startup rewind: the head block marker
+		// points at A4 while the canonical-hash index keeps H5 and H6 above
+		// it. The child stops the chain and writes the marker natively; the
+		// restart then decides the rewind, and a forward forkchoice to H6
+		// must name the corpus of H5 and H6, whose observations the earlier
+		// head change closed, so it is ErrCorpus.
+		chain.Stop()
+		rawdb.WriteHeadBlockHash(db, b.named("A4").Hash())
+		check(db.SyncKeyValue())
+		check(db.Close())
+		os.Exit(3)
 	}
 	os.Exit(0)
 }
 
 // inspect reopens the store of a crash scenario with the shipped attach (no
 // crash point) and reports how recovery settled the decisions.
-func inspect(genesis *core.Genesis, configPath, dir string, b *blocks) map[string]any {
+func inspect(genesis *core.Genesis, configPath, dir string, b *blocks, forward string) map[string]any {
 	db := openStore(dir)
 	chain := directChain(db, genesis)
 	// A settled intent that no retained block holds is pruned by the
@@ -725,6 +754,11 @@ func inspect(genesis *core.Genesis, configPath, dir string, b *blocks) map[strin
 	}
 	_, attachErr := extractorgeth.AttachLifecycle(chain, db, loadConfig(configPath), extractorgeth.Options{Trace: trace},
 		extractorgeth.DecisionOptions{}, extractorgeth.LifecycleOptions{})
+	var forwardErr any
+	if forward != "" && attachErr == nil {
+		_, err := chain.SetCanonical(b.named(forward))
+		forwardErr = errText(err)
+	}
 	r := newRecorder(nil, b)
 	rows := readDecisions(db)
 	list := []decisionRow{}
@@ -743,7 +777,8 @@ func inspect(genesis *core.Genesis, configPath, dir string, b *blocks) map[strin
 	ref.StoredFin = r.name(ref.StoredFin)
 	chain.Stop()
 	check(db.Close())
-	return map[string]any{"attach_error": errText(attachErr), "decisions": list, "refs": ref, "settled": settled}
+	return map[string]any{"attach_error": errText(attachErr), "decisions": list, "refs": ref, "settled": settled,
+		"forward_error": forwardErr}
 }
 
 func crashes(genesisPath string, genesis *core.Genesis, b *blocks, work string) []map[string]any {
@@ -754,7 +789,7 @@ func crashes(genesisPath string, genesis *core.Genesis, b *blocks, work string) 
 	check(err)
 	writeConfig(configPath, genesis, "cccccccccccccccccccccccccccccccc", commit)
 	out := []map[string]any{}
-	for _, scenario := range []string{"finality", "rewind", "canonical", "reorg"} {
+	for _, scenario := range []string{"finality", "rewind", "canonical", "reorg", "index", "repaired"} {
 		cmd := exec.Command(os.Args[0], "crash", genesisPath, configPath, dir, scenario)
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 		err := cmd.Run()
@@ -766,7 +801,11 @@ func crashes(genesisPath string, genesis *core.Genesis, b *blocks, work string) 
 			check(err)
 		}
 		row := map[string]any{"scenario": scenario, "exit_code": code}
-		for k, v := range inspect(genesis, configPath, dir, b) {
+		forward := ""
+		if scenario == "index" {
+			forward = "H6"
+		}
+		for k, v := range inspect(genesis, configPath, dir, b, forward) {
 			row[k] = v
 		}
 		out = append(out, row)

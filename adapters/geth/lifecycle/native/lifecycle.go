@@ -752,6 +752,13 @@ func (l *Lifecycle) recover() error {
 	l.recovering = true
 	defer func() { l.recovering = false }()
 	d := l.d
+	// On a restart the view must be readable before anything writes one: a
+	// view write during recovery keeps its decided finality references.
+	if l.gate.Phase() == lifecycle.Recovery {
+		if _, ok, err := l.readView(); err != nil || !ok {
+			return errors.Join(fmt.Errorf("%w: a boundary without a readable lifecycle view", lifecycle.ErrCorrupt), err)
+		}
+	}
 	if err := d.a.RecoverObligations(); err != nil {
 		return err
 	}
@@ -872,7 +879,13 @@ func (l *Lifecycle) settleLocked() (func() error, error) {
 		return nil, reject("native_head_is_old_head")
 	}
 	newHead := l.chain.GetBlockByHash(common.HexToHash(saved.Intent.NewHead.Hash))
-	if newHead != nil && head.Number.Uint64() < newHead.NumberU64() && l.isAncestor(head, saved.Intent.NewHead) {
+	// Inside the reorganization means strictly on the new branch: below the
+	// new head, its ancestor, and not on the chain it shares with the old
+	// head. A head that native startup repair lowered to or below the fork
+	// point (and every SetHead rewind, whose new head is below its old head)
+	// is not completed here.
+	if newHead != nil && head.Number.Uint64() < newHead.NumberU64() && l.isAncestor(head, saved.Intent.NewHead) &&
+		!l.isAncestor(head, saved.Intent.OldHead) {
 		// A crash inside the reorganization left a lower block of the new
 		// branch as the head: complete exactly the saved transition from
 		// its old head, with its marker in the final head batch.

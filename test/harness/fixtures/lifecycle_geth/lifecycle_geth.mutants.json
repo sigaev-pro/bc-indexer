@@ -150,13 +150,13 @@
   {
    "name": "crash settlement unchecked",
    "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
-   "original": "if [e.get(\"evidence\") for e in settled] != [evidence]:",
+   "original": "if [e.get(\"evidence\") for e in settled] != ([evidence] if evidence else []):",
    "replacement": "if False:"
   },
   {
    "name": "crash unresolved unchecked",
    "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
-   "original": "if any(d.get(\"state\") == \"INTENT\" for d in row.get(\"decisions\") or []):",
+   "original": "if stop is None and any(d.get(\"state\") == \"INTENT\" for d in row.get(\"decisions\") or []):",
    "replacement": "if False:"
   },
   {
@@ -228,8 +228,8 @@
   {
    "name": "crash restart error unchecked",
    "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
-   "original": "if row.get(\"attach_error\") is not None:",
-   "replacement": "if False:"
+   "original": "(stop is not None and (not isinstance(attach, str) or stop not in attach)):",
+   "replacement": "False:"
   },
   {
    "name": "crash reconciliation unchecked",
@@ -242,6 +242,18 @@
    "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
    "original": "if (row.get(\"refs\") or {}).get(\"safe\") != safe:",
    "replacement": "if False:"
+  },
+  {
+   "name": "forward forkchoice unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "(forward is not None and (not isinstance(error, str) or forward not in error)):",
+   "replacement": "False:"
+  },
+  {
+   "name": "crash expected restart ignored",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if (stop is None and attach is not None) or \\",
+   "replacement": "if False or \\"
   }
  ]
 }

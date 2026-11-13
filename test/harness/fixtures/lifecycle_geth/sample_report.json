@@ -394,6 +394,7 @@
    "attach_error": null,
    "decisions": [],
    "exit_code": 3,
+   "forward_error": null,
    "refs": {
     "canonical": [
      "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
@@ -494,6 +495,7 @@
     }
    ],
    "exit_code": 3,
+   "forward_error": null,
    "refs": {
     "canonical": [
      "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
@@ -519,7 +521,7 @@
     },
     {
      "delivery": "BATCH",
-     "digest": "8c38ae2bebc2333d48c0a26df792021e6bd92b6b5ceaf5805a74d0db0cd83fa9",
+     "digest": "99ce2c352df2f49aeb5f9eccb4b21c09b5af9aa9bddc51c45f011fc247a76b02",
      "event": "lifecycle_decided",
      "sequence": 6
     }
@@ -612,7 +614,7 @@
      "state": "NATIVE_DECIDED"
     },
     {
-     "evidence": "e428f5c8f53e03cf7ba86e37df185474c0b8dbf8a3530f3520aa3ba0e7f0344c",
+     "evidence": "b6dfe5c9566bd465af416a8cc745ba143bfef928f502d4b57e4bdded9cdfa474",
      "kind": "CANONICAL",
      "members": [
       "A5"
@@ -626,6 +628,7 @@
     }
    ],
    "exit_code": 3,
+   "forward_error": null,
    "refs": {
     "canonical": [
      "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
@@ -738,7 +741,7 @@
      "state": "NATIVE_DECIDED"
     },
     {
-     "evidence": "e428f5c8f53e03cf7ba86e37df185474c0b8dbf8a3530f3520aa3ba0e7f0344c",
+     "evidence": "b6dfe5c9566bd465af416a8cc745ba143bfef928f502d4b57e4bdded9cdfa474",
      "kind": "CANONICAL",
      "members": [
       "A5"
@@ -777,7 +780,7 @@
      "state": "NATIVE_DECIDED"
     },
     {
-     "evidence": "ca8ef9de9a467d061366ef6e367517b7b1b22aeaa5c7035027ac77e1e3bb0d18",
+     "evidence": "9e3ef74a0d3b6f56b227ae90eab995f016c1ab450639d228877f578ef670f2ad",
      "kind": "CANONICAL",
      "members": [
       "H5",
@@ -792,6 +795,7 @@
     }
    ],
    "exit_code": 3,
+   "forward_error": null,
    "refs": {
     "canonical": [
      "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
@@ -816,6 +820,397 @@
      "sequence": 11
     }
    ]
+  },
+  {
+   "attach_error": null,
+   "decisions": [
+    {
+     "evidence": "3134a8d341a6286dc91971fe5f1071acfa07d735fe6fded838fe57a2c509eec0",
+     "kind": "IMPORT",
+     "members": [
+      "A4"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A3",
+     "old_head": 3,
+     "sequence": 1,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "72cf81a4d286b2e2d6d3494118201d0ea5d21637bf08fd241a6e1cf41537fa5f",
+     "kind": "IMPORT",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 2,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "d21319245ffb192d7b4c195d51ba5affc1d73ec2da0eb1eb0c6489bc139839ce",
+     "kind": "FINALITY",
+     "members": [],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 3,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "032b681a26269eba776df8be1099a2d9a37ced91bbcbd1e16091658780ba1a81",
+     "kind": "FINALITY",
+     "members": [],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 4,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "58f676b2ea723f9251e64de187256ebed9fda5d7a97900f99718fce4c454046c",
+     "kind": "CANONICAL",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 5,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "ee4126f2222405ba8077de8abbd0681a08c2ce4967857cbc85494dd2dd664cf0",
+     "kind": "FINALITY",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 6,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "7bfd8610174f457a4dd520c052d40a6fcdb5830c8b126e392c3b2fefbc755a30",
+     "kind": "SIDE",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 7,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "b6dfe5c9566bd465af416a8cc745ba143bfef928f502d4b57e4bdded9cdfa474",
+     "kind": "CANONICAL",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 8,
+     "state": "NATIVE_REJECTED"
+    },
+    {
+     "evidence": "04a96ddaed2f57e40bb7d37af2901a9d166e878f63056855ba2b89b865e4a141",
+     "kind": "SIDE",
+     "members": [
+      "H5"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 9,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "c254f361ee715618e9267c7bfb0eb3aaa5f6782840d7f88b06963daf24123ed2",
+     "kind": "SIDE",
+     "members": [
+      "H6"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 10,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "9e3ef74a0d3b6f56b227ae90eab995f016c1ab450639d228877f578ef670f2ad",
+     "kind": "CANONICAL",
+     "members": [
+      "H5",
+      "H6"
+     ],
+     "new_hash": "H6",
+     "new_head": 6,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 11,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "619f02d51b640db567d1bf01f9868317c60026ee6d55ec292a81a992652d47d7",
+     "kind": "CANONICAL",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "H6",
+     "old_head": 6,
+     "sequence": 12,
+     "state": "NATIVE_DECIDED"
+    }
+   ],
+   "exit_code": 3,
+   "forward_error": "source invariant error: a branch block has no retained EXEC_READY observation: block 6 b18ec307af5bae5a00c64607e39ee73cae21e1ade3246e2cbcf9e67df388aadf",
+   "refs": {
+    "canonical": [
+     "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
+     "62fb698fda2b3554093d0f570a831b2754d76ee0512ff5f3b5bbb413be31ed98",
+     "c83294034eb1aaa2e4dcd07e517be1ce8cc375c8f9dd4426740109d99a024263",
+     "012b73b23036b1925dd8a2737ca2169e0d6ff123a69c17b18381956aa3efd1b5",
+     "724440ecedc72a37d65792f182f9543c534ccbbf76ba6734d284505e9da9d213",
+     "b18ec307af5bae5a00c64607e39ee73cae21e1ade3246e2cbcf9e67df388aadf"
+    ],
+    "finalized": "A3",
+    "head": 4,
+    "head_hash": "A4",
+    "head_root": "2831fdc3e4e59025dfa4444ba2577ef8b294e2652c70c32e423f746683b061b0",
+    "safe": "A3",
+    "stored_finalized": "A3"
+   },
+   "scenario": "index",
+   "settled": [
+    {
+     "delivery": "BATCH",
+     "digest": "a9832095f778645a0ea825376f6a046424aef5c67299a3395b595e67888d0288",
+     "event": "lifecycle_decided",
+     "sequence": 12
+    }
+   ]
+  },
+  {
+   "attach_error": "source invariant error: native data does not settle the lifecycle decision: native head 3 0xc83294034eb1aaa2e4dcd07e517be1ce8cc375c8f9dd4426740109d99a024263 is neither the old nor the new head of intent 15, nor on its branch",
+   "decisions": [
+    {
+     "evidence": "3134a8d341a6286dc91971fe5f1071acfa07d735fe6fded838fe57a2c509eec0",
+     "kind": "IMPORT",
+     "members": [
+      "A4"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A3",
+     "old_head": 3,
+     "sequence": 1,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "72cf81a4d286b2e2d6d3494118201d0ea5d21637bf08fd241a6e1cf41537fa5f",
+     "kind": "IMPORT",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 2,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "d21319245ffb192d7b4c195d51ba5affc1d73ec2da0eb1eb0c6489bc139839ce",
+     "kind": "FINALITY",
+     "members": [],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 3,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "032b681a26269eba776df8be1099a2d9a37ced91bbcbd1e16091658780ba1a81",
+     "kind": "FINALITY",
+     "members": [],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 4,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "58f676b2ea723f9251e64de187256ebed9fda5d7a97900f99718fce4c454046c",
+     "kind": "CANONICAL",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A5",
+     "old_head": 5,
+     "sequence": 5,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "ee4126f2222405ba8077de8abbd0681a08c2ce4967857cbc85494dd2dd664cf0",
+     "kind": "FINALITY",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 6,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "7bfd8610174f457a4dd520c052d40a6fcdb5830c8b126e392c3b2fefbc755a30",
+     "kind": "SIDE",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 7,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "b6dfe5c9566bd465af416a8cc745ba143bfef928f502d4b57e4bdded9cdfa474",
+     "kind": "CANONICAL",
+     "members": [
+      "A5"
+     ],
+     "new_hash": "A5",
+     "new_head": 5,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 8,
+     "state": "NATIVE_REJECTED"
+    },
+    {
+     "evidence": "04a96ddaed2f57e40bb7d37af2901a9d166e878f63056855ba2b89b865e4a141",
+     "kind": "SIDE",
+     "members": [
+      "H5"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 9,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "c254f361ee715618e9267c7bfb0eb3aaa5f6782840d7f88b06963daf24123ed2",
+     "kind": "SIDE",
+     "members": [
+      "H6"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 10,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "9e3ef74a0d3b6f56b227ae90eab995f016c1ab450639d228877f578ef670f2ad",
+     "kind": "CANONICAL",
+     "members": [
+      "H5",
+      "H6"
+     ],
+     "new_hash": "H6",
+     "new_head": 6,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 11,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "619f02d51b640db567d1bf01f9868317c60026ee6d55ec292a81a992652d47d7",
+     "kind": "CANONICAL",
+     "members": [],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "H6",
+     "old_head": 6,
+     "sequence": 12,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "a41b4ba87493985d47a357592d929151dbd861f8241f0d5d5ce601d54c3408be",
+     "kind": "SIDE",
+     "members": [
+      "J5"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 13,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "45d1d0c658612d490d3def42118c59fd7de5ac469a0a4c62778fad1c84f387c6",
+     "kind": "SIDE",
+     "members": [
+      "J6"
+     ],
+     "new_hash": "A4",
+     "new_head": 4,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 14,
+     "state": "NATIVE_DECIDED"
+    },
+    {
+     "evidence": "9e404b246edf6cd99a8c0da883e944194e1e741c007ef182d0cbd9caa220d4c2",
+     "kind": "CANONICAL",
+     "members": [
+      "J5",
+      "J6"
+     ],
+     "new_hash": "J6",
+     "new_head": 6,
+     "old_hash": "A4",
+     "old_head": 4,
+     "sequence": 15,
+     "state": "INTENT"
+    }
+   ],
+   "exit_code": 3,
+   "forward_error": null,
+   "refs": {
+    "canonical": [
+     "183821bef2437d27a5aead9af6e9e4211d2cdfcb43df411a06da1d0c4ad9a5de",
+     "62fb698fda2b3554093d0f570a831b2754d76ee0512ff5f3b5bbb413be31ed98",
+     "c83294034eb1aaa2e4dcd07e517be1ce8cc375c8f9dd4426740109d99a024263",
+     "012b73b23036b1925dd8a2737ca2169e0d6ff123a69c17b18381956aa3efd1b5",
+     "9a2ba981e72e57ef9f7c7dda42f351bba409e5ee2701fd2b567426ae2da79cdb",
+     ""
+    ],
+    "finalized": "A3",
+    "head": 3,
+    "head_hash": "A3",
+    "head_root": "efb7cb263050e5685c4193df0bef179b18b6a1e95ab33b96dbb920b1ee0149e4",
+    "safe": "A3",
+    "stored_finalized": "A3"
+   },
+   "scenario": "repaired",
+   "settled": []
   }
  ],
  "gaps": [],
@@ -1007,7 +1402,7 @@
    {
     "decisions": [
      {
-      "evidence": "7dc6720f936bd0a0f81201b322a699a027d5689ab22bd4b47173d4313a0e9c9f",
+      "evidence": "a8cb3f88d4f15e69b04b70f120988b15217cc7902a1fb8ae713e9d3222ac9cb5",
       "kind": "CANONICAL",
       "members": [
        "A4"
@@ -1241,7 +1636,7 @@
    {
     "decisions": [
      {
-      "evidence": "466d1d5588160a1a3fd0531c4c21cb78639a36b7bc1f2e953c5c226937af6bef",
+      "evidence": "c7441d27aaefdc7295644020f30ed08ea0bbb49df2cf9274c18c6afdbdea5c9f",
       "kind": "CANONICAL",
       "members": [
        "B3",
@@ -1333,13 +1728,13 @@
    "completed": true,
    "errors": [],
    "iterations": 10,
-   "seconds": 0.022127075
+   "seconds": 0.020806499
   },
   "exit_errors_first_open": [],
   "exit_errors_restart": [],
   "outside_gate_refusals": {
    "geth.dev-sealing": "the capture profile refuses this node configuration: --dev (geth.dev-sealing)",
-   "geth.manual-commands": "live pins forbid this native deletion: 1 live, first geth-lifecycle.rd5ca77bc6d682732.0000000000000009",
+   "geth.manual-commands": "live pins forbid this native deletion: 1 live, first geth-lifecycle.rc335f9b1369b7bc9.0000000000000009",
    "geth.snap-sync": "the capture profile refuses this node configuration: sync mode \"snap\" (geth.snap-sync)",
    "geth.sync-target": "the capture profile refuses this node configuration: --synctarget (geth.sync-target)"
   },
@@ -1526,7 +1921,7 @@
    {
     "decisions": [
      {
-      "evidence": "5866ddff34b571cbd2733531fdc264d42cafd8b6ede5a8bcf512a11da72bfbbe",
+      "evidence": "06e2a52162da2d3d0b9a0b68f6da7e971ee648bde1dd5a31bc23760748b30f97",
       "kind": "CANONICAL",
       "members": [
        "A4"
@@ -1760,7 +2155,7 @@
    {
     "decisions": [
      {
-      "evidence": "1ef896c167d7daa02280277b0abe7007377e842b4be3568bf8c316aaae99279d",
+      "evidence": "35bb9260211e7136a2c13bb8e2ffeb95989feaceffb14f45089af8de2c1df137",
       "kind": "CANONICAL",
       "members": [
        "B3",
@@ -1903,7 +2298,7 @@
    {
     "decisions": [
      {
-      "evidence": "6a9376820aa71cf26d1568ec6778bc7a7fa06b3b41216f1d48ce9f1a337a59ca",
+      "evidence": "b1aa11e778fae543e0abec25f48994171bccf8511cdf805420eab0a9ab0b07c1",
       "kind": "CANONICAL",
       "members": [
        "C3"
@@ -1916,7 +2311,7 @@
       "state": "NATIVE_DECIDED"
      },
      {
-      "evidence": "a244005036e0a8b18837a5a55f82dcc7342bebb72208f2a1dacf404154778f46",
+      "evidence": "95606d123694e11994c363c78842249172fb7c92e8872361e8cd199622699429",
       "kind": "CANONICAL",
       "members": [
        "C4"
@@ -2341,7 +2736,7 @@
    {
     "decisions": [
      {
-      "evidence": "b6207810366cb48116cfa7bc6532c123e4c6fd074bc346c3b6bf2eed325e1a49",
+      "evidence": "472fcde0fed3102661f00419ac5227754d1278407b1e756bb9c9006953452c64",
       "kind": "CANONICAL",
       "members": [
        "S3",

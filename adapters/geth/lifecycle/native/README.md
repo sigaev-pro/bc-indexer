@@ -128,8 +128,12 @@ the stored H instead of `decision.Bridge.GoLive`.
   (marker and view written, resolved) when the native head is its new head,
   rejected when the native head is its old head, completed through
   `ExtractorCompleteHead` from its old head when a crash inside the
-  reorganization left a lower block of the new branch as the head, and
-  otherwise stops startup (`ErrLifecycle`).
+  reorganization left a block strictly on the new branch (below the new
+  head, above the fork point with the old head) as the head, and otherwise
+  stops startup (`ErrLifecycle`): a head that native startup repair lowered
+  to the shared chain is never moved forward here.
+- On a restart the lifecycle view must be readable before the driver
+  writes anything (`ErrCorrupt` otherwise).
 - Startup reconciliation (`geth.startup-reconcile`): native startup repair
   runs before the gate opens, so the driver compares the native head and
   finality references with the view. A head that differs and is an ancestor

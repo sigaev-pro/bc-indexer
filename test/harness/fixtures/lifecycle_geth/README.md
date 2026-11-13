@@ -12,7 +12,7 @@
 ## What the probe does
 
 Chains: A1..A6 extend genesis; B3 B4, C3 C4, S3 S4, T3 T4 and G3 fork from
-A2, H5 H6 from A4, each block with one transfer, so every state root
+A2, H5 H6 and J5 J6 from A4, each block with one transfer, so every state root
 differs.
 
 1. Profile and identity, outside the gate: `CheckFlags` with `--dev`,
@@ -52,7 +52,12 @@ differs.
    decided by the reconciliation); a CANONICAL intent before the head write
    (head is the old head: rejected); a forkchoice from A4 to H6 between the
    head batch of H5 and the final head batch of H6 (completed from the old
-   head through `ExtractorCompleteHead`). Every FINALITY decision of the
+   head through `ExtractorCompleteHead`); a head marker rewound to A4 under
+   a canonical index that keeps H5 H6 (the rewind is decided at the restart,
+   and a forward forkchoice to H6 is refused for lack of corpus); a crash
+   before the final head batch of J6 with the head lowered to A3, below the
+   fork point (the restart stops instead of completing). Every FINALITY
+   decision of the
    main scenario is named by its field, caller and references, recomputed
    from its evidence digest.
 
