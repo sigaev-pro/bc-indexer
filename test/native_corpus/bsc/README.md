@@ -29,9 +29,11 @@ plus the public test-key-1 sender), with the corpus contracts of
 ORACLE.md "Fixtures" states. The sender is already in that genesis with the
 same 10 BNB; the driver checks that and adds only the parent and the child.
 No other fixture input is needed: the chain config, the fork blocks, the
-validator and the genesis timestamp stay as in the accepted fixture. The
-validator key is the public test keystore of the BSC source
-(`bsc_admission.KEYSTORE`, password empty).
+validator and the genesis timestamp stay as in the accepted fixture. One
+input is not named in ORACLE.md "Fixtures": the sealing key, the public test
+keystore of the BSC source (`bsc_admission.KEYSTORE`, password empty), whose
+address is the oracle's validator. The accepted E01-01 BSC generator and the
+BSC admission fixture use the same keystore.
 
 ## What the probe does
 
@@ -68,6 +70,10 @@ pinned compiler image. Each step is a separate process:
    - call frames from the native `callTracer` attached to that re-execution;
    - the validator nonce and the listed accounts at the block root.
 
+The run keeps a copy of the harness files and of the corpus files that decide
+the verdict (`bsc_corpus.py`, `corpus_test.go`, `corpus_compare.py`,
+`expected/bsc.json`) and fails if any of them changes during the run.
+
 The driver turns these outputs into the observation (`observation.json`) and
 runs `corpus_compare.compare`:
 - `decisions` are the decisions with a `NATIVE_DECIDED` record in the
@@ -82,10 +88,15 @@ wrong:
 - each decision is an IMPORT with one member, the members are the two
   corpus blocks with distinct observations, and each NATIVE_DECIDED record
   binds its intent;
-- the obligations are those decisions and bind their intents;
+- the obligations are those decisions and bind their intents and their
+  NATIVE_DECIDED records;
+- the restart recovery opened no observation or decision (the counters
+  after `Recover` equal the import's), went LIVE and left no observation
+  open;
 - neither the restart nor the re-import changed the decision records, the
-  obligations or the counters, and the re-import moved no head and reported
-  no error.
+  admission records, the obligations or the counters, no observation is open
+  after the re-import, and the re-import moved no head and reported no
+  error.
 
 A bridge failure marks every case FAIL in the run record.
 
@@ -99,7 +110,7 @@ From the repository root (`M` is the accepted BuildManifest of D95):
 ```sh
 python3 test/native_corpus/bsc/bsc_corpus.py prepare --build-manifest M --sha256 SHA --output PREP
 python3 test/native_corpus/bsc/bsc_corpus.py run PREP/tool.json --sha256 SHA_OF_TOOL --output RUN
-python3 test/native_corpus/bsc/bsc_corpus.py observe RUN/bsc --output NEW
+python3 test/native_corpus/bsc/bsc_corpus.py observe RUN --output NEW
 python3 test/native_corpus/bsc/test_bsc_corpus.py
 python3 test/mutate.py test/native_corpus/bsc/bsc_corpus.mutants.json --output DIR
 ```
@@ -122,8 +133,13 @@ export and the comparison are.
   binds their combined result for the listed accounts.
 - The mirror is the probe stand-in of the accepted BSC decision block
   (E05-01.registry owns the real one).
-- `observe` compares a retained run again with the repository's expected
-  file and writes only into a new directory; a retained record is never
-  rewritten.
+- `observe` rebuilds a retained run only from the probe outputs and the
+  expected copy whose digests that run recorded, compares with that copy,
+  and writes `observe.json`, `observation.json` and `comparison.json` only
+  into a new directory; a retained record is never rewritten.
+- The state before and after each user transaction is bound to the stored
+  receipts (status, gas, cumulative gas, logs), not to the stored state root:
+  the system transactions that follow are not re-executed, so no
+  intermediate root is compared.
 - Native BSC's own tests and the admission and decision checks are not
   repeated here; they belong to the accepted E01-02 records.

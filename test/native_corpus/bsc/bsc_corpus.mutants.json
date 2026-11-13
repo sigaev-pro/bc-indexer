@@ -7,6 +7,7 @@
     "test/native_corpus/*.py",
     "test/native_corpus/expected/*",
     "test/native_corpus/bsc/*.py",
+    "test/native_corpus/bsc/*.go",
     "test/native_corpus/bsc/sample/*",
     "test/harness/*.py",
     "test/harness/fixtures/bsc_admission/genesis.json",
@@ -292,6 +293,84 @@
       "file": "test/native_corpus/bsc/bsc_corpus.py",
       "original": "    except corpus_compare.FormatError as error:\n        comparison = {\"schema_version\": 1, \"kind\": \"native-corpus-comparison\", \"family\": \"bsc\", \"result\": \"FAIL\",",
       "replacement": "    except ZeroDivisionError as error:\n        comparison = {\"schema_version\": 1, \"kind\": \"native-corpus-comparison\", \"family\": \"bsc\", \"result\": \"FAIL\","
+    },
+    {
+      "name": "bridge restart admission records",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if before[\"admission_records\"] != bridge[\"admission_records\"] or \\\n            after[\"admission_records\"] != bridge[\"admission_records\"]:",
+      "replacement": "if after[\"admission_records\"] != bridge[\"admission_records\"]:"
+    },
+    {
+      "name": "bridge reimport admission records",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if before[\"admission_records\"] != bridge[\"admission_records\"] or \\\n            after[\"admission_records\"] != bridge[\"admission_records\"]:",
+      "replacement": "if before[\"admission_records\"] != bridge[\"admission_records\"]:"
+    },
+    {
+      "name": "bridge restart counters",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if before[\"counters\"] != bridge[\"counters\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge open after restart",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if before[\"open_observations\"] or after[\"open_observations\"]:",
+      "replacement": "if after[\"open_observations\"]:"
+    },
+    {
+      "name": "bridge open after reimport",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if before[\"open_observations\"] or after[\"open_observations\"]:",
+      "replacement": "if before[\"open_observations\"]:"
+    },
+    {
+      "name": "bridge restart mode",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if before[\"mode\"] != \"LIVE\":",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge obligation binds decided",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "    if any(row[\"decided_digest\"] != decided.get(row[\"sequence\"], {}).get(\"decided\", {}).get(\"digest\")\n           for row in bridge[\"obligations\"]):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "observe output must be new",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(not output.exists(), \"The observe output already exists\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "observe run kind",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(record.get(\"kind\") == \"bsc-corpus-run\", \"Not a BSC corpus run record\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "observe checks the probe outputs",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "        require(artifact(record[\"outputs\"][name], 64 * 1024 * 1024) == work / name,\n                f\"The retained {name} is not the recorded one\")",
+      "replacement": "        pass"
+    },
+    {
+      "name": "observe uses the recorded expected",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "expected_path = artifact(record[\"expected\"], 4 * 1024 * 1024)",
+      "replacement": "expected_path = EXPECTED"
+    },
+    {
+      "name": "observe writes its record",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "write_new(output / \"observe.json\", summary)",
+      "replacement": "pass"
+    },
+    {
+      "name": "snapshot keeps corpus files",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "        copy_artifact(source, target, origins[-1], 4 * 1024 * 1024, deadline)",
+      "replacement": "        pass"
     }
   ]
 }

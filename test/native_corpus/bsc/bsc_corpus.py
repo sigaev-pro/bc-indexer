@@ -19,9 +19,11 @@ compares it with `expected/bsc.json` (`corpus_compare.compare`), checks the
 bridge facts that the comparator does not see, and records a verdict per
 case.
 
-`observe DIR --output NEW` rebuilds the observation of a retained run from
-its probe outputs and compares it again, without Docker; it writes only into
-the new directory NEW.
+`observe RUN --output NEW` rebuilds the observation of a retained run from
+its probe outputs and compares it again with the expected copy that run
+recorded, without Docker. The probe outputs and the expected copy must match
+the digests in RUN/run.json. It writes only into the new directory NEW,
+including `observe.json`, which names every input.
 
 The expected file is never read for a value: the driver takes from it only
 the corpus accounts to add to the genesis and the account list to read.
@@ -64,7 +66,6 @@ CORPUS_FILES = ("bsc/bsc_corpus.py", "bsc/corpus_test.go", "corpus_compare.py", 
 PREPARATION_SECONDS = 2 * 3600
 RUN_SECONDS = 900
 STEP_CAP = 300
-PRODUCER_RUN = "bsc-probe.run-1"
 TRACER = "callTracer (eth/tracers/native) on a native re-execution of the block prefix"
 STATE_READS = ("native state reads at the parent root and after each user transaction: a native re-execution of "
                "the block prefix on the parent state (TryUpdateBuildInSystemContract, then core.ApplyTransaction "
@@ -273,9 +274,21 @@ def bridge_checks(imported, reimported):
     if any(row["intent_digest"] != decided.get(row["sequence"], {}).get("intent", {}).get("digest")
            for row in bridge["obligations"]):
         failures.append("an obligation does not bind its intent")
+    if any(row["decided_digest"] != decided.get(row["sequence"], {}).get("decided", {}).get("digest")
+           for row in bridge["obligations"]):
+        failures.append("an obligation does not bind its NATIVE_DECIDED record")
     before, after = reimported["before"], reimported["after"]
     if before["decision_records"] != bridge["decision_records"]:
         failures.append("the restart changed the decision records before the re-import")
+    if before["admission_records"] != bridge["admission_records"] or \
+            after["admission_records"] != bridge["admission_records"]:
+        failures.append("the restart or the re-import changed the admission records")
+    if before["counters"] != bridge["counters"]:
+        failures.append("the restart recovery opened an observation or a decision")
+    if before["open_observations"] or after["open_observations"]:
+        failures.append("an observation is open after the restart or the re-import")
+    if before["mode"] != "LIVE":
+        failures.append("the restart recovery did not go LIVE")
     if after["decision_records"] != before["decision_records"]:
         failures.append("the re-import changed the decision records")
     if after["obligations"] != bridge["obligations"] or before["obligations"] != bridge["obligations"]:
@@ -324,6 +337,47 @@ def verdict(comparison, failures):
     return ("PASS" if passed else "FAIL"), cases
 
 
+def corpus_snapshot(output, deadline=None):
+    """Copy the corpus files that decide the verdict into the run; return their references."""
+    origins = []
+    for name in CORPUS_FILES:
+        source = CORPUS / name
+        origins.append(reference(source, 4 * 1024 * 1024, deadline))
+        target = output / "corpus-code" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        copy_artifact(source, target, origins[-1], 4 * 1024 * 1024, deadline)
+    return origins
+
+
+def observe_retained(run_directory, output):
+    """Rebuild the observation of a retained run in a new directory.
+
+    The probe outputs and the expected file must be the bytes the run
+    recorded (`run.json`); the new comparison uses that expected copy, and
+    `observe.json` names every input."""
+    require(not output.exists(), "The observe output already exists")
+    record = load(run_directory / "run.json", 16 * 1024 * 1024)
+    require(record.get("kind") == "bsc-corpus-run", "Not a BSC corpus run record")
+    work = run_directory / "bsc" / "work"
+    for name in ("import.json", "reimport.json"):
+        require(artifact(record["outputs"][name], 64 * 1024 * 1024) == work / name,
+                f"The retained {name} is not the recorded one")
+    expected_path = artifact(record["expected"], 4 * 1024 * 1024)
+    expected = json.loads(read_bytes(expected_path, 4 * 1024 * 1024))
+    output.mkdir()
+    source = load(run_directory / "bsc" / "observation.json", 64 * 1024 * 1024)["source"]
+    comparison, failures = observe(work, expected, source, output)
+    result, cases = verdict(comparison, failures)
+    summary = {"schema_version": 1, "kind": "bsc-corpus-observe", "result": result, "cases": cases,
+               "bridge_failures": failures, "differences": len(comparison["differences"]),
+               "run": reference(run_directory / "run.json"), "expected": record["expected"],
+               "outputs": {name: record["outputs"][name] for name in ("import.json", "reimport.json")},
+               "observation": reference(output / "observation.json"),
+               "comparison": reference(output / "comparison.json")}
+    write_new(output / "observe.json", summary)
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # Measured run.
 
@@ -342,6 +396,8 @@ def run(tool_path, tool_sha, output):
 
     def body(output, runner):
         origins, proof["harness_sources"] = source_snapshot(output, HARNESS_FILES, deadline)
+        proof["corpus_sources"] = corpus_snapshot(output, deadline)
+        proof["expected"] = tool["expected"]
         expected_bytes = read_bytes(artifact(tool["expected"], 4 * 1024 * 1024, deadline=deadline), 4 * 1024 * 1024,
                                     deadline)
         require(expected_bytes == EXPECTED.read_bytes(), "The prepared expected file differs from the repository")
@@ -389,6 +445,7 @@ def run(tool_path, tool_sha, output):
         proof["differences"] = len(comparison["differences"])
         proof["bridge_failures"] = failures
         sources_unchanged(origins, deadline)
+        sources_unchanged(proof["corpus_sources"], deadline)
         artifact(tool["test_binary"], 1024 * 1024 * 1024, deadline=deadline)
         require(proof["verdict"] == "PASS", f"Corpus verdict {proof['verdict']}: {proof['differences']} differences, "
                                             f"bridge failures {failures}")
@@ -408,7 +465,7 @@ def main(argv=None):
     run_parser.add_argument("--sha256", required=True)
     run_parser.add_argument("--output", type=Path, required=True)
     observe_parser = commands.add_parser("observe")
-    observe_parser.add_argument("directory", type=Path, help="the bsc/ directory of a retained run")
+    observe_parser.add_argument("directory", type=Path, help="a retained run directory (with run.json)")
     observe_parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
@@ -417,14 +474,7 @@ def main(argv=None):
         elif args.command == "run":
             proof = run(args.tool, args.sha256, args.output)
         else:
-            args.output.mkdir()
-            directory = args.directory
-            observation = load(directory / "observation.json", 64 * 1024 * 1024)
-            comparison, failures = observe(directory / "work", json.loads(EXPECTED.read_text()),
-                                           observation["source"], args.output)
-            result, cases = verdict(comparison, failures)
-            proof = {"result": result, "cases": cases, "bridge_failures": failures,
-                     "differences": len(comparison["differences"])}
+            proof = observe_retained(args.directory, args.output)
     except Rejected as error:
         print(json.dumps({"result": "FAIL", "error": str(error)}))
         return 1

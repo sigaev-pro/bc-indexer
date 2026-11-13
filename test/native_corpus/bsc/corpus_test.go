@@ -92,12 +92,18 @@ func writeJSON(t *testing.T, path string, value any) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	writeNew(t, path, append(data, '\n'))
+}
+
+// writeNew writes a new file and syncs it; an existing file is never replaced.
+func writeNew(t *testing.T, path string, data []byte) {
+	t.Helper()
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	if _, err := file.Write(append(data, '\n')); err != nil {
+	if _, err := file.Write(data); err != nil {
 		t.Fatal(err)
 	}
 	if err := file.Sync(); err != nil {
@@ -224,9 +230,7 @@ func corpusGenerate(t *testing.T, work string) {
 			"state_root": hexOf(block.Root().Bytes()), "timestamp": block.Time(),
 			"transactions": len(block.Transactions()), "gas_used": block.GasUsed()})
 	}
-	if err := os.WriteFile(filepath.Join(work, "blocks.rlp"), blocks.Bytes(), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeNew(t, filepath.Join(work, "blocks.rlp"), blocks.Bytes())
 	writeJSON(t, filepath.Join(work, "generated.json"), map[string]any{
 		"genesis_hash": hexOf(genesis.ToBlock().Hash().Bytes()), "blocks": rows})
 }

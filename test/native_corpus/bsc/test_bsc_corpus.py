@@ -188,7 +188,16 @@ class BridgeTests(unittest.TestCase):
              "one observation per block"),
             (lambda i, r: i["bridge"]["decision_records"][decided].update(intent_digest="00"), "does not bind"),
             (lambda i, r: i["bridge"]["obligations"].pop(), "not the IMPORT decisions"),
-            (lambda i, r: i["bridge"]["obligations"][0].update(intent_digest="00"), "obligation does not bind"),
+            (lambda i, r: i["bridge"]["obligations"][0].update(intent_digest="00"), "does not bind its intent"),
+            (lambda i, r: i["bridge"]["obligations"][1].update(decided_digest="00"),
+             "does not bind its NATIVE_DECIDED"),
+            (lambda i, r: r["before"]["admission_records"].pop("lowwater"), "changed the admission records"),
+            (lambda i, r: r["after"]["admission_records"].pop("lowwater"), "changed the admission records"),
+            (lambda i, r: (r["before"].update(counters=[3, 2]), r["after"].update(counters=[3, 2])),
+             "the restart recovery opened"),
+            (lambda i, r: r["before"].update(open_observations=[{"key": "x"}]), "open after the restart"),
+            (lambda i, r: r["after"].update(open_observations=[{"key": "x"}]), "open after the restart"),
+            (lambda i, r: r["before"].update(mode="RECOVERY_ONLY"), "did not go LIVE"),
             (lambda i, r: r["before"]["decision_records"].pop(decided), "the restart changed"),
             (lambda i, r: r["after"]["decision_records"].update(x={}), "the re-import changed the decision"),
             (lambda i, r: r["after"]["obligations"].pop(), "changed the delivery obligations"),
@@ -210,12 +219,82 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(bsc_corpus.verdict(report, [])[0], "PASS")
         result, cases = bsc_corpus.verdict(report, ["bridge"])
         self.assertEqual(result, "FAIL")
-        self.assertEqual({row["verdict"] for row in cases if row["case"] != "system-action"} |
-                         {row["verdict"] for row in cases}, {"FAIL"})
+        self.assertEqual({row["verdict"] for row in cases}, {"FAIL"})
         self.assertEqual(bsc_corpus.verdict({"result": "PASS", "cases": []}, [])[0], "FAIL")
         # A difference outside every case fails the run even when each case passes.
         self.assertEqual(bsc_corpus.verdict({"result": "FAIL", "cases": [{"case": "transfer", "verdict": "PASS"}]},
                                             [])[0], "FAIL")
+
+
+def retained_run(directory):
+    """A retained run layout like `run` writes: run.json, bsc/work and bsc/observation.json."""
+    run = Path(directory).resolve() / "run"
+    work = run / "bsc" / "work"
+    work.mkdir(parents=True)
+    for name in ("import.json", "reimport.json"):
+        (work / name).write_bytes((SAMPLE / name).read_bytes())
+    (run / "expected-copy.json").write_bytes(bsc_corpus.EXPECTED.read_bytes())
+    (run / "bsc" / "observation.json").write_text(json.dumps({"source": SOURCE}))
+    record = {"kind": "bsc-corpus-run", "expected": bsc_corpus.reference(run / "expected-copy.json"),
+              "outputs": {name: bsc_corpus.reference(work / name) for name in ("import.json", "reimport.json")}}
+    (run / "run.json").write_text(json.dumps(record))
+    return run
+
+
+class ObserveRetainedTests(unittest.TestCase):
+    def test_rebuild_names_its_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = retained_run(directory)
+            summary = bsc_corpus.observe_retained(run, run.parent / "new")
+            self.assertEqual((summary["result"], summary["differences"], summary["bridge_failures"]), ("PASS", 0, []))
+            written = json.loads((run.parent / "new" / "observe.json").read_text())
+            self.assertEqual(written["expected"], json.loads((run / "run.json").read_text())["expected"])
+            self.assertEqual(written["kind"], "bsc-corpus-observe")
+
+    def test_changed_inputs_are_refused(self):
+        for mutate in (lambda run: (run / "bsc/work/import.json").write_text("{}"),
+                       lambda run: (run / "bsc/work/reimport.json").write_text("{}"),
+                       lambda run: (run / "expected-copy.json").write_text("{}")):
+            with self.subTest():
+                with tempfile.TemporaryDirectory() as directory:
+                    run = retained_run(directory)
+                    mutate(run)
+                    with self.assertRaises(Rejected):
+                        bsc_corpus.observe_retained(run, run.parent / "new")
+                    self.assertFalse((run.parent / "new").exists())
+
+    def test_the_recorded_expected_copy_is_used(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = retained_run(directory)
+            changed = expected()
+            changed["blocks"][0]["transactions"][0]["receipt"]["gas_used"] = 1
+            (run / "expected-copy.json").write_text(json.dumps(changed))
+            record = json.loads((run / "run.json").read_text())
+            record["expected"] = bsc_corpus.reference(run / "expected-copy.json")
+            (run / "run.json").write_text(json.dumps(record))
+            self.assertEqual(bsc_corpus.observe_retained(run, run.parent / "new")["result"], "FAIL")
+
+    def test_existing_output_and_other_records_are_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run = retained_run(directory)
+            (run.parent / "new").mkdir()
+            with self.assertRaises(Rejected):
+                bsc_corpus.observe_retained(run, run.parent / "new")
+            record = json.loads((run / "run.json").read_text())
+            record["kind"] = "poly-corpus-run"
+            (run / "run.json").write_text(json.dumps(record))
+            with self.assertRaises(Rejected):
+                bsc_corpus.observe_retained(run, run.parent / "other")
+
+
+class SnapshotTests(unittest.TestCase):
+    def test_corpus_files_are_kept(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory).resolve()
+            origins = bsc_corpus.corpus_snapshot(out)
+            self.assertEqual(len(origins), len(bsc_corpus.CORPUS_FILES))
+            for name in bsc_corpus.CORPUS_FILES:
+                self.assertEqual((out / "corpus-code" / name).read_bytes(), (bsc_corpus.CORPUS / name).read_bytes())
 
 
 class FileTests(unittest.TestCase):
