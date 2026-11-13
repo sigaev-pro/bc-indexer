@@ -2,12 +2,24 @@
 
 ## E01-03.smoke_corpus — Minimal independent native test corpus (issue #19)
 
-Status: IN_PROGRESS. The coordinator approved the split on 2026-11-13:
-block 0 in this session, then three parallel client blocks after block 0
-merges. D97 requires the roles, agent definitions and split to be agreed
-with the owner; the coordinator records that agreement when it assigns the
-client sessions. Branch `claude/e01-03-smoke-corpus` from main
-`a7ea231`. Dependencies E01-01.harness (#12), E01-02.decision_bridge (#17,
+Status: ACCEPTED (2026-11-13); #19 closes when this record merges. Merged
+blocks:
+
+- block 0 corpus-core: PR #164 at `3cc31ec`, with D102;
+- POLY: PR #166 at `4208145` (measured head `3943c7f`);
+- ETH: PR #167 at `3900d65` (measured head `1a6bef2`);
+- BSC: PR #168 at `cfb9195` (measured head `5217fc4`).
+
+qa verdicts, private local: transfer, nested-revert, fee and empty-block
+PASS for ETH, BSC and POLY; system-action PASS for BSC and POLY (checked by
+the receipt and the block-end state, D103) and NOT_APPLICABLE for ETH
+(D102). The expected results were fixed in block 0 and no client block
+changed them. Every public cell stays NOT_RUN (D96). The corpus issues no
+AC verdict and is not full production semantic coverage. D103 records the
+owner's answers on system-action state and names the owner of every other
+limit. The owner agreed the roles and the split on 2026-11-13 (D97).
+
+Dependencies E01-01.harness (#12), E01-02.decision_bridge (#17,
 merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Runs in parallel
 with #18, which another session does; no shared paths except this file.
 
@@ -137,12 +149,15 @@ Review 003 on `f5153d2`: Spec PASS and Standards PASS, with no open finding.
 The Spec note that the owner agreement under D97 must be recorded before
 the client sessions start goes to the coordinator.
 
-Next: hosted CI and the final review comment on the final head; then the
-three client blocks after block 0 merges.
+Merged in PR #164 at `3cc31ec` (final head `0b0f0fb`).
+
+Next: none for E01-03.smoke_corpus. It unlocks E01-05.type_paths and
+E02-05.actions_model; E01-04.early_faults also waits for #18.
 
 ### ETH block (Geth)
 
-Status: IN_PROGRESS in draft PR #167, branch
+Status: ACCEPTED in PR #167 at merge `3900d65` (final head `18ddf0d`, part of
+#19), branch
 `claude/e01-03-smoke-corpus-eth` from main `3cc31ec` (block 0 merged in PR
 #164 at `3cc31ec`). Part of #19. Role: native-engineer, and qa for the
 matrix; Spec and Standards reviewers read-only. D97: as the coordinator
@@ -184,8 +199,8 @@ Review 003 on `36365e7`: Spec PASS and Standards PASS (two docs P3s,
 fixed). The branch merges main `4208145` (POLY, PR #166), which adds no ETH
 input.
 
-Next: hosted CI and the final review comment on the final head; then merge
-with the owner's permission for this PR.
+Final head `18ddf0d`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #167 at `3900d65`.
 
 ### POLY block
 
@@ -197,7 +212,7 @@ everything"). That means block 0 core,
 then one native-engineer session per family, with qa for the per-case matrix
 and two read-only reviewers.
 
-Status: IN_PROGRESS (part of #19), draft PR #166 on branch
+Status: ACCEPTED in PR #166 at merge `4208145` (part of #19), branch
 `claude/e01-03-smoke-corpus-poly`, from main `3cc31ec` (block 0 merged in
 PR #164). Measured head `3943c7f`; later commits change only docs. Paths:
 `test/native_corpus/poly/**`,
@@ -236,8 +251,8 @@ qa verdict (POLY private local): transfer, nested-revert, fee,
 system-action (StateSync before Madhugiri) and empty-block PASS; family POLY
 PASS. Polygon Mainnet and Amoy stay NOT_RUN (D96).
 
-Next: a docs-only confirmation review, hosted CI on the final head, the final
-review comment, then READY to the coordinator.
+Final head `d204360`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #166 at `4208145`.
 
 ### BSC block
 
@@ -247,10 +262,10 @@ everything", relayed by the coordinator after the owner approved the
 #16-style split). The coordinator queued this block until an implementer
 slot was free (D97: at most three) and started it after PR #166 merged.
 
-Status: IN_PROGRESS (part of #19), branch `claude/e01-03-smoke-corpus-bsc`
-from main `4208145` (POLY merged in PR #166), draft PR #168. Measured head
-`5217fc4`; later
-commits change only docs. Paths: `test/native_corpus/bsc/**`,
+Status: ACCEPTED in PR #168 at merge `cfb9195` (part of #19), branch
+`claude/e01-03-smoke-corpus-bsc` from main `4208145` (POLY merged in PR
+#166). Measured head `5217fc4`; later commits change only docs. Paths:
+`test/native_corpus/bsc/**`,
 `.project/evidence/E01-03.smoke_corpus.bsc.md` and this subsection.
 
 Design ([BSC README](../test/native_corpus/bsc/README.md)):
@@ -300,8 +315,8 @@ Merge of main: `30bd372` merges main `3900d65` (ETH, PR #167) with a merge
 commit. It changes no BSC measured input (evidence, "Records"); the ETH and
 POLY subsections stay as on main.
 
-Next: a docs-only confirmation review of the merge, hosted CI on the final
-head, the final review comment, then READY to the coordinator.
+Final head `9611536`: Spec and Standards PASS; hosted CI passed. Merged in
+PR #168 at `cfb9195`.
 
 ## E01-02.lifecycle_seams — Map all required native lifecycle callers (issue #18)
 
@@ -504,6 +519,62 @@ measured code (evidence, "Merge of main").
 
 Next: a docs-only confirmation review of the merge, hosted CI on the merge
 head, the final review comment, then the client blocks after merge.
+
+### Geth block
+
+Base `51adbee` (block 0 merged in PR #165). Branch/worktree:
+`claude/e01-02-lifecycle-geth` / `e01-02-admission-geth-95b3ee`. Allowed
+paths: `adapters/geth/lifecycle/native/**`,
+`test/harness/fixtures/lifecycle_geth/**`,
+`.project/evidence/E01-02.lifecycle_seams.geth.md` and this subsection.
+Roles and split as the coordinator records them: the owner agreed on
+2026-11-13 to the #16-style split ("Очищай лишнее и запускай все"); this is
+the Geth native-engineer session, which also gives the qa matrix of the ETH
+slot.
+
+Design: [adapters/geth/lifecycle/native/README.md](../adapters/geth/lifecycle/native/README.md).
+34 anchored patches over the accepted admission and decision-bridge tree
+route all 26 Geth callers: passes for every OBSERVATION and DECISION caller,
+`Require` at the state commit, the canonical-hash rewrite, the head writer,
+a requested rewind and the finality setters, CANONICAL decisions for
+`SetCanonical` and `writeKnownBlock` that name the retained SIDE blocks of
+the branch (a branch block without one is a source error), SetHead as one
+CANONICAL decision plus one FINALITY decision per clear, one FINALITY
+decision per setter call, the recovery of lifecycle intents and the startup
+reconciliation, the live boundary H (`GoLive` after the initial sync, under
+the guard, root flushed and synced; a restart keeps H), the capture profile
+check (`--dev`, `--synctarget`, snap sync) and the native-commit identity
+from the binary (D100).
+
+Records 03 at measured head `14188b9`: preparation PASS, run PASS (probe
+7.8 s, `Gaps` empty, six crash and restart scenarios as expected), 14
+portable tests, 39 of 39 driver mutants killed (evidence:
+[E01-02.lifecycle_seams.geth](evidence/E01-02.lifecycle_seams.geth.md)).
+Records 01 at `3c89a06` and 02 at `45c087f` passed and are kept as
+superseded.
+
+Review 001 (head `b58d33a`): Spec and Standards REQUEST_CHANGES. Fixed in
+`45c087f`: the known-branch walk uses the common ancestor with the current
+head; recovery keeps the decided finality references in the lifecycle view;
+a crash inside a lifecycle reorganization is completed; the finality setters
+sync before the in-memory reference moves; a failed `GoLive` stops the node.
+Review 002 (head `caac285`): Spec and Standards REQUEST_CHANGES; fixed in
+`14188b9` (completion only from a head strictly on the new branch, a
+readable view on a restart, scenarios for a head lowered below the fork
+point and for a canonical index above the head). Owners of the two
+fail-closed limits, decided by the coordinator on 2026-11-13: the targeted
+replay of a branch block without corpus is E05-02.reorg (D104, PR from the
+#18 BSC block, applied to Geth), and the completion of an interrupted
+SetHead rewind is E01-04.early_faults.
+
+Review 003 (head `390ab5a`): Spec PASS and Standards PASS, with P3 notes
+only (D104 arrives with the #18 BSC PR; one judge check of the `repaired`
+scenario left for later). Later commits change only docs.
+qa verdict, private local ETH: AC-CAP-01-01 PASS, AC-LIF-05-02 PASS,
+AC-LIF-05-03 PASS, AC-LIF-06-04 and 06-05 NOT_APPLICABLE (BSC only); family
+PASS. Public ETH cells stay NOT_RUN.
+
+Next: Spec and Standards reviews, hosted CI, the final review comment.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 

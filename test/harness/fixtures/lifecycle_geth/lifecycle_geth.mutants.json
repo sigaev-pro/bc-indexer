@@ -1,0 +1,259 @@
+{
+ "schema_version": 1,
+ "language": "python",
+ "root": "../../../..",
+ "description": "Single-check mutants of the Geth lifecycle driver: the native self-checks of the probe report, the crash settlements and the qa matrix of the private local ETH slot.",
+ "copy": [
+  "test/harness/fixtures/lifecycle_geth/*",
+  "test/harness/*.py",
+  "test/harness/fixtures/admission_geth/*",
+  "test/native_corpus/eth/*",
+  "test/native_corpus/*.py",
+  "adapters/geth/**"
+ ],
+ "test": [
+  "{python}",
+  "test/harness/fixtures/lifecycle_geth/test_lifecycle_geth.py",
+  "-v"
+ ],
+ "import": [
+  "lifecycle_geth"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "native identity unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if report.get(\"native_identity\") != NATIVE_SOURCE:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "profile refusal unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if not isinstance(profile.get(key), str) or \"capture profile refuses\" not in profile[key]:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "full sync refusal unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if profile.get(\"flags_full\") is not None:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "wrong commit unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if not isinstance(profile.get(\"eth_new_wrong_commit\"), str) or \\\n            \"native commit identity\" not in profile[\"eth_new_wrong_commit\"]:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "bootstrap phase unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if row.get(\"phase_at_open\") != \"BOOTSTRAP\":",
+   "replacement": "if False:"
+  },
+  {
+   "name": "bootstrap records unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if row.get(\"admission_records_before_live\") != 0 or row.get(\"decision_records_before_live\") != 0:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "live error unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if row.get(\"live_service_error\") is not None or row.get(\"golive_error\") is not None:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "boundary root unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "row.get(\"boundary_root_durable\") is not True:",
+   "replacement": "False:"
+  },
+  {
+   "name": "step names unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if names != list(expected_names):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "decision state unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if any(row.get(\"state\") != \"NATIVE_DECIDED\" for row in rows):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "decision shapes unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if [decision_shape(row) for row in rows] != [_shape(e) for e in EXPECTED_STEPS[name]]:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "unexpected error unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if fragment is None and error is not None:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "expected error unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if fragment is not None and (not isinstance(error, str) or fragment not in error):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "references unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if want is not None and (refs.get(\"head_hash\"), refs.get(\"finalized\"), refs.get(\"safe\")) != want:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "restart boundary unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if (native.get(\"restart_boundary\") or {}).get(\"hash\") != \"A3\":",
+   "replacement": "if False:"
+  },
+  {
+   "name": "restart state unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if native.get(\"state_after_restart\") != {\"A1\": False, \"A2\": True, \"A3\": True, \"S3\": False, \"T3\": False}:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "deadlock unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if deadlock.get(\"completed\") is not True or deadlock.get(\"errors\") != []:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "exit errors unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if native.get(\"exit_errors_first_open\") != [] or native.get(\"exit_errors_restart\") != []:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "outside refusal unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if not isinstance(outside.get(caller), str):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "gaps unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if report.get(\"gaps\") != []:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash exit unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if row.get(\"exit_code\") != 3:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash settlement unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if [e.get(\"evidence\") for e in settled] != ([evidence] if evidence else []):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash unresolved unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if stop is None and any(d.get(\"state\") == \"INTENT\" for d in row.get(\"decisions\") or []):",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash head unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if (row.get(\"refs\") or {}).get(\"head_hash\") != head:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "paths not compared",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "cap = \"PASS\" if not failures and ac.get(\"native\") == ac.get(\"harness\") and reached",
+   "replacement": "cap = \"PASS\" if not failures and reached"
+  },
+  {
+   "name": "bridge reach unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "and reached and report.get(\"gaps\") == []",
+   "replacement": "and report.get(\"gaps\") == []"
+  },
+  {
+   "name": "zero noop decisions unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "return st.get(\"error\") is None and st.get(\"decisions\") == [] and again.get(\"decisions\") == [] and \\",
+   "replacement": "return st.get(\"error\") is None and \\"
+  },
+  {
+   "name": "zero noop refs unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "refs(st) == refs(before) == (\"A1\", \"A2\", \"A1\")",
+   "replacement": "True"
+  },
+  {
+   "name": "setter error unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "return isinstance(st.get(\"error\"), str) and len(rows) == 1",
+   "replacement": "return len(rows) == 1"
+  },
+  {
+   "name": "false safe unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "refs.get(\"stored_finalized\") == \"A2\" and refs.get(\"safe\") == \"A2\"",
+   "replacement": "refs.get(\"stored_finalized\") == \"A2\""
+  },
+  {
+   "name": "05-02 failures ignored",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "\"AC-LIF-05-02\": \"PASS\" if not failures and",
+   "replacement": "\"AC-LIF-05-02\": \"PASS\" if"
+  },
+  {
+   "name": "05-03 failures ignored",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "\"AC-LIF-05-03\": \"PASS\" if not failures and",
+   "replacement": "\"AC-LIF-05-03\": \"PASS\" if"
+  },
+  {
+   "name": "family ignores a FAIL row",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "\"family\": \"PASS\" if all(v == \"PASS\" for v in applicable) else \"FAIL\",",
+   "replacement": "\"family\": \"PASS\","
+  },
+  {
+   "name": "live phase unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if row.get(\"phase_after\") != \"LIVE\" or row.get(\"boundary_present\") is not True:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash restart error unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "(stop is not None and (not isinstance(attach, str) or stop not in attach)):",
+   "replacement": "False:"
+  },
+  {
+   "name": "crash reconciliation unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if sum(e.get(\"event\") == \"lifecycle_decided\" for e in row.get(\"settled\") or []) != decided:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "crash safe unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if (row.get(\"refs\") or {}).get(\"safe\") != safe:",
+   "replacement": "if False:"
+  },
+  {
+   "name": "forward forkchoice unchecked",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "(forward is not None and (not isinstance(error, str) or forward not in error)):",
+   "replacement": "False:"
+  },
+  {
+   "name": "crash expected restart ignored",
+   "file": "test/harness/fixtures/lifecycle_geth/lifecycle_geth.py",
+   "original": "if (stop is None and attach is not None) or \\",
+   "replacement": "if False or \\"
+  }
+ ]
+}
