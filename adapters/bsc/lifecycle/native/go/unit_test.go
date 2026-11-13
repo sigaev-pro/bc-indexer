@@ -117,3 +117,36 @@ func TestCheckProfile(t *testing.T) {
 		t.Fatalf("builder off: %v", err)
 	}
 }
+
+func TestRequireNoOpenCapture(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	if err := RequireNoOpenCapture(db); err != nil {
+		t.Fatalf("empty store: %v", err)
+	}
+	put := func(key, value string) {
+		if err := db.Put([]byte(key), []byte(value)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Released: the low-water mark reached the counter.
+	put(decisionPrefix+"p.r1/counter", `{"next":3}`)
+	put(decisionPrefix+"p.r1/lowwater", `{"sequence":3}`)
+	if err := RequireNoOpenCapture(db); err != nil {
+		t.Fatalf("released run: %v", err)
+	}
+	// Open: a second run with a decision above its low-water mark.
+	put(decisionPrefix+"p.r2/counter", `{"next":2}`)
+	put(decisionPrefix+"p.r2/0000000000000001/intent", `{}`)
+	open, err := OpenObligations(db)
+	if err != nil || len(open) != 1 || open[0] != "p.r2" {
+		t.Fatalf("open runs %v %v", open, err)
+	}
+	if err := RequireNoOpenCapture(db); !errors.Is(err, ErrOpenObligation) {
+		t.Fatalf("open run: %v", err)
+	}
+	// A malformed record fails closed.
+	put(decisionPrefix+"p.r3/counter", `{`)
+	if err := RequireNoOpenCapture(db); !errors.Is(err, lifecycle.ErrCorrupt) {
+		t.Fatalf("malformed record: %v", err)
+	}
+}

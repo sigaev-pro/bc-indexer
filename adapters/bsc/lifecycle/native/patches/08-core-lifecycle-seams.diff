@@ -101,7 +101,7 @@ index 0000000..30ecd9b
 +	return &att, nil
 +}
 diff --git a/core/blockchain.go b/core/blockchain.go
-index 952a1c8..5bd7561 100644
+index 952a1c8..a99802b 100644
 --- a/core/blockchain.go
 +++ b/core/blockchain.go
 @@ -416,6 +416,9 @@ type BlockChain struct {
@@ -446,6 +446,18 @@ index 952a1c8..5bd7561 100644
  	if len(chain) == 0 {
  		return 0, nil
  	}
+@@ -3672,6 +3823,11 @@ func EnableDoubleSignChecker(bc *BlockChain) (*BlockChain, error) {
+ // as they are claimed older than the configured chain cutoff point. All the
+ // inserted headers are regarded as canonical and chain reorg is not supported.
+ func (bc *BlockChain) InsertHeadersBeforeCutoff(headers []*types.Header) (int, error) {
++	// Extractor patch (E01-02.lifecycle_seams): header sync is refused on a
++	// capture store (bsc.snap-sync).
++	if err := bc.ExtractorRefuse("bsc.snap-sync"); err != nil {
++		return 0, err
++	}
+ 	if len(headers) == 0 {
+ 		return 0, nil
+ 	}
 diff --git a/core/extractor_decision.go b/core/extractor_decision.go
 index de6f893..c2a98d5 100644
 --- a/core/extractor_decision.go
@@ -502,10 +514,10 @@ index 01ac673..5f0a708 100644
  	if bc.extractorObservation == nil || bc.extractorObservation.Hash() != block.Hash() {
 diff --git a/core/extractor_lifecycle.go b/core/extractor_lifecycle.go
 new file mode 100644
-index 0000000..fa873e5
+index 0000000..1a8fee0
 --- /dev/null
 +++ b/core/extractor_lifecycle.go
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,348 @@
 +// Extractor patch (E01-02.lifecycle_seams, BSC block): the lifecycle gate
 +// seam.
 +//
@@ -736,8 +748,18 @@ index 0000000..fa873e5
 +// native order: the rewind batch with its marker, then the finalized clear
 +// as its own FINALITY decision, then loadLastState.
 +func (bc *BlockChain) extractorFinishRewind() error {
-+	l := bc.extractorLifecycle
 +	head := bc.CurrentBlock()
++	// The native rewind has moved the in-memory markers, so loadLastState
++	// runs on every exit; an error leaves the intent unresolved (fail
++	// closed).
++	err := bc.extractorRewindRecords(head)
++	return errors.Join(err, bc.loadLastState())
++}
++
++// extractorRewindRecords writes the rewind batch, resolves the rewind and
++// decides a finalized clear.
++func (bc *BlockChain) extractorRewindRecords(head *types.Header) error {
++	l := bc.extractorLifecycle
 +	records, err := l.Rewound(head, bc.extractorFinalizedHash())
 +	if err != nil {
 +		return err
@@ -754,11 +776,9 @@ index 0000000..fa873e5
 +		if err != nil {
 +			return err
 +		}
-+		if err := l.Settle(bc.setFinalizedChecked(nil, records)); err != nil {
-+			return err
-+		}
++		return l.Settle(bc.setFinalizedChecked(nil, records))
 +	}
-+	return bc.loadLastState()
++	return nil
 +}
 +
 +// setFinalizedChecked is the native finalized setter behind the FINALITY
@@ -847,7 +867,7 @@ index 0000000..fa873e5
 +	return nil
 +}
 diff --git a/eth/backend.go b/eth/backend.go
-index cb1319a..d1a4b5d 100644
+index cb1319a..dd3f2c1 100644
 --- a/eth/backend.go
 +++ b/eth/backend.go
 @@ -31,6 +31,8 @@ import (
@@ -878,7 +898,7 @@ index cb1319a..d1a4b5d 100644
  
  	chainDb, err := stack.OpenDatabaseWithFreezer(ChainData, config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, ChainDBNamespace, false)
  	if err != nil {
-@@ -326,6 +340,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+@@ -326,6 +340,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
  		log.Info("Unprotected transactions allowed")
  	}
  	ethAPI := ethapi.NewBlockChainAPI(eth.APIBackend)
@@ -887,13 +907,14 @@ index cb1319a..d1a4b5d 100644
 +	// (bsc.system-call-api), bound to the chain and the seam after
 +	// NewBlockChain.
 +	var extractorCalls *extractorbsc.SystemCallBackend
++	var extractorLifecycle *bsclifecycle.Lifecycle
 +	if extractorConfig != nil {
 +		ethAPI, extractorCalls = extractorbsc.NewSystemCallAPI()
 +	}
  	eth.engine, err = ethconfig.CreateConsensusEngine(chainConfig, chainDb, ethAPI, genesisHash)
  	if err != nil {
  		return nil, err
-@@ -416,6 +438,22 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+@@ -416,6 +439,21 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
  	if err != nil {
  		return nil, err
  	}
@@ -906,17 +927,28 @@ index cb1319a..d1a4b5d 100644
 +		if err != nil {
 +			return nil, err
 +		}
-+		extractorLifecycle, err := bsclifecycle.Attach(eth.blockchain, chainDb, extractorCalls, attachConfig,
++		extractorLifecycle, err = bsclifecycle.Attach(eth.blockchain, chainDb, extractorCalls, attachConfig,
 +			bsclifecycle.Options{})
 +		if err != nil {
 +			return nil, err
 +		}
-+		stack.RegisterLifecycle(extractorLifecycle.Live(eth.Synced))
 +	}
  
  	// Initialize filtermaps log index.
  	// Auto-enable checkpoint file
-@@ -811,6 +849,11 @@ func (s *Ethereum) handleAdditions(parlia *parlia.Parlia, nonce uint64, register
+@@ -542,6 +580,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
+ 	stack.RegisterAPIs(eth.APIs())
+ 	stack.RegisterProtocols(eth.Protocols())
+ 	stack.RegisterLifecycle(eth)
++	// Extractor patch (E01-02.lifecycle_seams): the live service is registered
++	// after the backend, so the node stops it before the chain and the store.
++	if extractorLifecycle != nil {
++		stack.RegisterLifecycle(extractorLifecycle.Live(eth.Synced))
++	}
+ 	grpcEnabled := !config.Miner.Mev.GRPCDisabled &&
+ 		config.Miner.Mev.Enabled != nil && *config.Miner.Mev.Enabled &&
+ 		config.Miner.Mev.BidBlockEnabled != nil && *config.Miner.Mev.BidBlockEnabled
+@@ -811,6 +854,11 @@ func (s *Ethereum) handleAdditions(parlia *parlia.Parlia, nonce uint64, register
  // is already running, this method adjust the number of threads allowed to use
  // and updates the minimum price required by the transaction pool.
  func (s *Ethereum) StartMining() error {

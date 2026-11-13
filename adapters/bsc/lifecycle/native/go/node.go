@@ -4,9 +4,12 @@ package bsclifecycle
 // admission, decision and lifecycle seams, and the manual database guard.
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -182,12 +185,84 @@ func Attach(chain *core.BlockChain, db ethdb.Database, calls *bsc.SystemCallBack
 	return l, nil
 }
 
+// ErrOpenObligation refuses a manual database command while a decision of
+// the store is not released.
+var ErrOpenObligation = errors.New("open extractor obligations forbid this native deletion")
+
+// decisionPrefix starts the keys of the decision bridge records
+// (extractor/decision).
+const decisionPrefix = "extractor-decision-v1/"
+
 // RequireNoOpenCapture is the manual database guard of the shipped geth on
 // a BSC capture store (bsc.database-commands): a command that deletes or
-// rewrites chaindata must not run while an extractor pin is live. Every
-// ADMITTED or EXEC_READY observation keeps the pin of its parent until its
-// decision closes it, so a live pin also covers every open obligation of the
-// import path. It is the ledger check of the other retention guards.
+// rewrites chaindata must not run while an extractor pin is live or an
+// obligation is open. Every ADMITTED or EXEC_READY observation keeps the pin
+// of its parent until its decision closes it (the ledger check of the other
+// retention guards). A decision stays an obligation (an unresolved intent,
+// or a decision the mirror has not applied) until the decision bridge
+// releases it below its low-water mark, so any producer run whose low-water
+// mark is below its counter is refused. A malformed record fails closed.
 func RequireNoOpenCapture(db ethdb.Database) error {
-	return stateprovider.RequireNoLivePins(db)
+	if err := stateprovider.RequireNoLivePins(db); err != nil {
+		return err
+	}
+	open, err := OpenObligations(db)
+	if err != nil {
+		return err
+	}
+	if len(open) != 0 {
+		return fmt.Errorf("%w: %d producer runs, first %s", ErrOpenObligation, len(open), open[0])
+	}
+	return nil
+}
+
+// OpenObligations lists the producer runs of the store whose decisions are
+// not all released: the low-water mark of the decision bridge is below its
+// counter.
+func OpenObligations(db ethdb.Database) ([]string, error) {
+	iterator := db.NewIterator([]byte(decisionPrefix), nil)
+	defer iterator.Release()
+	type marks struct{ next, low uint64 }
+	runs := map[string]*marks{}
+	var order []string
+	for iterator.Next() {
+		owner, suffix, ok := strings.Cut(string(iterator.Key()[len(decisionPrefix):]), "/")
+		if !ok || owner == "" {
+			return nil, fmt.Errorf("%w: decision key %q", lifecycle.ErrCorrupt, iterator.Key())
+		}
+		m := runs[owner]
+		if m == nil {
+			m = &marks{}
+			runs[owner] = m
+			order = append(order, owner)
+		}
+		switch suffix {
+		case "counter":
+			var r struct {
+				Next uint64 `json:"next"`
+			}
+			if err := json.Unmarshal(iterator.Value(), &r); err != nil {
+				return nil, fmt.Errorf("%w: %s counter: %v", lifecycle.ErrCorrupt, owner, err)
+			}
+			m.next = r.Next
+		case "lowwater":
+			var r struct {
+				Sequence uint64 `json:"sequence"`
+			}
+			if err := json.Unmarshal(iterator.Value(), &r); err != nil {
+				return nil, fmt.Errorf("%w: %s low-water mark: %v", lifecycle.ErrCorrupt, owner, err)
+			}
+			m.low = r.Sequence
+		}
+	}
+	if err := iterator.Error(); err != nil {
+		return nil, err
+	}
+	var open []string
+	for _, owner := range order {
+		if runs[owner].low < runs[owner].next {
+			open = append(open, owner)
+		}
+	}
+	return open, nil
 }

@@ -518,7 +518,12 @@
   ]
  },
  "attestation_fault": {
-  "database_guard": "live pins forbid this native deletion: 1 live, first bsc-lifecycle.run-1.0000000000000000",
+  "database_guard": {
+   "decided": "open extractor obligations forbid this native deletion: 1 producer runs, first bsc-lifecycle.run-1",
+   "fresh": null,
+   "fresh_import_error": null,
+   "pinned": "live pins forbid this native deletion: 1 live, first bsc-lifecycle.run-1.0000000000000000"
+  },
   "steps": [
    {
     "name": "start (BOOTSTRAP)",
@@ -599,8 +604,8 @@
     }
    },
    {
-    "name": "database guard (removedb, db put) while A3 is EXEC_READY",
-    "error": "live pins forbid this native deletion: 1 live, first bsc-lifecycle.run-1.0000000000000000",
+    "name": "setHead 1 while A3's pin is live",
+    "error": "live pins forbid this native deletion: rewind to 1 deletes header 2 of pin bsc-lifecycle.run-1.0000000000000000",
     "class": "ErrLivePins",
     "phase": "LIVE",
     "head": "A2",
@@ -640,7 +645,7 @@
     ],
     "new_decisions": [
      {
-      "sequence": 0,
+      "sequence": 1,
       "state": "NATIVE_DECIDED",
       "kind": "CANONICAL",
       "old": "A2",
@@ -648,7 +653,7 @@
       "members": [],
       "marker": true,
       "evidence_digest": "1b73193f3ff27b3920d98349bd2a5e79cdbd15e6252567817f294799aeb76daf",
-      "intent_digest": "4d063c9cf6b197702deb582e1a754326638537b7f57c48120155e812e907e214",
+      "intent_digest": "ff2cedde4b30d416684c2b0abbcdea471caa493fa7a61620301823c03cc852aa",
       "old_head": {
        "number": 2,
        "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
@@ -659,7 +664,7 @@
       }
      },
      {
-      "sequence": 1,
+      "sequence": 2,
       "state": "NATIVE_DECIDED",
       "kind": "IMPORT",
       "old": "A2",
@@ -669,7 +674,7 @@
       ],
       "marker": true,
       "evidence_digest": "54d7cf91699c489189f33ef23b6f0557946bdd08898da81594310fb3c6c88bde",
-      "intent_digest": "6d1b94ad4f7d8523cf58facd197794e9bdde3de44c4da34c20fbdd250e7f83f2",
+      "intent_digest": "cc9077edd38d9c0426232d9bf2518e916d64bf163f776c3ad751356d213aea65",
       "old_head": {
        "number": 2,
        "hash": "76c40777da25521e536171cc03280ee1d1b9afd23b18288e2efe7b7185c4f3c2"
@@ -680,27 +685,6 @@
       }
      }
     ],
-    "open_observations": [],
-    "view": {
-     "finalized": "G",
-     "head": "A3"
-    }
-   },
-   {
-    "name": "database guard after the decision",
-    "error": null,
-    "class": "",
-    "phase": "LIVE",
-    "head": "A3",
-    "head_number": 3,
-    "finalized": "G",
-    "canonical": [
-     "G",
-     "A1",
-     "A2",
-     "A3"
-    ],
-    "new_decisions": [],
     "open_observations": [],
     "view": {
      "finalized": "G",
@@ -852,8 +836,8 @@
    "refusals": 3
   },
   "bsc.set-head": {
-   "intents": 12,
-   "passes": 14,
+   "intents": 13,
+   "passes": 15,
    "refusals": 0
   },
   "bsc.shutdown": {
@@ -2852,5 +2836,5 @@
   "bsc.trace-state": "READ_ONLY"
  },
  "schema_version": 1,
- "seconds": 6.898868178
+ "seconds": 8.046495474
 }

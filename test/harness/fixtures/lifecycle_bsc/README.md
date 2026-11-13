@@ -46,9 +46,13 @@ state root differs, and timestamps are the parent's plus 3 seconds (S3 plus
    callers concurrently, ten calls each).
 4. The attestation lookup error (AC-LIF-06-05) on a third store. The native
    snapshot lookup of A3 runs on a reader without A3's header. The import
-   fails with `ErrSource` and A3 stays EXEC_READY. The manual database guard
-   refuses the store while A3's pin is live. A restart without the fault
-   replays and decides A3.
+   fails with `ErrSource` and A3 stays EXEC_READY. `SetHead 1` is then
+   refused by the pin ledger after its intent, and the intent is rejected at
+   run time. The manual database guard of the shipped geth
+   (`utils.ExtractorGuardChaindata`) refuses the closed store while A3's pin
+   is live. A restart without the fault replays and decides A3. The guard
+   then refuses the store for its open obligations, and passes a store
+   without decisions.
 5. Event feeds (D101): a reference chain without the extractor and a capture
    store import A1 to A7 one block per call; A3 to A7 are decided.
 6. Crash points of a SetHead decision, each in a child process that syncs

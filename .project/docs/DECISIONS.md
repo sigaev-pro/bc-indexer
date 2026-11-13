@@ -1,6 +1,6 @@
 # Дерево решений и журнал интервью
 
-## D104 — BSC known blocks and pruned-parent side branches fail closed; the targeted replay goes to E05-02.reorg (2026-11-13)
+## D104 — BSC known blocks and side branches fail closed; the targeted replay goes to E05-02.reorg (2026-11-13)
 
 The BSC block of E01-02.lifecycle_seams (#18) found two rows of the shared caller map that the BSC capture path can never route through a decision: `bsc.known-block` and `bsc.side-chain`. The BSC admission seam observes only a block on top of the head with its state, so a side branch, or a branch whose parent state was pruned, is refused at `Begin`. A decision closes its observation and purges its inputs (D100), so no block of another branch ever has a retained corpus (an EXEC_READY observation). The known-branch corpus rule can therefore never be met for BSC, `lifecycle.Gaps` cannot be empty, and AC-CAP-01-01 cannot pass on the BSC slot. The coordinator asked the owner how to handle these rows. The owner selected the coordinator's proposed option, "Fail closed now, fix later (Recommended)":
 
@@ -11,6 +11,8 @@ The BSC block of E01-02.lifecycle_seams (#18) found two rows of the shared calle
 Recorded technical decisions, not owner answers:
 
 - AC-LIF-05-02 and AC-LIF-05-03 are NOT_APPLICABLE on the BSC slot, because ACCEPTANCE_CASES makes them ETH-only.
+- The `bsc.side-chain` row covers every block whose parent is not the head with its state. `Begin` refuses an ordinary side branch or reorganization (a parent with its state) the same way as a pruned parent, so this decision reads the E05-02.reorg assignment as covering them too. Until then the BSC capture path follows no side branch, and the D101 plan row on the events of the decided `SIDE` path cannot run on BSC.
+- The closing rule of #18 in PROJECT_STATUS stays as it is: #18 closes when AC-CAP-01-01 passes for every family. With the BSC rows deferred to E05-02.reorg, #18 cannot close before that card fixes them, unless the owner changes the closing rule.
 - As with D96 to D103, TASK_DECOMPOSITION is a normative mirror and is not edited. Its E01-02.lifecycle_seams and E05-02.reorg cards are read through this decision. This decision assigns an owner; it does not change product guarantees, acceptance cases or gates. Every public cell stays NOT_RUN.
 
 ## D103 — System-action state in the smoke corpus; owners of the remaining corpus limits (2026-11-13)

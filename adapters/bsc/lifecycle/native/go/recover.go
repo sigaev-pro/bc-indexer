@@ -29,8 +29,8 @@ import (
 )
 
 func (l *Lifecycle) recover() error {
-	l.recovering = true
-	defer func() { l.recovering = false }()
+	l.recovering.Store(true)
+	defer l.recovering.Store(false)
 	if err := l.settleLifecycleIntent(); err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (l *Lifecycle) recover() error {
 			return err
 		}
 	}
-	l.recovering = false
+	l.recovering.Store(false)
 	if l.gate.Phase() == lifecycle.Recovery {
 		if _, err := l.GoLive(); err != nil {
 			return err

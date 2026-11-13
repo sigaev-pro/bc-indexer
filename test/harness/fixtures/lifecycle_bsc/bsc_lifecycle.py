@@ -48,7 +48,8 @@ PATCH = NATIVE / "patches/08-core-lifecycle-seams.diff"
 PACKAGE = "./extractor/bsc/lifecycle/"
 BINARY = "bsc-lifecycle.test"
 PROBE_TEST = "TestBSCLifecycleProbe"
-UNIT_TESTS = ("TestEvidenceDigests", "TestLifecycleIntent", "TestLoadConfig", "TestCheckProfile")
+UNIT_TESTS = ("TestEvidenceDigests", "TestLifecycleIntent", "TestLoadConfig", "TestCheckProfile",
+              "TestRequireNoOpenCapture")
 VET = base.VET + ("./cmd/utils",)
 HARNESS_FILES = bsc_decision.HARNESS + ("lifecycle.py",)
 # The block files that decide the verdict, relative to the repository root.
@@ -306,7 +307,8 @@ def judge_blocks(c, report, raw_blocks, genesis_hash):
         c.check(f"{name} hash", row.get("hash") == header["hash"], (row.get("hash"), header["hash"]))
         c.check(f"{name} parent", names.get(header["parent"]) == PARENTS[name], names.get(header["parent"]))
         c.check(f"{name} number", header["number"] == int(name[1]), header["number"])
-        c.check(f"{name} sealed in turn by the validator", header["difficulty"] == 2 and header["coinbase"] == VALIDATOR,
+        c.check(f"{name} sealed in turn by the validator",
+                header["difficulty"] == 2 and header["coinbase"] == VALIDATOR,
                 (header["difficulty"], header["coinbase"]))
         roots.add(header["root"])
         parent = decoded.get(PARENTS[name])
@@ -360,6 +362,7 @@ def judge_path(c, label, steps, genesis_head, intents):
             elif d["kind"] == "CANONICAL":
                 caller = CANONICAL_CALLERS.get((d["old"], d["new"]))
                 c.check(f"{where}: CANONICAL {d['old']}->{d['new']} evidence of {caller}",
+                        caller is not None and
                         d["evidence_digest"] == canonical_evidence(caller, d["old_head"], d["new_head"]),
                         d["evidence_digest"])
                 if intents is not None:
@@ -413,9 +416,9 @@ def judge_coverage(c, report, callers):
             gaps.append(caller)
     c.check("Gaps recomputed from the coverage", gaps == report.get("gaps"), (gaps, report.get("gaps")))
     c.check("the gaps are exactly the D104 rows", gaps == sorted(DEFERRED), gaps)
+    known = coverage.get("bsc.known-block", {})
     c.check("the known-block passes ran and stopped without an intent",
-            coverage["bsc.known-block"]["passes"] >= 2 and coverage["bsc.known-block"]["intents"] == 0,
-            coverage["bsc.known-block"])
+            known.get("passes", 0) >= 2 and known.get("intents") == 0, known)
     for caller in OUTSIDE_GATE:
         c.check(f"refusal of {caller} outside the gate", isinstance(report["outside_gate_refusals"].get(caller), str),
                 report["outside_gate_refusals"].get(caller))
@@ -443,15 +446,15 @@ def judge_extras(c, report):
 
 
 def judge_attestation_fault(c, report, trace, genesis_head):
-    steps = report["attestation_fault"]["steps"]
+    fault = report["attestation_fault"]
+    steps = fault["steps"]
     want = (("start (BOOTSTRAP)", "", "G", (), ()),
             ("import A1 A2 (BOOTSTRAP)", "", "A2", (), ()),
             ("GoLive", "", "A2", (), ()),
             ("import A3 with the snapshot lookup error", "ErrSource", "A2", (), ("EXEC_READY A3",)),
-            ("database guard (removedb, db put) while A3 is EXEC_READY", "ErrLivePins", "A2", (), ("EXEC_READY A3",)),
+            ("setHead 1 while A3's pin is live", "ErrLivePins", "A2", (), ("EXEC_READY A3",)),
             ("restart: recovery replays A3 without the fault", "", "A3",
-             (("CANONICAL", "A2", "A2"), ("IMPORT", "A2", "A3")), ()),
-            ("database guard after the decision", "", "A3", (), ()))
+             (("CANONICAL", "A2", "A2"), ("IMPORT", "A2", "A3")), ()))
     c.check("attestation fault: steps", [s["name"] for s in steps] == [w[0] for w in want], [s["name"] for s in steps])
     for step, (name, klass, head, made, open_) in zip(steps, want):
         c.check(f"attestation fault: {name}", step["class"] == klass and step["head"] == head and
@@ -462,20 +465,35 @@ def judge_attestation_fault(c, report, trace, genesis_head):
     c.check("attestation fault: one refused read, a source error (AC-LIF-06-05)",
             len(refused) == 1 and refused[0]["number"] == 3 and
             "finality evidence source error" in refused[0]["error"], refused)
+    rejected = [e for e in trace if e.get("scope") == "attestation" and e.get("event") == "lifecycle-rejected"]
+    intents = [e for e in trace if e.get("scope") == "attestation" and e.get("event") == "lifecycle-intent"
+               and e.get("caller") == "bsc.set-head"]
+    c.check("attestation fault: the refused rewind's intent is rejected at run time (head unchanged)",
+            len(rejected) == 1 and len(intents) == 1 and rejected[0]["sequence"] == intents[0]["sequence"] and
+            "live pins" in rejected[0]["cause"] and intents[0]["old_head"]["number"] == 2 and
+            intents[0]["new_head"]["number"] == 1, (rejected, intents))
     for d in steps[5]["new_decisions"] if len(steps) > 5 else []:
         if d["kind"] == "IMPORT":
-            want_digest = bsc_decision.evidence_digest("IMPORT", d["old_head"], d["new_head"], genesis_head, genesis_head)
+            want_digest = bsc_decision.evidence_digest("IMPORT", d["old_head"], d["new_head"], genesis_head,
+                                                       genesis_head)
             c.check("attestation fault: the recovered import binds the genesis fallback",
                     d["evidence_digest"] == want_digest, d["evidence_digest"])
     read = [e for e in trace if e.get("scope") == "attestation" and e.get("event") == "attestation"]
     c.check("attestation fault: the replay reads the attestation again",
             [e["number"] for e in read] == [3] and read[0]["status"] == "GENESIS_FALLBACK", read)
+    guard = fault.get("database_guard", {})
+    c.check("database guard: refused while A3's pin is live",
+            "live pins forbid" in str(guard.get("pinned")), guard.get("pinned"))
+    c.check("database guard: refused while a decision is not released",
+            "open extractor obligations" in str(guard.get("decided")), guard.get("decided"))
+    c.check("database guard: a store without decisions passes",
+            guard.get("fresh") is None and guard.get("fresh_import_error") is None, guard)
 
 
 def judge_events(c, report):
     e = report["events"]
-    c.check("events: no import error", all(e.get(k) is None for k in ("reference_error", "bootstrap_error",
-                                                                       "golive_error", "decided_error")), e)
+    errors = ("reference_error", "bootstrap_error", "golive_error", "decided_error")
+    c.check("events: no import error", all(e.get(k) is None for k in errors), e)
     for name in ("A1", "A2"):
         c.check(f"events: BOOTSTRAP {name} as native", e["bootstrap"].get(name) == e["reference"].get(name),
                 (e["bootstrap"].get(name), e["reference"].get(name)))
@@ -498,15 +516,17 @@ def judge_crashes(c, report):
     for mode, (head, outcome, evidence) in want.items():
         row = rows.get(mode, {})
         c.check(f"crash {mode}: child exited at its point", row.get("child_exit") == 3, row.get("child_exit"))
-        c.check(f"crash {mode}: restart live at {head}", row.get("restart_error") is None and row.get("phase") == "LIVE"
-                and row.get("head") == head and row.get("view_head") == head and row.get("head_after_crash") == head, row)
+        c.check(f"crash {mode}: restart live at {head}",
+                row.get("restart_error") is None and row.get("phase") == "LIVE" and row.get("head") == head and
+                row.get("view_head") == head and row.get("head_after_crash") == head, row)
         settle = [(s.get("outcome"), s.get("evidence")) for s in row.get("settle", [])]
         c.check(f"crash {mode}: the lifecycle intent is {outcome}", settle == [(outcome, evidence)], settle)
 
 
 def lifecycle_intents(trace, scope):
     """Evidence digest -> caller of each lifecycle intent of scope."""
-    return {e["evidence"]: e["caller"] for e in trace if e.get("scope") == scope and e.get("event") == "lifecycle-intent"}
+    return {e["evidence"]: e["caller"] for e in trace
+            if e.get("scope") == scope and e.get("event") == "lifecycle-intent"}
 
 
 def row_verdicts(routes, coverage, callers):
@@ -534,23 +554,35 @@ def judge(report, trace, raw_blocks, genesis_hash, callers):
     """Judge one probe report; return the summary with the checks and the qa matrix."""
     c = Checks()
     genesis_head = {"number": 0, "hash": genesis_hash}
-    judge_blocks(c, report, raw_blocks, genesis_hash)
-    judge_profile(c, report)
-    native = report["native_caller"]
-    harness = report["harness"]
-    native_imports = judge_path(c, "native", native["steps"], genesis_head, None)
-    harness_imports = judge_path(c, "harness", harness["steps"], genesis_head, lifecycle_intents(trace, "harness"))
-    c.check("AC-CAP-01-01: both paths reach the bridge with the same native result",
-            report["ac_cap_01_01"]["native"] == report["ac_cap_01_01"]["harness"] and
-            len(report["ac_cap_01_01"]["native"]) == len(SHARED_STEPS), None)
-    reads = judge_attestations(c, trace, "harness", harness_imports, genesis_head)
-    routes, gaps = judge_coverage(c, report, callers)
-    judge_extras(c, report)
-    judge_attestation_fault(c, report, trace, genesis_head)
-    judge_events(c, report)
-    judge_crashes(c, report)
+
+    def part(name, function, *args, default=None):
+        """Run one part of the judge; a malformed report is a failed check, never a crash."""
+        try:
+            return function(*args)
+        except (KeyError, TypeError, AttributeError, IndexError, ValueError) as error:
+            c.check(f"{name}: well-formed report", False, f"{type(error).__name__}: {error}")
+            return default
+
+    def paths():
+        native = judge_path(c, "native", report["native_caller"]["steps"], genesis_head, None)
+        harness = judge_path(c, "harness", report["harness"]["steps"], genesis_head,
+                             lifecycle_intents(trace, "harness"))
+        c.check("AC-CAP-01-01: both paths reach the bridge with the same native result",
+                report["ac_cap_01_01"]["native"] == report["ac_cap_01_01"]["harness"] and
+                len(report["ac_cap_01_01"]["native"]) == len(SHARED_STEPS), None)
+        return native, harness
+
+    part("blocks", judge_blocks, c, report, raw_blocks, genesis_hash)
+    part("profile", judge_profile, c, report)
+    native_imports, harness_imports = part("paths", paths, default=([], []))
+    reads = part("attestations", judge_attestations, c, trace, "harness", harness_imports, genesis_head, default=0)
+    routes, gaps = part("coverage", judge_coverage, c, report, callers, default=({}, []))
+    part("extras", judge_extras, c, report)
+    part("attestation fault", judge_attestation_fault, c, report, trace, genesis_head)
+    part("events", judge_events, c, report)
+    part("crashes", judge_crashes, c, report)
     failures = c.failures()
-    rows = row_verdicts(routes, report["coverage"], callers)
+    rows = part("rows", row_verdicts, routes, report.get("coverage", {}), callers, default={})
     clean = not failures
     matrix = {
         "AC-CAP-01-01": {"bsc-private-local": "FAIL" if clean else "FAIL_CHECKS",
@@ -646,6 +678,7 @@ def run(tool_path, tool_sha, manifest_path, manifest_sha, output):
 
 def judge_retained(run_directory, output):
     """Judge a retained run again in a new directory, from its recorded outputs."""
+    require(run_directory.is_absolute() and output.is_absolute(), "Paths must be absolute")
     require(not output.exists(), "The judge output already exists")
     record = load(run_directory / "run.json", 16 * 1024 * 1024)
     require(record.get("kind") == "bsc-lifecycle-run", "Not a BSC lifecycle run record")

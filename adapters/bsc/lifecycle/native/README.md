@@ -37,7 +37,9 @@ development sample are in
   cleanup of D100 and the decision bridge (`bscdecision.Start`), installs the
   lifecycle as the import hook and the lifecycle seam of the chain, opens the
   gate (`lifecycle.Open`, client `bsc`) and runs the recovery driver. The
-  node registers the live service (`Lifecycle.Live(eth.Synced)`).
+  node registers the live service (`Lifecycle.Live(eth.Synced)`) after the
+  backend, so a node stop stops the service before the chain and the store
+  close.
 - `Ethereum.StartMining` is refused through the gate (`bsc.sealing`). The
   native commit stays the config value: D100 gives the binary identity to the
   Geth block only.
@@ -86,15 +88,18 @@ Decisions without a new block:
   the reference and its marker in one synced batch. Then `loadLastState`
   runs.
 - Shutdown (`bsc.shutdown`): with the hash scheme, `Stop` commits recent
-  states and rewrites the head block hash. With a seam that rewrite is one
+  states and rewrites the head block hash. With a seam, that rewrite is one
   CANONICAL decision of the head to itself, with the marker and view in the
   batch of the head hash. It takes the guard after the chain mutex is closed,
   so no import holds it. A rewrite to a lower block (the commit of the head
   state failed) is skipped; the next start repairs and reconciles the head.
 - Startup reconciliation (`bsc.startup-reconcile`): see below.
 - A native error after an intent and before its batch, with the head
-  unchanged, rejects the intent (`NotAppliedEvidence`). Otherwise the intent
-  stays unresolved, and the next start settles it.
+  unchanged, rejects the intent (`NotAppliedEvidence`). The probe shows this
+  with a SetHead that the pin ledger refuses. Otherwise the intent stays
+  unresolved, and the next start settles it. After the native rewind,
+  `loadLastState` runs on every exit, so an error never leaves the in-memory
+  markers half-reloaded.
 
 Evidence digests: SHA-256 of the tag, a zero byte, then the fields; strings
 as `u64(len) || bytes`, heads as `u64(number) || hash`.
@@ -167,16 +172,16 @@ Every BSC row of `callers.json`, checked against the patched tree.
 |---|---|---|---|
 | `bsc.import` | OBSERVATION | `InsertChain` takes the guard and enters; `Begin` observes in an observing pass | every import, both paths |
 | `bsc.recovery` | OBSERVATION | `Lifecycle.Acquire` nests every guarded call of the recovery driver | every restart |
-| `bsc.side-chain` | OBSERVATION | `insertSideChain` enters, and its re-import of pruned ancestors runs in a nested import pass. In LIVE, `Begin` refuses the block first (D104) | `import S4` on the pruned S3: `ErrImportProfile` |
+| `bsc.side-chain` | OBSERVATION | `insertSideChain` enters, and its re-import of pruned ancestors runs in a nested import pass (source review: no probe step reaches it). In LIVE, `Begin` refuses every block whose parent is not the head with its state, first (D104) | `import S4` on the pruned S3: `ErrImportProfile` |
 | `bsc.known-block` | DECISION (CANONICAL) | where the native fork choice activates a stored block (the known-block loop of `insertChain`, and `writeKnownBlock`), the pass enters and stops with `ErrCorpus` (D104) | `InsertChain S3`: `ErrCorpus`, head unchanged |
 | `bsc.set-head` | DECISION (CANONICAL, FINALITY) | `SetHead` and `SetHeadWithTimestamp` take the guard and enter | `setHead 4`, BOOTSTRAP `setHead 2`, deadlock smoke, crash points |
 | `bsc.shutdown` | DECISION (CANONICAL) | `Stop` enters for the head rewrite | every node close |
 | `bsc.startup-reconcile` | DECISION (CANONICAL, FINALITY) | the reconciliation of the recovery driver | restart 2 (A7 state root deleted) |
 | `bsc.engine-api` | REFUSE | `InsertBlockWithoutSetHead` and `SetCanonical` are refused through the gate; patch 01 refuses unobserved execution | both refused |
-| `bsc.snap-sync` | REFUSE | `CheckProfile` refuses snap sync; `InsertReceiptChain`, `InsertHeaderChain`, `SnapSyncStart` and `SnapSyncComplete` are refused through the gate | `eth.New` with snap sync; `InsertReceiptChain`, `InsertHeaderChain` |
+| `bsc.snap-sync` | REFUSE | `CheckProfile` refuses snap sync; `InsertReceiptChain`, `InsertHeaderChain`, `InsertHeadersBeforeCutoff`, `SnapSyncStart` and `SnapSyncComplete` are refused through the gate; `geth import-history` opens the store for writing, so the manual database guard refuses it on a capture store | `eth.New` with snap sync; `InsertReceiptChain`, `InsertHeaderChain` |
 | `bsc.sealing` | REFUSE | `CheckProfile` refuses voting and the builder role; `StartMining` and `WriteBlockAndSetHead` are refused through the gate | all three |
 | `bsc.manual-commands` | REFUSE | `Start` refuses a Parlia engine without the system-call API (`geth import`); the prune-state guard refuses live pins (admission patch 04) | `Start` without the API |
-| `bsc.database-commands` | REFUSE | `MakeChainDatabase` (every writable open of an existing store) and `geth removedb` run `ExtractorGuardChaindata`, which refuses while a pin is live; every ADMITTED or EXEC_READY observation keeps its parent pin | the guard with A3 EXEC_READY, and after its decision |
+| `bsc.database-commands` | REFUSE | `MakeChainDatabase` (every writable open of an existing store) and `geth removedb` run `ExtractorGuardChaindata`. It refuses while a pin is live (every ADMITTED or EXEC_READY observation keeps its parent pin) or an obligation is open (a producer run whose decision low-water mark is below its counter: an unresolved intent, or a decision the mirror has not applied) | `ExtractorGuardChaindata` on a store with A3 EXEC_READY (pin), after A3's decision (obligation), and on a store without decisions (passes) |
 | `bsc.attestation-read` | READ_ONLY | read through `ReadAttestation` in every import decision | every decided import |
 | `bsc.execution-witness` | READ_ONLY | an execution without a state write is refused on a capture node (`ErrExtractorWitness`), so it never runs outside the guard or through the current observation | `debug_executionWitness` |
 | `bsc.system-call-api` | READ_ONLY | the system-call API of the node wiring | the shipped node |
@@ -207,8 +212,12 @@ targeted native replay for these two rows belongs to E05-02.reorg.
     re-execution.
   - `writeKnownBlock` (the mid-batch path) has the same pass. The capture
     import inserts one block per call, so that path does not run.
-- `bsc.side-chain`: `Begin` refuses a block whose parent is not the head
-  with state (`ErrImportProfile`), before `insertSideChain` can run.
+- `bsc.side-chain`: `Begin` refuses every block whose parent is not the
+  head with its state (`ErrImportProfile`), before `insertSideChain` can run.
+  That covers a pruned parent and an ordinary side branch or reorganization
+  alike, so the BSC capture path follows no side branch until E05-02.reorg.
+  The D101 plan row on the events of the decided SIDE path is therefore
+  unreachable on BSC (see "Import decision").
 
 ## Limits
 
@@ -224,14 +233,20 @@ targeted native replay for these two rows belongs to E05-02.reorg.
   no rewind goes below it.
 - The FINALITY decision of the startup reconciliation is implemented but not
   exercised, for the same reason.
+- The passes of `insertSideChain` (and its nested import pass) are never
+  entered by the probe: a LIVE side branch is refused at `Begin`, and the
+  BOOTSTRAP imports of the probe never meet a pruned ancestor. They rest on
+  source review.
 - The node wiring is proven through `eth.New` and the RPC APIs in-process
   (`admin_importChain`, `debug_setHead`, `debug_executionWitness`); the
   shipped `geth` command line and its release build are E01-01.builds and E06
   (D100).
 - The probe calls `GoLive` where the live service would after the initial
   sync: a node without peers never reports `Synced`.
-- `ExtractorGuardChaindata` refuses on live pins. A decided block that the
-  mirror has not applied is a delivery obligation without a pin (E05-01.registry).
+- With no mirror (E05-01.registry), every decision stays an obligation, so the
+  manual database guard refuses every capture store that has made a
+  decision. The guard reads the decision records only; lifecycle records (H
+  and the view) are not obligations.
 - A refused finalized setter call is logged, not returned: native
   `SetFinalized` returns no error. The gate is stopped after a bypass, so
   the node imports nothing more.

@@ -212,6 +212,61 @@
       "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
       "original": "\"AC-LIF-05-02\": {\"bsc-private-local\": \"NOT_APPLICABLE\",",
       "replacement": "\"AC-LIF-05-02\": {\"bsc-private-local\": \"PASS\","
+    },
+    {
+      "name": "runtime rejection",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            len(rejected) == 1 and len(intents) == 1 and rejected[0][\"sequence\"] == intents[0][\"sequence\"] and",
+      "replacement": "            True or"
+    },
+    {
+      "name": "guard decided",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            \"open extractor obligations\" in str(guard.get(\"decided\")), guard.get(\"decided\"))",
+      "replacement": "            True, guard.get(\"decided\"))"
+    },
+    {
+      "name": "guard fresh",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            guard.get(\"fresh\") is None and guard.get(\"fresh_import_error\") is None, guard)",
+      "replacement": "            True, guard)"
+    },
+    {
+      "name": "guard pinned",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            \"live pins forbid\" in str(guard.get(\"pinned\")), guard.get(\"pinned\"))",
+      "replacement": "            True, guard.get(\"pinned\"))"
+    },
+    {
+      "name": "malformed part",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            c.check(f\"{name}: well-formed report\", False, f\"{type(error).__name__}: {error}\")",
+      "replacement": "            pass"
+    },
+    {
+      "name": "canonical caller known",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "                        caller is not None and\n",
+      "replacement": "",
+      "equivalent": "A missing caller makes canonical_evidence raise AttributeError, which the judge's part() turns into a failed well-formed-report check; the explicit guard only names the failure earlier."
+    },
+    {
+      "name": "retained absolute paths",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    require(run_directory.is_absolute() and output.is_absolute(), \"Paths must be absolute\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "retained existing output",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    require(not output.exists(), \"The judge output already exists\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "retained recorded outputs",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "        require(artifact(record[\"outputs\"][name], 64 * 1024 * 1024) == work / name,\n                f\"The retained {name} is not the recorded one\")",
+      "replacement": "        pass"
     }
   ]
 }

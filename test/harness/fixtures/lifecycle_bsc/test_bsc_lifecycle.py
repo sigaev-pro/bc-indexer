@@ -8,7 +8,9 @@ and checks that the judge refuses it, or checks one independent formula.
 
 import copy
 import json
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -311,10 +313,87 @@ class RefusalTests(unittest.TestCase):
                 report["events"][side]["A5"] = [e for e in report["events"][side]["A5"] if not e.startswith("verified")]
         self.refused(change)
 
+    def test_runtime_rejection_missing(self):
+        def change(report, trace, raw):
+            trace[:] = [e for e in trace if e.get("event") != "lifecycle-rejected"]
+        self.refused(change)
+
+    def test_guard_not_refused_by_the_pin(self):
+        def change(report, trace, raw):
+            report["attestation_fault"]["database_guard"]["pinned"] = "open extractor obligations forbid"
+        self.refused(change)
+
+    def test_guard_passes_a_decided_store(self):
+        def change(report, trace, raw):
+            report["attestation_fault"]["database_guard"]["decided"] = None
+        self.refused(change)
+
+    def test_guard_refuses_a_fresh_store(self):
+        def change(report, trace, raw):
+            report["attestation_fault"]["database_guard"]["fresh"] = "live pins forbid this native deletion"
+        self.refused(change)
+
+    def test_malformed_report_fails_without_a_crash(self):
+        def change(report, trace, raw):
+            del report["deadlock"]
+            del report["coverage"]["bsc.known-block"]
+            row = step(report, "harness", "setHead 4")["new_decisions"][0]
+            row["old"], row["new"] = "A6", "A1"
+        summary = self.refused(change)
+        self.assertTrue(any("well-formed" in f["check"] for f in summary["failures"]))
+
     def test_map_differs(self):
         def change(report, trace, raw):
             report["routes"]["bsc.sealing"] = "READ_ONLY"
         self.refused(change)
+
+
+def retained_run(directory):
+    """A valid retained run of the sample under directory; returns its path."""
+    run = Path(directory) / "run"
+    work = run / "bsc" / "work"
+    work.mkdir(parents=True)
+    for name in ("report.json", "trace.jsonl", "blocks.rlp"):
+        shutil.copyfile(SAMPLE / name, work / name)
+    tool = Path(directory) / "tool.json"
+    tool.write_text(json.dumps({"callers": bsc_lifecycle.reference(bsc_lifecycle.SHARED / "callers.json")}))
+    outputs = {name: bsc_lifecycle.reference(work / name) for name in ("report.json", "trace.jsonl", "blocks.rlp")}
+    (run / "run.json").write_text(json.dumps({"kind": "bsc-lifecycle-run", "outputs": outputs, "genesis_hash": GENESIS,
+                                              "tool": bsc_lifecycle.reference(tool)}))
+    return run
+
+
+class RetainedTests(unittest.TestCase):
+    def test_valid_run_judged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory).resolve()
+            result = bsc_lifecycle.judge_retained(retained_run(directory), directory / "new")
+            self.assertEqual(result["result"], "PASS")
+            self.assertTrue((directory / "new" / "judge.json").exists())
+
+    def test_relative_output_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory).resolve()
+            with self.assertRaises(bsc_lifecycle.Rejected):
+                bsc_lifecycle.judge_retained(retained_run(directory), Path("new"))
+            self.assertFalse(Path("new").exists())
+
+    def test_existing_output_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory).resolve()
+            run = retained_run(directory)
+            (directory / "new").mkdir()
+            with self.assertRaises(bsc_lifecycle.Rejected):
+                bsc_lifecycle.judge_retained(run, directory / "new")
+
+    def test_output_not_the_recorded_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory).resolve()
+            run = retained_run(directory)
+            (run / "bsc" / "work" / "report.json").write_text("{}")
+            with self.assertRaises(bsc_lifecycle.Rejected):
+                bsc_lifecycle.judge_retained(run, directory / "new")
+            self.assertFalse((directory / "new").exists())
 
 
 if __name__ == "__main__":

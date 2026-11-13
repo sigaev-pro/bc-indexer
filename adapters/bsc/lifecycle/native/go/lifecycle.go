@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -93,7 +94,7 @@ type Lifecycle struct {
 	emit    func(bsc.Event)
 	// The fields below are used with the guard held.
 	stack      []*lifecycle.Pass
-	recovering bool
+	recovering atomic.Bool
 	pending    *pending
 	rewind     *rewindState
 	exitErrs   []string
@@ -170,7 +171,7 @@ func (l *Lifecycle) producer() admission.Producer {
 // the recovery caller, so that the gate admits it in RECOVERY.
 func (l *Lifecycle) Acquire() func() {
 	release := l.hook.Acquire()
-	if !l.recovering {
+	if !l.recovering.Load() {
 		return release
 	}
 	p, err := l.gate.Enter(l.token(), callerRecovery)
@@ -241,6 +242,16 @@ func (l *Lifecycle) Enter(id string) (func(), error) {
 func (l *Lifecycle) pop(p *lifecycle.Pass) {
 	if n := len(l.stack); n > 0 && l.stack[n-1] == p {
 		l.stack = l.stack[:n-1]
+	} else {
+		// An exit out of order: drop the pass wherever it is, so no later
+		// call reads it, and record the mismatch; the gate refuses the exit.
+		for i := range l.stack {
+			if l.stack[i] == p {
+				l.stack = append(l.stack[:i], l.stack[i+1:]...)
+				break
+			}
+		}
+		l.exitErrs = append(l.exitErrs, "pass stack mismatch at the exit of "+p.Caller().ID)
 	}
 	if err := p.Exit(); err != nil {
 		l.exitErrs = append(l.exitErrs, err.Error())
@@ -566,7 +577,9 @@ func (l *Lifecycle) Settle(err error) error {
 				"delivery": string(record.Delivery), "digest": record.Digest})
 			rerr = bridge.Cleanup(token)
 		}
-		l.point("settled")
+		if rerr == nil {
+			l.point("settled")
+		}
 		return rerr
 	}
 	head := l.chain.CurrentBlock().Hash()

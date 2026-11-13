@@ -29,6 +29,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"math/big"
 	"os"
@@ -42,6 +43,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -68,6 +70,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -518,7 +521,8 @@ func errorClass(err error) string {
 	}{{"ErrCorpus", bsclifecycle.ErrCorpus}, {"ErrRefused", lifecycle.ErrRefused}, {"ErrSource", lifecycle.ErrSource},
 		{"ErrImportProfile", bsc.ErrImportProfile}, {"ErrExtractorWitness", core.ErrExtractorWitness},
 		{"ErrBypass", lifecycle.ErrBypass}, {"ErrPhase", lifecycle.ErrPhase}, {"ErrLivePins", stateprovider.ErrLivePins},
-		{"ErrProfile", stateprovider.ErrProfile}, {"ErrEngine", bsc.ErrEngine}}
+		{"ErrProfile", stateprovider.ErrProfile}, {"ErrEngine", bsc.ErrEngine},
+		{"ErrOpenObligation", bsclifecycle.ErrOpenObligation}}
 	for _, c := range classes {
 		if errors.Is(err, c.sentinel) || strings.Contains(err.Error(), c.sentinel.Error()) {
 			return c.name
@@ -991,7 +995,7 @@ func TestBSCLifecycleProbe(t *testing.T) {
 	// Refusals outside the gate.
 	outside := map[string]any{"bsc.snap-sync": profile["eth_new_snap_sync"], "bsc.sealing": profile["vote_enable"],
 		"bsc.manual-commands":   profile["start_without_eth_api"],
-		"bsc.database-commands": report["attestation_fault"].(map[string]any)["database_guard"]}
+		"bsc.database-commands": report["attestation_fault"].(map[string]any)["database_guard"].(map[string]any)["pinned"]}
 	for id, refusal := range outside {
 		if refusal != nil {
 			t := total[id]
@@ -1019,6 +1023,26 @@ func TestBSCLifecycleProbe(t *testing.T) {
 	report["gaps"] = lifecycle.Gaps(m, "bsc", total)
 	report["seconds"] = time.Since(started).Seconds()
 	writeJSON(t, filepath.Join(work, "report.json"), report)
+}
+
+// guardChaindata runs the manual database guard of the shipped geth on a
+// closed store: utils.ExtractorGuardChaindata, which MakeChainDatabase runs
+// before every writable open and `geth removedb` before it deletes anything.
+func guardChaindata(home string) error {
+	app := &cli.App{Flags: []cli.Flag{utils.CacheFlag, utils.CacheDatabaseFlag, utils.FDLimitFlag, utils.AncientFlag,
+		utils.EraFlag, utils.RemoteDBFlag, utils.HttpHeaderFlag}}
+	set := flag.NewFlagSet("probe", flag.ContinueOnError)
+	for _, f := range app.Flags {
+		if err := f.Apply(set); err != nil {
+			return err
+		}
+	}
+	stack, err := node.New(&node.Config{Name: "geth", DataDir: home, DBEngine: "pebble"})
+	if err != nil {
+		return err
+	}
+	defer stack.Close()
+	return utils.ExtractorGuardChaindata(cli.NewContext(app, set, nil), stack)
 }
 
 type noMirror struct{}
@@ -1134,11 +1158,10 @@ func attestationFault(t *testing.T, fx *fixture, home string, tr *tracer, total 
 	faulty = true
 	r.record("import A3 with the snapshot lookup error", h.importNew("A3"), nil)
 	faulty = false
-	guardErr := bsclifecycle.RequireNoOpenCapture(h.db)
-	out["database_guard"] = errText(guardErr)
-	r.record("database guard (removedb, db put) while A3 is EXEC_READY", guardErr, nil)
+	r.record("setHead 1 while A3's pin is live", h.setHead(1), nil)
 	h.close()
 	addCoverage(total, h.l)
+	guard := map[string]any{"pinned": errText(guardChaindata(home))}
 	h, err = openHarness(fx, home, opts, tr.emit("attestation"))
 	if err != nil {
 		t.Fatal(err)
@@ -1146,9 +1169,19 @@ func attestationFault(t *testing.T, fx *fixture, home string, tr *tracer, total 
 	chainRef = h.ch
 	r.s = h
 	r.record("restart: recovery replays A3 without the fault", nil, nil)
-	r.record("database guard after the decision", bsclifecycle.RequireNoOpenCapture(h.db), nil)
 	h.close()
 	addCoverage(total, h.l)
+	guard["decided"] = errText(guardChaindata(home))
+	// A store with no decision: the BOOTSTRAP imports only.
+	fresh := home + "-fresh"
+	h, err = openHarness(fx, fresh, bsclifecycle.Options{}, tr.emit("attestation-fresh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard["fresh_import_error"] = errText(h.importNew("A1", "A2"))
+	h.close()
+	guard["fresh"] = errText(guardChaindata(fresh))
+	out["database_guard"] = guard
 	out["steps"] = r.steps
 	return out
 }
