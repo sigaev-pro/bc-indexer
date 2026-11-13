@@ -551,6 +551,10 @@ fail-closed limits, decided by the coordinator on 2026-11-13: the targeted
 replay of a branch block without corpus is E05-02.reorg (D104, PR from the
 #18 BSC block, applied to Geth), and the completion of an interrupted
 SetHead rewind is E01-04.early_faults.
+
+Review 003 (head `390ab5a`): Spec PASS and Standards PASS, with P3 notes
+only (D104 arrives with the #18 BSC PR; one judge check of the `repaired`
+scenario left for later). Later commits change only docs.
 qa verdict, private local ETH: AC-CAP-01-01 PASS, AC-LIF-05-02 PASS,
 AC-LIF-05-03 PASS, AC-LIF-06-04 and 06-05 NOT_APPLICABLE (BSC only); family
 PASS. Public ETH cells stay NOT_RUN.

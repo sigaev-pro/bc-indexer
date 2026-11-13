@@ -197,7 +197,11 @@ open pass (`ErrBypass`), so a missed write cannot pass silently.
 - A SetHead rewind interrupted between its intent and its marker with the
   native head between the old and the new head stops the next start
   (`ErrLifecycle`); completing a partial rewind belongs to
-  E01-04.early_faults (coordinator technical decision, 2026-11-13).
+  E01-04.early_faults (coordinator technical decision, 2026-11-13). The same
+  holds for a crash inside a lifecycle CANONICAL reorganization after which
+  native startup repair lowers the head to or below the fork point: the next
+  start stops (`ErrLifecycle`, crash scenario `repaired`); E01-04.early_faults
+  as well.
 - A refused finality setter call writes nothing and logs the error; the
   Engine API response still reports the forkchoice as valid, because the
   native setters return no error. The gate is stopped after a bypass, so the
