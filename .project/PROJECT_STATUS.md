@@ -611,14 +611,14 @@ decision of 2026-11-13, "Fail closed now, fix later"):
 
 The targeted native replay for both is E05-02.reorg.
 
-Records at measured head `092b8a9`: preparation 04 PASS, run 03 PASS (445
-checks, probe 16.2 s), the offline judgement of run 03, 54 portable tests,
-40 of 40 non-equivalent driver mutants killed (evidence:
+Records at measured head `8ed0f73`: preparation 05 and run 04 at `28b45cd`
+(the next commit changes only the mutants table) PASS, with 448 checks; the
+offline judgement of run 04; 55 portable tests; 41 driver mutants killed and
+2 labeled equivalent (evidence:
 [E01-02.lifecycle_seams.bsc](evidence/E01-02.lifecycle_seams.bsc.md)). The
-`f2cffe9` records passed and are kept as superseded; also kept under D83 are
-two attempts refused because another runner held the host lock, and
-preparation 02 at `612d3d0`, which failed on the driver's reading of the
-`go test` summary.
+`f2cffe9` and `092b8a9` records passed and are kept as superseded. Also kept
+under D83: a failed mutant record at `28b45cd`, two attempts refused because
+another runner held the host lock, and preparation 02 at `612d3d0`.
 
 Review 001 (head `e3c7466`): Spec and Standards REQUEST_CHANGES. Fixed in
 `092b8a9`:
@@ -634,6 +634,12 @@ Review 001 (head `e3c7466`): Spec and Standards REQUEST_CHANGES. Fixed in
 D104 now reads the side-branch row as every block whose parent is not the
 head with its state, and states that #18 cannot close before E05-02.reorg
 fixes the two BSC rows, unless the owner changes the closing rule.
+
+Review 002 (head `e70cc75`): Spec PASS (P3 only: the owner should confirm the
+side-branch reading of D104). Standards REQUEST_CHANGES with one P2: the judge
+returned PASS when the row verdicts failed. Fixed in `28b45cd` (the verdicts
+are computed before the failures), with a mutant in `8ed0f73`; the probe also
+calls `InsertHeadersBeforeCutoff` now.
 
 qa verdict, private local BSC: AC-CAP-01-01 FAIL, with `bsc.known-block` and
 `bsc.side-chain` DEFERRED under D104 and every other row PASS (four
