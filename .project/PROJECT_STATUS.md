@@ -180,6 +180,10 @@ Review 002 on `5d17e55`: Spec PASS and Standards PASS; the docs P3s are
 fixed and the code P3s are listed in the evidence as open notes that change
 no result.
 
+Review 003 on `36365e7`: Spec PASS and Standards PASS (two docs P3s,
+fixed). The branch merges main `4208145` (POLY, PR #166), which adds no ETH
+input.
+
 Next: hosted CI and the final review comment on the final head; then merge
 with the owner's permission for this PR.
 

@@ -44,7 +44,8 @@ cache.
    `core.DefaultConfig()` (hash state scheme), not the node's flags, and the
    engine is the ethash faker. It then imports both blocks with
    `InsertChain`, so each block goes through the patched `ProcessBlock`:
-   admission, EXEC_READY, intent, native write and NATIVE_DECIDED. The chain is stopped and the store closed.
+   admission, EXEC_READY, intent, native write and NATIVE_DECIDED. The
+   chain is stopped and the store closed.
 3. Restart and re-import. It opens the same store the same way, which runs
    the recovery driver, and imports the same two blocks again. Both blocks
    are canonical with their state, so Geth skips them natively as known
