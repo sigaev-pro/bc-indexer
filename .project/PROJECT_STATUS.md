@@ -531,20 +531,26 @@ the guard, root flushed and synced; a restart keeps H), the capture profile
 check (`--dev`, `--synctarget`, snap sync) and the native-commit identity
 from the binary (D100).
 
-Records 02 at measured head `45c087f`: preparation PASS, run PASS (probe
-6.9 s, `Gaps` empty, four crash scenarios settled), 14 portable tests, 37 of
-37 driver mutants killed (evidence:
+Records 03 at measured head `14188b9`: preparation PASS, run PASS (probe
+7.8 s, `Gaps` empty, six crash and restart scenarios as expected), 14
+portable tests, 39 of 39 driver mutants killed (evidence:
 [E01-02.lifecycle_seams.geth](evidence/E01-02.lifecycle_seams.geth.md)).
-Records 01 at `3c89a06` passed and are kept as superseded.
+Records 01 at `3c89a06` and 02 at `45c087f` passed and are kept as
+superseded.
 
 Review 001 (head `b58d33a`): Spec and Standards REQUEST_CHANGES. Fixed in
 `45c087f`: the known-branch walk uses the common ancestor with the current
 head; recovery keeps the decided finality references in the lifecycle view;
 a crash inside a lifecycle reorganization is completed; the finality setters
 sync before the in-memory reference moves; a failed `GoLive` stops the node.
-Two limits need a coordinator owner decision: the targeted replay of a
-branch block without corpus (proposed E05-01.activation_gc) and the
-completion of a partial SetHead rewind (proposed E01-04.early_faults).
+Review 002 (head `caac285`): Spec and Standards REQUEST_CHANGES; fixed in
+`14188b9` (completion only from a head strictly on the new branch, a
+readable view on a restart, scenarios for a head lowered below the fork
+point and for a canonical index above the head). Owners of the two
+fail-closed limits, decided by the coordinator on 2026-11-13: the targeted
+replay of a branch block without corpus is E05-02.reorg (D104, PR from the
+#18 BSC block, applied to Geth), and the completion of an interrupted
+SetHead rewind is E01-04.early_faults.
 qa verdict, private local ETH: AC-CAP-01-01 PASS, AC-LIF-05-02 PASS,
 AC-LIF-05-03 PASS, AC-LIF-06-04 and 06-05 NOT_APPLICABLE (BSC only); family
 PASS. Public ETH cells stay NOT_RUN.

@@ -190,14 +190,14 @@ open pass (`ErrBypass`), so a missed write cannot pass silently.
   protocol then allows the source error. The effect on a live node is that a
   reorganization back to a branch it left (A, then B, then A again) stops
   the node from following that branch: it fails closed and keeps running.
-  Keeping the inputs of decided canonical blocks until the irreversible
-  anchor, so that such a branch can be replayed, has no owner yet; the
-  proposed owner is E05-01.activation_gc (retention until the anchor), to be
-  confirmed by the coordinator.
+  The targeted replay belongs to E05-02.reorg: D104 (PR from the #18 BSC
+  block), which the coordinator applied to the Geth path on 2026-11-13;
+  keeping the inputs of decided canonical blocks until the irreversible
+  anchor may be part of that fix.
 - A SetHead rewind interrupted between its intent and its marker with the
   native head between the old and the new head stops the next start
-  (`ErrLifecycle`); completing a partial rewind is proposed for
-  E01-04.early_faults, to be confirmed by the coordinator.
+  (`ErrLifecycle`); completing a partial rewind belongs to
+  E01-04.early_faults (coordinator technical decision, 2026-11-13).
 - A refused finality setter call writes nothing and logs the error; the
   Engine API response still reports the forkchoice as valid, because the
   native setters return no error. The gate is stopped after a bypass, so the
