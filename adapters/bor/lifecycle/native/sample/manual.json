@@ -5,28 +5,28 @@
    "caller": "bor.manual-commands",
    "command": "removedb",
    "exit": 1,
-   "output": "INFO [11-13|14:28:24.391] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=16.00MiB handles=16\nmanual chaindata command refused on a capture store: removedb: live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\n",
+   "output": "INFO [11-13|14:48:40.679] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=16.00MiB handles=16\nmanual chaindata command refused on a capture store: removedb: live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\n",
    "refused": true
   },
   {
    "caller": "bor.prune-commands",
    "command": "snapshot prune-state",
    "exit": 1,
-   "output": "INFO [11-13|14:28:24.582] Using pebble as the backing database\nINFO [11-13|14:28:24.582] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=1024.00MiB handles=524,288\nINFO [11-13|14:28:24.608] Resolving ancient pruner offset          isLastOffset=false offset=0\nERROR[11-13|14:28:24.609] Failed to prune state                    err=\"live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\"\n",
+   "output": "INFO [11-13|14:48:40.756] Using pebble as the backing database\nINFO [11-13|14:48:40.756] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=1024.00MiB handles=524,288\nINFO [11-13|14:48:40.778] Resolving ancient pruner offset          isLastOffset=false offset=0\nERROR[11-13|14:48:40.779] Failed to prune state                    err=\"live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\"\n",
    "refused": true
   },
   {
    "caller": "bor.manual-commands",
    "command": "purge-whitelisted-entries",
    "exit": 1,
-   "output": "Starting to prune whitelisted entries. Opening database at path: /out/instance\nINFO [11-13|14:28:24.797] Using pebble as the backing database\nINFO [11-13|14:28:24.798] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=1024.00MiB handles=2000\nINFO [11-13|14:28:24.881] Resolving ancient pruner offset          isLastOffset=false offset=0\nINFO [11-13|14:28:24.897] Opened ancient database                  database=/out/instance/bor/chaindata/ancient/chain readonly=false frozen=0 offset=0\nINFO [11-13|14:28:24.897] Opened Era store                         datadir=/out/instance/bor/chaindata/ancient/chain/era\nOpened database at path: /out/instance\nmanual chaindata command refused on a capture store: purge-whitelisted-entries: live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\n",
+   "output": "Starting to prune whitelisted entries. Opening database at path: /out/instance\nINFO [11-13|14:48:40.856] Using pebble as the backing database\nINFO [11-13|14:48:40.856] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=1024.00MiB handles=2000\nINFO [11-13|14:48:40.871] Resolving ancient pruner offset          isLastOffset=false offset=0\nINFO [11-13|14:48:40.877] Opened ancient database                  database=/out/instance/bor/chaindata/ancient/chain readonly=false frozen=0 offset=0\nINFO [11-13|14:48:40.877] Opened Era store                         datadir=/out/instance/bor/chaindata/ancient/chain/era\nOpened database at path: /out/instance\nmanual chaindata command refused on a capture store: purge-whitelisted-entries: live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\nINFO [11-13|14:48:40.878] Freezer shutting down\n",
    "refused": true
   },
   {
    "caller": "bor.manual-commands",
    "command": "backfill-statesync-txs",
    "exit": 1,
-   "output": "INFO [11-13|14:28:25.088] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=16.00MiB handles=16\nmanual chaindata command refused on a capture store: backfill-statesync-txs: live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\n",
+   "output": "INFO [11-13|14:48:40.970] Allocated cache and file handles         database=/out/instance/bor/chaindata cache=16.00MiB handles=16\nmanual chaindata command refused on a capture store: backfill-statesync-txs: live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c\n",
    "refused": true
   }
  ]

@@ -92,7 +92,7 @@
   },
   "bor.known-block": {
    "Intents": 2,
-   "Passes": 2,
+   "Passes": 3,
    "Refusals": 0
   },
   "bor.milestone": {
@@ -348,7 +348,7 @@
    ],
    "new_head": "H7",
    "old_head": "H6",
-   "sequence": 46,
+   "sequence": 45,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -372,6 +372,7 @@
    "state": "NATIVE_DECIDED"
   }
  ],
+ "evidence_records": 0,
  "native_head": {
   "hash": "e6503fb5ba68a5d08a785bfcd3bfa09e5a2ad73cf9f4a5f1d9f35d16eb9b0feb",
   "name": "H7",
@@ -426,6 +427,13 @@
    "head_name": "A2",
    "head_number": 2,
    "name": "set-canonical-A2"
+  },
+  {
+   "error": "",
+   "head": "63b4ab8cd2aa7e2ea5e3b26d046cdc84051742277434b8e358d18b04808b5d8d",
+   "head_name": "A2",
+   "head_number": 2,
+   "name": "known-A3-refused"
   },
   {
    "error": "",

@@ -213,7 +213,7 @@
    ],
    "new_head": "H7",
    "old_head": "H6",
-   "sequence": 46,
+   "sequence": 45,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -237,6 +237,7 @@
    "state": "NATIVE_DECIDED"
   }
  ],
+ "evidence_records": 0,
  "native_head": {
   "hash": "e6503fb5ba68a5d08a785bfcd3bfa09e5a2ad73cf9f4a5f1d9f35d16eb9b0feb",
   "name": "H7",

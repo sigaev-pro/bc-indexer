@@ -122,7 +122,7 @@ VECTORS = (
 
 # The native head after each scenario step, by generated block name.
 SCENARIO_HEADS = (
-    ("import-A1-A5", "A5"), ("side-B3", "A5"), ("side-B4", "A5"), ("set-canonical-A2", "A2"), ("known-B3", "B3"),
+    ("import-A1-A5", "A5"), ("side-B3", "A5"), ("side-B4", "A5"), ("set-canonical-A2", "A2"), ("known-A3-refused", "A2"), ("known-B3", "B3"),
     ("known-B4", "B4"), ("side-C4", "B4"), ("set-canonical-C4", "C4"), ("set-canonical-stateless-D4", "D4"),
     ("stateless-E4", "D4"), ("side-chain-E5", "E5"), ("side-F4", "E5"), ("side-G4", "E5"),
     ("milestone-reorg-F4", "F4"), ("checkpoint-F4", "F4"), ("milestone-F4", "F4"), ("future-milestone-16", "F4"),
@@ -152,8 +152,8 @@ PROFILE_REFUSALS = {
     "mining": ["bor.seal-write"], "dev": ["bor.seal-write"], "dev-fake-author": ["bor.seal-write"],
 }
 
-COVERAGE_FILES = ("scenario", "restart", "settle", "resolved", "imported", "repair", "native-caller", "stateless",
-                  "refuse")
+COVERAGE_FILES = ("scenario", "restart", "settle", "resolved", "imported", "advance", "completed", "repair",
+                  "native-caller", "stateless", "refuse")
 OUTSIDE_FILES = ("profile", "manual")
 
 
@@ -220,7 +220,7 @@ def judge(outputs, callers_map):
           "the scenario decisions differ from the expected transitions")
     check(all(d["state"] == "NATIVE_DECIDED" for d in sc["decisions"]), "a scenario decision is not decided")
     for name, expect in (("restart", "H7"), ("settle", "H6"), ("resolved", "H5"), ("imported", "H6"),
-                         ("repair", None)):
+                         ("advance", "H8"), ("completed", "H5"), ("repair", None)):
         out = outputs[name]
         check(not out.get("error"), f"{name} reported an error")
         check(out["reconcile"]["phase"] == "RECOVERY" and out["phase_after_start"] == "LIVE",
@@ -234,7 +234,8 @@ def judge(outputs, callers_map):
     check(rows(outputs["restart"]["decisions"]) == rows(sc["decisions"]), "the clean restart changed the decisions")
     for name, line in (("crash", "crash point: marker of bor.set-head"),
                        ("crash-resolve", "crash point: resolve of bor.set-head"),
-                       ("crash-import", "crash point: import marker of H6")):
+                       ("crash-import", "crash point: import marker of H6"),
+                       ("crash-mid", "crash point: write of bor.set-head")):
         check(outputs[name]["exit"] == 3 and line in outputs[name]["stderr_tail"], f"the {name} child did not stop at "
               f"its crash point")
     settle = outputs["settle"]
@@ -248,15 +249,27 @@ def judge(outputs, callers_map):
               and len((out.get("decision_recovery") or {}).get("resolved") or []) == 1,
               f"{name}: the decision recovery did not resolve the marked intent")
         check(rows(out["decisions"])[-1:] == [last], f"{name}: the resolved decision is not {last}")
+    advance, completed = outputs["advance"], outputs["completed"]
+    check([(s["name"], s["error"]) for s in advance["steps"]] == [("import-H7", ""), ("import-H8", "")]
+          and rows(advance["decisions"])[-2:] == [("IMPORT", "H6", "H7", ["H7"]), ("IMPORT", "H7", "H8", ["H8"])],
+          "the advance did not import H7 and H8")
+    start = completed["native_head_at_start"]
+    check(start["name"] in ("H6", "H7"), f"the mid-rewind crash left the head at {start['name']}, not between H8 and H5")
+    check([(r["caller"], r["outcome"], r["completed"]) for r in completed["reconcile"]["settled"]]
+          == [("bor.set-head", "NATIVE_DECIDED", True)]
+          and rows(completed["decisions"])[-1:] == [("CANONICAL", "H8", "H5", [])],
+          "the interrupted rewind was not completed and decided")
+    for name in COVERAGE_FILES:
+        check(outputs[name].get("evidence_records") == 0, f"{name} left lifecycle evidence records")
     fault = outputs["fault"]
-    check(fault["number"] == 6, "the fault did not hit the head H6")
+    check(fault["number"] == 5, "the fault did not hit the head H5")
     repair = outputs["repair"]
     repaired = repair["reconcile"].get("repaired")
     check(repaired is not None and repaired["hash"] == repair["native_head_at_start"]["hash"]
-          and repair["native_head_at_start"]["number"] < 6,
+          and repair["native_head_at_start"]["number"] < 5,
           "the startup reconcile did not decide the native repair")
-    check(rows(repair["decisions"])[-1:] == [("CANONICAL", "H6", repair["native_head_at_start"]["name"], [])],
-          "the repair decision is not from H6 to the repaired head")
+    check(rows(repair["decisions"])[-1:] == [("CANONICAL", "H5", repair["native_head_at_start"]["name"], [])],
+          "the repair decision is not from H5 to the repaired head")
     check(repair["coverage"].get("bor.startup-reconcile", {}).get("Intents") == 1,
           "bor.startup-reconcile made no intent")
     stateless, refuse = outputs["stateless"], outputs["refuse"]
@@ -284,6 +297,8 @@ def judge(outputs, callers_map):
     check(not any(r.get("config_error") for r in profile["sets"]), "a profile argument set did not parse")
     check(profile["server"]["refused"] and not profile["server"]["chaindata_created"],
           "bor server with --extractor.capture --mine was not refused before eth.New")
+    check(profile.get("plain_server", {}).get("refused") is True,
+          "bor server without --extractor.capture was not refused on the capture store")
     native = outputs["native-caller"]
     check(not native.get("error"), "the admin_importChain node reported an error")
     check(native["after_import"]["head"] == sc["after_import"]["head"]
@@ -329,7 +344,8 @@ def write_new(path, value):
 
 OUTPUT_FILES = {"scenario": "scenario.json", "restart": "restart.json", "crash": "crash.json", "settle": "settle.json",
                 "crash-resolve": "crash-resolve.json", "resolved": "resolved.json", "crash-import": "crash-import.json",
-                "imported": "imported.json", "fault": "fault.json", "repair": "repair.json", "manual": "manual.json",
+                "imported": "imported.json", "advance": "advance.json", "crash-mid": "crash-mid.json",
+                "completed": "completed.json", "fault": "fault.json", "repair": "repair.json", "manual": "manual.json",
                 "profile": "profile.json", "native-caller": "native-caller.json", "stateless": "stateless.json",
                 "fault-stateless": "fault-stateless.json", "refuse": "refuse.json", "gaps": "gaps.json"}
 
@@ -532,10 +548,15 @@ def run(preparation_path, expected_sha, output):
             probe("crash", "-record", "/out/crash-import.json", "--", *store, "-import", "H6", "-crash-import", "H6",
                   "-out", "/out/crash-import-child.json")
             probe("restart", *store, "-out", "/out/imported.json")
+            probe("restart", *store, "-import", "H7,H8", "-out", "/out/advance.json")
+            probe("crash", "-record", "/out/crash-mid.json", "--", *store, "-sethead", "5", "-crash", "bor.set-head",
+                  "-crash-step", "write", "-crash-count", "4", "-out", "/out/crash-mid-child.json")
+            probe("restart", *store, "-out", "/out/completed.json")
             probe("fault", "-datadir", "/out/instance", "-out", "/out/fault.json")
             probe("restart", *store, "-out", "/out/repair.json")
             probe("manual", "-datadir", "/out/instance", "-out", "/out/manual.json")
-            probe("profile", "-datadir", "/out/server", "-capture", "/out/capture.json", "-out", "/out/profile.json")
+            probe("profile", "-datadir", "/out/server", "-capture", "/out/capture.json", "-capture-store",
+                  "/out/instance", "-out", "/out/profile.json")
             probe("native-caller", *common, "-datadir", "/out/instance2", "-out", "/out/native-caller.json")
             probe("restart", *common, "-datadir", "/out/instance3", "-import", "A1,A2,B3,D4,D5", "-out",
                   "/out/stateless.json")

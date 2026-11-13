@@ -24,10 +24,17 @@ var (
 	// before node.Start: the admission, the lifecycle gate and the decision
 	// recovery driver, then the live observer.
 	ExtractorCaptureStart func(config *Config, stack *node.Node, backend *eth.Ethereum) error
+	// ExtractorPlainStore checks a node started without --extractor.capture:
+	// it refuses a capture store, which a native node without the gate would
+	// change without decisions.
+	ExtractorPlainStore func(config *Config) error
 )
 
 func extractorCaptureProfile(config *Config) error {
 	if config.ExtractorCapture == "" {
+		if ExtractorPlainStore != nil {
+			return ExtractorPlainStore(config)
+		}
 		return nil
 	}
 	if ExtractorCaptureProfile == nil || ExtractorCaptureStart == nil {

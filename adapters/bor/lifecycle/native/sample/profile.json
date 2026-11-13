@@ -1,4 +1,8 @@
 {
+ "plain_server": {
+  "error": "bor server without --extractor.capture refused on a capture store: manual chaindata command refused on a capture store: bor server: live pins forbid this native deletion: 1 live, first bor.run-1.000000000000000c",
+  "refused": true
+ },
  "server": {
   "chaindata_created": false,
   "error": "bor server configuration is outside the capture profile: mine (<nil>)",

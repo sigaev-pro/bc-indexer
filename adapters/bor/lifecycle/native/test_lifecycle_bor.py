@@ -76,7 +76,7 @@ class Coverage(unittest.TestCase):
         self.assertEqual(coverage["bor.parallel"], {"Passes": 0, "Intents": 0, "Refusals": 1})
         self.assertEqual(coverage["bor.seal-write"]["Refusals"], 4)
         self.assertEqual(coverage["bor.manual-commands"]["Refusals"], 3)
-        self.assertEqual(coverage["bor.recovery"]["Passes"], 9)
+        self.assertEqual(coverage["bor.recovery"]["Passes"], 11)
 
     def test_gaps_rules(self):
         coverage = lb.summed_coverage(sample())
@@ -124,8 +124,8 @@ class Judge(unittest.TestCase):
         self.assertFails(lambda o: o["scenario"].update(error="x"), "the scenario reported an error")
         self.assertFails(lambda o: o["scenario"]["reconcile"].update(phase="RECOVERY"), "BOOTSTRAP to LIVE")
         self.assertFails(lambda o: o["scenario"]["reconcile"]["boundary"]["head"].update(number=1), "not the genesis")
-        self.assertFails(lambda o: o["scenario"]["steps"][4].update(head_name="A2"), "steps or heads differ")
-        self.assertFails(lambda o: o["scenario"]["steps"][7].update(error="boom"), "step set-canonical-C4 failed")
+        self.assertFails(lambda o: o["scenario"]["steps"][5].update(head_name="A2"), "steps or heads differ")
+        self.assertFails(lambda o: o["scenario"]["steps"][8].update(error="boom"), "step set-canonical-C4 failed")
         self.assertFails(lambda o: o["scenario"]["decisions"][6].update(kind="IMPORT"), "scenario decisions differ")
         self.assertFails(lambda o: o["scenario"]["decisions"][6]["members"].append("B4"), "scenario decisions differ")
         self.assertFails(lambda o: o["scenario"]["decisions"].pop(), "scenario decisions differ")
@@ -151,7 +151,7 @@ class Judge(unittest.TestCase):
         self.assertFails(lambda o: o["settle"]["native_head"].update(name="H7"), "settle ended at H7")
 
     def test_repair_changes(self):
-        self.assertFails(lambda o: o["fault"].update(number=7), "did not hit the head H6")
+        self.assertFails(lambda o: o["fault"].update(number=7), "did not hit the head H5")
         self.assertFails(lambda o: o["repair"]["reconcile"].update(repaired=None), "did not decide the native repair")
         self.assertFails(lambda o: o["repair"]["native_head_at_start"].update(number=6),
                          "did not decide the native repair")
@@ -202,6 +202,32 @@ class Judge(unittest.TestCase):
             for name in ("stateless", "refuse"):
                 o[name]["decisions"][-1]["state"] = "INTENT"
         self.assertFails(both_open, "the refused rewind left an intent")
+
+    def test_interrupted_rewind_changes(self):
+        self.assertFails(lambda o: o["completed"]["reconcile"]["settled"][0].update(completed=False),
+                         "the interrupted rewind was not completed")
+        self.assertFails(lambda o: o["completed"]["reconcile"]["settled"][0].update(outcome="NATIVE_REJECTED"),
+                         "the interrupted rewind was not completed")
+        self.assertFails(lambda o: o["completed"]["decisions"][-1].update(old_head="H7"),
+                         "the interrupted rewind was not completed")
+        self.assertFails(lambda o: o["completed"]["native_head_at_start"].update(name="H8"),
+                         "left the head at H8")
+        self.assertFails(lambda o: o["completed"]["native_head"].update(name="H6"), "completed ended at H6")
+        self.assertFails(lambda o: o["crash-mid"].update(stderr_tail="crash point: marker of bor.set-head"),
+                         "the crash-mid child did not stop")
+        self.assertFails(lambda o: o["advance"]["steps"][1].update(error="x"), "did not import H7 and H8")
+        self.assertFails(lambda o: o["advance"]["decisions"].pop(), "did not import H7 and H8")
+
+    def test_evidence_records(self):
+        for name in lb.COVERAGE_FILES:
+            self.assertFails(lambda o, n=name: o[n].update(evidence_records=1), f"{name} left lifecycle evidence")
+        self.assertFails(lambda o: o["repair"].pop("evidence_records"), "repair left lifecycle evidence")
+
+    def test_corpus_and_plain_server(self):
+        self.assertFails(lambda o: o["scenario"]["steps"][4].update(error="not refused by the corpus rule"),
+                         "step known-A3-refused failed")
+        self.assertFails(lambda o: o["profile"]["plain_server"].update(refused=False), "without --extractor.capture")
+        self.assertFails(lambda o: o["profile"].pop("plain_server"), "without --extractor.capture")
 
     def test_manual_messages(self):
         self.assertFails(lambda o: o["manual"]["commands"][0].update(output="flag provided but not defined"),

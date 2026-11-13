@@ -42,6 +42,7 @@ const decisionPrefix = "extractor-decision-v1/"
 func init() {
 	server.ExtractorCaptureProfile = Profile
 	server.ExtractorCaptureStart = serverStart
+	server.ExtractorPlainStore = PlainStore
 	cli.ExtractorManualCommand = ManualCommand
 }
 
@@ -154,6 +155,20 @@ func Start(stack *node.Node, backend *eth.Ethereum, capture Capture) (*Run, erro
 func (r *Run) Stop() {
 	r.Decided.Detach()
 	r.Lifecycle.Close()
+}
+
+// ErrPlainStore refuses `bor server` without --extractor.capture on a capture
+// store.
+var ErrPlainStore = errors.New("bor server without --extractor.capture refused on a capture store")
+
+// PlainStore refuses `bor server` without --extractor.capture on a store with
+// a live pin or a decision record: native imports, rewinds and whitelist
+// writes would run there without the gate.
+func PlainStore(config *server.Config) error {
+	if err := ManualCommand("bor server", filepath.Join(config.DataDir, "bor", "chaindata"), nil); err != nil {
+		return fmt.Errorf("%w: %w", ErrPlainStore, err)
+	}
+	return nil
 }
 
 func serverStart(config *server.Config, stack *node.Node, backend *eth.Ethereum) error {

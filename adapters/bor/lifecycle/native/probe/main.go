@@ -586,6 +586,7 @@ func (c *capture) finish(out string, failure error) error {
 	c.result["coverage"] = c.run.Lifecycle.Coverage()
 	c.result["boundary"], _ = gateBoundary(c.run.Lifecycle)
 	c.result["native_head"] = headRow(c.chain.CurrentBlock(), c.blocks)
+	c.result["evidence_records"] = c.evidenceRecords()
 	if failure != nil {
 		c.result["error"] = failure.Error()
 	}
@@ -594,6 +595,17 @@ func (c *capture) finish(out string, failure error) error {
 	}
 	c.close()
 	return errors.Join(saveJSON(out, c.result), failure)
+}
+
+// evidenceRecords counts the lifecycle evidence records left in the store.
+func (c *capture) evidenceRecords() int {
+	it := c.eth.ChainDb().NewIterator([]byte("extractor-lifecycle-bor-v1/"), nil)
+	defer it.Release()
+	count := 0
+	for it.Next() {
+		count++
+	}
+	return count
 }
 
 func gateBoundary(n *borlifecycle.Node) (any, bool) {
@@ -667,6 +679,15 @@ func scenario(args []string) error {
 	node.insert("side-B4", "B4")
 	_, err = node.chain.SetCanonical(b["A2"])
 	node.step("set-canonical-A2", err)
+	// A3 is stored with its state, but its IMPORT observation was closed:
+	// the known-branch corpus rule refuses its activation before any intent.
+	err = node.chain.ExtractorWriteKnownBlock(b["A3"])
+	if errors.Is(err, borlifecycle.ErrCorpus) {
+		err = nil
+	} else {
+		err = fmt.Errorf("not refused by the corpus rule: %v", err)
+	}
+	node.step("known-A3-refused", err)
 	node.step("known-B3", node.chain.ExtractorWriteKnownBlock(b["B3"]))
 	node.step("known-B4", node.chain.ExtractorWriteKnownBlock(b["B4"]))
 	node.insert("side-C4", "C4")
@@ -790,13 +811,18 @@ func (c *capture) deadlock(b map[string]*types.Block) {
 
 var flagOut = new(string)
 
+// crashStore is the store of the restarted node; a "write" crash point syncs
+// it before the process exits.
+var crashStore interface{ SyncKeyValue() error }
+
 // restart reopens the node: RECOVERY, the startup reconcile, GoLive with the
 // stored H.
 func restart(args []string) error {
 	flags := flag.NewFlagSet("restart", flag.ContinueOnError)
 	c := commonFlags(flags)
 	crash := flags.String("crash", "", "lifecycle caller whose crash step exits the process (crash point)")
-	crashStep := flags.String("crash-step", "marker", "lifecycle step of the crash point: marker or resolve")
+	crashStep := flags.String("crash-step", "marker", "lifecycle step of the crash point: write, marker or resolve")
+	crashCount := flags.Int("crash-count", 1, "exit at this occurrence of the crash step")
 	crashImport := flags.String("crash-import", "", "block whose import exits after its synced marker (crash point)")
 	imports := flags.String("import", "", "comma-separated blocks to import after the start")
 	setHead := flags.Uint64("sethead", 0, "SetHead after the start (0: none)")
@@ -806,8 +832,19 @@ func restart(args []string) error {
 	}
 	var step func(string, string)
 	if *crash != "" {
+		seen := 0
 		step = func(name, caller string) {
 			if name == *crashStep && caller == *crash {
+				if seen++; seen < *crashCount {
+					return
+				}
+				if name == "write" && crashStore != nil {
+					// The native batches committed before this write reached
+					// the disk; the write and everything after it did not.
+					if err := crashStore.SyncKeyValue(); err != nil {
+						fmt.Fprintln(os.Stderr, "crash point: sync failed:", err)
+					}
+				}
 				fmt.Fprintf(os.Stderr, "crash point: %s of %s\n", name, caller)
 				os.Exit(3)
 			}
@@ -817,6 +854,7 @@ func restart(args []string) error {
 	if err != nil {
 		return err
 	}
+	crashStore = node.eth.ChainDb()
 	if *crashImport != "" {
 		target := node.blocks[*crashImport].Hash()
 		core.ExtractorDecisionStep = func(name string, block common.Hash) {
@@ -999,6 +1037,7 @@ func profileCheck(args []string) error {
 	flags := flag.NewFlagSet("profile", flag.ContinueOnError)
 	datadir := flags.String("datadir", "", "new directory for the server attempt")
 	captureFile := flags.String("capture", "", "capture configuration file")
+	captureStore := flags.String("capture-store", "", "stopped capture store for the plain bor server check")
 	out := flags.String("out", "", "new result file")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -1043,6 +1082,14 @@ func profileCheck(args []string) error {
 	_, statErr := os.Stat(filepath.Join(*datadir, instanceName, "chaindata"))
 	result["server"] = map[string]any{"error": errString(err), "refused": errors.Is(err, profile.ErrProfile),
 		"chaindata_created": statErr == nil}
+	if *captureStore != "" {
+		// A plain bor server (no --extractor.capture) on the stopped capture store.
+		cfg, err := server.ExtractorEffectiveConfig(append([]string{"--datadir", *captureStore}, base...))
+		if err == nil {
+			_, err = server.NewServer(cfg)
+		}
+		result["plain_server"] = map[string]any{"error": errString(err), "refused": errors.Is(err, wire.ErrPlainStore)}
+	}
 	return saveJSON(*out, result)
 }
 

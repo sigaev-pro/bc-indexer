@@ -21,7 +21,7 @@ plan for the per-client blocks, every row marked Bor or each client block).
 | `lifecycle_tree.py` | | Installer: `bor_admission_tree.install` (unchanged), then the shared `lifecycle` package, the glue, the new files and the edits |
 | `probe/main.go` | `cmd/extractor-bor-lifecycle-probe` | Measured probe (test only) |
 | `lifecycle_bor.py` | | Driver: `prepare`, `run`, `observe`, `vectors`, `derive` |
-| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 25 portable controls on development outputs (`sample/`, not measured) and 64 single-check mutants |
+| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 28 portable controls on development outputs (`sample/`, not measured) and 71 single-check mutants |
 
 The installer adds a third patch set after the admission and decision patch
 sets, so it does not change their files. An anchor may sit in text that an
@@ -163,13 +163,22 @@ recovery driver, as on the import path.
    - native state equal to its new value: the marker is written and the
      intent is resolved;
    - native state equal to its old value: `RejectIntent`;
+   - a CANONICAL intent whose native head lies on the path the mutation
+     walks (native rewinds and reorganizations move the head in steps, one
+     batch per block): the head is on the old chain above the new head, or
+     on the new branch below it. The mutation is completed natively inside
+     the recovery pass (`ExtractorCompleteCanonical`: the rewind, or
+     `SetCanonical` of the new head), with the saved intent covering the
+     nested callers, and the intent is then decided;
    - anything else: a source invariant error.
 
    An intent with a marker, or without such a record, is left to the
    decision recovery driver, which resolves a marked intent and completes an
    import-path intent.
 2. **Repair**, after the decision recovery driver, when no intent is
-   unresolved (otherwise a source invariant error). A native head that
+   unresolved (otherwise a source invariant error). It first deletes every
+   evidence record left (the decision recovery driver resolved those intents
+   from their markers). A native head that
    differs from the last decided head is native startup repair made before
    the gate opened. It becomes a CANONICAL decision from the last decided
    head to the native head. A native head below H is a source invariant
@@ -192,14 +201,22 @@ write is decided here. This is a limit of this block (see "Limits").
 
 The probe starts its capture node with the same `wire.Start`.
 
+A plain `bor server` (no `--extractor.capture`) is refused on a store with a
+live pin or a decision record, by the same check as the manual commands, so
+a capture store cannot run without the gate.
+
 **H.** `GoLive` runs in the same guard hold as the bridge's GoLive, after the
 repair and the end of the recovery pass, with the native head read under
-the guard and its state root durable. A first start goes from BOOTSTRAP to
-LIVE at once. The admission's store preflight refuses a store that a native
-node without the capture binding filled, so on Bor the first capture start
-is on a new store and H is its genesis: the initial sync is captured. A
-restart keeps the stored H. The rewind refusal below H is a guard that the
-measured run cannot reach for that reason.
+the guard and its state root durable. A restart keeps the stored H.
+
+On Bor there is no BOOTSTRAP window. The decision block's recovery driver
+(`bordecision.Start`) switches the admission and the bridge to LIVE at the
+first start, and the store preflight refuses a store that a native node
+filled without the capture binding. So the first capture start is on a new
+store, H is its genesis, and the initial sync is captured block by block.
+D100 reads H "after the initial native sync"; a Bor BOOTSTRAP window is a
+scope question raised with the coordinator (see the evidence). The rewind
+refusal below H is therefore a guard that the measured run cannot reach.
 
 ## Milestone reorganization
 
@@ -250,17 +267,19 @@ lock:
 | Step | Process | Proves |
 |---|---|---|
 | 1 | `generate` | The fixture blocks |
-| 2 | `scenario` | First start (BOOTSTRAP, then LIVE with H at the genesis), then every caller through its native entry, except known-block and the milestone reorganization, which run through the test-only hooks (see "Known-block reachability" and "Milestone reorganization"): imports A1 to A5; side blocks; `SetCanonical(A2)`; known blocks B3 and B4; `SetCanonical(C4)`; `SetCanonical` of the stateless D4 (recover-ancestors); E5 on the stateless E4 (side chain); the milestone reorganization to F4; the whitelist calls; the four refused entries; the deadlock check; `SetHead(7)` |
+| 2 | `scenario` | First start (BOOTSTRAP, then LIVE with H at the genesis), then every caller through its native entry, except known-block and the milestone reorganization, which run through the test-only hooks (see "Known-block reachability" and "Milestone reorganization"): imports A1 to A5; side blocks; `SetCanonical(A2)`; the refused activation of A3, whose observation was closed (known-branch corpus rule); known blocks B3 and B4; `SetCanonical(C4)`; `SetCanonical` of the stateless D4 (recover-ancestors); E5 on the stateless E4 (side chain); the milestone reorganization to F4; the whitelist calls; the four refused entries; the deadlock check; `SetHead(7)` |
 | 3 | `restart` | RECOVERY, then LIVE with H kept and nothing to settle |
 | 4, 5 | `crash`, `restart` (settle) | A child runs `SetHead(6)` and exits after the native rewind, before the marker; the restart settles the intent as decided from native evidence |
 | 6, 7 | `crash`, `restart` (resolved) | A child runs `SetHead(5)` and exits after the synced marker, before `Resolve`; the decision recovery driver resolves it |
 | 8, 9 | `crash`, `restart` (imported) | A child imports H6 and exits after the synced head batch with the marker, before `Resolve`; the decision recovery driver resolves it |
-| 10, 11 | `fault`, `restart` (repair) | The state root node of the head is deleted offline; native startup repair rewinds and the startup reconcile decides it |
-| 12 | `manual` | `removedb`, `snapshot prune-state`, `purge-whitelisted-entries` and `backfill-statesync-txs`, each in its own process (the native commands leave their node open), are refused by the capture-store guard or the retention guard, by message; the store stays |
-| 13 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New` |
-| 14 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
-| 15 to 17 | `restart` (stateless), `fault`, `restart` (refuse) | A third store imports A1, A2, B3, D4 and D5; D4's state root is deleted offline; `SetHead(4)` is refused before any intent and the head and decisions stay |
-| 18 | `gaps` | `lifecycle.Gaps` over the summed coverage |
+| 10 | `restart` (advance) | Imports H7 and H8 again |
+| 11, 12 | `crash`, `restart` (completed) | A child runs `SetHead(5)` from H8 and exits at the fourth canonical write, after the first rewind step's batch reached the disk; the restart finds the head between H8 and H5, completes the rewind and decides it |
+| 13, 14 | `fault`, `restart` (repair) | The state root node of the head is deleted offline; native startup repair rewinds and the startup reconcile decides it |
+| 15 | `manual` | `removedb`, `snapshot prune-state`, `purge-whitelisted-entries` and `backfill-statesync-txs`, each in its own process (the native commands leave their node open), are refused by the capture-store guard or the retention guard, by message; the store stays |
+| 16 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New`; `NewServer` without the flag is refused on the stopped capture store |
+| 17 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
+| 18 to 20 | `restart` (stateless), `fault`, `restart` (refuse) | A third store imports A1, A2, B3, D4 and D5; D4's state root is deleted offline; `SetHead(4)` is refused before any intent and the head and decisions stay |
+| 21 | `gaps` | `lifecycle.Gaps` over the summed coverage |
 
 The driver then judges every output (`judge`) and writes the AC matrix of
 the POLY slot:

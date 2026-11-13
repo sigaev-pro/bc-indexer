@@ -354,6 +354,30 @@ func (bc *BlockChain) ExtractorReorgToFinalized(rewindTo uint64, chain []*types.
 	return true, err
 }
 
+// ExtractorCompleteCanonical completes an interrupted CANONICAL native
+// mutation toward target, with chainmu held by the caller (the decision
+// recovery driver, through ExtractorRecover): a rewind when target is an
+// ancestor of the native head, else SetCanonical of target. The startup
+// reconcile calls it with the saved intent covering the nested callers.
+func (bc *BlockChain) ExtractorCompleteCanonical(target *types.Header) error {
+	current := bc.CurrentBlock()
+	for h := current; h != nil; h = bc.GetHeader(h.ParentHash, h.Number.Uint64()-1) {
+		if h.Number.Uint64() <= target.Number.Uint64() {
+			if h.Hash() == target.Hash() {
+				_, err := bc.extractorSetHeadLocked(target.Number.Uint64(), 0, common.Hash{}, false)
+				return err
+			}
+			break
+		}
+	}
+	block := bc.GetBlock(target.Hash(), target.Number.Uint64())
+	if block == nil {
+		return fmt.Errorf("%w: the intent's head %d is not stored", ErrExtractorRefused, target.Number.Uint64())
+	}
+	_, err := bc.extractorNativeSetCanonicalLocked(block)
+	return err
+}
+
 // ExtractorWriteKnownBlock activates a stored block with its state through
 // writeKnownBlock, with chainmu held. On a capture chain the native entries
 // do not reach writeKnownBlock: the import path inserts one block per batch,

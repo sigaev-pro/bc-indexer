@@ -93,8 +93,8 @@
   {
    "name": "coverage node files",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "COVERAGE_FILES = (\"scenario\", \"restart\", \"settle\", \"resolved\", \"imported\", \"repair\",",
-   "replacement": "COVERAGE_FILES = (\"scenario\", \"restart\", \"settle\", \"resolved\", \"imported\","
+   "original": "COVERAGE_FILES = (\"scenario\", \"restart\", \"settle\", \"resolved\", \"imported\", \"advance\", \"completed\", \"repair\",",
+   "replacement": "COVERAGE_FILES = (\"scenario\", \"restart\", \"settle\", \"resolved\", \"imported\", \"advance\", \"completed\","
   },
   {
    "name": "gaps observation",
@@ -291,8 +291,50 @@
   {
    "name": "coverage new node files",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "\"resolved\", \"imported\", \"repair\", \"native-caller\", \"stateless\",\n                  \"refuse\")",
-   "replacement": "\"resolved\", \"imported\", \"repair\", \"native-caller\", \"stateless\")"
+   "original": "\"native-caller\", \"stateless\", \"refuse\")",
+   "replacement": "\"native-caller\", \"stateless\")"
+  },
+  {
+   "name": "advance imports",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check([(s[\"name\"], s[\"error\"]) for s in advance[\"steps\"]] == [(\"import-H7\", \"\"), (\"import-H8\", \"\")]\n",
+   "replacement": "check(True\n"
+  },
+  {
+   "name": "advance decisions",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and rows(advance[\"decisions\"])[-2:] == [(\"IMPORT\", \"H6\", \"H7\", [\"H7\"]), (\"IMPORT\", \"H7\", \"H8\", [\"H8\"])],",
+   "replacement": ","
+  },
+  {
+   "name": "mid crash head",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(start[\"name\"] in (\"H6\", \"H7\"),",
+   "replacement": "check(True,"
+  },
+  {
+   "name": "completed settle",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "== [(\"bor.set-head\", \"NATIVE_DECIDED\", True)]\n",
+   "replacement": "!= []\n"
+  },
+  {
+   "name": "completed decision",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "          and rows(completed[\"decisions\"])[-1:] == [(\"CANONICAL\", \"H8\", \"H5\", [])],",
+   "replacement": ","
+  },
+  {
+   "name": "evidence records",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(outputs[name].get(\"evidence_records\") == 0, f\"{name} left lifecycle evidence records\")",
+   "replacement": "pass"
+  },
+  {
+   "name": "plain server",
+   "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
+   "original": "check(profile.get(\"plain_server\", {}).get(\"refused\") is True,",
+   "replacement": "check(True,"
   },
   {
    "name": "settle outcome",
@@ -309,19 +351,19 @@
   {
    "name": "fault head",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "check(fault[\"number\"] == 6, \"the fault did not hit the head H6\")",
+   "original": "check(fault[\"number\"] == 5, \"the fault did not hit the head H5\")",
    "replacement": "pass"
   },
   {
    "name": "repair below",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "          and repair[\"native_head_at_start\"][\"number\"] < 6,",
+   "original": "          and repair[\"native_head_at_start\"][\"number\"] < 5,",
    "replacement": ","
   },
   {
    "name": "repair decision",
    "file": "adapters/bor/lifecycle/native/lifecycle_bor.py",
-   "original": "check(rows(repair[\"decisions\"])[-1:] == [(\"CANONICAL\", \"H6\", repair[\"native_head_at_start\"][\"name\"], [])],",
+   "original": "check(rows(repair[\"decisions\"])[-1:] == [(\"CANONICAL\", \"H5\", repair[\"native_head_at_start\"][\"name\"], [])],",
    "replacement": "check(True,"
   },
   {

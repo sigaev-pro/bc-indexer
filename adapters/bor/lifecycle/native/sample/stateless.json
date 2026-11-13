@@ -84,6 +84,7 @@
    "state": "NATIVE_DECIDED"
   }
  ],
+ "evidence_records": 0,
  "native_head": {
   "hash": "69f83e3abdd5baae278f7ba6bc8556cde18219e0dde694db65c9e696a214d086",
   "name": "D5",

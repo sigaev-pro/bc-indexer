@@ -92,6 +92,9 @@ type Settled struct {
 	Sequence uint64 `json:"sequence"`
 	Caller   string `json:"caller"`
 	Outcome  string `json:"outcome"`
+	// Completed reports that the native mutation was interrupted between
+	// its old and new head and was completed before the decision.
+	Completed bool `json:"completed"`
 }
 
 // Report is what the startup reconcile did.
@@ -119,9 +122,9 @@ type Node struct {
 	recovery *pass
 	report   Report
 	// Step, if set, runs at the named steps of a lifecycle decision (the
-	// probe's crash points; test only): "marker" after the native mutation
-	// and before the marker batch, "resolve" after the synced marker and
-	// before Resolve.
+	// probe's crash points; test only): "write" before each choke-point
+	// check of a native write, "marker" after the native mutation and before
+	// the marker batch, "resolve" after the synced marker and before Resolve.
 	Step func(step, caller string)
 }
 
@@ -342,7 +345,14 @@ func (n *Node) Floor() (uint64, bool) {
 }
 
 // Require implements core.ExtractorLifecycle.
-func (n *Node) Require(effect string) error { return n.gate.Require(lifecycle.Effect(effect)) }
+func (n *Node) Require(effect string) error {
+	if n.Step != nil {
+		if p := n.innermost(); p != nil {
+			n.Step("write", p.id)
+		}
+	}
+	return n.gate.Require(lifecycle.Effect(effect))
+}
 
 // Refuse implements core.ExtractorLifecycle.
 func (n *Node) Refuse(id string, chain bool) error {
@@ -478,7 +488,8 @@ func (p *pass) intend(e Evidence, members []decision.Member, events bool) error 
 	rec, err := p.gp.Intend(n.in.Bridge, decision.Intent{Kind: e.Kind, OldHead: e.OldHead, NewHead: e.NewHead,
 		Members: members, EvidenceDigest: digest, Events: events})
 	if err != nil {
-		return err
+		// No intent was recorded: the evidence record names nothing.
+		return errors.Join(err, n.in.DB.Delete(n.evidenceKey(digest)))
 	}
 	p.open = &rec
 	return nil
@@ -709,14 +720,18 @@ func (n *Node) repair(token *admission.Token) error {
 	if err != nil {
 		return err
 	}
-	// The decision recovery driver resolves a lifecycle intent that has its
-	// marker; its evidence record is deleted here, as Decide would have.
 	for _, d := range decisions {
-		if d.State == decision.Decided {
-			if err := n.in.DB.Delete(n.evidenceKey(d.Intent.EvidenceDigest)); err != nil {
-				return err
-			}
+		if d.State == decision.Intended {
+			return fmt.Errorf("%w: intent %d is unresolved after the decision recovery", lifecycle.ErrInvariant,
+				d.Sequence)
 		}
+	}
+	// Every intent is resolved now. The decision recovery driver resolved
+	// the intents it found with their markers (and may have cleaned up a
+	// FINALITY one already), so the evidence records left are deleted here,
+	// as Decide would have deleted them.
+	if err := n.deleteEvidence(); err != nil {
+		return err
 	}
 	b, live := n.gate.Boundary()
 	if !live {
@@ -761,6 +776,67 @@ func (n *Node) repair(token *admission.Token) error {
 	return p.Exit()
 }
 
+// deleteEvidence deletes every evidence record of the producer run.
+func (n *Node) deleteEvidence() error {
+	p := n.in.Admission.Producer()
+	it := n.in.DB.NewIterator([]byte(evidencePrefix+p.ProducerID+"."+p.RunID+"/evidence/"), nil)
+	keys := [][]byte{}
+	for it.Next() {
+		keys = append(keys, append([]byte{}, it.Key()...))
+	}
+	err := it.Error()
+	it.Release()
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := n.in.DB.Delete(key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ancestor reports whether a is b or one of b's ancestors.
+func (n *Node) ancestor(a, b *types.Header) bool {
+	for h := b; h != nil; h = n.in.Chain.GetHeader(h.ParentHash, h.Number.Uint64()-1) {
+		if h.Number.Uint64() <= a.Number.Uint64() {
+			return h.Hash() == a.Hash()
+		}
+	}
+	return false
+}
+
+// complete finishes a CANONICAL native mutation that a process loss
+// interrupted: native rewinds and reorganizations move the head in steps, so
+// the native head can lie on the path between the intent's old and new head
+// (a rewind: on the old chain above the new head; a reorganization: on the
+// new branch below the new head). The mutation is completed natively inside
+// the recovery pass, with the saved intent covering the nested callers, and
+// the intent is then decided. A native head off that path is left to the
+// caller, which reports a source invariant error.
+func (n *Node) complete(d decision.Decision, e Evidence) (bool, error) {
+	native := n.in.Chain.CurrentBlock()
+	next := n.in.Chain.GetHeaderByHash(common.HexToHash(e.NewHead.Hash))
+	if next == nil || n.recovery == nil {
+		return false, nil
+	}
+	rewind := n.ancestor(next, native) && native.Number.Uint64() < e.OldHead.Number
+	reorg := n.ancestor(native, next)
+	if !rewind && !reorg {
+		return false, nil
+	}
+	intent := d.Intent
+	n.mu.Lock()
+	n.recovery.open = &intent
+	n.mu.Unlock()
+	err := n.in.Chain.ExtractorCompleteCanonical(next)
+	n.mu.Lock()
+	n.recovery.open = nil
+	n.mu.Unlock()
+	return err == nil, err
+}
+
 // settle settles one unresolved intent without a marker whose evidence
 // record names a lifecycle caller; an intent without one belongs to the
 // import path and stays for the decision recovery driver.
@@ -779,9 +855,16 @@ func (n *Node) settle(token *admission.Token, d decision.Decision) error {
 		return fmt.Errorf("%w: evidence record of intent %d", lifecycle.ErrCorrupt, d.Sequence)
 	}
 	var now, next, old string
+	completed := false
 	switch e.Kind {
 	case decision.Canonical:
 		now, next, old = hexOf(n.in.Chain.CurrentBlock().Hash()), e.NewHead.Hash, e.OldHead.Hash
+		if now != next && now != old {
+			if completed, err = n.complete(d, e); err != nil {
+				return err
+			}
+			now = hexOf(n.in.Chain.CurrentBlock().Hash())
+		}
 	case decision.Finality:
 		raw, err := hex.DecodeString(e.Key)
 		if err != nil {
@@ -820,7 +903,8 @@ func (n *Node) settle(token *admission.Token, d decision.Decision) error {
 		return fmt.Errorf("%w: native state of intent %d (%s) is neither its old nor its new value",
 			lifecycle.ErrInvariant, d.Sequence, e.Caller)
 	}
-	n.report.Settled = append(n.report.Settled, Settled{Sequence: d.Sequence, Caller: e.Caller, Outcome: outcome})
+	n.report.Settled = append(n.report.Settled, Settled{Sequence: d.Sequence, Caller: e.Caller, Outcome: outcome,
+		Completed: completed})
 	if err := n.in.DB.Delete(key); err != nil {
 		return err
 	}

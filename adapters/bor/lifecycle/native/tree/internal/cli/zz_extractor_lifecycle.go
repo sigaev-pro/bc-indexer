@@ -8,10 +8,11 @@ package cli
 import "github.com/ethereum/go-ethereum/ethdb"
 
 // ExtractorManualCommand, if set, refuses a manual command (removedb,
-// purge-whitelisted-entries) on a capture store with live pins or decision
-// obligations. db is the open store, or nil for a command that removes the
-// store at chaindata without opening it. extractor/borlifecycle/wire installs
-// it from the shipped bor main.
+// purge-whitelisted-entries, backfill-statesync-txs) on a capture store with
+// live pins or decision obligations. db is the open store, or nil when the
+// command has not opened it yet; the hook then opens the store at chaindata
+// read-only. extractor/borlifecycle/wire installs it from the shipped bor
+// main.
 var ExtractorManualCommand func(command, chaindata string, db ethdb.Database) error
 
 func extractorManualCommand(command, chaindata string, db ethdb.Database) error {

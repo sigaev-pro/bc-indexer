@@ -218,7 +218,7 @@
    ],
    "new_head": "H7",
    "old_head": "H6",
-   "sequence": 46,
+   "sequence": 45,
    "state": "NATIVE_DECIDED"
   },
   {
@@ -271,15 +271,47 @@
    "state": "NATIVE_DECIDED"
   },
   {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "H7"
+   ],
+   "new_head": "H7",
+   "old_head": "H6",
+   "sequence": 55,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "IMPORT",
+   "marker": true,
+   "members": [
+    "H8"
+   ],
+   "new_head": "H8",
+   "old_head": "H7",
+   "sequence": 56,
+   "state": "NATIVE_DECIDED"
+  },
+  {
+   "kind": "CANONICAL",
+   "marker": true,
+   "members": [],
+   "new_head": "H5",
+   "old_head": "H8",
+   "sequence": 57,
+   "state": "NATIVE_DECIDED"
+  },
+  {
    "kind": "CANONICAL",
    "marker": true,
    "members": [],
    "new_head": "B3",
-   "old_head": "H6",
-   "sequence": 55,
+   "old_head": "H5",
+   "sequence": 58,
    "state": "NATIVE_DECIDED"
   }
  ],
+ "evidence_records": 0,
  "native_head": {
   "hash": "7521542a86f0631e7643da2531cbf1ed5f05b9f5f73ae461fae622b30a6878b0",
   "name": "B3",
