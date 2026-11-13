@@ -289,14 +289,19 @@ Reviews:
   traceback on an output path with a missing parent (documented, observe
   02), the unchecked `source` metadata that `observe` copies, and a README
   wording fix (done in the docs commit after it).
+- 003 on `2ded48c`: Spec PASS and Standards PASS, cosmetic P3 notes only.
 
 qa verdict (BSC private local): transfer, nested-revert, fee (distribution
 before Kepler), system-action (Parlia `init()` system transactions) and
 empty-block PASS; family BSC PASS. `bsc-mainnet` and `bsc-testnet` stay
 NOT_RUN (D96).
 
-Next: a docs-only confirmation review, hosted CI on the final head, the
-final review comment, then READY to the coordinator.
+Merge of main: `30bd372` merges main `3900d65` (ETH, PR #167) with a merge
+commit. It changes no BSC measured input (evidence, "Records"); the ETH and
+POLY subsections stay as on main.
+
+Next: a docs-only confirmation review of the merge, hosted CI on the final
+head, the final review comment, then READY to the coordinator.
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
