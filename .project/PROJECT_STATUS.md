@@ -653,7 +653,9 @@ the measured round. The merge adds only BSC files and docs, so run 01 still
 describes the measured code. The owner decisions on D104 (E05-02.reorg owns
 ordinary BSC side branches and reorganizations) and on closing #18 with the
 two BSC rows deferred to E05-02.reorg change no Bor row (evidence, "Merge
-of main and later owner decisions").
+of main and later owner decisions"). They are not yet recorded in
+DECISIONS.md; until the coordinator records them, D104 and its #18 closing
+rule stand as written.
 
 The `bor.manual-commands` row of the shared caller map does not yet name
 `bor backfill-statesync-txs`. The map is a shared file that the measured run
