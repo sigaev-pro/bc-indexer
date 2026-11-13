@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "description": "Single-check mutants of the BSC corpus driver: the fixture derivation, the observation built from the probe outputs, the decision bridge checks and the verdict. The portable controls in test_bsc_corpus.py run on the development sample.",
+  "copy": [
+    "test/native_corpus/*.py",
+    "test/native_corpus/expected/*",
+    "test/native_corpus/bsc/*.py",
+    "test/native_corpus/bsc/sample/*",
+    "test/harness/*.py",
+    "test/harness/fixtures/bsc_admission/genesis.json",
+    "test/evidence/*.py",
+    "test/evidence/*.json"
+  ],
+  "test": [
+    "{python}",
+    "test/native_corpus/bsc/test_bsc_corpus.py",
+    "-v"
+  ],
+  "import": [
+    "bsc_corpus"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "genesis chain id",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(document.get(\"config\", {}).get(\"chainId\") == expected[\"chain_id\"], \"The genesis is not the corpus chain\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "genesis existing account code",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(not row[\"code\"] and \"code\" not in existing and quantity(existing[\"balance\"]) == int(row[\"balance\"]),",
+      "replacement": "require(\"code\" not in existing and quantity(existing[\"balance\"]) == int(row[\"balance\"]),"
+    },
+    {
+      "name": "genesis existing account balance",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(not row[\"code\"] and \"code\" not in existing and quantity(existing[\"balance\"]) == int(row[\"balance\"]),",
+      "replacement": "require(not row[\"code\"] and \"code\" not in existing,"
+    },
+    {
+      "name": "genesis adds code",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "        if row[\"code\"]:\n            account[\"code\"] = \"0x\" + row[\"code\"]",
+      "replacement": "        pass"
+    },
+    {
+      "name": "quantity hex",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "return int(text, 16) if text.lower().startswith(\"0x\") else int(text)",
+      "replacement": "return int(text, 16) if text.startswith(\"0x\") else int(text)"
+    },
+    {
+      "name": "accounts include block-end state",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "listed |= set(block[\"state_after_block\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "hex digits lowercase",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "text = value.lower().removeprefix(\"0x\")",
+      "replacement": "text = value.removeprefix(\"0x\")"
+    },
+    {
+      "name": "hex digits checked",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(re.fullmatch(r\"[0-9a-f]*\", text) is not None, f\"Bad hex {value!r}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "hex digits string",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(isinstance(value, str), f\"Expected a hex string, got {value!r}\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "frame value decimal",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "\"value\": str(int(value, 16)) if value else \"0\"",
+      "replacement": "\"value\": str(int(value, 16)) if value else \"\""
+    },
+    {
+      "name": "frame output default",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "\"output\": hex_digits(trace.get(\"output\", \"0x\"))",
+      "replacement": "\"output\": trace.get(\"output\", \"\")"
+    },
+    {
+      "name": "frame nested calls",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "\"calls\": [frame_of(call) for call in trace.get(\"calls\", [])]}",
+      "replacement": "\"calls\": []}"
+    },
+    {
+      "name": "transaction fee fields",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "    for key in (\"gas_price\", \"max_fee_per_gas\", \"max_priority_fee_per_gas\"):\n        if key in row:\n            tx[key] = row[key]",
+      "replacement": "    pass"
+    },
+    {
+      "name": "decisions need decided",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "return {sequence: rows for sequence, rows in out.items() if \"decided\" in rows}",
+      "replacement": "return out"
+    },
+    {
+      "name": "observation probe errors",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "require(not imported[\"error\"] and not reimported[\"recover_error\"] and not reimported[\"reimport_error\"],",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "observation member block mapping",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "decisions.append({\"block\": by_hash.get(member[\"block\"], -1), \"kind\": rows[\"intent\"][\"kind\"]})",
+      "replacement": "decisions.append({\"block\": by_hash.get(member[\"block\"], 1), \"kind\": rows[\"intent\"][\"kind\"]})"
+    },
+    {
+      "name": "observation new observations",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "\"reimport\": {\"new_observations\": after[0] - before[0],",
+      "replacement": "\"reimport\": {\"new_observations\": 0,"
+    },
+    {
+      "name": "observation new decisions",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "\"new_decisions\": after[1] - before[1]}}",
+      "replacement": "\"new_decisions\": 0}}"
+    },
+    {
+      "name": "bridge live head",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "    if bridge[\"mode\"] != \"LIVE\" or bridge[\"head_number\"] != len(blocks) or \\\n            bridge[\"head_hash\"] != blocks[-1][\"hash\"]:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "bridge mode",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if bridge[\"mode\"] != \"LIVE\" or bridge[\"head_number\"]",
+      "replacement": "if bridge[\"head_number\"]"
+    },
+    {
+      "name": "bridge head hash",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "            bridge[\"head_hash\"] != blocks[-1][\"hash\"]:",
+      "replacement": "            False:"
+    },
+    {
+      "name": "bridge counters",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if bridge[\"counters\"] != [len(blocks), len(blocks)]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge open observations",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if bridge[\"open_observations\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge import kind",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if any(rows[\"intent\"][\"kind\"] != \"IMPORT\" or len(rows[\"intent\"][\"members\"]) != 1",
+      "replacement": "if any(len(rows[\"intent\"][\"members\"]) != 1"
+    },
+    {
+      "name": "bridge one member",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "or len(rows[\"intent\"][\"members\"]) != 1 for rows in decided.values()):",
+      "replacement": "for rows in decided.values()):"
+    },
+    {
+      "name": "bridge member blocks",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if sorted(member[\"block\"] for member in members) != sorted(row[\"hash\"] for row in blocks):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge member observations",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if len({member[\"observation\"] for member in members}) != len(blocks):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge decided binds intent",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if any(rows[\"decided\"][\"intent_digest\"] != rows[\"intent\"][\"digest\"] for rows in decided.values()):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge obligations are decisions",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if obligations != sorted(decided):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge obligation binds intent",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "    if any(row[\"intent_digest\"] != decided.get(row[\"sequence\"], {}).get(\"intent\", {}).get(\"digest\")\n           for row in bridge[\"obligations\"]):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "bridge restart records",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if before[\"decision_records\"] != bridge[\"decision_records\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge reimport records",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if after[\"decision_records\"] != before[\"decision_records\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge reimport obligations",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if after[\"obligations\"] != bridge[\"obligations\"] or before[\"obligations\"] != bridge[\"obligations\"]:",
+      "replacement": "if before[\"obligations\"] != bridge[\"obligations\"]:"
+    },
+    {
+      "name": "bridge restart obligations",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if after[\"obligations\"] != bridge[\"obligations\"] or before[\"obligations\"] != bridge[\"obligations\"]:",
+      "replacement": "if after[\"obligations\"] != bridge[\"obligations\"]:"
+    },
+    {
+      "name": "bridge reimport counters",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if after[\"counters\"] != before[\"counters\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bridge recover error",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if reimported[\"recover_error\"] or reimported[\"reimport_error\"]:",
+      "replacement": "if reimported[\"reimport_error\"]:"
+    },
+    {
+      "name": "bridge reimport error",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if reimported[\"recover_error\"] or reimported[\"reimport_error\"]:",
+      "replacement": "if reimported[\"recover_error\"]:"
+    },
+    {
+      "name": "bridge reimport head",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if after[\"head_hash\"] != bridge[\"head_hash\"] or after[\"mode\"] != \"LIVE\":",
+      "replacement": "if after[\"mode\"] != \"LIVE\":"
+    },
+    {
+      "name": "bridge reimport mode",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "if after[\"head_hash\"] != bridge[\"head_hash\"] or after[\"mode\"] != \"LIVE\":",
+      "replacement": "if after[\"head_hash\"] != bridge[\"head_hash\"]:"
+    },
+    {
+      "name": "verdict bridge fails cases",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "        if failures and row[\"verdict\"] == \"PASS\":",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "verdict needs comparison pass",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = not failures and bool(cases)"
+    },
+    {
+      "name": "verdict needs no bridge failure",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = comparison[\"result\"] == \"PASS\" and bool(cases)"
+    },
+    {
+      "name": "verdict needs cases",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "passed = comparison[\"result\"] == \"PASS\" and not failures and bool(cases)",
+      "replacement": "passed = comparison[\"result\"] == \"PASS\" and not failures"
+    },
+    {
+      "name": "write new only",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "with open(path, \"x\") as handle:",
+      "replacement": "with open(path, \"w\") as handle:"
+    },
+    {
+      "name": "format error comparison",
+      "file": "test/native_corpus/bsc/bsc_corpus.py",
+      "original": "    except corpus_compare.FormatError as error:\n        comparison = {\"schema_version\": 1, \"kind\": \"native-corpus-comparison\", \"family\": \"bsc\", \"result\": \"FAIL\",",
+      "replacement": "    except ZeroDivisionError as error:\n        comparison = {\"schema_version\": 1, \"kind\": \"native-corpus-comparison\", \"family\": \"bsc\", \"result\": \"FAIL\","
+    }
+  ]
+}
