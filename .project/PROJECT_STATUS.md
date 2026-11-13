@@ -505,6 +505,41 @@ measured code (evidence, "Merge of main").
 Next: a docs-only confirmation review of the merge, hosted CI on the merge
 head, the final review comment, then the client blocks after merge.
 
+### Geth block
+
+Base `51adbee` (block 0 merged in PR #165). Branch/worktree:
+`claude/e01-02-lifecycle-geth` / `e01-02-admission-geth-95b3ee`. Allowed
+paths: `adapters/geth/lifecycle/native/**`,
+`test/harness/fixtures/lifecycle_geth/**`,
+`.project/evidence/E01-02.lifecycle_seams.geth.md` and this subsection.
+Roles and split as the coordinator records them: the owner agreed on
+2026-11-13 to the #16-style split ("Очищай лишнее и запускай все"); this is
+the Geth native-engineer session, which also gives the qa matrix of the ETH
+slot.
+
+Design: [adapters/geth/lifecycle/native/README.md](../adapters/geth/lifecycle/native/README.md).
+34 anchored patches over the accepted admission and decision-bridge tree
+route all 26 Geth callers: passes for every OBSERVATION and DECISION caller,
+`Require` at the state commit, the canonical-hash rewrite, the head writer,
+a requested rewind and the finality setters, CANONICAL decisions for
+`SetCanonical` and `writeKnownBlock` that name the retained SIDE blocks of
+the branch (a branch block without one is a source error), SetHead as one
+CANONICAL decision plus one FINALITY decision per clear, one FINALITY
+decision per setter call, the recovery of lifecycle intents and the startup
+reconciliation, the live boundary H (`GoLive` after the initial sync, under
+the guard, root flushed and synced; a restart keeps H), the capture profile
+check (`--dev`, `--synctarget`, snap sync) and the native-commit identity
+from the binary (D100).
+
+Records 01 at measured head `3c89a06`: preparation PASS, run PASS (probe
+7.1 s, `Gaps` empty), 13 portable tests, 33 of 33 driver mutants killed
+(evidence: [E01-02.lifecycle_seams.geth](evidence/E01-02.lifecycle_seams.geth.md)).
+qa verdict, private local ETH: AC-CAP-01-01 PASS, AC-LIF-05-02 PASS,
+AC-LIF-05-03 PASS, AC-LIF-06-04 and 06-05 NOT_APPLICABLE (BSC only); family
+PASS. Public ETH cells stay NOT_RUN.
+
+Next: Spec and Standards reviews, hosted CI, the final review comment.
+
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
 Status: ACCEPTED (2026-11-12); #17 closes when this record merges. Merged
