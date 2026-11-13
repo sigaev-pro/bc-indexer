@@ -201,7 +201,8 @@ everything", relayed by the coordinator after the owner approved the
 slot was free (D97: at most three) and started it after PR #166 merged.
 
 Status: IN_PROGRESS (part of #19), branch `claude/e01-03-smoke-corpus-bsc`
-from main `4208145` (POLY merged in PR #166). Measured head `5dd8d72`; later
+from main `4208145` (POLY merged in PR #166), draft PR #168. Measured head
+`5217fc4`; later
 commits change only docs. Paths: `test/native_corpus/bsc/**`,
 `.project/evidence/E01-03.smoke_corpus.bsc.md` and this subsection.
 
@@ -218,14 +219,25 @@ Design ([BSC README](../test/native_corpus/bsc/README.md)):
   before and after each user transaction (native re-execution checked
   against the stored receipts), the system transactions, the validator nonce
   and the block-end state.
-- The driver builds the observation and runs block 0's comparator. ORACLE.md
-  names every fixture input; no chain-config value is added.
+- The driver builds the observation and runs block 0's comparator. One
+  fixture input is not named in ORACLE.md: the sealing key, the public test
+  validator keystore of the BSC source, whose address ORACLE.md names. No
+  chain-config value is added.
 
 Evidence: [E01-03.smoke_corpus.bsc](evidence/E01-03.smoke_corpus.bsc.md).
-Records at `5dd8d72`, all PASS: preparation 02, run 01 (five cases, 0
-differences, no bridge failure), observe 01, 16 portable tests, 45 Python
-mutants killed. Preparation 01 never started the tool (a shell wrapper
-error) and is kept under D83.
+Records at `5217fc4`, all PASS: preparation 03, run 02 (five cases, 0
+differences, no bridge failure), observe 03, 21 portable tests, 58 Python
+mutants killed. Kept under D83: the `5dd8d72` records (all PASS, superseded),
+preparation 01 (never started, a shell wrapper error) and observe 02 at
+`5217fc4` (an output path with a missing parent).
+
+Reviews:
+- 001 on `690a338`: Spec and Standards REQUEST_CHANGES. P2: the restart
+  recovery was not checked (counters, mode, open observations, admission
+  records); P2: `observe` did not bind its inputs to the run record. P3: the
+  obligation's NATIVE_DECIDED binding, the unnamed keystore input, the
+  per-transaction states not bound to the root, the run not keeping the
+  corpus files, small code notes. All fixed in `5217fc4`.
 
 qa verdict (BSC private local): transfer, nested-revert, fee (distribution
 before Kepler), system-action (Parlia `init()` system transactions) and
