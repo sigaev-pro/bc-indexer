@@ -272,7 +272,14 @@
       "name": "row verdicts present",
       "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
       "original": "    c.check(\"every BSC row of the map has a verdict\", bool(rows) and sorted(rows) == sorted(routes), sorted(rows))\n",
-      "replacement": ""
+      "replacement": "",
+      "equivalent": "row_verdicts returns a verdict for every row of the map or raises; part() turns the exception into a failed check, so this check only names the failure."
+    },
+    {
+      "name": "row verdicts after the failures",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    rows = part(\"rows\", row_verdicts, routes, report.get(\"coverage\", {}), callers, default={})\n    c.check(\"every BSC row of the map has a verdict\", bool(rows) and sorted(rows) == sorted(routes), sorted(rows))\n    failures = c.failures()",
+      "replacement": "    failures = c.failures()\n    rows = part(\"rows\", row_verdicts, routes, report.get(\"coverage\", {}), callers, default={})"
     }
   ]
 }
