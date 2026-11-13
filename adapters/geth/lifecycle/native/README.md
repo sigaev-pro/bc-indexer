@@ -18,7 +18,7 @@ only; every public cell stays NOT_RUN (D96, D98, D99).
 
 The shared package `extractor/lifecycle` is installed byte-identical from
 `adapters/geth/lifecycle`. The measured probe and its driver are in
-[`test/harness/fixtures/lifecycle_geth`](../../../../test/harness/fixtures/lifecycle_geth).
+[`test/harness/fixtures/lifecycle_geth`](../../../../test/harness/fixtures/lifecycle_geth/README.md).
 
 ## Node wiring (D100)
 
