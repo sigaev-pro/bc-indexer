@@ -17,11 +17,11 @@ plan for the per-client blocks, every row marked Bor or each client block).
 | `borlifecycle/profile/` | `extractor/borlifecycle/profile` | The `bor server` capture profile check, each refusal named by its REFUSE caller |
 | `borlifecycle/wire/` | `extractor/borlifecycle/wire` | `--extractor.capture` wiring of `bor server` and the manual-command refusal; imported by the shipped main |
 | `tree/` | the same relative path | New native files (hooks of `core`, `core/rawdb`, `eth`, the whitelist, `internal/cli`, the server, and the decision bridge) |
-| `patches.json` | (applied after the admission and decision patch sets) | 47 anchored edits |
+| `patches.json` | (applied after the admission and decision patch sets) | 48 anchored edits |
 | `lifecycle_tree.py` | | Installer: `bor_admission_tree.install` (unchanged), then the shared `lifecycle` package, the glue, the new files and the edits |
 | `probe/main.go` | `cmd/extractor-bor-lifecycle-probe` | Measured probe (test only) |
 | `lifecycle_bor.py` | | Driver: `prepare`, `run`, `observe`, `vectors`, `derive` |
-| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 28 portable controls on development outputs (`sample/`, not measured) and 71 single-check mutants |
+| `test_lifecycle_bor.py`, `lifecycle_bor.mutants.json`, `sample/` | | 29 portable controls on development outputs (`sample/`, not measured) and 84 single-check mutants |
 
 The installer adds a third patch set after the admission and decision patch
 sets, so it does not change their files. An anchor may sit in text that an
@@ -205,18 +205,30 @@ A plain `bor server` (no `--extractor.capture`) is refused on a store with a
 live pin or a decision record, by the same check as the manual commands, so
 a capture store cannot run without the gate.
 
-**H.** `GoLive` runs in the same guard hold as the bridge's GoLive, after the
-repair and the end of the recovery pass, with the native head read under
-the guard and its state root durable. A restart keeps the stored H.
+**BOOTSTRAP and H (D105).** A new capture store starts in BOOTSTRAP:
+`bordecision.Start` (the installed `Start` of this block, edit
+`lifecycle-bootstrap-start`) finds no live boundary H and returns at once.
+The decision block's recovery driver and GoLive wait. The initial native
+sync runs natively and uncaptured: no observer, no decider and no
+choke-point hook.
 
-On Bor there is no BOOTSTRAP window. The decision block's recovery driver
-(`bordecision.Start`) switches the admission and the bridge to LIVE at the
-first start, and the store preflight refuses a store that a native node
-filled without the capture binding. So the first capture start is on a new
-store, H is its genesis, and the initial sync is captured block by block.
-D100 reads H "after the initial native sync"; a Bor BOOTSTRAP window is a
-scope question raised with the coordinator (see the evidence). The rewind
-refusal below H is therefore a guard that the measured run cannot reach.
+`bor server --extractor.capture` calls `wire.Run.GoLive` once the native
+`eth.Synced()` reports the end of the initial sync; the probe calls the same
+function. GoLive runs the deferred recovery driver under `chainmu` and the
+guard:
+1. It flushes the state root of the native head through the hash trie
+   database and syncs (the initial sync keeps recent state in memory).
+2. It writes and syncs the boundary record with that head as H, after the
+   bridge's GoLive in the same guard hold.
+3. It installs the decider and the observer in the same lock, so no import
+   runs uncaptured after H.
+
+A crash during BOOTSTRAP leaves no boundary, so the next start is BOOTSTRAP
+again, and native startup repair runs uncaptured. A restart after H keeps
+the stored H, recovers and goes live at once.
+
+The rewind refusal below H keeps a decided rewind from moving the head below
+the boundary.
 
 ## Milestone reorganization
 
@@ -267,7 +279,7 @@ lock:
 | Step | Process | Proves |
 |---|---|---|
 | 1 | `generate` | The fixture blocks |
-| 2 | `scenario` | First start (BOOTSTRAP, then LIVE with H at the genesis), then every caller through its native entry, except known-block and the milestone reorganization, which run through the test-only hooks (see "Known-block reachability" and "Milestone reorganization"): imports A1 to A5; side blocks; `SetCanonical(A2)`; the refused activation of A3, whose observation was closed (known-branch corpus rule); known blocks B3 and B4; `SetCanonical(C4)`; `SetCanonical` of the stateless D4 (recover-ancestors); E5 on the stateless E4 (side chain); the milestone reorganization to F4; the whitelist calls; the four refused entries; the deadlock check; `SetHead(7)` |
+| 2 | `scenario` | First start (BOOTSTRAP with no initial sync, GoLive at once, so H is the genesis), then every caller through its native entry, except known-block and the milestone reorganization, which run through the test-only hooks (see "Known-block reachability" and "Milestone reorganization"): imports A1 to A5; side blocks; `SetCanonical(A2)`; the refused activation of A3, whose observation was closed (known-branch corpus rule); known blocks B3 and B4; `SetCanonical(C4)`; `SetCanonical` of the stateless D4 (recover-ancestors); E5 on the stateless E4 (side chain); the milestone reorganization to F4; the whitelist calls; the four refused entries; the deadlock check; `SetHead(7)` |
 | 3 | `restart` | RECOVERY, then LIVE with H kept and nothing to settle |
 | 4, 5 | `crash`, `restart` (settle) | A child runs `SetHead(6)` and exits after the native rewind, before the marker; the restart settles the intent as decided from native evidence |
 | 6, 7 | `crash`, `restart` (resolved) | A child runs `SetHead(5)` and exits after the synced marker, before `Resolve`; the decision recovery driver resolves it |
@@ -279,7 +291,8 @@ lock:
 | 16 | `profile` | Each forbidden `bor server` setting is refused with its caller. `NewServer` with `--extractor.capture --mine` stops before `eth.New`; `NewServer` without the flag is refused on the stopped capture store |
 | 17 | `native-caller` | A second store imports A1 to A5 through `admin_importChain` |
 | 18 to 20 | `restart` (stateless), `fault`, `restart` (refuse) | A third store imports A1, A2, B3, D4 and D5; D4's state root is deleted offline; `SetHead(4)` is refused before any intent and the head and decisions stay |
-| 21 | `gaps` | `lifecycle.Gaps` over the summed coverage |
+| 21 to 23 | `crash` (BOOTSTRAP), `restart` (bootstrap), `restart` (bootstrap restart) | A fourth store in BOOTSTRAP imports A1 to A3 natively and the child exits uncaptured; the restart is BOOTSTRAP again (native repair rewound the unflushed state), syncs A1 to A5 natively, goes live with H at A5, and captures B3 and B4 as SIDE decisions; the next restart keeps H |
+| 24 | `gaps` | `lifecycle.Gaps` over the summed coverage |
 
 The driver then judges every output (`judge`) and writes the AC matrix of
 the POLY slot:
@@ -326,8 +339,8 @@ computes the values of the Go test vectors independently.
   E05-01.registry) every head-moving decision keeps its marker and stays
   there. Once a mirror lets `Cleanup` drop applied decisions, the repair
   step needs a persisted last decided head. Owner: E05-01.registry.
-- **H on Bor.** H is the genesis of a new capture store; the below-H refusal
-  is not reached by the measured run.
+- **Below H.** The measured stores set H at the genesis or at A5 and no
+  rewind targets a block below it, so the below-H refusal is not reached.
 - **Test-only seams.** `core.ExtractorWriteKnownBlock`,
   `eth.ExtractorReorgToFinalized` and `Node.Step` exist for the probe; no
   product path calls them.
