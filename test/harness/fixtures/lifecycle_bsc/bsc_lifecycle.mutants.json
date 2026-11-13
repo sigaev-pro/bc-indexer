@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "description": "Single-check mutants of the BSC lifecycle driver's judge: the block checks, the shared scenario of both paths, the evidence digests, the attestation reads, the coverage and gaps, the refusals, the attestation fault, the event feeds, the crash points and the qa matrix. The portable controls in test_bsc_lifecycle.py run on the development sample.",
+  "copy": [
+    "test/harness/*.py",
+    "test/harness/fixtures/lifecycle_bsc/*.py",
+    "test/harness/fixtures/lifecycle_bsc/sample/*",
+    "adapters/bsc/lifecycle/callers.json",
+    "test/evidence/*.py",
+    "test/evidence/*.json"
+  ],
+  "test": [
+    "{python}",
+    "test/harness/fixtures/lifecycle_bsc/test_bsc_lifecycle.py",
+    "-v"
+  ],
+  "import": [
+    "bsc_lifecycle"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "block count",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(\"blocks.rlp holds the nine probe blocks\", len(blocks) == len(BLOCK_ORDER), len(blocks))",
+      "replacement": ""
+    },
+    {
+      "name": "genesis binding",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(\"genesis is the ProfileManifest genesis\", report.get(\"genesis\") == genesis_hash, report.get(\"genesis\"))",
+      "replacement": ""
+    },
+    {
+      "name": "block hash",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{name} hash\", row.get(\"hash\") == header[\"hash\"], (row.get(\"hash\"), header[\"hash\"]))",
+      "replacement": ""
+    },
+    {
+      "name": "block parent",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{name} parent\", names.get(header[\"parent\"]) == PARENTS[name], names.get(header[\"parent\"]))",
+      "replacement": ""
+    },
+    {
+      "name": "profile snap sync",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "(\"snap_sync\", \"bsc.snap-sync\"), ",
+      "replacement": ""
+    },
+    {
+      "name": "step error class",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{where}: error class\", step[\"class\"] == klass, (step[\"class\"], step[\"error\"]))",
+      "replacement": ""
+    },
+    {
+      "name": "step head",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{where}: head\", step[\"head\"] == head, step[\"head\"])",
+      "replacement": ""
+    },
+    {
+      "name": "step open observations",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{where}: no open observation\", step[\"open_observations\"] == [], step[\"open_observations\"])",
+      "replacement": ""
+    },
+    {
+      "name": "step view",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{where}: view\", step.get(\"view\") == {\"head\": head, \"finalized\": \"G\"}, step.get(\"view\"))",
+      "replacement": "pass"
+    },
+    {
+      "name": "step decisions",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{where}: decisions\", got == list(made), got)",
+      "replacement": ""
+    },
+    {
+      "name": "decision marker",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "d[\"state\"] == \"NATIVE_DECIDED\" and d[\"marker\"] is True",
+      "replacement": "d[\"state\"] == \"NATIVE_DECIDED\""
+    },
+    {
+      "name": "import evidence",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "d[\"evidence_digest\"] == want, d[\"evidence_digest\"])",
+      "replacement": "True, d[\"evidence_digest\"])"
+    },
+    {
+      "name": "canonical evidence",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "d[\"evidence_digest\"] == canonical_evidence(caller, d[\"old_head\"], d[\"new_head\"]),",
+      "replacement": "True,"
+    },
+    {
+      "name": "pruned parent",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "s4.get(\"s3_stored\") is True and s4.get(\"s3_has_state\") is False, s4)",
+      "replacement": "s4.get(\"s3_stored\") is True, s4)"
+    },
+    {
+      "name": "paths equal",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "report[\"ac_cap_01_01\"][\"native\"] == report[\"ac_cap_01_01\"][\"harness\"] and",
+      "replacement": ""
+    },
+    {
+      "name": "attestation fallback",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "ok = (e[\"status\"] == \"GENESIS_FALLBACK\" and e[\"justified\"] == genesis_head and e[\"finalized\"] == genesis_head",
+      "replacement": "ok = (e[\"status\"] == \"GENESIS_FALLBACK\""
+    },
+    {
+      "name": "attestation count",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "sorted(e[\"number\"] for e in events) == sorted(d[\"new_head\"][\"number\"] for d in imports),",
+      "replacement": "True,"
+    },
+    {
+      "name": "gaps recomputed",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(\"Gaps recomputed from the coverage\", gaps == report.get(\"gaps\"), (gaps, report.get(\"gaps\")))",
+      "replacement": ""
+    },
+    {
+      "name": "gaps deferred only",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(\"the gaps are exactly the D104 rows\", gaps == sorted(DEFERRED), gaps)",
+      "replacement": ""
+    },
+    {
+      "name": "routes from the map",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(\"the probe's caller map is the repository map\", report.get(\"routes\") == routes, report.get(\"routes\"))",
+      "replacement": ""
+    },
+    {
+      "name": "outside refusals",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"refusal of {caller} outside the gate\", isinstance(report[\"outside_gate_refusals\"].get(caller), str),",
+      "replacement": "c.check(f\"refusal of {caller} outside the gate\", True,"
+    },
+    {
+      "name": "native extras refused",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"native: {name} refused\", step[\"class\"] == klass and text in (step[\"error\"] or \"\"),",
+      "replacement": "c.check(f\"native: {name} refused\", True,"
+    },
+    {
+      "name": "exit errors",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"{path}: every pass exit accepted\", report[path][\"exit_errors\"] == [], report[path][\"exit_errors\"])",
+      "replacement": "pass"
+    },
+    {
+      "name": "deadlock",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(\"deadlock smoke finished without errors\", d.get(\"finished\") is True and d.get(\"errors\") == [], d)",
+      "replacement": ""
+    },
+    {
+      "name": "attestation fault step",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"attestation fault: {name}\", step[\"class\"] == klass and step[\"head\"] == head and",
+      "replacement": "c.check(f\"attestation fault: {name}\", step[\"head\"] == head and"
+    },
+    {
+      "name": "attestation fault head",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"attestation fault: {name}\", step[\"class\"] == klass and step[\"head\"] == head and",
+      "replacement": "c.check(f\"attestation fault: {name}\", step[\"class\"] == klass and"
+    },
+    {
+      "name": "decided events",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"events: decided {name} sends the native events (D101)\", got == e[\"reference\"].get(name),",
+      "replacement": "c.check(f\"events: decided {name} sends the native events (D101)\", True,"
+    },
+    {
+      "name": "verified event",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "got is not None and f\"verified {name}\" in got and f\"block {name}\" in got, got)",
+      "replacement": "got is not None, got)"
+    },
+    {
+      "name": "crash settle",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "c.check(f\"crash {mode}: the lifecycle intent is {outcome}\", settle == [(outcome, evidence)], settle)",
+      "replacement": ""
+    },
+    {
+      "name": "deferred rows",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "        if caller in DEFERRED:\n            out[caller] = {\"verdict\": \"DEFERRED\", \"reason\": DEFERRED[caller]}\n        elif",
+      "replacement": "        if"
+    },
+    {
+      "name": "matrix 06-04",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "\"AC-LIF-06-04\": {\"bsc-private-local\": \"PASS\" if clean else \"FAIL\",",
+      "replacement": "\"AC-LIF-06-04\": {\"bsc-private-local\": \"PASS\","
+    },
+    {
+      "name": "matrix 05-02",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "\"AC-LIF-05-02\": {\"bsc-private-local\": \"NOT_APPLICABLE\",",
+      "replacement": "\"AC-LIF-05-02\": {\"bsc-private-local\": \"PASS\","
+    },
+    {
+      "name": "runtime rejection",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            len(rejected) == 1 and len(intents) == 1 and rejected[0][\"sequence\"] == intents[0][\"sequence\"] and",
+      "replacement": "            True or"
+    },
+    {
+      "name": "guard decided",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            \"open extractor obligations\" in str(guard.get(\"decided\")), guard.get(\"decided\"))",
+      "replacement": "            True, guard.get(\"decided\"))"
+    },
+    {
+      "name": "guard fresh",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            guard.get(\"fresh\") is None and guard.get(\"fresh_import_error\") is None, guard)",
+      "replacement": "            True, guard)"
+    },
+    {
+      "name": "guard pinned",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            \"live pins forbid\" in str(guard.get(\"pinned\")), guard.get(\"pinned\"))",
+      "replacement": "            True, guard.get(\"pinned\"))"
+    },
+    {
+      "name": "malformed part",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "            c.check(f\"{name}: well-formed report\", False, f\"{type(error).__name__}: {error}\")",
+      "replacement": "            pass"
+    },
+    {
+      "name": "canonical caller known",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "                        caller is not None and\n",
+      "replacement": "",
+      "equivalent": "A missing caller makes canonical_evidence raise AttributeError, which the judge's part() turns into a failed well-formed-report check; the explicit guard only names the failure earlier."
+    },
+    {
+      "name": "retained absolute paths",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    require(run_directory.is_absolute() and output.is_absolute(), \"Paths must be absolute\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "retained existing output",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    require(not output.exists(), \"The judge output already exists\")\n",
+      "replacement": ""
+    },
+    {
+      "name": "retained recorded outputs",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "        require(artifact(record[\"outputs\"][name], 64 * 1024 * 1024) == work / name,\n                f\"The retained {name} is not the recorded one\")",
+      "replacement": "        pass"
+    },
+    {
+      "name": "row verdicts present",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    c.check(\"every BSC row of the map has a verdict\", bool(rows) and sorted(rows) == sorted(routes), sorted(rows))\n",
+      "replacement": "",
+      "equivalent": "row_verdicts returns a verdict for every row of the map or raises; part() turns the exception into a failed check, so this check only names the failure."
+    },
+    {
+      "name": "row verdicts after the failures",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "    rows = part(\"rows\", row_verdicts, routes, report.get(\"coverage\", {}), callers, default={})\n    c.check(\"every BSC row of the map has a verdict\", bool(rows) and sorted(rows) == sorted(routes), sorted(rows))\n    failures = c.failures()",
+      "replacement": "    failures = c.failures()\n    rows = part(\"rows\", row_verdicts, routes, report.get(\"coverage\", {}), callers, default={})"
+    }
+  ]
+}
