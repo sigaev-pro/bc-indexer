@@ -107,12 +107,13 @@ Pebble v1's `MemFS` has no crash clone, and the store is never closed: a
 close of a pebble v1 store under a live chain reports its leaked iterators
 and leaves the chain calling a closed store, which panics, and a close
 flushes Pebble's in-process WAL buffer, which a process crash does not do.
-So on every family a crash keeps exactly what reached the file system.
-Both Pebble versions keep a small NoSync WAL record in process memory until a sync or a full WAL block, so at the pending points
-of this catalog a crash reaches the same states as a power loss (seen on ETH
-and BSC). The catalog crash sets allow the state before the pending write,
-so this fits them; the recovery paths that only a crash keeping the pending
-write would add are covered by the core unit tables, not by these probes.
+So on every family a crash keeps exactly what reached the file system. Both
+Pebble versions keep a small NoSync WAL record in process memory until a
+sync or a full WAL block, so at the pending points of this catalog a crash
+reaches the same states as a power loss (seen on ETH and BSC). The catalog
+crash sets allow the state before the pending write, so this fits them; the
+recovery paths that only a crash keeping the pending write would add are
+covered by the core unit tables, not by these probes.
 
 ## Catalog
 
