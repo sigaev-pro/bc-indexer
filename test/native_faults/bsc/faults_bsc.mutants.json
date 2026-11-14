@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "description": "Single-check mutants of the E01-04.early_faults BSC fault probe driver judgement.",
+  "copy": [
+    "test/native_faults/bsc/*",
+    "test/native_faults/eth/probe.go",
+    "test/native_faults/*.py",
+    "test/native_faults/*.json",
+    "test/harness/*.py",
+    "test/harness/fixtures/admission_geth/*",
+    "test/harness/fixtures/lifecycle_bsc/*",
+    "test/harness/fixtures/bsc_admission/*",
+    "test/native_corpus/bsc/*",
+    "test/native_corpus/*.py",
+    "test/native_corpus/expected/*",
+    "adapters/bsc/**"
+  ],
+  "test": [
+    "{python}",
+    "test/native_faults/bsc/test_faults_bsc.py",
+    "-v"
+  ],
+  "import": [
+    "faults_bsc"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "decision rows dropped",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "rows = [row for row in comparison[\"differences\"] if row[\"field\"] not in DECISION_FIELDS]",
+      "replacement": "rows = list(comparison[\"differences\"])"
+    },
+    {
+      "name": "only per-block decisions",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "DECISION_FIELDS = (\"decisions\",)",
+      "replacement": "DECISION_FIELDS = (\"decisions\", \"decisions of other blocks\", \"reimport.new_decisions\", \"reimport.new_observations\")"
+    },
+    {
+      "name": "corpus fail on rows",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "return (\"FAIL\" if rows else \"PASS\"), [f\"{row['place']} {row['field']}\" for row in rows]",
+      "replacement": "return \"PASS\", [f\"{row['place']} {row['field']}\" for row in rows]"
+    },
+    {
+      "name": "no export",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if not isinstance(export, dict):\n        return \"FAIL\", [\"no export\"]",
+      "replacement": "    if not isinstance(export, dict):\n        return \"PASS\", [\"no export\"]"
+    },
+    {
+      "name": "format error",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        return \"FAIL\", [f\"format: {error}\"]",
+      "replacement": "        return \"PASS\", [f\"format: {error}\"]"
+    },
+    {
+      "name": "storage model",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if probe.get(\"storage_model\") != STORAGE_MODEL:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "malformed case",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "            errors.append(f\"case {index}: malformed\")",
+      "replacement": "            pass"
+    },
+    {
+      "name": "restart and golive errors",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        for key in (\"restart_error\", \"golive_error\"):",
+      "replacement": "        for key in ():"
+    },
+    {
+      "name": "import error",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if (case.get(\"import\") or {}).get(\"error\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "undecided intents",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if export.get(\"undecided_intents\") != []:",
+      "replacement": "        if export.get(\"undecided_intents\"):"
+    },
+    {
+      "name": "reimport error",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if export.get(\"reimport_error\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "one row per block",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if [row.get(\"number\") for row in export.get(\"blocks\") or []] != list(range(1, BLOCKS + 1)):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "native errors fail",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if errors and verdict.get(\"result\") != \"FAIL\":",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "corpus into final",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "final = dict(case.get(\"final\") or {}, corpus=result)",
+      "replacement": "final = dict(case.get(\"final\") or {}, corpus=\"PASS\")"
+    }
+  ]
+}

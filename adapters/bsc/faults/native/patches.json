@@ -1,0 +1,29 @@
+{
+ "schema_version": 1,
+ "description": "E01-04.early_faults BSC native patch set, applied after the E01-02.admission, E01-02.decision_bridge and E01-02.lifecycle_seams BSC patches (01 to 08). Test-only: it lets a fault probe open the chaindata store on a Pebble (v1) in-memory file system. With the default nil value the store opens on the OS file system exactly as before. Each original must occur exactly once.",
+ "source_commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+ "files": {},
+ "patches": [
+  {
+   "name": "pebble_vfs_import",
+   "file": "ethdb/pebble/pebble.go",
+   "original": "\t\"github.com/cockroachdb/pebble/bloom\"\n",
+   "replacement": "\t\"github.com/cockroachdb/pebble/bloom\"\n\t\"github.com/cockroachdb/pebble/vfs\"\n",
+   "reason": "The fault probe file system type."
+  },
+  {
+   "name": "pebble_vfs_var",
+   "file": "ethdb/pebble/pebble.go",
+   "original": "const (\n\t// minCache is the minimum amount of memory in megabytes to allocate to pebble\n",
+   "replacement": "// ExtractorFS is test-only (E01-04.early_faults). When it is not nil, New opens\n// the store on this file system instead of the OS file system, so a fault\n// probe can drop the unsynced data of a power loss. Production leaves it nil.\nvar ExtractorFS vfs.FS\n\nconst (\n\t// minCache is the minimum amount of memory in megabytes to allocate to pebble\n",
+   "reason": "A package switch that only the fault probe sets."
+  },
+  {
+   "name": "pebble_vfs_open",
+   "file": "ethdb/pebble/pebble.go",
+   "original": "\tinnerDB, err := pebble.Open(file, opt)\n",
+   "replacement": "\tif ExtractorFS != nil {\n\t\topt.FS = ExtractorFS\n\t}\n\tinnerDB, err := pebble.Open(file, opt)\n",
+   "reason": "Open on the probe file system when it is set."
+  }
+ ]
+}
