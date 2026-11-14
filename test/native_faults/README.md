@@ -26,8 +26,8 @@ Every fault point runs both:
 
 | Variant | What survives | How the probe makes it |
 |---|---|---|
-| `crash` | Every write made so far, synced or not (the OS cache survives) | Stop the native node at the fault point without closing the store, then reopen the same store |
-| `power_loss` | Only the writes that a completed sync made durable | The same stop, then drop every unsynced write before the reopen |
+| `crash` | Every write made so far, synced or not (the OS cache survives) | Stop the native node at the fault point, then reopen on a file system that keeps every write (see "Restart") |
+| `power_loss` | Only the writes that a completed sync made durable | The same stop, then reopen on a file system that keeps only the synced data |
 
 Most fault points lie between a write and its `SyncKeyValue` inside a
 shared accepted package (`Begin`, `Admit`, `ExecReady`, `Intend`,
@@ -40,11 +40,13 @@ set puts around the chaindata store the packages use:
 - a point after a sync: that sync completes, and the next store call returns
   an error.
 
-The error stops the step, and the probe stops the node without closing the
-store. The wrapper counts the key writes made since the last completed sync;
-that count is `unsynced_dropped` for the power-loss variant. Then the probe
-reopens the node on the same store and lets recovery finish. After that it
-imports the smoke corpus blocks and the rest of the short chain.
+The error stops the step, and the probe stops the node. The wrapper counts
+the key writes made since the last completed sync; that count is
+`unsynced_dropped` for the power-loss variant. It is an upper bound: a WAL
+byte sync or a memtable flush may have made some of those writes durable.
+Then the probe reopens the node (see "Restart") and lets recovery finish.
+After that it imports the smoke corpus blocks and the rest of the short
+chain.
 
 ### Storage and cache model
 
@@ -57,8 +59,19 @@ differs, so the in-memory file system does too:
 | ETH (Geth) | v2.1.4 | `vfs.NewCrashableMem` | reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})` | `pebble-v2-crashable-mem` |
 | BSC, POLY (Bor) | v1.1.5 | `vfs.NewStrictMem` | `ResetToSyncedState`, then reopen | `pebble-v1-strict-mem` |
 
-Both keep exactly the data that was last synced. A reopen of the same file
-system without that step is the crash variant. Every capture record of the
+Both keep exactly the data that was last synced.
+
+### Restart
+
+A second open of a Pebble store on the same in-memory file system fails
+while the first is still open (the file system holds an in-process lock),
+and a normal close of a pebble v1 store syncs its WAL. So the probe reopens
+like this:
+
+| Family | `power_loss` | `crash` |
+|---|---|---|
+| ETH (pebble v2) | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})`, a new file system with no locks | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 100})` |
+| BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)`, close the node, `ResetToSyncedState`, `SetIgnoreSyncs(false)`, reopen | Close the node normally, then reopen: every write is kept | Every capture record of the
 early seams lives in this store and is made durable by `SyncKeyValue`: the
 admission records, the pins (`state_provider`, hash scheme only),
 EXEC_READY, the decision records and markers, and the boundary record. So
@@ -73,8 +86,9 @@ Limits of the model, recorded in every report as `storage_model`:
   mixed survival of native writes in the same window is not tested.
 - Native writes are not all unsynced until a capture sync: Pebble syncs the
   WAL every `WALBytesPerSync` bytes (geth sets 5 times `IdealBatchSize`), and
-  a memtable flush also makes data durable. A report states what the store
-  dropped, not what native code expected.
+  a memtable flush also makes data durable. So `unsynced_dropped` is an
+  upper bound of what the power loss dropped, and the states after the
+  restart, read from the store, are what counts.
 - It models the loss of unsynced data at the store level. It does not model
   torn sector writes, a device that acknowledges a sync it did not do, or
   file system metadata loss.
@@ -90,8 +104,9 @@ Limits of the model, recorded in every report as `storage_model`:
 [faults.json](faults.json) lists the fault points. Each point has:
 
 - the seam and the exact boundary;
-- the source table that defines the expected state: the power-loss table of
-  the accepted core README, narrowed to the two extremes above;
+- the source that defines the expected state: a power-loss or crash-point
+  table of an accepted core README, the GoLive section of the lifecycle
+  README, or the pins evidence, narrowed to the two extremes above;
 - whether a write is pending at the point (`pending`);
 - the states allowed right after the restart, per variant;
 - how H behaves (`h_rule`): `kept` when the boundary is durable at the
@@ -177,7 +192,8 @@ For every case:
 
 1. The fault point was reached.
 2. A power loss reset the store to its synced state and, at a pending
-   point, dropped at least one write. A crash dropped nothing.
+   point, the wrapper counted at least one unsynced write. A crash reports
+   a count of zero.
 3. The boundary presence and each state after the restart are allowed for
    the variant. The mode is BOOTSTRAP without a boundary and RECOVERY with
    one. A boundary after the restart equals the native canonical header at

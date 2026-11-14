@@ -28,7 +28,7 @@ measured session at a time, so the client blocks run one after another.
 | Block | Role | Output | Allowed paths |
 |---|---|---|---|
 | 0 faults-core | architect, then native-engineer; reviewer | Fault model, storage and cache model, catalog of fault points, report format, judge, portable controls and mutants; no native run | `test/native_faults/{README.md,faults.json,*.py,*.mutants.json}`, `.project/automation/ci.py` and `test_ci_discovery.py` (discover the fault tests), `.project/evidence/E01-04.early_faults.md`, this section |
-| ETH | native-engineer; qa for the matrix | Geth fault probe on the strict in-memory store, fault hooks in its own patch set, measured records, Geth handoffs | `test/native_faults/eth/**`, `adapters/geth/*/native/**` as the hooks need (shared files unchanged), `.project/evidence/E01-04.early_faults.eth.md`, its subsection of this section |
+| ETH | native-engineer; qa for the matrix | Geth fault probe on the in-memory store, fault hooks in its own patch set, measured records, Geth handoffs | `test/native_faults/eth/**`, `adapters/geth/*/native/**` as the hooks need (shared files unchanged), `.project/evidence/E01-04.early_faults.eth.md`, its subsection of this section |
 | BSC | native-engineer; qa for the matrix | The same for BSC, with the BSC handoffs | `test/native_faults/bsc/**`, `adapters/bsc/*/native/**` as above, `.project/evidence/E01-04.early_faults.bsc.md`, its subsection of this section |
 | POLY | native-engineer; qa for the matrix | The same for Bor, with the Bor handoffs | `test/native_faults/poly/**`, `adapters/bor/*/native/**` as above, `.project/evidence/E01-04.early_faults.poly.md`, its subsection of this section |
 
@@ -84,7 +84,7 @@ REQUEST_CHANGES and Standards REQUEST_CHANGES. They found these problems:
 - unkilled checks;
 - unretained records.
 
-All of them are fixed in `53be973`.
+All of them are fixed in `53be973`; review 002 confirms the fixes.
 
 Evidence: [E01-04.early_faults](evidence/E01-04.early_faults.md).
 
