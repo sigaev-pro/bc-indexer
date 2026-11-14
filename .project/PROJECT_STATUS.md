@@ -320,9 +320,36 @@ PR #168 at `cfb9195`.
 
 ## E01-02.lifecycle_seams — Map all required native lifecycle callers (issue #18)
 
-Status: IN_PROGRESS. Block 0 (lifecycle-core) merged in PR #165, the Geth
-block in PR #170 and the BSC block in PR #172; the Bor block is in review
-(PR #171). Dependencies E01-02.decision_bridge (#17,
+Status: ACCEPTED (2026-11-14); #18 closes when this record merges. Merged
+blocks:
+
+- block 0 lifecycle-core: PR #165 at `51adbee`;
+- Geth: PR #170 at `07ae232` (measured head `14188b9`);
+- BSC: PR #172 at `425cf71` (measured head `8ed0f73`), with D104;
+- Bor: PR #171 at `2c58e11` (measured head `b4f90bd`), with D105.
+
+qa verdicts, private local:
+
+| Family | AC-CAP-01-01 | AC-LIF-05-02, 05-03 | AC-LIF-06-04, 06-05 |
+|---|---|---|---|
+| ETH (Geth records 03) | PASS | PASS, PASS | NOT_APPLICABLE |
+| BSC (run 04 at `28b45cd`) | PASS with `bsc.known-block` and `bsc.side-chain` deferred to E05-02.reorg (D104, D106) | NOT_APPLICABLE | PASS, PASS |
+| POLY (Bor run 01) | PASS (known-block and the milestone reorganization through test hooks, D106) | NOT_APPLICABLE | NOT_APPLICABLE |
+
+The retained BSC judge output says FAIL because it counts the two deferred
+rows; D106 reads it as PASS with those rows deferred, and the records are
+not edited. Every public cell stays NOT_RUN (D96). D106 records the owner's
+answers: the D104 side-branch reading, closing #18 with the BSC deferral,
+the Bor startup finality write deferred to E05-01.polygon_observer, the
+replay of a closed branch on Geth and Bor to E05-02.reorg, and the owners of
+the other limits. It also records the technical decisions on manual
+chaindata commands, the source pins and the historical `status` fields of
+the caller map. The acceptance commit adds `bor backfill-statesync-txs` to
+the `bor.manual-commands` entries of the shared `callers.json` (the three
+copies stay identical; the lifecycle validators, Python tests and the Go
+tests of the assembled module pass).
+
+Dependencies E01-02.decision_bridge (#17,
 merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Plan from the
 coordinator on 2026-11-13, approved by the owner, the same split as #16 and
 #17: block 0 core (architect, then native-engineer), then parallel Geth, BSC
@@ -440,7 +467,9 @@ D99). `python3 test/harness/lifecycle.py table` prints the full map.
 
 #18 closes only when every client block is accepted and AC-CAP-01-01 passes
 for every family, AC-LIF-05-02 and 05-03 for ETH, and AC-LIF-06-04 and 06-05
-for BSC, on the private local slots under the D96 boundary.
+for BSC, on the private local slots under the D96 boundary. D106 replaces
+this rule for the two BSC rows deferred under D104: #18 closes with them
+deferred to E05-02.reorg.
 
 Evidence: [E01-02.lifecycle_seams](evidence/E01-02.lifecycle_seams.md).
 
@@ -518,8 +547,7 @@ then at `3900d65` (#167) and then at `cfb9195` (#168), each with a merge
 commit. No merge adds a measured input; record 03 still describes the
 measured code (evidence, "Merge of main").
 
-Next: a docs-only confirmation review of the merge, hosted CI on the merge
-head, the final review comment, then the client blocks after merge.
+Block 0 merged in PR #165 at `51adbee`.
 
 ### Geth block
 
@@ -575,7 +603,7 @@ qa verdict, private local ETH: AC-CAP-01-01 PASS, AC-LIF-05-02 PASS,
 AC-LIF-05-03 PASS, AC-LIF-06-04 and 06-05 NOT_APPLICABLE (BSC only); family
 PASS. Public ETH cells stay NOT_RUN.
 
-Next: Spec and Standards reviews, hosted CI, the final review comment.
+The Geth block merged in PR #170 at `07ae232`.
 
 ### Bor block
 
@@ -653,16 +681,12 @@ the measured round. The merge adds only BSC files and docs, so run 01 still
 describes the measured code. The owner decisions on D104 (E05-02.reorg owns
 ordinary BSC side branches and reorganizations) and on closing #18 with the
 two BSC rows deferred to E05-02.reorg change no Bor row (evidence, "Merge
-of main and later owner decisions"). They are not yet recorded in
-DECISIONS.md; until the coordinator records them, D104 and its #18 closing
-rule stand as written.
+of main and later owner decisions"). D106 records them.
 
-The `bor.manual-commands` row of the shared caller map does not yet name
-`bor backfill-statesync-txs`. The map is a shared file that the measured run
-reads, so the coordinator adds it in the #18 acceptance record.
+The acceptance commit adds `bor backfill-statesync-txs` to the
+`bor.manual-commands` row of the shared caller map (D106).
 
-Next: Spec and Standards confirmation of the merge and the docs commits,
-hosted CI, the final review comment.
+The Bor block merged in PR #171 at `2c58e11`.
 
 ### BSC block
 
@@ -739,8 +763,12 @@ qa verdict, private local BSC: AC-CAP-01-01 FAIL, with `bsc.known-block` and
 READ_ONLY rows by source review, `bsc.notify-finalized` NOT_APPLICABLE for
 E05-01.bsc_finality). AC-LIF-05-02 and 05-03 NOT_APPLICABLE (ETH only, D104).
 AC-LIF-06-04 PASS and AC-LIF-06-05 PASS. Public BSC cells stay NOT_RUN.
+Under D106 AC-CAP-01-01 for BSC is accepted with the two rows deferred.
 
-Next: hosted CI on the final head and the final review comment.
+The BSC block merged in PR #172 at `425cf71`.
+
+Next: none for E01-02.lifecycle_seams. It unlocks E01-04.early_faults (#20);
+with E01-05.type_paths (#21) it leads to G.E01 (#78).
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 

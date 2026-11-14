@@ -1143,7 +1143,8 @@
       "source": "internal/cli/removedb.go:Run",
       "entry": [
         "bor removedb",
-        "bor purge-whitelisted-entries"
+        "bor purge-whitelisted-entries",
+        "bor backfill-statesync-txs"
       ],
       "effects": [
         "CANONICAL",
