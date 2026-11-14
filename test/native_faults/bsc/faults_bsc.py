@@ -198,6 +198,9 @@ def prepare(manifest_path, expected_sha, output):
                                   deadline)
         for directory in ("metadata", "generated", "build-cache", "build-temp", "gopath"):
             (root / directory).mkdir()
+        for name in ("go.mod", "go.sum"):
+            copy_artifact(source / name, root / "metadata" / name, reference(source / name, deadline=deadline),
+                          deadline=deadline)
         compiler = manifest["builds"]["bsc"]["compiler_image"]
         require(compiler == manifest["image_inputs"]["golang-build-image"]["reference"], "Unexpected compiler image")
         mounts = probe14.build_mounts(source, manifest_path.parent / "cache" / "bsc" / "mod", root)
