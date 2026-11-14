@@ -2,7 +2,9 @@
 
 ## E01-04.early_faults — Early capture and decision boundaries under power loss (issue #20)
 
-Status: IN_PROGRESS. Block 0 (faults-core) is in review. Dependencies
+Status: IN_PROGRESS. Block 0 (faults-core) merged in PR #174 at `bdf3919`;
+correction 01 of block 0 (from the first Geth fault run) is in review. The
+Geth block is in progress. Dependencies
 E01-02.lifecycle_seams (#18, accepted in PR #173 at `fea548e`),
 E01-03.smoke_corpus (#19, accepted in PR #169) and BOOT-09 are accepted.
 
@@ -57,6 +59,51 @@ the Bor power-loss variant of its startup-repair fault, and per family a
 canonical import held open across `GoLive` (the other side of
 AC-SCP-03-01).
 
+### Geth block
+
+Branch `claude/e01-04-early-faults-geth`, based on block 0 correction 01
+(PR #175). Part A covers the 30 catalog cases. Part B covers the four Geth
+handoffs: `geth.pass-at-golive`, `geth.sethead-interrupted`,
+`geth.repaired-judge` and `geth.mid-reorg-long-branch`. Design:
+[test/native_faults/eth/README.md](../test/native_faults/eth/README.md).
+
+A test-only patch set (`adapters/geth/faults/native`, 3 patches) lets
+`ethdb/pebble` open on a Pebble in-memory file system. The probe runs every
+case on the smoke corpus blocks:
+
+- a fault store fires the point inside the store call;
+- the probe abandons the node and reopens on a `CrashClone`;
+- it reads the durable states as the accepted packages read them, lets
+  recovery finish, imports and re-imports the corpus blocks, and exports
+  the native result.
+
+Records 02 at `9122d93` (evidence:
+[E01-04.early_faults.eth](evidence/E01-04.early_faults.eth.md)):
+
+- preparation 02 PASS;
+- run 02 INCOMPLETE: all 30 cases PASS, AC-SCP-03-01 PASS for ETH, the
+  handoffs NOT_RUN (part B);
+- 18 portable tests;
+- 18 of 18 mutants killed.
+
+Records 01 at `532831d` are superseded and kept.
+
+Recovered obligations close as a CANONICAL activation of the stored block,
+and each block is delivered exactly once. On ETH the crash variant reaches
+the power-loss states at the pending points: Pebble v2 keeps a small NoSync
+WAL record in process memory until a sync.
+
+Review 001: Spec and Standards REQUEST_CHANGES, fixed in `9122d93`. The
+findings were:
+
+- the `dec.before-intent-sync` arming;
+- a corpus row left out;
+- the crash copy;
+- the opening mode;
+- the native checks.
+
+Next: Spec and Standards confirmation of part A, then part B.
+
 ### Block 0: faults-core
 
 Branch `claude/e01-04-early-faults-core`. Design:
@@ -88,8 +135,7 @@ All of them are fixed in `53be973`; review 002 confirms the fixes.
 
 Evidence: [E01-04.early_faults](evidence/E01-04.early_faults.md).
 
-Next: Spec and Standards confirmation reviews, hosted CI, the final review
-comment.
+Block 0 merged in PR #174 at `bdf3919`.
 
 ## E01-03.smoke_corpus — Minimal independent native test corpus (issue #19)
 
