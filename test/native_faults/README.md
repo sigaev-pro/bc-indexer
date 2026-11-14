@@ -26,8 +26,8 @@ Every fault point runs both:
 
 | Variant | What survives | How the probe makes it |
 |---|---|---|
-| `crash` | Every write made so far, synced or not (the OS cache survives) | Stop the native node at the fault point, then reopen on a file system that keeps every write (see "Restart") |
-| `power_loss` | Only the writes that a completed sync made durable | The same stop, then reopen on a file system that keeps only the synced data |
+| `crash` | Every write made so far, synced or not (the OS cache survives) | Abandon the native node at the fault point (no `BlockChain.Stop`), then reopen on a file system that keeps every write (see "Restart") |
+| `power_loss` | Only the writes that a completed sync made durable | The same abandon, then reopen on a file system that keeps only the synced data |
 
 Most fault points lie between a write and its `SyncKeyValue` inside a
 shared accepted package (`Begin`, `Admit`, `ExecReady`, `Intend`,
@@ -40,7 +40,7 @@ set puts around the chaindata store the packages use:
 - a point after a sync: that sync completes, and the next store call returns
   an error.
 
-The error stops the step, and the probe stops the node. The wrapper counts
+The error stops the step, and the probe abandons the node. The wrapper counts
 the key writes made since the last completed sync; that count is
 `unsynced_dropped` for the power-loss variant. It is an upper bound: a WAL
 byte sync or a memtable flush may have made some of those writes durable.
