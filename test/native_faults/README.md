@@ -26,7 +26,7 @@ Every fault point runs both:
 
 | Variant | What survives | How the probe makes it |
 |---|---|---|
-| `crash` | Every write made so far, synced or not (the OS cache survives) | Abandon the native node at the fault point (no `BlockChain.Stop`), then reopen on a file system that keeps every write (see "Restart") |
+| `crash` | Every write that reached the file system, synced or not (the OS cache survives); a write still in Pebble's in-process WAL buffer is lost, as in a real process crash | Abandon the native node at the fault point (no `BlockChain.Stop`), then reopen on a file system that keeps every write (see "Restart") |
 | `power_loss` | Only the writes that a completed sync made durable | The same abandon, then reopen on a file system that keeps only the synced data |
 
 Most fault points lie between a write and its `SyncKeyValue` inside a
@@ -186,8 +186,12 @@ Hashes and roots are 64 lowercase hex digits without `0x`. The
 `after_restart` states describe the fault block: the head at GoLive for an H
 point, or the live block that hit the point. `native_h` is read from the
 native chain (canonical hash and header state root at the boundary number),
-not from the boundary record. `final.corpus` is the
-`corpus_compare.py` result for the corpus blocks imported after recovery.
+not from the boundary record. `final.corpus` is the `corpus_compare.py`
+result for the corpus blocks imported after recovery, without its decision
+rows: after a fault a recovered obligation may close with another decision
+kind (for example a CANONICAL activation of the stored block instead of an
+IMPORT), and rule 4 judges the delivery of each block. Every other
+difference fails it.
 
 ## Judge rules
 

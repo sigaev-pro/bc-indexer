@@ -86,7 +86,9 @@ class CatalogTests(unittest.TestCase):
 
     def test_pending_points_allow_fewer_states_after_power_loss(self):
         for point in catalog()["points"]:
-            if not point["pending"]:
+            # The pending counter write of adm.before-counter-sync leaves the
+            # INPUT_PREPARING state unchanged (an orphan beyond the counter).
+            if not point["pending"] or point["id"] == "adm.before-counter-sync":
                 continue
             crash, power = point["after_restart"]["crash"], point["after_restart"]["power_loss"]
             narrower = [f for f in power if set(power[f]) < set(crash.get(f, power[f]))]
