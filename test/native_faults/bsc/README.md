@@ -36,9 +36,10 @@ For each catalog point and each variant (30 cases), on a fresh store:
    (with its batch, the arming table and the catalog order) is the Geth
    probe's; a portable test compares every declaration.
 3. **Abandon and copy.** The probe abandons the node: no `BlockChain.Stop`
-   and no store close. Closing a pebble v1 store under a live chain panics
-   on the chain's open iterators, and a close would flush Pebble's in-process
-   WAL buffer, which a process crash does not do. Pebble v1's `MemFS` has no
+   and no store close. Closing a pebble v1 store under a live chain reports
+   leaked iterators and leaves the chain calling a closed store, which
+   panics, and a close would flush Pebble's in-process WAL buffer, which a
+   process crash does not do. Pebble v1's `MemFS` has no
    crash clone, so the probe copies the chaindata files into a new strict
    file system: as they are for a crash (after waiting for the WAL files to
    stop growing, no sync), and after `SetIgnoreSyncs(true)` and
