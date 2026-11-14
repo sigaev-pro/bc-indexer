@@ -77,19 +77,32 @@ case on the smoke corpus blocks:
   recovery finish, imports and re-imports the corpus blocks, and exports
   the native result.
 
-Records 01 at `532831d` (evidence:
+Records 02 at `9122d93` (evidence:
 [E01-04.early_faults.eth](evidence/E01-04.early_faults.eth.md)):
 
-- preparation 01 PASS;
-- run 01 INCOMPLETE: all 30 cases PASS, AC-SCP-03-01 PASS for ETH, the
+- preparation 02 PASS;
+- run 02 INCOMPLETE: all 30 cases PASS, AC-SCP-03-01 PASS for ETH, the
   handoffs NOT_RUN (part B);
-- 13 portable tests;
-- 12 of 12 mutants killed.
+- 18 portable tests;
+- 18 of 18 mutants killed.
+
+Records 01 at `532831d` are superseded and kept.
 
 Recovered obligations close as a CANONICAL activation of the stored block,
-and each block is delivered exactly once.
+and each block is delivered exactly once. On ETH the crash variant reaches
+the power-loss states at the pending points: Pebble v2 keeps a small NoSync
+WAL record in process memory until a sync.
 
-Next: Spec and Standards reviews of part A, then part B.
+Review 001: Spec and Standards REQUEST_CHANGES, fixed in `9122d93`. The
+findings were:
+
+- the `dec.before-intent-sync` arming;
+- a corpus row left out;
+- the crash copy;
+- the opening mode;
+- the native checks.
+
+Next: Spec and Standards confirmation of part A, then part B.
 
 ### Block 0: faults-core
 
