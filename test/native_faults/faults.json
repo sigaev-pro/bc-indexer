@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "kind": "native-faults-catalog",
+  "task": "E01-04.early_faults",
+  "families": ["eth", "bsc", "poly"],
+  "variants": {
+    "crash": "The process stops at the fault point and the OS cache survives: the store reopens with every write made so far, synced or not.",
+    "power_loss": "The machine loses power at the fault point: the store reopens with only the writes that a completed sync made durable; every unsynced write is dropped."
+  },
+  "states": {
+    "mode": ["BOOTSTRAP", "RECOVERY", "LIVE"],
+    "admission": ["none", "preparing", "admitted", "exec_ready", "decided"],
+    "pin": ["none", "live", "released"],
+    "decision": ["none", "intent", "intent_marker", "decided"]
+  },
+  "points": [
+    {
+      "id": "h.before-boundary-sync",
+      "pending": true,
+      "seam": "H",
+      "ac": ["AC-SCP-03-01"],
+      "boundary": "GoLive has flushed and synced the state root of the H header and written the boundary record, but the boundary sync has not completed.",
+      "source": "adapters/geth/lifecycle/README.md, GoLive",
+      "after_restart": {
+        "crash": {"boundary": ["absent", "present"], "mode": ["BOOTSTRAP", "RECOVERY"]},
+        "power_loss": {"boundary": ["absent"], "mode": ["BOOTSTRAP"]}
+      },
+      "h_rule": "kept_if_present"
+    },
+    {
+      "id": "h.after-boundary-sync",
+      "pending": false,
+      "seam": "H",
+      "ac": ["AC-SCP-03-01"],
+      "boundary": "The boundary record is synced; the decision bridge has not gone live.",
+      "source": "adapters/geth/lifecycle/README.md, GoLive",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "mode": ["RECOVERY"]},
+        "power_loss": {"boundary": ["present"], "mode": ["RECOVERY"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "h.after-golive-before-first-import",
+      "pending": false,
+      "seam": "H",
+      "ac": ["AC-SCP-03-01"],
+      "boundary": "GoLive has returned and the capture path is live; block H+1 has not reached admission.",
+      "source": "adapters/geth/lifecycle/README.md, GoLive",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "mode": ["RECOVERY"], "admission": ["none"]},
+        "power_loss": {"boundary": ["present"], "mode": ["RECOVERY"], "admission": ["none"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "adm.before-counter-sync",
+      "pending": true,
+      "seam": "admission",
+      "ac": [],
+      "boundary": "Begin has written the counter and the INPUT_PREPARING record of the fault block, but the counter sync has not completed.",
+      "source": "adapters/geth/admission/README.md, power loss table",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["none", "preparing"]},
+        "power_loss": {"boundary": ["present"], "admission": ["none"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "adm.before-admitted-sync",
+      "pending": true,
+      "seam": "admission",
+      "ac": [],
+      "boundary": "Begin is durable and the ADMITTED record of the fault block is written, but its closing sync has not completed.",
+      "source": "adapters/geth/admission/README.md, power loss table",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["preparing", "admitted"]},
+        "power_loss": {"boundary": ["present"], "admission": ["preparing"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "adm.after-admitted-sync",
+      "pending": false,
+      "seam": "admission",
+      "ac": [],
+      "boundary": "The ADMITTED record of the fault block is synced; execution has not finished.",
+      "source": "adapters/geth/admission/README.md, power loss table",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["admitted"], "pin": ["live"]},
+        "power_loss": {"boundary": ["present"], "admission": ["admitted"], "pin": ["live"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "pin.before-pin-sync",
+      "pending": true,
+      "seam": "pins",
+      "ac": [],
+      "boundary": "The pin of the parent state of the fault block is written, but its sync has not completed.",
+      "source": ".project/evidence/E01-02.pins.md, surviving SyncKeyValue mutants",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "pin": ["none", "live"], "admission": ["preparing"]},
+        "power_loss": {"boundary": ["present"], "pin": ["none"], "admission": ["preparing"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "pin.after-pin-sync",
+      "pending": false,
+      "seam": "pins",
+      "ac": [],
+      "boundary": "The pin of the parent state of the fault block is synced; the ADMITTED record is not written.",
+      "source": ".project/evidence/E01-02.pins.md",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "pin": ["live"], "admission": ["preparing"]},
+        "power_loss": {"boundary": ["present"], "pin": ["live"], "admission": ["preparing"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "pin.release-before-sync",
+      "pending": true,
+      "seam": "pins",
+      "ac": [],
+      "boundary": "The decision of the fault block is synced and the pin release is written, but the release sync has not completed.",
+      "source": ".project/evidence/E01-02.pins.md, surviving SyncKeyValue mutants",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "pin": ["live", "released"], "admission": ["decided"]},
+        "power_loss": {"boundary": ["present"], "pin": ["live"], "admission": ["decided"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "exec.before-exec-ready-sync",
+      "pending": true,
+      "seam": "EXEC_READY",
+      "ac": [],
+      "boundary": "Execution of the fault block has finished and the EXEC_READY record is written, but its closing sync has not completed.",
+      "source": "adapters/geth/decision/README.md, crash points of one decision (AC-CAP-07-01 unit form)",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["admitted", "exec_ready"]},
+        "power_loss": {"boundary": ["present"], "admission": ["admitted"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "exec.after-exec-ready-sync",
+      "pending": false,
+      "seam": "EXEC_READY",
+      "ac": [],
+      "boundary": "EXEC_READY of the fault block is synced; the child state root is not durable and no intent exists.",
+      "source": "adapters/geth/decision/README.md, crash points of one decision (AC-CAP-07-02 unit form)",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["none"]},
+        "power_loss": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["none"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "dec.before-intent-sync",
+      "pending": true,
+      "seam": "decision",
+      "ac": [],
+      "boundary": "Intend has written the decision counter and intent of the fault block, but the counter sync has not completed.",
+      "source": "adapters/geth/decision/README.md, crash points of one decision",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["none", "intent"]},
+        "power_loss": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["none"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "dec.in-native-mutation",
+      "pending": false,
+      "seam": "decision",
+      "ac": [],
+      "boundary": "The intent of the fault block is synced and the native mutation has started, with no marker written.",
+      "source": "adapters/geth/decision/README.md, crash points of one decision (AC-CAP-07-03 unit form)",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent"]},
+        "power_loss": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "dec.before-decided-sync",
+      "pending": true,
+      "seam": "decision",
+      "ac": [],
+      "boundary": "The final native batch of the fault block carried the marker and was synced; the decided record is written, but its sync has not completed.",
+      "source": "adapters/geth/decision/README.md, crash points of one decision",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent_marker", "decided"]},
+        "power_loss": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent_marker"]}
+      },
+      "h_rule": "kept"
+    },
+    {
+      "id": "dec.after-decided-sync",
+      "pending": false,
+      "seam": "decision",
+      "ac": [],
+      "boundary": "The decided record of the fault block is synced; the observation is not closed.",
+      "source": "adapters/geth/decision/README.md, crash points of one decision",
+      "after_restart": {
+        "crash": {"boundary": ["present"], "admission": ["exec_ready", "decided"], "decision": ["decided"]},
+        "power_loss": {"boundary": ["present"], "admission": ["exec_ready", "decided"], "decision": ["decided"]}
+      },
+      "h_rule": "kept"
+    }
+  ],
+  "handoffs": [
+    {"id": "geth.pass-at-golive", "block": "eth", "kind": "fault", "source": "AC-SCP-03-01; adapters/geth/lifecycle/README.md, GoLive (ErrOrder)", "item": "A canonical import held open while GoLive runs: GoLive is refused, and the held import finishes before H is set, so it is not captured."},
+    {"id": "bsc.pass-at-golive", "block": "bsc", "kind": "fault", "source": "AC-SCP-03-01; adapters/bsc/lifecycle/README.md, GoLive (ErrOrder)", "item": "A canonical import held open while GoLive runs: GoLive is refused, and the held import finishes before H is set, so it is not captured."},
+    {"id": "bor.pass-at-golive", "block": "poly", "kind": "fault", "source": "AC-SCP-03-01; adapters/bor/lifecycle/README.md, GoLive (ErrOrder)", "item": "A canonical import held open while GoLive runs: GoLive is refused, and the held import finishes before H is set, so it is not captured."},
+    {"id": "geth.sethead-interrupted", "block": "eth", "kind": "fault", "source": "D106 item 5; .project/evidence/E01-02.lifecycle_seams.geth.md", "item": "The Geth completion of an interrupted SetHead rewind."},
+    {"id": "geth.repaired-judge", "block": "eth", "kind": "judge", "source": "D106 item 5; Geth lifecycle review 003", "item": "The judge of the Geth `repaired` scenario must bind the unresolved intent."},
+    {"id": "geth.mid-reorg-long-branch", "block": "eth", "kind": "fault", "source": "D101 item 2", "item": "The Geth mid-reorg completion with an old branch longer than one block, checked by source review only so far."},
+    {"id": "bsc.store-write-errors", "block": "bsc", "kind": "fault", "source": "D101 item 2", "item": "The BSC store and write errors of the decision path, checked by source review only so far."},
+    {"id": "bsc.skip-block", "block": "bsc", "kind": "fault", "source": "D101 item 2", "item": "The BSC `skipBlock` path, checked by source review only so far."},
+    {"id": "bor.below-h-rewind", "block": "poly", "kind": "fault", "source": "D106 item 5; adapters/bor/lifecycle/native/README.md, Below H", "item": "The Bor set-head refusal of a rewind target below H."},
+    {"id": "bor.golive-order", "block": "poly", "kind": "fault", "source": "D106 item 5; Bor lifecycle review 006", "item": "The Bor GoLive order, so far inferred from timing."},
+    {"id": "bor.bootstrap-vote-pass", "block": "poly", "kind": "fault", "source": "D106 item 5; Bor lifecycle review 006", "item": "The Bor BOOTSTRAP vote pass, which is not bound yet."},
+    {"id": "bor.probe-flag-help", "block": "poly", "kind": "doc", "source": "D106 item 5; Bor lifecycle review 006", "item": "The stale help text of the Bor probe flag."},
+    {"id": "bor.power-loss-model", "block": "poly", "kind": "fault", "source": "adapters/bor/lifecycle/native/README.md, Fault model", "item": "The Bor startup-repair fault is a process crash model; this task adds the power-loss variant."}
+  ]
+}
