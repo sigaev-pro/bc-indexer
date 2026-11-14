@@ -72,9 +72,24 @@ block is live.
 AC-SCP-03-01 per family is PASS when both variants of the three H points
 pass. Block 0 gives no AC verdict.
 
+Records 02 at `53be973`: catalog check PASS, 37 portable tests PASS, 44 of
+44 mutants killed, `ci.py` PASS. Review 001 (head `4665f90`): Spec
+REQUEST_CHANGES and Standards REQUEST_CHANGES. They found these problems:
+
+- Geth opens a new store with pebble v2, which has no strict file system;
+- wrong decided-sync, pin and restart-mode states;
+- no check of H against the native header;
+- a fault mechanism that could not reach the pending points;
+- the narrowed power-loss model was not disclosed;
+- unkilled checks;
+- unretained records.
+
+All of them are fixed in `53be973`.
+
 Evidence: [E01-04.early_faults](evidence/E01-04.early_faults.md).
 
-Next: Spec and Standards reviews, hosted CI, the final review comment.
+Next: Spec and Standards confirmation reviews, hosted CI, the final review
+comment.
 
 ## E01-03.smoke_corpus — Minimal independent native test corpus (issue #19)
 
