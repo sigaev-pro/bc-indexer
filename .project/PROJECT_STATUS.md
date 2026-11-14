@@ -59,6 +59,38 @@ the Bor power-loss variant of its startup-repair fault, and per family a
 canonical import held open across `GoLive` (the other side of
 AC-SCP-03-01).
 
+### Geth block
+
+Branch `claude/e01-04-early-faults-geth`, based on block 0 correction 01
+(PR #175). Part A covers the 30 catalog cases. Part B covers the four Geth
+handoffs: `geth.pass-at-golive`, `geth.sethead-interrupted`,
+`geth.repaired-judge` and `geth.mid-reorg-long-branch`. Design:
+[test/native_faults/eth/README.md](../test/native_faults/eth/README.md).
+
+A test-only patch set (`adapters/geth/faults/native`, 3 patches) lets
+`ethdb/pebble` open on a Pebble in-memory file system. The probe runs every
+case on the smoke corpus blocks:
+
+- a fault store fires the point inside the store call;
+- the probe abandons the node and reopens on a `CrashClone`;
+- it reads the durable states as the accepted packages read them, lets
+  recovery finish, imports and re-imports the corpus blocks, and exports
+  the native result.
+
+Records 01 at `532831d` (evidence:
+[E01-04.early_faults.eth](evidence/E01-04.early_faults.eth.md)):
+
+- preparation 01 PASS;
+- run 01 INCOMPLETE: all 30 cases PASS, AC-SCP-03-01 PASS for ETH, the
+  handoffs NOT_RUN (part B);
+- 13 portable tests;
+- 12 of 12 mutants killed.
+
+Recovered obligations close as a CANONICAL activation of the stored block,
+and each block is delivered exactly once.
+
+Next: Spec and Standards reviews of part A, then part B.
+
 ### Block 0: faults-core
 
 Branch `claude/e01-04-early-faults-core`. Design:
