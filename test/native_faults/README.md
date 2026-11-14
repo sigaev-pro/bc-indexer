@@ -26,7 +26,7 @@ Every fault point runs both:
 
 | Variant | What survives | How the probe makes it |
 |---|---|---|
-| `crash` | Every write that reached the file system, synced or not (the OS cache survives); a write still in Pebble's in-process WAL buffer is lost, as in a real process crash | Abandon the native node at the fault point (no `BlockChain.Stop`), then reopen on a file system that keeps every write (see "Restart") |
+| `crash` | Every write that reached the file system, synced or not (the OS cache survives); see "Restart" for what each family keeps | Abandon the native node at the fault point (no `BlockChain.Stop`), then reopen on a file system that keeps every write (see "Restart") |
 | `power_loss` | Only the writes that a completed sync made durable | The same abandon, then reopen on a file system that keeps only the synced data |
 
 Most fault points lie between a write and its `SyncKeyValue` inside a
@@ -69,8 +69,8 @@ that this task tests.
 Limits of the model, recorded in every report as `storage_model`:
 
 - It tests the two extremes of a power loss: every unsynced write dropped,
-  and (as the crash variant) every one kept. The accepted core READMEs allow
-  any subset of unsynced writes to survive. Each early step has one pending
+  and (as the crash variant) every one kept that reached the file system.
+  The accepted core READMEs allow any subset of unsynced writes to survive. Each early step has one pending
   capture write after its previous sync, so the extremes cover its states;
   mixed survival of native writes in the same window is not tested.
 - Native writes are not all unsynced until a capture sync: Pebble syncs the
@@ -99,8 +99,12 @@ without `BlockChain.Stop` and reopens a new node like this:
 
 | Family | `power_loss` | `crash` |
 |---|---|---|
-| ETH (pebble v2) | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})`, a new file system with no locks | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 100, RNG: <any seeded rand>})`; at 100 every write is kept |
-| BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)`, close only the chaindata store handle, `ResetToSyncedState`, `SetIgnoreSyncs(false)`, reopen | Close only the chaindata store handle, then reopen: every write is kept |
+| ETH (pebble v2) | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})`, a new file system with no locks | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 100, RNG: <any seeded rand>})`; every write that reached the file system is kept, but a write still in Pebble's in-process WAL buffer (records persist asynchronously) is lost, as in a real process crash |
+| BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)`, close only the chaindata store handle, `ResetToSyncedState`, `SetIgnoreSyncs(false)`, reopen | Close only the chaindata store handle, then reopen: the close flushes and syncs Pebble's WAL buffer, so every write is kept |
+
+The crash variant therefore keeps a little less on ETH than on BSC and
+POLY. The catalog crash sets allow both the state before and the state
+after the pending write at every pending point, so both recipes fit them.
 
 ## Catalog
 
@@ -173,7 +177,7 @@ Each client block writes one JSON report per family:
       "native_h": {"number", "hash", "root"},
       "mode": "LIVE",
       "head": <number>,
-      "exported": [<block numbers with a decided import, in any order>],
+      "exported": [<block numbers named by a decided IMPORT or CANONICAL decision, in any order>],
       "duplicates": <count of blocks exported more than once>,
       "corpus": "PASS" | "FAIL"
     }
@@ -186,12 +190,18 @@ Hashes and roots are 64 lowercase hex digits without `0x`. The
 `after_restart` states describe the fault block: the head at GoLive for an H
 point, or the live block that hit the point. `native_h` is read from the
 native chain (canonical hash and header state root at the boundary number),
-not from the boundary record. `final.corpus` is the `corpus_compare.py`
-result for the corpus blocks imported after recovery, without its decision
-rows: after a fault a recovered obligation may close with another decision
-kind (for example a CANONICAL activation of the stored block instead of an
-IMPORT), and rule 4 judges the delivery of each block. Every other
-difference fails it.
+not from the boundary record. `final.corpus` is the
+`corpus_compare.py` result for the corpus blocks imported after recovery,
+without its per-block `decisions` rows (exactly one IMPORT per block):
+after a fault a recovered obligation may close as a CANONICAL activation of
+the stored block, because its parent is no longer the head. Its rows
+`decisions of other blocks`, `reimport.new_observations` and
+`reimport.new_decisions` still count. `exported` names the blocks of decided
+IMPORT and CANONICAL decisions only, never SIDE or FINALITY, so rule 4 still
+requires one delivery per block. The `after_restart` admission and decision
+states follow the accepted packages: a record beyond the durable counter of
+its run is not an observation or an intent (it is an orphan the next step
+overwrites).
 
 ## Judge rules
 
@@ -209,7 +219,9 @@ For every case:
    header at H, and the capture path is LIVE. The exported blocks are exactly
    H+1 to the head: none at or below H (the initial sync is not exported),
    H+1 is present (no loss window), and none is exported twice.
-5. The native result of the corpus blocks matches the smoke corpus.
+5. The native result of the corpus blocks matches the smoke corpus
+   (`corpus_compare.py` without its per-block `decisions` rows; see "Report
+   format").
 6. A boundary that was durable after the restart is the final one (H, hash
    and root unchanged). For an H point it is the fault block. When no
    boundary survived, nothing was captured, so the new H may be anywhere;
@@ -253,6 +265,8 @@ clean checkout or worktree without `.project/cache`.
 - Read the `after_restart` states from the durable records through the
   accepted packages, before recovery changes them.
 - Import the smoke corpus blocks after recovery, and compare them with
-  `corpus_compare.py`.
+  `corpus_compare.py`, leaving out only its per-block `decisions` rows.
+- Read the admission and decision states as the accepted packages do: only
+  sequences below the durable counter of the run.
 - Answer every handoff of the family in the report.
 - Keep failed attempts as D83 records.

@@ -58,11 +58,11 @@
       "pending": true,
       "seam": "admission",
       "ac": [],
-      "boundary": "Begin has synced the INPUT_PREPARING record of the fault block and written the counter, but the counter sync has not completed.",
+      "boundary": "Begin has synced the INPUT_PREPARING record of the fault block and written the counter, but the counter sync has not completed. A record beyond the durable counter is not an observation (admission open loads only [lowwater, counter)).",
       "source": "adapters/geth/admission/README.md, power loss table",
       "after_restart": {
-        "crash": {"boundary": ["present"], "admission": ["preparing"]},
-        "power_loss": {"boundary": ["present"], "admission": ["preparing"]}
+        "crash": {"boundary": ["present"], "admission": ["none", "preparing"]},
+        "power_loss": {"boundary": ["present"], "admission": ["none"]}
       },
       "h_rule": "kept"
     },

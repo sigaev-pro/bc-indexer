@@ -90,8 +90,7 @@ All of them are fixed in `53be973`; review 002 confirms the fixes.
 
 Evidence: [E01-04.early_faults](evidence/E01-04.early_faults.md).
 
-Next: Spec and Standards confirmation reviews, hosted CI, the final review
-comment.
+Block 0 merged in PR #174 at `bdf3919`.
 
 ## E01-03.smoke_corpus — Minimal independent native test corpus (issue #19)
 
