@@ -15,7 +15,8 @@
     "test/native_corpus/bsc/*",
     "test/native_corpus/*.py",
     "test/native_corpus/expected/*",
-    "adapters/bsc/**"
+    "adapters/bsc/**",
+    "test/evidence/*"
   ],
   "test": [
     "{python}",
