@@ -84,8 +84,12 @@ Records (evidence:
 - preparation 02 PASS;
 - run 01 at `0931841`: verdict INCOMPLETE, all 30 cases PASS, AC-SCP-03-01
   PASS for BSC, handoffs NOT_RUN;
-- 14 portable tests;
+- 15 portable tests (`e6e4563`);
 - 14 of 14 mutants killed.
+
+Review 001: Spec PASS. Standards REQUEST_CHANGES on two points: the copied
+fault store was not fully pinned, and the exit codes. Both are fixed in
+`e6e4563`.
 
 Two failed attempts are kept under D83: preparation 01 lacked `go.mod`, and
 mutant record 01 lacked `test/evidence`.
