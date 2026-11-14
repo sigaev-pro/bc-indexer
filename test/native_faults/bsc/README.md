@@ -32,8 +32,9 @@ For each catalog point and each variant (30 cases), on a fresh store:
    a new directory per open.
 2. **Scenario and fault.** As on Geth. H points: block 1 imports in
    BOOTSTRAP and the fault comes inside `GoLive`. Other points: `GoLive` at
-   the genesis and the fault inside the import of block 1. The fault store's
-   arming rules are the Geth probe's; a portable test keeps them equal.
+   the genesis and the fault inside the import of block 1. The fault store
+   (with its batch, the arming table and the catalog order) is the Geth
+   probe's; a portable test compares every declaration.
 3. **Abandon and copy.** The probe abandons the node: no `BlockChain.Stop`
    and no store close. Closing a pebble v1 store under a live chain panics
    on the chain's open iterators, and a close would flush Pebble's in-process
@@ -83,3 +84,6 @@ python3 test/mutate.py test/native_faults/bsc/faults_bsc.mutants.json --output R
 `run` writes `run.json` with the verdict, `bsc/work/report.json` and
 `bsc/work/faults-report.json`. The attempt records PASS when the probe ran
 and the verdict is PASS or INCOMPLETE; a FAIL verdict fails the attempt.
+`prepare` and `run` exit 0 only on a PASS attempt, 1 on a failed attempt and
+2 on a refusal before any record exists; `judge` exits 0 only on a PASS
+verdict.

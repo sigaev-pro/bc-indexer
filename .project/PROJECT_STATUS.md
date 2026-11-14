@@ -70,9 +70,9 @@ part B will cover the three BSC handoffs (`bsc.pass-at-golive`,
 A test-only patch set (`adapters/bsc/faults/native`, 3 patches) lets the
 pebble v1 `ethdb/pebble` open on an in-memory file system. The probe is a Go
 test in `extractor/bsc/faults`. It runs a harness chain with the shipped
-`bsclifecycle.Attach` on the accepted smoke corpus BSC blocks, and reuses
-the Geth fault store and the BSC corpus export, both kept identical by
-tests.
+`bsclifecycle.Attach` on the accepted smoke corpus BSC blocks. It reuses
+the Geth fault store, arming table and state reading, and the BSC corpus
+export; portable tests compare every copied declaration.
 
 Pebble v1 cannot be closed under the abandoned chain: it panics, and a close
 would flush its WAL buffer. So the restart copies the file system. This is

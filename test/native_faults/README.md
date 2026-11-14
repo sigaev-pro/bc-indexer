@@ -104,9 +104,9 @@ without `BlockChain.Stop` and reopens a new node like this:
 | BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)` and `ResetToSyncedState` on the abandoned file system, then copy its chaindata files into a new strict file system and reopen there | Wait until the WAL files stop growing (no sync), copy the chaindata files as they are into a new strict file system and reopen there |
 
 Pebble v1's `MemFS` has no crash clone, and the store is never closed: a
-close of a pebble v1 store under a live chain panics on the chain's open
-iterators, and a close flushes Pebble's in-process WAL buffer, which a
-process crash does not do. So on every family a crash keeps exactly what
+close of a pebble v1 store under a live chain reports its leaked iterators
+and leaves the chain calling a closed store, which panics, and a close
+flushes Pebble's in-process WAL buffer, which a process crash does not do. So on every family a crash keeps exactly what
 reached the file system. Both Pebble versions keep a small NoSync WAL record
 in process memory until a sync or a full WAL block, so at the pending points
 of this catalog a crash reaches the same states as a power loss (seen on ETH

@@ -306,16 +306,21 @@ def main(argv=None):
     third = commands.add_parser("judge")
     third.add_argument("report", type=Path)
     args = parser.parse_args(argv)
-    if args.command == "judge":
-        verdict, corpus, _ = judge(json.loads(args.report.read_text()))
-        print(json.dumps({"verdict": verdict, "corpus_differences": corpus}, indent=1, sort_keys=True))
-        return 0 if verdict["result"] == "PASS" else 1
-    if args.command == "prepare":
-        record = prepare(args.manifest, args.sha256, args.output)
-    else:
-        record = run(args.tool, args.sha256, args.corpus_run, args.corpus_sha256, args.output)
-    print(json.dumps({"result": record.get("result") if isinstance(record, dict) else record}, default=str))
-    return 0
+    try:
+        if args.command == "judge":
+            verdict, corpus, _ = judge(json.loads(args.report.read_text()))
+            print(json.dumps({"verdict": verdict, "corpus_differences": corpus}, indent=1, sort_keys=True))
+            return 0 if verdict["result"] == "PASS" else 1
+        if args.command == "prepare":
+            record = prepare(args.manifest, args.sha256, args.output)
+        else:
+            record = run(args.tool, args.sha256, args.corpus_run, args.corpus_sha256, args.output)
+    except Exception as error:  # a refusal before any record exists
+        print(json.dumps({"valid": False, "error": f"{type(error).__name__}: {error}"}))
+        return 2
+    print(json.dumps({"result": record.get("result"), "verdict": (record.get("verdict") or {}).get("result"),
+                      "error": record.get("error")}))
+    return 0 if record.get("result") == "PASS" else 1
 
 
 if __name__ == "__main__":

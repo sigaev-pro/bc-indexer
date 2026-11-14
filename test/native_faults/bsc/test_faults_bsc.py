@@ -118,9 +118,28 @@ class JudgeTests(unittest.TestCase):
 COPIED = ("exportBlock", "sameLogs", "accountsAt", "logsOf", "addressText")
 
 
-def go_function(text, name):
-    start = text.index(f"\nfunc {name}(") + 1
+def go_block(text, header):
+    """The source of one top-level Go declaration starting with header, to its closing brace at column 0."""
+    start = text.index("\n" + header) + 1
+    if text[start:].split("\n", 1)[0].endswith("}"):
+        return text[start:text.index("\n", start) + 1]
     return text[start:text.index("\n}\n", start) + 2]
+
+
+def go_function(text, name):
+    return go_block(text, f"func {name}(")
+
+
+# The fault store, its batch, the arming table and the catalog order of the
+# Geth probe, by declaration header.
+GETH_SHARED = ("type faultHit struct", "type arm struct", "type faultStore struct", "type faultBatch struct",
+               "func (s *faultStore) note(", "func (s *faultStore) nativeWrite(", "func (s *faultStore) record(",
+               "func (s *faultStore) Put(", "func (s *faultStore) Delete(", "func (s *faultStore) SyncKeyValue(",
+               "func (s *faultStore) NewBatch(", "func (s *faultStore) NewBatchWithSize(",
+               "func (b *faultBatch) Put(", "func (b *faultBatch) Delete(", "func (b *faultBatch) Reset(",
+               "func (b *faultBatch) Write(", "func suffix(", "func pinPut(", "func pinDrop(", "func arms(",
+               "var points = ", "func below(", "func states(", "func guarded(", "func boundaryOf(",
+               "func nativeAt(", "func has(", "func prefixed(", "func counted(")
 
 
 class CopiedCodeTests(unittest.TestCase):
@@ -133,11 +152,26 @@ class CopiedCodeTests(unittest.TestCase):
     def test_fault_store_equals_the_geth_probe(self):
         ours = (HERE / "faults_test.go").read_text()
         geth = (HERE.parent / "eth" / "probe.go").read_text()
-        # settleWAL differs on purpose: the BSC version skips a WAL file that
-        # the abandoned store removed between the listing and the stat.
-        for name in ("arms", "suffix", "below", "states", "guarded", "boundaryOf", "nativeAt", "has",
-                     "prefixed", "counted"):
-            self.assertEqual(go_function(ours, name), go_function(geth, name), name)
+        for header in GETH_SHARED:
+            self.assertEqual(go_block(ours, header), go_block(geth, header), header)
+
+    def test_bsc_specific_differences(self):
+        ours = (HERE / "faults_test.go").read_text()
+        geth = (HERE.parent / "eth" / "probe.go").read_text()
+        # settleWAL skips a WAL file that the abandoned store removed between
+        # the listing and the stat.
+        self.assertEqual(go_function(ours, "settleWAL"), go_function(geth, "settleWAL").replace(
+            """\t\t\t\tinfo, err := mem.Stat(filepath.Join(memDir, name))
+\t\t\t\tcheck(err)
+\t\t\t\ttotal += info.Size()
+""", """\t\t\t\tif info, err := mem.Stat(filepath.Join(memDir, name)); err == nil {
+\t\t\t\t\ttotal += info.Size()
+\t\t\t\t}
+"""))
+        # decisions gives one row per member, so a decision without members
+        # (a FINALITY change of a BSC import) gives none.
+        self.assertIn("for _, member := range intent.Members {", go_function(ours, "decisions"))
+        self.assertNotIn("has %d members, want 1", go_function(ours, "decisions"))
 
 
 class CommandTests(unittest.TestCase):
