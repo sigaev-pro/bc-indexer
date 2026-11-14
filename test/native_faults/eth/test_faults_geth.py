@@ -73,10 +73,29 @@ class JudgeTests(unittest.TestCase):
         self.failing(lambda c: c["observation"]["native"].update(reimport_error="x"), "re-import error")
 
     def test_native_reexecution_must_match(self):
-        self.failing(lambda c: c["observation"]["native"]["reexecution"][0].update(root_equal=False),
-                     "re-execution of block 1 differs")
-        self.failing(lambda c: c["observation"]["native"]["reexecution"][0]["receipts"][0].update(receipt_equal=False),
-                     "re-execution of block 1 differs")
+        rows = lambda c: c["observation"]["native"]["reexecution"]  # noqa: E731
+        self.failing(lambda c: rows(c)[0].update(root_equal=False), "block 1 root differs")
+        self.failing(lambda c: rows(c)[0].update(root_equal="yes"), "block 1 root differs")
+        self.failing(lambda c: rows(c)[0]["receipts"][0].update(receipt_equal=False), "block 1 receipt 0 differs")
+        self.failing(lambda c: rows(c)[0].update(cumulative_gas_used=1), "block 1 gas differs from the header")
+        self.failing(lambda c: rows(c)[0]["receipts"].pop(), "does not check one receipt per transaction")
+        self.failing(lambda c: c["observation"]["native"].update(reexecution=[]), "one row per block")
+        self.failing(lambda c: c["observation"]["native"].pop("reexecution"), "one row per block")
+
+    def test_undecided_intents_must_be_an_empty_list(self):
+        self.failing(lambda c: c["observation"]["native"].pop("undecided_intents"), "undecided intents None")
+
+    def test_decision_of_another_block_fails_the_corpus(self):
+        def change(case):
+            case["observation"]["decisions"].append({"block": 0, "kind": "IMPORT"})
+        self.failing(change, "native result does not match the smoke corpus")
+
+    def test_storage_model_of_the_probe(self):
+        probe = sample()
+        probe["storage_model"] = "pebble-v1-strict-mem"
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["result"], "FAIL")
+        self.assertIn("probe: storage_model is not pebble-v2-crashable-mem", verdict["native_errors"])
 
     def test_corpus_difference_fails_the_case(self):
         def change(case):
@@ -106,11 +125,39 @@ class JudgeTests(unittest.TestCase):
                             for case in report["cases"]))
         self.assertEqual(set(map(len, corpus.values())), {0})
 
-    def test_non_dict_cases_are_skipped_and_fail_as_missing(self):
+    def test_malformed_case_fails(self):
         probe = sample()
         probe["cases"][0] = "not a case"
         verdict = self.verdict(probe)
-        self.assertIn("NOT_RUN", verdict["cases"].values())
+        self.assertEqual(verdict["result"], "FAIL")
+        self.assertIn("case 0: malformed", verdict["native_errors"])
+
+
+COPIED = ("plain", "accounts", "hexField", "frame", "logs", "receiptView", "txView", "exportBlocks", "counted")
+
+
+def go_function(text, name):
+    """The source of one top-level Go function, from its line to the closing brace at column 0."""
+    start = text.index(f"\nfunc {name}(") + 1
+    return text[start:text.index("\n}\n", start) + 2]
+
+
+class CopiedCodeTests(unittest.TestCase):
+    def test_export_helpers_equal_the_accepted_corpus_probe(self):
+        ours = (HERE / "probe.go").read_text()
+        accepted = (HERE.parents[1] / "native_corpus" / "eth" / "probe.go").read_text()
+        for name in COPIED:
+            self.assertEqual(go_function(ours, name), go_function(accepted, name), name)
+
+    def test_decisions_differs_only_by_rejected_intents(self):
+        ours = go_function((HERE / "probe.go").read_text(), "decisions")
+        accepted = go_function((HERE.parents[1] / "native_corpus" / "eth" / "probe.go").read_text(), "decisions")
+        self.assertNotEqual(ours, accepted)
+        self.assertEqual(ours.replace("""\t\t\tif _, rejected := records[base+"/rejected"]; !rejected {
+\t\t\t\tundecided = append(undecided, key)
+\t\t\t}
+""", """\t\t\tundecided = append(undecided, key)
+"""), accepted)
 
 
 class CommandTests(unittest.TestCase):

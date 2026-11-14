@@ -49,7 +49,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -160,7 +161,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 54
   },
   {
    "after_restart": {
@@ -280,7 +282,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -405,7 +408,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -535,7 +539,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 55
   },
   {
    "after_restart": {
@@ -665,7 +670,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 54
   },
   {
    "after_restart": {
@@ -795,7 +801,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 51
   },
   {
    "after_restart": {
@@ -925,7 +932,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 54
   },
   {
    "after_restart": {
@@ -1055,7 +1063,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -1185,7 +1194,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -1315,7 +1325,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 51
   },
   {
    "after_restart": {
@@ -1445,7 +1456,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 55
   },
   {
    "after_restart": {
@@ -1575,7 +1587,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -1705,7 +1718,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -1835,7 +1849,8 @@
     "reset_to_synced": false,
     "unsynced_dropped": 0
    },
-   "variant": "crash"
+   "variant": "crash",
+   "wal_settle_ms": 54
   },
   {
    "after_restart": {
@@ -1903,7 +1918,7 @@
    "variant": "power_loss"
   }
  ],
- "elapsed_seconds": 2.301812833,
+ "elapsed_seconds": 3.239255001,
  "family": "eth",
  "genesis_hash": "0x5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
  "kind": "native-faults-probe",

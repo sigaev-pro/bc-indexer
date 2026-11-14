@@ -198,21 +198,23 @@ func (s *faultStore) nativeWrite(keys []string) {
 	}
 }
 
-func (s *faultStore) Put(key, value []byte) error {
+func (s *faultStore) record(keys []string, deleted []bool) {
 	s.mu.Lock()
-	s.nativeWrite([]string{string(key)})
-	s.pending++
-	s.note(key, false)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	s.nativeWrite(keys)
+	s.pending += len(keys)
+	for i, key := range keys {
+		s.note([]byte(key), deleted[i])
+	}
+}
+
+func (s *faultStore) Put(key, value []byte) error {
+	s.record([]string{string(key)}, []bool{false})
 	return s.KeyValueStore.Put(key, value)
 }
 
 func (s *faultStore) Delete(key []byte) error {
-	s.mu.Lock()
-	s.nativeWrite([]string{string(key)})
-	s.pending++
-	s.note(key, true)
-	s.mu.Unlock()
+	s.record([]string{string(key)}, []bool{true})
 	return s.KeyValueStore.Delete(key)
 }
 
@@ -276,14 +278,7 @@ func (b *faultBatch) Reset() {
 }
 
 func (b *faultBatch) Write() error {
-	s := b.store
-	s.mu.Lock()
-	s.nativeWrite(b.keys)
-	s.pending += len(b.keys)
-	for i, key := range b.keys {
-		s.note([]byte(key), b.dels[i])
-	}
-	s.mu.Unlock()
+	b.store.record(b.keys, b.dels)
 	return b.Batch.Write()
 }
 
@@ -312,7 +307,7 @@ func arms(point string) *arm {
 		"pin.release-before-sync":     {match: pinDrop, mode: "before"},
 		"exec.before-exec-ready-sync": {match: suffix(admissionPrefix, "/exec-ready"), mode: "before"},
 		"exec.after-exec-ready-sync":  {match: suffix(admissionPrefix, "/exec-ready"), mode: "after"},
-		"dec.before-intent-sync":      {match: suffix(decisionPrefix, "/intent"), mode: "before"},
+		"dec.before-intent-sync":      {match: suffix(decisionPrefix, "/counter"), mode: "before"},
 		"dec.in-native-mutation":      {match: suffix(decisionPrefix, "/intent"), mode: "native"},
 		"dec.before-decided-sync":     {match: suffix(decisionPrefix, "/decided"), mode: "before"},
 		"dec.after-decided-sync":      {match: suffix(decisionPrefix, "/decided"), mode: "after"},
@@ -355,7 +350,8 @@ func syncDirs(mem *vfs.MemFS) {
 
 // open opens the store on mem. The freezer stays on the OS file system in a
 // new directory per open (the short chain never reaches it).
-func open(mem *vfs.MemFS, work string, genesis *core.Genesis, cfg extractorgeth.Config) (*node, error) {
+func open(mem *vfs.MemFS, work string, genesis *core.Genesis, cfg extractorgeth.Config,
+	trace func(string, map[string]any)) (*node, error) {
 	pebble.ExtractorFS = mem
 	kv, err := pebble.New(memDir, 16, 16, "", false)
 	if err != nil {
@@ -374,12 +370,42 @@ func open(mem *vfs.MemFS, work string, genesis *core.Genesis, cfg extractorgeth.
 		return n, err
 	}
 	n.chain = chain
-	n.life, err = extractorgeth.AttachLifecycle(chain, db, cfg, extractorgeth.Options{},
+	n.life, err = extractorgeth.AttachLifecycle(chain, db, cfg, extractorgeth.Options{Trace: trace},
 		extractorgeth.DecisionOptions{}, extractorgeth.LifecycleOptions{})
 	return n, err
 }
 
 func phaseText(p lifecycle.Phase) string { return string(p) }
+
+// settleWAL waits until the total size of the WAL files on mem is stable for
+// five checks 10 ms apart, at most two seconds, and returns the wait in ms.
+func settleWAL(mem *vfs.MemFS) int64 {
+	size := func() int64 {
+		names, err := mem.List(memDir)
+		check(err)
+		var total int64
+		for _, name := range names {
+			if strings.HasSuffix(name, ".log") {
+				info, err := mem.Stat(filepath.Join(memDir, name))
+				check(err)
+				total += info.Size()
+			}
+		}
+		return total
+	}
+	started := time.Now()
+	last, stable := size(), 0
+	for stable < 5 && time.Since(started) < 2*time.Second {
+		time.Sleep(10 * time.Millisecond)
+		now := size()
+		if now == last {
+			stable++
+		} else {
+			last, stable = now, 0
+		}
+	}
+	return time.Since(started).Milliseconds()
+}
 
 func prefixed(db ethdb.KeyValueReader, iter ethdb.Iteratee, prefix string) map[string]string {
 	out := map[string]string{}
@@ -515,7 +541,7 @@ func runCase(point, variant, work string, genesis *core.Genesis, blocks []*types
 	check(mem.MkdirAll(memDir, 0o755))
 	syncDirs(mem)
 	result := caseResult{"point": point, "variant": variant}
-	n, err := open(mem, dir, genesis, cfg)
+	n, err := open(mem, dir, genesis, cfg, nil)
 	check(err)
 	isH := strings.HasPrefix(point, "h.")
 	faultBlock := uint64(1)
@@ -549,6 +575,10 @@ func runCase(point, variant, work string, genesis *core.Genesis, blocks []*types
 	if variant == "power_loss" {
 		clone = mem.CrashClone(vfs.CrashCloneCfg{UnsyncedDataPercent: 0})
 	} else {
+		// A process crash keeps what reached the file system. Pebble writes
+		// WAL records asynchronously, so let the abandoned store's flusher
+		// finish (no sync) before the copy.
+		result["wal_settle_ms"] = settleWAL(mem)
 		clone = mem.CrashClone(vfs.CrashCloneCfg{UnsyncedDataPercent: 100, RNG: rand.New(rand.NewPCG(1, 2))})
 		dropped = 0
 	}
@@ -564,21 +594,21 @@ func runCase(point, variant, work string, genesis *core.Genesis, blocks []*types
 	check(err)
 	after := states(raw)
 	check(raw.Close())
-	r, err := open(clone, dir, genesis, cfg)
+	// The gate's phase when it opens, before the shipped attach recovers
+	// and goes live, from its "gate_opened" trace event.
+	opened := ""
+	trace := func(event string, fields map[string]any) {
+		if event == "gate_opened" && opened == "" {
+			opened, _ = fields["phase"].(string)
+		}
+	}
+	r, err := open(clone, dir, genesis, cfg, trace)
 	result["restart_error"] = errText(err)
 	if err != nil {
 		result["after_restart"] = after
 		return result
 	}
-	// The gate opens in RECOVERY with a boundary and in BOOTSTRAP without one
-	// (extractor/lifecycle Open); the shipped attach then finishes recovery
-	// and goes live itself, so the opening mode is derived from the durable
-	// boundary and the phase after the attach is kept as evidence.
-	if after["boundary"] == nil {
-		after["mode"] = phaseText(lifecycle.Bootstrap)
-	} else {
-		after["mode"] = phaseText(lifecycle.Recovery)
-	}
+	after["mode"] = opened
 	result["attach_phase"] = phaseText(r.life.Gate().Phase())
 	result["after_restart"] = after
 	_, liveErr := r.life.GoLive()
@@ -878,7 +908,9 @@ func decisions(records map[string]string, numbers map[string]uint64) ([]any, []s
 		}
 		base := strings.TrimSuffix(key, "/intent")
 		if _, ok := records[base+"/decided"]; !ok {
-			undecided = append(undecided, key)
+			if _, rejected := records[base+"/rejected"]; !rejected {
+				undecided = append(undecided, key)
+			}
 			continue
 		}
 		var intent intentRow

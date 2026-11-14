@@ -38,7 +38,8 @@ For each catalog point and each variant (30 cases), on a fresh store:
    - the boundary record;
    - the admission counter, ADMITTED or EXEC_READY record;
    - a pin write or delete;
-   - the decision intent or decided record.
+   - the decision counter (`dec.before-intent-sync`: `Intend` syncs the
+     intent, then writes the counter), the intent or the decided record.
 
    It then panics at the next `SyncKeyValue`: before syncing for a
    "before" point, after syncing for an "after" point. For
@@ -48,15 +49,21 @@ For each catalog point and each variant (30 cases), on a fresh store:
 4. **Abandon and reopen.** The probe abandons the node (no
    `BlockChain.Stop`, no store close). It reopens on
    `CrashClone(UnsyncedDataPercent: 0)` for a power loss and
-   `CrashClone(UnsyncedDataPercent: 100, RNG)` for a crash.
+   `CrashClone(UnsyncedDataPercent: 100, RNG)` for a crash. Before the crash
+   copy it waits until the WAL files stop growing (`wal_settle_ms`, at most
+   two seconds; no sync). Pebble v2 keeps a small NoSync WAL record in
+   process memory until a sync or a full WAL block, so a process crash loses
+   the pending capture write just as a power loss does: on ETH the crash
+   variant reaches the same states as the power loss at the pending points.
    `unsynced_dropped` is the fault store's count of writes since the last
    completed sync, an upper bound.
-5. **States after the restart.** They are read from the raw records before
-   any attach: the boundary, the native canonical header at its number, and
-   the sequence 0 records of admission, pins and decisions. The opening mode
-   follows the gate rule (RECOVERY with a boundary, BOOTSTRAP without). The
-   shipped attach then finishes recovery and goes live itself; its phase is
-   kept as `attach_phase`.
+5. **States after the restart.** They are read from the records before any
+   attach: the boundary, the native canonical header at its number, and the
+   sequence 0 records of admission, pins and decisions, counted only below
+   the durable counter of the run, as the accepted packages read them. The
+   opening mode is the gate's phase from its `gate_opened` trace event,
+   before the shipped attach finishes recovery and goes live; the phase
+   after the attach is kept as `attach_phase`.
 6. **Recovery and import.** `GoLive` runs, then blocks 1 and 2 import, then
    the probe reads the final boundary, the native header at H, the mode,
    the head and the decided members. Last come the corpus observation (the
@@ -65,10 +72,22 @@ For each catalog point and each variant (30 cases), on a fresh store:
 
 `faults_geth.py judge` turns the probe report into the block 0 faults
 report. It compares each case's observation with
-`test/native_corpus/expected/eth.json` by `corpus_compare.py`, without the
-decision rows (see the block 0 README, "Report format"). It adds the probe's
-own step errors (restart, `GoLive`, import, undecided intents, re-import,
-native re-execution), and any of them fails the result.
+`test/native_corpus/expected/eth.json` by `corpus_compare.py`, without only
+the per-block `decisions` rows (see the block 0 README, "Report format").
+It adds the probe's own errors, and any of them fails the result:
+
+- the storage model;
+- a malformed case;
+- restart, `GoLive` or import errors;
+- undecided intents (the list must be empty);
+- re-import errors;
+- the native re-execution checks of `test/native_corpus/eth/corpus_eth.py`:
+  one row per block, the root, the gas and one equal receipt per
+  transaction.
+
+The export helpers of `probe.go` are copied from
+`test/native_corpus/eth/probe.go`. A portable test keeps them identical.
+The one difference is in `decisions`: a rejected intent is not undecided.
 
 ## Commands
 
@@ -85,4 +104,5 @@ python3 test/mutate.py test/native_faults/eth/faults_geth.mutants.json --output 
 `run` writes `probe/report.json`, `probe/faults-report.json` and
 `run-record.json` with the verdict. The result is PASS only when every case
 and every Geth handoff passes. INCOMPLETE means some cases or handoffs are
-not run.
+not run. `run` exits 0 on PASS and INCOMPLETE (the record is written);
+`judge` exits 0 only on PASS.

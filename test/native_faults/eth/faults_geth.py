@@ -14,10 +14,11 @@ probe in the pinned runtime image under the host lock and judges its report.
 
 The judgement turns the probe report into a native faults report: each case's
 corpus observation is compared with test/native_corpus/expected/eth.json by
-corpus_compare.py. The decision rows of that comparison are not part of the
-corpus result: after a fault a recovered obligation may close with another
-decision kind, and the delivery of each block is judged by faults_judge.py
-rule 4 instead. Every other difference fails the corpus result.
+corpus_compare.py. Only its per-block `decisions` rows (one IMPORT per block)
+are left out of the corpus result, as block 0 says: after a fault a recovered
+obligation may close as a CANONICAL activation, and faults_judge.py rule 4
+judges the delivery of each block. `decisions of other blocks` and the
+re-import rows still count, and so does every other difference.
 """
 
 import argparse
@@ -63,7 +64,9 @@ PREPARATION_SECONDS = 3600
 RUN_SECONDS = 1200
 BINARY_LIMIT = 512 * 1024 * 1024
 REPORT_LIMIT = 64 * 1024 * 1024
-DECISION_FIELDS = ("decisions", "decisions of other blocks")
+DECISION_FIELDS = ("decisions",)
+STORAGE_MODEL = "pebble-v2-crashable-mem"
+BLOCKS = 2
 
 # ---------------------------------------------------------------- judgement
 
@@ -98,11 +101,38 @@ def to_faults_report(probe, expected, source):
             "handoffs": probe.get("handoffs", [])}, corpus
 
 
+def reexecution_errors(tag, observation):
+    """The native re-execution checks of test/native_corpus/eth/corpus_eth.py, per case."""
+    errors = []
+    sizes = {block.get("number"): block.get("body_tx_count") for block in observation.get("blocks") or []
+             if isinstance(block, dict)}
+    checks = (observation.get("native") or {}).get("reexecution")
+    if not isinstance(checks, list) or [row.get("number") for row in checks] != list(range(1, BLOCKS + 1)):
+        return [f"{tag}: re-execution does not check one row per block"]
+    for row in checks:
+        number = row.get("number")
+        if row.get("root_equal") is not True:
+            errors.append(f"{tag}: native re-execution of block {number} root differs")
+        if row.get("cumulative_gas_used") != row.get("header_gas_used"):
+            errors.append(f"{tag}: native re-execution of block {number} gas differs from the header")
+        receipts = row.get("receipts") or []
+        if not isinstance(sizes.get(number), int) or \
+                [receipt.get("index") for receipt in receipts] != list(range(sizes[number])):
+            errors.append(f"{tag}: native re-execution of block {number} does not check one receipt per transaction")
+        for receipt in receipts:
+            if receipt.get("receipt_equal") is not True:
+                errors.append(f"{tag}: native re-execution of block {number} receipt {receipt.get('index')} differs")
+    return errors
+
+
 def native_errors(probe):
     """Errors of the probe's own steps that the faults report does not carry."""
     errors = []
-    for case in probe.get("cases", []):
+    if probe.get("storage_model") != STORAGE_MODEL:
+        errors.append(f"probe: storage_model is not {STORAGE_MODEL}")
+    for index, case in enumerate(probe.get("cases", [])):
         if not isinstance(case, dict):
+            errors.append(f"case {index}: malformed")
             continue
         tag = f"{case.get('point')}/{case.get('variant')}"
         for key in ("restart_error", "golive_error"):
@@ -111,14 +141,15 @@ def native_errors(probe):
         imported = case.get("import") or {}
         if imported.get("error"):
             errors.append(f"{tag}: import error {imported['error']}")
-        native = (case.get("observation") or {}).get("native") or {}
-        if native.get("undecided_intents"):
-            errors.append(f"{tag}: undecided intents {native['undecided_intents']}")
+        observation = case.get("observation")
+        if not isinstance(observation, dict):
+            continue  # the corpus result fails it
+        native = observation.get("native") or {}
+        if native.get("undecided_intents") != []:
+            errors.append(f"{tag}: undecided intents {native.get('undecided_intents')}")
         if native.get("reimport_error"):
             errors.append(f"{tag}: re-import error {native['reimport_error']}")
-        for row in native.get("reexecution") or []:
-            if not row.get("root_equal") or not all(r.get("receipt_equal") for r in row.get("receipts", [])):
-                errors.append(f"{tag}: native re-execution of block {row.get('number')} differs")
+        errors.extend(reexecution_errors(tag, observation))
     return errors
 
 
