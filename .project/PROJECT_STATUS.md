@@ -2,7 +2,9 @@
 
 ## E01-04.early_faults — Early capture and decision boundaries under power loss (issue #20)
 
-Status: IN_PROGRESS. Block 0 (faults-core) is in review. Dependencies
+Status: IN_PROGRESS. Block 0 (faults-core) merged in PR #174 at `bdf3919`;
+correction 01 of block 0 (from the first Geth fault run) is in review. The
+Geth block is in progress. Dependencies
 E01-02.lifecycle_seams (#18, accepted in PR #173 at `fea548e`),
 E01-03.smoke_corpus (#19, accepted in PR #169) and BOOT-09 are accepted.
 
