@@ -334,23 +334,28 @@ qa verdicts, private local:
 |---|---|---|---|
 | ETH (Geth records 03) | PASS | PASS, PASS | NOT_APPLICABLE |
 | BSC (run 04 at `28b45cd`) | PASS with `bsc.known-block` and `bsc.side-chain` deferred to E05-02.reorg (D104, D106) | NOT_APPLICABLE | PASS, PASS |
-| POLY (Bor run 01) | PASS (known-block and the milestone reorganization through test hooks, D106) | NOT_APPLICABLE | NOT_APPLICABLE |
+| POLY (Bor run 01) | PASS; the known-block path and the milestone reorganization are reached only through the test hooks `core.ExtractorWriteKnownBlock` and `eth.ExtractorReorgToFinalized` (D106) | NOT_APPLICABLE | NOT_APPLICABLE |
 
-The retained BSC judge output says FAIL because it counts the two deferred
-rows; D106 reads it as PASS with those rows deferred, and the records are
+The retained BSC judge gives AC-CAP-01-01 FAIL in its qa matrix because it
+counts the two deferred rows; D106 reads it as PASS with those rows deferred, and the records are
 not edited. Every public cell stays NOT_RUN (D96). D106 records the owner's
 answers: the D104 side-branch reading, closing #18 with the BSC deferral,
 the Bor startup finality write deferred to E05-01.polygon_observer, the
 replay of a closed branch on Geth and Bor to E05-02.reorg, and the owners of
 the other limits. It also records the technical decisions on manual
-chaindata commands, the source pins and the historical `status` fields of
-the caller map. The acceptance commit adds `bor backfill-statesync-txs` to
-the `bor.manual-commands` entries of the shared `callers.json` (the three
+chaindata commands, the Bor milestone reorganization as several decisions
+under one chain lock, the source pins and the historical `status` fields of
+the caller map, plus how the BSC judge output is read. The acceptance commit
+adds `bor backfill-statesync-txs` to the `entry` list of the
+`bor.manual-commands` row of the shared `callers.json` (the three
 copies stay identical; the lifecycle validators, Python tests and the Go
 tests of the assembled module pass).
 
-Dependencies E01-02.decision_bridge (#17,
-merged in PR #163 at `a7ea231`) and BOOT-09 are accepted. Plan from the
+Next: none for E01-02.lifecycle_seams. It unlocks E01-04.early_faults (#20);
+E01-04.early_faults and E01-05.type_paths (#21) lead to G.E01 (#78).
+
+Dependencies E01-02.decision_bridge (#17, merged in PR #163 at `a7ea231`)
+and BOOT-09 are accepted. Plan from the
 coordinator on 2026-11-13, approved by the owner, the same split as #16 and
 #17: block 0 core (architect, then native-engineer), then parallel Geth, BSC
 and Bor blocks (native-engineer each), qa for the AC matrix, and two
@@ -455,7 +460,7 @@ D99). `python3 test/harness/lifecycle.py table` prints the full map.
 | `SetHead` rewinds as decisions (in Bor the guard goes right after the `chainmu` TryLock) | NATIVE_CAPTURE_PROTOCOL | Geth, BSC, Bor (`*.set-head`) |
 | Side-chain writes without state (`insertSideChain`) reach no head or canonical choke point; their re-execution passes the import | source review | Geth, BSC, Bor (`*.side-chain`) |
 | Startup repair (before the gate opens) decided inside the recovery pass from native evidence, or a source invariant error; a native head below H that no decision explains is a source invariant error | NATIVE_CAPTURE_PROTOCOL startup | Geth, BSC, Bor (`*.startup-reconcile`) |
-| Manual commands that delete or rewrite chaindata (BSC `removedb`, `db delete`, `db put`, `db import`, `db delete-trie-state`, `prune-history`, `init`; Bor `removedb`, `purge-whitelisted-entries`) refused on a capture store with live pins or obligations, as D100 item 3 does for Geth. Technical decision of block 0: such a command is a caller that would lose obligations, and refusing it changes no guarantee | D100 item 3; this card | BSC (`bsc.database-commands`), Bor (`bor.manual-commands`) |
+| Manual commands that delete or rewrite chaindata (BSC `removedb`, `db delete`, `db put`, `db import`, `db delete-trie-state`, `prune-history`, `init`; Bor `removedb`, `purge-whitelisted-entries`, and `backfill-statesync-txs` added by D106) refused on a capture store with live pins or obligations, as D100 item 3 does for Geth. Technical decision of block 0: such a command is a caller that would lose obligations, and refusing it changes no guarantee | D100 item 3; this card | BSC (`bsc.database-commands`), Bor (`bor.manual-commands`) |
 | Lock order and deadlock check per client: guard then `chainmu` in Geth and BSC; `chainmu`, guard, whitelist lock in Bor; the guard is never held across a call that takes `chainmu` itself or taken under a whitelist lock | NATIVE_CAPTURE_PROTOCOL (caller map and deadlock check are E01) | Geth, BSC, Bor |
 | AC-CAP-01-01 per family: the same scenario through the harness and the real native caller reaches the bridge on both paths with the same native result, and `Gaps` is empty | ACCEPTANCE_CASES | Geth (ETH), BSC (BSC), Bor (POLY); qa owns the matrix |
 | Typed safe and finalized observations, restart and regression semantics (AC-LIF-05-01, 05-04), GC anchor | TASK_DECOMPOSITION | Not lifecycle_seams: E05-01.eth_finality |
@@ -745,7 +750,8 @@ Review 001 (head `e3c7466`): Spec and Standards REQUEST_CHANGES. Fixed in
 
 D104 now reads the side-branch row as every block whose parent is not the
 head with its state, and states that #18 cannot close before E05-02.reorg
-fixes the two BSC rows, unless the owner changes the closing rule.
+fixes the two BSC rows, unless the owner changes the closing rule (D106
+item 2 changes it).
 
 Review 002 (head `e70cc75`): Spec PASS (P3 only: the owner should confirm the
 side-branch reading of D104). Standards REQUEST_CHANGES with one P2: the judge
@@ -756,19 +762,17 @@ calls `InsertHeadersBeforeCutoff` now.
 Review 003 (head `d38a94c`): Spec PASS and Standards PASS, no findings. One
 item for the owner: confirm that the E05-02.reorg assignment of D104 also
 covers ordinary BSC side branches and reorganizations (a technical reading
-recorded in D104). Later commits change only docs.
+recorded in D104; answered in D106 item 1). Later commits change only docs.
 
 qa verdict, private local BSC: AC-CAP-01-01 FAIL, with `bsc.known-block` and
 `bsc.side-chain` DEFERRED under D104 and every other row PASS (four
 READ_ONLY rows by source review, `bsc.notify-finalized` NOT_APPLICABLE for
 E05-01.bsc_finality). AC-LIF-05-02 and 05-03 NOT_APPLICABLE (ETH only, D104).
 AC-LIF-06-04 PASS and AC-LIF-06-05 PASS. Public BSC cells stay NOT_RUN.
-Under D106 AC-CAP-01-01 for BSC is accepted with the two rows deferred.
+Under D106, AC-CAP-01-01 for BSC is PASS with `bsc.known-block` and
+`bsc.side-chain` deferred.
 
 The BSC block merged in PR #172 at `425cf71`.
-
-Next: none for E01-02.lifecycle_seams. It unlocks E01-04.early_faults (#20);
-with E01-05.type_paths (#21) it leads to G.E01 (#78).
 
 ## E01-02.decision_bridge — Recover native decisions and delivery obligations (issue #17)
 
