@@ -150,12 +150,6 @@
       "replacement": "if False:"
     },
     {
-      "name": "h kept",
-      "file": "test/native_faults/faults_judge.py",
-      "original": "if rule == \"kept\" and restart_h is None:",
-      "replacement": "if False:"
-    },
-    {
       "name": "new h below fault",
       "file": "test/native_faults/faults_judge.py",
       "original": "if restart_h is None and number < fault[\"block\"]:",

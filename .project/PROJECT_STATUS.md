@@ -1,5 +1,74 @@
 # Состояние проекта
 
+## E01-04.early_faults — Early capture and decision boundaries under power loss (issue #20)
+
+Status: IN_PROGRESS. Block 0 (faults-core) is in review. Dependencies
+E01-02.lifecycle_seams (#18, accepted in PR #173 at `fea548e`),
+E01-03.smoke_corpus (#19, accepted in PR #169) and BOOT-09 are accepted.
+
+Card (TASK_DECOMPOSITION, a normative mirror that this task does not edit):
+output `test/native_faults`, families ETH, BSC and POLY, contracts NATIVE
+and EVID. Evidence for the early admission, pin, EXEC_READY, decision and H
+seams under power loss. The full native-plus-Gateway matrix stays with E05.
+Inputs: caller coverage from E01-02.lifecycle_seams, inputs and expected
+results from E01-03.smoke_corpus. AC: AC-SCP-03-01 (REQ-SCP-03).
+AC-SCP-03-02 is E05-03.full_crash_matrix. Every public cell stays NOT_RUN
+(D96). Under D101 only short measured runs; no long, load or product run.
+
+Plan by the coordinator on 2026-11-14. The owner approved starting #20 and
+then said to do it in the coordinator session ("Делай здесь", translated
+from Russian as "do it here") because a new session could not be started
+from Remote Control. The split is the same as #16 to #19: block 0, then a
+Geth, a BSC and a Bor block, qa for the per-family verdicts, and two
+independent read-only reviewers for Spec and Standards. Free disk allows one
+measured session at a time, so the client blocks run one after another.
+
+### Proposed blocks and roles
+
+| Block | Role | Output | Allowed paths |
+|---|---|---|---|
+| 0 faults-core | architect, then native-engineer; reviewer | Fault model, storage and cache model, catalog of fault points, report format, judge, portable controls and mutants; no native run | `test/native_faults/{README.md,faults.json,*.py,*.mutants.json}`, `.project/automation/ci.py` and `test_ci_discovery.py` (discover the fault tests), `.project/evidence/E01-04.early_faults.md`, this section |
+| ETH | native-engineer; qa for the matrix | Geth fault probe on the strict in-memory store, fault hooks in its own patch set, measured records, Geth handoffs | `test/native_faults/eth/**`, `adapters/geth/*/native/**` as the hooks need (shared files unchanged), `.project/evidence/E01-04.early_faults.eth.md` |
+| BSC | native-engineer; qa for the matrix | The same for BSC, with the BSC handoffs | `test/native_faults/bsc/**`, `adapters/bsc/*/native/**` as above, `.project/evidence/E01-04.early_faults.bsc.md` |
+| POLY | native-engineer; qa for the matrix | The same for Bor, with the Bor handoffs | `test/native_faults/poly/**`, `adapters/bor/*/native/**` as above, `.project/evidence/E01-04.early_faults.poly.md` |
+
+The client blocks start after block 0 merges. They change no shared
+`admission`, `decision`, `lifecycle`, `source_inputs` or `state_provider`
+file and no block 0 file; a catalog change is a separate change accepted by
+an independent reviewer. Measured runs execute one at a time under the host
+lock (D97).
+
+Technical decision of block 0 (within ACCEPTANCE_CASES, which asks every
+case for a storage and cache model): the power-loss variant opens the
+native Pebble chaindata on Pebble's strict in-memory file system and drops
+every unsynced write before the reopen; the crash variant reopens without
+dropping. The limits (no torn writes or false syncs, no freezer, in-process
+reopen) are in the module README.
+
+Items that earlier decisions gave to this task are `handoffs` in the
+catalog, one client block each: the Geth interrupted SetHead completion, the
+Geth `repaired` judge, the Geth mid-reorg with a longer old branch, the BSC
+store and write errors and `skipBlock` (D101), the Bor below-H rewind
+refusal, GoLive order, BOOTSTRAP vote pass, probe flag help text (D106) and
+the Bor power-loss variant of its startup-repair fault.
+
+### Block 0: faults-core
+
+Branch `claude/e01-04-early-faults-core`. Design:
+[test/native_faults/README.md](../test/native_faults/README.md). The
+catalog has 15 fault points over the five seams, each with a crash and a
+power-loss variant, and 10 handoffs. The judge checks the fault was reached,
+the storage model of the variant, the allowed states after the restart, the
+mode against the boundary, that the exported blocks are exactly H+1 to the
+head (no initial-sync export, no H+1 loss, no duplicate), the smoke corpus
+result, that a durable H never changes, and that the fault block is live.
+AC-SCP-03-01 per family is PASS when both variants of the three H points
+pass. Block 0 gives no AC verdict.
+
+Evidence: [E01-04.early_faults](evidence/E01-04.early_faults.md).
+
+Next: Spec and Standards reviews, hosted CI, the final review comment.
+
 ## E01-03.smoke_corpus — Minimal independent native test corpus (issue #19)
 
 Status: ACCEPTED (2026-11-13); #19 closes when this record merges. Merged

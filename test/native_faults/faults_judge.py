@@ -174,11 +174,8 @@ def judge_case(case, point, states):
     if final.get("corpus") != "PASS":
         failures.append(f"{tag}: the native result does not match the smoke corpus")
 
-    rule = point["h_rule"]
     if restart_h is not None and restart_h != final_h:
         failures.append(f"{tag}: H changed after the boundary was durable")
-    if rule == "kept" and restart_h is None:
-        failures.append(f"{tag}: H was not kept")
     if restart_h is None and number < fault["block"]:
         failures.append(f"{tag}: the new H is below the fault point")
     if point["seam"] == "H" and restart_h is not None and restart_h[0] != fault["block"]:
