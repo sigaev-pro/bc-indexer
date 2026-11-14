@@ -1,0 +1,2524 @@
+{
+ "cases": [
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": null,
+    "decision": "none",
+    "mode": "BOOTSTRAP",
+    "pin": "none"
+   },
+   "attach_phase": "BOOTSTRAP",
+   "decisions": [
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "duplicates": 0,
+    "exported": [
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "h.before-boundary-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": null,
+    "decision": "none",
+    "mode": "BOOTSTRAP",
+    "pin": "none"
+   },
+   "attach_phase": "BOOTSTRAP",
+   "decisions": [
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "duplicates": 0,
+    "exported": [
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "h.before-boundary-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "duplicates": 0,
+    "exported": [
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "h.after-boundary-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "duplicates": 0,
+    "exported": [
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "h.after-boundary-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 0
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "duplicates": 0,
+    "exported": [
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "h.after-golive-before-first-import",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    },
+    "duplicates": 0,
+    "exported": [
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+     "number": 1,
+     "root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "h.after-golive-before-first-import",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 0
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "adm.before-counter-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "none",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "adm.before-counter-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "preparing",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "adm.before-admitted-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "preparing",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "adm.before-admitted-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "admitted",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "adm.after-admitted-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "admitted",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "adm.after-admitted-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 0
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "preparing",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "pin.before-pin-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "preparing",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "none"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "pin.before-pin-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "preparing",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "pin.after-pin-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "preparing",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "pin.after-pin-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 0
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "decided",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "decided",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "pin.release-before-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "decided",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "decided",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "pin.release-before-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "admitted",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "exec.before-exec-ready-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "admitted",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "exec.before-exec-ready-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "exec.after-exec-ready-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "exec.after-exec-ready-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 0
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.before-intent-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "none",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "CANONICAL"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.before-intent-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "intent",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.in-native-mutation",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "intent",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.in-native-mutation",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 0
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "intent_marker",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.before-decided-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "intent_marker",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.before-decided-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 1
+   },
+   "variant": "power_loss"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "decided",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.after-decided-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": false,
+    "unsynced_dropped": 0
+   },
+   "variant": "crash"
+  },
+  {
+   "after_restart": {
+    "admission": "exec_ready",
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "decision": "decided",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "pin": "live"
+   },
+   "attach_phase": "LIVE",
+   "decisions": [
+    {
+     "block": 1,
+     "kind": "IMPORT"
+    },
+    {
+     "block": 2,
+     "kind": "IMPORT"
+    }
+   ],
+   "fault": {
+    "block": 1,
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+     "number": 0,
+     "root": "21400531fcddb831004050d1bbe4f9694ee5a328263d304c8e528f11aa8725d3"
+    }
+   },
+   "golive_error": null,
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "point": "dec.after-decided-sync",
+   "restart_error": null,
+   "step_error": null,
+   "storage": {
+    "reset_to_synced": true,
+    "unsynced_dropped": 0
+   },
+   "variant": "power_loss"
+  }
+ ],
+ "elapsed_seconds": 2.301812833,
+ "family": "eth",
+ "genesis_hash": "0x5bce29fa35af40f35138e536ea84a2efb7d3c581c370444a6c1d00f68ed3e98d",
+ "kind": "native-faults-probe",
+ "native_commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+ "note": "Development run of the probe (not measured evidence). Each case ended with the same observation of the corpus blocks except its decision kinds; the tests attach shared_observation, with the case's own decisions, to every case.",
+ "schema_version": 1,
+ "shared_observation": {
+  "blocks": [
+   {
+    "base_fee": "875000000",
+    "body_tx_count": 4,
+    "gas_limit": 10000000,
+    "gas_used": 228538,
+    "hash": "128fddd47712437264da5737bba4907a44946bdeff31dfb61d15dd05ae491d2e",
+    "number": 1,
+    "state_after_block": {
+     "2000000000000000000000000000000000000000": {
+      "balance": "2000261305250000000",
+      "code": "",
+      "nonce": 0
+     },
+     "3000000000000000000000000000000000000001": {
+      "balance": "5",
+      "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+      "nonce": 0,
+      "storage": {
+       "0": "0000000000000000000000000000000000000000000000000000000000000001",
+       "1": "0000000000000000000000000000000000000000000000000000000000000001",
+       "2": "0000000000000000000000000000000000000000000000000000000000000020",
+       "3": "00000000000000000000000000000000000000000000000000000000000000ee"
+      }
+     },
+     "3000000000000000000000000000000000000002": {
+      "balance": "0",
+      "code": "600160005560c160006000a160ee60005260206000fd",
+      "nonce": 0,
+      "storage": {
+       "0": "0000000000000000000000000000000000000000000000000000000000000000",
+       "1": "0000000000000000000000000000000000000000000000000000000000000000",
+       "2": "0000000000000000000000000000000000000000000000000000000000000000",
+       "3": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+     },
+     "4000000000000000000000000000000000000001": {
+      "balance": "1000000001000000000",
+      "code": "",
+      "nonce": 0
+     },
+     "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+      "balance": "8999538722999999995",
+      "code": "",
+      "nonce": 4
+     }
+    },
+    "state_root": "687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e",
+    "state_sync": [],
+    "system_transactions": [],
+    "transactions": [
+     {
+      "data": "",
+      "frame": {
+       "calls": [],
+       "error": null,
+       "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+       "input": "",
+       "output": "",
+       "to": "4000000000000000000000000000000000000001",
+       "type": "CALL",
+       "value": "1000000000000000000"
+      },
+      "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+      "gas": 21000,
+      "gas_price": "2000000000",
+      "hash": "64a386979232da224e12276d494a2cd2902d7ecbc992d66ac9fa831aa7343cc0",
+      "index": 0,
+      "nonce": 0,
+      "receipt": {
+       "cumulative_gas_used": 21000,
+       "effective_gas_price": "2000000000",
+       "gas_used": 21000,
+       "logs": [],
+       "status": 1
+      },
+      "state_after": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "23625000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "0",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "1000000000000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "8999958000000000000",
+        "code": "",
+        "nonce": 1
+       }
+      },
+      "state_before": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "0",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "0",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "0",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "10000000000000000000",
+        "code": "",
+        "nonce": 0
+       }
+      },
+      "to": "4000000000000000000000000000000000000001",
+      "type": 0,
+      "value": "1000000000000000000"
+     },
+     {
+      "data": "",
+      "frame": {
+       "calls": [],
+       "error": null,
+       "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+       "input": "",
+       "output": "",
+       "to": "4000000000000000000000000000000000000001",
+       "type": "CALL",
+       "value": "1000000000"
+      },
+      "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+      "gas": 21000,
+      "hash": "8c7f5eada22df704823f49ec1b471699d04056d5495627604ff68be2d491a459",
+      "index": 1,
+      "max_fee_per_gas": "2200000000",
+      "max_priority_fee_per_gas": "1500000000",
+      "nonce": 1,
+      "receipt": {
+       "cumulative_gas_used": 42000,
+       "effective_gas_price": "2200000000",
+       "gas_used": 21000,
+       "logs": [],
+       "status": 1
+      },
+      "state_after": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "51450000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "0",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "1000000001000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "8999911799000000000",
+        "code": "",
+        "nonce": 2
+       }
+      },
+      "state_before": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "23625000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "0",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "1000000000000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "8999958000000000000",
+        "code": "",
+        "nonce": 1
+       }
+      },
+      "to": "4000000000000000000000000000000000000001",
+      "type": 2,
+      "value": "1000000000"
+     },
+     {
+      "data": "",
+      "frame": {
+       "calls": [
+        {
+         "calls": [],
+         "error": "execution reverted",
+         "from": "3000000000000000000000000000000000000001",
+         "input": "",
+         "output": "00000000000000000000000000000000000000000000000000000000000000ee",
+         "to": "3000000000000000000000000000000000000002",
+         "type": "CALL",
+         "value": "5"
+        }
+       ],
+       "error": null,
+       "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+       "input": "",
+       "output": "",
+       "to": "3000000000000000000000000000000000000001",
+       "type": "CALL",
+       "value": "5"
+      },
+      "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+      "gas": 200000,
+      "gas_price": "2000000000",
+      "hash": "5b7a0710e2b743cd17f009b02af0a4465423a9b6746363b16e173a8f78978c84",
+      "index": 2,
+      "nonce": 2,
+      "receipt": {
+       "cumulative_gas_used": 184655,
+       "effective_gas_price": "2000000000",
+       "gas_used": 142655,
+       "logs": [
+        {
+         "address": "3000000000000000000000000000000000000001",
+         "data": "0000000000000000000000000000000000000000000000000000000000000005",
+         "topics": [
+          "00000000000000000000000000000000000000000000000000000000000000a1"
+         ]
+        }
+       ],
+       "status": 1
+      },
+      "state_after": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "211936875000000",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "5",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000001",
+         "1": "0000000000000000000000000000000000000000000000000000000000000001",
+         "2": "0000000000000000000000000000000000000000000000000000000000000020",
+         "3": "00000000000000000000000000000000000000000000000000000000000000ee"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "1000000001000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "8999626488999999995",
+        "code": "",
+        "nonce": 3
+       }
+      },
+      "state_before": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "51450000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "0",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "1000000001000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "8999911799000000000",
+        "code": "",
+        "nonce": 2
+       }
+      },
+      "to": "3000000000000000000000000000000000000001",
+      "type": 0,
+      "value": "5"
+     },
+     {
+      "data": "",
+      "frame": {
+       "calls": [],
+       "error": "execution reverted",
+       "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+       "input": "",
+       "output": "00000000000000000000000000000000000000000000000000000000000000ee",
+       "to": "3000000000000000000000000000000000000002",
+       "type": "CALL",
+       "value": "7"
+      },
+      "from": "7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+      "gas": 100000,
+      "gas_price": "2000000000",
+      "hash": "27469acf01dd5c1113db6012fd6e6f52ce5b6b528c33a7aaa9ecf4a6422aa109",
+      "index": 3,
+      "nonce": 3,
+      "receipt": {
+       "cumulative_gas_used": 228538,
+       "effective_gas_price": "2000000000",
+       "gas_used": 43883,
+       "logs": [],
+       "status": 0
+      },
+      "state_after": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "261305250000000",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "5",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000001",
+         "1": "0000000000000000000000000000000000000000000000000000000000000001",
+         "2": "0000000000000000000000000000000000000000000000000000000000000020",
+         "3": "00000000000000000000000000000000000000000000000000000000000000ee"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "1000000001000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "8999538722999999995",
+        "code": "",
+        "nonce": 4
+       }
+      },
+      "state_before": {
+       "2000000000000000000000000000000000000000": {
+        "balance": "211936875000000",
+        "code": "",
+        "nonce": 0
+       },
+       "3000000000000000000000000000000000000001": {
+        "balance": "5",
+        "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000001",
+         "1": "0000000000000000000000000000000000000000000000000000000000000001",
+         "2": "0000000000000000000000000000000000000000000000000000000000000020",
+         "3": "00000000000000000000000000000000000000000000000000000000000000ee"
+        }
+       },
+       "3000000000000000000000000000000000000002": {
+        "balance": "0",
+        "code": "600160005560c160006000a160ee60005260206000fd",
+        "nonce": 0,
+        "storage": {
+         "0": "0000000000000000000000000000000000000000000000000000000000000000",
+         "1": "0000000000000000000000000000000000000000000000000000000000000000",
+         "2": "0000000000000000000000000000000000000000000000000000000000000000",
+         "3": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+       },
+       "4000000000000000000000000000000000000001": {
+        "balance": "1000000001000000000",
+        "code": "",
+        "nonce": 0
+       },
+       "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+        "balance": "8999626488999999995",
+        "code": "",
+        "nonce": 3
+       }
+      },
+      "to": "3000000000000000000000000000000000000002",
+      "type": 0,
+      "value": "7"
+     }
+    ]
+   },
+   {
+    "base_fee": "770624269",
+    "body_tx_count": 0,
+    "gas_limit": 10000000,
+    "gas_used": 0,
+    "hash": "7a977bf1de3e89506d80d293aef9a80297ad57dc7f13d44363b0274a27e98a79",
+    "number": 2,
+    "state_after_block": {
+     "2000000000000000000000000000000000000000": {
+      "balance": "4000261305250000000",
+      "code": "",
+      "nonce": 0
+     },
+     "3000000000000000000000000000000000000001": {
+      "balance": "5",
+      "code": "6001600055602060006000600034733000000000000000000000000000000000000002617530f1156001553d6002556000516003553460005260a160206000a100",
+      "nonce": 0,
+      "storage": {
+       "0": "0000000000000000000000000000000000000000000000000000000000000001",
+       "1": "0000000000000000000000000000000000000000000000000000000000000001",
+       "2": "0000000000000000000000000000000000000000000000000000000000000020",
+       "3": "00000000000000000000000000000000000000000000000000000000000000ee"
+      }
+     },
+     "3000000000000000000000000000000000000002": {
+      "balance": "0",
+      "code": "600160005560c160006000a160ee60005260206000fd",
+      "nonce": 0,
+      "storage": {
+       "0": "0000000000000000000000000000000000000000000000000000000000000000",
+       "1": "0000000000000000000000000000000000000000000000000000000000000000",
+       "2": "0000000000000000000000000000000000000000000000000000000000000000",
+       "3": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+     },
+     "4000000000000000000000000000000000000001": {
+      "balance": "1000000001000000000",
+      "code": "",
+      "nonce": 0
+     },
+     "7e5f4552091a69125d5dfcb7b8c2659029395bdf": {
+      "balance": "8999538722999999995",
+      "code": "",
+      "nonce": 4
+     }
+    },
+    "state_root": "36837731485362290571d7de66c79a78ca4928f90a0dee1be5c5f64881eaf5fd",
+    "state_sync": [],
+    "system_transactions": [],
+    "transactions": []
+   }
+  ],
+  "chain_id": 31337,
+  "decisions": [
+   {
+    "block": 2,
+    "kind": "IMPORT"
+   }
+  ],
+  "family": "eth",
+  "kind": "native-corpus-observation",
+  "native": {
+   "reexecution": [
+    {
+     "cumulative_gas_used": 228538,
+     "header_gas_used": 228538,
+     "header_root": "0x687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e",
+     "number": 1,
+     "receipts": [
+      {
+       "index": 0,
+       "receipt_equal": true
+      },
+      {
+       "index": 1,
+       "receipt_equal": true
+      },
+      {
+       "index": 2,
+       "receipt_equal": true
+      },
+      {
+       "index": 3,
+       "receipt_equal": true
+      }
+     ],
+     "reexecuted_root": "0x687c0c4ab64ca1ba487bdeccf21b92815af7b2f7cb9986bb7053b0a2fe05838e",
+     "root_equal": true
+    },
+    {
+     "cumulative_gas_used": 0,
+     "header_gas_used": 0,
+     "header_root": "0x36837731485362290571d7de66c79a78ca4928f90a0dee1be5c5f64881eaf5fd",
+     "number": 2,
+     "receipts": [],
+     "reexecuted_root": "0x36837731485362290571d7de66c79a78ca4928f90a0dee1be5c5f64881eaf5fd",
+     "root_equal": true
+    }
+   ],
+   "reimport_error": null,
+   "undecided_intents": []
+  },
+  "reimport": {
+   "new_decisions": 0,
+   "new_observations": 0
+  },
+  "schema_version": 1
+ },
+ "storage_model": "pebble-v2-crashable-mem"
+}

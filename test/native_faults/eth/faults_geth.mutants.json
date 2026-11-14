@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "description": "Single-check mutants of the E01-04.early_faults Geth fault probe driver judgement.",
+  "copy": [
+    "test/native_faults/eth/*",
+    "test/native_faults/*.py",
+    "test/native_faults/*.json",
+    "test/harness/*.py",
+    "test/harness/fixtures/admission_geth/*",
+    "test/harness/fixtures/lifecycle_geth/*",
+    "test/native_corpus/eth/*",
+    "test/native_corpus/*.py",
+    "test/native_corpus/expected/*",
+    "adapters/geth/**"
+  ],
+  "test": [
+    "{python}",
+    "test/native_faults/eth/test_faults_geth.py",
+    "-v"
+  ],
+  "import": [
+    "faults_geth"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "decision rows dropped",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "rows = [row for row in comparison[\"differences\"] if row[\"field\"] not in DECISION_FIELDS]",
+      "replacement": "rows = list(comparison[\"differences\"])"
+    },
+    {
+      "name": "corpus fail on rows",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "return (\"FAIL\" if rows else \"PASS\"), [f\"{row['place']} {row['field']}\" for row in rows]",
+      "replacement": "return \"PASS\", [f\"{row['place']} {row['field']}\" for row in rows]"
+    },
+    {
+      "name": "no observation",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "if not isinstance(observation, dict):\n        return \"FAIL\", [\"no observation\"]",
+      "replacement": "if not isinstance(observation, dict):\n        return \"PASS\", [\"no observation\"]"
+    },
+    {
+      "name": "format error",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "        return \"FAIL\", [f\"format: {error}\"]",
+      "replacement": "        return \"PASS\", [f\"format: {error}\"]"
+    },
+    {
+      "name": "restart and golive errors",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "        for key in (\"restart_error\", \"golive_error\"):",
+      "replacement": "        for key in ():"
+    },
+    {
+      "name": "import error",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "        if imported.get(\"error\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "undecided intents",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "        if native.get(\"undecided_intents\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "reimport error",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "        if native.get(\"reimport_error\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "reexecution root",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "if not row.get(\"root_equal\") or not all(r.get(\"receipt_equal\") for r in row.get(\"receipts\", [])):",
+      "replacement": "if not all(r.get(\"receipt_equal\") for r in row.get(\"receipts\", [])):"
+    },
+    {
+      "name": "reexecution receipts",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "if not row.get(\"root_equal\") or not all(r.get(\"receipt_equal\") for r in row.get(\"receipts\", [])):",
+      "replacement": "if not row.get(\"root_equal\"):"
+    },
+    {
+      "name": "native errors fail",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "    if errors and verdict.get(\"result\") != \"FAIL\":",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "corpus into final",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "final = dict(case.get(\"final\") or {}, corpus=result)",
+      "replacement": "final = dict(case.get(\"final\") or {}, corpus=\"PASS\")"
+    }
+  ]
+}
