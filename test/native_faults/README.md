@@ -26,7 +26,7 @@ Every fault point runs both:
 
 | Variant | What survives | How the probe makes it |
 |---|---|---|
-| `crash` | Every write that reached the file system, synced or not (the OS cache survives); see "Restart" for what each family keeps | Abandon the native node at the fault point (no `BlockChain.Stop`), then reopen on a file system that keeps every write (see "Restart") |
+| `crash` | Every write that reached the file system, synced or not (the OS cache survives); a write still in Pebble's in-process WAL buffer is lost, as in a real process crash | Abandon the native node at the fault point (no `BlockChain.Stop`), then reopen on a file system that keeps every write that reached it (see "Restart") |
 | `power_loss` | Only the writes that a completed sync made durable | The same abandon, then reopen on a file system that keeps only the synced data |
 
 Most fault points lie between a write and its `SyncKeyValue` inside a
@@ -57,7 +57,7 @@ differs, so the in-memory file system does too:
 | Family | Pebble for a new store | File system | Power loss | `storage_model` |
 |---|---|---|---|---|
 | ETH (Geth) | v2.1.4 | `vfs.NewCrashableMem` | reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})` | `pebble-v2-crashable-mem` |
-| BSC, POLY (Bor) | v1.1.5 | `vfs.NewStrictMem` | `ResetToSyncedState` (see "Restart"), then reopen | `pebble-v1-strict-mem` |
+| BSC, POLY (Bor) | v1.1.5 | `vfs.NewStrictMem` | `SetIgnoreSyncs(true)`, `ResetToSyncedState`, then a copy into a new strict file system (see "Restart") | `pebble-v1-strict-mem` |
 
 Both keep exactly the data that was last synced; "Restart" gives the full
 steps. Every capture record of the early seams lives in this store and is
@@ -70,9 +70,10 @@ Limits of the model, recorded in every report as `storage_model`:
 
 - It tests the two extremes of a power loss: every unsynced write dropped,
   and (as the crash variant) every one kept that reached the file system.
-  The accepted core READMEs allow any subset of unsynced writes to survive. Each early step has one pending
-  capture write after its previous sync, so the extremes cover its states;
-  mixed survival of native writes in the same window is not tested.
+  The accepted core READMEs allow any subset of unsynced writes to survive.
+  Each early step has one pending capture write after its previous sync, so
+  the extremes cover its states; mixed survival of native writes in the same
+  window is not tested.
 - Native writes are not all unsynced until a capture sync: Pebble syncs the
   WAL every `WALBytesPerSync` bytes (geth sets 5 times `IdealBatchSize`), and
   a memtable flush also makes data durable. So `unsynced_dropped` is an
@@ -100,11 +101,19 @@ without `BlockChain.Stop` and reopens a new node like this:
 | Family | `power_loss` | `crash` |
 |---|---|---|
 | ETH (pebble v2) | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})`, a new file system with no locks | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 100, RNG: <any seeded rand>})`; every write that reached the file system is kept, but a write still in Pebble's in-process WAL buffer (records persist asynchronously) is lost, as in a real process crash |
-| BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)`, close only the chaindata store handle, `ResetToSyncedState`, `SetIgnoreSyncs(false)`, reopen | Close only the chaindata store handle, then reopen: the close flushes and syncs Pebble's WAL buffer, so every write is kept |
+| BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)` and `ResetToSyncedState` on the abandoned file system, then copy its chaindata files into a new strict file system and reopen there | Wait until the WAL files stop growing (no sync), copy the chaindata files as they are into a new strict file system and reopen there |
 
-The crash variant therefore keeps a little less on ETH than on BSC and
-POLY. The catalog crash sets allow both the state before and the state
-after the pending write at every pending point, so both recipes fit them.
+Pebble v1's `MemFS` has no crash clone, and the store is never closed: a
+close of a pebble v1 store under a live chain reports its leaked iterators
+and leaves the chain calling a closed store, which panics, and a close
+flushes Pebble's in-process WAL buffer, which a process crash does not do.
+So on every family a crash keeps exactly what reached the file system. Both
+Pebble versions keep a small NoSync WAL record in process memory until a
+sync or a full WAL block, so at the pending points of this catalog a crash
+reaches the same states as a power loss (seen on ETH and BSC). The catalog
+crash sets allow the state before the pending write, so this fits them; the
+recovery paths that only a crash keeping the pending write would add are
+covered by the core unit tables, not by these probes.
 
 ## Catalog
 
