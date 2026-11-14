@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../..",
+  "description": "Single-check mutants of the E01-04.early_faults catalog validator and judge.",
+  "copy": [
+    "test/native_faults/*.py",
+    "test/native_faults/*.json"
+  ],
+  "test": [
+    "{python}",
+    "test/native_faults/test_native_faults.py",
+    "-v"
+  ],
+  "import": [
+    "faults_judge"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "schema check",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if catalog.get(\"schema_version\") != 1 or catalog.get(\"kind\") != \"native-faults-catalog\":",
+      "replacement": "if False:"
+    },
+    {
+      "name": "families check",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if tuple(catalog.get(\"families\", ())) != FAMILIES:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "duplicate point",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if pid in points:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "unknown seam",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if point.get(\"seam\") not in SEAMS:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "pending bool",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if not isinstance(point.get(\"pending\"), bool):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "bad state values",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if not allowed or any(value not in vocabulary for value in allowed):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "kept needs present",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if point[\"h_rule\"] == \"kept\" and expected[\"boundary\"] != [\"present\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "ac point required",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if not any(\"AC-SCP-03-01\" in point[\"ac\"] for point in points.values()):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "malformed boundary hash",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "or not HEX64.fullmatch(str(value.get(\"hash\", \"\"))) \\",
+      "replacement": "or False \\"
+    },
+    {
+      "name": "fault hit",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if fault.get(\"hit\") is not True or not is_int(fault.get(\"block\")) or fault[\"block\"] < 0:",
+      "replacement": "if not is_int(fault.get(\"block\")) or fault[\"block\"] < 0:"
+    },
+    {
+      "name": "power loss reset",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if storage.get(\"reset_to_synced\") is not True:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "pending dropped",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if point[\"pending\"] and dropped < 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "crash keeps writes",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "elif storage.get(\"reset_to_synced\") is not False or dropped != 0:",
+      "replacement": "elif False:"
+    },
+    {
+      "name": "boundary presence",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if presence not in expected[\"boundary\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "allowed states",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "elif field in expected and value not in expected[field]:",
+      "replacement": "elif False:"
+    },
+    {
+      "name": "mode boundary",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if (restart_h is None) != (mode == \"BOOTSTRAP\"):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "initial sync export",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if any(item <= number for item in exported):",
+      "replacement": "if any(item < number for item in exported):"
+    },
+    {
+      "name": "loss window",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if head > number and number + 1 not in exported:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "exact range",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if sorted(exported) != list(range(number + 1, head + 1)):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "duplicates",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if final.get(\"duplicates\") != 0:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "corpus",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if final.get(\"corpus\") != \"PASS\":",
+      "replacement": "if False:"
+    },
+    {
+      "name": "h changed",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if restart_h is not None and restart_h != final_h:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "h kept",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if rule == \"kept\" and restart_h is None:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "new h below fault",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if restart_h is None and number < fault[\"block\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "kept h fault head",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if point[\"seam\"] == \"H\" and restart_h is not None and restart_h[0] != fault[\"block\"]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "live fault block",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if point[\"seam\"] != \"H\" and not number < fault[\"block\"] <= head:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "storage model",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if report.get(\"storage_model\") != STORAGE_MODEL:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "reported twice",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if tag in verdicts:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "handoff family",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if hid not in wanted:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "handoff fail",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if item[\"verdict\"] == \"FAIL\":",
+      "replacement": "if False:"
+    },
+    {
+      "name": "incomplete result",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "elif \"NOT_RUN\" in values:",
+      "replacement": "elif False:"
+    },
+    {
+      "name": "ac not run",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "ac = \"FAIL\" if \"FAIL\" in h_values else (\"NOT_RUN\" if \"NOT_RUN\" in h_values else \"PASS\")",
+      "replacement": "ac = \"FAIL\" if \"FAIL\" in h_values else \"PASS\""
+    },
+    {
+      "name": "final head below h",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if not is_int(head) or head < number:",
+      "replacement": "if not is_int(head):"
+    }
+  ]
+}
