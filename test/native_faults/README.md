@@ -57,25 +57,14 @@ differs, so the in-memory file system does too:
 | Family | Pebble for a new store | File system | Power loss | `storage_model` |
 |---|---|---|---|---|
 | ETH (Geth) | v2.1.4 | `vfs.NewCrashableMem` | reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})` | `pebble-v2-crashable-mem` |
-| BSC, POLY (Bor) | v1.1.5 | `vfs.NewStrictMem` | `ResetToSyncedState`, then reopen | `pebble-v1-strict-mem` |
+| BSC, POLY (Bor) | v1.1.5 | `vfs.NewStrictMem` | `ResetToSyncedState` (see "Restart"), then reopen | `pebble-v1-strict-mem` |
 
-Both keep exactly the data that was last synced.
-
-### Restart
-
-A second open of a Pebble store on the same in-memory file system fails
-while the first is still open (the file system holds an in-process lock),
-and a normal close of a pebble v1 store syncs its WAL. So the probe reopens
-like this:
-
-| Family | `power_loss` | `crash` |
-|---|---|---|
-| ETH (pebble v2) | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})`, a new file system with no locks | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 100})` |
-| BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)`, close the node, `ResetToSyncedState`, `SetIgnoreSyncs(false)`, reopen | Close the node normally, then reopen: every write is kept | Every capture record of the
-early seams lives in this store and is made durable by `SyncKeyValue`: the
-admission records, the pins (`state_provider`, hash scheme only),
-EXEC_READY, the decision records and markers, and the boundary record. So
-the model covers every durable step that this task tests.
+Both keep exactly the data that was last synced; "Restart" gives the full
+steps. Every capture record of the early seams lives in this store and is
+made durable by `SyncKeyValue`: the admission records, the pins
+(`state_provider`, hash scheme only), EXEC_READY, the decision records and
+markers, and the boundary record. So the model covers every durable step
+that this task tests.
 
 Limits of the model, recorded in every report as `storage_model`:
 
@@ -98,6 +87,20 @@ Limits of the model, recorded in every report as `storage_model`:
 - The store lives in memory, so both variants reopen the node in the same
   process. A process-level crash of a real binary is a different fault. The
   Bor block keeps its process-crash model as well (`bor.power-loss-model`).
+
+### Restart
+
+A second open of a Pebble store on the same in-memory file system fails
+while the first is still open (the file system holds an in-process lock),
+and a normal close of a pebble v1 store syncs its WAL. A normal node stop
+is not a crash either: `BlockChain.Stop` writes cached state to disk and
+journals the snapshot. So the probe never stops the node; it abandons it
+without `BlockChain.Stop` and reopens a new node like this:
+
+| Family | `power_loss` | `crash` |
+|---|---|---|
+| ETH (pebble v2) | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})`, a new file system with no locks | Reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 100, RNG: <any seeded rand>})`; at 100 every write is kept |
+| BSC, POLY (pebble v1) | `SetIgnoreSyncs(true)`, close only the chaindata store handle, `ResetToSyncedState`, `SetIgnoreSyncs(false)`, reopen | Close only the chaindata store handle, then reopen: every write is kept |
 
 ## Catalog
 
