@@ -22,10 +22,10 @@
       "boundary": "GoLive has flushed and synced the state root of the H header and written the boundary record, but the boundary sync has not completed.",
       "source": "adapters/geth/lifecycle/README.md, GoLive",
       "after_restart": {
-        "crash": {"boundary": ["absent", "present"], "mode": ["BOOTSTRAP", "RECOVERY", "LIVE"]},
+        "crash": {"boundary": ["absent", "present"], "mode": ["BOOTSTRAP", "RECOVERY"]},
         "power_loss": {"boundary": ["absent"], "mode": ["BOOTSTRAP"]}
       },
-      "h_rule": "kept_if_present_else_new"
+      "h_rule": "kept_if_present"
     },
     {
       "id": "h.after-boundary-sync",
@@ -35,8 +35,8 @@
       "boundary": "The boundary record is synced; the decision bridge has not gone live.",
       "source": "adapters/geth/lifecycle/README.md, GoLive",
       "after_restart": {
-        "crash": {"boundary": ["present"], "mode": ["RECOVERY", "LIVE"]},
-        "power_loss": {"boundary": ["present"], "mode": ["RECOVERY", "LIVE"]}
+        "crash": {"boundary": ["present"], "mode": ["RECOVERY"]},
+        "power_loss": {"boundary": ["present"], "mode": ["RECOVERY"]}
       },
       "h_rule": "kept"
     },
@@ -48,8 +48,8 @@
       "boundary": "GoLive has returned and the capture path is live; block H+1 has not reached admission.",
       "source": "adapters/geth/lifecycle/README.md, GoLive",
       "after_restart": {
-        "crash": {"boundary": ["present"], "mode": ["RECOVERY", "LIVE"], "admission": ["none"]},
-        "power_loss": {"boundary": ["present"], "mode": ["RECOVERY", "LIVE"], "admission": ["none"]}
+        "crash": {"boundary": ["present"], "mode": ["RECOVERY"], "admission": ["none"]},
+        "power_loss": {"boundary": ["present"], "mode": ["RECOVERY"], "admission": ["none"]}
       },
       "h_rule": "kept"
     },
@@ -100,8 +100,8 @@
       "boundary": "The pin of the parent state of the fault block is written, but its sync has not completed.",
       "source": ".project/evidence/E01-02.pins.md, surviving SyncKeyValue mutants",
       "after_restart": {
-        "crash": {"boundary": ["present"], "pin": ["none", "live"], "admission": ["none", "preparing"]},
-        "power_loss": {"boundary": ["present"], "pin": ["none"], "admission": ["none", "preparing"]}
+        "crash": {"boundary": ["present"], "pin": ["none", "live"], "admission": ["preparing"]},
+        "power_loss": {"boundary": ["present"], "pin": ["none"], "admission": ["preparing"]}
       },
       "h_rule": "kept"
     },
@@ -113,8 +113,8 @@
       "boundary": "The pin of the parent state of the fault block is synced; the ADMITTED record is not written.",
       "source": ".project/evidence/E01-02.pins.md",
       "after_restart": {
-        "crash": {"boundary": ["present"], "pin": ["live"], "admission": ["none", "preparing"]},
-        "power_loss": {"boundary": ["present"], "pin": ["live"], "admission": ["none", "preparing"]}
+        "crash": {"boundary": ["present"], "pin": ["live"], "admission": ["preparing"]},
+        "power_loss": {"boundary": ["present"], "pin": ["live"], "admission": ["preparing"]}
       },
       "h_rule": "kept"
     },
@@ -188,11 +188,11 @@
       "pending": true,
       "seam": "decision",
       "ac": [],
-      "boundary": "The native mutation of the fault block wrote its marker with the native batch; the decided record sync has not completed.",
+      "boundary": "The final native batch of the fault block carried the marker and was synced; the decided record is written, but its sync has not completed.",
       "source": "adapters/geth/decision/README.md, crash points of one decision",
       "after_restart": {
-        "crash": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent", "intent_marker"]},
-        "power_loss": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent", "intent_marker"]}
+        "crash": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent_marker", "decided"]},
+        "power_loss": {"boundary": ["present"], "admission": ["exec_ready"], "decision": ["intent_marker"]}
       },
       "h_rule": "kept"
     },
@@ -211,6 +211,9 @@
     }
   ],
   "handoffs": [
+    {"id": "geth.pass-at-golive", "block": "eth", "kind": "fault", "source": "AC-SCP-03-01; adapters/geth/lifecycle/README.md, GoLive (ErrOrder)", "item": "A canonical import held open while GoLive runs: GoLive is refused, and the held import finishes before H is set, so it is not captured."},
+    {"id": "bsc.pass-at-golive", "block": "bsc", "kind": "fault", "source": "AC-SCP-03-01; adapters/bsc/lifecycle/README.md, GoLive (ErrOrder)", "item": "A canonical import held open while GoLive runs: GoLive is refused, and the held import finishes before H is set, so it is not captured."},
+    {"id": "bor.pass-at-golive", "block": "poly", "kind": "fault", "source": "AC-SCP-03-01; adapters/bor/lifecycle/README.md, GoLive (ErrOrder)", "item": "A canonical import held open while GoLive runs: GoLive is refused, and the held import finishes before H is set, so it is not captured."},
     {"id": "geth.sethead-interrupted", "block": "eth", "kind": "fault", "source": "D106 item 5; .project/evidence/E01-02.lifecycle_seams.geth.md", "item": "The Geth completion of an interrupted SetHead rewind."},
     {"id": "geth.repaired-judge", "block": "eth", "kind": "judge", "source": "D106 item 5; Geth lifecycle review 003", "item": "The judge of the Geth `repaired` scenario must bind the unresolved intent."},
     {"id": "geth.mid-reorg-long-branch", "block": "eth", "kind": "fault", "source": "D101 item 2", "item": "The Geth mid-reorg completion with an old branch longer than one block, checked by source review only so far."},

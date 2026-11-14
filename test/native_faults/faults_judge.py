@@ -18,11 +18,12 @@ CATALOG = HERE / "faults.json"
 FAMILIES = ("eth", "bsc", "poly")
 VARIANTS = ("crash", "power_loss")
 SEAMS = ("H", "admission", "pins", "EXEC_READY", "decision")
-H_RULES = ("kept", "kept_if_present_else_new")
+H_RULES = ("kept", "kept_if_present")
 HANDOFF_KINDS = ("fault", "judge", "doc")
 HANDOFF_VERDICTS = ("PASS", "FAIL", "NOT_RUN")
 STATE_FIELDS = ("mode", "admission", "pin", "decision")
-STORAGE_MODEL = "pebble-strict-mem"
+# Accepted trees: Geth opens a new store with pebble v2, BSC and Bor with pebble v1.
+STORAGE_MODELS = {"eth": "pebble-v2-crashable-mem", "bsc": "pebble-v1-strict-mem", "poly": "pebble-v1-strict-mem"}
 HEX64 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -33,6 +34,11 @@ class CatalogError(ValueError):
 def load_json(path):
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def obj(value):
+    """Return value when it is a JSON object, else an empty one."""
+    return value if isinstance(value, dict) else {}
 
 
 def is_int(value):
@@ -52,6 +58,7 @@ def check_catalog(catalog):
         raise CatalogError("catalog: states must name mode, admission, pin, decision")
     points = {}
     for point in catalog.get("points", []):
+        point = obj(point)
         pid = point.get("id")
         if not isinstance(pid, str) or not pid:
             raise CatalogError("catalog: point without id")
@@ -116,11 +123,11 @@ def judge_case(case, point, states):
     failures = []
     tag = f"{case.get('point')}/{case.get('variant')}"
     variant = case.get("variant")
-    fault = case.get("fault", {})
+    fault = obj(case.get("fault"))
     if fault.get("hit") is not True or not is_int(fault.get("block")) or fault["block"] < 0:
         failures.append(f"{tag}: the fault point was not reached")
         return failures
-    storage = case.get("storage", {})
+    storage = obj(case.get("storage"))
     dropped = storage.get("unsynced_dropped")
     if not is_int(dropped) or dropped < 0:
         failures.append(f"{tag}: unsynced_dropped must be a count")
@@ -133,7 +140,7 @@ def judge_case(case, point, states):
     elif storage.get("reset_to_synced") is not False or dropped != 0:
         failures.append(f"{tag}: a crash keeps every write")
 
-    after = case.get("after_restart", {})
+    after = obj(case.get("after_restart"))
     restart_h = boundary_of(after.get("boundary"), f"{tag} after_restart", failures)
     expected = point["after_restart"][variant]
     presence = "present" if restart_h else "absent"
@@ -146,15 +153,22 @@ def judge_case(case, point, states):
         elif field in expected and value not in expected[field]:
             failures.append(f"{tag}: {field} {value} after restart, expected {expected[field]}")
     mode = after.get("mode")
-    if (restart_h is None) != (mode == "BOOTSTRAP"):
+    if mode != ("BOOTSTRAP" if restart_h is None else "RECOVERY"):
         failures.append(f"{tag}: mode {mode} does not match the boundary")
+    native_h = boundary_of(after.get("native_h"), f"{tag} after_restart native", failures)
+    if restart_h is not None and native_h != restart_h:
+        failures.append(f"{tag}: the boundary after restart is not the native canonical header at H")
 
-    final = case.get("final", {})
+    final = obj(case.get("final"))
     final_h = boundary_of(final.get("boundary"), f"{tag} final", failures)
     if final_h is None:
         failures.append(f"{tag}: no durable boundary at the end")
         return failures
     number = final_h[0]
+    if boundary_of(final.get("native_h"), f"{tag} final native", failures) != final_h:
+        failures.append(f"{tag}: the final boundary is not the native canonical header at H")
+    if final.get("mode") != "LIVE":
+        failures.append(f"{tag}: the capture path is not LIVE at the end")
     head = final.get("head")
     if not is_int(head) or head < number:
         failures.append(f"{tag}: final head below H")
@@ -169,17 +183,18 @@ def judge_case(case, point, states):
         failures.append(f"{tag}: block H+1 was not exported (loss window)")
     if sorted(exported) != list(range(number + 1, head + 1)):
         failures.append(f"{tag}: exported blocks are not exactly H+1 to the head")
-    if final.get("duplicates") != 0:
+    duplicates = final.get("duplicates")
+    if not is_int(duplicates):
+        failures.append(f"{tag}: duplicates must be a count")
+    elif duplicates != 0:
         failures.append(f"{tag}: a block was exported more than once")
     if final.get("corpus") != "PASS":
         failures.append(f"{tag}: the native result does not match the smoke corpus")
 
     if restart_h is not None and restart_h != final_h:
         failures.append(f"{tag}: H changed after the boundary was durable")
-    if restart_h is None and number < fault["block"]:
-        failures.append(f"{tag}: the new H is below the fault point")
     if point["seam"] == "H" and restart_h is not None and restart_h[0] != fault["block"]:
-        failures.append(f"{tag}: the kept H is not the head of the fault")
+        failures.append(f"{tag}: the kept H is not the fault block")
     if point["seam"] != "H" and not number < fault["block"] <= head:
         failures.append(f"{tag}: the fault block is not a live block")
     return failures
@@ -190,15 +205,16 @@ def judge(report, catalog):
     points = check_catalog(catalog)
     states = catalog["states"]
     failures = []
-    if report.get("schema_version") != 1 or report.get("kind") != "native-faults-report":
+    if not isinstance(report, dict) or report.get("schema_version") != 1 or report.get("kind") != "native-faults-report":
         return {"result": "FAIL", "failures": ["report: wrong schema_version or kind"]}
     family = report.get("family")
     if family not in FAMILIES:
         return {"result": "FAIL", "failures": ["report: unknown family"]}
-    if report.get("storage_model") != STORAGE_MODEL:
-        failures.append(f"report: storage_model must be {STORAGE_MODEL}")
+    if report.get("storage_model") != STORAGE_MODELS[family]:
+        failures.append(f"report: storage_model must be {STORAGE_MODELS[family]}")
     verdicts = {}
     for case in report.get("cases", []):
+        case = obj(case)
         key = (case.get("point"), case.get("variant"))
         tag = f"{key[0]}/{key[1]}"
         if key[0] not in points or key[1] not in VARIANTS:
@@ -216,8 +232,11 @@ def judge(report, catalog):
     handoffs = {}
     wanted = [h["id"] for h in catalog.get("handoffs", []) if h["block"] == family]
     for item in report.get("handoffs", []):
+        item = obj(item)
         hid = item.get("id")
-        if hid not in wanted:
+        if hid in handoffs:
+            failures.append(f"handoff {hid}: reported twice")
+        elif hid not in wanted:
             failures.append(f"handoff {hid}: not a handoff of {family}")
         elif item.get("verdict") not in HANDOFF_VERDICTS or not item.get("evidence"):
             failures.append(f"handoff {hid}: needs a verdict and evidence")
@@ -253,7 +272,7 @@ def main(argv=None):
     catalog = load_json(CATALOG)
     if args.command == "check":
         points = check_catalog(catalog)
-        print(f"catalog OK: {len(points)} points, {len(catalog['handoffs'])} handoffs")
+        print(f"catalog OK: {len(points)} points, {len(catalog.get('handoffs', []))} handoffs")
         return 0
     verdict = judge(load_json(args.report), catalog)
     text = json.dumps(verdict, indent=2, sort_keys=True) + "\n"

@@ -110,7 +110,7 @@
     {
       "name": "mode boundary",
       "file": "test/native_faults/faults_judge.py",
-      "original": "if (restart_h is None) != (mode == \"BOOTSTRAP\"):",
+      "original": "if mode != (\"BOOTSTRAP\" if restart_h is None else \"RECOVERY\"):",
       "replacement": "if False:"
     },
     {
@@ -134,8 +134,8 @@
     {
       "name": "duplicates",
       "file": "test/native_faults/faults_judge.py",
-      "original": "if final.get(\"duplicates\") != 0:",
-      "replacement": "if False:"
+      "original": "elif duplicates != 0:",
+      "replacement": "elif False:"
     },
     {
       "name": "corpus",
@@ -147,12 +147,6 @@
       "name": "h changed",
       "file": "test/native_faults/faults_judge.py",
       "original": "if restart_h is not None and restart_h != final_h:",
-      "replacement": "if False:"
-    },
-    {
-      "name": "new h below fault",
-      "file": "test/native_faults/faults_judge.py",
-      "original": "if restart_h is None and number < fault[\"block\"]:",
       "replacement": "if False:"
     },
     {
@@ -170,7 +164,7 @@
     {
       "name": "storage model",
       "file": "test/native_faults/faults_judge.py",
-      "original": "if report.get(\"storage_model\") != STORAGE_MODEL:",
+      "original": "if report.get(\"storage_model\") != STORAGE_MODELS[family]:",
       "replacement": "if False:"
     },
     {
@@ -208,6 +202,84 @@
       "file": "test/native_faults/faults_judge.py",
       "original": "if not is_int(head) or head < number:",
       "replacement": "if not is_int(head):"
+    },
+    {
+      "name": "restart native header",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if restart_h is not None and native_h != restart_h:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "final native header",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if boundary_of(final.get(\"native_h\"), f\"{tag} final native\", failures) != final_h:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "final live",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if final.get(\"mode\") != \"LIVE\":",
+      "replacement": "if False:"
+    },
+    {
+      "name": "point without id",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if not isinstance(pid, str) or not pid:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "boundary root",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "or not HEX64.fullmatch(str(value.get(\"root\", \"\"))):",
+      "replacement": "or False:"
+    },
+    {
+      "name": "boundary number negative",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "or value[\"number\"] < 0 \\",
+      "replacement": "or False \\"
+    },
+    {
+      "name": "lowercase hex",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "HEX64 = re.compile(r\"[0-9a-f]{64}\")",
+      "replacement": "HEX64 = re.compile(r\"[0-9a-fA-F]{64}\")"
+    },
+    {
+      "name": "unknown family",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if family not in FAMILIES:",
+      "replacement": "if family is None:"
+    },
+    {
+      "name": "duplicates count",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if not is_int(duplicates):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "handoff twice",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if hid in handoffs:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "report shape",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "if not isinstance(report, dict) or report.get(\"schema_version\") != 1",
+      "replacement": "if report.get(\"schema_version\") != 1"
+    },
+    {
+      "name": "case shape",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "        case = obj(case)\n",
+      "replacement": "        pass\n"
+    },
+    {
+      "name": "ac fail branch",
+      "file": "test/native_faults/faults_judge.py",
+      "original": "ac = \"FAIL\" if \"FAIL\" in h_values else (\"NOT_RUN\" if \"NOT_RUN\" in h_values else \"PASS\")",
+      "replacement": "ac = \"NOT_RUN\" if \"NOT_RUN\" in h_values else \"PASS\""
     }
   ]
 }

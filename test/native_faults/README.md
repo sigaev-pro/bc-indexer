@@ -29,25 +29,52 @@ Every fault point runs both:
 | `crash` | Every write made so far, synced or not (the OS cache survives) | Stop the native node at the fault point without closing the store, then reopen the same store |
 | `power_loss` | Only the writes that a completed sync made durable | The same stop, then drop every unsynced write before the reopen |
 
-The probe stops the node at the fault point: an armed hook in the native
-caller returns an error there, so nothing after the point runs. Then it
+Most fault points lie between a write and its `SyncKeyValue` inside a
+shared accepted package (`Begin`, `Admit`, `ExecReady`, `Intend`,
+`Resolve`, `Pin`, `Release`, `GoLive`), which a client block may not change.
+So the probe arms the fault in a store wrapper that its own `native/` patch
+set puts around the chaindata store the packages use:
+
+- a point before a sync: the matching `SyncKeyValue` call returns an error
+  without syncing, so the pending write stays unsynced;
+- a point after a sync: that sync completes, and the next store call returns
+  an error.
+
+The error stops the step, and the probe stops the node without closing the
+store. The wrapper counts the key writes made since the last completed sync;
+that count is `unsynced_dropped` for the power-loss variant. Then the probe
 reopens the node on the same store and lets recovery finish. After that it
 imports the smoke corpus blocks and the rest of the short chain.
 
 ### Storage and cache model
 
 The native chaindata store is Pebble: it is the default engine for a new
-store in all three accepted trees (`node/database.go`, pebble v1.1.5). The probe opens it on Pebble's strict in-memory file
-system (`vfs.NewStrictMem`). That file system keeps unsynced data apart.
-`ResetToSyncedState` drops it, which is the power-loss variant. A reopen
-without that call is the crash variant. Every capture record of the early
-seams lives in this store and is made durable by `SyncKeyValue`: the
-admission records, the pins (`state_provider`), EXEC_READY, the decision records and markers,
-and the boundary record. So the model covers every durable step that this
-task tests.
+store in all three accepted trees (`node/database.go`). The Pebble version
+differs, so the in-memory file system does too:
+
+| Family | Pebble for a new store | File system | Power loss | `storage_model` |
+|---|---|---|---|---|
+| ETH (Geth) | v2.1.4 | `vfs.NewCrashableMem` | reopen on `CrashClone(CrashCloneCfg{UnsyncedDataPercent: 0})` | `pebble-v2-crashable-mem` |
+| BSC, POLY (Bor) | v1.1.5 | `vfs.NewStrictMem` | `ResetToSyncedState`, then reopen | `pebble-v1-strict-mem` |
+
+Both keep exactly the data that was last synced. A reopen of the same file
+system without that step is the crash variant. Every capture record of the
+early seams lives in this store and is made durable by `SyncKeyValue`: the
+admission records, the pins (`state_provider`, hash scheme only),
+EXEC_READY, the decision records and markers, and the boundary record. So
+the model covers every durable step that this task tests.
 
 Limits of the model, recorded in every report as `storage_model`:
 
+- It tests the two extremes of a power loss: every unsynced write dropped,
+  and (as the crash variant) every one kept. The accepted core READMEs allow
+  any subset of unsynced writes to survive. Each early step has one pending
+  capture write after its previous sync, so the extremes cover its states;
+  mixed survival of native writes in the same window is not tested.
+- Native writes are not all unsynced until a capture sync: Pebble syncs the
+  WAL every `WALBytesPerSync` bytes (geth sets 5 times `IdealBatchSize`), and
+  a memtable flush also makes data durable. A report states what the store
+  dropped, not what native code expected.
 - It models the loss of unsynced data at the store level. It does not model
   torn sector writes, a device that acknowledges a sync it did not do, or
   file system metadata loss.
@@ -63,11 +90,13 @@ Limits of the model, recorded in every report as `storage_model`:
 [faults.json](faults.json) lists the fault points. Each point has:
 
 - the seam and the exact boundary;
-- the source table that defines the expected state, which is the power-loss
-  table of the accepted core README;
+- the source table that defines the expected state: the power-loss table of
+  the accepted core README, narrowed to the two extremes above;
 - whether a write is pending at the point (`pending`);
 - the states allowed right after the restart, per variant;
-- how H behaves (`h_rule`).
+- how H behaves (`h_rule`): `kept` when the boundary is durable at the
+  point, `kept_if_present` when it may be lost. It is descriptive; the
+  catalog check only requires `kept` points to expect a present boundary.
 
 | Seam | Points |
 |---|---|
@@ -81,9 +110,23 @@ For a point with a pending write, the power-loss variant allows only the
 state from before the write. The crash variant also allows the state the
 write would make. The judge requires that a power loss at such a point
 dropped at least one write, so a probe cannot pass by syncing too early.
+Right after a restart the mode is BOOTSTRAP without a boundary and RECOVERY
+with one; the states are read before recovery runs `GoLive`.
 
 `handoffs` lists the open items that earlier decisions gave to this task
-(D101, D106), each assigned to one client block.
+(D101, D106), each assigned to one client block. It also gives each block
+the other side of AC-SCP-03-01: a canonical import held open while `GoLive`
+runs is refused (`ErrOrder`) and finishes before H is set.
+
+Rows of the core tables that are not catalog points:
+
+- admission `Reject` and `Abandon`, and the native rejection before
+  `RejectIntent` (AC-CAP-07-06): they need an invalid block, which never
+  reaches export, so the export rules of this judge do not apply. The
+  accepted unit tables and the #17 native AC-CAP-07-06 runs cover them, and
+  the full matrix is E05-03.full_crash_matrix.
+- "after the mirror applied, before the cleanup sync": no mirror exists
+  until E05-01.registry.
 
 ## Report format
 
@@ -93,7 +136,7 @@ Each client block writes one JSON report per family:
 {
   "schema_version": 1, "kind": "native-faults-report",
   "family": "eth" | "bsc" | "poly",
-  "storage_model": "pebble-strict-mem",
+  "storage_model": "pebble-v2-crashable-mem" (eth) | "pebble-v1-strict-mem" (bsc, poly),
   "source": {<accepted patched native build, patch set, tool and record digests>},
   "cases": [{
     "point": <catalog id>, "variant": "crash" | "power_loss",
@@ -101,13 +144,16 @@ Each client block writes one JSON report per family:
     "storage": {"reset_to_synced": <bool>, "unsynced_dropped": <count>},
     "after_restart": {
       "boundary": null | {"number", "hash", "root"},
-      "mode": "BOOTSTRAP" | "RECOVERY" | "LIVE",
+      "native_h": <with a boundary: the native canonical {"number", "hash", "root"} at its number>,
+      "mode": "BOOTSTRAP" | "RECOVERY",
       "admission": "none" | "preparing" | "admitted" | "exec_ready" | "decided",
       "pin": "none" | "live" | "released",
       "decision": "none" | "intent" | "intent_marker" | "decided"
     },
     "final": {
       "boundary": {"number", "hash", "root"},
+      "native_h": {"number", "hash", "root"},
+      "mode": "LIVE",
       "head": <number>,
       "exported": [<block numbers with a decided import, in any order>],
       "duplicates": <count of blocks exported more than once>,
@@ -120,7 +166,9 @@ Each client block writes one JSON report per family:
 
 Hashes and roots are 64 lowercase hex digits without `0x`. The
 `after_restart` states describe the fault block: the head at GoLive for an H
-point, or the live block that hit the point. `final.corpus` is the
+point, or the live block that hit the point. `native_h` is read from the
+native chain (canonical hash and header state root at the boundary number),
+not from the boundary record. `final.corpus` is the
 `corpus_compare.py` result for the corpus blocks imported after recovery.
 
 ## Judge rules
@@ -131,16 +179,25 @@ For every case:
 2. A power loss reset the store to its synced state and, at a pending
    point, dropped at least one write. A crash dropped nothing.
 3. The boundary presence and each state after the restart are allowed for
-   the variant. The mode is BOOTSTRAP exactly when no boundary exists.
-4. At the end a durable boundary H exists. The exported blocks are exactly
+   the variant. The mode is BOOTSTRAP without a boundary and RECOVERY with
+   one. A boundary after the restart equals the native canonical header at
+   its number.
+4. At the end a durable boundary H exists, equals the native canonical
+   header at H, and the capture path is LIVE. The exported blocks are exactly
    H+1 to the head: none at or below H (the initial sync is not exported),
    H+1 is present (no loss window), and none is exported twice.
 5. The native result of the corpus blocks matches the smoke corpus.
 6. A boundary that was durable after the restart is the final one (H, hash
-   and root unchanged). For an H point it is the head of the fault. When no
-   boundary survived, the new H is at or above the fault block.
+   and root unchanged). For an H point it is the fault block. When no
+   boundary survived, nothing was captured, so the new H may be anywhere;
+   rules 4 and 5 still apply to it.
 7. For every point outside H, the fault block is a live block: above H and
    at or below the head.
+
+Report-level checks: the report kind and schema, a known family, the
+`storage_model` of that family, known points and variants, no case or
+handoff reported twice, and only handoffs of that family. A malformed case
+or field fails; it never stops the judge.
 
 The verdict is PASS when every point and variant passes and every handoff
 of the family has a PASS verdict. It is INCOMPLETE when a case or handoff
@@ -163,12 +220,13 @@ clean checkout or worktree without `.project/cache`.
 
 ## Client block duties
 
-- Arm each fault point in the native caller of the accepted patched tree,
-  through the client's own patch set under `native/`. Change no shared
+- Arm each fault point in the store wrapper (see "Fault model"), through the
+  client's own patch set under `native/`. Change no shared
   `admission`, `decision`, `lifecycle`, `source_inputs` or `state_provider`
   (pins) file.
-- Open the chaindata on the strict in-memory file system, and record
-  `unsynced_dropped` from the store, not from the probe's own count.
+- Open the chaindata on the in-memory file system of its Pebble version, and
+  take `unsynced_dropped` from the store wrapper's count of writes since the
+  last completed sync.
 - Read the `after_restart` states from the durable records through the
   accepted packages, before recovery changes them.
 - Import the smoke corpus blocks after recovery, and compare them with

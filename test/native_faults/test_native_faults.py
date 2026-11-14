@@ -17,7 +17,7 @@ H = 10
 HEAD = 14
 HASH_H = "11" * 32
 ROOT_H = "22" * 32
-DEFAULTS = {"mode": "LIVE", "admission": "none", "pin": "none", "decision": "none"}
+DEFAULTS = {"mode": "RECOVERY", "admission": "none", "pin": "none", "decision": "none"}
 
 
 def catalog():
@@ -39,8 +39,10 @@ def perfect_case(point, variant):
     if not present:
         after["mode"] = "BOOTSTRAP"
     elif after["mode"] == "BOOTSTRAP":
-        after["mode"] = "LIVE"
+        after["mode"] = "RECOVERY"
     after["boundary"] = boundary() if present else None
+    if present:
+        after["native_h"] = boundary()
     fault_block = H if point["seam"] == "H" else H + 2
     power = variant == "power_loss"
     return {
@@ -48,8 +50,8 @@ def perfect_case(point, variant):
         "fault": {"hit": True, "block": fault_block},
         "storage": {"reset_to_synced": power, "unsynced_dropped": 1 if power and point["pending"] else 0},
         "after_restart": after,
-        "final": {"boundary": boundary(), "head": HEAD, "exported": list(range(H + 1, HEAD + 1)),
-                  "duplicates": 0, "corpus": "PASS"},
+        "final": {"boundary": boundary(), "native_h": boundary(), "mode": "LIVE", "head": HEAD,
+                  "exported": list(range(H + 1, HEAD + 1)), "duplicates": 0, "corpus": "PASS"},
     }
 
 
@@ -59,7 +61,7 @@ def perfect_report(family="eth", cat=None):
     handoffs = [{"id": h["id"], "verdict": "PASS", "evidence": "record 01"}
                 for h in cat["handoffs"] if h["block"] == family]
     return {"schema_version": 1, "kind": "native-faults-report", "family": family,
-            "storage_model": faults_judge.STORAGE_MODEL, "cases": cases, "handoffs": handoffs}
+            "storage_model": faults_judge.STORAGE_MODELS[family], "cases": cases, "handoffs": handoffs}
 
 
 def case_of(report, point_id, variant):
@@ -84,7 +86,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_pending_points_allow_fewer_states_after_power_loss(self):
         for point in catalog()["points"]:
-            if not point["pending"] or point["id"] == "dec.before-decided-sync":
+            if not point["pending"]:
                 continue
             crash, power = point["after_restart"]["crash"], point["after_restart"]["power_loss"]
             narrower = [f for f in power if set(power[f]) < set(crash.get(f, power[f]))]
@@ -118,6 +120,8 @@ class CatalogTests(unittest.TestCase):
         self.bad(lambda c: c["points"][0]["after_restart"]["crash"].update(mode=[]), "bad values")
         self.bad(lambda c: c["points"][1]["after_restart"]["crash"].update(boundary=["absent"]), "kept needs")
         self.bad(lambda c: c.update(points=[]), "no points")
+        self.bad(lambda c: c["points"][0].pop("id"), "point without id")
+        self.bad(lambda c: c["points"].append("h.extra"), "point without id")
         self.bad(lambda c: [p.update(ac=[]) for p in c["points"]], "AC-SCP-03-01")
         self.bad(lambda c: c["handoffs"].append(copy.deepcopy(c["handoffs"][0])), "duplicate handoff")
         self.bad(lambda c: c["handoffs"][0].update(block="arb"), "unknown block")
@@ -168,6 +172,28 @@ class JudgeTests(unittest.TestCase):
         self.assertTrue(any(message in failure for failure in verdict["failures"]), verdict["failures"])
         return verdict
 
+    def test_failing_h_case_fails_the_ac(self):
+        verdict = self.failing(lambda c, r: c["final"].update(corpus="FAIL"), "smoke corpus",
+                               point="h.after-boundary-sync")
+        self.assertEqual(verdict["ac"], {"AC-SCP-03-01": "FAIL"})
+
+    def test_unknown_family_without_handoffs(self):
+        report = perfect_report()
+        report.update(family="arb", handoffs=[])
+        self.assertEqual(self.verdict(report), {"result": "FAIL", "failures": ["report: unknown family"]})
+
+    def test_malformed_report_shapes_fail_cleanly(self):
+        self.assertEqual(self.verdict(["not", "a", "report"])["result"], "FAIL")
+        for change in (lambda c: c.update(after_restart=None), lambda c: c.update(fault=None),
+                       lambda c: c.update(storage="x"), lambda c: c.update(final=[])):
+            report = perfect_report()
+            change(case_of(report, "adm.after-admitted-sync", "crash"))
+            self.assertEqual(self.verdict(report)["result"], "FAIL")
+        report = perfect_report()
+        report["cases"].append("not a case")
+        report["handoffs"].append(None)
+        self.assertEqual(self.verdict(report)["result"], "FAIL")
+
     def test_report_format_errors(self):
         report = perfect_report()
         report["kind"] = "other"
@@ -211,17 +237,21 @@ class JudgeTests(unittest.TestCase):
 
     def test_mode_must_match_boundary(self):
         self.failing(lambda c, r: c["after_restart"].update(mode="BOOTSTRAP"), "does not match the boundary")
-        self.failing(lambda c, r: c["after_restart"].update(mode="LIVE"), "does not match the boundary",
+        self.failing(lambda c, r: c["after_restart"].update(mode="RECOVERY"), "does not match the boundary",
                      point="h.before-boundary-sync")
+        self.failing(lambda c, r: c["after_restart"].update(mode="LIVE"), "does not match the boundary")
 
     def test_boundary_presence_after_restart(self):
-        self.failing(lambda c, r: c["after_restart"].update(boundary=boundary(), mode="LIVE"),
+        self.failing(lambda c, r: c["after_restart"].update(boundary=boundary(), mode="RECOVERY"),
                      "boundary present", point="h.before-boundary-sync")
         self.failing(lambda c, r: c["after_restart"].update(boundary=None, mode="BOOTSTRAP"),
                      "boundary absent", point="h.after-boundary-sync")
 
     def test_malformed_boundaries(self):
         self.failing(lambda c, r: c["after_restart"].update(boundary={"number": H}), "malformed boundary")
+        self.failing(lambda c, r: c["final"].update(boundary=dict(boundary(), root="zz" * 32)), "malformed boundary")
+        self.failing(lambda c, r: c["final"].update(boundary=dict(boundary(), number=-1)), "malformed boundary")
+        self.failing(lambda c, r: c["final"].update(boundary=dict(boundary(), hash="AB" * 32)), "malformed boundary")
         self.failing(lambda c, r: c["final"].update(boundary={"number": H, "hash": "xy", "root": ROOT_H}),
                      "malformed boundary")
         self.failing(lambda c, r: c["final"].update(boundary=None), "no durable boundary")
@@ -238,6 +268,7 @@ class JudgeTests(unittest.TestCase):
 
     def test_duplicates_and_corpus(self):
         self.failing(lambda c, r: c["final"].update(duplicates=1), "more than once")
+        self.failing(lambda c, r: c["final"].pop("duplicates"), "duplicates must be a count")
         self.failing(lambda c, r: c["final"].update(corpus="FAIL"), "smoke corpus")
 
     def test_final_head_below_h(self):
@@ -247,20 +278,35 @@ class JudgeTests(unittest.TestCase):
         self.failing(lambda c, r: c["final"].update(boundary=boundary(H + 1), exported=list(range(H + 2, HEAD + 1))),
                      "H changed")
 
-    def test_new_h_must_not_be_below_the_fault(self):
-        def change(case, report):
-            case["fault"]["block"] = H + 1
-        self.failing(change, "below the fault point", point="h.before-boundary-sync")
+    def test_new_h_may_be_below_the_fault_after_power_loss(self):
+        report = perfect_report()
+        case_of(report, "h.before-boundary-sync", "power_loss")["fault"]["block"] = H + 1
+        self.assertEqual(self.verdict(report)["result"], "PASS", self.verdict(report)["failures"])
+
+    def test_boundary_must_be_the_native_header(self):
+        other = dict(boundary(), hash="44" * 32)
+        self.failing(lambda c, r: c["after_restart"].update(native_h=other), "after restart is not the native")
+        self.failing(lambda c, r: c["after_restart"].pop("native_h"), "after restart is not the native")
+        self.failing(lambda c, r: c["final"].update(native_h=dict(boundary(), root="55" * 32)),
+                     "final boundary is not the native")
+
+    def test_capture_must_be_live_at_the_end(self):
+        self.failing(lambda c, r: c["final"].update(mode="RECOVERY"), "not LIVE at the end")
+
+    def test_storage_model_is_per_family(self):
+        report = perfect_report("eth")
+        report["storage_model"] = faults_judge.STORAGE_MODELS["bsc"]
+        self.assertIn("storage_model", " ".join(self.verdict(report)["failures"]))
 
     def test_new_h_at_or_above_the_fault_passes(self):
         report = perfect_report()
         case = case_of(report, "h.before-boundary-sync", "power_loss")
-        case["final"]["boundary"] = boundary(H + 1)
+        case["final"]["boundary"] = case["final"]["native_h"] = boundary(H + 1)
         case["final"]["exported"] = list(range(H + 2, HEAD + 1))
         self.assertEqual(self.verdict(report)["result"], "PASS", self.verdict(report)["failures"])
 
-    def test_kept_h_must_be_the_fault_head(self):
-        self.failing(lambda c, r: c["fault"].update(block=H - 1), "head of the fault",
+    def test_kept_h_must_be_the_fault_block(self):
+        self.failing(lambda c, r: c["fault"].update(block=H - 1), "not the fault block",
                      point="h.after-boundary-sync")
 
     def test_live_fault_block(self):
@@ -274,6 +320,9 @@ class JudgeTests(unittest.TestCase):
         report = perfect_report("bsc")
         report["handoffs"][0]["evidence"] = ""
         self.assertIn("needs a verdict", " ".join(self.verdict(report)["failures"]))
+        report = perfect_report("bsc")
+        report["handoffs"].append(dict(report["handoffs"][0]))
+        self.assertIn("handoff bsc.pass-at-golive: reported twice", self.verdict(report)["failures"])
         report = perfect_report("bsc")
         report["handoffs"][0]["verdict"] = "FAIL"
         self.assertEqual(self.verdict(report)["result"], "FAIL")

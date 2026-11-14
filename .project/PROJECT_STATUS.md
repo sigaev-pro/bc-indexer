@@ -28,9 +28,9 @@ measured session at a time, so the client blocks run one after another.
 | Block | Role | Output | Allowed paths |
 |---|---|---|---|
 | 0 faults-core | architect, then native-engineer; reviewer | Fault model, storage and cache model, catalog of fault points, report format, judge, portable controls and mutants; no native run | `test/native_faults/{README.md,faults.json,*.py,*.mutants.json}`, `.project/automation/ci.py` and `test_ci_discovery.py` (discover the fault tests), `.project/evidence/E01-04.early_faults.md`, this section |
-| ETH | native-engineer; qa for the matrix | Geth fault probe on the strict in-memory store, fault hooks in its own patch set, measured records, Geth handoffs | `test/native_faults/eth/**`, `adapters/geth/*/native/**` as the hooks need (shared files unchanged), `.project/evidence/E01-04.early_faults.eth.md` |
-| BSC | native-engineer; qa for the matrix | The same for BSC, with the BSC handoffs | `test/native_faults/bsc/**`, `adapters/bsc/*/native/**` as above, `.project/evidence/E01-04.early_faults.bsc.md` |
-| POLY | native-engineer; qa for the matrix | The same for Bor, with the Bor handoffs | `test/native_faults/poly/**`, `adapters/bor/*/native/**` as above, `.project/evidence/E01-04.early_faults.poly.md` |
+| ETH | native-engineer; qa for the matrix | Geth fault probe on the strict in-memory store, fault hooks in its own patch set, measured records, Geth handoffs | `test/native_faults/eth/**`, `adapters/geth/*/native/**` as the hooks need (shared files unchanged), `.project/evidence/E01-04.early_faults.eth.md`, its subsection of this section |
+| BSC | native-engineer; qa for the matrix | The same for BSC, with the BSC handoffs | `test/native_faults/bsc/**`, `adapters/bsc/*/native/**` as above, `.project/evidence/E01-04.early_faults.bsc.md`, its subsection of this section |
+| POLY | native-engineer; qa for the matrix | The same for Bor, with the Bor handoffs | `test/native_faults/poly/**`, `adapters/bor/*/native/**` as above, `.project/evidence/E01-04.early_faults.poly.md`, its subsection of this section |
 
 The client blocks start after block 0 merges. They change no shared
 `admission`, `decision`, `lifecycle`, `source_inputs` or `state_provider`
@@ -40,28 +40,35 @@ lock (D97).
 
 Technical decision of block 0 (within ACCEPTANCE_CASES, which asks every
 case for a storage and cache model): the power-loss variant opens the
-native Pebble chaindata on Pebble's strict in-memory file system and drops
-every unsynced write before the reopen; the crash variant reopens without
-dropping. The limits (no torn writes or false syncs, no freezer, in-process
+native Pebble chaindata on Pebble's in-memory file system and keeps only
+the synced data at the reopen (Geth, pebble v2: `CrashClone` with no
+unsynced data; BSC and Bor, pebble v1: `ResetToSyncedState`); the crash
+variant reopens without dropping. A store wrapper in each client's own
+patch set arms the fault at the matching sync. The limits (the two extremes
+of unsynced survival, no torn writes or false syncs, no freezer, in-process
 reopen) are in the module README.
 
 Items that earlier decisions gave to this task are `handoffs` in the
 catalog, one client block each: the Geth interrupted SetHead completion, the
 Geth `repaired` judge, the Geth mid-reorg with a longer old branch, the BSC
 store and write errors and `skipBlock` (D101), the Bor below-H rewind
-refusal, GoLive order, BOOTSTRAP vote pass, probe flag help text (D106) and
-the Bor power-loss variant of its startup-repair fault.
+refusal, GoLive order, BOOTSTRAP vote pass, probe flag help text (D106),
+the Bor power-loss variant of its startup-repair fault, and per family a
+canonical import held open across `GoLive` (the other side of
+AC-SCP-03-01).
 
 ### Block 0: faults-core
 
 Branch `claude/e01-04-early-faults-core`. Design:
 [test/native_faults/README.md](../test/native_faults/README.md). The
 catalog has 15 fault points over the five seams, each with a crash and a
-power-loss variant, and 10 handoffs. The judge checks the fault was reached,
+power-loss variant, and 13 handoffs. The judge checks the fault was reached,
 the storage model of the variant, the allowed states after the restart, the
 mode against the boundary, that the exported blocks are exactly H+1 to the
 head (no initial-sync export, no H+1 loss, no duplicate), the smoke corpus
-result, that a durable H never changes, and that the fault block is live.
+result, that the boundary equals the native canonical header at H and the
+capture path ends LIVE, that a durable H never changes, and that the fault
+block is live.
 AC-SCP-03-01 per family is PASS when both variants of the three H points
 pass. Block 0 gives no AC verdict.
 
