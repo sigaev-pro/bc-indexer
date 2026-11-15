@@ -32,7 +32,8 @@ its own:
 
 1. **Start.** A capture node starts as the Bor lifecycle probe starts one:
    - the node stack;
-   - the store identity preflight (`borimport.Preflight`);
+   - the store identity preflight (`borimport.Preflight`); a no-op here,
+     because the new OS data directory has no store (evidence, Limits);
    - the native backend in the sequential capture profile, with Heimdall
      answered by the in-process stub;
    - `wire.Start`: the admission, the decision bridge with the lifecycle
@@ -81,7 +82,7 @@ its own:
    - The native export of each block (`exportChain`, copied from
      `test/native_corpus/poly/main.go`).
 
-A portable test keeps every copied declaration equal to its source:
+A portable test keeps each copied declaration equal to its source:
 
 - the inputs, the node start helpers and the export, from the POLY corpus
   probe;
@@ -89,7 +90,11 @@ A portable test keeps every copied declaration equal to its source:
 - the decision rows, from the BSC probe: one row per member.
 
 The storage helpers take the chaindata directory, because each Bor node has
-its own path; apart from that they equal the BSC probe's.
+its own path. A portable test pins `settleWAL`, `freshFS` and `copyFS` as
+the BSC probe's with only the directory changed. `syncDirs` syncs the
+directory and every parent up to `/` (BSC syncs its fixed path); a portable
+test pins its text, and others pin the fail-closed steps: a failed child's
+row, the fault store guard and the opening mode.
 
 **Why child processes.** An abandoned node is never freed. Sixty Bor nodes,
 each with its caches, would not fit in one process in the runtime memory
@@ -98,8 +103,9 @@ limit. A child that fails is recorded with the end of its error output
 
 `faults_poly.py judge` builds each case's observation as
 `poly_corpus.observation_of` does, with the state sync events of the
-import. It compares the observation with `test/native_corpus/expected/poly.json`
-by `corpus_compare.py`, without only the per-block `decisions` rows. Any of
+import. It compares the observation with
+`test/native_corpus/expected/poly.json` by `corpus_compare.py`, without only
+the per-block `decisions` rows. Any of
 these probe errors fails the result:
 
 - the storage model;

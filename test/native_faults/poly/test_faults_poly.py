@@ -187,6 +187,48 @@ class CopiedCodeTests(unittest.TestCase):
                          .replace("MkdirAll(dir,", "MkdirAll(memDir,").replace("syncDirs(mem, dir)", "syncDirs(mem)"),
                          go_block(bsc, "func freshFS("))
 
+    def test_copy_differs_from_bsc_only_by_the_directories(self):
+        bsc = (HERE.parent / "bsc" / "faults_test.go").read_text()
+        ours = go_block(self.ours, "func copyFS(")
+        for old, new in (("src *vfs.MemFS, from, to string", "src *vfs.MemFS"), ("freshFS(to)", "freshFS()"),
+                         ("List(from)", "List(memDir)"),
+                         ("\t\tin, err := src.Open(filepath.Join(from, name))\n",
+                          "\t\tpath := filepath.Join(memDir, name)\n\t\tin, err := src.Open(path)\n"),
+                         ("dst.Create(filepath.Join(to, name))", "dst.Create(path)"),
+                         ("syncDirs(dst, to)", "syncDirs(dst)")):
+            self.assertEqual(ours.count(old), 1, old)
+            ours = ours.replace(old, new)
+        self.assertEqual(ours, go_block(bsc, "func copyFS("))
+
+    def test_directory_sync_walks_up_to_the_root(self):
+        # BSC syncs its fixed chaindata path and parents; each Bor node has its
+        # own path, so the Bor helper syncs dir and every parent up to "/".
+        self.assertEqual(go_block(self.ours, "func syncDirs("), """func syncDirs(mem *vfs.MemFS, dir string) {
+\tfor current := dir; ; current = filepath.Dir(current) {
+\t\tf, err := mem.OpenDir(current)
+\t\tcheck(err)
+\t\tcheck(f.Sync())
+\t\tcheck(f.Close())
+\t\tif current == "/" {
+\t\t\treturn
+\t\t}
+\t}
+}""")
+
+    def test_fail_closed_probe_steps(self):
+        # A failed child stays in the report as a case with child_error, so
+        # the judge fails it instead of finding a case missing.
+        self.assertIn('cases = append(cases, map[string]any{"point": point, "variant": variant,\n'
+                      '\t\t\t\t\t"child_error": fmt.Sprintf("%v: %s", err, tail)})', go_block(self.ours, "func run("))
+        start = go_block(self.ours, "func start(")
+        self.assertIn('if n.fs == nil {\n\t\treturn n, errors.New("the node did not open its store through the fault '
+                      'store")', start)
+        self.assertIn("""\tif r.run.Bootstrapping() {
+\t\tafter["mode"] = string(lifecycle.Bootstrap)
+\t} else {
+\t\tafter["mode"] = r.run.Lifecycle.Report().Phase
+\t}""", go_block(self.ours, "func runCase("))
+
     def test_restart_resets_the_process_global_hooks(self):
         start = go_block(self.ours, "func start(")
         self.assertIn("rawdb.ExtractorRequire, rawdb.ExtractorFinality, whitelist.ExtractorEnter = nil, nil, nil",

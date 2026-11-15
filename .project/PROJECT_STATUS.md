@@ -91,7 +91,12 @@ Records (evidence:
 On Bor, as on ETH and BSC, a crash reaches the power-loss states at the
 pending points. Recovered obligations close as IMPORT decisions.
 
-Next: Spec and Standards reviews of part A.
+Review 001: Spec and Standards REQUEST_CHANGES, each with one P2 on the
+docs and the pins (the copy window under power loss; the storage-helper
+claim). Both are fixed, with more portable pins; three P3s that change the
+probe are deferred to part B (evidence, "Review 001").
+
+Next: re-review of part A.
 
 ### BSC block
 
