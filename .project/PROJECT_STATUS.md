@@ -143,7 +143,7 @@ handoffs in the same probe run (`handoffs_test.go`); `faults_bsc.py` derives
 their verdicts from the native facts. Records at `883d3fe`: preparation 03
 PASS; run 02 verdict PASS (all 30 cases and all three handoffs PASS); 21
 portable tests; 35 of 35 mutants killed, including the exit codes deferred
-from part A (after review 001: 22 tests and 43 of 43 mutants at `3a28fe2`).
+from part A (after the reviews: 22 tests and 44 of 44 mutants at `a6948e2`).
 Findings: `GoLive` with a held BOOTSTRAP import waits for it on
 the guard, then sets H after it; on a chain without snapshots recovery
 decides a stored block through the patched `skipBlock`; each of five store
@@ -154,7 +154,8 @@ pass-at-golive item, now block 0 correction 03; the judge passing handoffs
 without native facts). Both fixed in the judge and the docs; three P3s that
 change the probe are deferred (evidence, "Review 001" of part B).
 
-Next: re-review of part B.
+Re-review: Spec PASS and Standards PASS at `6744372`; their last P3s are
+fixed at `a6948e2`. Next: merge of part B on the owner's go-ahead.
 
 ### Geth block
 
