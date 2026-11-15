@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "description": "Single-check mutants of the E01-04.early_faults Bor fault probe driver judgement.",
+  "copy": [
+    "test/native_faults/poly/*",
+    "test/native_faults/eth/probe.go",
+    "test/native_faults/bsc/faults_test.go",
+    "test/native_faults/*.py",
+    "test/native_faults/*.json",
+    "test/harness/*.py",
+    "test/harness/fixtures/admission_geth/*",
+    "test/harness/fixtures/source_inputs_bor/heimdallstub/*",
+    "test/native_corpus/poly/*",
+    "test/native_corpus/*.py",
+    "test/native_corpus/expected/*",
+    "adapters/bor/**",
+    "test/evidence/*"
+  ],
+  "test": [
+    "{python}",
+    "test/native_faults/poly/test_faults_poly.py",
+    "-v"
+  ],
+  "import": [
+    "faults_poly"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "decision rows dropped",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "rows = [row for row in comparison[\"differences\"] if row[\"field\"] not in DECISION_FIELDS]",
+      "replacement": "rows = list(comparison[\"differences\"])"
+    },
+    {
+      "name": "only per-block decisions",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "DECISION_FIELDS = (\"decisions\",)",
+      "replacement": "DECISION_FIELDS = (\"decisions\", \"decisions of other blocks\", \"reimport new_decisions\")"
+    },
+    {
+      "name": "corpus fail on rows",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "return (\"FAIL\" if rows else \"PASS\"), [f\"{row['place']} {row['field']}\" for row in rows]",
+      "replacement": "return \"PASS\", [f\"{row['place']} {row['field']}\" for row in rows]"
+    },
+    {
+      "name": "no export",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "    if not isinstance(case.get(\"export\"), dict):\n        return \"FAIL\", [\"no export\"]",
+      "replacement": "    if not isinstance(case.get(\"export\"), dict):\n        return \"PASS\", [\"no export\"]"
+    },
+    {
+      "name": "format error",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "        return \"FAIL\", [f\"format: {error}\"]",
+      "replacement": "        return \"PASS\", [f\"format: {error}\"]"
+    },
+    {
+      "name": "state sync events dropped",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "        syncs.setdefault(event[\"block\"], []).append(event)",
+      "replacement": "        pass"
+    },
+    {
+      "name": "state sync id",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "state_sync.append({\"id\": event[\"id\"],",
+      "replacement": "state_sync.append({\"id\": 1,"
+    },
+    {
+      "name": "storage model",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "    if probe.get(\"storage_model\") != STORAGE_MODEL:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "malformed case",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "            errors.append(f\"case {index}: malformed\")",
+      "replacement": "            pass"
+    },
+    {
+      "name": "child error",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "for key in (\"child_error\", \"restart_error\", \"golive_error\"):",
+      "replacement": "for key in (\"restart_error\", \"golive_error\"):"
+    },
+    {
+      "name": "restart and golive errors",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "for key in (\"child_error\", \"restart_error\", \"golive_error\"):",
+      "replacement": "for key in (\"child_error\",):"
+    },
+    {
+      "name": "import error",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "        if (case.get(\"import\") or {}).get(\"error\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "undecided intents",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "        if export.get(\"undecided_intents\") != []:",
+      "replacement": "        if export.get(\"undecided_intents\"):"
+    },
+    {
+      "name": "reimport error",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "        if export.get(\"reimport_error\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "export error",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "        if export.get(\"export_error\"):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "one row per block",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "        if [row.get(\"number\") for row in export.get(\"blocks\") or []] != list(range(1, BLOCKS + 1)):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "native errors fail",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "    if errors and verdict.get(\"result\") != \"FAIL\":",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "corpus into final",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "final = dict(case.get(\"final\") or {}, corpus=result)",
+      "replacement": "final = dict(case.get(\"final\") or {}, corpus=\"PASS\")"
+    },
+    {
+      "name": "judge exit code",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "            return 0 if verdict[\"result\"] == \"PASS\" else 1",
+      "replacement": "            return 0"
+    }
+  ]
+}
