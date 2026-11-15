@@ -1,0 +1,43 @@
+{
+ "schema_version": 1,
+ "description": "E01-04.early_faults Bor native patch set, applied after the E01-02.admission, E01-02.decision_bridge and E01-02.lifecycle_seams Bor patch sets. Test-only: it lets a fault probe open the chaindata store on a Pebble (v1) in-memory file system and wrap the key-value store the node opens. With the default nil values the node opens and uses its store exactly as before. Each original must occur exactly once.",
+ "source_commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+ "files": {},
+ "patches": [
+  {
+   "name": "pebble_vfs_import",
+   "file": "ethdb/pebble/pebble.go",
+   "original": "\t\"github.com/cockroachdb/pebble/bloom\"\n",
+   "replacement": "\t\"github.com/cockroachdb/pebble/bloom\"\n\t\"github.com/cockroachdb/pebble/vfs\"\n",
+   "reason": "The fault probe file system type."
+  },
+  {
+   "name": "pebble_vfs_var",
+   "file": "ethdb/pebble/pebble.go",
+   "original": "const (\n\t// minCache is the minimum amount of memory in megabytes to allocate to pebble\n",
+   "replacement": "// ExtractorFS is test-only (E01-04.early_faults). When it is not nil, New opens\n// the store on this file system instead of the OS file system, so a fault\n// probe can drop the unsynced data of a power loss. Production leaves it nil.\nvar ExtractorFS vfs.FS\n\nconst (\n\t// minCache is the minimum amount of memory in megabytes to allocate to pebble\n",
+   "reason": "A package switch that only the fault probe sets."
+  },
+  {
+   "name": "pebble_vfs_open",
+   "file": "ethdb/pebble/pebble.go",
+   "original": "\tinnerDB, err := pebble.Open(file, opt)\n",
+   "replacement": "\tif ExtractorFS != nil {\n\t\topt.FS = ExtractorFS\n\t}\n\tinnerDB, err := pebble.Open(file, opt)\n",
+   "reason": "Open on the probe file system when it is set."
+  },
+  {
+   "name": "node_store_wrap_var",
+   "file": "node/database.go",
+   "original": "func newPebbleDBDatabase(file string, cache int, handles int, namespace string, readonly bool) (ethdb.KeyValueStore, error) {\n",
+   "replacement": "// ExtractorWrap is test-only (E01-04.early_faults). When it is not nil, the\n// node's pebble key-value store is passed through it, so a fault probe can\n// wrap the store the node and the extractor packages use. Production leaves\n// it nil.\nvar ExtractorWrap func(ethdb.KeyValueStore) ethdb.KeyValueStore\n\nfunc newPebbleDBDatabase(file string, cache int, handles int, namespace string, readonly bool) (ethdb.KeyValueStore, error) {\n",
+   "reason": "A package switch that only the fault probe sets."
+  },
+  {
+   "name": "node_store_wrap_apply",
+   "file": "node/database.go",
+   "original": "\tdb, err := pebble.New(file, cache, handles, namespace, readonly)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn db, nil\n}",
+   "replacement": "\tdb, err := pebble.New(file, cache, handles, namespace, readonly)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif ExtractorWrap != nil {\n\t\treturn ExtractorWrap(db), nil\n\t}\n\treturn db, nil\n}",
+   "reason": "Wrap the store when the probe sets the switch."
+  }
+ ]
+}
