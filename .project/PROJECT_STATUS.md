@@ -4,8 +4,9 @@
 
 Status: IN_PROGRESS. Block 0 (faults-core) merged in PR #174 at `bdf3919`,
 its correction 01 and the Geth block part A in PRs #175 and #176 at
-`35d7896`. The BSC block part A and block 0 correction 02 are in review;
-Geth part B, BSC part B and the Bor block are open. Dependencies
+`35d7896`, the BSC block part A and block 0 correction 02 in PR #177 at
+`b943585`. The Bor block part A is in review; Geth part B, BSC part B and
+Bor part B are open. Dependencies
 E01-02.lifecycle_seams (#18, accepted in PR #173 at `fea548e`),
 E01-03.smoke_corpus (#19, accepted in PR #169) and BOOT-09 are accepted.
 
@@ -60,6 +61,38 @@ the Bor power-loss variant of its startup-repair fault, and per family a
 canonical import held open across `GoLive` (the other side of
 AC-SCP-03-01).
 
+### Bor block
+
+Branch `claude/e01-04-early-faults-poly`. Part A runs the 30 catalog cases;
+part B will cover the six Bor handoffs (`bor.pass-at-golive`,
+`bor.below-h-rewind`, `bor.golive-order`, `bor.bootstrap-vote-pass`,
+`bor.probe-flag-help`, `bor.power-loss-model`). Design:
+[test/native_faults/poly/README.md](../test/native_faults/poly/README.md).
+
+A test-only patch set (`adapters/bor/faults/native`, 5 patches) lets the
+pebble v1 `ethdb/pebble` open on an in-memory file system and lets the node
+wrap its key-value store. The probe is a cmd binary,
+`cmd/extractor-faults-bor`. It starts a capture node as the Bor lifecycle
+probe does (`wire.Start`, Heimdall from the in-process stub) on the accepted
+smoke corpus POLY blocks 1 to 4. Each case runs in a child process. It reuses
+the Geth fault store and state reading, the BSC decision rows and the POLY
+corpus export; portable tests compare every copied declaration.
+
+Records (evidence:
+[E01-04.early_faults.poly](evidence/E01-04.early_faults.poly.md)), all at
+`9add8ec`:
+
+- preparation 01 PASS;
+- run 01: verdict INCOMPLETE, all 30 cases PASS, AC-SCP-03-01 PASS for
+  POLY, handoffs NOT_RUN;
+- 19 portable tests;
+- 19 of 19 mutants killed.
+
+On Bor, as on ETH and BSC, a crash reaches the power-loss states at the
+pending points. Recovered obligations close as IMPORT decisions.
+
+Next: Spec and Standards reviews of part A.
+
 ### BSC block
 
 Branch `claude/e01-04-early-faults-bsc`. Part A runs the 30 catalog cases;
@@ -97,7 +130,8 @@ mutant record 01 lacked `test/evidence`.
 On BSC, as on ETH, a crash reaches the power-loss states at the pending
 points.
 
-Next: Spec and Standards reviews of part A.
+BSC part A merged in PR #177 at `b943585`. Next: part B (the three BSC
+handoffs).
 
 ### Geth block
 
