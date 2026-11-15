@@ -79,14 +79,13 @@ the Geth fault store and state reading, the BSC decision rows and the POLY
 corpus export; portable tests compare every copied declaration.
 
 Records (evidence:
-[E01-04.early_faults.poly](evidence/E01-04.early_faults.poly.md)), all at
-`9add8ec`:
+[E01-04.early_faults.poly](evidence/E01-04.early_faults.poly.md)):
 
-- preparation 01 PASS;
-- run 01: verdict INCOMPLETE, all 30 cases PASS, AC-SCP-03-01 PASS for
-  POLY, handoffs NOT_RUN;
-- 19 portable tests;
-- 19 of 19 mutants killed.
+- preparation 01 PASS (`9add8ec`);
+- run 01 at `9add8ec`: verdict INCOMPLETE, all 30 cases PASS,
+  AC-SCP-03-01 PASS for POLY, handoffs NOT_RUN;
+- 22 portable tests (`46a322b`);
+- 19 of 19 mutants killed (`46a322b`).
 
 On Bor, as on ETH and BSC, a crash reaches the power-loss states at the
 pending points. Recovered obligations close as IMPORT decisions.
