@@ -190,7 +190,7 @@ def pass_at_golive(run, block1):
         if run.get(key):
             failures.append(f"{key} {run[key]}")
     boundary = run.get("boundary") or {}
-    if boundary.get("number") != 1 or boundary.get("hash") != block1:
+    if boundary.get("number") != 1 or not isinstance(block1, str) or boundary.get("hash") != block1:
         failures.append("H is not block 1, the end of the held import")
     if run.get("observations_before_block2") != 0 or run.get("decided_before_block2") != []:
         failures.append("the held import was captured")

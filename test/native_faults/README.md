@@ -147,10 +147,10 @@ with one; the states are read before recovery runs `GoLive`.
 `handoffs` lists the open items that earlier decisions gave to this task
 (D101, D106), each assigned to one client block. It also gives each block
 the other side of AC-SCP-03-01: a canonical import held open while `GoLive`
-runs is refused (`ErrOrder`) and finishes before H is set.
+runs finishes before H is set, and is not captured.
 
 Correction 03 (BSC part B review) states how a client block reads that
-`*.pass-at-golive` item. `GoLive` runs under the guard, and an import on
+`*.pass-at-golive` item, whose catalog text says `GoLive` "is refused". `GoLive` runs under the guard, and an import on
 another goroutine holds the guard. So a concurrent held import is
 serialized: `GoLive` waits for it, then finds no pass open and sets H after
 it. `ErrOrder` applies only to a pass open in the same guard hold, which the

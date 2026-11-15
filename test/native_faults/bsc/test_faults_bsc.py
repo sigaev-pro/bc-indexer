@@ -93,6 +93,15 @@ class JudgeTests(unittest.TestCase):
         self.handoff_fails(hid, lambda r: r.update(golive_error="x"), "golive_error x")
         self.handoff_fails(hid, lambda r: r["boundary"].update(number=0), "H is not block 1")
         self.handoff_fails(hid, lambda r: r["boundary"].update(hash="00"), "H is not block 1")
+
+        def no_hashes(probe):
+            probe.pop("blocks")
+            probe["handoff_runs"][hid]["boundary"].pop("hash")
+        probe = sample()
+        no_hashes(probe)
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["handoffs"][hid], "FAIL")
+        self.assertIn("H is not block 1", " ".join(verdict["handoff_failures"][hid]))
         self.handoff_fails(hid, lambda r: r.update(observations_before_block2=1), "held import was captured")
         self.handoff_fails(hid, lambda r: r.update(decided_before_block2=[1]), "held import was captured")
         self.handoff_fails(hid, lambda r: r.update(decided=[1, 2]), "block 2 is not decided once")

@@ -127,7 +127,7 @@
     {
       "name": "H at the held block",
       "file": "test/native_faults/bsc/faults_bsc.py",
-      "original": "    if boundary.get(\"number\") != 1 or boundary.get(\"hash\") != block1:",
+      "original": "    if boundary.get(\"number\") != 1 or not isinstance(block1, str) or boundary.get(\"hash\") != block1:",
       "replacement": "    if boundary.get(\"number\") != 1:"
     },
     {
@@ -285,6 +285,12 @@
       "file": "test/native_faults/bsc/faults_bsc.py",
       "original": "    if {\"block\": 1, \"kind\": \"IMPORT\"} not in decided:",
       "replacement": "    if False:"
+    },
+    {
+      "name": "H hash required",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "or not isinstance(block1, str) or boundary.get(\"hash\") != block1:",
+      "replacement": "or boundary.get(\"hash\") != block1:"
     }
   ]
 }
