@@ -52,12 +52,15 @@ import pins  # noqa: E402
 
 PROBE = FIXTURE / "faults_test.go"
 PROBE_TARGET = "extractor/bsc/faults/faults_test.go"
+HANDOFFS = FIXTURE / "handoffs_test.go"
+HANDOFFS_TARGET = "extractor/bsc/faults/handoffs_test.go"
 PACKAGE = "./extractor/bsc/faults/"
 BINARY = "bsc-faults.test"
 PROBE_TEST = "TestBSCFaults"
 EXPECTED = ROOT / "test" / "native_corpus" / "expected" / "bsc.json"
 HARNESS_FILES = bsc_lifecycle.HARNESS_FILES
 BLOCK_FILES = ("test/native_faults/bsc/faults_bsc.py", "test/native_faults/bsc/faults_test.go",
+               "test/native_faults/bsc/handoffs_test.go",
                "adapters/bsc/faults/native/patches.json", "test/native_faults/faults_judge.py",
                "test/native_faults/faults.json")
 PREPARATION_SECONDS = 2 * 3600
@@ -112,6 +115,29 @@ def to_faults_report(probe, expected, source):
             "handoffs": probe.get("handoffs", [])}, corpus
 
 
+def case_errors(tag, case):
+    """Errors of one restart's own steps: restart, GoLive, import and export."""
+    errors = []
+    for key in ("restart_error", "golive_error"):
+        if case.get(key):
+            errors.append(f"{tag}: {key} {case[key]}")
+    if (case.get("import") or {}).get("error"):
+        errors.append(f"{tag}: import error {case['import']['error']}")
+    export = case.get("export")
+    if not isinstance(export, dict):
+        return errors  # the corpus result fails it
+    if export.get("undecided_intents") != []:
+        errors.append(f"{tag}: undecided intents {export.get('undecided_intents')}")
+    if export.get("reimport_error"):
+        errors.append(f"{tag}: re-import error {export['reimport_error']}")
+    # The native re-execution of the BSC corpus probe stops the test on a
+    # receipt that differs (exportBlock), so a written export holds one
+    # checked row per block.
+    if [row.get("number") for row in export.get("blocks") or []] != list(range(1, BLOCKS + 1)):
+        errors.append(f"{tag}: the export does not hold one row per block")
+    return errors
+
+
 def native_errors(probe):
     """Errors of the probe's own steps that the faults report does not carry."""
     errors = []
@@ -121,25 +147,111 @@ def native_errors(probe):
         if not isinstance(case, dict):
             errors.append(f"case {index}: malformed")
             continue
-        tag = f"{case.get('point')}/{case.get('variant')}"
-        for key in ("restart_error", "golive_error"):
-            if case.get(key):
-                errors.append(f"{tag}: {key} {case[key]}")
-        if (case.get("import") or {}).get("error"):
-            errors.append(f"{tag}: import error {case['import']['error']}")
-        export = case.get("export")
-        if not isinstance(export, dict):
-            continue  # the corpus result fails it
-        if export.get("undecided_intents") != []:
-            errors.append(f"{tag}: undecided intents {export.get('undecided_intents')}")
-        if export.get("reimport_error"):
-            errors.append(f"{tag}: re-import error {export['reimport_error']}")
-        # The native re-execution of the BSC corpus probe stops the test on a
-        # receipt that differs (exportBlock), so a written export holds one
-        # checked row per block.
-        if [row.get("number") for row in export.get("blocks") or []] != list(range(1, BLOCKS + 1)):
-            errors.append(f"{tag}: the export does not hold one row per block")
+        errors += case_errors(f"{case.get('point')}/{case.get('variant')}", case)
     return errors
+
+
+# ---------------------------------------------------------------- handoffs
+
+STORE_ERRORS = ("barrier-sync", "intent-sync", "block-batch", "final-sync", "decided-write")
+INJECTED = "extractor-faults: injected store error"
+
+
+def recovered(tag, run, expected, source):
+    """Failures of a restart that must recover and deliver blocks 1 and 2 once each."""
+    failures = case_errors(tag, run)
+    result, rows = corpus_result(expected, run.get("export"), source)
+    if result != "PASS":
+        failures.append(f"{tag}: native result does not match the smoke corpus ({rows[:3]})")
+    final = run.get("final") or {}
+    if final.get("exported") != [1, 2] or final.get("duplicates") != 0 or final.get("head") != BLOCKS:
+        failures.append(f"{tag}: blocks 1 and 2 are not each delivered once at head 2")
+    return failures
+
+
+def pass_at_golive(run, block1):
+    """bsc.pass-at-golive: GoLive does not set H while the BOOTSTRAP import is held; H is that import's block,
+    which is not captured; block 2 is decided."""
+    failures = []
+    during = run.get("golive_during_pass") or {}
+    if run.get("held") is not True:
+        failures.append("the import was not held at its head write")
+    if during.get("returned") is True and not during.get("error"):
+        failures.append("GoLive succeeded while the import was held")
+    for key in ("import_error", "golive_error", "block2_error"):
+        if run.get(key):
+            failures.append(f"{key} {run[key]}")
+    boundary = run.get("boundary") or {}
+    if boundary.get("number") != 1 or boundary.get("hash") != block1:
+        failures.append("H is not block 1, the end of the held import")
+    if run.get("observations_before_block2") != 0 or run.get("decided_before_block2") != []:
+        failures.append("the held import was captured")
+    if run.get("decided") != [2] or run.get("head") != 2:
+        failures.append("block 2 is not decided once at head 2")
+    outcome = "refused" if during.get("returned") else "waited for the import"
+    return failures, f"GoLive during the held import {outcome}; H = block 1, not captured; block 2 decided"
+
+
+def skip_block(run, block1, expected, source):
+    """bsc.skip-block: after a crash between the block batch and the head batch, recovery decides the stored
+    block on a chain without snapshots (where native skipBlock skips a known block)."""
+    failures = []
+    after = run.get("after_restart") or {}
+    if (run.get("fault") or {}).get("hit") is not True:
+        failures.append("the fault was not reached")
+    if after.get("decision") != "intent" or after.get("block1_stored") is not True \
+            or after.get("block1_state") is not True or after.get("head") == block1:
+        failures.append("the restart state is not: intent, block 1 stored with its state, head not moved")
+    if run.get("snapshots") is not False:
+        failures.append("the chain has snapshots, so native skipBlock would execute the block anyway")
+    if 1 not in (run.get("decided_after_recovery") or []):
+        failures.append("recovery did not decide the stored block 1")
+    failures += recovered("bsc.skip-block", run, expected, source)
+    return failures, "intent with block 1 stored and the head not moved; recovery decided block 1 without snapshots"
+
+
+def store_write_errors(runs, expected, source):
+    """bsc.store-write-errors: each store error stops the step with that error, the live node decides nothing
+    after it, and a restart recovers and delivers blocks 1 and 2 once each."""
+    failures = []
+    by_point = {run.get("point"): run for run in runs if isinstance(run, dict)}
+    if sorted(by_point) != sorted(STORE_ERRORS) or len(runs) != len(STORE_ERRORS):
+        failures.append(f"store error points {sorted(by_point)}")
+    for point in STORE_ERRORS:
+        run = by_point.get(point) or {}
+        tag = f"store-write-errors/{point}"
+        if run.get("injected") is not True:
+            failures.append(f"{tag}: the error was not injected")
+        if INJECTED not in str(run.get("step_error")):
+            failures.append(f"{tag}: the step did not fail with the injected error")
+        if 2 in (run.get("decided_before_restart") or []):
+            failures.append(f"{tag}: the live node decided block 2 after the error")
+        failures += recovered(tag, run, expected, source)
+    return failures, f"{len(STORE_ERRORS)} store errors of the decision step; each recovered after a restart"
+
+
+def handoff_verdicts(probe, expected, source):
+    """The handoff verdicts from the probe's handoff runs, with their failures."""
+    runs = probe.get("handoff_runs")
+    if not isinstance(runs, dict):
+        return [], {}
+    block1 = (probe.get("blocks") or {}).get("1")
+    checks = {
+        "bsc.pass-at-golive": lambda run: pass_at_golive(run, block1),
+        "bsc.skip-block": lambda run: skip_block(run, block1, expected, source),
+        "bsc.store-write-errors": lambda run: store_write_errors(run, expected, source),
+    }
+    rows, failures = [], {}
+    for hid, check in checks.items():
+        if hid not in runs:
+            continue
+        try:
+            found, evidence = check(runs[hid])
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            found, evidence = [f"malformed: {error}"], "malformed run"
+        failures[hid] = found
+        rows.append({"id": hid, "verdict": "FAIL" if found else "PASS", "evidence": evidence})
+    return rows, failures
 
 
 def judge(probe, expected=None, source=None):
@@ -147,11 +259,15 @@ def judge(probe, expected=None, source=None):
     expected = expected or json.loads(EXPECTED.read_text())
     source = source or {"native_build": "unrecorded", "tool": "faults_bsc.py judge"}
     report, corpus = to_faults_report(probe, expected, source)
+    handoffs, handoff_failures = handoff_verdicts(probe, expected, source)
+    if handoffs:
+        report["handoffs"] = handoffs
     verdict = faults_judge.judge(report, json.loads(faults_judge.CATALOG.read_text()))
     errors = native_errors(probe)
     if errors and verdict.get("result") != "FAIL":
         verdict = dict(verdict, result="FAIL")
     verdict["native_errors"] = errors
+    verdict["handoff_failures"] = handoff_failures
     return verdict, corpus, report
 
 
@@ -196,6 +312,8 @@ def prepare(manifest_path, expected_sha, output):
         target.parent.mkdir(parents=True)
         probe_ref = copy_artifact(PROBE, target, reference(PROBE, 4 * 1024 * 1024, deadline), 4 * 1024 * 1024,
                                   deadline)
+        handoffs_ref = copy_artifact(HANDOFFS, source / HANDOFFS_TARGET, reference(HANDOFFS, 4 * 1024 * 1024, deadline),
+                                     4 * 1024 * 1024, deadline)
         for directory in ("metadata", "generated", "build-cache", "build-temp", "gopath"):
             (root / directory).mkdir()
         for name in ("go.mod", "go.sum"):
@@ -219,6 +337,7 @@ def prepare(manifest_path, expected_sha, output):
         tool = {"schema_version": 1, "kind": "bsc-faults-tool", "build_manifest": manifest_ref,
                 "native_source_commit": closure["source_commit"], "source_archive": copied, "compiler": compiler,
                 "patched": patched, "installed": installed, "faults_install": faults, "probe": probe_ref,
+                "handoffs_probe": handoffs_ref,
                 "test_binary": reference(root / "generated" / BINARY, BINARY_LIMIT, deadline)}
         pins.save(output / "tool.json", tool)
         proof["tool"] = reference(output / "tool.json", deadline=deadline)

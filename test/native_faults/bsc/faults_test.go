@@ -17,8 +17,9 @@
 // system (as it is for a crash; after SetIgnoreSyncs and ResetToSyncedState
 // for a power loss) into a new strict file system, reads the durable states,
 // lets recovery finish, imports and re-imports the corpus blocks, and
-// exports the native output as the BSC corpus probe does. It writes no
-// expected value; faults_bsc.py judges it.
+// exports the native output as the BSC corpus probe does. Then it runs the
+// BSC handoff scenarios (handoffs_test.go). It writes no expected value;
+// faults_bsc.py judges it.
 package bscfaults_test
 
 import (
@@ -381,15 +382,26 @@ func copyFS(src *vfs.MemFS) *vfs.MemFS {
 // probe does. The freezer stays on the OS file system in a new directory per
 // open (the short chain never reaches it).
 func open(mem *vfs.MemFS, work, storeID string, in inputs, emit func(bsc.Event)) (*node, error) {
+	return openWrapped(mem, work, storeID, in, emit, nil)
+}
+
+// openWrapped is open with wrap, if set, between the fault store and the
+// database: the handoff scenarios act on the store through it.
+func openWrapped(mem *vfs.MemFS, work, storeID string, in inputs, emit func(bsc.Event),
+	wrap func(ethdb.KeyValueStore) ethdb.KeyValueStore) (*node, error) {
 	pebble.ExtractorFS = mem
 	kv, err := pebble.New(memDir, 64, 64, "", false)
 	if err != nil {
 		return nil, err
 	}
 	fs := &faultStore{KeyValueStore: kv}
+	var store ethdb.KeyValueStore = fs
+	if wrap != nil {
+		store = wrap(fs)
+	}
 	ancient, err := os.MkdirTemp(work, "ancient-")
 	check(err)
-	db, err := rawdb.Open(fs, rawdb.OpenOptions{Ancient: ancient})
+	db, err := rawdb.Open(store, rawdb.OpenOptions{Ancient: ancient})
 	if err != nil {
 		return nil, err
 	}
@@ -606,6 +618,14 @@ func runCase(t *testing.T, index int, point, variant, work string, in inputs, nu
 	after["mode"] = opened
 	result["attach_phase"] = string(r.life.Gate().Phase())
 	result["after_restart"] = after
+	recoverAndExport(t, r, in, numbers, result)
+	return result
+}
+
+// recoverAndExport finishes a restart: GoLive, the import of the corpus
+// blocks, the final state, the decided members, the native export and a
+// re-import that must add nothing.
+func recoverAndExport(t *testing.T, r *node, in inputs, numbers map[string]uint64, result caseResult) {
 	_, liveErr := r.life.GoLive()
 	result["golive_error"] = errText(liveErr)
 	index2, importErr := r.chain.InsertChain(types.Blocks{in.blocks[0], in.blocks[1]})
@@ -648,7 +668,6 @@ func runCase(t *testing.T, index int, point, variant, work string, in inputs, nu
 	result["export"] = map[string]any{"blocks": blocks, "decisions": decided, "undecided_intents": undecided,
 		"reimport":       map[string]any{"new_observations": admAfter - admBefore, "new_decisions": decAfter - decBefore},
 		"reimport_error": errText(reErr)}
-	return result
 }
 
 // settleWAL waits until the total size of the WAL files on mem is stable for
@@ -698,9 +717,10 @@ func TestBSCFaults(t *testing.T) {
 			cases = append(cases, runCase(t, index*2+v, point, variant, work, in, numbers))
 		}
 	}
+	handoffs := runHandoffs(t, work, in, numbers)
 	report := map[string]any{"schema_version": 1, "kind": "native-faults-probe", "family": "bsc",
 		"storage_model": "pebble-v1-strict-mem", "native_commit": in.commit,
-		"genesis_hash": in.genesis.ToBlock().Hash().Hex(), "cases": cases,
+		"genesis_hash": in.genesis.ToBlock().Hash().Hex(), "cases": cases, "handoff_runs": handoffs,
 		"blocks":          map[string]any{"1": hexOf(in.blocks[0].Hash().Bytes()), "2": hexOf(in.blocks[1].Hash().Bytes())},
 		"elapsed_seconds": time.Since(started).Seconds()}
 	data, err := json.MarshalIndent(report, "", " ")
