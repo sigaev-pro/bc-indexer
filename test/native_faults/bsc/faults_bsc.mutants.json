@@ -119,12 +119,6 @@
       "replacement": "    if False:"
     },
     {
-      "name": "GoLive during the pass",
-      "file": "test/native_faults/bsc/faults_bsc.py",
-      "original": "    if during.get(\"returned\") is True and not during.get(\"error\"):",
-      "replacement": "    if False:"
-    },
-    {
       "name": "pass step errors",
       "file": "test/native_faults/bsc/faults_bsc.py",
       "original": "    for key in (\"import_error\", \"golive_error\", \"block2_error\"):",
@@ -273,6 +267,24 @@
       "file": "test/native_faults/bsc/faults_bsc.py",
       "original": "        if (run.get(\"block2_live\") or {}).get(\"returned\") is not True:",
       "replacement": "        if False:"
+    },
+    {
+      "name": "GoLive during the pass",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if during.get(\"returned\") is True and during.get(\"order\") is not True:",
+      "replacement": "    if during.get(\"returned\") is True and not during.get(\"error\"):"
+    },
+    {
+      "name": "BOOTSTRAP during the pass",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if run.get(\"phase_during_pass\") != \"BOOTSTRAP\":",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "skip decided as IMPORT",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if {\"block\": 1, \"kind\": \"IMPORT\"} not in decided:",
+      "replacement": "    if False:"
     }
   ]
 }

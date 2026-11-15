@@ -83,8 +83,10 @@ derives each handoff verdict from the facts (`handoff_verdicts`).
 
 - **`bsc.pass-at-golive`.** In BOOTSTRAP the import of block 1 is held at
   its native head write while `GoLive` runs. PASS when:
-  - `GoLive` did not succeed while the import was held (it is refused, or
-    it waits for the import: it takes the guard);
+  - `GoLive` did not return while the import was held, or returned
+    `ErrOrder` (it takes the guard, so it waits for the import; block 0,
+    correction 03);
+  - the gate stayed in BOOTSTRAP while the import was held;
   - after the import, H is block 1;
   - block 1 has no observation and no decision;
   - block 2 is then decided once, at head 2.
@@ -98,7 +100,8 @@ derives each handoff verdict from the facts (`handoff_verdicts`).
     the head not moved;
   - the chain has no snapshots (`SnapshotLimit` 0), so native `skipBlock`
     would skip the known block;
-  - recovery decides block 1 (only the patched `skipBlock` executes it);
+  - recovery decides block 1 as an IMPORT (only the patched `skipBlock`
+    executes it);
   - the restart then recovers as a catalog case does: blocks 1 and 2
     delivered once each, the native result equal to the smoke corpus.
 - **`bsc.store-write-errors`.** After `GoLive` at the genesis, one store
@@ -112,12 +115,15 @@ derives each handoff verdict from the facts (`handoff_verdicts`).
   The native head batch is not among them: native BSC ends the process on
   that write error (`log.Crit`). PASS when, for each place:
   - the import fails with the injected error;
-  - the live node then decides no block 2;
+  - the live import of block 2 returns, and the live node decides no
+    block 2;
   - after a restart (the store as the live node left it) blocks 1 and 2
     are delivered once each, with the native result equal to the smoke
     corpus.
 
-A handoff run that is malformed fails its handoff.
+A handoff run that is malformed or misses a required fact fails its
+handoff. Handoff verdicts come only from `handoff_runs`: a report that
+carries its own `handoffs`, or a malformed `handoff_runs`, fails the result.
 
 ## Commands
 

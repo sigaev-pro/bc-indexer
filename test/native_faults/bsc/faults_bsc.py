@@ -182,8 +182,10 @@ def pass_at_golive(run, block1):
         failures.append("the import was not held at its head write")
     if during.get("returned") not in (True, False):
         failures.append("golive_during_pass is malformed")
-    if during.get("returned") is True and not during.get("error"):
-        failures.append("GoLive succeeded while the import was held")
+    if during.get("returned") is True and during.get("order") is not True:
+        failures.append("GoLive returned while the import was held, and not with ErrOrder")
+    if run.get("phase_during_pass") != "BOOTSTRAP":
+        failures.append("the gate left BOOTSTRAP while the import was held")
     for key in ("import_error", "golive_error", "block2_error"):
         if run.get(key):
             failures.append(f"{key} {run[key]}")
@@ -213,6 +215,9 @@ def skip_block(run, block1, expected, source):
         failures.append("the chain has snapshots, so native skipBlock would execute the block anyway")
     if 1 not in (run.get("decided_after_recovery") or []):
         failures.append("recovery did not decide the stored block 1")
+    decided = ((run.get("export") or {}).get("decisions") or [])
+    if {"block": 1, "kind": "IMPORT"} not in decided:
+        failures.append("block 1 is not decided as an IMPORT")
     failures += recovered("bsc.skip-block", run, expected, source)
     return failures, "intent with block 1 stored and the head not moved; recovery decided block 1 without snapshots"
 

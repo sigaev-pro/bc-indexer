@@ -149,6 +149,15 @@ with one; the states are read before recovery runs `GoLive`.
 the other side of AC-SCP-03-01: a canonical import held open while `GoLive`
 runs is refused (`ErrOrder`) and finishes before H is set.
 
+Correction 03 (BSC part B review) states how a client block reads that
+`*.pass-at-golive` item. `GoLive` runs under the guard, and an import on
+another goroutine holds the guard. So a concurrent held import is
+serialized: `GoLive` waits for it, then finds no pass open and sets H after
+it. `ErrOrder` applies only to a pass open in the same guard hold, which the
+lifecycle unit tests cover. The handoff passes when `GoLive` does not set H
+while the import is held (it waits, or it is refused with `ErrOrder`), H is
+the held import's block, and that block is not captured.
+
 Rows of the core tables that are not catalog points:
 
 - admission `Reject` and `Abandon`, and the native rejection before

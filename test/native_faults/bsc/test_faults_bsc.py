@@ -85,7 +85,10 @@ class JudgeTests(unittest.TestCase):
         self.handoff_fails(hid, lambda r: r.pop("golive_during_pass"), "golive_during_pass is malformed")
         self.handoff_fails(hid, lambda r: r.update(golive_during_pass={}), "golive_during_pass is malformed")
         self.handoff_fails(hid, lambda r: r.update(golive_during_pass={"returned": True, "error": None}),
-                           "GoLive succeeded while the import was held")
+                           "not with ErrOrder")
+        refused = {"returned": True, "error": "root", "order": False}
+        self.handoff_fails(hid, lambda r: r.update(golive_during_pass=refused), "not with ErrOrder")
+        self.handoff_fails(hid, lambda r: r.update(phase_during_pass="LIVE"), "left BOOTSTRAP")
         self.handoff_fails(hid, lambda r: r.update(import_error="x"), "import_error x")
         self.handoff_fails(hid, lambda r: r.update(golive_error="x"), "golive_error x")
         self.handoff_fails(hid, lambda r: r["boundary"].update(number=0), "H is not block 1")
@@ -111,6 +114,8 @@ class JudgeTests(unittest.TestCase):
         self.handoff_fails(hid, lambda r: r["after_restart"].pop("head"), "restart state")
         self.handoff_fails(hid, lambda r: r.update(snapshots=True), "has snapshots")
         self.handoff_fails(hid, lambda r: r.update(decided_after_recovery=[]), "did not decide the stored block")
+        self.handoff_fails(hid, lambda r: r["export"]["decisions"][0].update(kind="CANONICAL"),
+                           "not decided as an IMPORT")
         self.handoff_fails(hid, lambda r: r.update(restart_error="boom"), "restart_error boom")
         self.handoff_fails(hid, lambda r: r["final"].update(exported=[2]), "not each delivered once")
 
