@@ -237,6 +237,42 @@
       "file": "test/native_faults/bsc/faults_bsc.py",
       "original": "        print(json.dumps({\"valid\": False, \"error\": f\"{type(error).__name__}: {error}\"}))\n        return 2",
       "replacement": "        print(json.dumps({\"valid\": False, \"error\": f\"{type(error).__name__}: {error}\"}))\n        return 1"
+    },
+    {
+      "name": "probe-claimed handoffs refused",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if \"handoffs\" in probe:\n        errors.append",
+      "replacement": "    if False:\n        errors.append"
+    },
+    {
+      "name": "probe handoffs not passed through",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "            \"handoffs\": []}, corpus",
+      "replacement": "            \"handoffs\": probe.get(\"handoffs\", [])}, corpus"
+    },
+    {
+      "name": "malformed handoff runs",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if \"handoff_runs\" in probe and not isinstance(probe[\"handoff_runs\"], dict):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "GoLive fact required",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if during.get(\"returned\") not in (True, False):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "restart head required",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "or not isinstance(after.get(\"head\"), str) \\\n",
+      "replacement": "\\\n"
+    },
+    {
+      "name": "live block 2 returned",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if (run.get(\"block2_live\") or {}).get(\"returned\") is not True:",
+      "replacement": "        if False:"
     }
   ]
 }

@@ -55,11 +55,21 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(verdict["result"], "INCOMPLETE")
         self.assertEqual(verdict["handoffs"], {hid: "NOT_RUN" for hid in HANDOFFS})
 
-    def test_handoffs_pass_through(self):
+    def test_probe_claimed_handoffs_fail(self):
         probe = sample()
         probe.pop("handoff_runs")
         probe["handoffs"] = [{"id": hid, "verdict": "PASS", "evidence": "x"} for hid in HANDOFFS]
-        self.assertEqual(self.verdict(probe)["result"], "PASS")
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["result"], "FAIL")
+        self.assertEqual(verdict["handoffs"], {hid: "NOT_RUN" for hid in HANDOFFS})
+        self.assertIn("probe: handoff verdicts come from handoff_runs, not from the probe", verdict["native_errors"])
+
+    def test_malformed_handoff_runs_fail(self):
+        probe = sample()
+        probe["handoff_runs"] = []
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["result"], "FAIL")
+        self.assertIn("probe: handoff_runs is malformed", verdict["native_errors"])
 
     def handoff_fails(self, hid, change, message):
         probe = sample()
@@ -72,6 +82,8 @@ class JudgeTests(unittest.TestCase):
     def test_pass_at_golive_rules(self):
         hid = "bsc.pass-at-golive"
         self.handoff_fails(hid, lambda r: r.update(held=False), "not held")
+        self.handoff_fails(hid, lambda r: r.pop("golive_during_pass"), "golive_during_pass is malformed")
+        self.handoff_fails(hid, lambda r: r.update(golive_during_pass={}), "golive_during_pass is malformed")
         self.handoff_fails(hid, lambda r: r.update(golive_during_pass={"returned": True, "error": None}),
                            "GoLive succeeded while the import was held")
         self.handoff_fails(hid, lambda r: r.update(import_error="x"), "import_error x")
@@ -96,6 +108,7 @@ class JudgeTests(unittest.TestCase):
         self.handoff_fails(hid, lambda r: r["after_restart"].update(block1_state=False), "restart state")
         self.handoff_fails(hid, lambda r: r["after_restart"].update(
             head="621ceaf8e24c089141d903d7c561023fb7b67a472819a9faaf3a50264ccc445e"), "restart state")
+        self.handoff_fails(hid, lambda r: r["after_restart"].pop("head"), "restart state")
         self.handoff_fails(hid, lambda r: r.update(snapshots=True), "has snapshots")
         self.handoff_fails(hid, lambda r: r.update(decided_after_recovery=[]), "did not decide the stored block")
         self.handoff_fails(hid, lambda r: r.update(restart_error="boom"), "restart_error boom")
@@ -107,6 +120,8 @@ class JudgeTests(unittest.TestCase):
         self.handoff_fails(hid, lambda r: r[1].update(injected=False), "intent-sync: the error was not injected")
         self.handoff_fails(hid, lambda r: r[2].update(step_error=None), "block-batch: the step did not fail")
         self.handoff_fails(hid, lambda r: r[3].update(decided_before_restart=[1, 2]), "decided block 2")
+        self.handoff_fails(hid, lambda r: r[0].update(block2_live={"returned": False, "error": None}),
+                           "barrier-sync: the live import of block 2 did not return")
         self.handoff_fails(hid, lambda r: r[4].update(golive_error="x"), "decided-write: golive_error x")
         self.handoff_fails(hid, lambda r: r[0]["export"]["blocks"][0]["transactions"][0]["receipt"].update(
             gas_used=1), "native result does not match")

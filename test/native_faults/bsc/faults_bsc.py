@@ -112,7 +112,7 @@ def to_faults_report(probe, expected, source):
                      {"final": final})
     return {"schema_version": 1, "kind": "native-faults-report", "family": "bsc",
             "storage_model": probe.get("storage_model"), "source": source, "cases": cases,
-            "handoffs": probe.get("handoffs", [])}, corpus
+            "handoffs": []}, corpus
 
 
 def case_errors(tag, case):
@@ -143,6 +143,10 @@ def native_errors(probe):
     errors = []
     if probe.get("storage_model") != STORAGE_MODEL:
         errors.append(f"probe: storage_model is not {STORAGE_MODEL}")
+    if "handoffs" in probe:
+        errors.append("probe: handoff verdicts come from handoff_runs, not from the probe")
+    if "handoff_runs" in probe and not isinstance(probe["handoff_runs"], dict):
+        errors.append("probe: handoff_runs is malformed")
     for index, case in enumerate(probe.get("cases", [])):
         if not isinstance(case, dict):
             errors.append(f"case {index}: malformed")
@@ -176,6 +180,8 @@ def pass_at_golive(run, block1):
     during = run.get("golive_during_pass") or {}
     if run.get("held") is not True:
         failures.append("the import was not held at its head write")
+    if during.get("returned") not in (True, False):
+        failures.append("golive_during_pass is malformed")
     if during.get("returned") is True and not during.get("error"):
         failures.append("GoLive succeeded while the import was held")
     for key in ("import_error", "golive_error", "block2_error"):
@@ -200,7 +206,8 @@ def skip_block(run, block1, expected, source):
     if (run.get("fault") or {}).get("hit") is not True:
         failures.append("the fault was not reached")
     if after.get("decision") != "intent" or after.get("block1_stored") is not True \
-            or after.get("block1_state") is not True or after.get("head") == block1:
+            or after.get("block1_state") is not True or not isinstance(after.get("head"), str) \
+            or not isinstance(block1, str) or after.get("head") == block1:
         failures.append("the restart state is not: intent, block 1 stored with its state, head not moved")
     if run.get("snapshots") is not False:
         failures.append("the chain has snapshots, so native skipBlock would execute the block anyway")
@@ -226,6 +233,8 @@ def store_write_errors(runs, expected, source):
             failures.append(f"{tag}: the step did not fail with the injected error")
         if 2 in (run.get("decided_before_restart") or []):
             failures.append(f"{tag}: the live node decided block 2 after the error")
+        if (run.get("block2_live") or {}).get("returned") is not True:
+            failures.append(f"{tag}: the live import of block 2 did not return")
         failures += recovered(tag, run, expected, source)
     return failures, f"{len(STORE_ERRORS)} store errors of the decision step; each recovered after a restart"
 
