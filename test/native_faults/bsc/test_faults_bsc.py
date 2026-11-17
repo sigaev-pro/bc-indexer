@@ -15,13 +15,15 @@ sys.path.insert(0, str(HERE))
 import faults_bsc  # noqa: E402
 
 SOURCE = {"native_build": "test", "tool": "test_faults_bsc.py"}
+HANDOFFS = ("bsc.pass-at-golive", "bsc.skip-block", "bsc.store-write-errors")
 
 
 def sample():
     """The development probe report with each case's export rebuilt."""
     data = json.loads((HERE / "sample_report.json").read_text())
     shared = data.pop("shared_blocks")
-    for case in data["cases"]:
+    runs = data["handoff_runs"]
+    for case in data["cases"] + [runs["bsc.skip-block"]] + runs["bsc.store-write-errors"]:
         case["export"] = dict(case.pop("export_rest"), blocks=copy.deepcopy(shared))
     return data
 
@@ -37,20 +39,110 @@ class JudgeTests(unittest.TestCase):
     def verdict(self, probe):
         return faults_bsc.judge(probe, source=SOURCE)[0]
 
-    def test_sample_passes_every_case_and_waits_for_the_handoffs(self):
+    def test_sample_passes_every_case_and_handoff(self):
         verdict = self.verdict(sample())
         self.assertEqual((verdict["failures"], verdict["native_errors"]), ([], []))
         self.assertEqual(set(verdict["cases"].values()), {"PASS"})
         self.assertEqual(len(verdict["cases"]), 30)
         self.assertEqual(verdict["ac"], {"AC-SCP-03-01": "PASS"})
-        self.assertEqual(verdict["result"], "INCOMPLETE")
-        self.assertEqual(set(verdict["handoffs"]), {"bsc.pass-at-golive", "bsc.store-write-errors", "bsc.skip-block"})
+        self.assertEqual(verdict["handoffs"], {hid: "PASS" for hid in HANDOFFS})
+        self.assertEqual(verdict["result"], "PASS")
 
-    def test_handoffs_pass_through(self):
+    def test_without_handoff_runs_the_handoffs_wait(self):
         probe = sample()
-        probe["handoffs"] = [{"id": hid, "verdict": "PASS", "evidence": "x"}
-                             for hid in ("bsc.pass-at-golive", "bsc.store-write-errors", "bsc.skip-block")]
-        self.assertEqual(self.verdict(probe)["result"], "PASS")
+        probe.pop("handoff_runs")
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["result"], "INCOMPLETE")
+        self.assertEqual(verdict["handoffs"], {hid: "NOT_RUN" for hid in HANDOFFS})
+
+    def test_probe_claimed_handoffs_fail(self):
+        probe = sample()
+        probe.pop("handoff_runs")
+        probe["handoffs"] = [{"id": hid, "verdict": "PASS", "evidence": "x"} for hid in HANDOFFS]
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["result"], "FAIL")
+        self.assertEqual(verdict["handoffs"], {hid: "NOT_RUN" for hid in HANDOFFS})
+        self.assertIn("probe: handoff verdicts come from handoff_runs, not from the probe", verdict["native_errors"])
+
+    def test_malformed_handoff_runs_fail(self):
+        probe = sample()
+        probe["handoff_runs"] = []
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["result"], "FAIL")
+        self.assertIn("probe: handoff_runs is malformed", verdict["native_errors"])
+
+    def handoff_fails(self, hid, change, message):
+        probe = sample()
+        change(probe["handoff_runs"][hid])
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["result"], "FAIL")
+        self.assertEqual(verdict["handoffs"][hid], "FAIL")
+        self.assertIn(message, " ".join(verdict["handoff_failures"][hid]))
+
+    def test_pass_at_golive_rules(self):
+        hid = "bsc.pass-at-golive"
+        self.handoff_fails(hid, lambda r: r.update(held=False), "not held")
+        self.handoff_fails(hid, lambda r: r.pop("golive_during_pass"), "golive_during_pass is malformed")
+        self.handoff_fails(hid, lambda r: r.update(golive_during_pass={}), "golive_during_pass is malformed")
+        self.handoff_fails(hid, lambda r: r.update(golive_during_pass={"returned": True, "error": None}),
+                           "not with ErrOrder")
+        refused = {"returned": True, "error": "root", "order": False}
+        self.handoff_fails(hid, lambda r: r.update(golive_during_pass=refused), "not with ErrOrder")
+        self.handoff_fails(hid, lambda r: r.update(phase_during_pass="LIVE"), "left BOOTSTRAP")
+        self.handoff_fails(hid, lambda r: r.update(import_error="x"), "import_error x")
+        self.handoff_fails(hid, lambda r: r.update(golive_error="x"), "golive_error x")
+        self.handoff_fails(hid, lambda r: r["boundary"].update(number=0), "H is not block 1")
+        self.handoff_fails(hid, lambda r: r["boundary"].update(hash="00"), "H is not block 1")
+
+        def no_hashes(probe):
+            probe.pop("blocks")
+            probe["handoff_runs"][hid]["boundary"].pop("hash")
+        probe = sample()
+        no_hashes(probe)
+        verdict = self.verdict(probe)
+        self.assertEqual(verdict["handoffs"][hid], "FAIL")
+        self.assertIn("H is not block 1", " ".join(verdict["handoff_failures"][hid]))
+        self.handoff_fails(hid, lambda r: r.update(observations_before_block2=1), "held import was captured")
+        self.handoff_fails(hid, lambda r: r.update(decided_before_block2=[1]), "held import was captured")
+        self.handoff_fails(hid, lambda r: r.update(decided=[1, 2]), "block 2 is not decided once")
+
+    def test_refused_golive_during_the_pass_is_accepted(self):
+        probe = sample()
+        probe["handoff_runs"]["bsc.pass-at-golive"]["golive_during_pass"] = {
+            "returned": True, "error": "pass used out of order", "order": True}
+        self.assertEqual(self.verdict(probe)["handoffs"]["bsc.pass-at-golive"], "PASS")
+
+    def test_skip_block_rules(self):
+        hid = "bsc.skip-block"
+        self.handoff_fails(hid, lambda r: r["fault"].update(hit=False), "fault was not reached")
+        self.handoff_fails(hid, lambda r: r["after_restart"].update(decision="intent_marker"), "restart state")
+        self.handoff_fails(hid, lambda r: r["after_restart"].update(block1_stored=False), "restart state")
+        self.handoff_fails(hid, lambda r: r["after_restart"].update(block1_state=False), "restart state")
+        self.handoff_fails(hid, lambda r: r["after_restart"].update(
+            head="621ceaf8e24c089141d903d7c561023fb7b67a472819a9faaf3a50264ccc445e"), "restart state")
+        self.handoff_fails(hid, lambda r: r["after_restart"].pop("head"), "restart state")
+        self.handoff_fails(hid, lambda r: r.update(snapshots=True), "has snapshots")
+        self.handoff_fails(hid, lambda r: r.update(decided_after_recovery=[]), "did not decide the stored block")
+        self.handoff_fails(hid, lambda r: r["export"]["decisions"][0].update(kind="CANONICAL"),
+                           "not decided as an IMPORT")
+        self.handoff_fails(hid, lambda r: r.update(restart_error="boom"), "restart_error boom")
+        self.handoff_fails(hid, lambda r: r["final"].update(exported=[2]), "not each delivered once")
+
+    def test_store_write_error_rules(self):
+        hid = "bsc.store-write-errors"
+        self.handoff_fails(hid, lambda r: r.pop(), "store error points")
+        self.handoff_fails(hid, lambda r: r[1].update(injected=False), "intent-sync: the error was not injected")
+        self.handoff_fails(hid, lambda r: r[2].update(step_error=None), "block-batch: the step did not fail")
+        self.handoff_fails(hid, lambda r: r[3].update(decided_before_restart=[1, 2]), "decided block 2")
+        self.handoff_fails(hid, lambda r: r[0].update(block2_live={"returned": False, "error": None}),
+                           "barrier-sync: the live import of block 2 did not return")
+        self.handoff_fails(hid, lambda r: r[4].update(golive_error="x"), "decided-write: golive_error x")
+        self.handoff_fails(hid, lambda r: r[0]["export"]["blocks"][0]["transactions"][0]["receipt"].update(
+            gas_used=1), "native result does not match")
+        self.handoff_fails(hid, lambda r: r[0]["final"].update(duplicates=1), "not each delivered once")
+
+    def test_malformed_handoff_run_fails(self):
+        self.handoff_fails("bsc.skip-block", lambda r: r.update(after_restart="x"), "malformed")
 
     def failing(self, change, message, point="adm.after-admitted-sync", variant="power_loss"):
         probe = sample()
@@ -180,7 +272,16 @@ class CommandTests(unittest.TestCase):
             path = Path(tmp) / "report.json"
             path.write_text(json.dumps(sample()))
             with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(faults_bsc.main(["judge", str(path)]), 0)
+            probe = sample()
+            probe.pop("handoff_runs")
+            path.write_text(json.dumps(probe))
+            with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(faults_bsc.main(["judge", str(path)]), 1)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(faults_bsc.main(["run", "/nonexistent/tool.json", "--sha256", "0" * 64,
+                                                  "--corpus-run", "/nonexistent/run.json", "--corpus-sha256",
+                                                  "0" * 64, "--output", "/nonexistent/out"]), 2)
 
 
 if __name__ == "__main__":

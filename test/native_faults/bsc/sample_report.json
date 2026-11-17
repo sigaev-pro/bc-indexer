@@ -190,7 +190,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 54
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -327,7 +327,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 53
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -469,7 +469,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 54
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -616,7 +616,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 54
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -763,7 +763,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 53
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -910,7 +910,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 54
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -1204,7 +1204,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 52
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -1645,7 +1645,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 54
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -1792,7 +1792,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 52
+   "wal_settle_ms": 53
   },
   {
    "after_restart": {
@@ -1939,7 +1939,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 54
+   "wal_settle_ms": 51
   },
   {
    "after_restart": {
@@ -2086,7 +2086,7 @@
     "unsynced_dropped": 0
    },
    "variant": "crash",
-   "wal_settle_ms": 53
+   "wal_settle_ms": 52
   },
   {
    "after_restart": {
@@ -2162,12 +2162,500 @@
    "variant": "power_loss"
   }
  ],
- "elapsed_seconds": 5.7260579499999995,
+ "elapsed_seconds": 9.020332918,
  "family": "bsc",
  "genesis_hash": "0x2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+ "handoff_runs": {
+  "bsc.pass-at-golive": {
+   "block1": {
+    "hash": "621ceaf8e24c089141d903d7c561023fb7b67a472819a9faaf3a50264ccc445e",
+    "root": "3235daac4b658499e1822f24410d59cec57a5d089fb4de9e5de2a39779fb8712"
+   },
+   "block2_error": null,
+   "boundary": {
+    "hash": "621ceaf8e24c089141d903d7c561023fb7b67a472819a9faaf3a50264ccc445e",
+    "number": 1,
+    "root": "3235daac4b658499e1822f24410d59cec57a5d089fb4de9e5de2a39779fb8712"
+   },
+   "decided": [
+    2
+   ],
+   "decided_before_block2": [],
+   "golive_during_pass": {
+    "returned": false
+   },
+   "golive_error": null,
+   "head": 2,
+   "held": true,
+   "id": "bsc.pass-at-golive",
+   "import_error": null,
+   "observations_before_block2": 0,
+   "phase_at_start": "BOOTSTRAP",
+   "phase_during_pass": "BOOTSTRAP"
+  },
+  "bsc.skip-block": {
+   "after_restart": {
+    "admission": "exec_ready",
+    "block1_state": true,
+    "block1_stored": true,
+    "boundary": {
+     "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "number": 0,
+     "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+    },
+    "decision": "intent",
+    "head": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+    "mode": "RECOVERY",
+    "native_h": {
+     "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "number": 0,
+     "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+    },
+    "pin": "live"
+   },
+   "decided_after_recovery": [
+    1
+   ],
+   "export_rest": {
+    "decisions": [
+     {
+      "block": 1,
+      "kind": "IMPORT"
+     },
+     {
+      "block": 2,
+      "kind": "IMPORT"
+     }
+    ],
+    "reimport": {
+     "new_decisions": 0,
+     "new_observations": 0
+    },
+    "reimport_error": null,
+    "undecided_intents": []
+   },
+   "fault": {
+    "hit": true
+   },
+   "final": {
+    "boundary": {
+     "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "number": 0,
+     "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+    },
+    "duplicates": 0,
+    "exported": [
+     1,
+     2
+    ],
+    "head": 2,
+    "mode": "LIVE",
+    "native_h": {
+     "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "number": 0,
+     "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+    }
+   },
+   "golive_error": null,
+   "id": "bsc.skip-block",
+   "import": {
+    "error": null,
+    "index": 2
+   },
+   "restart_error": null,
+   "snapshots": false,
+   "wal_settle_ms": 53
+  },
+  "bsc.store-write-errors": [
+   {
+    "after_restart": {
+     "admission": "exec_ready",
+     "block1_state": false,
+     "block1_stored": false,
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "decision": "none",
+     "head": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "mode": "RECOVERY",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "pin": "live"
+    },
+    "block2_live": {
+     "error": "block outside the sequential import profile: block 2 has no parent with state",
+     "returned": true
+    },
+    "decided_after_recovery": [
+     1
+    ],
+    "decided_before_restart": [],
+    "export_rest": {
+     "decisions": [
+      {
+       "block": 1,
+       "kind": "IMPORT"
+      },
+      {
+       "block": 2,
+       "kind": "IMPORT"
+      }
+     ],
+     "reimport": {
+      "new_decisions": 0,
+      "new_observations": 0
+     },
+     "reimport_error": null,
+     "undecided_intents": []
+    },
+    "final": {
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "duplicates": 0,
+     "exported": [
+      1,
+      2
+     ],
+     "head": 2,
+     "mode": "LIVE",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     }
+    },
+    "golive_error": null,
+    "import": {
+     "error": null,
+     "index": 2
+    },
+    "injected": true,
+    "point": "barrier-sync",
+    "restart_error": null,
+    "snapshots": false,
+    "step_error": "extractor-faults: injected store error",
+    "wal_settle_ms": 52
+   },
+   {
+    "after_restart": {
+     "admission": "exec_ready",
+     "block1_state": true,
+     "block1_stored": false,
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "decision": "none",
+     "head": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "mode": "RECOVERY",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "pin": "live"
+    },
+    "block2_live": {
+     "error": "decision bridge stopped after an error: extractor-faults: injected store error",
+     "returned": true
+    },
+    "decided_after_recovery": [
+     1
+    ],
+    "decided_before_restart": [],
+    "export_rest": {
+     "decisions": [
+      {
+       "block": 1,
+       "kind": "IMPORT"
+      },
+      {
+       "block": 2,
+       "kind": "IMPORT"
+      }
+     ],
+     "reimport": {
+      "new_decisions": 0,
+      "new_observations": 0
+     },
+     "reimport_error": null,
+     "undecided_intents": []
+    },
+    "final": {
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "duplicates": 0,
+     "exported": [
+      1,
+      2
+     ],
+     "head": 2,
+     "mode": "LIVE",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     }
+    },
+    "golive_error": null,
+    "import": {
+     "error": null,
+     "index": 2
+    },
+    "injected": true,
+    "point": "intent-sync",
+    "restart_error": null,
+    "snapshots": false,
+    "step_error": "extractor-faults: injected store error",
+    "wal_settle_ms": 53
+   },
+   {
+    "after_restart": {
+     "admission": "exec_ready",
+     "block1_state": true,
+     "block1_stored": false,
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "decision": "intent",
+     "head": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "mode": "RECOVERY",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "pin": "live"
+    },
+    "block2_live": {
+     "error": "a decision is still pending: intent 0 is unresolved",
+     "returned": true
+    },
+    "decided_after_recovery": [
+     1
+    ],
+    "decided_before_restart": [],
+    "export_rest": {
+     "decisions": [
+      {
+       "block": 1,
+       "kind": "IMPORT"
+      },
+      {
+       "block": 2,
+       "kind": "IMPORT"
+      }
+     ],
+     "reimport": {
+      "new_decisions": 0,
+      "new_observations": 0
+     },
+     "reimport_error": null,
+     "undecided_intents": []
+    },
+    "final": {
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "duplicates": 0,
+     "exported": [
+      1,
+      2
+     ],
+     "head": 2,
+     "mode": "LIVE",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     }
+    },
+    "golive_error": null,
+    "import": {
+     "error": null,
+     "index": 2
+    },
+    "injected": true,
+    "point": "block-batch",
+    "restart_error": null,
+    "snapshots": false,
+    "step_error": "extractor-faults: injected store error",
+    "wal_settle_ms": 53
+   },
+   {
+    "after_restart": {
+     "admission": "exec_ready",
+     "block1_state": true,
+     "block1_stored": false,
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "decision": "intent",
+     "head": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+     "mode": "RECOVERY",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "pin": "live"
+    },
+    "block2_live": {
+     "error": "a decision is still pending: intent 0 is unresolved",
+     "returned": true
+    },
+    "decided_after_recovery": [
+     1
+    ],
+    "decided_before_restart": [],
+    "export_rest": {
+     "decisions": [
+      {
+       "block": 1,
+       "kind": "IMPORT"
+      },
+      {
+       "block": 2,
+       "kind": "IMPORT"
+      }
+     ],
+     "reimport": {
+      "new_decisions": 0,
+      "new_observations": 0
+     },
+     "reimport_error": null,
+     "undecided_intents": []
+    },
+    "final": {
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "duplicates": 0,
+     "exported": [
+      1,
+      2
+     ],
+     "head": 2,
+     "mode": "LIVE",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     }
+    },
+    "golive_error": null,
+    "import": {
+     "error": null,
+     "index": 2
+    },
+    "injected": true,
+    "point": "final-sync",
+    "restart_error": null,
+    "snapshots": false,
+    "step_error": "extractor-faults: injected store error",
+    "wal_settle_ms": 53
+   },
+   {
+    "after_restart": {
+     "admission": "exec_ready",
+     "block1_state": true,
+     "block1_stored": true,
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "decision": "intent_marker",
+     "head": "621ceaf8e24c089141d903d7c561023fb7b67a472819a9faaf3a50264ccc445e",
+     "mode": "RECOVERY",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "pin": "live"
+    },
+    "block2_live": {
+     "error": "decision bridge stopped after an error: extractor-faults: injected store error",
+     "returned": true
+    },
+    "decided_after_recovery": [
+     1
+    ],
+    "decided_before_restart": [],
+    "export_rest": {
+     "decisions": [
+      {
+       "block": 1,
+       "kind": "IMPORT"
+      },
+      {
+       "block": 2,
+       "kind": "IMPORT"
+      }
+     ],
+     "reimport": {
+      "new_decisions": 0,
+      "new_observations": 0
+     },
+     "reimport_error": null,
+     "undecided_intents": []
+    },
+    "final": {
+     "boundary": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     },
+     "duplicates": 0,
+     "exported": [
+      1,
+      2
+     ],
+     "head": 2,
+     "mode": "LIVE",
+     "native_h": {
+      "hash": "2151f9f50b184b526c72d9d3a3937f378578f36a1363e48b708060c95316f17e",
+      "number": 0,
+      "root": "60a3046c78d5e5fc90bca71f307c42873d9be31b11f6f647ffb76aa777b39919"
+     }
+    },
+    "golive_error": null,
+    "import": {
+     "error": null,
+     "index": 2
+    },
+    "injected": true,
+    "point": "decided-write",
+    "restart_error": null,
+    "snapshots": false,
+    "step_error": "extractor-faults: injected store error",
+    "wal_settle_ms": 52
+   }
+  ]
+ },
  "kind": "native-faults-probe",
- "native_commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
- "note": "Development run of the probe (not measured evidence). Every case exported the same corpus blocks; the tests rebuild each case's export from shared_blocks and its own export_rest.",
+ "native_commit": "54afaff4",
  "schema_version": 1,
  "shared_blocks": [
   {

@@ -5,8 +5,8 @@
 Status: IN_PROGRESS. Block 0 (faults-core) merged in PR #174 at `bdf3919`,
 its correction 01 and the Geth block part A in PRs #175 and #176 at
 `35d7896`, the BSC block part A and block 0 correction 02 in PR #177 at
-`b943585`. The Bor block part A is in review; Geth part B, BSC part B and
-Bor part B are open. Dependencies
+`b943585`, the Bor block part A in PR #178 at `a5d85c1`. The BSC block
+part B is in review; Geth part B and Bor part B are open. Dependencies
 E01-02.lifecycle_seams (#18, accepted in PR #173 at `fea548e`),
 E01-03.smoke_corpus (#19, accepted in PR #169) and BOOT-09 are accepted.
 
@@ -95,7 +95,9 @@ docs and the pins (the copy window under power loss; the storage-helper
 claim). Both are fixed, with more portable pins; three P3s that change the
 probe are deferred to part B (evidence, "Review 001").
 
-Next: re-review of part A.
+Bor part A merged in PR #178 at `a5d85c1` after the re-reviews (Spec PASS,
+Standards PASS). Next: part B (the six Bor handoffs and the three deferred
+P3s).
 
 ### BSC block
 
@@ -134,8 +136,26 @@ mutant record 01 lacked `test/evidence`.
 On BSC, as on ETH, a crash reaches the power-loss states at the pending
 points.
 
-BSC part A merged in PR #177 at `b943585`. Next: part B (the three BSC
-handoffs).
+BSC part A merged in PR #177 at `b943585`.
+
+Part B (branch `claude/e01-04-early-faults-bsc-b`) answers the three BSC
+handoffs in the same probe run (`handoffs_test.go`); `faults_bsc.py` derives
+their verdicts from the native facts. Records at `883d3fe`: preparation 03
+PASS; run 02 verdict PASS (all 30 cases and all three handoffs PASS); 21
+portable tests; 35 of 35 mutants killed, including the exit codes deferred
+from part A (after the reviews: 22 tests and 44 of 44 mutants at `a6948e2`).
+Findings: `GoLive` with a held BOOTSTRAP import waits for it on
+the guard, then sets H after it; on a chain without snapshots recovery
+decides a stored block through the patched `skipBlock`; each of five store
+errors in the decision step fails closed and recovers after a restart.
+
+Review 001: Spec and Standards REQUEST_CHANGES (the reading of the
+pass-at-golive item, now block 0 correction 03; the judge passing handoffs
+without native facts). Both fixed in the judge and the docs; three P3s that
+change the probe are deferred (evidence, "Review 001" of part B).
+
+Re-review: Spec PASS and Standards PASS at `6744372`; their last P3s are
+fixed at `a6948e2`. Next: merge of part B on the owner's go-ahead.
 
 ### Geth block
 

@@ -71,36 +71,6 @@
       "replacement": "            pass"
     },
     {
-      "name": "restart and golive errors",
-      "file": "test/native_faults/bsc/faults_bsc.py",
-      "original": "        for key in (\"restart_error\", \"golive_error\"):",
-      "replacement": "        for key in ():"
-    },
-    {
-      "name": "import error",
-      "file": "test/native_faults/bsc/faults_bsc.py",
-      "original": "        if (case.get(\"import\") or {}).get(\"error\"):",
-      "replacement": "        if False:"
-    },
-    {
-      "name": "undecided intents",
-      "file": "test/native_faults/bsc/faults_bsc.py",
-      "original": "        if export.get(\"undecided_intents\") != []:",
-      "replacement": "        if export.get(\"undecided_intents\"):"
-    },
-    {
-      "name": "reimport error",
-      "file": "test/native_faults/bsc/faults_bsc.py",
-      "original": "        if export.get(\"reimport_error\"):",
-      "replacement": "        if False:"
-    },
-    {
-      "name": "one row per block",
-      "file": "test/native_faults/bsc/faults_bsc.py",
-      "original": "        if [row.get(\"number\") for row in export.get(\"blocks\") or []] != list(range(1, BLOCKS + 1)):",
-      "replacement": "        if False:"
-    },
-    {
       "name": "native errors fail",
       "file": "test/native_faults/bsc/faults_bsc.py",
       "original": "    if errors and verdict.get(\"result\") != \"FAIL\":",
@@ -111,6 +81,216 @@
       "file": "test/native_faults/bsc/faults_bsc.py",
       "original": "final = dict(case.get(\"final\") or {}, corpus=result)",
       "replacement": "final = dict(case.get(\"final\") or {}, corpus=\"PASS\")"
+    },
+    {
+      "name": "restart and golive errors",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    for key in (\"restart_error\", \"golive_error\"):\n        if case.get(key):",
+      "replacement": "    for key in ():\n        if case.get(key):"
+    },
+    {
+      "name": "import error",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if (case.get(\"import\") or {}).get(\"error\"):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "undecided intents",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if export.get(\"undecided_intents\") != []:",
+      "replacement": "    if export.get(\"undecided_intents\"):"
+    },
+    {
+      "name": "reimport error",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if export.get(\"reimport_error\"):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "one row per block",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if [row.get(\"number\") for row in export.get(\"blocks\") or []] != list(range(1, BLOCKS + 1)):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "held import",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if run.get(\"held\") is not True:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "pass step errors",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    for key in (\"import_error\", \"golive_error\", \"block2_error\"):",
+      "replacement": "    for key in ():"
+    },
+    {
+      "name": "H at the held block",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if boundary.get(\"number\") != 1 or not isinstance(block1, str) or boundary.get(\"hash\") != block1:",
+      "replacement": "    if boundary.get(\"number\") != 1:"
+    },
+    {
+      "name": "held import not captured",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if run.get(\"observations_before_block2\") != 0 or run.get(\"decided_before_block2\") != []:",
+      "replacement": "    if run.get(\"decided_before_block2\") != []:"
+    },
+    {
+      "name": "block 2 decided once",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if run.get(\"decided\") != [2] or run.get(\"head\") != 2:",
+      "replacement": "    if run.get(\"head\") != 2:"
+    },
+    {
+      "name": "skip fault hit",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if (run.get(\"fault\") or {}).get(\"hit\") is not True:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "skip restart state",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if after.get(\"decision\") != \"intent\" or after.get(\"block1_stored\") is not True \\\n",
+      "replacement": "    if after.get(\"block1_stored\") is not True \\\n"
+    },
+    {
+      "name": "skip without snapshots",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if run.get(\"snapshots\") is not False:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "skip decided by recovery",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if 1 not in (run.get(\"decided_after_recovery\") or []):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "recovered corpus",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if result != \"PASS\":\n        failures.append(f\"{tag}: native result",
+      "replacement": "    if False:\n        failures.append(f\"{tag}: native result"
+    },
+    {
+      "name": "recovered delivery",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if final.get(\"exported\") != [1, 2] or final.get(\"duplicates\") != 0 or final.get(\"head\") != BLOCKS:",
+      "replacement": "    if final.get(\"head\") != BLOCKS:"
+    },
+    {
+      "name": "store error points",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if sorted(by_point) != sorted(STORE_ERRORS) or len(runs) != len(STORE_ERRORS):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "store error injected",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if run.get(\"injected\") is not True:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "store error step",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if INJECTED not in str(run.get(\"step_error\")):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "no live decision after the error",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if 2 in (run.get(\"decided_before_restart\") or []):",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "handoff verdict",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "rows.append({\"id\": hid, \"verdict\": \"FAIL\" if found else \"PASS\", \"evidence\": evidence})",
+      "replacement": "rows.append({\"id\": hid, \"verdict\": \"PASS\", \"evidence\": evidence})"
+    },
+    {
+      "name": "handoffs into the report",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if handoffs:\n        report[\"handoffs\"] = handoffs",
+      "replacement": "    if False:\n        report[\"handoffs\"] = handoffs"
+    },
+    {
+      "name": "malformed handoff run",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        except (AttributeError, KeyError, TypeError, ValueError) as error:\n            found, evidence = [f\"malformed: {error}\"], \"malformed run\"",
+      "replacement": "        except (AttributeError, KeyError, TypeError, ValueError) as error:\n            found, evidence = [], \"malformed run\""
+    },
+    {
+      "name": "judge exit code",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "            return 0 if verdict[\"result\"] == \"PASS\" else 1",
+      "replacement": "            return 0"
+    },
+    {
+      "name": "refusal exit code",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        print(json.dumps({\"valid\": False, \"error\": f\"{type(error).__name__}: {error}\"}))\n        return 2",
+      "replacement": "        print(json.dumps({\"valid\": False, \"error\": f\"{type(error).__name__}: {error}\"}))\n        return 1"
+    },
+    {
+      "name": "probe-claimed handoffs refused",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if \"handoffs\" in probe:\n        errors.append",
+      "replacement": "    if False:\n        errors.append"
+    },
+    {
+      "name": "probe handoffs not passed through",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "            \"handoffs\": []}, corpus",
+      "replacement": "            \"handoffs\": probe.get(\"handoffs\", [])}, corpus"
+    },
+    {
+      "name": "malformed handoff runs",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if \"handoff_runs\" in probe and not isinstance(probe[\"handoff_runs\"], dict):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "GoLive fact required",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if during.get(\"returned\") not in (True, False):",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "restart head required",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "or not isinstance(after.get(\"head\"), str) \\\n",
+      "replacement": "\\\n"
+    },
+    {
+      "name": "live block 2 returned",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "        if (run.get(\"block2_live\") or {}).get(\"returned\") is not True:",
+      "replacement": "        if False:"
+    },
+    {
+      "name": "GoLive during the pass",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if during.get(\"returned\") is True and during.get(\"order\") is not True:",
+      "replacement": "    if during.get(\"returned\") is True and not during.get(\"error\"):"
+    },
+    {
+      "name": "BOOTSTRAP during the pass",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if run.get(\"phase_during_pass\") != \"BOOTSTRAP\":",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "skip decided as IMPORT",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "    if {\"block\": 1, \"kind\": \"IMPORT\"} not in decided:",
+      "replacement": "    if False:"
+    },
+    {
+      "name": "H hash required",
+      "file": "test/native_faults/bsc/faults_bsc.py",
+      "original": "or not isinstance(block1, str) or boundary.get(\"hash\") != block1:",
+      "replacement": "or boundary.get(\"hash\") != block1:"
     }
   ]
 }

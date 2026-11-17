@@ -4,6 +4,7 @@
 |---|---|
 | `faults_bsc.py` | `prepare` builds the probe test binary from the accepted BSC build manifest (the accepted BSC lifecycle install plus the faults patch set); `run` executes it under the host lock on the accepted smoke corpus BSC blocks and judges the report; `judge` judges a saved probe report |
 | `faults_test.go` | The probe, `TestBSCFaults`, installed as `extractor/bsc/faults/faults_test.go` (package `bscfaults_test`) |
+| `handoffs_test.go` | The handoff scenarios of part B, installed next to it; `TestBSCFaults` runs them after the catalog cases |
 | `test_faults_bsc.py` | Portable controls of the driver (run by `bootstrap/ci`) |
 | `faults_bsc.mutants.json` | Single-check mutants of the driver judgement |
 | `sample_report.json` | A development run of the probe, compacted (one shared block export, each case's own decisions and re-import counts); used by the portable tests, not measured evidence |
@@ -69,6 +70,60 @@ the per-block `decisions` rows. Any of these probe errors fails the result:
 - re-import errors;
 - an export without one row per block. The export's native re-execution
   stops the test on a receipt that differs from the stored one.
+
+A failed handoff fails the result too.
+
+## Handoffs (part B)
+
+After the 30 cases, `TestBSCFaults` runs the three BSC handoffs on fresh
+stores and writes their native facts to the report as `handoff_runs`. An
+`actionStore` between the fault store and the database sees every key write
+and sync: it can hold a write, fail it, or fail a sync. `faults_bsc.py`
+derives each handoff verdict from the facts (`handoff_verdicts`).
+
+- **`bsc.pass-at-golive`.** In BOOTSTRAP the import of block 1 is held at
+  its native head write while `GoLive` runs. PASS when:
+  - `GoLive` did not return while the import was held, or returned
+    `ErrOrder` (it takes the guard, so it waits for the import; block 0,
+    correction 03);
+  - the gate stayed in BOOTSTRAP while the import was held;
+  - after the import, H is block 1;
+  - block 1 has no observation and no decision;
+  - block 2 is then decided once, at head 2.
+- **`bsc.skip-block`.** After `GoLive` at the genesis, the decision of block 1
+  stops after its block batch. BSC writes the head batch in a goroutine of
+  `writeHeadBlock`, and the import waits for it. So the fault syncs the
+  store (the outcome in which the block batch reached the disk) and stops
+  that goroutine before the head batch is applied. The node is abandoned
+  and copied as at a crash. PASS when:
+  - the restart state is an intent, with block 1 stored with its state and
+    the head not moved;
+  - the chain has no snapshots (`SnapshotLimit` 0), so native `skipBlock`
+    would skip the known block;
+  - recovery decides block 1 as an IMPORT (only the patched `skipBlock`
+    executes it);
+  - the restart then recovers as a catalog case does: blocks 1 and 2
+    delivered once each, the native result equal to the smoke corpus.
+- **`bsc.store-write-errors`.** After `GoLive` at the genesis, one store
+  error, not a crash, in the decision step of block 1, at five places:
+  - the barrier sync;
+  - the intent sync;
+  - the block batch write;
+  - the sync after the head batch;
+  - the write of the NATIVE_DECIDED record.
+
+  The native head batch is not among them: native BSC ends the process on
+  that write error (`log.Crit`). PASS when, for each place:
+  - the import fails with the injected error;
+  - the live import of block 2 returns, and the live node decides no
+    block 2;
+  - after a restart (the store as the live node left it) blocks 1 and 2
+    are delivered once each, with the native result equal to the smoke
+    corpus.
+
+A handoff run that is malformed or misses a required fact fails its
+handoff. Handoff verdicts come only from `handoff_runs`: a report that
+carries its own `handoffs`, or a malformed `handoff_runs`, fails the result.
 
 ## Commands
 
