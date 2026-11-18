@@ -38,6 +38,39 @@ def case_of(probe, point, variant):
     raise KeyError(point)
 
 
+def handoff_sample():
+    """Synthetic native facts for judge controls, never measured evidence."""
+    block = {"hash": "ab" * 32, "root": "cd" * 32}
+    boundary = dict(block, number=1)
+    reach = {"bor.milestone-lock": {"Passes": 1, "Intents": 0, "Refusals": 0}}
+    common = {"phase_at_start": "BOOTSTRAP", "block1": block, "head": 2}
+    vote = dict(common, vote_locked=True, recovery_chain_locked=True, boundary_held=None,
+                boundary_before_vote_release=None, decisions_held={}, decisions_before_golive={},
+                coverage_before={}, coverage_held=reach, coverage_released=reach,
+                golive_error=None, phase="LIVE", boundary=boundary)
+    rows = {
+        "bor.pass-at-golive": dict(common, native_head_write_held=True, golive_attempted=True,
+                                   boundary_during_import=None, import_error=None, golive_error=None,
+                                   block2_error=None, boundary=boundary, observations_before_block2=0,
+                                   decided_before_block2=[], decided=[2]),
+        "bor.below-h-rewind": dict(common, rewind_error="rewind to 0 is below the live boundary 1",
+                                   boundary_before=boundary, boundary_after=boundary,
+                                   head_before="ef" * 32, head_after="ef" * 32,
+                                   decisions_before={"intent": "native"}, decisions_after={"intent": "native"}),
+        "bor.bootstrap-vote-pass": copy.deepcopy(vote),
+        "bor.golive-order": copy.deepcopy(vote),
+        "bor.power-loss-model": dict(common, root_present_before_fixture=True, fixture_deletion_synced=True,
+                                     sentinel_before_reset=True, sentinel_after_reset=False, reset_to_synced=True,
+                                     fixture_root_after_reset=False, restart_error=None, phase_after="LIVE",
+                                     head_before=2, head_after=1, decided_before=[1, 2], undecided=[],
+                                     boundary_before={"number": 0}, boundary_after={"number": 0},
+                                     recovery={"repaired": {"number": 1, "hash": block["hash"]}}),
+    }
+    for hid, row in rows.items():
+        row["id"] = hid
+    return rows
+
+
 class JudgeTests(unittest.TestCase):
     def verdict(self, probe):
         return faults_poly.judge(probe, source=SOURCE)[0]
@@ -51,10 +84,48 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(verdict["result"], "INCOMPLETE")
         self.assertEqual(set(verdict["handoffs"]), HANDOFFS)
 
-    def test_handoffs_pass_through(self):
+    def test_supplied_handoff_verdicts_are_not_trusted(self):
         probe = sample()
         probe["handoffs"] = [{"id": hid, "verdict": "PASS", "evidence": "x"} for hid in sorted(HANDOFFS)]
+        self.assertEqual(self.verdict(probe)["result"], "INCOMPLETE")
+
+    def test_handoff_facts_pass_and_each_required_fact_is_bound(self):
+        probe = sample()
+        probe["handoff_runs"] = handoff_sample()
         self.assertEqual(self.verdict(probe)["result"], "PASS")
+        for hid, row in handoff_sample().items():
+            for key in row:
+                if key == "head" and hid != "bor.pass-at-golive" and hid != "bor.below-h-rewind":
+                    continue
+                changed = copy.deepcopy(probe)
+                del changed["handoff_runs"][hid][key]
+                with self.subTest(handoff=hid, key=key):
+                    self.assertEqual(self.verdict(changed)["handoffs"][hid], "FAIL")
+
+    def test_handoff_faults_and_refusals_fail_closed(self):
+        for hid in handoff_sample():
+            for broken in (None, {}, {"child_error": "timeout"}):
+                probe = sample()
+                probe["handoff_runs"] = handoff_sample()
+                probe["handoff_runs"][hid] = broken
+                self.assertEqual(self.verdict(probe)["result"], "FAIL")
+        for hid, key, value in (("bor.pass-at-golive", "decided", [1, 2]),
+                                ("bor.pass-at-golive", "golive_error", "failure"),
+                                ("bor.below-h-rewind", "head_after", "different"),
+                                ("bor.bootstrap-vote-pass", "vote_locked", False),
+                                ("bor.golive-order", "decisions_held", {"intent": "unexpected"}),
+                                ("bor.power-loss-model", "sentinel_after_reset", True)):
+            probe = sample()
+            probe["handoff_runs"] = handoff_sample()
+            probe["handoff_runs"][hid][key] = value
+            self.assertEqual(self.verdict(probe)["result"], "FAIL")
+
+    def test_stale_probe_help_fails_doc_handoff(self):
+        probe = sample()
+        probe["handoff_runs"] = handoff_sample()
+        with mock.patch.object(faults_poly, "HELP_PROBE") as help_probe:
+            help_probe.read_text.return_value = "stale text"
+            self.assertEqual(self.verdict(probe)["handoffs"]["bor.probe-flag-help"], "FAIL")
 
     def failing(self, change, message, point="adm.after-admitted-sync", variant="power_loss"):
         probe = sample()

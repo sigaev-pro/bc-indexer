@@ -1,5 +1,30 @@
 # Bor fault probe (E01-04.early_faults, Bor block)
 
+## Part B implementation checkpoint
+
+The probe now records five native handoff scenarios in separate bounded
+child processes, and the driver derives their verdicts from required facts.
+Caller-provided handoff verdicts are ignored. The sixth handoff checks the
+corrected lifecycle probe flag help in the source snapshot.
+
+The GoLive scenarios use a test-only callback at the native recovery chain
+lock boundary. The held import scenario blocks the native head batch before
+it reaches the store. The vote scenario records BOOTSTRAP coverage, the
+absence of decisions, and the boundary before and after releasing the vote.
+The rewind scenario checks the below-H error and unchanged head, boundary,
+and decision records.
+
+The startup-repair scenario retains the accepted lifecycle probe's explicit
+missing-state fixture: delete the head state root and sync the deletion.
+This deletion is not attributed to power loss; capture makes imported roots
+durable. It then writes an unsynced sentinel, resets the in-memory file
+system to its synced frontier, and restarts. Its verdict requires the
+sentinel to disappear, the injected missing state to remain, the original H
+to survive, and startup reconciliation to decide the repaired head.
+
+These changes are not native runtime evidence until a retained preparation
+and measured run pass. Public profile credit remains NOT_RUN.
+
 | File | Role |
 |---|---|
 | `faults_poly.py` | `prepare` builds the probe from the accepted Bor build manifest (the accepted Bor lifecycle install plus the faults patch set); `run` executes it under the host lock on the accepted smoke corpus POLY blocks and judges the report; `judge` judges a saved probe report |

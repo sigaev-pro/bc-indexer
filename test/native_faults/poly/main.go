@@ -640,6 +640,9 @@ func start(c config, in inputs, storeID, dataDir string, mem *vfs.MemFS) (*insta
 	pebble.ExtractorFS = mem
 	node.ExtractorWrap = func(kv ethdb.KeyValueStore) ethdb.KeyValueStore {
 		n.fs = &faultStore{KeyValueStore: kv}
+		if handoffWrap != nil {
+			return handoffWrap(n.fs)
+		}
 		return n.fs
 	}
 	defer func() { node.ExtractorWrap = nil }()
@@ -904,9 +907,33 @@ func run(c config) {
 			cases = append(cases, result)
 		}
 	}
+	handoffs := map[string]any{}
+	for _, id := range []string{"bor.pass-at-golive", "bor.below-h-rewind", "bor.golive-order", "bor.bootstrap-vote-pass", "bor.power-loss-model"} {
+		out := filepath.Join(c.work, id+".json")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cmd := exec.CommandContext(ctx, self, append(c.args(), "-point", id, "-out", out)...)
+		cmd.Args[1] = "handoff"
+		var stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = io.Discard, &stderr
+		err := cmd.Run()
+		cancel()
+		if err != nil {
+			tail := stderr.String()
+			if len(tail) > 2000 {
+				tail = tail[len(tail)-2000:]
+			}
+			handoffs[id] = map[string]any{"child_error": fmt.Sprintf("%v: %s", err, tail)}
+			continue
+		}
+		data, err := os.ReadFile(out)
+		check(err)
+		var result map[string]any
+		check(json.Unmarshal(data, &result))
+		handoffs[id] = result
+	}
 	report := map[string]any{"schema_version": 1, "kind": "native-faults-probe", "family": "poly",
 		"storage_model": "pebble-v1-strict-mem", "native_commit": c.commit,
-		"genesis_hash": ci.in.genesis.ToBlock().Hash().Hex(), "cases": cases, "blocks": hashes,
+		"genesis_hash": ci.in.genesis.ToBlock().Hash().Hex(), "cases": cases, "blocks": hashes, "handoff_runs": handoffs,
 		"elapsed_seconds": time.Since(started).Seconds()}
 	data, err := json.MarshalIndent(report, "", " ")
 	check(err)
@@ -921,7 +948,7 @@ func (c config) args() []string {
 }
 
 func main() {
-	if len(os.Args) < 2 || (os.Args[1] != "run" && os.Args[1] != "case") {
+	if len(os.Args) < 2 || (os.Args[1] != "run" && os.Args[1] != "case" && os.Args[1] != "handoff") {
 		fmt.Fprintln(os.Stderr, "usage: extractor-faults-bor run -genesis G -config C -bodies DIR -blocks RLP "+
 			"-commit SHA -accounts LIST -work DIR -report FILE")
 		os.Exit(2)
@@ -946,6 +973,12 @@ func main() {
 	}
 	if os.Args[1] == "case" {
 		caseCommand(c, *index, *point, *variant, *out)
+		return
+	}
+	if os.Args[1] == "handoff" {
+		data, err := json.Marshal(runHandoff(c, *point))
+		check(err)
+		check(os.WriteFile(*out, append(data, '\n'), 0o600))
 		return
 	}
 	run(c)

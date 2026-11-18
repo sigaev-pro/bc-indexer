@@ -5,6 +5,13 @@
  "files": {},
  "patches": [
   {
+   "name": "recovery_order_probe",
+   "file": "core/zz_extractor_decision.go",
+   "original": "func (bc *BlockChain) ExtractorRecover(fn func(*ExtractorRecovery) error) error {\n\tif !bc.chainmu.TryLock() {\n\t\treturn errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\treturn fn(&ExtractorRecovery{bc: bc})\n}",
+   "replacement": "// ExtractorFaultRecoveryStep is a test-only ordering probe. Production leaves it nil.\nvar ExtractorFaultRecoveryStep func(string)\n\nfunc (bc *BlockChain) ExtractorRecover(fn func(*ExtractorRecovery) error) error {\n\tif ExtractorFaultRecoveryStep != nil {\n\t\tExtractorFaultRecoveryStep(\"before-chain-lock\")\n\t}\n\tif !bc.chainmu.TryLock() {\n\t\treturn errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\tif ExtractorFaultRecoveryStep != nil {\n\t\tExtractorFaultRecoveryStep(\"chain-locked\")\n\t}\n\treturn fn(&ExtractorRecovery{bc: bc})\n}",
+   "reason": "Record the actual recovery lock boundary, without inferring GoLive order from elapsed time."
+  },
+  {
    "name": "pebble_vfs_import",
    "file": "ethdb/pebble/pebble.go",
    "original": "\t\"github.com/cockroachdb/pebble/bloom\"\n",
