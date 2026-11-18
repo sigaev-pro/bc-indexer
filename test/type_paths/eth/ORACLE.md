@@ -46,6 +46,12 @@ presence, not acceptance of outside-transaction effect semantics.
 
 Each fork control accepts the selected type in block 2 at its activation
 and rejects it in block 1 before activation without advancing the head.
+Berlin and London controls use premerge headers with nonzero difficulty
+and the native fake seal engine; Cancun and Prague controls use PoS headers.
+These miniature activation configurations are private fixtures, not public
+historical-chain evidence. Attempt 01 incorrectly combined pre-London rules
+with PoS headers and failed header validation before reaching the type gate;
+the expected type-gate outcomes remain unchanged.
 The native signer must separately return ErrTxTypeNotSupported before the
 fork. For type 3 the import rejection is the earlier native body check
 `data blobs present in block body`; the other types reach unsupported-type

@@ -244,7 +244,7 @@ func importCase(work string, spec *core.Genesis, blocks []*types.Block, label st
 		view := map[string]any{"number": block.NumberU64(), "hash": block.Hash().Hex(), "body_equal": bytes.Equal(originalBytes, storedBytes),
 			"replay_error": errText(replayErr), "raw_block": hexBytes(storedBytes), "receipt_count": len(receipts)}
 		if replayErr == nil {
-			root := state.IntermediateRoot(spec.Config.Rules(header.Number, true, header.Time))
+			root := state.IntermediateRoot(spec.Config.Rules(header.Number, header.Difficulty.Sign() == 0, header.Time))
 			view["root_equal"], view["root"], view["header_root"] = root == header.Root, root.Hex(), header.Root.Hex()
 			view["gas_equal"] = processed.GasUsed == header.GasUsed
 			rows := []map[string]any{}
@@ -321,6 +321,10 @@ func forkCases(work string) []map[string]any {
 		}
 		if kind <= 2 {
 			spec.BaseFee = nil
+			// Berlin/London precede the merge. PoS validation always applies
+			// EIP-1559 header rules and cannot model their pre-activation blocks.
+			c.TerminalTotalDifficulty = nil
+			spec.Difficulty = new(big.Int).Set(params.MinimumDifficulty)
 		}
 		tx := transaction(kind, 0, 0, recipient)
 		_, blocks, _ := core.GenerateChainWithGenesis(spec, beacon.New(ethash.NewFaker()), 2, func(i int, gen *core.BlockGen) {
