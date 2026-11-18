@@ -6,13 +6,24 @@ Status: IN_PROGRESS. Owner-authorized window: 01:23:22–07:23:22 Europe/Moscow.
 
 Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-03`. Latest update: 02:43 Europe/Moscow. Reconcile live processes and GitHub after interruption. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
 
-Latest verified changes (supersede the earlier checkpoint details below):
+Latest verified changes (supersede the earlier checkpoint details below; merge update 02:48 Europe/Moscow):
 
 - ETH private current-fork type paths accepted in PR #186, merge `da59a1a1a208d2823132ac4bf42d4f4203052ffe`, reviewed head `a5ae6ba48a6e8d95b9e657cda5d466d44f2bd0bf`. Both independent reviews and exact-head CI passed. Native producer `6f46e18` passed preparation/run 02 with cleanup. Repaired judge binds decisions to canonical raw RLP headers, actual hashes, roots and chain continuity. Retained final validation: 103 tests; judge mutation campaign: 69 kills. Earlier failed native run and inadequate judge records remain retained. Issue #21 remains open; public profiles and full outside-transaction semantics are not covered.
-- BSC initialization prerequisite PR #188, pushed `77bf547`, has both independent reviews PASS and CI PASS against previous main `6cb31bc`. Before acceptance it must merge current main and refresh exact-head reviews/checks. Native producer `0aefa19` passed preparation/run with cleanup. This proves explicit modern contract-bytecode initialization and deprecated/unmapped-validator deposit behavior only, not full modern import or active-validator state.
+- BSC initialization prerequisite PR #188 accepted at `de4e297c54be7cd3191f409d9140a7a4ce23c473`, reviewed head `11b7c1934cfed9b313a4841ac64a695ac44738dc`. Both independent delta reviews and exact-head CI passed after merging accepted ETH main; retained integration validation has 110 tests. Native producer `0aefa19` passed preparation/run with cleanup. This proves explicit modern contract-bytecode initialization and deprecated/unmapped-validator deposit behavior only, not full modern import or active-validator state. Follow-on implementation must use native initialization, registration and election, with an explicit coherent private activation schedule and independent state oracle.
 - Bor native run 03 at `783b432` passed all 30 catalog cases and six handoffs with cleanup. Subsequent independent review required real child-process failure/deadline controls; the new shared helper has three behavioral tests and 12 compiled mutants passing. Preparation 04 at `5540d98` failed compilation because an existing RPC call still needed the removed `context` import; failure retained, cleanup complete. Corrected frozen `6d1b51dfb34f16736dda582434c986f68fe953ae` owns the exclusive native slot for preparation 05. No Bor part B acceptance yet.
 - Geth #20 remains stopped at pushed `20ecb95` after repeated platform restrictions; its compile failure and incomplete SetHead scenario remain outstanding. E01 and E02 gates remain unchanged.
 - ETH native result archive [checkpoint 06](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-06-eth-native-result.tar.gz), SHA-256 `57c4385a99d94bd55dfa7fc0fd2430368299de3ad7561996ebc39cead61a21ca`, is remotely verified. Its original judge evidence is historical; final repaired-judge records require their separate archive.
+
+Additional remotely digest-verified evidence assets in the same backup release:
+
+| Asset | SHA-256 | Scope |
+|---|---|---|
+| `checkpoint-07-bor-native-controls.tar.gz` | `6a05f43e2c69108e9ef9c6e06171141ab3a9e34c5d377e59266b6b7138ee9b0b` | Native03, failed preparation04, actual guard/child controls, mutation history |
+| `checkpoint-08-bsc-init-native.tar.gz` | `c2c5187cfd2d44247dc579fd8c2ae8e1225cf1a3f98ebb6081fec4aa00babd16` | Native BSC initialization records |
+| `checkpoint-09-bsc-init-validation.tar.gz` | `6fff5892935043d6e43d932897e90498715226b1d85154caaaf8fc315c75ff4b` | BSC independent source oracles, mutation history, exact-head validation |
+| `eth-type-paths-evidence-da59a1a-20261119.tar.gz` | `333d8fabfee2bcf3dd4af848ffa01ee1f0e0028129776eabb218f327804e1a8e` | Accepted repaired ETH judge evidence, member hashes verified |
+
+Polygon #21 implementation is assigned to `/root/type_paths` in a separate worktree, limited to `test/type_paths/poly/**`, `adapters/bor/type_mapping/native/**` and its evidence. Preserve native applicability distinctions, including StateSync `0x7f`; generic decoding alone does not prove Bor execution applicability. No edits to active Bor #20 sources are allowed.
 
 | Session | Block | Exclusive implementation scope |
 |---|---|---|
