@@ -34,6 +34,20 @@ block 8, sole validator `03735c2ed70a56cd221e0024eb4bf90243c9d6e9`); Bor chain
 Shanghai, Cancun, Prague, Delhi and Bhilai at block 3, sprint 4, signer
 `71562b71999873db5b286df957af199ec94617f7` with 1000 coins).
 
+Two additional fixture inputs, recorded here under D103 without changing
+the accepted expected results:
+
+- Bor adds `config.bor.stateSyncConfirmationDelay = {"0": 0}`. The source
+  test genesis activates Indore at block 3 but has no delay map. The same
+  zero delay is used by the accepted admission fixture. The corpus event
+  remains eligible at block 4; timestamps and fork blocks are unchanged.
+- BSC uses the pinned source's public validator test keystore named by
+  `bsc_admission.KEYSTORE`, with an empty password. The probe decrypts it
+  and checks that both its address and derived public-key address equal
+  the validator above before signing headers or system transactions. This
+  is the same public test keystore as the accepted BSC fixture, not an
+  external credential or a newly supplied private key.
+
 ## Contracts
 
 Hand-assembled bytecode (no compiler). `corpus_evm.disassemble` prints it.

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "client": "bsc",
+  "family": "BSC",
+  "source_commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+  "archive_sha256": "f140cf8a9e6fd231ebc1b6764ca4404875a16aa5cd5e1abff86cdb93992ad810",
+  "files": {
+    "core/types/transaction.go": "ff94ed79c52a8c5ee160bc9e8997e9cac12cdd4a95121a5ecf958324d6823c83",
+    "core/types/transaction_signing.go": "9b2a17dcdbafab831ccd8a1ed507da79845f3209dbf8557ead9abe11de82e3a7",
+    "core/state_processor.go": "f4a857dae8b15e931856230503dca184167320c6b84f94b7cd71de0a632f495e",
+    "core/state_transition.go": "cfa643e1af585324bdd5882deae4c54541ca97cb660d8283d96de23c530927c1",
+    "consensus/parlia/parlia.go": "54d49ff4247b40cc100656adbc30b614423a46949f26a390531f839370bdeaf2"
+  },
+  "body_types": [
+    {"native_type": 0, "variant": "EvmLegacy", "activation": "Native legacy signature and replay-protection rules", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM, or Parlia system path"},
+    {"native_type": 1, "variant": "EvmAccessList", "activation": "MakeSigner: IsBerlin(blockNumber)", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM, or Parlia system path"},
+    {"native_type": 2, "variant": "EvmDynamicFee", "activation": "MakeSigner: IsLondon(blockNumber)", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM, or Parlia system path"},
+    {"native_type": 3, "variant": "EvmBlob", "activation": "MakeSigner: IsCancun(blockNumber, blockTime), plus native blob validation", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM, or Parlia system path"},
+    {"native_type": 4, "variant": "EvmSetCode", "activation": "MakeSigner: IsPrague(blockNumber, blockTime)", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM, or Parlia system path"}
+  ],
+  "special_paths": [
+    {"id": "bsc.parlia-system", "origin": "BODY_CLASSIFICATION", "native_type": null, "path": "Parlia.IsSystemTransaction -> Finalize/applyTransaction", "owner": "E01-05.type_paths"}
+  ],
+  "classification": "System recipient AND EffectiveGasPriceForBSC().Sign() == 0 AND native recovered sender == header.Coinbase; sender recovery errors propagate. The classification preserves the actual wire type and payload; it does not assign a new type ID.",
+  "unknown_type": "decodeTyped returns ErrTxTypeNotSupported; native runtime rejection remains unverified in this block",
+  "runtime": "NOT_RUN",
+  "public_profiles": {"bsc-mainnet": "NOT_RUN", "bsc-testnet": "NOT_RUN"}
+}
