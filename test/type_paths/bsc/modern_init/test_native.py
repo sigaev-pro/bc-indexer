@@ -3,6 +3,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("bsc_modern_init_driver", HERE / "native.py")
@@ -57,6 +58,36 @@ class ModernInitControls(unittest.TestCase):
         bad["rows"].pop()
         with self.assertRaises(driver.Rejected):
             driver.check_report(bad)
+
+    def test_shape_identity_and_context(self):
+        cases = [("schema_version", True), ("schema_version", 2), ("scope", "full-import"),
+                 ("rows", None), ("rows", [None, None]), ("code_hashes", {}),
+                 ("header_number", "1"), ("header_time", 0)]
+        for key, value in cases:
+            with self.subTest(key=key, value=value):
+                bad = report()
+                bad[key] = value
+                with self.assertRaises(driver.Rejected):
+                    driver.check_report(bad)
+        for key, value in (("method", "wrong"), ("hash", "malformed")):
+            bad = report()
+            bad["rows"][0][key] = value
+            with self.assertRaises(driver.Rejected):
+                driver.check_report(bad)
+
+    def test_tool_identity_before_binary(self):
+        good = {"kind": "bsc-modern-init-tool", "native_source_commit": driver.COMMIT,
+                "probe": "native_test.go", "driver": "native.py", "provenance": "provenance.json", "binary": {}}
+        for key in ("kind", "native_source_commit", "probe", "driver", "provenance"):
+            with self.subTest(key=key):
+                bad = dict(good)
+                bad[key] = "wrong"
+                with patch.object(driver, "pinned_json", return_value=({}, bad)), \
+                        patch.object(driver, "reference", side_effect=lambda p: p.name), \
+                        patch.object(driver, "artifact", return_value=Path("/binary")), \
+                        patch.object(driver.pins, "owned_attempt", return_value="UNEXPECTED"):
+                    with self.assertRaises(driver.Rejected):
+                        driver.run(Path("/tool.json"), "unused", Path("/output"))
 
 
 if __name__ == "__main__":

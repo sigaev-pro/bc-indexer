@@ -91,12 +91,12 @@ def prepare(manifest_path, sha, output):
 
 
 def check_report(report):
-    require(type(report) is dict and report.get("schema_version") == 1 and
+    require(type(report) is dict and type(report.get("schema_version")) is int and report.get("schema_version") == 1 and
             report.get("scope") == "modern-validator-init-deposit-prerequisite", "Wrong report")
     for field in ("import_observation", "system_transaction_state", "public_profiles", "complete_system_initialization"):
         require(report.get(field) == "NOT_RUN", "Prerequisite cannot grant import or complete initialization credit")
     rows = report.get("rows")
-    require(type(rows) is list and len(rows) == 2 and
+    require(type(rows) is list and len(rows) == 2 and all(type(row) is dict for row in rows) and
             [row.get("method") for row in rows] == ["init", "deposit"], "Missing initialization/deposit")
     before = {"coinbase": "10000", "validator": "0", "reward": "0", "burn": "0", "nonce": "0",
               "slot_0": "0", "slot_1": "0", "slot_3": "0", "slot_6": "0", "slot_15": "0", "slot_20": "0",
