@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "client": "geth",
+  "family": "ETH",
+  "source_commit": "1df30b18d9ed35ee9d28ffd4648442c2204554ad",
+  "archive_sha256": "196cd5ef574476b8bf6c0dc0a6d4a467fa94fedd7bf5cc4ab06a84957e1aa658",
+  "files": {
+    "core/types/transaction.go": "eb4409e8f5b094b395e8f3546fc403369b1c47256250afb7670d652fd77e971e",
+    "core/types/transaction_signing.go": "811cca1946aaf3770e9cc2fdb6cdc9c792e1947f6270caf393874fb0e54f962e",
+    "core/state_processor.go": "66aa61a1f1c9aae466d56d22ce6c6f132a8a21023858a877d77bef45ae121b41",
+    "core/state_transition.go": "b85812dfd250889b4c9f63b1f752281fbcce08cc9e4dd43946aed4c01f7bdb94"
+  },
+  "body_types": [
+    {"native_type": 0, "variant": "EvmLegacy", "activation": "Native legacy signature and replay-protection rules", "path": "StateProcessor.Process -> TransactionToMessage -> applyTransactionWithEVM"},
+    {"native_type": 1, "variant": "EvmAccessList", "activation": "MakeSigner: IsBerlin(blockNumber)", "path": "StateProcessor.Process -> TransactionToMessage -> applyTransactionWithEVM"},
+    {"native_type": 2, "variant": "EvmDynamicFee", "activation": "MakeSigner: IsLondon(blockNumber)", "path": "StateProcessor.Process -> TransactionToMessage -> applyTransactionWithEVM"},
+    {"native_type": 3, "variant": "EvmBlob", "activation": "MakeSigner: IsCancun(blockNumber, blockTime), plus native blob validation", "path": "StateProcessor.Process -> TransactionToMessage -> applyTransactionWithEVM"},
+    {"native_type": 4, "variant": "EvmSetCode", "activation": "MakeSigner: IsPrague(blockNumber, blockTime)", "path": "StateProcessor.Process -> TransactionToMessage -> applyTransactionWithEVM"}
+  ],
+  "special_paths": [
+    {"id": "eth.beacon-roots", "origin": "OUTSIDE_TRANSACTION", "native_type": null, "path": "ProcessBeaconBlockRoot", "owner": "E04-02.optional_scope"},
+    {"id": "eth.history-storage", "origin": "OUTSIDE_TRANSACTION", "native_type": null, "path": "ProcessParentBlockHash", "owner": "E04-02.optional_scope"},
+    {"id": "eth.withdrawal-queue", "origin": "OUTSIDE_TRANSACTION", "native_type": null, "path": "ProcessWithdrawalQueue", "owner": "E04-02.optional_scope"},
+    {"id": "eth.consolidation-queue", "origin": "OUTSIDE_TRANSACTION", "native_type": null, "path": "ProcessConsolidationQueue", "owner": "E04-02.optional_scope"}
+  ],
+  "unknown_type": "decodeTyped returns ErrTxTypeNotSupported; native runtime rejection remains unverified in this block",
+  "runtime": "NOT_RUN",
+  "public_profiles": {"ethereum-mainnet": "NOT_RUN", "ethereum-sepolia": "NOT_RUN", "ethereum-hoodi": "NOT_RUN"}
+}

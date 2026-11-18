@@ -14,11 +14,14 @@ class DiscoveryTests(unittest.TestCase):
             "test/builds/test_build_contract.py", "test/evidence/test_evidence.py", "test/mutate.py",
             "test/harness/fixtures/test_data.json", "adapters/test_adapter.py",
             "test/native_corpus/test_native_corpus.py", "test/native_corpus/helper.py",
-            "test/native_faults/test_native_faults.py", "test/native_faults/faults_judge.py")]
+            "test/native_faults/test_native_faults.py", "test/native_faults/faults_judge.py",
+            "test/type_paths/test_type_paths.py", "test/type_paths/verify.py",
+            "test/type_paths/geth/test_native.py")]
         self.assertEqual([str(path.relative_to(root)) for path in ci.test_modules(paths, root)],
                          [".project/automation/test_ci.py", "test/harness/test_runner.py", "test/test_mutate.py",
                           "test/native_corpus/test_native_corpus.py",
-                          "test/native_faults/test_native_faults.py"])
+                          "test/native_faults/test_native_faults.py",
+                          "test/type_paths/test_type_paths.py", "test/type_paths/geth/test_native.py"])
 
 
 if __name__ == "__main__":
