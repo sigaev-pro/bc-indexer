@@ -22,8 +22,8 @@ def report():
             "import_observation": "NOT_RUN", "system_transaction_state": "NOT_RUN", "public_profiles": "NOT_RUN",
             "complete_system_initialization": "NOT_RUN", "header_number": "100000001", "header_time": 1795046401,
             "code_hashes": {row["address"]: row["bytecode_sha256"] for row in driver.load(HERE / "provenance.json")["contracts"]},
-            "rows": [{"method": "init", "before": before, "after": initialized, "hash": "0x" + "1" * 64},
-                     {"method": "deposit", "before": initialized, "after": after, "hash": "0x" + "2" * 64}]}
+            "rows": [{"method": "init", "before": dict(before), "after": dict(initialized), "hash": "0x" + "1" * 64},
+                     {"method": "deposit", "before": dict(initialized), "after": dict(after), "hash": "0x" + "2" * 64}]}
 
 
 class ModernInitControls(unittest.TestCase):
@@ -85,6 +85,7 @@ class ModernInitControls(unittest.TestCase):
                 with patch.object(driver, "pinned_json", return_value=({}, bad)), \
                         patch.object(driver, "reference", side_effect=lambda p: p.name), \
                         patch.object(driver, "artifact", return_value=Path("/binary")), \
+                        patch.object(driver, "record", return_value={}), \
                         patch.object(driver.pins, "owned_attempt", return_value="UNEXPECTED"):
                     with self.assertRaises(driver.Rejected):
                         driver.run(Path("/tool.json"), "unused", Path("/output"))
