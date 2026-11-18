@@ -77,6 +77,12 @@ class ReportTests(unittest.TestCase):
             report["rows"][0][field] = value
             self.reject(report)
 
+    def test_correlated_invalid_hash_is_rejected(self):
+        report = valid_report()
+        report["rows"][0]["hash"] = "not-a-hash"
+        report["classification"][0]["hash"] = "not-a-hash"
+        self.reject(report)
+
     def test_activation_inputs_required(self):
         for field, bad in (("block", "-1"), ("block", 1), ("time", -1), ("time", True),
                            ("time", 1795046401), ("block", "31302048")):
