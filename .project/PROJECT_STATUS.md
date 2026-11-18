@@ -4,7 +4,7 @@
 
 Status: IN_PROGRESS. Owner-authorized window: 01:23:22–07:23:22 Europe/Moscow. Baseline: `3c9414043600a57cf0c68ca5217dd606ebd9c789`. BSC part B is merged in PR #179; its earlier pending-merge entries below are historical.
 
-Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-02`. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
+Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-03`. Checkpoint captured around 02:07 Europe/Moscow; reconcile live processes and GitHub after interruption. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
 
 | Session | Block | Exclusive implementation scope |
 |---|---|---|
@@ -13,18 +13,26 @@ Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-02`. Authoriz
 | `/root/type_paths` | #21 ETH native fixtures after accepted source foundation | `test/type_paths/eth/**`, `adapters/geth/type_mapping/native/**`, `.project/evidence/E01-05.type_paths.eth.md`; no early-fault/lifecycle changes |
 | `/root/bsc_types_native` | #21 BSC native fixtures | `test/type_paths/bsc/**`, `adapters/bsc/type_mapping/native/**`, `.project/evidence/E01-05.type_paths.bsc.md` |
 
-Each implementer owns an isolated worktree and branch. Shared status, decisions, and future shared CI changes are coordinated by root; source-foundation CI discovery changes are accepted in PR #183. Runtime slot currently belongs to Bor early faults. No worker may begin native measured preparation or execution without coordinator assignment. Portable checks may run independently.
+Each implementer owns an isolated worktree and branch. Shared status, decisions, and future shared CI changes are coordinated by root; source-foundation CI discovery changes are accepted in PR #183. Runtime slot at this checkpoint belongs to ETH type paths, frozen `6f46e18`, preparation 02. Corrected Bor `caddc79` is next in the queue. No worker may begin native measured preparation or execution without coordinator assignment. Portable checks may run independently.
 
 Campaign checkpoint results:
 
 - Geth PR #182, clean pushed `20ecb95`: native preparation 03 FAIL at compilation (`StateAt` needs `*big.Int`, probe supplies `uint64`). Cleanup completed. No native success claimed. The implementation session hit a repeated platform restriction and stopped after preserving the running preparation result; remaining partial SetHead completion is not implemented. Preparation record SHA-256 `9f9fe551b488b9649369910596f21ebda69885af29296d56b3101849249c76a9`.
-- Bor PR #181: preparation from frozen `8bdd4cc` passed `go vet` and is building the probe; no native runtime result claimed yet. A subsequent correction will strengthen actual guard-contention evidence for the GoLive-order handoff.
+- Bor PR #181: preparation `8bdd4cc` PASS; short diagnostic run 02 FAIL with cleanup complete. All 30 base cases pass; raw judge reports 5/6 handoffs PASS, but the GoLive-order evidence remains unaccepted pending its contention correction. The power-loss fixture deleted a shared state root. Corrected `caddc79` uses a distinct-root fixture and actual guard contention; its portable mutation checks are in progress, native proof is pending. The clean `80051bc` mutation attempt failed with one survivor and is retained. Only prep02's disposable compiler cache and empty temporary directory were removed after ownership/process/path checks; evidence, sources and binaries are retained.
 - Type source foundation PR #183: accepted at merge `f2911c6a043da51891466e41acc88bef41c3ddf7`, reviewed head `1f3225ed6d227db4535836a5c7602394c7b7be92`. Earlier Spec REQUEST_CHANGES for missing retained logs was resolved by honest fresh checks and evidence updates; both independent reviews and exact-head CI passed. This accepts the source-inventory foundation only. Issue #21 and G.E01 remain open.
 - Read-only QA session `/root/e01_gate_audit` reconciled accepted #10–19 and live issue state. No additional unowned E01 blocker found beyond #20 and #21; gate #78 stays open. D106's BSC lifecycle deferrals preserve the original raw FAIL record.
+- BSC type component PR #185 accepted at `6cb31bcc498f054559a37fa7bc39456efc423e4e`, reviewed `35c0f21bdb0104b49f192f316a3dd42f29a71ee8`. Native decoder/signer/classifier preparation and run passed with cleanup; independent Spec/Standards and exact-head CI passed. Full import, extractor observation and system state remain NOT_RUN. Follow-on work uses `.worktrees/bsc-modern-import`, branch `codex/e01-05-bsc-modern-import`, design checkpoint `8e1db84`; it must establish coherent modern system-contract initialization before claiming current-fork import proof.
+- ETH type paths PR #186: first preparation `7570a22` PASS; run 01 FAIL with cleanup. The main modern transaction scenario passed its judge, while Berlin/London activation fixtures used incompatible PoS headers. Corrected `6f46e18` uses native pre-merge rules for those historical boundaries; preparation 02 is running. Preserve the first failure, and claim no complete ETH acceptance yet.
 
 Compact preserved failure logs and coordinator review are in [checkpoint archive 01](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-01-evidence.tar.gz), SHA-256 `d62b38110ccd79dc8977fa583d081a4472919b0fdcb736c099d9e637b220bc7d`. Uploaded asset digest verified. This supplements local run retention and published implementation commits; it does not include build caches.
 
 Type-path validation, mutation outputs and independent review are in [checkpoint archive 02](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-02-type-paths-evidence.tar.gz), SHA-256 `a1ee2534c4e9b497dbf63eaae54660e0314a14632b5e41de5b169016442912b0`; uploaded asset digest verified. ETH and BSC current-fork fixture work now proceeds independently, with native preparation and runs serialized behind Bor.
+
+Further remotely verified compact evidence archives:
+
+- [Bor diagnostic 03](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-03-bor-diagnostic-evidence.tar.gz): `54ddf4eb02106fdb53fb5d8e55735cc2fc580858b838ccfe93614f677db8b55c`.
+- [BSC component 04](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-04-bsc-type-components.tar.gz): `7484a409c84ed304d3436cc8cfa5b64fa908bd0b84b2dd6f1f9504592ad55db0`.
+- [ETH diagnostic 05](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-05-eth-type-diagnostic.tar.gz): `957adf5d6d195b836be78f199e8c2bdd15d707894db5045f7ccd8e1424c8efc3`.
 
 Checkpoint policy: save meaningful implementation changes locally and push draft PR checkpoints at least every 15–20 minutes when tools and network permit. Keep exact heads, failed runs, and next actions. The baseline source/history backup is published at https://github.com/sigaev-pro/bc-indexer/releases/tag/backup-2026-11-19-3c94140; ignored local run artifacts require separate preservation when material to new evidence.
 
