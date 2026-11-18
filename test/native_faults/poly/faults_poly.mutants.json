@@ -297,6 +297,18 @@
       "file": "test/native_faults/poly/faults_poly.py",
       "original": "            return 0 if verdict[\"result\"] == \"PASS\" else 1",
       "replacement": "            return 0"
+    },
+    {
+      "name": "handoff native block binding",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"block1\"][\"hash\"] == probe[\"blocks\"][\"1\"]",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "repair native predecessor binding",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"predecessor\"][\"hash\"] == probe[\"blocks\"][\"3\"]",
+      "replacement": "valid = valid"
     }
   ]
 }

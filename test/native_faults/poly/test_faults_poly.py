@@ -40,7 +40,8 @@ def case_of(probe, point, variant):
 
 def handoff_sample():
     """Synthetic native facts for judge controls, never measured evidence."""
-    block = {"hash": "ab" * 32, "root": "cd" * 32}
+    blocks = json.loads((HERE / "sample_report.json").read_text())["blocks"]
+    block = {"hash": blocks["1"], "root": "cd" * 32}
     boundary = dict(block, number=1)
     reach = {"bor.milestone-lock": {"Passes": 1, "Intents": 0, "Refusals": 0}}
     common = {"phase_at_start": "BOOTSTRAP", "block1": block, "head": 2}
@@ -65,9 +66,9 @@ def handoff_sample():
                                      fixture_root_after_reset=False, restart_error=None, phase_after="LIVE",
                                      head_before=4, head_after=3, decided_before=[1, 2, 3, 4], undecided=[],
                                      roots_distinct=True, predecessor_state_before=True, predecessor_state_after=True,
-                                     predecessor={"number": 3, "hash": "ef" * 32, "root": "12" * 32},
+                                     predecessor={"number": 3, "hash": blocks["3"], "root": "12" * 32},
                                      boundary_before={"number": 0}, boundary_after={"number": 0},
-                                     recovery={"repaired": {"number": 3, "hash": "ef" * 32}}),
+                                     recovery={"repaired": {"number": 3, "hash": blocks["3"]}}),
     }
     for hid, row in rows.items():
         row["id"] = hid
@@ -100,13 +101,21 @@ class JudgeTests(unittest.TestCase):
             for key in row:
                 if key == "head" and hid != "bor.pass-at-golive" and hid != "bor.below-h-rewind":
                     continue
-                if key == "block1" and hid == "bor.power-loss-model":
-                    continue
-                changed = {"handoff_runs": copy.deepcopy(probe["handoff_runs"])}
+                changed = {"blocks": probe["blocks"], "handoff_runs": copy.deepcopy(probe["handoff_runs"])}
                 del changed["handoff_runs"][hid][key]
                 with self.subTest(handoff=hid, key=key):
                     verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(changed)}
                     self.assertEqual(verdicts[hid], "FAIL")
+
+    def test_handoff_hashes_bind_native_corpus_and_repair(self):
+        for field in ("block1", "predecessor", "repaired"):
+            probe = sample()
+            probe["handoff_runs"] = handoff_sample()
+            row = probe["handoff_runs"]["bor.power-loss-model"]
+            target = row["recovery"] if field == "repaired" else row
+            target[field]["hash"] = "00" * 32
+            verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(probe)}
+            self.assertEqual(verdicts["bor.power-loss-model"], "FAIL", field)
 
     def test_handoff_faults_and_refusals_fail_closed(self):
         for hid in handoff_sample():

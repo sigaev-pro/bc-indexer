@@ -140,6 +140,7 @@ def handoff_verdicts(probe):
             continue
         try:
             valid = row["id"] == hid and row["phase_at_start"] == "BOOTSTRAP" and not row.get("child_error")
+            valid = valid and row["block1"]["hash"] == probe["blocks"]["1"]
             if hid == "bor.pass-at-golive":
                 valid = valid and all(row[k] is True for k in ("native_head_write_held", "golive_attempted"))
                 valid = valid and row["boundary_during_import"] is None
@@ -173,6 +174,7 @@ def handoff_verdicts(probe):
                 valid = valid and row["decided_before"] == [1, 2, 3, 4] and row["undecided"] == []
                 valid = valid and row["roots_distinct"] is True and row["predecessor_state_before"] is True
                 valid = valid and row["predecessor_state_after"] is True and row["predecessor"]["number"] == 3
+                valid = valid and row["predecessor"]["hash"] == probe["blocks"]["3"]
                 valid = valid and row["boundary_before"]["number"] == 0
                 valid = valid and row["boundary_after"] == row["boundary_before"]
                 repaired = row["recovery"]["repaired"]
