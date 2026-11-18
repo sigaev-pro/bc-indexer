@@ -25,7 +25,7 @@ from native import Native, new_output
 
 NATIVE = "1df30b18d9ed35ee9d28ffd4648442c2204554ad"
 PROBE = "cmd/extractor-type-paths-eth/main.go"
-FILES = ("probe.go", "native.py", "judge.py", "ORACLE.md", "README.md")
+FILES = ("probe.go", "eth_type_paths.py", "eth_type_judge.py", "ORACLE.md", "README.md")
 PREPARATION_SECONDS = 2400
 RUN_SECONDS = 900
 LIMIT = 512 * 1024 * 1024
@@ -142,7 +142,7 @@ def run(preparation_path, sha256, output):
                            [(binary.parent, "/bin", True), (probe, "/out", False)], cap=600, memory="2g")
             record["execution_seconds"] = time.monotonic() - begun
             record["observation"] = reference(probe / "observation.json", 16 * 1024 * 1024, deadline)
-            compared = subprocess.run([sys.executable, "-I", str(retained["judge.py"]), str(probe / "observation.json")],
+            compared = subprocess.run([sys.executable, "-I", str(retained["eth_type_judge.py"]), str(probe / "observation.json")],
                                       capture_output=True, text=True, timeout=max(1, deadline - time.monotonic() - 40))
             record["judge_command"] = compared.args
             record["judge_exit"], record["judge_stdout"], record["judge_stderr"] = compared.returncode, compared.stdout, compared.stderr

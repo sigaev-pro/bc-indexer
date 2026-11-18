@@ -77,6 +77,7 @@ def judge(observation):
         blocks = check_import(main, 2, errors, "main")
         txs = main.get("transactions", [])
         check(len(txs) == 10, "expected ten transaction observations")
+        check(all(len(b.get("receipts", [])) == 5 for b in blocks), "expected five receipts in each main block")
         receipts = [r for b in blocks for r in b.get("receipts", [])]
         check(len(receipts) == 10, "expected ten native receipts")
         for index, tx in enumerate(txs):
