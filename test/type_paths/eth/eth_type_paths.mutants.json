@@ -360,6 +360,36 @@
       "file": "test/type_paths/eth/eth_type_paths.py",
       "original": "require(compared.returncode == 0 and record[\"judgement\"][\"result\"] == \"PASS\", \"Native type-path judge failed\")",
       "replacement": "require(True, \"Native type-path judge failed\")"
+    },
+    {
+      "name": "duplicate record fields",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "if key in result:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "native integer encoding",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "if type(value) is not int or not 0 <= value < 2**64:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "native digest encoding",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "if not isinstance(value, str) or not re.fullmatch(r\"[0-9a-f]{64}\", value):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "native parent list",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "if prefix < 0xc0:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "native parent width",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "if data[offset] != 0xa0 or len(data[offset + 1:offset + 33]) != 32:",
+      "replacement": "if False:"
     }
   ]
 }

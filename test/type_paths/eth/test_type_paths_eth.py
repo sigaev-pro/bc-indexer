@@ -248,6 +248,9 @@ class JudgeTests(unittest.TestCase):
         for value in (True, -1, 2**64, "0"):
             with self.assertRaises(ValueError):
                 judge.uint64(value)
+        for value in ("80e1a0" + "00" * 32, "e2e1a1" + "00" * 32, "e2e1a0" + "00" * 31):
+            with self.assertRaises(ValueError):
+                judge.parent_hash(value)
 
     def test_malformed_and_unrelated_native_records(self):
         for group in ("decision_records", "admission_records"):
