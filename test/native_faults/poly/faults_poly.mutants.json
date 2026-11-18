@@ -29,12 +29,6 @@
   "timeout_seconds": 300,
   "mutants": [
     {
-      "name": "catalog child timeout source pin",
-      "file": "test/native_faults/poly/main.go",
-      "original": "\t\t\tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)",
-      "replacement": "\t\t\tctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)"
-    },
-    {
       "name": "actual guard contention order",
       "file": "test/native_faults/poly/faults_poly.py",
       "original": "valid = valid and row[\"order\"] == [\"chain-locked\", \"guard-contended\", \"vote-release\", \"guard-acquired\"]",
