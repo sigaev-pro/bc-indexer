@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "description": "Single-check report/identity rejection mutations; no native credit.",
+  "copy": [
+    "test/type_paths/bsc/modern_init/*.py",
+    "test/type_paths/bsc/modern_init/provenance.json",
+    "test/harness/*.py",
+    "test/evidence/*.py"
+  ],
+  "test": [
+    "{python}",
+    "test/type_paths/bsc/modern_init/test_native.py",
+    "-v"
+  ],
+  "import": [
+    "test_native"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "report scope",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "report.get(\"scope\") == \"modern-validator-init-deposit-prerequisite\"",
+      "replacement": "True"
+    },
+    {
+      "name": "schema integer",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "type(report.get(\"schema_version\")) is int",
+      "replacement": "True"
+    },
+    {
+      "name": "schema version",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "report.get(\"schema_version\") == 1",
+      "replacement": "True"
+    },
+    {
+      "name": "no credit",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "report.get(field) == \"NOT_RUN\"",
+      "replacement": "True"
+    },
+    {
+      "name": "row methods",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "[row.get(\"method\") for row in rows] == [\"init\", \"deposit\"]",
+      "replacement": "True"
+    },
+    {
+      "name": "init before",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "rows[0].get(\"before\") == before",
+      "replacement": "True"
+    },
+    {
+      "name": "init after",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "rows[0].get(\"after\") == initialized",
+      "replacement": "True"
+    },
+    {
+      "name": "deposit before",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "rows[1].get(\"before\") == initialized",
+      "replacement": "True"
+    },
+    {
+      "name": "deposit after",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "rows[1].get(\"after\") == deposited",
+      "replacement": "True"
+    },
+    {
+      "name": "hash",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "re.fullmatch(r\"0x[0-9a-fA-F]{64}\", row.get(\"hash\", \"\")) is not None",
+      "replacement": "True"
+    },
+    {
+      "name": "code provenance",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "hashes == expected_hashes",
+      "replacement": "True"
+    },
+    {
+      "name": "block number",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "report.get(\"header_number\") == \"100000001\"",
+      "replacement": "True"
+    },
+    {
+      "name": "block timestamp",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "report.get(\"header_time\") == 1795046401",
+      "replacement": "True"
+    },
+    {
+      "name": "tool kind",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "tool.get(\"kind\") == \"bsc-modern-init-tool\"",
+      "replacement": "True"
+    },
+    {
+      "name": "source commit",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "tool.get(\"native_source_commit\") == COMMIT",
+      "replacement": "True"
+    },
+    {
+      "name": "probe binding",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "tool[\"probe\"] == reference(HERE / \"native_test.go\")",
+      "replacement": "True"
+    },
+    {
+      "name": "driver binding",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "tool[\"driver\"] == reference(HERE / \"native.py\")",
+      "replacement": "True"
+    },
+    {
+      "name": "provenance binding",
+      "file": "test/type_paths/bsc/modern_init/native.py",
+      "original": "tool[\"provenance\"] == reference(HERE / \"provenance.json\")",
+      "replacement": "True"
+    }
+  ]
+}
