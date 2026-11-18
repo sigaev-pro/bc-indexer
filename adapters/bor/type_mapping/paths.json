@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "client": "bor",
+  "family": "POLY",
+  "source_commit": "3a018e38467594508ca31ebeaf804837fb92834a",
+  "archive_sha256": "a313bc56a136b054d44ef0a319bcbc0fcf0eddba046035ed2b89b83c83847e38",
+  "files": {
+    "core/types/transaction.go": "64ed947614636ad99a78311892f1d8f5f17a287aa86513fc6f0e7ac5722f5d3c",
+    "core/types/transaction_signing.go": "8f491a4cd716802fac5afca76f5bd6e148aa33e14dd2957893089ed063d9322f",
+    "core/state_processor.go": "bd48a3b9ebdc6a84b9367baf40b0a9ce4f5e8f50f5e4729ab1d23c55b421b0cc",
+    "core/state_transition.go": "15f6c889b687ad187d9bd084185b54353a39c7837b5fb3a13c54151f7eccc07b",
+    "core/types/tx_state_sync.go": "f9088957720441a4a03a36d944623cfa5dd92099e34c982966f2aee384ba5358",
+    "core/types/state_data.go": "03eb14c51defc58ed491d5e70d51f2c05d4a019fe5aa89a6a2521945090e4368",
+    "consensus/bor/bor.go": "086cf2e0d8abfd6d68cbff015431b5506f6f562b4cbee53bd5ba21c0a60ac916"
+  },
+  "body_types": [
+    {"native_type": 0, "variant": "EvmLegacy", "activation": "Native legacy signature and replay-protection rules", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM"},
+    {"native_type": 1, "variant": "EvmAccessList", "activation": "MakeSigner: IsBerlin(blockNumber)", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM"},
+    {"native_type": 2, "variant": "EvmDynamicFee", "activation": "MakeSigner: IsLondon(blockNumber)", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM"},
+    {"native_type": 3, "variant": "EvmBlob", "activation": "Decodable source variant; MakeSigner uses IsCancun(blockNumber). Native Bor network/block applicability still requires proof.", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM"},
+    {"native_type": 4, "variant": "EvmSetCode", "activation": "MakeSigner: IsPrague(blockNumber)", "path": "StateProcessor.Process -> TransactionToMessage -> ApplyTransactionWithEVM"},
+    {"native_type": 127, "variant": "BorStateSync", "activation": "Bor.IsMadhugiri(blockNumber); native body position, payload and receipt validation required", "path": "StateProcessor.Process skips ordinary EVM loop for StateSync; Bor Finalize and state-sync receipt reconciliation execute it"}
+  ],
+  "special_paths": [
+    {"id": "bor.legacy-state-sync", "origin": "BOR_LEGACY_SYNTHETIC_RECEIPT", "native_type": null, "path": "Bor Finalize before Madhugiri; optional separate receipt, never a body transaction", "owner": "E04-02.optional_scope"},
+    {"id": "bor.body-state-sync", "origin": "BODY_TRANSACTION", "native_type": 127, "path": "Bor Finalize after Madhugiri and insertStateSyncTransactionAndCalculateReceipt", "owner": "E01-05.type_paths"}
+  ],
+  "state_sync_payload": "0x7f || RLP(items); item fields ID, Contract, Data, TxHash (L1 transaction hash). No ordinary signature, nonce, chain ID or gas fields; zero accessor values do not prove an execution sender.",
+  "unknown_type": "decodeTyped returns ErrTxTypeNotSupported; native runtime rejection remains unverified in this block",
+  "runtime": "NOT_RUN",
+  "public_profiles": {"polygon-pos-mainnet": "NOT_RUN", "polygon-pos-amoy": "NOT_RUN"}
+}

@@ -53,6 +53,7 @@ def test_modules(paths, root=ROOT):
                  path.is_relative_to(root / "test/harness") or
                  path.is_relative_to(root / "test/native_corpus") or
                  path.is_relative_to(root / "test/native_faults") or
+                 path.is_relative_to(root / "test/type_paths") or
                  path.parent == root / "test")]
 
 
