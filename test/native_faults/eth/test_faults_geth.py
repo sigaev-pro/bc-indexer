@@ -48,12 +48,18 @@ class JudgeTests(unittest.TestCase):
         kinds = {row["kind"] for case in sample()["cases"] for row in case["observation"]["decisions"]}
         self.assertIn("CANONICAL", kinds)
 
-    def test_handoffs_pass_through(self):
+    def test_handoff_verdicts_cannot_be_supplied_without_native_facts(self):
         probe = sample()
         probe["handoffs"] = [{"id": hid, "verdict": "PASS", "evidence": "x"} for hid in
                              ("geth.pass-at-golive", "geth.sethead-interrupted", "geth.repaired-judge",
                               "geth.mid-reorg-long-branch")]
-        self.assertEqual(self.verdict(probe)["result"], "PASS")
+        self.assertEqual(self.verdict(probe)["result"], "INCOMPLETE")
+
+    def test_malformed_handoff_facts_fail_closed(self):
+        for name in ("geth.pass-at-golive", "geth.sethead-interrupted", "geth.mid-reorg-long-branch"):
+            probe = sample()
+            probe["handoff_runs"] = {name: {}}
+            self.assertEqual(self.verdict(probe)["handoffs"][name], "FAIL")
 
     def failing(self, change, message, point="adm.after-admitted-sync", variant="power_loss"):
         probe = sample()

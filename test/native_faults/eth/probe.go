@@ -352,15 +352,25 @@ func syncDirs(mem *vfs.MemFS) {
 // new directory per open (the short chain never reaches it).
 func open(mem *vfs.MemFS, work string, genesis *core.Genesis, cfg extractorgeth.Config,
 	trace func(string, map[string]any)) (*node, error) {
+	return openHandoff(mem, work, genesis, cfg, trace, extractorgeth.LifecycleOptions{}, nil)
+}
+
+func openHandoff(mem *vfs.MemFS, work string, genesis *core.Genesis, cfg extractorgeth.Config,
+	trace func(string, map[string]any), opts extractorgeth.LifecycleOptions,
+	wrap func(ethdb.KeyValueStore) ethdb.KeyValueStore) (*node, error) {
 	pebble.ExtractorFS = mem
 	kv, err := pebble.New(memDir, 16, 16, "", false)
 	if err != nil {
 		return nil, err
 	}
 	fs := &faultStore{KeyValueStore: kv}
+	var store ethdb.KeyValueStore = fs
+	if wrap != nil {
+		store = wrap(store)
+	}
 	ancient, err := os.MkdirTemp(work, "ancient-")
 	check(err)
-	db, err := rawdb.Open(fs, rawdb.OpenOptions{Ancient: ancient})
+	db, err := rawdb.Open(store, rawdb.OpenOptions{Ancient: ancient})
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +381,7 @@ func open(mem *vfs.MemFS, work string, genesis *core.Genesis, cfg extractorgeth.
 	}
 	n.chain = chain
 	n.life, err = extractorgeth.AttachLifecycle(chain, db, cfg, extractorgeth.Options{Trace: trace},
-		extractorgeth.DecisionOptions{}, extractorgeth.LifecycleOptions{})
+		extractorgeth.DecisionOptions{}, opts)
 	return n, err
 }
 
@@ -684,6 +694,7 @@ func run(genesisPath, work, reportPath string) {
 		"storage_model": "pebble-v2-crashable-mem", "native_commit": commit,
 		"genesis_hash": genesis.ToBlock().Hash().Hex(), "cases": cases,
 		"elapsed_seconds": time.Since(started).Seconds()}
+	report["handoff_runs"] = runHandoffs(work, genesis, blocks, commit)
 	data, err := json.MarshalIndent(report, "", " ")
 	check(err)
 	check(os.WriteFile(reportPath, append(data, '\n'), 0o600))
