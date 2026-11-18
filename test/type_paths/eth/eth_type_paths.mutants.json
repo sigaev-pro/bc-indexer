@@ -3,33 +3,291 @@
   "language": "python",
   "root": "../../..",
   "description": "Single-check mutants of the private ETH type-path judge. Synthetic controls give no native credit.",
-  "copy": ["test/type_paths/eth/*", "adapters/geth/admission/native/geth.go"],
-  "test": ["{python}", "test/type_paths/eth/test_type_paths_eth.py", "-v"],
-  "import": ["eth_type_judge"],
+  "copy": [
+    "test/type_paths/eth/*",
+    "adapters/geth/admission/native/geth.go",
+    "adapters/geth/decision/vectors.json",
+    "test/harness/*.py",
+    "test/harness/fixtures/admission_geth/*.py",
+    "test/native_corpus/eth/*.py"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/type_paths/eth",
+    "-v"
+  ],
+  "import": [
+    "eth_type_judge"
+  ],
   "timeout_seconds": 30,
   "mutants": [
-    {"name": "missing transaction type coverage", "file": "test/type_paths/eth/eth_type_judge.py", "original": "check(len(txs) == 10, \"expected ten transaction observations\")", "replacement": "check(True, \"expected ten transaction observations\")"},
-    {"name": "native source identity ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "observation.get(\"native_commit\") == NATIVE", "replacement": "True"},
-    {"name": "native import error ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "case.get(\"import_error\") is None and \"import_error\" in case", "replacement": "True"},
-    {"name": "native attach error ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "case.get(\"attach_error\") is None and \"attach_error\" in case", "replacement": "True"},
-    {"name": "transaction replay differs", "file": "test/type_paths/eth/eth_type_judge.py", "original": "case.get(\"replay_transactions_equal\") is True", "replacement": "True"},
-    {"name": "system replay differs", "file": "test/type_paths/eth/eth_type_judge.py", "original": "case.get(\"replay_system_calls_equal\") is True", "replacement": "True"},
-    {"name": "root body and gas check removed", "file": "test/type_paths/eth/eth_type_judge.py", "original": "block.get(field) is True", "replacement": "True"},
-    {"name": "unresolved decision ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "key[:-7] + \"/decided\" in records", "replacement": "True"},
-    {"name": "admission ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "check(bool(admission), \"no admission records\")", "replacement": "check(True, \"no admission records\")"},
-    {"name": "receipt replay ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "row.get(\"index\") == i and row.get(\"receipt_equal\") is True", "replacement": "row.get(\"index\") == i"},
-    {"name": "transaction status ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "tx.get(\"from\") == SENDER and tx.get(\"status\") == expected_status", "replacement": "tx.get(\"from\") == SENDER"},
-    {"name": "source bytes ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "tx[\"wire\"] == receipt[\"transaction_wire\"] and bool(tx[\"wire\"])", "replacement": "True"},
-    {"name": "fee accounting ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "quantity(before[SENDER][\"balance\"]) - quantity(after[SENDER][\"balance\"]) ==\n                  gas_fee + blob_fee + expected_status", "replacement": "True"},
-    {"name": "target value ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "quantity(after[target][\"balance\"]) - quantity(before[target][\"balance\"]) == expected_status", "replacement": "True"},
-    {"name": "reverted storage ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "before[REVERT][\"slot0\"] == ZERO and after[REVERT][\"slot0\"] == ZERO", "replacement": "True"},
-    {"name": "sender nonce ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "before[SENDER][\"nonce\"] == index and after[SENDER][\"nonce\"] == index + 1", "replacement": "True"},
-    {"name": "authorization state ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "before[AUTHORITY][\"nonce\"] == block - 1 and after[AUTHORITY][\"nonce\"] == block and\n                      after[AUTHORITY][\"code\"] == \"ef0100\" + DELEGATE[2:]", "replacement": "True"},
-    {"name": "system call coverage ignored", "file": "test/type_paths/eth/eth_type_judge.py", "original": "Counter((row.get(\"block\"), row.get(\"from\"), row.get(\"to\")) for row in calls) ==\n              Counter((block, SYSTEM, target) for block in (1, 2) for target in SYSTEM_TARGETS)", "replacement": "True"},
-    {"name": "fork controls incomplete", "file": "test/type_paths/eth/eth_type_judge.py", "original": "[row.get(\"type\") for row in forks] == [1, 2, 3, 4]", "replacement": "True"},
-    {"name": "pre fork head advances", "file": "test/type_paths/eth/eth_type_judge.py", "original": "bad.get(\"head\") == 0", "replacement": "True"},
-    {"name": "wrong import rejection accepted", "file": "test/type_paths/eth/eth_type_judge.py", "original": "expected_error in (bad.get(\"import_error\") or \"\")", "replacement": "bool(bad.get(\"import_error\"))"},
-    {"name": "unknown envelope accepted", "file": "test/type_paths/eth/eth_type_judge.py", "original": "unknown.get(\"unsupported\") is True", "replacement": "True"},
-    {"name": "errors still pass", "file": "test/type_paths/eth/eth_type_judge.py", "original": "\"FAIL\" if errors else \"PASS\"", "replacement": "\"PASS\""}
+    {
+      "name": "missing transaction type coverage",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "check(len(txs) == 10, \"expected ten transaction observations\")",
+      "replacement": "check(True, \"expected ten transaction observations\")"
+    },
+    {
+      "name": "native source identity ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "observation.get(\"native_commit\") == NATIVE",
+      "replacement": "True"
+    },
+    {
+      "name": "native import error ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "case.get(\"import_error\") is None and \"import_error\" in case",
+      "replacement": "True"
+    },
+    {
+      "name": "native attach error ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "case.get(\"attach_error\") is None and \"attach_error\" in case",
+      "replacement": "True"
+    },
+    {
+      "name": "transaction replay differs",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "case.get(\"replay_transactions_equal\") is True",
+      "replacement": "True"
+    },
+    {
+      "name": "system replay differs",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "case.get(\"replay_system_calls_equal\") is True",
+      "replacement": "True"
+    },
+    {
+      "name": "root body and gas check removed",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "block.get(field) is True",
+      "replacement": "True"
+    },
+    {
+      "name": "receipt replay ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "row.get(\"index\") == i and row.get(\"receipt_equal\") is True",
+      "replacement": "row.get(\"index\") == i"
+    },
+    {
+      "name": "transaction status ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "tx.get(\"from\") == SENDER and tx.get(\"status\") == expected_status",
+      "replacement": "tx.get(\"from\") == SENDER"
+    },
+    {
+      "name": "source bytes ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "tx[\"wire\"] == receipt[\"transaction_wire\"] and bool(tx[\"wire\"])",
+      "replacement": "True"
+    },
+    {
+      "name": "fee accounting ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "quantity(before[SENDER][\"balance\"]) - quantity(after[SENDER][\"balance\"]) ==\n                  gas_fee + blob_fee + expected_status",
+      "replacement": "True"
+    },
+    {
+      "name": "target value ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "quantity(after[target][\"balance\"]) - quantity(before[target][\"balance\"]) == expected_status",
+      "replacement": "True"
+    },
+    {
+      "name": "reverted storage ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "before[REVERT][\"slot0\"] == ZERO and after[REVERT][\"slot0\"] == ZERO",
+      "replacement": "True"
+    },
+    {
+      "name": "sender nonce ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "before[SENDER][\"nonce\"] == index and after[SENDER][\"nonce\"] == index + 1",
+      "replacement": "True"
+    },
+    {
+      "name": "authorization state ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "before[AUTHORITY][\"nonce\"] == block - 1 and after[AUTHORITY][\"nonce\"] == block and\n                      after[AUTHORITY][\"code\"] == \"ef0100\" + DELEGATE[2:]",
+      "replacement": "True"
+    },
+    {
+      "name": "system call coverage ignored",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "Counter((row.get(\"block\"), row.get(\"from\"), row.get(\"to\")) for row in calls) ==\n              Counter((block, SYSTEM, target) for block in (1, 2) for target in SYSTEM_TARGETS)",
+      "replacement": "True"
+    },
+    {
+      "name": "fork controls incomplete",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "[row.get(\"type\") for row in forks] == [1, 2, 3, 4]",
+      "replacement": "True"
+    },
+    {
+      "name": "pre fork head advances",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "bad.get(\"head\") == 0",
+      "replacement": "True"
+    },
+    {
+      "name": "wrong import rejection accepted",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "expected_error in (bad.get(\"import_error\") or \"\")",
+      "replacement": "bool(bad.get(\"import_error\"))"
+    },
+    {
+      "name": "unknown envelope accepted",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "unknown.get(\"unsupported\") is True",
+      "replacement": "True"
+    },
+    {
+      "name": "errors still pass",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "\"FAIL\" if errors else \"PASS\"",
+      "replacement": "\"PASS\""
+    },
+    {
+      "name": "native records missing or duplicate capture decisions",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "len(intents) == len(views)",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong capture producer",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "re.fullmatch(r\"type-paths-eth\\.r[0-9a-f]{16}\", producer) is not None",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong decision frontier",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "set(records) == expected and records[prefix + \"counter\"] == {\"next\": len(views)}",
+      "replacement": "True"
+    },
+    {
+      "name": "native records no admission records or wrong admission frontier",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "admission == {prefix + \"counter\": {\"next\": len(views)}, prefix + \"lowwater\": {\"sequence\": len(views)}, prefix + \"purged\": {\"sequence\": len(views)}}",
+      "replacement": "True"
+    },
+    {
+      "name": "native records unresolved capture intent",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "key + \"/decided\" in records",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong intent schema",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "set(intent) == {\"native_store_id\", \"producer\", \"sequence\", \"kind\", \"old_head\", \"new_head\", \"members\", \"evidence_digest\", \"events\", \"digest\"}",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong native store",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "intent[\"native_store_id\"] == \"e0105e71000000000000000000000001\"",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong capture identity",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "intent[\"producer\"] == producer and type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong capture kind/events",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong previous native head",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "intent[\"old_head\"] == {\"number\": block[\"number\"] - 1, \"hash\": parent_hash(block[\"raw_block\"])}",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong imported native head",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "intent[\"new_head\"] == {\"number\": block[\"number\"], \"hash\": block[\"hash\"][2:]}",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong capture members",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "len(members) == 1",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong member schema",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "set(member) == {\"observation\", \"block\", \"exec_ready_digest\", \"child_root\"}",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong observation identity",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "member[\"observation\"] == producer + f\".{sequence:016x}\"",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong member block/root",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "member[\"block\"] == block[\"hash\"][2:] and member[\"child_root\"] == block[\"root\"][2:] == block[\"header_root\"][2:]",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong intent digest",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "intent[\"digest\"] == intent_digest(intent)",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong decided schema",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "set(decided) == {\"sequence\", \"intent_digest\", \"delivery\", \"digest\"}",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong decided reference",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and decided[\"intent_digest\"] == intent[\"digest\"]",
+      "replacement": "True"
+    },
+    {
+      "name": "native records wrong decided digest/delivery",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "decided[\"delivery\"] == \"BATCH\" and decided[\"digest\"] == decided_digest(intent[\"digest\"], decided[\"delivery\"])",
+      "replacement": "True"
+    },
+    {
+      "name": "source fee gasPrice",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "quantity(fields[\"gasPrice\"]) == 2_000_000_000",
+      "replacement": "True"
+    },
+    {
+      "name": "source fee maxFeePerGas",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "quantity(fields[\"maxFeePerGas\"]) == 2_000_000_000",
+      "replacement": "True"
+    },
+    {
+      "name": "source fee maxPriorityFeePerGas",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "quantity(fields[\"maxPriorityFeePerGas\"]) == 1_000_000_000",
+      "replacement": "True"
+    },
+    {
+      "name": "source fee maxFeePerBlobGas",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "quantity(fields[\"maxFeePerBlobGas\"]) == 1_000_000_000",
+      "replacement": "True"
+    }
   ]
 }
