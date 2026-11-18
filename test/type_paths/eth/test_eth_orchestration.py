@@ -47,6 +47,8 @@ class OrchestrationTests(unittest.TestCase):
         self.judge_exit = 0
         self.judge_result = "PASS"
         self.state = {"clean": True, "commit": "a" * 40}
+        self.signal_handler = signal.getsignal(signal.SIGTERM)
+        self.signal_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
         test = self
 
         class FakeNative:
@@ -80,6 +82,8 @@ class OrchestrationTests(unittest.TestCase):
         self.stack.enter_context(patch.object(driver.subprocess, "run", dispatch))
 
     def assert_released(self):
+        self.assertEqual(signal.getsignal(signal.SIGTERM), self.signal_handler)
+        self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK, ()), self.signal_mask)
         with self.lock.open("a+") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fcntl.flock(handle, fcntl.LOCK_UN)

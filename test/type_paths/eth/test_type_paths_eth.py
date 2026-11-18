@@ -231,6 +231,23 @@ class JudgeTests(unittest.TestCase):
         for name in ("import_marker", "finality_marker"):
             record = json.loads(vectors[name])
             self.assertEqual(judge.intent_digest(record), record["digest"])
+            kind = name.split("_")[0]
+            self.assertEqual(judge.decided_digest(record["digest"], "BATCH" if kind == "import" else "CHECKPOINT"),
+                             vectors[kind + "_decided_digest"])
+
+    def test_native_record_duplicate_fields_are_rejected(self):
+        records = self.observation["main"]["decision_records"]
+        key = next(k for k in records if k.endswith("/counter"))
+        records[key] = '{"next":2,"next":2}'
+        self.failed("Duplicate native record field")
+
+    def test_malformed_native_digest_and_integer_encodings(self):
+        for value in (None, "ABC", "a" * 63, "A" * 64):
+            with self.assertRaises(ValueError):
+                judge.digest_bytes(value)
+        for value in (True, -1, 2**64, "0"):
+            with self.assertRaises(ValueError):
+                judge.uint64(value)
 
     def test_malformed_and_unrelated_native_records(self):
         for group in ("decision_records", "admission_records"):
