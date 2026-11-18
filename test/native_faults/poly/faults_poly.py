@@ -154,7 +154,8 @@ def handoff_verdicts(probe):
                 valid = valid and row["head_before"] == row["head_after"] and row["head"] == 2
                 valid = valid and row["decisions_before"] == row["decisions_after"]
             elif hid in ("bor.bootstrap-vote-pass", "bor.golive-order"):
-                valid = valid and row["vote_locked"] is True and row["recovery_chain_locked"] is True
+                valid = valid and row["vote_locked"] is True and row["guard_matches_vote"] is True
+                valid = valid and row["order"] == ["chain-locked", "guard-contended", "vote-release", "guard-acquired"]
                 valid = valid and row["boundary_held"] is None and row["boundary_before_vote_release"] is None
                 valid = valid and row["decisions_held"] == {} and row["decisions_before_golive"] == {}
                 before = row["coverage_before"].get("bor.milestone-lock", {"Passes": 0, "Intents": 0, "Refusals": 0})
@@ -168,12 +169,14 @@ def handoff_verdicts(probe):
                 valid = valid and row["sentinel_before_reset"] is True and row["sentinel_after_reset"] is False
                 valid = valid and row["reset_to_synced"] is True and row["fixture_root_after_reset"] is False
                 valid = valid and row["restart_error"] is None and row["phase_after"] == "LIVE"
-                valid = valid and row["head_before"] == 2 and row["head_after"] == 1
-                valid = valid and row["decided_before"] == [1, 2] and row["undecided"] == []
+                valid = valid and row["head_before"] == 4 and row["head_after"] == 3
+                valid = valid and row["decided_before"] == [1, 2, 3, 4] and row["undecided"] == []
+                valid = valid and row["roots_distinct"] is True and row["predecessor_state_before"] is True
+                valid = valid and row["predecessor_state_after"] is True and row["predecessor"]["number"] == 3
                 valid = valid and row["boundary_before"]["number"] == 0
                 valid = valid and row["boundary_after"] == row["boundary_before"]
                 repaired = row["recovery"]["repaired"]
-                valid = valid and repaired["number"] == 1 and repaired["hash"] == row["block1"]["hash"]
+                valid = valid and repaired["number"] == 3 and repaired["hash"] == row["predecessor"]["hash"]
             else:
                 valid = False
         except (KeyError, TypeError, AttributeError):

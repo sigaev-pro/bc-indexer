@@ -44,7 +44,8 @@ def handoff_sample():
     boundary = dict(block, number=1)
     reach = {"bor.milestone-lock": {"Passes": 1, "Intents": 0, "Refusals": 0}}
     common = {"phase_at_start": "BOOTSTRAP", "block1": block, "head": 2}
-    vote = dict(common, vote_locked=True, recovery_chain_locked=True, boundary_held=None,
+    vote = dict(common, vote_locked=True, guard_matches_vote=True,
+                order=["chain-locked", "guard-contended", "vote-release", "guard-acquired"], boundary_held=None,
                 boundary_before_vote_release=None, decisions_held={}, decisions_before_golive={},
                 coverage_before={}, coverage_held=reach, coverage_released=reach,
                 golive_error=None, phase="LIVE", boundary=boundary)
@@ -62,9 +63,11 @@ def handoff_sample():
         "bor.power-loss-model": dict(common, root_present_before_fixture=True, fixture_deletion_synced=True,
                                      sentinel_before_reset=True, sentinel_after_reset=False, reset_to_synced=True,
                                      fixture_root_after_reset=False, restart_error=None, phase_after="LIVE",
-                                     head_before=2, head_after=1, decided_before=[1, 2], undecided=[],
+                                     head_before=4, head_after=3, decided_before=[1, 2, 3, 4], undecided=[],
+                                     roots_distinct=True, predecessor_state_before=True, predecessor_state_after=True,
+                                     predecessor={"number": 3, "hash": "ef" * 32, "root": "12" * 32},
                                      boundary_before={"number": 0}, boundary_after={"number": 0},
-                                     recovery={"repaired": {"number": 1, "hash": block["hash"]}}),
+                                     recovery={"repaired": {"number": 3, "hash": "ef" * 32}}),
     }
     for hid, row in rows.items():
         row["id"] = hid
@@ -97,10 +100,13 @@ class JudgeTests(unittest.TestCase):
             for key in row:
                 if key == "head" and hid != "bor.pass-at-golive" and hid != "bor.below-h-rewind":
                     continue
-                changed = copy.deepcopy(probe)
+                if key == "block1" and hid == "bor.power-loss-model":
+                    continue
+                changed = {"handoff_runs": copy.deepcopy(probe["handoff_runs"])}
                 del changed["handoff_runs"][hid][key]
                 with self.subTest(handoff=hid, key=key):
-                    self.assertEqual(self.verdict(changed)["handoffs"][hid], "FAIL")
+                    verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(changed)}
+                    self.assertEqual(verdicts[hid], "FAIL")
 
     def test_handoff_faults_and_refusals_fail_closed(self):
         for hid in handoff_sample():
@@ -113,6 +119,7 @@ class JudgeTests(unittest.TestCase):
                                 ("bor.pass-at-golive", "golive_error", "failure"),
                                 ("bor.below-h-rewind", "head_after", "different"),
                                 ("bor.bootstrap-vote-pass", "vote_locked", False),
+                                ("bor.golive-order", "order", ["chain-locked", "guard-acquired", "vote-release"]),
                                 ("bor.golive-order", "decisions_held", {"intent": "unexpected"}),
                                 ("bor.power-loss-model", "sentinel_after_reset", True)):
             probe = sample()
@@ -309,6 +316,24 @@ class CopiedCodeTests(unittest.TestCase):
 
     def test_each_case_runs_in_its_own_process(self):
         self.assertIn('cmd.Args[1] = "case"', go_block(self.ours, "func run("))
+
+    def test_contention_hook_is_test_only_and_reports_the_actual_mutex(self):
+        patches = json.loads((faults_poly.NATIVE / "patches.json").read_text())["patches"]
+        patch = next(p for p in patches if p["name"] == "guard_contention_probe")
+        self.assertEqual(patch["file"], "extractor/admission/admission.go")
+        shared = (faults_poly.ROOT / "adapters/bor/admission/admission.go").read_text()
+        self.assertEqual(shared.count(patch["original"]), 1)
+        self.assertNotIn("ExtractorFaultGuardAcquire", shared)
+        self.assertIn('if !g.lock.TryLock() {\n\t\t\thook(g, "contended")', patch["replacement"])
+        self.assertIn('\t\t\tg.lock.Lock()\n\t\t}\n\t\thook(g, "acquired")', patch["replacement"])
+        self.assertTrue(patch["replacement"].endswith('\t} else {\n\t\tg.lock.Lock()\n\t}\n'))
+
+    def test_child_deadlines_and_error_last_contract(self):
+        run = go_block(self.ours, "func run(")
+        self.assertEqual(run.count("context.WithTimeout(context.Background(), 30*time.Second)"), 2)
+        self.assertEqual(run.count("exec.CommandContext(ctx, self,"), 2)
+        self.assertEqual(run.count("cancel()"), 2)
+        self.assertIn("func (n *instance) insert(blocks []*types.Block) (int, []map[string]any, error)", self.ours)
 
 
 class CommandTests(unittest.TestCase):

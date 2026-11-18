@@ -7,15 +7,23 @@ child processes, and the driver derives their verdicts from required facts.
 Caller-provided handoff verdicts are ignored. The sixth handoff checks the
 corrected lifecycle probe flag help in the source snapshot.
 
-The GoLive scenarios use a test-only callback at the native recovery chain
-lock boundary. The held import scenario blocks the native head batch before
-it reaches the store. The vote scenario records BOOTSTRAP coverage, the
-absence of decisions, and the boundary before and after releasing the vote.
+The GoLive scenarios use test-only callbacks at the native recovery chain
+lock boundary and on the installed Bor admission guard. The guard reports
+contention only after a real failed `TryLock`; it then waits on the original
+mutex. With a nil callback its original lock path is unchanged. The vote is
+released only after that contention event on its own guard. The judge binds
+the exact chain-lock, contention, vote-release and guard-acquired order.
+The held import scenario blocks the native head batch before it reaches the
+store. The vote scenario also records BOOTSTRAP coverage, the absence of
+decisions, and the boundary before and after releasing the vote.
 The rewind scenario checks the below-H error and unchanged head, boundary,
 and decision records.
 
 The startup-repair scenario retains the accepted lifecycle probe's explicit
-missing-state fixture: delete the head state root and sync the deletion.
+missing-state fixture: delete block 4's state root and sync the deletion,
+while block 3's distinct root remains available. Blocks 1 through 3 share
+one root in this corpus; diagnostic run 02 retained the failed block-2
+fixture that also removed the predecessor state.
 This deletion is not attributed to power loss; capture makes imported roots
 durable. It then writes an unsynced sentinel, resets the in-memory file
 system to its synced frontier, and restarts. Its verdict requires the

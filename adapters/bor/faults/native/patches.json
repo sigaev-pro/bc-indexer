@@ -5,6 +5,13 @@
  "files": {},
  "patches": [
   {
+   "name": "guard_contention_probe",
+   "file": "extractor/admission/admission.go",
+   "original": "func (g *Guard) Acquire() *Token {\n\tg.lock.Lock()\n",
+   "replacement": "// ExtractorFaultGuardAcquire is test-only. A nil hook preserves the production lock path.\nvar ExtractorFaultGuardAcquire func(*Guard, string)\n\nfunc (g *Guard) Acquire() *Token {\n\tif hook := ExtractorFaultGuardAcquire; hook != nil {\n\t\tif !g.lock.TryLock() {\n\t\t\thook(g, \"contended\")\n\t\t\tg.lock.Lock()\n\t\t}\n\t\thook(g, \"acquired\")\n\t} else {\n\t\tg.lock.Lock()\n\t}\n",
+   "reason": "The test-only installed Bor tree reports actual mutex contention, so GoLive ordering does not depend on a sleep or an artificial hold at a callback."
+  },
+  {
    "name": "recovery_order_probe",
    "file": "core/zz_extractor_decision.go",
    "original": "func (bc *BlockChain) ExtractorRecover(fn func(*ExtractorRecovery) error) error {\n\tif !bc.chainmu.TryLock() {\n\t\treturn errChainStopped\n\t}\n\tdefer bc.chainmu.Unlock()\n\treturn fn(&ExtractorRecovery{bc: bc})\n}",

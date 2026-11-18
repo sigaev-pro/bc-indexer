@@ -29,6 +29,30 @@
   "timeout_seconds": 300,
   "mutants": [
     {
+      "name": "catalog child timeout source pin",
+      "file": "test/native_faults/poly/main.go",
+      "original": "\t\t\tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)",
+      "replacement": "\t\t\tctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)"
+    },
+    {
+      "name": "actual guard contention order",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"order\"] == [\"chain-locked\", \"guard-contended\", \"vote-release\", \"guard-acquired\"]",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "distinct predecessor state before loss",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"roots_distinct\"] is True and row[\"predecessor_state_before\"] is True",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "predecessor state survives reset",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"predecessor_state_after\"] is True and row[\"predecessor\"][\"number\"] == 3",
+      "replacement": "valid = valid"
+    },
+    {
       "name": "handoff identity and starting phase",
       "file": "test/native_faults/poly/faults_poly.py",
       "original": "valid = row[\"id\"] == hid and row[\"phase_at_start\"] == \"BOOTSTRAP\" and not row.get(\"child_error\")",
@@ -85,7 +109,7 @@
     {
       "name": "vote lock and recovery lock facts",
       "file": "test/native_faults/poly/faults_poly.py",
-      "original": "valid = valid and row[\"vote_locked\"] is True and row[\"recovery_chain_locked\"] is True",
+      "original": "valid = valid and row[\"vote_locked\"] is True and row[\"guard_matches_vote\"] is True",
       "replacement": "valid = valid"
     },
     {
@@ -139,13 +163,13 @@
     {
       "name": "repaired native head",
       "file": "test/native_faults/poly/faults_poly.py",
-      "original": "valid = valid and row[\"head_before\"] == 2 and row[\"head_after\"] == 1",
+      "original": "valid = valid and row[\"head_before\"] == 4 and row[\"head_after\"] == 3",
       "replacement": "valid = valid"
     },
     {
       "name": "repair resolves native intent",
       "file": "test/native_faults/poly/faults_poly.py",
-      "original": "valid = valid and row[\"decided_before\"] == [1, 2] and row[\"undecided\"] == []",
+      "original": "valid = valid and row[\"decided_before\"] == [1, 2, 3, 4] and row[\"undecided\"] == []",
       "replacement": "valid = valid"
     },
     {
@@ -157,7 +181,7 @@
     {
       "name": "repair binds expected block",
       "file": "test/native_faults/poly/faults_poly.py",
-      "original": "valid = valid and repaired[\"number\"] == 1 and repaired[\"hash\"] == row[\"block1\"][\"hash\"]",
+      "original": "valid = valid and repaired[\"number\"] == 3 and repaired[\"hash\"] == row[\"predecessor\"][\"hash\"]",
       "replacement": "valid = valid"
     },
     {

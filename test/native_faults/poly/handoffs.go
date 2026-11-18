@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/borlifecycle"
 )
 
@@ -87,12 +88,16 @@ func runHandoff(c config, id string) caseResult {
 	switch id {
 	case "bor.power-loss-model":
 		check(n.run.GoLive())
-		_, _, err = n.insert(ci.blocks[:2])
+		_, _, err = n.insert(ci.blocks)
 		check(err)
 		r["boundary_before"] = boundaryOf(n.db)
 		r["head_before"] = n.chain.CurrentBlock().Number.Uint64()
 		r["decided_before"] = nativeDecided(n, ci.numbers)
-		root := ci.blocks[1].Root()
+		root := ci.blocks[3].Root()
+		previous := ci.blocks[2]
+		r["predecessor"] = map[string]any{"number": previous.NumberU64(), "hash": plainHash(previous.Hash().Hex()), "root": plainHash(previous.Root().Hex())}
+		r["roots_distinct"] = root != previous.Root()
+		r["predecessor_state_before"] = n.chain.HasState(previous.Root())
 		r["root_present_before_fixture"] = rawdb.HasLegacyTrieNode(n.db, root)
 		// Match the accepted lifecycle probe's explicit missing-state
 		// fixture. This deletion is not attributed to power loss: the
@@ -118,6 +123,7 @@ func runHandoff(c config, id string) caseResult {
 		r["sentinel_after_reset"], err = restarted.db.Has([]byte(sentinel))
 		check(err)
 		r["fixture_root_after_reset"] = rawdb.HasLegacyTrieNode(restarted.db, root)
+		r["predecessor_state_after"] = restarted.chain.HasState(previous.Root())
 		r["boundary_after"] = boundaryOf(restarted.db)
 		r["head_after"] = restarted.chain.CurrentBlock().Number.Uint64()
 		r["phase_after"] = restarted.phase()
@@ -125,6 +131,7 @@ func runHandoff(c config, id string) caseResult {
 		_, undecided := decisions(prefixed(restarted.db, restarted.db, decisionPrefix), ci.numbers)
 		r["undecided"] = undecided
 		r["decisions_after"] = prefixed(restarted.db, restarted.db, decisionPrefix)
+		n = restarted
 	case "bor.below-h-rewind":
 		_, err = n.chain.InsertChain(types.Blocks{ci.blocks[0]}, false)
 		check(err)
@@ -148,27 +155,39 @@ func runHandoff(c config, id string) caseResult {
 		r["coverage_held"] = life.Coverage()
 		r["boundary_held"] = boundaryOf(n.db)
 		r["decisions_held"] = prefixed(n.db, n.db, decisionPrefix)
-		// GoLive reaches its actual chain-lock boundary while the vote
-		// owns the guard. No sleep or scheduling-duration claim is used.
-		locked := make(chan struct{})
-		release := make(chan struct{})
+		// The hook reports a real failed TryLock on the same guard held
+		// by the native vote. Only that fact releases the vote; callbacks
+		// never manufacture a wait, and no sleep is used as evidence.
+		contended := make(chan struct{})
+		var traceMu sync.Mutex
+		trace := []string{}
+		add := func(step string) { traceMu.Lock(); trace = append(trace, step); traceMu.Unlock() }
 		core.ExtractorFaultRecoveryStep = func(step string) {
 			if step == "chain-locked" {
-				close(locked)
-				<-release
+				add("chain-locked")
+			}
+		}
+		sameGuard := true
+		admission.ExtractorFaultGuardAcquire = func(guard *admission.Guard, step string) {
+			sameGuard = sameGuard && guard == n.run.Import.Driver.Guard
+			add("guard-" + step)
+			if step == "contended" {
+				close(contended)
 			}
 		}
 		done := make(chan error, 1)
 		go func() { done <- n.run.GoLive() }()
-		<-locked
-		r["recovery_chain_locked"] = true
+		<-contended
 		r["boundary_before_vote_release"] = boundaryOf(n.db)
+		r["decisions_before_golive"] = prefixed(n.db, n.db, decisionPrefix)
+		add("vote-release")
 		d.UnlockMutex(false, "", 11, common.Hash{})
 		r["coverage_released"] = life.Coverage()
-		r["decisions_before_golive"] = prefixed(n.db, n.db, decisionPrefix)
-		close(release)
 		r["golive_error"] = errText(<-done)
 		core.ExtractorFaultRecoveryStep = nil
+		admission.ExtractorFaultGuardAcquire = nil
+		r["guard_matches_vote"] = sameGuard
+		r["order"] = trace
 		r["boundary"] = boundaryOf(n.db)
 		r["phase"] = n.phase()
 	case "bor.pass-at-golive":
