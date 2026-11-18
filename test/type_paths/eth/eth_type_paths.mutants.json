@@ -288,6 +288,78 @@
       "file": "test/type_paths/eth/eth_type_judge.py",
       "original": "quantity(fields[\"maxFeePerBlobGas\"]) == 1_000_000_000",
       "replacement": "True"
+    },
+    {
+      "name": "driver guard 38",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(accepted.get(\"kind\") == \"admission-geth-preparation\" and accepted.get(\"result\") == \"PASS\" and\n            accepted.get(\"cleanup_complete\") is True and accepted.get(\"decision_native\"),\n            \"A passing Geth decision-bridge preparation is required\")",
+      "replacement": "require(True,\n            \"A passing Geth decision-bridge preparation is required\")"
+    },
+    {
+      "name": "driver guard 41",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(accepted.get(\"source_commit\") == NATIVE, \"Wrong native source\")",
+      "replacement": "require(True, \"Wrong native source\")"
+    },
+    {
+      "name": "driver guard 45",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(source_state.get(\"clean\") is True, \"Preparation requires a clean committed source\")",
+      "replacement": "require(True, \"Preparation requires a clean committed source\")"
+    },
+    {
+      "name": "driver guard 112",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(prep.get(\"kind\") == \"native-type-paths-eth-preparation\" and prep.get(\"result\") == \"PASS\" and\n            prep.get(\"cleanup_complete\") is True, \"A passing type-path preparation is required\")",
+      "replacement": "require(True, \"A passing type-path preparation is required\")"
+    },
+    {
+      "name": "driver guard 118",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(source_state.get(\"clean\") is True, \"Run requires clean committed source\")",
+      "replacement": "require(True, \"Run requires clean committed source\")"
+    },
+    {
+      "name": "driver guard 62",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(corpus_eth.code_equal(record[\"repository_equal\"]), \"Accepted adapter files differ from repository\")",
+      "replacement": "require(True, \"Accepted adapter files differ from repository\")"
+    },
+    {
+      "name": "driver guard 65",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(manifest[\"image_inputs\"][\"golang-build-image\"][\"reference\"] == compiler and\n                    re.fullmatch(r\"docker.io/library/golang@sha256:[0-9a-f]{64}\", compiler), \"Unpinned compiler\")",
+      "replacement": "require(True, \"Unpinned compiler\")"
+    },
+    {
+      "name": "driver guard 82",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(not differences, f\"Accepted install differs: {differences}\")",
+      "replacement": "require(True, f\"Accepted install differs: {differences}\")"
+    },
+    {
+      "name": "driver guard 133",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(set(retained) == set(FILES), \"Incomplete preparation code set\")",
+      "replacement": "require(True, \"Incomplete preparation code set\")"
+    },
+    {
+      "name": "driver guard 134",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(all((ETH / name).read_bytes() == path.read_bytes() for name, path in retained.items()),\n                    \"Prepared sources differ from repository\")",
+      "replacement": "require(True,\n                    \"Prepared sources differ from repository\")"
+    },
+    {
+      "name": "driver guard 137",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", runtime), \"Unpinned runtime\")",
+      "replacement": "require(True, \"Unpinned runtime\")"
+    },
+    {
+      "name": "driver guard 150",
+      "file": "test/type_paths/eth/eth_type_paths.py",
+      "original": "require(compared.returncode == 0 and record[\"judgement\"][\"result\"] == \"PASS\", \"Native type-path judge failed\")",
+      "replacement": "require(True, \"Native type-path judge failed\")"
     }
   ]
 }

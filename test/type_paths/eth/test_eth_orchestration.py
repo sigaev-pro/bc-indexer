@@ -226,6 +226,7 @@ class OrchestrationTests(unittest.TestCase):
     def test_prepare_rejects_unrelated_native_and_dirty_source(self):
         self.prep = self.accepted
         for field, value, reason in (("source_commit", "bad", "Wrong native source"),
+                                    ("kind", "bad", "decision-bridge"), ("result", "FAIL", "decision-bridge"),
                                     ("decision_native", False, "decision-bridge"),
                                     ("cleanup_complete", False, "decision-bridge")):
             old = self.accepted[field]
@@ -256,6 +257,11 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(record["result"], "FAIL")
         self.assertIn("Unpinned compiler", record["error"])
         self.assertEqual(self.commands, [])
+        self.output = self.root / "prepare-mutually-unpinned"
+        self.manifest["image_inputs"]["golang-build-image"]["reference"] = "golang:latest"
+        record = driver.prepare(self.prep_path, "unused-test-pin", self.output)
+        self.assertEqual(record["result"], "FAIL")
+        self.assertIn("Unpinned compiler", record["error"])
 
 
 if __name__ == "__main__":

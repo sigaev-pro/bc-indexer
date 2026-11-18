@@ -259,8 +259,50 @@ class JudgeTests(unittest.TestCase):
                 key = next(k for k in records if k.endswith("/" + suffix))
                 record = json.loads(records[key])
                 record[field] = value
+                if suffix == "intent" and field not in ("digest", "evidence_digest"):
+                    record["digest"] = judge.intent_digest(record)
+                    decided_key = key[:-6] + "decided"
+                    decided = json.loads(records[decided_key])
+                    decided.update(intent_digest=record["digest"], digest=judge.decided_digest(record["digest"], "BATCH"))
+                    records[decided_key] = json.dumps(decided)
                 records[key] = json.dumps(record)
                 self.assertEqual(judge.judge(self.observation)["result"], "FAIL")
+
+    def test_empty_capture_records(self):
+        self.observation["main"]["decision_records"] = {}
+        self.failed("missing or duplicate capture decisions")
+
+    def test_extra_member_with_valid_digest_is_rejected(self):
+        records = self.observation["main"]["decision_records"]
+        key = next(k for k in records if k.endswith("/intent"))
+        record = json.loads(records[key])
+        record["members"].append(copy.deepcopy(record["members"][0]))
+        record["digest"] = judge.intent_digest(record)
+        records[key] = json.dumps(record)
+        decided_key = key[:-6] + "decided"
+        decided = json.loads(records[decided_key])
+        decided.update(intent_digest=record["digest"], digest=judge.decided_digest(record["digest"], "BATCH"))
+        records[decided_key] = json.dumps(decided)
+        self.failed("wrong capture members")
+
+    def test_consistently_substituted_producer_is_rejected(self):
+        case = self.observation["main"]
+        original = "type-paths-eth.r0123456789abcdef"
+        case["decision_records"] = {k.replace(original, "other"): v.replace(original, "other")
+                                    for k, v in case["decision_records"].items()}
+        case["admission_records"] = {k.replace(original, "other"): v
+                                     for k, v in case["admission_records"].items()}
+        records = case["decision_records"]
+        for key in list(records):
+            if key.endswith("/intent"):
+                record = json.loads(records[key])
+                record["digest"] = judge.intent_digest(record)
+                records[key] = json.dumps(record)
+                decided_key = key[:-6] + "decided"
+                decided = json.loads(records[decided_key])
+                decided.update(intent_digest=record["digest"], digest=judge.decided_digest(record["digest"], "BATCH"))
+                records[decided_key] = json.dumps(decided)
+        self.failed("wrong capture producer")
 
     def test_member_bindings_even_with_recomputed_digests(self):
         for field, value in (("observation", "other.0000000000000000"), ("block", "f" * 64),
