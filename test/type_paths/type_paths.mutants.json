@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../..",
+  "description": "Single-check controls of source inventory completeness, evidence boundaries, and archive identity.",
+  "copy": ["test/type_paths/*", "adapters/*/type_mapping/*", ".project/bootstrap/components/candidate-lock.json"],
+  "test": ["{python}", "test/type_paths/test_type_paths.py", "-v"],
+  "import": ["verify"],
+  "timeout_seconds": 30,
+  "mutants": [
+    {"name": "missing body type accepted", "file": "test/type_paths/verify.py", "original": "require(seen == expected_types(client), \"Missing native type\")", "replacement": "require(True, \"Missing native type\")"},
+    {"name": "missing special path accepted", "file": "test/type_paths/verify.py", "original": "require(seen == SPECIAL[client], \"Missing special path\")", "replacement": "require(True, \"Missing special path\")"},
+    {"name": "source grants runtime credit", "file": "test/type_paths/verify.py", "original": "require(document[\"runtime\"] == \"NOT_RUN\", \"Source inventory cannot grant runtime credit\")", "replacement": "require(True, \"Source inventory cannot grant runtime credit\")"},
+    {"name": "source grants public credit", "file": "test/type_paths/verify.py", "original": "require(all(value == \"NOT_RUN\" for value in profiles.values()), \"Source inventory cannot grant public credit\")", "replacement": "require(True, \"Source inventory cannot grant public credit\")"},
+    {"name": "missing public profile accepted", "file": "test/type_paths/verify.py", "original": "isinstance(profiles, dict) and set(profiles) == PROFILES[client]", "replacement": "isinstance(profiles, dict)"},
+    {"name": "wrong source revision accepted", "file": "test/type_paths/verify.py", "original": "document[\"source_commit\"] == candidates[\"components\"][client][\"commit\"]", "replacement": "True"},
+    {"name": "unknown type falls back to legacy", "file": "test/type_paths/verify.py", "original": "raise ValueError(f\"Unknown native type: {native_type}\")", "replacement": "return document[\"body_types\"][0]"},
+    {"name": "duplicate body type accepted", "file": "test/type_paths/verify.py", "original": "require(number not in seen, \"Duplicate native type\")", "replacement": "require(True, \"Duplicate native type\")"},
+    {"name": "boolean native type accepted", "file": "test/type_paths/verify.py", "original": "type(number) is int and number in expected_types(client)", "replacement": "isinstance(number, int) and number in expected_types(client)"},
+    {"name": "wrong variant accepted", "file": "test/type_paths/verify.py", "original": "row[\"variant\"] == VARIANTS[number]", "replacement": "True"},
+    {"name": "new system wire type accepted", "file": "test/type_paths/verify.py", "original": "row[\"native_type\"] is None and row[\"origin\"] == origin", "replacement": "True"},
+    {"name": "mandatory body StateSync becomes optional", "file": "test/type_paths/verify.py", "original": "require(row[\"owner\"] == owner, \"Special path owner mismatch\")", "replacement": "require(True, \"Special path owner mismatch\")"},
+    {"name": "duplicate JSON accepted", "file": "test/type_paths/verify.py", "original": "require(key not in result, f\"Duplicate JSON key: {key}\")", "replacement": "require(True, f\"Duplicate JSON key: {key}\")"},
+    {"name": "archive substitution accepted", "file": "test/type_paths/verify.py", "original": "require(digest == document[\"archive_sha256\"], \"Source archive digest mismatch\")", "replacement": "require(True, \"Source archive digest mismatch\")"},
+    {"name": "file substitution accepted", "file": "test/type_paths/verify.py", "original": "hashlib.sha256(data).hexdigest() == document[\"files\"][member.name]", "replacement": "True"},
+    {"name": "duplicate archive member accepted", "file": "test/type_paths/verify.py", "original": "require(member.name not in sources, \"Duplicate source archive member\")", "replacement": "require(True, \"Duplicate source archive member\")"},
+    {"name": "unlisted source type accepted", "file": "test/type_paths/verify.py", "original": "constants == {row[\"native_type\"] for row in document[\"body_types\"]}", "replacement": "True"},
+    {"name": "missing native decoder rejection accepted", "file": "test/type_paths/verify.py", "original": "\"return nil, ErrTxTypeNotSupported\" in transaction", "replacement": "True"},
+    {"name": "missing native block signer accepted", "file": "test/type_paths/verify.py", "original": "\"func MakeSigner(\" in signer", "replacement": "True"}
+  ]
+}
