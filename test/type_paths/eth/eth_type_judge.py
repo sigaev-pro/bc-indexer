@@ -2,6 +2,7 @@
 """Judge private native ETH type-path facts against the independent oracle."""
 
 import argparse
+import functools
 from collections import Counter
 import json
 import hashlib
@@ -20,6 +21,98 @@ SYSTEM_TARGETS = {
     "0x000f3df6d732807ef1319fb7b8bb8522d0beac02", "0x0000f90827f1c53a10cb7a02335b175320002935",
     "0x00000961ef480eb55e80d19ad83579a64c007002", "0x0000bbddc7ce488642fb579f8b00f3a590007251",
 }
+
+
+# Exact accepted independent codec from test/harness/source_inputs_geth.py.
+# Portable source identity and behavioral vectors guard this retained copy.
+KECCAK_ROUNDS = (
+    0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000, 0x000000000000808B,
+    0x0000000080000001, 0x8000000080008081, 0x8000000000008009, 0x000000000000008A, 0x0000000000000088,
+    0x0000000080008009, 0x000000008000000A, 0x000000008000808B, 0x800000000000008B, 0x8000000000008089,
+    0x8000000000008003, 0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
+    0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008)
+KECCAK_ROTATIONS = ((0, 36, 3, 41, 18), (1, 44, 10, 45, 2), (62, 6, 43, 15, 61), (28, 55, 25, 21, 56),
+                    (27, 20, 39, 8, 14))
+MASK = (1 << 64) - 1
+
+
+@functools.lru_cache(maxsize=4096)
+def keccak256(data):
+    """Keccak-256 as Ethereum uses it (original padding, not SHA3-256), written from the specification.
+    It is slow in pure Python, so results are cached; data must be bytes."""
+    rate = 136
+    padded = bytearray(data) + b"\x01" + bytes(-(len(data) + 1) % rate)
+    padded[-1] |= 0x80
+    lanes = [[0] * 5 for _ in range(5)]
+    for offset in range(0, len(padded), rate):
+        for index in range(rate // 8):
+            lanes[index % 5][index // 5] ^= int.from_bytes(padded[offset + 8 * index:offset + 8 * index + 8], "little")
+        for constant in KECCAK_ROUNDS:
+            parity = [lanes[x][0] ^ lanes[x][1] ^ lanes[x][2] ^ lanes[x][3] ^ lanes[x][4] for x in range(5)]
+            for x in range(5):
+                mix = parity[(x - 1) % 5] ^ (((parity[(x + 1) % 5] << 1) | (parity[(x + 1) % 5] >> 63)) & MASK)
+                for y in range(5):
+                    lanes[x][y] ^= mix
+            moved = [[0] * 5 for _ in range(5)]
+            for x in range(5):
+                for y in range(5):
+                    shift = KECCAK_ROTATIONS[x][y]
+                    moved[y][(2 * x + 3 * y) % 5] = ((lanes[x][y] << shift) | (lanes[x][y] >> (64 - shift))) & MASK
+            for x in range(5):
+                for y in range(5):
+                    lanes[x][y] = moved[x][y] ^ (~moved[(x + 1) % 5][y] & moved[(x + 2) % 5][y])
+            lanes[0][0] ^= constant
+    return b"".join(lanes[index % 5][index // 5].to_bytes(8, "little") for index in range(4))
+
+
+def rlp_item(data, offset=0):
+    """Decode one RLP item at offset. Return (value, raw encoding, next offset); a list value is a list of
+    (value, raw) pairs. Noncanonical lengths are refused."""
+    first = data[offset]
+    if first < 0x80:
+        return data[offset:offset + 1], data[offset:offset + 1], offset + 1
+    short, base = (first < 0xB8, 0x80) if first < 0xC0 else (first < 0xF8, 0xC0)
+    if short:
+        start, length = offset + 1, first - base
+    else:
+        size = first - base - 55
+        length = int.from_bytes(data[offset + 1:offset + 1 + size], "big")
+        if data[offset + 1] == 0 or length < 56:
+            raise ValueError("noncanonical RLP length")
+        start = offset + 1 + size
+    end = start + length
+    if end > len(data):
+        raise ValueError("truncated RLP item")
+    if base == 0x80:
+        if length == 1 and data[start] < 0x80:
+            raise ValueError("noncanonical RLP byte")
+        return data[start:end], data[offset:end], end
+    values, cursor = [], start
+    while cursor < end:
+        value, raw, cursor = rlp_item(data, cursor)
+        values.append((value, raw))
+    if cursor != end:
+        raise ValueError("RLP list overruns its length")
+    return values, data[offset:end], end
+
+
+def rlp_list(data):
+    """Decode bytes that must hold exactly one RLP list."""
+    value, _, end = rlp_item(data)
+    if end != len(data) or not isinstance(value, list):
+        raise ValueError("not exactly one RLP list")
+    return value
+
+
+# Positions in the RLP list of a Geth header.
+PARENT_HASH, STATE_ROOT, NUMBER, EXTRA = 0, 3, 8, 12
+
+
+def header_fields(data):
+    fields = [value for value, _ in rlp_list(data)]
+    if len(fields) < 15 or any(isinstance(field, list) for field in fields[:15]):
+        raise ValueError("not a header")
+    return fields
 
 
 def quantity(value):
@@ -81,18 +174,26 @@ def decided_digest(intent, delivery):
 
 
 def parent_hash(raw):
-    """Read only the parent hash from the native block/header RLP lists."""
-    data = bytes.fromhex(raw)
-    def list_start(offset):
-        prefix = data[offset]
-        if prefix < 0xc0:
-            raise ValueError("Expected native RLP list")
-        width = 0 if prefix <= 0xf7 else prefix - 0xf7
-        return offset + 1 + width
-    offset = list_start(list_start(0))
-    if data[offset] != 0xa0 or len(data[offset + 1:offset + 33]) != 32:
-        raise ValueError("Missing native parent hash")
-    return data[offset + 1:offset + 33].hex()
+    return native_header(raw)["parent"]
+
+
+def native_header(raw):
+    """Bind reported identities to the exact encoded native header."""
+    block = rlp_list(bytes.fromhex(raw))
+    if len(block) not in (3, 4):
+        raise ValueError("Unexpected native block field count")
+    encoded = block[0][1]
+    fields = header_fields(encoded)
+    if len(fields) not in (15, 16, 17, 20, 21):
+        raise ValueError("Unexpected fixture header field count")
+    if len(fields[PARENT_HASH]) != 32 or len(fields[STATE_ROOT]) != 32:
+        raise ValueError("Invalid native hash/root width")
+    for position in (NUMBER, 11):
+        if len(fields[position]) > 8 or fields[position].startswith(b"\0"):
+            raise ValueError("Noncanonical native header integer")
+    return {"hash": "0x" + keccak256(encoded).hex(), "parent": fields[PARENT_HASH].hex(),
+            "root": "0x" + fields[STATE_ROOT].hex(), "number": int.from_bytes(fields[NUMBER], "big"),
+            "time": int.from_bytes(fields[11], "big")}
 
 
 def check_records(case, views, check):
@@ -145,7 +246,16 @@ def check_import(case, blocks, errors, label):
     check(case.get("replay_system_calls_equal") is True, "re-execution system observations differ")
     views = case.get("blocks", [])
     check([b.get("number") for b in views] == list(range(1, blocks + 1)), "missing or duplicate block observations")
+    previous = None
     for block in views:
+        header = native_header(block["raw_block"])
+        check(block["hash"] == header["hash"], "reported block hash differs from raw native header")
+        check(block["number"] == header["number"], "reported block number differs from raw native header")
+        check(block["root"] == header["root"] and block["header_root"] == header["root"], "reported state root differs from raw native header")
+        check(header["time"] == block["number"] * 10, "native header timestamp differs from fixture")
+        if previous is not None:
+            check(header["parent"] == previous[2:], "native canonical chain is discontinuous")
+        previous = header["hash"]
         for field in ("body_equal", "root_equal", "gas_equal"):
             check(block.get(field) is True, f"block {block.get('number')} {field}")
         check("replay_error" in block and block["replay_error"] is None, "re-execution failed or absent")
@@ -155,6 +265,7 @@ def check_import(case, blocks, errors, label):
         for i, row in enumerate(rows):
             check(row.get("index") == i and row.get("receipt_equal") is True, "missing or differing receipt")
             check(isinstance(row.get("wire"), str) and bool(row["wire"]), "missing raw receipt")
+    check(case.get("head_hash") == previous, "native final head differs from raw header")
     check_records(case, views, check)
     return views
 

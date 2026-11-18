@@ -380,16 +380,64 @@
       "replacement": "if False:"
     },
     {
-      "name": "native parent list",
+      "name": "raw header guard 183",
       "file": "test/type_paths/eth/eth_type_judge.py",
-      "original": "if prefix < 0xc0:",
+      "original": "if len(block) not in (3, 4):",
       "replacement": "if False:"
     },
     {
-      "name": "native parent width",
+      "name": "raw header guard 187",
       "file": "test/type_paths/eth/eth_type_judge.py",
-      "original": "if data[offset] != 0xa0 or len(data[offset + 1:offset + 33]) != 32:",
+      "original": "if len(fields) not in (15, 16, 17, 20, 21):",
       "replacement": "if False:"
+    },
+    {
+      "name": "raw header guard 189",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "if len(fields[PARENT_HASH]) != 32 or len(fields[STATE_ROOT]) != 32:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "raw header guard 192",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "if len(fields[position]) > 8 or fields[position].startswith(b\"\\0\"):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "raw binding native final head differs from raw header",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "case.get(\"head_hash\") == previous",
+      "replacement": "True"
+    },
+    {
+      "name": "raw binding reported block hash differs from raw native header",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "block[\"hash\"] == header[\"hash\"]",
+      "replacement": "True"
+    },
+    {
+      "name": "raw binding reported block number differs from raw native header",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "block[\"number\"] == header[\"number\"]",
+      "replacement": "True"
+    },
+    {
+      "name": "raw binding reported state root differs from raw native header",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "block[\"root\"] == header[\"root\"] and block[\"header_root\"] == header[\"root\"]",
+      "replacement": "True"
+    },
+    {
+      "name": "raw binding native header timestamp differs from fixture",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "header[\"time\"] == block[\"number\"] * 10",
+      "replacement": "True"
+    },
+    {
+      "name": "raw binding native canonical chain is discontinuous",
+      "file": "test/type_paths/eth/eth_type_judge.py",
+      "original": "header[\"parent\"] == previous[2:]",
+      "replacement": "True"
     }
   ]
 }

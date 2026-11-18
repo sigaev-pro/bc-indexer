@@ -8,13 +8,31 @@ import unittest
 import eth_type_judge as judge
 
 
+def rlp(value):
+    if isinstance(value, list):
+        data, base = b"".join(rlp(item) for item in value), 0xc0
+    else:
+        data, base = value, 0x80
+        if len(data) == 1 and data[0] < 0x80:
+            return data
+    if len(data) < 56:
+        return bytes([base + len(data)]) + data
+    size = len(data).to_bytes((len(data).bit_length() + 7) // 8, "big")
+    return bytes([base + 55 + len(size)]) + size + data
+
+
 def imported_case(block_count=2):
     records = {}
     producer = "type-paths-eth.r0123456789abcdef"
     prefix = "extractor-decision-v1/" + producer + "/"
     views = []
+    parent = "00" * 32
     for i in range(block_count):
-        block_hash, root, parent = f"{i + 1:064x}", f"{i + 100:064x}", f"{i:064x}"
+        root = f"{i + 100:064x}"
+        header = [b""] * 15
+        header[0], header[3] = bytes.fromhex(parent), bytes.fromhex(root)
+        header[8], header[11] = bytes([i + 1]), bytes([(i + 1) * 10])
+        block_hash = judge.keccak256(rlp(header)).hex()
         intent = {"native_store_id": "e0105e71000000000000000000000001", "producer": producer,
                   "sequence": i, "kind": "IMPORT", "old_head": {"number": i, "hash": parent},
                   "new_head": {"number": i + 1, "hash": block_hash}, "members": [{
@@ -27,10 +45,11 @@ def imported_case(block_count=2):
             "delivery": "BATCH", "digest": judge.decided_digest(intent["digest"], "BATCH")})
         views.append({"number": i + 1, "hash": "0x" + block_hash, "root": "0x" + root, "header_root": "0x" + root,
                       "body_equal": True, "root_equal": True, "gas_equal": True,
-                      "replay_error": None, "raw_block": "e2e1a0" + parent, "receipt_count": 0, "receipts": []})
+                      "replay_error": None, "raw_block": rlp([header, [], []]).hex(), "receipt_count": 0, "receipts": []})
+        parent = block_hash
     records[prefix + "counter"] = json.dumps({"next": block_count})
     prefix = "extractor-admission-v1/" + producer + "/"
-    return {"attach_error": None, "import_error": None, "head": block_count, "hooks_closed": True,
+    return {"attach_error": None, "import_error": None, "head": block_count, "head_hash": "0x" + parent, "hooks_closed": True,
             "replay_transactions_equal": True, "replay_system_calls_equal": True,
             "admission_records": {prefix + "counter": json.dumps({"next": block_count}),
                                   prefix + "lowwater": json.dumps({"sequence": block_count}),
@@ -234,6 +253,93 @@ class JudgeTests(unittest.TestCase):
             kind = name.split("_")[0]
             self.assertEqual(judge.decided_digest(record["digest"], "BATCH" if kind == "import" else "CHECKPOINT"),
                              vectors[kind + "_decided_digest"])
+
+    def test_accepted_independent_codec_identity_and_vectors(self):
+        root = Path(__file__).resolve().parents[3]
+        source = (root / "test/harness/source_inputs_geth.py").read_text()
+        local = Path(judge.__file__).read_text()
+        self.assertEqual(source.split("KECCAK_ROUNDS =", 1)[1].split("\ndef capsule_digest(", 1)[0].strip(),
+                         local.split("KECCAK_ROUNDS =", 1)[1].split("\ndef quantity(", 1)[0].strip())
+        for data, expected in ((b"", "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),
+                               (b"abc", "4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45"),
+                               (b"a" * 200, "96ea54061def936c4be90b518992fdc6f12f535068a256229aca54267b4d084d"),
+                               (b"\x5a" * 136, "ddc757d2caa82320e140f35833c18e8cc3b230b2b9a48def3d98461ffae81716")):
+            self.assertEqual(judge.keccak256(data).hex(), expected)
+
+    def rebind_records(self):
+        case = self.observation["main"]
+        records = case["decision_records"]
+        for key in list(records):
+            if not key.endswith("/intent"):
+                continue
+            record = json.loads(records[key])
+            block = case["blocks"][record["sequence"]]
+            record["old_head"] = {"number": block["number"] - 1, "hash": judge.parent_hash(block["raw_block"])}
+            record["new_head"] = {"number": block["number"], "hash": block["hash"][2:]}
+            record["members"][0].update(block=block["hash"][2:], child_root=block["root"][2:])
+            record["digest"] = judge.intent_digest(record)
+            records[key] = json.dumps(record)
+            decided_key = key[:-6] + "decided"
+            decided = json.loads(records[decided_key])
+            decided.update(intent_digest=record["digest"], digest=judge.decided_digest(record["digest"], "BATCH"))
+            records[decided_key] = json.dumps(decided)
+        case["head_hash"] = case["blocks"][-1]["hash"]
+
+    def test_correlated_view_hash_cannot_replace_native_header(self):
+        self.observation["main"]["blocks"][0]["hash"] = "0x" + "ab" * 32
+        self.rebind_records()
+        self.failed("block hash differs from raw native header")
+
+    def test_correlated_view_root_cannot_replace_native_header(self):
+        block = self.observation["main"]["blocks"][0]
+        block["root"] = block["header_root"] = "0x" + "ab" * 32
+        self.rebind_records()
+        self.failed("state root differs from raw native header")
+        for field in ("root", "header_root"):
+            self.observation = valid_observation()
+            self.observation["main"]["blocks"][0][field] = "0x" + "ab" * 32
+            self.failed("state root differs from raw native header")
+
+    def change_header(self, index, position, value):
+        block = self.observation["main"]["blocks"][index]
+        header = [item for item, _ in judge.rlp_list(bytes.fromhex(block["raw_block"]))[0][0]]
+        header[position] = value
+        block["raw_block"] = rlp([header, [], []]).hex()
+        block["hash"] = "0x" + judge.keccak256(rlp(header)).hex()
+        self.rebind_records()
+
+    def test_correlated_native_headers_must_form_one_chain(self):
+        self.change_header(1, 0, b"\xab" * 32)
+        self.failed("canonical chain is discontinuous")
+
+    def test_native_final_head_binds_last_raw_header(self):
+        self.observation["main"]["head_hash"] = "0x" + "ab" * 32
+        self.failed("final head differs")
+
+    def test_header_number_and_time_are_independently_checked(self):
+        self.change_header(1, 8, b"\x03")
+        self.failed("block number differs from raw native header")
+        self.observation = valid_observation()
+        self.change_header(1, 11, b"\x15")
+        self.failed("timestamp differs")
+
+    def test_raw_header_shapes_widths_and_lengths(self):
+        header = [item for item, _ in judge.rlp_list(bytes.fromhex(self.observation["main"]["blocks"][0]["raw_block"]))[0][0]]
+        cases = [(rlp([header, []]), "field count"), (rlp([header, [], [], [], []]), "field count"),
+                 (rlp([header + header, [], []]), "header field count"),
+                 (rlp([header + [[b""]], [], []]) + b"\x00", "not exactly one"),
+                 (rlp([header[:14], [], []]), "not a header")]
+        for position, value in ((0, b"x" * 31), (3, b"x" * 33), (8, b"\0\x01"), (11, b"x" * 9)):
+            changed = list(header)
+            changed[position] = value
+            cases.append((rlp([changed, [], []]), "width" if position in (0, 3) else "integer"))
+        for raw, message in cases:
+            with self.assertRaisesRegex(ValueError, message):
+                judge.native_header(raw.hex())
+        for raw in (b"\x81\x01", b"\xb8\x01a", b"\xb9\x00\x40" + b"a" * 64, b"\x83ab", b"\xc2\x83a",
+                    b"\xc4\xc1\x82ab"):
+            with self.assertRaises((ValueError, IndexError)):
+                judge.rlp_list(raw)
 
     def test_native_record_duplicate_fields_are_rejected(self):
         records = self.observation["main"]["decision_records"]
