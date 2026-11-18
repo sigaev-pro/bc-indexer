@@ -124,11 +124,13 @@
   "oracle_sources": [
     {
       "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/44ebc6c17a00bd24db3240141a78091528dcebbb/contracts/BSCValidatorSet.sol",
-      "sha256": "447c092b3ea16135cbc6ad7acbca053513db928821711dc9105a434a73c8cb2f"
+      "sha256": "93fd53c9ca5d97d1c0b1bebef003737facf8d36c6a0edbb89e51c110d0dbca08",
+      "git_blob_sha1": "fc9ffda0e5890bff813a551d58cf56a1a306f77d"
     },
     {
       "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/44ebc6c17a00bd24db3240141a78091528dcebbb/contracts/System.sol",
-      "sha256": "ce0de07090a8c1795f019d40099d78c4266ef0660a3aaa5528990881c58dd155"
+      "sha256": "e22ba9b5eb526e776d91d9e6b2549ddb794b13279ad6c2417df6e04f2a86b67e",
+      "git_blob_sha1": "1f785c7849c91d2cd46abc848410f72a545e39a8"
     }
   ]
 }
