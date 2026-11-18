@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -240,6 +241,21 @@ class CopiedCodeTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
+    def test_run_refuses_corpus_from_another_native_source_before_creating_output(self):
+        tool = {"kind": "bor-faults-tool", "native_source_commit": "accepted"}
+        corpus = {"kind": "poly-corpus-run", "result": "PASS",
+                  "preparation": {"path": "/fixture/preparation.json", "sha256": "0" * 64}}
+        preparation = {"kind": "poly-corpus-preparation", "result": "PASS",
+                       "bor": {"source_commit": "other"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "must-not-exist"
+            with mock.patch.object(faults_poly, "pinned_json", side_effect=[({}, tool), ({}, corpus),
+                                                                         ({}, preparation)]):
+                with self.assertRaisesRegex(ValueError, "another Bor source"):
+                    faults_poly.run(Path("/fixture/tool.json"), "0" * 64, Path("/fixture/run.json"),
+                                    "0" * 64, output)
+            self.assertFalse(output.exists())
+
     def test_judge_command_exit_code(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "report.json"

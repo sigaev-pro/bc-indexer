@@ -679,20 +679,20 @@ func (n *instance) phase() string {
 }
 
 // insert imports the blocks one by one through the native import path and
-// returns the index of the first failed block, the error, and the state sync
-// data the native engine recorded for each processed block.
-func (n *instance) insert(blocks []*types.Block) (int, error, []map[string]any) {
+// returns the index of the first failed block, the state sync data the
+// native engine recorded for each processed block, and the error.
+func (n *instance) insert(blocks []*types.Block) (int, []map[string]any, error) {
 	events := []map[string]any{}
 	for i, block := range blocks {
 		if _, err := n.chain.InsertChain([]*types.Block{block}, false); err != nil {
-			return i, err, events
+			return i, events, err
 		}
 		for _, data := range n.chain.HeaderChain().GetStateSync() {
 			events = append(events, map[string]any{"block": block.NumberU64(), "id": data.ID,
 				"contract": hex.EncodeToString(data.Contract[:]), "data": hex.EncodeToString(data.Data)})
 		}
 	}
-	return len(blocks), nil, events
+	return len(blocks), events, nil
 }
 
 // ---------------------------------------------------------------- one case
@@ -776,7 +776,7 @@ func runCase(c config, in inputs, index int, point, variant string, blocks []*ty
 		liveErr = r.run.GoLive()
 	}
 	result["golive_error"] = errText(liveErr)
-	imported, importErr, events := r.insert(blocks)
+	imported, events, importErr := r.insert(blocks)
 	result["import"] = map[string]any{"index": imported, "error": errText(importErr)}
 	result["state_sync"] = events
 	final := map[string]any{"mode": r.phase(), "head": r.chain.CurrentBlock().Number.Uint64()}
@@ -880,12 +880,15 @@ func run(c config) {
 	for index, point := range points {
 		for v, variant := range []string{"crash", "power_loss"} {
 			out := filepath.Join(c.work, fmt.Sprintf("case-%02d.json", index*2+v))
-			cmd := exec.Command(self, append(c.args(), "-index", fmt.Sprint(index*2+v), "-point", point,
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			cmd := exec.CommandContext(ctx, self, append(c.args(), "-index", fmt.Sprint(index*2+v), "-point", point,
 				"-variant", variant, "-out", out)...)
 			cmd.Args[1] = "case"
 			var stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = io.Discard, &stderr
-			if err := cmd.Run(); err != nil {
+			err := cmd.Run()
+			cancel()
+			if err != nil {
 				tail := stderr.String()
 				if len(tail) > 2000 {
 					tail = tail[len(tail)-2000:]
