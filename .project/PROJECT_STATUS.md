@@ -4,15 +4,25 @@
 
 Status: IN_PROGRESS. Owner-authorized window: 01:23:22–07:23:22 Europe/Moscow. Baseline: `3c9414043600a57cf0c68ca5217dd606ebd9c789`. BSC part B is merged in PR #179; its earlier pending-merge entries below are historical.
 
-Coordinator: `/root`, branch `codex/autonomous-20261119`. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
+Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-02`. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
 
 | Session | Block | Exclusive implementation scope |
 |---|---|---|
 | `/root/geth_b` | #20 Geth part B | `test/native_faults/eth/**`, `adapters/geth/*/native/**`, `test/harness/fixtures/lifecycle_geth/**` for the D106 repaired judge, Geth early-fault evidence |
 | `/root/bor_b` | #20 Bor part B | `test/native_faults/poly/**`, `adapters/bor/*/native/**`, Bor early-fault evidence |
-| `/root/type_paths` | #21 native type paths | `adapters/{geth,bsc,bor}/type_mapping/**`, `test/type_paths/**`, `test/native_corpus/ORACLE.md` omitted fixture inputs, E01-05 evidence |
+| `/root/type_paths` | #21 source inventory foundation | Existing source inventories and common verifier/tests under `adapters/{geth,bsc,bor}/type_mapping` and `test/type_paths`; excludes new BSC native subdirectories below. Also ORACLE omitted inputs, CI discovery and its regression, E01-05 foundation evidence |
+| `/root/bsc_types_native` | #21 BSC native fixtures | `test/type_paths/bsc/**`, `adapters/bsc/type_mapping/native/**`, `.project/evidence/E01-05.type_paths.bsc.md` |
 
-Each implementer owns an isolated worktree and branch. Shared status, decisions, CI changes, and runtime slots are coordinated by root. Runtime slot: initially free; no worker may begin native measured preparation or execution without coordinator assignment. Portable checks may run independently.
+Each implementer owns an isolated worktree and branch. Shared status, decisions and runtime slots are coordinated by root; CI discovery-only changes belong exclusively to the source foundation worker. Runtime slot currently belongs to Bor early faults. No worker may begin native measured preparation or execution without coordinator assignment. Portable checks may run independently.
+
+Campaign checkpoint results:
+
+- Geth PR #182, clean pushed `20ecb95`: native preparation 03 FAIL at compilation (`StateAt` needs `*big.Int`, probe supplies `uint64`). Cleanup completed. No native success claimed. The implementation session hit a repeated platform restriction and stopped after preserving the running preparation result; remaining partial SetHead completion is not implemented. Preparation record SHA-256 `9f9fe551b488b9649369910596f21ebda69885af29296d56b3101849249c76a9`.
+- Bor PR #181: preparation from frozen `8bdd4cc` is in progress; no native result claimed yet.
+- Type source foundation PR #183 at `eccd6f6`: independent Standards PASS, Spec REQUEST_CHANGES for missing retained validation outputs. Author is preserving fresh checks and correcting evidence. This is partial #21, not stage acceptance.
+- Read-only QA session `/root/e01_gate_audit` reconciled accepted #10–19 and live issue state. No additional unowned E01 blocker found beyond #20 and #21; gate #78 stays open. D106's BSC lifecycle deferrals preserve the original raw FAIL record.
+
+Compact preserved failure logs and coordinator review are in [checkpoint archive 01](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-01-evidence.tar.gz), SHA-256 `d62b38110ccd79dc8977fa583d081a4472919b0fdcb736c099d9e637b220bc7d`. Uploaded asset digest verified. This supplements local run retention and published implementation commits; it does not include build caches.
 
 Checkpoint policy: save meaningful implementation changes locally and push draft PR checkpoints at least every 15–20 minutes when tools and network permit. Keep exact heads, failed runs, and next actions. The baseline source/history backup is published at https://github.com/sigaev-pro/bc-indexer/releases/tag/backup-2026-11-19-3c94140; ignored local run artifacts require separate preservation when material to new evidence.
 
