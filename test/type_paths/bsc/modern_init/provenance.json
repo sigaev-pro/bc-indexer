@@ -1,0 +1,136 @@
+{
+  "native_commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+  "contracts": [
+    {
+      "address": "0x0000000000000000000000000000000000001000",
+      "native_path": "core/systemcontracts/lorentz/mainnet/ValidatorContract",
+      "source_file_sha256": "e0776ecfd17b68157ba9bd72ba9872421d9c4850cc823cf5a9f0904bd1076fc4",
+      "bytecode_sha256": "7640aabe831abfea4708c9ae1ff7db7f7c9c57f8e07f4673f4b4607e46d7484e",
+      "contract_source_commit": "44ebc6c17a00bd24db3240141a78091528dcebbb"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001001",
+      "native_path": "core/systemcontracts/pascal/mainnet/SlashContract",
+      "source_file_sha256": "5d91578f4c78aaab9c01310cb72c7cc066e8e57080efb2718adca0615c9cad2a",
+      "bytecode_sha256": "deed235252c18be88d1dc944516d2dae5edfd40b6be0930abc54ad76843ce902",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001002",
+      "native_path": "core/systemcontracts/pascal/mainnet/SystemRewardContract",
+      "source_file_sha256": "3a26866363c3e2992bd0a08609fd11fc177f5cce46cdc9f9b9a2c99f8af9689f",
+      "bytecode_sha256": "8edf6a838f0e0b4367204aef31150db6dc37415b5c7a397755aef33748e108f9",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001003",
+      "native_path": "core/systemcontracts/pascal/mainnet/LightClientContract",
+      "source_file_sha256": "527f894a21fa1e5f1d80e60c629d041972fb1731c01533e9a076d7a665dac106",
+      "bytecode_sha256": "e833e678f43dacd753fb8c677a1a93fcf9014fbee235f2000a4ee1720b259a91",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001004",
+      "native_path": "core/systemcontracts/pascal/mainnet/TokenHubContract",
+      "source_file_sha256": "e1d89e61a7758c9985ddb69f48135c291bfd0b8de7697317b6118783ae95789e",
+      "bytecode_sha256": "3c667965606bd5647158c04a897964cb96ddd8238b083335cd69b250b7f66d89",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001005",
+      "native_path": "core/systemcontracts/pascal/mainnet/RelayerIncentivizeContract",
+      "source_file_sha256": "624fa1ffb49985f464580c423b57fef1022f28370d06acb3d7dcf090f57ef31b",
+      "bytecode_sha256": "47c66567d7118f61c5e4427b34eef4fda263fd0007533b14ffa62cca9364615b",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001006",
+      "native_path": "core/systemcontracts/pascal/mainnet/RelayerHubContract",
+      "source_file_sha256": "aece8ea9470f090db24f2dc37e4bbfb417ba2d3ccab0588dcf89cd5e746dd11c",
+      "bytecode_sha256": "7eee2a31a124ac7c7a458479386f6fc5c64d2f374e1b28e4c718995ac5a13f8e",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001007",
+      "native_path": "core/systemcontracts/pascal/mainnet/GovHubContract",
+      "source_file_sha256": "7874915e73c4e23602bf46eec79af1e2d1071ce3e3b4ed7d51da7ef2672ce6c0",
+      "bytecode_sha256": "d3ae7058d44f2d20c31f78b70e254b538ca23dd021d293ccd4075778d377908e",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000001008",
+      "native_path": "core/systemcontracts/pascal/mainnet/TokenManagerContract",
+      "source_file_sha256": "1fbd6c6ae280aa6d9e6c0e32781e504b94a232a734156daff1ca63bafe9640cc",
+      "bytecode_sha256": "f0fe49615a26e2cbacff59f82e8493a3117aa342a4c9f156521b1872525326c9",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002000",
+      "native_path": "core/systemcontracts/pascal/mainnet/CrossChainContract",
+      "source_file_sha256": "5714aa8b5dc204758e0b2b88a1235fc8ee9f5b9ca34c6eb9991dd7390a5c0aa4",
+      "bytecode_sha256": "f4fce7bd03299b16bbe013ffb724da6c4a1f01560ffcca7821027a24214ec727",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002001",
+      "native_path": "core/systemcontracts/pascal/mainnet/StakingContract",
+      "source_file_sha256": "e08b8c4e64623519ca5bde3b7e47b9e9fd0242b5bef15b45edeafb8d723908a7",
+      "bytecode_sha256": "dca7f46830c27d1eed30adf23eac646ba14e33d366274b8d5c78c2884773158d",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002002",
+      "native_path": "core/systemcontracts/pasteur/mainnet/StakeHubContract",
+      "source_file_sha256": "692693ec8e64231d904a310aee76963a71e35aca5ba4e4dc9ad6aa77cb178121",
+      "bytecode_sha256": "32177e5e9fbcc23289efbadccd9869803254073145ac0ab89d4b377f73b9fd8e",
+      "contract_source_commit": "041881a02475638b19f3d840871b7621cdebd8f8"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002003",
+      "native_path": "core/systemcontracts/pascal/mainnet/StakeCreditContract",
+      "source_file_sha256": "529987cdd19ff32e40af3bad8882e94f7ed2f7d590ed1594b91f4ac8083988d7",
+      "bytecode_sha256": "e8bfdfaa3bcb62eb8c239602afe04c45b8b1a29a63a98a90bd232d4b3905cb05",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002004",
+      "native_path": "core/systemcontracts/pasteur/mainnet/GovernorContract",
+      "source_file_sha256": "de7d7727ef3017033bdeac952cb5c698c8c743036876191686d43b9d2169679b",
+      "bytecode_sha256": "ec61737b55ffa868699297b7376861a09fe9e455bca2a123b809745b74cf18b7",
+      "contract_source_commit": "041881a02475638b19f3d840871b7621cdebd8f8"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002005",
+      "native_path": "core/systemcontracts/pascal/mainnet/GovTokenContract",
+      "source_file_sha256": "a1a83ef239ad6e0ae86101025ff72a6f6d8cfedc3ee9df7107e8a17c219578d8",
+      "bytecode_sha256": "d7bf2568d60b31f06a3b03d3b95bb6f03d69c6b0b64a335bcac0d6a0c180281b",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000002006",
+      "native_path": "core/systemcontracts/pascal/mainnet/TimelockContract",
+      "source_file_sha256": "1a8600e4dc6649cb2088a0eafa66c8ec5fc140a19f628a8d2dae65df03097c80",
+      "bytecode_sha256": "18be9f557c38343ce91541fa95aeacc38bca96c730a861c42796cb9f8bc7e128",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000003000",
+      "native_path": "core/systemcontracts/pascal/mainnet/TokenRecoverPortalContract",
+      "source_file_sha256": "ca4a9bd67cdb6cad27a1a7c533cf11e863b8f7a88907199d98dd4960ac20a02e",
+      "bytecode_sha256": "6b00679e7c369b16d8d93b2dbcfc044c8e48279f732ed77640b9438e5b95f4bf",
+      "contract_source_commit": "020c0459e37d1f9d635c1cff86dd1099ab1383fa"
+    }
+  ],
+  "oracle_sources": [
+    {
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/44ebc6c17a00bd24db3240141a78091528dcebbb/contracts/BSCValidatorSet.sol",
+      "sha256": "93fd53c9ca5d97d1c0b1bebef003737facf8d36c6a0edbb89e51c110d0dbca08",
+      "git_blob_sha1": "fc9ffda0e5890bff813a551d58cf56a1a306f77d"
+    },
+    {
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/44ebc6c17a00bd24db3240141a78091528dcebbb/contracts/System.sol",
+      "sha256": "e22ba9b5eb526e776d91d9e6b2549ddb794b13279ad6c2417df6e04f2a86b67e",
+      "git_blob_sha1": "1f785c7849c91d2cd46abc848410f72a545e39a8"
+    }
+  ]
+}
