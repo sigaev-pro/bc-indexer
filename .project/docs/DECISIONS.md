@@ -1,5 +1,18 @@
 # Дерево решений и журнал интервью
 
+## D107 — Six-hour autonomous development and durable checkpoints (2026-11-19)
+
+The owner explicitly accepted the coordinator's six recommendations and requested six hours of work, followed by saved results and a report. The owner also requested intermediate saves to minimize loss after Internet or computer failure.
+
+- Finish Geth part B and Bor part B of E01-04.early_faults, then E01-05.type_paths and G.E01; proceed to E02 if time remains and its gate permits it.
+- Branches, commits, pushes, PRs, and merges of passing PRs are authorized without another per-PR question during this campaign. This overrides D97's per-PR owner-permission requirement for this campaign only. Exact-head CI, independent Spec and Standards reviews, branch protection, and serialized merges remain required.
+- Independent implementers and reviewers are authorized. Native measured preparation and runs remain serialized under the host resource rules. D101's prohibition on long/load/product runs remains in force.
+- Resolve technical choices inside the accepted specification. Record requirements-changing questions as blocked and continue independent ready work; do not weaken acceptance criteria.
+- Use the current machine and existing GitHub resources only. No paid resources or production deployment.
+- Save meaningful local checkpoints and publish incomplete work as draft PRs. Target at most 15–20 minutes between durable implementation checkpoints; preserve failed evidence and record exact next steps. Network failures do not justify discarding local work or claiming an uncompleted push.
+
+Campaign clock: 2026-11-19 01:23:22–07:23:22 Europe/Moscow (2026-11-18 22:23:22 through 2026-11-19 04:23:22 UTC). On interruption, reconcile saved Git, PRs, evidence, and agent state before resuming. The deadline does not authorize bypassing gates.
+
 ## D106 — E01-02.lifecycle_seams accepted; reorg replay, startup finality and owners of the remaining limits (2026-11-14)
 
 After the four E01-02.lifecycle_seams blocks merged (block 0 in PR #165, Geth in PR #170, BSC in PR #172, Bor in PR #171), the coordinator asked a read-only Spec reviewer to audit their evidence for the acceptance record. The audit found no failed check and no bypass without an owner. It found two limits that defer part of a #18 guarantee, plus smaller limits with no owner card. The coordinator asked the owner five questions: two after the BSC block (2026-11-13) and three after the audit (2026-11-14). For each, the owner selected the coordinator's proposed option (marked as recommended):

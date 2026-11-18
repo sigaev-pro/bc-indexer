@@ -1,5 +1,23 @@
 # Состояние проекта
 
+## Autonomous campaign — 2026-11-19 (D107)
+
+Status: IN_PROGRESS. Owner-authorized window: 01:23:22–07:23:22 Europe/Moscow. Baseline: `3c9414043600a57cf0c68ca5217dd606ebd9c789`. BSC part B is merged in PR #179; its earlier pending-merge entries below are historical.
+
+Coordinator: `/root`, branch `codex/autonomous-20261119`. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
+
+| Session | Block | Exclusive implementation scope |
+|---|---|---|
+| `/root/geth_b` | #20 Geth part B | `test/native_faults/eth/**`, `adapters/geth/*/native/**`, `test/harness/fixtures/lifecycle_geth/**` for the D106 repaired judge, Geth early-fault evidence |
+| `/root/bor_b` | #20 Bor part B | `test/native_faults/poly/**`, `adapters/bor/*/native/**`, Bor early-fault evidence |
+| `/root/type_paths` | #21 native type paths | `adapters/{geth,bsc,bor}/type_mapping/**`, `test/type_paths/**`, `test/native_corpus/ORACLE.md` omitted fixture inputs, E01-05 evidence |
+
+Each implementer owns an isolated worktree and branch. Shared status, decisions, CI changes, and runtime slots are coordinated by root. Runtime slot: initially free; no worker may begin native measured preparation or execution without coordinator assignment. Portable checks may run independently.
+
+Checkpoint policy: save meaningful implementation changes locally and push draft PR checkpoints at least every 15–20 minutes when tools and network permit. Keep exact heads, failed runs, and next actions. The baseline source/history backup is published at https://github.com/sigaev-pro/bc-indexer/releases/tag/backup-2026-11-19-3c94140; ignored local run artifacts require separate preservation when material to new evidence.
+
+Next: implement and independently review both remaining #20 client blocks; develop #21 independently against its accepted corpus dependency. Do not close #20 or G.E01 without complete assigned evidence. Stop campaign development at the deadline, save partial work, and report verified results and remaining work.
+
 ## E01-04.early_faults — Early capture and decision boundaries under power loss (issue #20)
 
 Status: IN_PROGRESS. Block 0 (faults-core) merged in PR #174 at `bdf3919`,
