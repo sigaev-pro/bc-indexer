@@ -5,7 +5,8 @@
   "description": "Single-check mutations of the BSC native type-path component report verifier; no native credit.",
   "copy": [
     "test/type_paths/bsc/*.py",
-    "test/harness/*.py"
+    "test/harness/*.py",
+    "test/evidence/*.py"
   ],
   "test": [
     "{python}",
