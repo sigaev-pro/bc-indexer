@@ -23,6 +23,21 @@ def step(report, path, name):
 
 
 class Judge(unittest.TestCase):
+    def test_repaired_requires_the_exact_unresolved_intent(self):
+        for change in (
+                lambda r: r.update(decisions=[]),
+                lambda r: r["decisions"][-1].update(state="NATIVE_DECIDED"),
+                lambda r: r["decisions"][-1].update(old_hash="A3"),
+                lambda r: r["decisions"][-1].update(new_hash="H6"),
+                lambda r: r["decisions"][-1].update(members=[]),
+                lambda r: r["decisions"][-1].update(sequence=999),
+                lambda r: r["decisions"].append(copy.deepcopy(r["decisions"][-1]))):
+            report = copy.deepcopy(SAMPLE)
+            change(next(r for r in report["crashes"] if r["scenario"] == "repaired"))
+            failures, _, verdict = lifecycle_geth.judge(report)
+            self.assertEqual(verdict, "FAIL")
+            self.assertTrue(any("crashes: repaired:" in f for f in failures), failures)
+
     def test_sample_passes(self):
         failures, matrix, result = lifecycle_geth.judge(copy.deepcopy(SAMPLE))
         self.assertEqual(failures, [])
