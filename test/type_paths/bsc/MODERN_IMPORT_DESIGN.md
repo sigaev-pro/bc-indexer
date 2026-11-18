@@ -1,6 +1,9 @@
 # Modern private BSC import fixture
 
-Status: design; execution, initialization and import proof are NOT_RUN.
+Status: full import design; complete initialization and import are NOT_RUN.
+A separate validator init/deprecated-deposit prerequisite has native PASS;
+see [its bounded scope](modern_init/README.md) and
+[retained evidence](../../../.project/evidence/E01-05.type_paths.bsc.md).
 Base: accepted PR185 (`6cb31bcc498f054559a37fa7bc39456efc423e4e`).
 This fixture must not turn the accepted decoder/classifier component result into
 an execution claim. Issue #21 remains open.
