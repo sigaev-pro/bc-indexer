@@ -117,6 +117,13 @@ class JudgeTests(unittest.TestCase):
             verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(probe)}
             self.assertEqual(verdicts["bor.power-loss-model"], "FAIL", field)
 
+        probe = sample()
+        probe["handoff_runs"] = handoff_sample()
+        row = probe["handoff_runs"]["bor.power-loss-model"]
+        row["predecessor"]["hash"] = row["recovery"]["repaired"]["hash"] = "00" * 32
+        verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(probe)}
+        self.assertEqual(verdicts["bor.power-loss-model"], "FAIL")
+
     def test_handoff_faults_and_refusals_fail_closed(self):
         for hid in handoff_sample():
             for broken in (None, {}, {"child_error": "timeout"}):
