@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "copy": [
+    "test/type_paths/poly/*",
+    "test/native_corpus/poly/*.py",
+    "test/native_corpus/poly/main.go",
+    "test/native_corpus/*.py",
+    "test/harness/*.py"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/type_paths/poly",
+    "-v"
+  ],
+  "timeout_seconds": 30,
+  "mutants": [
+    {
+      "name": "accepted corpus identity ignored",
+      "file": "test/type_paths/poly/poly_support.py",
+      "original": "if hashlib.sha256(source).hexdigest() != CORPUS_SHA256:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "unscheduled Hampi admitted",
+      "file": "test/type_paths/poly/poly_profile.py",
+      "original": "if bor.get(\"hampiBlock\") is not None:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "non Bor schedule admitted",
+      "file": "test/type_paths/poly/poly_profile.py",
+      "original": "if config.get(field) is not None:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "prepared fixture identity ignored",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require(set(tool[\"fixture\"]) == set(FILES) and all(\n        tool[\"fixture\"][name] == reference(HERE / name) for name in FILES),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "prepared input membership ignored",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require({Path(item[\"path\"]).name for item in tool[field]} == expected and len(tool[field]) == len(expected),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "prepared input ownership ignored",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require(all(Path(item[\"path\"]).parent == tool_path.parent / \"bor\" / field for item in tool[field]),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "mutable runtime accepted",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", tool[\"runtime\"]),",
+      "replacement": "require(True,"
+    }
+  ]
+}
