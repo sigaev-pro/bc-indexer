@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "description": "Single-check mutations of the BSC native type-path component report verifier; no native credit.",
+  "copy": [
+    "test/type_paths/bsc/*.py",
+    "test/harness/*.py",
+    "test/evidence/*.py"
+  ],
+  "test": [
+    "{python}",
+    "test/type_paths/bsc/test_native.py",
+    "-v"
+  ],
+  "import": [
+    "test_native"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "public boundary",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "report.get(field) == \"NOT_RUN\"",
+      "replacement": "True"
+    },
+    {
+      "name": "row set",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "len(keys) == len(rows) and sorted(keys) == sorted(expected)",
+      "replacement": "True"
+    },
+    {
+      "name": "native hash",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "re.fullmatch(r\"0x[0-9a-fA-F]{64}\", row.get(\"hash\", \"\")) is not None",
+      "replacement": "True"
+    },
+    {
+      "name": "native sender",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "row[\"sender\"].lower() == \"0x7e5f4552091a69125d5dfcb7b8c2659029395bdf\"",
+      "replacement": "True"
+    },
+    {
+      "name": "activation boundary",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "(row[\"block\"], row[\"time\"]) == boundary",
+      "replacement": "True"
+    },
+    {
+      "name": "unknown coverage",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "type(report.get(\"unknown_typed_ids_rejected\")) is int and report[\"unknown_typed_ids_rejected\"] == 123",
+      "replacement": "True"
+    },
+    {
+      "name": "classification identities",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "all(row.get(\"system\") is True and row.get(\"hash\") == hashes[row[\"type\"]] for row in classification)",
+      "replacement": "True"
+    },
+    {
+      "name": "classifier controls",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "type(report.get(\"classification_controls\")) is int and report[\"classification_controls\"] == 5",
+      "replacement": "True"
+    },
+    {
+      "name": "type integer",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "type(row[\"type\"]) is int",
+      "replacement": "True"
+    },
+    {
+      "name": "classification types",
+      "file": "test/type_paths/bsc/native.py",
+      "original": "sorted(row[\"type\"] for row in classification) == list(range(5))",
+      "replacement": "True"
+    }
+  ]
+}
