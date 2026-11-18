@@ -61,7 +61,7 @@ EXPECTED = ROOT / "test" / "native_corpus" / "expected" / "poly.json"
 HARNESS_FILES = ("artifacts.py", "native.py", "owned.py", "pins.py", "bor_admission_tree.py", "admission.py",
                  "capture_probe.py")
 BLOCK_FILES = ("test/native_faults/poly/faults_poly.py", "test/native_faults/poly/main.go",
-               "test/native_faults/poly/handoffs.go", "adapters/bor/lifecycle/native/probe/main.go",
+               "test/native_faults/poly/handoffs.go", "test/native_faults/poly/children.go", "adapters/bor/lifecycle/native/probe/main.go",
                "adapters/bor/faults/native/patches.json", "adapters/bor/lifecycle/native/lifecycle_tree.py",
                "test/native_corpus/poly/poly_corpus.py", "test/native_corpus/corpus_compare.py",
                "test/native_faults/faults_judge.py", "test/native_faults/faults.json")
@@ -298,6 +298,9 @@ def prepare(manifest_path, expected_sha, output):
         handoff = FIXTURE / "handoffs.go"
         handoff_ref = copy_artifact(handoff, target / handoff.name, reference(handoff, deadline=deadline),
                                     deadline=deadline)
+        children = FIXTURE / "children.go"
+        children_ref = copy_artifact(children, target / children.name, reference(children, deadline=deadline),
+                                     deadline=deadline)
         stub_ref = copy_artifact(STUB, target / "heimdallstub" / "stub.go", reference(STUB, 4 * 1024 * 1024, deadline),
                                  4 * 1024 * 1024, deadline)
         for name in ("bin", "build-cache", "gopath", "gotmp"):
@@ -320,7 +323,7 @@ def prepare(manifest_path, expected_sha, output):
         tool = {"schema_version": 1, "kind": "bor-faults-tool", "build_manifest": manifest_ref,
                 "native_source_commit": closure["source_commit"], "source_archive": copied, "compiler": compiler,
                 "runtime": runtime, "installed": installed, "faults_install": faults, "probe": probe_ref,
-                "heimdall_stub": stub_ref, "handoffs": handoff_ref,
+                "heimdall_stub": stub_ref, "handoffs": handoff_ref, "children": children_ref,
                 "binary": reference(root / "bin" / "probe", BINARY_LIMIT, deadline)}
         pins.save(output / "tool.json", tool)
         proof["tool"] = reference(output / "tool.json", deadline=deadline)

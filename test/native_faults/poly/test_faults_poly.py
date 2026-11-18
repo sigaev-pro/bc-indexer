@@ -331,7 +331,7 @@ class CopiedCodeTests(unittest.TestCase):
         self.assertLess(start.index("whitelist.ExtractorEnter = nil"), start.index("newStack(dataDir)"))
 
     def test_each_case_runs_in_its_own_process(self):
-        self.assertIn('cmd.Args[1] = "case"', go_block(self.ours, "func run("))
+        self.assertIn('args[0] = "case"', go_block(self.ours, "func run("))
 
     def test_contention_hook_is_test_only_and_reports_the_actual_mutex(self):
         patches = json.loads((faults_poly.NATIVE / "patches.json").read_text())["patches"]
@@ -346,9 +346,9 @@ class CopiedCodeTests(unittest.TestCase):
 
     def test_child_deadlines_and_error_last_contract(self):
         run = go_block(self.ours, "func run(")
-        self.assertEqual(run.count("context.WithTimeout(context.Background(), 30*time.Second)"), 2)
-        self.assertEqual(run.count("exec.CommandContext(ctx, self,"), 2)
-        self.assertEqual(run.count("cancel()"), 2)
+        self.assertEqual(run.count("30*time.Second"), 2)
+        self.assertIn("runChildren(self, caseJobs,", run)
+        self.assertIn("runChildren(self, handoffJobs,", run)
         self.assertIn("func (n *instance) insert(blocks []*types.Block) (int, []map[string]any, error)", self.ours)
 
 

@@ -28,7 +28,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -38,7 +37,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -879,57 +877,26 @@ func run(c config) {
 	}
 	self, err := os.Executable()
 	check(err)
-	cases := []any{}
+	caseJobs := []childJob{}
 	for index, point := range points {
 		for v, variant := range []string{"crash", "power_loss"} {
 			out := filepath.Join(c.work, fmt.Sprintf("case-%02d.json", index*2+v))
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			cmd := exec.CommandContext(ctx, self, append(c.args(), "-index", fmt.Sprint(index*2+v), "-point", point,
-				"-variant", variant, "-out", out)...)
-			cmd.Args[1] = "case"
-			var stderr bytes.Buffer
-			cmd.Stdout, cmd.Stderr = io.Discard, &stderr
-			err := cmd.Run()
-			cancel()
-			if err != nil {
-				tail := stderr.String()
-				if len(tail) > 2000 {
-					tail = tail[len(tail)-2000:]
-				}
-				cases = append(cases, map[string]any{"point": point, "variant": variant,
-					"child_error": fmt.Sprintf("%v: %s", err, tail)})
-				continue
-			}
-			data, err := os.ReadFile(out)
-			check(err)
-			var result map[string]any
-			check(json.Unmarshal(data, &result))
-			cases = append(cases, result)
+			args := append(c.args(), "-index", fmt.Sprint(index*2+v), "-point", point, "-variant", variant, "-out", out)
+			args[0] = "case"
+			caseJobs = append(caseJobs, childJob{args: args, output: out, identity: map[string]any{"point": point, "variant": variant}})
 		}
 	}
-	handoffs := map[string]any{}
+	cases := runChildren(self, caseJobs, 30*time.Second)
+	handoffJobs := []childJob{}
 	for _, id := range []string{"bor.pass-at-golive", "bor.below-h-rewind", "bor.golive-order", "bor.bootstrap-vote-pass", "bor.power-loss-model"} {
 		out := filepath.Join(c.work, id+".json")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		cmd := exec.CommandContext(ctx, self, append(c.args(), "-point", id, "-out", out)...)
-		cmd.Args[1] = "handoff"
-		var stderr bytes.Buffer
-		cmd.Stdout, cmd.Stderr = io.Discard, &stderr
-		err := cmd.Run()
-		cancel()
-		if err != nil {
-			tail := stderr.String()
-			if len(tail) > 2000 {
-				tail = tail[len(tail)-2000:]
-			}
-			handoffs[id] = map[string]any{"child_error": fmt.Sprintf("%v: %s", err, tail)}
-			continue
-		}
-		data, err := os.ReadFile(out)
-		check(err)
-		var result map[string]any
-		check(json.Unmarshal(data, &result))
-		handoffs[id] = result
+		args := append(c.args(), "-point", id, "-out", out)
+		args[0] = "handoff"
+		handoffJobs = append(handoffJobs, childJob{args: args, output: out, identity: map[string]any{"id": id}})
+	}
+	handoffs := map[string]any{}
+	for index, result := range runChildren(self, handoffJobs, 30*time.Second) {
+		handoffs[handoffJobs[index].identity["id"].(string)] = result
 	}
 	report := map[string]any{"schema_version": 1, "kind": "native-faults-probe", "family": "poly",
 		"storage_model": "pebble-v1-strict-mem", "native_commit": c.commit,

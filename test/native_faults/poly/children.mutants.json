@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "language": "go",
+  "copy": ["children.go", "children_test.go"],
+  "go_module": "bor-child-controls",
+  "test": ["go", "test", "-v", "-count=1", "-timeout=10s", "./..."],
+  "timeout_seconds": 120,
+  "mutants": [
+    {"name": "child deadline ignored", "file": "children.go", "original": "exec.CommandContext(ctx, executable", "replacement": "exec.CommandContext(context.WithoutCancel(ctx), executable"},
+    {"name": "child wait omitted", "file": "children.go", "original": "cmd.Run()", "replacement": "cmd.Start()"},
+    {"name": "child nonzero exit ignored", "file": "children.go", "original": "if err := cmd.Run(); err != nil", "replacement": "if err := cmd.Run(); false"},
+    {"name": "child error field omitted", "file": "children.go", "original": "result[\"child_error\"]", "replacement": "result[\"ignored_error\"]"},
+    {"name": "child identity omitted", "file": "children.go", "original": "result[key] = value", "replacement": "result[key+\"ignored\"] = value"},
+    {"name": "child diagnostics omitted", "file": "children.go", "original": "err, stderr.data", "replacement": "err, []byte{}"},
+    {"name": "later child omitted", "file": "children.go", "original": "results = append(results, runChild(executable, job, timeout))", "replacement": "results = append(results, runChild(executable, job, timeout)); break"},
+    {"name": "large diagnostic bound removed", "file": "children.go", "original": "p[len(p)-childDiagnosticLimit:]", "replacement": "p"},
+    {"name": "chunked diagnostic bound removed", "file": "children.go", "original": "w.data = w.data[len(w.data)-childDiagnosticLimit:]", "replacement": "w.data = append([]byte(nil), w.data...)"},
+    {"name": "missing output error ignored", "file": "children.go", "original": "data, err := os.ReadFile(job.output)\n\tif err != nil", "replacement": "data, err := os.ReadFile(job.output)\n\tif false"},
+    {"name": "malformed output accepted", "file": "children.go", "original": "if err := json.Unmarshal(data, &result); err != nil", "replacement": "if err := json.Unmarshal(data, &result); false"},
+    {"name": "null output accepted", "file": "children.go", "original": "if result == nil", "replacement": "if false"}
+  ]
+}
