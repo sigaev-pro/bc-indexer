@@ -4,15 +4,27 @@
 
 Status: IN_PROGRESS. Owner-authorized window: 01:23:22–07:23:22 Europe/Moscow. Baseline: `3c9414043600a57cf0c68ca5217dd606ebd9c789`. BSC part B is merged in PR #179; its earlier pending-merge entries below are historical.
 
-Coordinator: `/root`, branch `codex/autonomous-20261119`. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
+Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-02`. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
 
 | Session | Block | Exclusive implementation scope |
 |---|---|---|
 | `/root/geth_b` | #20 Geth part B | `test/native_faults/eth/**`, `adapters/geth/*/native/**`, `test/harness/fixtures/lifecycle_geth/**` for the D106 repaired judge, Geth early-fault evidence |
 | `/root/bor_b` | #20 Bor part B | `test/native_faults/poly/**`, `adapters/bor/*/native/**`, Bor early-fault evidence |
-| `/root/type_paths` | #21 native type paths | `adapters/{geth,bsc,bor}/type_mapping/**`, `test/type_paths/**`, `test/native_corpus/ORACLE.md` omitted fixture inputs, E01-05 evidence |
+| `/root/type_paths` | #21 ETH native fixtures after accepted source foundation | `test/type_paths/eth/**`, `adapters/geth/type_mapping/native/**`, `.project/evidence/E01-05.type_paths.eth.md`; no early-fault/lifecycle changes |
+| `/root/bsc_types_native` | #21 BSC native fixtures | `test/type_paths/bsc/**`, `adapters/bsc/type_mapping/native/**`, `.project/evidence/E01-05.type_paths.bsc.md` |
 
-Each implementer owns an isolated worktree and branch. Shared status, decisions, CI changes, and runtime slots are coordinated by root. Runtime slot: initially free; no worker may begin native measured preparation or execution without coordinator assignment. Portable checks may run independently.
+Each implementer owns an isolated worktree and branch. Shared status, decisions, and future shared CI changes are coordinated by root; source-foundation CI discovery changes are accepted in PR #183. Runtime slot currently belongs to Bor early faults. No worker may begin native measured preparation or execution without coordinator assignment. Portable checks may run independently.
+
+Campaign checkpoint results:
+
+- Geth PR #182, clean pushed `20ecb95`: native preparation 03 FAIL at compilation (`StateAt` needs `*big.Int`, probe supplies `uint64`). Cleanup completed. No native success claimed. The implementation session hit a repeated platform restriction and stopped after preserving the running preparation result; remaining partial SetHead completion is not implemented. Preparation record SHA-256 `9f9fe551b488b9649369910596f21ebda69885af29296d56b3101849249c76a9`.
+- Bor PR #181: preparation from frozen `8bdd4cc` passed `go vet` and is building the probe; no native runtime result claimed yet. A subsequent correction will strengthen actual guard-contention evidence for the GoLive-order handoff.
+- Type source foundation PR #183: accepted at merge `f2911c6a043da51891466e41acc88bef41c3ddf7`, reviewed head `1f3225ed6d227db4535836a5c7602394c7b7be92`. Earlier Spec REQUEST_CHANGES for missing retained logs was resolved by honest fresh checks and evidence updates; both independent reviews and exact-head CI passed. This accepts the source-inventory foundation only. Issue #21 and G.E01 remain open.
+- Read-only QA session `/root/e01_gate_audit` reconciled accepted #10–19 and live issue state. No additional unowned E01 blocker found beyond #20 and #21; gate #78 stays open. D106's BSC lifecycle deferrals preserve the original raw FAIL record.
+
+Compact preserved failure logs and coordinator review are in [checkpoint archive 01](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-01-evidence.tar.gz), SHA-256 `d62b38110ccd79dc8977fa583d081a4472919b0fdcb736c099d9e637b220bc7d`. Uploaded asset digest verified. This supplements local run retention and published implementation commits; it does not include build caches.
+
+Type-path validation, mutation outputs and independent review are in [checkpoint archive 02](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-02-type-paths-evidence.tar.gz), SHA-256 `a1ee2534c4e9b497dbf63eaae54660e0314a14632b5e41de5b169016442912b0`; uploaded asset digest verified. ETH and BSC current-fork fixture work now proceeds independently, with native preparation and runs serialized behind Bor.
 
 Checkpoint policy: save meaningful implementation changes locally and push draft PR checkpoints at least every 15–20 minutes when tools and network permit. Keep exact heads, failed runs, and next actions. The baseline source/history backup is published at https://github.com/sigaev-pro/bc-indexer/releases/tag/backup-2026-11-19-3c94140; ignored local run artifacts require separate preservation when material to new evidence.
 
