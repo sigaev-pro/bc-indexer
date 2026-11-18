@@ -1,6 +1,7 @@
 """Synthetic controls of the ETH judge; these are not native runtime evidence."""
 
 import copy
+import json
 from pathlib import Path
 import unittest
 
@@ -9,16 +10,33 @@ import eth_type_judge as judge
 
 def imported_case(block_count=2):
     records = {}
+    producer = "type-paths-eth.r0123456789abcdef"
+    prefix = "extractor-decision-v1/" + producer + "/"
+    views = []
     for i in range(block_count):
-        records[f"decision/{i}/intent"] = "{}"
-        records[f"decision/{i}/decided"] = "{}"
+        block_hash, root, parent = f"{i + 1:064x}", f"{i + 100:064x}", f"{i:064x}"
+        intent = {"native_store_id": "e0105e71000000000000000000000001", "producer": producer,
+                  "sequence": i, "kind": "IMPORT", "old_head": {"number": i, "hash": parent},
+                  "new_head": {"number": i + 1, "hash": block_hash}, "members": [{
+                      "observation": producer + f".{i:016x}", "block": block_hash,
+                      "exec_ready_digest": "a" * 64, "child_root": root}], "evidence_digest": "b" * 64,
+                  "events": True}
+        intent["digest"] = judge.intent_digest(intent)
+        records[prefix + f"{i:016x}/intent"] = json.dumps(intent)
+        records[prefix + f"{i:016x}/decided"] = json.dumps({"sequence": i, "intent_digest": intent["digest"],
+            "delivery": "BATCH", "digest": judge.decided_digest(intent["digest"], "BATCH")})
+        views.append({"number": i + 1, "hash": "0x" + block_hash, "root": "0x" + root, "header_root": "0x" + root,
+                      "body_equal": True, "root_equal": True, "gas_equal": True,
+                      "replay_error": None, "raw_block": "e2e1a0" + parent, "receipt_count": 0, "receipts": []})
+    records[prefix + "counter"] = json.dumps({"next": block_count})
+    prefix = "extractor-admission-v1/" + producer + "/"
     return {"attach_error": None, "import_error": None, "head": block_count, "hooks_closed": True,
             "replay_transactions_equal": True, "replay_system_calls_equal": True,
-            "admission_records": {"admission/counter": '{"next":2}'}, "decision_records": records,
+            "admission_records": {prefix + "counter": json.dumps({"next": block_count}),
+                                  prefix + "lowwater": json.dumps({"sequence": block_count}),
+                                  prefix + "purged": json.dumps({"sequence": block_count})}, "decision_records": records,
             "transactions": [], "system_calls": [],
-            "blocks": [{"number": n, "body_equal": True, "root_equal": True, "gas_equal": True,
-                        "replay_error": None, "raw_block": "c0", "receipt_count": 0, "receipts": []}
-                       for n in range(1, block_count + 1)]}
+            "blocks": views}
 
 
 def valid_observation():
@@ -196,8 +214,79 @@ class JudgeTests(unittest.TestCase):
         self.failed("differing receipt")
 
     def test_missing_decision_is_failure(self):
-        del self.observation["main"]["decision_records"]["decision/0/decided"]
+        records = self.observation["main"]["decision_records"]
+        del records[next(k for k in records if k.endswith("/decided"))]
         self.failed("unresolved capture intent")
+
+    def test_each_fee_field_is_independent(self):
+        for index, field, error in ((0, "gasPrice", "gas price"), (2, "maxFeePerGas", "fee caps"),
+                                    (2, "maxPriorityFeePerGas", "fee caps"), (3, "maxFeePerBlobGas", "blob source")):
+            self.observation = valid_observation()
+            self.observation["main"]["transactions"][index]["fields"][field] = "0x0"
+            self.failed(error)
+
+    def test_native_digest_vectors(self):
+        root = Path(__file__).resolve().parents[3]
+        vectors = json.loads((root / "adapters/geth/decision/vectors.json").read_text())
+        for name in ("import_marker", "finality_marker"):
+            record = json.loads(vectors[name])
+            self.assertEqual(judge.intent_digest(record), record["digest"])
+
+    def test_malformed_and_unrelated_native_records(self):
+        for group in ("decision_records", "admission_records"):
+            self.observation = valid_observation()
+            records = self.observation["main"][group]
+            for key in records:
+                records[key] = "not JSON"
+            self.failed("Malformed")
+        self.observation = valid_observation()
+        self.observation["main"]["admission_records"] = {"arbitrary": '{}'}
+        self.failed("admission frontier")
+
+    def test_native_records_bind_every_identity_and_digest(self):
+        edits = [("intent", "native_store_id", "other"), ("intent", "producer", "other"),
+                 ("intent", "sequence", 9), ("intent", "kind", "FINALITY"), ("intent", "events", False),
+                 ("intent", "old_head", {"number": 0, "hash": "f" * 64}),
+                 ("intent", "new_head", {"number": 1, "hash": "f" * 64}),
+                 ("intent", "digest", "f" * 64), ("intent", "evidence_digest", "f" * 64),
+                 ("decided", "sequence", 9), ("decided", "intent_digest", "f" * 64),
+                 ("decided", "delivery", "EMPTY"), ("decided", "digest", "f" * 64),
+                 ("intent", "extra", True), ("decided", "extra", True)]
+        for suffix, field, value in edits:
+            with self.subTest(suffix=suffix, field=field):
+                self.observation = valid_observation()
+                records = self.observation["main"]["decision_records"]
+                key = next(k for k in records if k.endswith("/" + suffix))
+                record = json.loads(records[key])
+                record[field] = value
+                records[key] = json.dumps(record)
+                self.assertEqual(judge.judge(self.observation)["result"], "FAIL")
+
+    def test_member_bindings_even_with_recomputed_digests(self):
+        for field, value in (("observation", "other.0000000000000000"), ("block", "f" * 64),
+                             ("child_root", "f" * 64), ("extra", True)):
+            self.observation = valid_observation()
+            records = self.observation["main"]["decision_records"]
+            key = next(k for k in records if k.endswith("/intent"))
+            record = json.loads(records[key])
+            record["members"][0][field] = value
+            record["digest"] = judge.intent_digest(record)
+            records[key] = json.dumps(record)
+            decided = json.loads(records[key[:-6] + "decided"])
+            decided.update(intent_digest=record["digest"], digest=judge.decided_digest(record["digest"], "BATCH"))
+            records[key[:-6] + "decided"] = json.dumps(decided)
+            self.assertEqual(judge.judge(self.observation)["result"], "FAIL")
+
+    def test_frontier_and_extra_records(self):
+        for group, suffix, value in (("decision_records", "counter", {"next": 3}),
+                                    ("admission_records", "counter", {"next": 3}),
+                                    ("admission_records", "lowwater", {"sequence": 1}),
+                                    ("admission_records", "purged", {"sequence": 1})):
+            self.observation = valid_observation()
+            records = self.observation["main"][group]
+            key = next(k for k in records if k.endswith("/" + suffix))
+            records[key] = json.dumps(value)
+            self.failed("frontier")
 
     def test_missing_admission_is_failure(self):
         self.observation["main"]["admission_records"] = {}

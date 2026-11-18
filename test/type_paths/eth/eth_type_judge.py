@@ -4,6 +4,8 @@
 import argparse
 from collections import Counter
 import json
+import hashlib
+import re
 from pathlib import Path
 
 NATIVE = "1df30b18d9ed35ee9d28ffd4648442c2204554ad"
@@ -30,6 +32,107 @@ def quantity(value):
     raise ValueError("Expected a nonnegative quantity")
 
 
+def native_json(value):
+    def unique(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("Duplicate native record field")
+            result[key] = item
+        return result
+    return json.loads(value, object_pairs_hook=unique)
+
+
+def uint64(value):
+    if type(value) is not int or not 0 <= value < 2**64:
+        raise ValueError("Invalid native uint64")
+    return value.to_bytes(8, "big")
+
+
+def digest_bytes(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError("Invalid native digest")
+    return bytes.fromhex(value)
+
+
+def native_text(value):
+    data = value.encode("utf-8")
+    return uint64(len(data)) + data
+
+
+def intent_digest(record):
+    """Pinned adapters/geth/decision/decision.go IntentDigest encoding."""
+    data = b"extractor-decision-intent-v1\0"
+    data += native_text(record["native_store_id"]) + native_text(record["producer"])
+    data += uint64(record["sequence"]) + native_text(record["kind"])
+    for head in (record["old_head"], record["new_head"]):
+        data += uint64(head["number"]) + digest_bytes(head["hash"])
+    data += uint64(len(record["members"]))
+    for member in record["members"]:
+        data += native_text(member["observation"])
+        for field in ("block", "exec_ready_digest", "child_root"):
+            data += digest_bytes(member[field])
+    data += digest_bytes(record["evidence_digest"]) + bytes([record["events"]])
+    return hashlib.sha256(data).hexdigest()
+
+
+def decided_digest(intent, delivery):
+    return hashlib.sha256(b"extractor-decision-decided-v1\0" + digest_bytes(intent) + native_text(delivery)).hexdigest()
+
+
+def parent_hash(raw):
+    """Read only the parent hash from the native block/header RLP lists."""
+    data = bytes.fromhex(raw)
+    def list_start(offset):
+        prefix = data[offset]
+        if prefix < 0xc0:
+            raise ValueError("Expected native RLP list")
+        width = 0 if prefix <= 0xf7 else prefix - 0xf7
+        return offset + 1 + width
+    offset = list_start(list_start(0))
+    if data[offset] != 0xa0 or len(data[offset + 1:offset + 33]) != 32:
+        raise ValueError("Missing native parent hash")
+    return data[offset + 1:offset + 33].hex()
+
+
+def check_records(case, views, check):
+    """Check native durable records after admission's terminal purge."""
+    records = {k: native_json(v) for k, v in case["decision_records"].items()}
+    intents = sorted(k for k in records if k.endswith("/intent"))
+    check(len(intents) == len(views), "missing or duplicate capture decisions")
+    if not intents:
+        return
+    producer = records[intents[0]]["producer"]
+    check(re.fullmatch(r"type-paths-eth\.r[0-9a-f]{16}", producer) is not None, "wrong capture producer")
+    prefix = "extractor-decision-v1/" + producer + "/"
+    expected = {prefix + "counter"}
+    for sequence, block in enumerate(views):
+        key = prefix + f"{sequence:016x}"
+        expected.update((key + "/intent", key + "/decided"))
+        check(key + "/decided" in records, "unresolved capture intent")
+        intent, decided = records[key + "/intent"], records[key + "/decided"]
+        check(set(intent) == {"native_store_id", "producer", "sequence", "kind", "old_head", "new_head", "members", "evidence_digest", "events", "digest"}, "wrong intent schema")
+        check(intent["native_store_id"] == "e0105e71000000000000000000000001", "wrong native store")
+        check(intent["producer"] == producer and type(intent["sequence"]) is int and intent["sequence"] == sequence, "wrong capture identity")
+        check(intent["kind"] == "IMPORT" and intent["events"] is True, "wrong capture kind/events")
+        check(intent["old_head"] == {"number": block["number"] - 1, "hash": parent_hash(block["raw_block"])}, "wrong previous native head")
+        check(intent["new_head"] == {"number": block["number"], "hash": block["hash"][2:]}, "wrong imported native head")
+        members = intent["members"]
+        check(len(members) == 1, "wrong capture members")
+        member = members[0]
+        check(set(member) == {"observation", "block", "exec_ready_digest", "child_root"}, "wrong member schema")
+        check(member["observation"] == producer + f".{sequence:016x}", "wrong observation identity")
+        check(member["block"] == block["hash"][2:] and member["child_root"] == block["root"][2:] == block["header_root"][2:], "wrong member block/root")
+        check(intent["digest"] == intent_digest(intent), "wrong intent digest")
+        check(set(decided) == {"sequence", "intent_digest", "delivery", "digest"}, "wrong decided schema")
+        check(type(decided["sequence"]) is int and decided["sequence"] == sequence and decided["intent_digest"] == intent["digest"], "wrong decided reference")
+        check(decided["delivery"] == "BATCH" and decided["digest"] == decided_digest(intent["digest"], decided["delivery"]), "wrong decided digest/delivery")
+    check(set(records) == expected and records[prefix + "counter"] == {"next": len(views)}, "wrong decision frontier")
+    admission = {k: native_json(v) for k, v in case["admission_records"].items()}
+    prefix = "extractor-admission-v1/" + producer + "/"
+    check(admission == {prefix + "counter": {"next": len(views)}, prefix + "lowwater": {"sequence": len(views)}, prefix + "purged": {"sequence": len(views)}}, "no admission records or wrong admission frontier")
+
+
 def check_import(case, blocks, errors, label):
     def check(ok, reason):
         if not ok:
@@ -52,13 +155,7 @@ def check_import(case, blocks, errors, label):
         for i, row in enumerate(rows):
             check(row.get("index") == i and row.get("receipt_equal") is True, "missing or differing receipt")
             check(isinstance(row.get("wire"), str) and bool(row["wire"]), "missing raw receipt")
-    records = case.get("decision_records", {})
-    intents = [key for key in records if key.endswith("/intent")]
-    check(len(intents) == blocks, "missing or duplicate capture decisions")
-    for key in intents:
-        check(key[:-7] + "/decided" in records, "unresolved capture intent")
-    admission = case.get("admission_records", {})
-    check(bool(admission), "no admission records")
+    check_records(case, views, check)
     return views
 
 
