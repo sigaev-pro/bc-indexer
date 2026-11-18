@@ -311,10 +311,9 @@ class CopiedCodeTests(unittest.TestCase):
 }""")
 
     def test_fail_closed_probe_steps(self):
-        # A failed child stays in the report as a case with child_error, so
-        # the judge fails it instead of finding a case missing.
-        self.assertIn('cases = append(cases, map[string]any{"point": point, "variant": variant,\n'
-                      '\t\t\t\t\t"child_error": fmt.Sprintf("%v: %s", err, tail)})', go_block(self.ours, "func run("))
+        # Child termination and report continuation are exercised by the
+        # real subprocess controls in children_test.go.
+        self.assertIn('identity: map[string]any{"point": point, "variant": variant}', go_block(self.ours, "func run("))
         start = go_block(self.ours, "func start(")
         self.assertIn('if n.fs == nil {\n\t\treturn n, errors.New("the node did not open its store through the fault '
                       'store")', start)
