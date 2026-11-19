@@ -534,7 +534,7 @@ func modernState(st tracing.StateDB, addresses []common.Address, validator commo
 			slots["operator_index"] = st.GetState(address, mappingKey(operator, 64)).Hex()
 			slots["consensus_operator"] = st.GetState(address, mappingKey(validator, 67)).Hex()
 			base := mappingKey(operator, 65).Big()
-			for i, name := range []string{"consensus", "operator", "credit", "created", "vote", "moniker", "identity", "website", "details", "commission", "jail_until", "updated"} {
+			for i, name := range []string{"consensus", "operator", "credit", "created", "vote", "moniker", "identity", "website", "details", "commission", "jailed", "jail_until", "updated", "agent"} {
 				key := common.BigToHash(new(big.Int).Add(base, big.NewInt(int64(i))))
 				slots["validator_"+name] = st.GetState(address, key).Hex()
 			}
