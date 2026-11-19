@@ -30,3 +30,22 @@ The wrapper reuses the pinned accepted driver's exclusive output ownership,
 bounded command runner, signal handling and cleanup. Every rendered helper and
 its original pinned source are retained in preparation/run evidence. No shared
 adapter or upstream production behavior changes.
+
+The separate judge starts from source-derived initial watched accounts, then
+requires the legacy transfer's absolute state and the typed transfer's exact
+state delta. Initial contract code hashes come from pinned Bor
+`tests/bor/testdata/genesis.json` (SHA-256
+`aff8d66c9e67bfdacad48372c4f26d1bcb58207fa6fcae09dc28bc5c1c83e483`)
+and the accepted corpus additions in `test/native_corpus/expected/poly.json`.
+All four watched storage slots begin at zero. The authority begins absent;
+type 4 creates its delegation code and increments its nonce to 1. Its intrinsic
+gas is 21000 + 25000 with no existing-account authorization refund. Source
+`core/state_transition.go` and `core/bor_fee_log.go` define gas purchase,
+effective price, refund, value-transfer and deprecated fee-transfer log
+balances. The fee event describes tip movement, not final sender balance.
+
+The helper provenance file identifies narrow source copies from preactivation
+judge checkpoint `6400125`; that checkpoint is a dependency, not an acceptance
+claim. The accepted durable-record checker is adapted only to distinguish
+successful decision sequences 0/1 from admission observation sequences 1/2
+after the first refused admission. Native replay and controls remain pending.

@@ -13,6 +13,24 @@ prior, codec = h.prior, h.codec
 check, octets, integer, quantity = h.check, h.octets, h.integer, h.quantity
 CASES = (("Berlin", "berlinBlock", 1, 0, 0), ("London", "londonBlock", 2, 1, 0), ("Prague", "pragueBlock", 4, 4, 4))
 SIGNER = "71562b71999873db5b286df957af199ec94617f7"
+INITIAL_CODE_HASHES = {
+    prior.SENDER: "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    prior.AUTHORITY: "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    prior.SUCCESS: "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    prior.REVERT: "5cf04cb8c25808b54e86ef1f67aefd4648843b8233bf76efccfcc2e415f749f1",
+    prior.TARGET: "2baa572e83d64a532a4358ed7cc1743dfea2794b392bc3dc35eb500e66a4850a",
+    prior.RECEIVER: "710f0472f8b6b03ec96db2536b77758501cd97da610bc1bb2a522eccb3a7aced",
+}
+
+
+def legacy_state(state, sender_after):
+    expected = {address: {"nonce": 0, "balance": 0, "storage": (0, 0, 0, 0), "code_hash": digest}
+                for address, digest in INITIAL_CODE_HASHES.items()}
+    expected[prior.SENDER].update(nonce=1, balance=sender_after)
+    expected[prior.SUCCESS]["balance"] = 7
+    actual = {address: {"nonce": row["nonce"], "balance": row["balance"], "storage": row["storage"],
+                        "code_hash": codec.keccak256(row["code"]).hex()} for address, row in state.items()}
+    check(actual == expected, "crossing legacy state differs from source genesis")
 
 
 def receipt_oracle(kind, base_fee, sender_before, recipient_before, signer_before):
@@ -110,9 +128,7 @@ def case(row, expected):
     oracle2 = receipt_oracle(kind, base2, oracle1["sender_after"], 7, oracle1["signer_after"])
     state1 = stored(first, h1, tx1[0], 0, oracle1)
     state2 = stored(second, h2, tx2[0], kind, oracle2)
-    check(state1[prior.SENDER]["nonce"] == 1 and state1[prior.SENDER]["balance"] == oracle1["sender_after"] and
-          state1[prior.SUCCESS]["balance"] == 7, "crossing legacy state differs")
-    check(state1[prior.AUTHORITY] == {"balance": 0, "nonce": 0, "code": b"", "storage": (0, 0, 0, 0)}, "crossing authority must begin absent")
+    legacy_state(state1, oracle1["sender_after"])
     expected_state = copy.deepcopy(state1)
     expected_state[prior.SENDER].update(nonce=2, balance=oracle2["sender_after"])
     expected_state[prior.SUCCESS]["balance"] = 14

@@ -1,6 +1,8 @@
 """Owned-file controls and exact rendering checks; no native execution claim."""
 
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -48,6 +50,17 @@ class CrossingOwnershipTests(base.PolygonOrchestrationTests):
 
 
 class CrossingRenderingTests(unittest.TestCase):
+    def test_portable_go_bodies_match_frozen_producer(self):
+        source = (HERE / "probe.go").read_bytes()
+        origin = json.loads((HERE / "controls/source.json").read_text())
+        self.assertEqual(hashlib.sha256(source).hexdigest(), origin["source_sha256"])
+        text = source.decode()
+        body = text[text.index("func crossingKind("):text.index("func crossingCase(")].rstrip() + "\n"
+        selected = (HERE / "controls/logic.go").read_text()
+        selected = selected[selected.index("func crossingKind("):]
+        self.assertEqual(body, selected)
+        self.assertEqual(hashlib.sha256(body.encode()).hexdigest(), origin["selected_body_sha256"])
+
     def test_generator_changes_only_transaction_selection(self):
         corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
         before = native.support.parent.render_support(corpus).decode()
