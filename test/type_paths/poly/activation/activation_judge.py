@@ -148,7 +148,7 @@ def case(row, expected):
     else:
         check(txc[0][0] == 127, "wrong reserved envelope")
         fields = prior.plain_rlp(codec.rlp_list(txc[0][1:]))
-        check(fields == [[[b"\x01", octets(prior.TARGET), b"%", bytes(31) + b"\x01"]]], "wrong reserved body fixture")
+        check(fields == [[b"\x01", octets(prior.TARGET), b"%", bytes(31) + b"\x01"]], "wrong reserved body fixture")
         check(attempt["classification"] == "native-preMadhugiri-observation-no-refusal-credit" and attempt["accepted"] is True and "error" not in attempt, "reserved behavior differs from scoped native observation")
         candidate_state = stored(candidate, hc, txc, False)
         check(candidate_state == state2 and hc[3] == h2[3], "reserved preactivation changed authenticated state")
