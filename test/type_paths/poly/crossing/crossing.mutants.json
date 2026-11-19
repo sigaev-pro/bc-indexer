@@ -1,0 +1,819 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "copy": [
+    "test/type_paths/poly/*",
+    "test/type_paths/poly/crossing/*",
+    "test/type_paths/poly/crossing/controls/*",
+    "test/type_paths/poly/activation/*",
+    "test/type_paths/eth/eth_type_judge.py",
+    "adapters/bor/decision/vectors.json",
+    "test/native_corpus/poly/*.py",
+    "test/native_corpus/poly/main.go",
+    "test/native_corpus/*.py",
+    "test/harness/*.py",
+    "test/evidence/*.py",
+    "test/native_corpus/poly/stub/*",
+    "test/native_corpus/expected/poly.json",
+    "test/harness/fixtures/source_inputs_bor/heimdallstub/stub.go"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/type_paths/poly/crossing",
+    "-v"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "crossing_judge.py:legacy_state:crossing legacy state differs from source genesis:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(actual == expected, \"crossing legacy state differs from source genesis\")",
+      "replacement": "check(True, \"crossing legacy state differs from source genesis\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt collection differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(isinstance(receipts, list) and isinstance(proofs, list) and len(receipts) == len(proofs) == 1, \"crossing receipt collection differs\")",
+      "replacement": "check(True and isinstance(proofs, list) and len(receipts) == len(proofs) == 1, \"crossing receipt collection differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt collection differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(isinstance(receipts, list) and isinstance(proofs, list) and len(receipts) == len(proofs) == 1, \"crossing receipt collection differs\")",
+      "replacement": "check(isinstance(receipts, list) and True and len(receipts) == len(proofs) == 1, \"crossing receipt collection differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt collection differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(isinstance(receipts, list) and isinstance(proofs, list) and len(receipts) == len(proofs) == 1, \"crossing receipt collection differs\")",
+      "replacement": "check(isinstance(receipts, list) and isinstance(proofs, list) and True, \"crossing receipt collection differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt wire/root differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(wires == [oracle[\"wire\"]] and codec.ordered_root(wires) == header[5], \"crossing receipt wire/root differs\")",
+      "replacement": "check(True and codec.ordered_root(wires) == header[5], \"crossing receipt wire/root differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt wire/root differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(wires == [oracle[\"wire\"]] and codec.ordered_root(wires) == header[5], \"crossing receipt wire/root differs\")",
+      "replacement": "check(wires == [oracle[\"wire\"]] and True, \"crossing receipt wire/root differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing header gas/bloom differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(header[10]) == oracle[\"gas\"] and header[6] == oracle[\"bloom\"], \"crossing header gas/bloom differs\")",
+      "replacement": "check(True and header[6] == oracle[\"bloom\"], \"crossing header gas/bloom differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing header gas/bloom differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(header[10]) == oracle[\"gas\"] and header[6] == oracle[\"bloom\"], \"crossing header gas/bloom differs\")",
+      "replacement": "check(integer(header[10]) == oracle[\"gas\"] and True, \"crossing header gas/bloom differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt status/type differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(quantity(receipt.get(\"type\", \"0x0\")) == kind and quantity(receipt[\"status\"]) == 1, \"crossing receipt status/type differs\")",
+      "replacement": "check(True and quantity(receipt[\"status\"]) == 1, \"crossing receipt status/type differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt status/type differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(quantity(receipt.get(\"type\", \"0x0\")) == kind and quantity(receipt[\"status\"]) == 1, \"crossing receipt status/type differs\")",
+      "replacement": "check(quantity(receipt.get(\"type\", \"0x0\")) == kind and True, \"crossing receipt status/type differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt fees differ:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(quantity(receipt[\"gasUsed\"]) == quantity(receipt[\"cumulativeGasUsed\"]) == oracle[\"gas\"] and\n          quantity(receipt[\"effectiveGasPrice\"]) == oracle[\"price\"], \"crossing receipt fees differ\")",
+      "replacement": "check(True and\n          quantity(receipt[\"effectiveGasPrice\"]) == oracle[\"price\"], \"crossing receipt fees differ\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt fees differ:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(quantity(receipt[\"gasUsed\"]) == quantity(receipt[\"cumulativeGasUsed\"]) == oracle[\"gas\"] and\n          quantity(receipt[\"effectiveGasPrice\"]) == oracle[\"price\"], \"crossing receipt fees differ\")",
+      "replacement": "check(quantity(receipt[\"gasUsed\"]) == quantity(receipt[\"cumulativeGasUsed\"]) == oracle[\"gas\"] and\n          True, \"crossing receipt fees differ\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt logs differ:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(prior.consensus_logs(receipt[\"logs\"]) == oracle[\"logs\"] and octets(receipt[\"logsBloom\"]) == oracle[\"bloom\"], \"crossing receipt logs differ\")",
+      "replacement": "check(True and octets(receipt[\"logsBloom\"]) == oracle[\"bloom\"], \"crossing receipt logs differ\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt logs differ:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(prior.consensus_logs(receipt[\"logs\"]) == oracle[\"logs\"] and octets(receipt[\"logsBloom\"]) == oracle[\"bloom\"], \"crossing receipt logs differ\")",
+      "replacement": "check(prior.consensus_logs(receipt[\"logs\"]) == oracle[\"logs\"] and True, \"crossing receipt logs differ\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt identity differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(receipt[\"transactionHash\"] == tx_hash and receipt[\"blockHash\"] == row[\"hash\"] and\n          quantity(receipt[\"blockNumber\"]) == row[\"number\"] and quantity(receipt[\"transactionIndex\"]) == 0, \"crossing receipt identity differs\")",
+      "replacement": "check(True and receipt[\"blockHash\"] == row[\"hash\"] and\n          quantity(receipt[\"blockNumber\"]) == row[\"number\"] and quantity(receipt[\"transactionIndex\"]) == 0, \"crossing receipt identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt identity differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(receipt[\"transactionHash\"] == tx_hash and receipt[\"blockHash\"] == row[\"hash\"] and\n          quantity(receipt[\"blockNumber\"]) == row[\"number\"] and quantity(receipt[\"transactionIndex\"]) == 0, \"crossing receipt identity differs\")",
+      "replacement": "check(receipt[\"transactionHash\"] == tx_hash and True and\n          quantity(receipt[\"blockNumber\"]) == row[\"number\"] and quantity(receipt[\"transactionIndex\"]) == 0, \"crossing receipt identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt identity differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(receipt[\"transactionHash\"] == tx_hash and receipt[\"blockHash\"] == row[\"hash\"] and\n          quantity(receipt[\"blockNumber\"]) == row[\"number\"] and quantity(receipt[\"transactionIndex\"]) == 0, \"crossing receipt identity differs\")",
+      "replacement": "check(receipt[\"transactionHash\"] == tx_hash and receipt[\"blockHash\"] == row[\"hash\"] and\n          True and quantity(receipt[\"transactionIndex\"]) == 0, \"crossing receipt identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing receipt identity differs:4",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(receipt[\"transactionHash\"] == tx_hash and receipt[\"blockHash\"] == row[\"hash\"] and\n          quantity(receipt[\"blockNumber\"]) == row[\"number\"] and quantity(receipt[\"transactionIndex\"]) == 0, \"crossing receipt identity differs\")",
+      "replacement": "check(receipt[\"transactionHash\"] == tx_hash and receipt[\"blockHash\"] == row[\"hash\"] and\n          quantity(receipt[\"blockNumber\"]) == row[\"number\"] and True, \"crossing receipt identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing log identity differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")",
+      "replacement": "check(True and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing log identity differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")",
+      "replacement": "check(log[\"transactionHash\"] == tx_hash and True and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing log identity differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")",
+      "replacement": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              True and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing log identity differs:4",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")",
+      "replacement": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and True and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing log identity differs:5",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")",
+      "replacement": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              True and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing log identity differs:6",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")",
+      "replacement": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and True and\n              log[\"removed\"] is False, \"crossing log identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:stored:crossing log identity differs:7",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              log[\"removed\"] is False, \"crossing log identity differs\")",
+      "replacement": "check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n              quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == 0 and\n              quantity(log[\"logIndex\"]) == index and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n              True, \"crossing log identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing actual head differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"head_hash\"] == head, \"crossing actual head differs\")",
+      "replacement": "check(True, \"crossing actual head differs\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing observation frontier differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"observed\"] == observed and all(type(x) is int for x in row[\"observed\"]) and\n          row[\"keys\"] == keys and row[\"observer_errors\"] == [error], \"crossing observation frontier differs\")",
+      "replacement": "check(True and all(type(x) is int for x in row[\"observed\"]) and\n          row[\"keys\"] == keys and row[\"observer_errors\"] == [error], \"crossing observation frontier differs\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing observation frontier differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"observed\"] == observed and all(type(x) is int for x in row[\"observed\"]) and\n          row[\"keys\"] == keys and row[\"observer_errors\"] == [error], \"crossing observation frontier differs\")",
+      "replacement": "check(row[\"observed\"] == observed and True and\n          row[\"keys\"] == keys and row[\"observer_errors\"] == [error], \"crossing observation frontier differs\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing observation frontier differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"observed\"] == observed and all(type(x) is int for x in row[\"observed\"]) and\n          row[\"keys\"] == keys and row[\"observer_errors\"] == [error], \"crossing observation frontier differs\")",
+      "replacement": "check(row[\"observed\"] == observed and all(type(x) is int for x in row[\"observed\"]) and\n          True and row[\"observer_errors\"] == [error], \"crossing observation frontier differs\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing observation frontier differs:4",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"observed\"] == observed and all(type(x) is int for x in row[\"observed\"]) and\n          row[\"keys\"] == keys and row[\"observer_errors\"] == [error], \"crossing observation frontier differs\")",
+      "replacement": "check(row[\"observed\"] == observed and all(type(x) is int for x in row[\"observed\"]) and\n          row[\"keys\"] == keys and True, \"crossing observation frontier differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing case identity differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")",
+      "replacement": "check(True and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing case identity differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")",
+      "replacement": "check(row[\"name\"] == name and True and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing case identity differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")",
+      "replacement": "check(row[\"name\"] == name and type(row[\"type\"]) is int and True and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing case identity differs:4",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")",
+      "replacement": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          True and row[\"activation_block\"] == 2, \"crossing case identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing case identity differs:5",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and row[\"activation_block\"] == 2, \"crossing case identity differs\")",
+      "replacement": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind and\n          type(row[\"activation_block\"]) is int and True, \"crossing case identity differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing activation schedule differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(type(config[gate]) is int and config[gate] == 2, \"crossing activation schedule differs\")",
+      "replacement": "check(True and config[gate] == 2, \"crossing activation schedule differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing activation schedule differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(type(config[gate]) is int and config[gate] == 2, \"crossing activation schedule differs\")",
+      "replacement": "check(type(config[gate]) is int and True, \"crossing activation schedule differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing genesis differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(genesis[8]) == 0 and genesis[0] == bytes(32) and not txg, \"crossing genesis differs\")",
+      "replacement": "check(True and genesis[0] == bytes(32) and not txg, \"crossing genesis differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing genesis differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(genesis[8]) == 0 and genesis[0] == bytes(32) and not txg, \"crossing genesis differs\")",
+      "replacement": "check(integer(genesis[8]) == 0 and True and not txg, \"crossing genesis differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing genesis differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(genesis[8]) == 0 and genesis[0] == bytes(32) and not txg, \"crossing genesis differs\")",
+      "replacement": "check(integer(genesis[8]) == 0 and genesis[0] == bytes(32) and True, \"crossing genesis differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing needs two successful blocks:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(positive[\"blocks\"]) == 2, \"crossing needs two successful blocks\")",
+      "replacement": "check(True, \"crossing needs two successful blocks\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing transaction count differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(tx1) == len(tx2) == 1, \"crossing transaction count differs\")",
+      "replacement": "check(True, \"crossing transaction count differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing London gas-limit transition differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(genesis[9]) == integer(h1[9]) == 10_000_000 and\n          integer(h2[9]) == (20_000_000 if kind == 2 else 10_000_000), \"crossing London gas-limit transition differs\")",
+      "replacement": "check(True and\n          integer(h2[9]) == (20_000_000 if kind == 2 else 10_000_000), \"crossing London gas-limit transition differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing London gas-limit transition differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(genesis[9]) == integer(h1[9]) == 10_000_000 and\n          integer(h2[9]) == (20_000_000 if kind == 2 else 10_000_000), \"crossing London gas-limit transition differs\")",
+      "replacement": "check(integer(genesis[9]) == integer(h1[9]) == 10_000_000 and\n          True, \"crossing London gas-limit transition differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing timestamp sequence differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(h1[11]) == integer(genesis[11]) + 1 and integer(h2[11]) == integer(h1[11]) + 1, \"crossing timestamp sequence differs\")",
+      "replacement": "check(True and integer(h2[11]) == integer(h1[11]) + 1, \"crossing timestamp sequence differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing timestamp sequence differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(integer(h1[11]) == integer(genesis[11]) + 1 and integer(h2[11]) == integer(h1[11]) + 1, \"crossing timestamp sequence differs\")",
+      "replacement": "check(integer(h1[11]) == integer(genesis[11]) + 1 and True, \"crossing timestamp sequence differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing native base-fee transition differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check((integer(h1[15]) if width1 == 16 else 0) == base1 and\n          (integer(h2[15]) if width2 == 16 else 0) == base2, \"crossing native base-fee transition differs\")",
+      "replacement": "check(True and\n          (integer(h2[15]) if width2 == 16 else 0) == base2, \"crossing native base-fee transition differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing native base-fee transition differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check((integer(h1[15]) if width1 == 16 else 0) == base1 and\n          (integer(h2[15]) if width2 == 16 else 0) == base2, \"crossing native base-fee transition differs\")",
+      "replacement": "check((integer(h1[15]) if width1 == 16 else 0) == base1 and\n          True, \"crossing native base-fee transition differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing final authenticated state differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(state2 == expected_state and h1[3] != h2[3], \"crossing final authenticated state differs\")",
+      "replacement": "check(True and h1[3] != h2[3], \"crossing final authenticated state differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing final authenticated state differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(state2 == expected_state and h1[3] != h2[3], \"crossing final authenticated state differs\")",
+      "replacement": "check(state2 == expected_state and True, \"crossing final authenticated state differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing negative body is not distinct:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and hn[4] != h1[4], \"crossing negative body is not distinct\")",
+      "replacement": "check(True and candidate[\"hash\"] != first[\"hash\"] and hn[4] != h1[4], \"crossing negative body is not distinct\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing negative body is not distinct:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and hn[4] != h1[4], \"crossing negative body is not distinct\")",
+      "replacement": "check(len(txn) == 1 and True and hn[4] != h1[4], \"crossing negative body is not distinct\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing negative body is not distinct:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and hn[4] != h1[4], \"crossing negative body is not distinct\")",
+      "replacement": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and True, \"crossing negative body is not distinct\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing negative changed control header commitments:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(all(hn[i] == h1[i] for i in range(width1) if i not in (4, 12)), \"crossing negative changed control header commitments\")",
+      "replacement": "check(True, \"crossing negative changed control header commitments\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing native refusal differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(negative[\"accepted\"] is False and negative[\"error\"] == expected_error and negative[\"head_before\"] == genesis_hash, \"crossing native refusal differs\")",
+      "replacement": "check(True and negative[\"error\"] == expected_error and negative[\"head_before\"] == genesis_hash, \"crossing native refusal differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing native refusal differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(negative[\"accepted\"] is False and negative[\"error\"] == expected_error and negative[\"head_before\"] == genesis_hash, \"crossing native refusal differs\")",
+      "replacement": "check(negative[\"accepted\"] is False and True and negative[\"head_before\"] == genesis_hash, \"crossing native refusal differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing native refusal differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(negative[\"accepted\"] is False and negative[\"error\"] == expected_error and negative[\"head_before\"] == genesis_hash, \"crossing native refusal differs\")",
+      "replacement": "check(negative[\"accepted\"] is False and negative[\"error\"] == expected_error and True, \"crossing native refusal differs\")"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing refused block has durable state claims:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(not any(key in candidate for key in (\"receipts\", \"receipt_proofs\", \"account_proofs\", \"state_after\")), \"crossing refused block has durable state claims\")",
+      "replacement": "check(True, \"crossing refused block has durable state claims\")"
+    },
+    {
+      "name": "crossing_judge.py:judge:crossing native identity/result differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(report[\"native_source\"] == prior.NATIVE and report[\"scope\"] == \"private-ordinary-activation-crossing\" and\n              report[\"public_profile_credit\"] is False and \"error\" not in report, \"crossing native identity/result differs\")",
+      "replacement": "check(True and report[\"scope\"] == \"private-ordinary-activation-crossing\" and\n              report[\"public_profile_credit\"] is False and \"error\" not in report, \"crossing native identity/result differs\")"
+    },
+    {
+      "name": "crossing_judge.py:judge:crossing native identity/result differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(report[\"native_source\"] == prior.NATIVE and report[\"scope\"] == \"private-ordinary-activation-crossing\" and\n              report[\"public_profile_credit\"] is False and \"error\" not in report, \"crossing native identity/result differs\")",
+      "replacement": "check(report[\"native_source\"] == prior.NATIVE and True and\n              report[\"public_profile_credit\"] is False and \"error\" not in report, \"crossing native identity/result differs\")"
+    },
+    {
+      "name": "crossing_judge.py:judge:crossing native identity/result differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(report[\"native_source\"] == prior.NATIVE and report[\"scope\"] == \"private-ordinary-activation-crossing\" and\n              report[\"public_profile_credit\"] is False and \"error\" not in report, \"crossing native identity/result differs\")",
+      "replacement": "check(report[\"native_source\"] == prior.NATIVE and report[\"scope\"] == \"private-ordinary-activation-crossing\" and\n              True and \"error\" not in report, \"crossing native identity/result differs\")"
+    },
+    {
+      "name": "crossing_judge.py:judge:crossing native identity/result differs:4",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(report[\"native_source\"] == prior.NATIVE and report[\"scope\"] == \"private-ordinary-activation-crossing\" and\n              report[\"public_profile_credit\"] is False and \"error\" not in report, \"crossing native identity/result differs\")",
+      "replacement": "check(report[\"native_source\"] == prior.NATIVE and report[\"scope\"] == \"private-ordinary-activation-crossing\" and\n              report[\"public_profile_credit\"] is False and True, \"crossing native identity/result differs\")"
+    },
+    {
+      "name": "crossing_judge.py:judge:crossing case matrix differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(report[\"cases\"]) == len(CASES), \"crossing case matrix differs\")",
+      "replacement": "check(True, \"crossing case matrix differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:historical_config:historical native configuration differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(config == eth, \"historical native configuration differs\")",
+      "replacement": "check(True, \"historical native configuration differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:invalid historical block envelope:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(outer) == (4 if width == 20 else 3) and isinstance(outer[1][0], list) and outer[2][0] == [], \"invalid historical block envelope\")",
+      "replacement": "check(True and isinstance(outer[1][0], list) and outer[2][0] == [], \"invalid historical block envelope\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:invalid historical block envelope:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(outer) == (4 if width == 20 else 3) and isinstance(outer[1][0], list) and outer[2][0] == [], \"invalid historical block envelope\")",
+      "replacement": "check(len(outer) == (4 if width == 20 else 3) and True and outer[2][0] == [], \"invalid historical block envelope\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:invalid historical block envelope:3",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(outer) == (4 if width == 20 else 3) and isinstance(outer[1][0], list) and outer[2][0] == [], \"invalid historical block envelope\")",
+      "replacement": "check(len(outer) == (4 if width == 20 else 3) and isinstance(outer[1][0], list) and True, \"invalid historical block envelope\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:historical header fork shape differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(header) == width, \"historical header fork shape differs\")",
+      "replacement": "check(True, \"historical header fork shape differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:invalid historical header hashes:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(all(len(header[i]) == 32 for i in (0, 1, 3, 4, 5)), \"invalid historical header hashes\")",
+      "replacement": "check(True, \"invalid historical header hashes\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:complete historical body root differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(codec.ordered_root(txs) == header[4], \"complete historical body root differs\")",
+      "replacement": "check(True, \"complete historical body root differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:wrong native genesis fork tail:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(outer[3][0] == [] and header[15:] == [(10**9).to_bytes(4, \"big\"), codec.EMPTY_ROOT, b\"\", b\"\", bytes(32)], \"wrong native genesis fork tail\")",
+      "replacement": "check(True and header[15:] == [(10**9).to_bytes(4, \"big\"), codec.EMPTY_ROOT, b\"\", b\"\", bytes(32)], \"wrong native genesis fork tail\")"
+    },
+    {
+      "name": "crossing_helpers.py:raw_block:wrong native genesis fork tail:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(outer[3][0] == [] and header[15:] == [(10**9).to_bytes(4, \"big\"), codec.EMPTY_ROOT, b\"\", b\"\", bytes(32)], \"wrong native genesis fork tail\")",
+      "replacement": "check(outer[3][0] == [] and True, \"wrong native genesis fork tail\")"
+    },
+    {
+      "name": "crossing_helpers.py:inclusion:historical proof count differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(proofs) == len(wires), \"historical proof count differs\")",
+      "replacement": "check(True, \"historical proof count differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:inclusion:historical proof key differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(proof[\"index\"]) is int and proof[\"index\"] == index and octets(proof[\"key\"]) == key, \"historical proof key differs\")",
+      "replacement": "check(True and proof[\"index\"] == index and octets(proof[\"key\"]) == key, \"historical proof key differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:inclusion:historical proof key differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(proof[\"index\"]) is int and proof[\"index\"] == index and octets(proof[\"key\"]) == key, \"historical proof key differs\")",
+      "replacement": "check(type(proof[\"index\"]) is int and True and octets(proof[\"key\"]) == key, \"historical proof key differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:inclusion:historical proof key differs:3",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(proof[\"index\"]) is int and proof[\"index\"] == index and octets(proof[\"key\"]) == key, \"historical proof key differs\")",
+      "replacement": "check(type(proof[\"index\"]) is int and proof[\"index\"] == index and True, \"historical proof key differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:inclusion:historical proof bytes differ:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(octets(proof[\"value\"]) == wire == codec.proof_value(root, key, [octets(x) for x in proof[\"nodes\"]]), \"historical proof bytes differ\")",
+      "replacement": "check(True, \"historical proof bytes differ\")"
+    },
+    {
+      "name": "crossing_helpers.py:block:historical block number differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(row[\"number\"]) is int and row[\"number\"] == integer(header[8]) == number, \"historical block number differs\")",
+      "replacement": "check(True and row[\"number\"] == integer(header[8]) == number, \"historical block number differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:block:historical block number differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(row[\"number\"]) is int and row[\"number\"] == integer(header[8]) == number, \"historical block number differs\")",
+      "replacement": "check(type(row[\"number\"]) is int and True, \"historical block number differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:block:historical block chain differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(row[\"hash\"] == digest and row[\"parent\"] == \"0x\" + header[0].hex() == parent, \"historical block chain differs\")",
+      "replacement": "check(True and row[\"parent\"] == \"0x\" + header[0].hex() == parent, \"historical block chain differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:block:historical block chain differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(row[\"hash\"] == digest and row[\"parent\"] == \"0x\" + header[0].hex() == parent, \"historical block chain differs\")",
+      "replacement": "check(row[\"hash\"] == digest and True, \"historical block chain differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:block:historical state root differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(row[\"root\"] == \"0x\" + header[3].hex(), \"historical state root differs\")",
+      "replacement": "check(True, \"historical state root differs\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong activation transaction type:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check((raw[0] if raw[0] < 128 else 0) == kind, \"wrong activation transaction type\")",
+      "replacement": "check(True, \"wrong activation transaction type\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong activation transaction fields:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(fields) == {0: 9, 1: 11, 2: 12, 4: 13}[kind], \"wrong activation transaction fields\")",
+      "replacement": "check(True, \"wrong activation transaction fields\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong activation transaction inputs:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")",
+      "replacement": "check(True and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong activation transaction inputs:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")",
+      "replacement": "check(integer(n) == nonce and True and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong activation transaction inputs:3",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")",
+      "replacement": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          True and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong activation transaction inputs:4",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")",
+      "replacement": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and True and data == b\"\", \"wrong activation transaction inputs\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong activation transaction inputs:5",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")",
+      "replacement": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and True, \"wrong activation transaction inputs\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong legacy fixture price:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(price) == 5_000_000_000, \"wrong legacy fixture price\")",
+      "replacement": "check(True, \"wrong legacy fixture price\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong typed fixture chain:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(fields[0]) == 15001, \"wrong typed fixture chain\")",
+      "replacement": "check(True, \"wrong typed fixture chain\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong fixture access list:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(access == [], \"wrong fixture access list\")",
+      "replacement": "check(True, \"wrong fixture access list\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong access-list fixture price:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(price) == 5_000_000_000, \"wrong access-list fixture price\")",
+      "replacement": "check(True, \"wrong access-list fixture price\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong typed fixture fee caps:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000, \"wrong typed fixture fee caps\")",
+      "replacement": "check(True and integer(cap) == 5_000_000_000, \"wrong typed fixture fee caps\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong typed fixture fee caps:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000, \"wrong typed fixture fee caps\")",
+      "replacement": "check(integer(tip) == 2_000_000_000 and True, \"wrong typed fixture fee caps\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong fixture authorization count:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(auth) == 1 and len(auth[0]) == 6, \"wrong fixture authorization count\")",
+      "replacement": "check(True and len(auth[0]) == 6, \"wrong fixture authorization count\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong fixture authorization count:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(auth) == 1 and len(auth[0]) == 6, \"wrong fixture authorization count\")",
+      "replacement": "check(len(auth) == 1 and True, \"wrong fixture authorization count\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong fixture authorization domain:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(chain) == 15001 and target == octets(prior.SUCCESS) and integer(auth_nonce) == 0, \"wrong fixture authorization domain\")",
+      "replacement": "check(True and target == octets(prior.SUCCESS) and integer(auth_nonce) == 0, \"wrong fixture authorization domain\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong fixture authorization domain:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(chain) == 15001 and target == octets(prior.SUCCESS) and integer(auth_nonce) == 0, \"wrong fixture authorization domain\")",
+      "replacement": "check(integer(chain) == 15001 and True and integer(auth_nonce) == 0, \"wrong fixture authorization domain\")"
+    },
+    {
+      "name": "crossing_helpers.py:signed_input:wrong fixture authorization domain:3",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(integer(chain) == 15001 and target == octets(prior.SUCCESS) and integer(auth_nonce) == 0, \"wrong fixture authorization domain\")",
+      "replacement": "check(integer(chain) == 15001 and target == octets(prior.SUCCESS) and True, \"wrong fixture authorization domain\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong durable decision frontier:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(set(records) == expected and records[prefix + \"counter\"] == {\"next\": len(views)}, \"wrong durable decision frontier\")",
+      "replacement": "check(True and records[prefix + \"counter\"] == {\"next\": len(views)}, \"wrong durable decision frontier\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong durable decision frontier:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(set(records) == expected and records[prefix + \"counter\"] == {\"next\": len(views)}, \"wrong durable decision frontier\")",
+      "replacement": "check(set(records) == expected and True, \"wrong durable decision frontier\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong admission frontier:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(actual == {prefix + \"counter\": {\"next\": frontier}, prefix + \"lowwater\": {\"sequence\": frontier},\n                     prefix + \"purged\": {\"sequence\": frontier}}, \"wrong admission frontier\")",
+      "replacement": "check(True, \"wrong admission frontier\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid intent schema:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(set(intent) == {\"native_store_id\", \"producer\", \"sequence\", \"kind\", \"old_head\", \"new_head\", \"members\", \"evidence_digest\", \"events\", \"digest\"}, \"invalid intent schema\")",
+      "replacement": "check(True, \"invalid intent schema\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong native identity:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(intent[\"native_store_id\"] == \"0123456789abcdef0123456789abcdef\" and intent[\"producer\"] == \"bor.run-1\", \"wrong native identity\")",
+      "replacement": "check(True and intent[\"producer\"] == \"bor.run-1\", \"wrong native identity\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong native identity:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(intent[\"native_store_id\"] == \"0123456789abcdef0123456789abcdef\" and intent[\"producer\"] == \"bor.run-1\", \"wrong native identity\")",
+      "replacement": "check(intent[\"native_store_id\"] == \"0123456789abcdef0123456789abcdef\" and True, \"wrong native identity\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong decision kind/sequence:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")",
+      "replacement": "check(True and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong decision kind/sequence:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")",
+      "replacement": "check(type(intent[\"sequence\"]) is int and True and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong decision kind/sequence:3",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")",
+      "replacement": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and True and intent[\"events\"] is True, \"wrong decision kind/sequence\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong decision kind/sequence:4",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")",
+      "replacement": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and True, \"wrong decision kind/sequence\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:decision/native header mismatch:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(intent[\"old_head\"] == {\"number\": row[\"number\"] - 1, \"hash\": row[\"parent\"][2:]} and\n              intent[\"new_head\"] == {\"number\": row[\"number\"], \"hash\": row[\"hash\"][2:]}, \"decision/native header mismatch\")",
+      "replacement": "check(True and\n              intent[\"new_head\"] == {\"number\": row[\"number\"], \"hash\": row[\"hash\"][2:]}, \"decision/native header mismatch\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:decision/native header mismatch:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(intent[\"old_head\"] == {\"number\": row[\"number\"] - 1, \"hash\": row[\"parent\"][2:]} and\n              intent[\"new_head\"] == {\"number\": row[\"number\"], \"hash\": row[\"hash\"][2:]}, \"decision/native header mismatch\")",
+      "replacement": "check(intent[\"old_head\"] == {\"number\": row[\"number\"] - 1, \"hash\": row[\"parent\"][2:]} and\n              True, \"decision/native header mismatch\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:wrong decision member count:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(len(intent[\"members\"]) == 1, \"wrong decision member count\")",
+      "replacement": "check(True, \"wrong decision member count\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid decision member schema:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(set(member) == {\"observation\", \"block\", \"exec_ready_digest\", \"child_root\"}, \"invalid decision member schema\")",
+      "replacement": "check(True, \"invalid decision member schema\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:decision member/root mismatch:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(member[\"observation\"] == f\"bor.run-1.{sequence + observation_offset:016x}\" and member[\"block\"] == row[\"hash\"][2:] and\n              member[\"child_root\"] == row[\"root\"][2:], \"decision member/root mismatch\")",
+      "replacement": "check(True and member[\"block\"] == row[\"hash\"][2:] and\n              member[\"child_root\"] == row[\"root\"][2:], \"decision member/root mismatch\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:decision member/root mismatch:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(member[\"observation\"] == f\"bor.run-1.{sequence + observation_offset:016x}\" and member[\"block\"] == row[\"hash\"][2:] and\n              member[\"child_root\"] == row[\"root\"][2:], \"decision member/root mismatch\")",
+      "replacement": "check(member[\"observation\"] == f\"bor.run-1.{sequence + observation_offset:016x}\" and True and\n              member[\"child_root\"] == row[\"root\"][2:], \"decision member/root mismatch\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:decision member/root mismatch:3",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(member[\"observation\"] == f\"bor.run-1.{sequence + observation_offset:016x}\" and member[\"block\"] == row[\"hash\"][2:] and\n              member[\"child_root\"] == row[\"root\"][2:], \"decision member/root mismatch\")",
+      "replacement": "check(member[\"observation\"] == f\"bor.run-1.{sequence + observation_offset:016x}\" and member[\"block\"] == row[\"hash\"][2:] and\n              True, \"decision member/root mismatch\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid intent digest:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(intent[\"digest\"] == intent_digest(intent), \"invalid intent digest\")",
+      "replacement": "check(True, \"invalid intent digest\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid decided schema:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(set(decided) == {\"sequence\", \"intent_digest\", \"delivery\", \"digest\"}, \"invalid decided schema\")",
+      "replacement": "check(True, \"invalid decided schema\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid decided binding:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")",
+      "replacement": "check(True and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid decided binding:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")",
+      "replacement": "check(type(decided[\"sequence\"]) is int and True and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid decided binding:3",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")",
+      "replacement": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              True and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid decided binding:4",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")",
+      "replacement": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and True and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")"
+    },
+    {
+      "name": "crossing_helpers.py:check_records:invalid decided binding:5",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")",
+      "replacement": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              True, \"invalid decided binding\")"
+    },
+    {
+      "name": "source pin ignored",
+      "file": "test/type_paths/poly/crossing/crossing_support.py",
+      "original": "if hashlib.sha256(data).hexdigest() != ACTIVATION_PINS[name]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "helper boundary guard ignored",
+      "file": "test/type_paths/poly/crossing/crossing_support.py",
+      "original": "if source.count(marker) != 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "nonce seams ignored",
+      "file": "test/type_paths/poly/crossing/crossing_support.py",
+      "original": "if helpers.count(\"Nonce: 1,\") != 3:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "import block count ignored",
+      "file": "test/type_paths/poly/crossing/crossing_support.py",
+      "original": "if len(matches) != 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "parent copies omitted",
+      "file": "test/type_paths/poly/crossing/crossing_native.py",
+      "original": "copies.append(driver.copy_artifact(path, destination / name, ref, deadline=deadline))",
+      "replacement": "copies.append(ref)"
+    },
+    {
+      "name": "parent copy directory omitted",
+      "file": "test/type_paths/poly/crossing/crossing_native.py",
+      "original": "destination.mkdir()",
+      "replacement": "pass"
+    },
+    {
+      "name": "parent evidence omitted",
+      "file": "test/type_paths/poly/crossing/crossing_native.py",
+      "original": "return origins, copies",
+      "replacement": "return origins, [x for x in copies if Path(x[\"path\"]).parent.name not in (\"accepted-poly\", \"activation-helpers\")]"
+    }
+  ]
+}

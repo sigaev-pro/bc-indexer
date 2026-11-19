@@ -92,6 +92,17 @@ class CrossingRenderingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.support.replace_once("duplicate duplicate", "duplicate", "new")
 
+    def test_unexpected_helper_seams_fail_closed(self):
+        corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
+        source = native.support.activation_source("probe.go")
+        for changed in (source + b"\nfunc activationCase(", source.replace(b"Nonce: 1,", b"Nonce: 2,", 1)):
+            with self.subTest(changed=changed[-40:]), patch.object(native.support, "activation_source", return_value=changed):
+                with self.assertRaises(ValueError):
+                    native.support.render_support(corpus)
+        with patch.object(native.support.parent, "render_support", return_value=b"package main\n"):
+            with self.assertRaises(ValueError):
+                native.support.render_support(corpus)
+
 
 if __name__ == "__main__":
     unittest.main()
