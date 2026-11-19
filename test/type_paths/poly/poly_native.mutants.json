@@ -934,6 +934,84 @@
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(items == list(reversed(expected_items)), \"item-order mismatch control absent\")",
       "replacement": "check(True, 'item-order mismatch control absent')"
+    },
+    {
+      "name": "omit signature binding line 294",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(digest, parity, integer(r), integer(s), 1)",
+      "replacement": "pass"
+    },
+    {
+      "name": "omit signature binding line 397",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(codec.keccak256(b\"\\x03\" + codec.rlp(fields[:-3])), integer(fields[-3]), integer(fields[-2]), integer(fields[-1]), 1)",
+      "replacement": "pass"
+    },
+    {
+      "name": "complete body transaction root differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(codec.ordered_root(txs) == header[4], \"complete body transaction root differs\")",
+      "replacement": "check(True, 'complete body transaction root differs')"
+    },
+    {
+      "name": "complete receipt root differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(codec.ordered_root(receipt_wires) == header[5], \"complete receipt root differs\")",
+      "replacement": "check(True, 'complete receipt root differs')"
+    },
+    {
+      "name": "omit signature binding line 283",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(codec.keccak256(b\"\\x05\" + codec.rlp(auth[0][:3])), integer(parity), integer(ar), integer(ass), 2)",
+      "replacement": "pass"
+    },
+    {
+      "name": "omit signature binding line 430",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(digest, integer(normal[6]) - 30037, integer(normal[7]), integer(normal[8]), 1)",
+      "replacement": "pass"
+    },
+    {
+      "name": "recovery parity ignored",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "recovered_r[0] != r or recovered_r[1] % 2 != parity",
+      "replacement": "recovered_r[0] != r"
+    },
+    {
+      "name": "recovery x accepted only modulo order",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "recovered_r[0] != r or recovered_r[1] % 2 != parity",
+      "replacement": "recovered_r[0] % ORDER != r or recovered_r[1] % 2 != parity"
+    },
+    {
+      "name": "high s accepted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "not 0 < s <= ORDER // 2",
+      "replacement": "not 0 < s < ORDER"
+    },
+    {
+      "name": "ordered root hashes embedded children",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "return node if len(wire) < 32 else keccak256(wire)",
+      "replacement": "return keccak256(wire)"
+    },
+    {
+      "name": "ordered root loses shared extension",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if shared:\n            return [compact",
+      "replacement": "if False:\n            return [compact"
+    },
+    {
+      "name": "ordered root loses RLP index prefix",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "key = rlp(index.to_bytes((index.bit_length() + 7) // 8, \"big\"))",
+      "replacement": "key = index.to_bytes((index.bit_length() + 7) // 8, \"big\")"
+    },
+    {
+      "name": "ordered root drops final item",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "for index, value in enumerate(values):",
+      "replacement": "for index, value in enumerate(values[:-1]):"
     }
   ]
 }
