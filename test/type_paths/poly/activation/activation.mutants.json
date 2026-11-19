@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "copy": [
+    "test/type_paths/poly/*",
+    "test/type_paths/eth/eth_type_judge.py",
+    "adapters/bor/decision/vectors.json",
+    "test/native_corpus/poly/*.py",
+    "test/native_corpus/poly/main.go",
+    "test/native_corpus/*.py",
+    "test/harness/*.py",
+    "test/evidence/*.py",
+    "test/native_corpus/poly/stub/*",
+    "test/native_corpus/expected/poly.json",
+    "test/harness/fixtures/source_inputs_bor/heimdallstub/stub.go",
+    "test/type_paths/poly/activation/*"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/type_paths/poly/activation",
+    "-v"
+  ],
+  "timeout_seconds": 30,
+  "mutants": [
+    {
+      "name": "accepted parent identity ignored",
+      "file": "test/type_paths/poly/activation/activation_support.py",
+      "original": "if hashlib.sha256(data).hexdigest() != PINS[name]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "ambiguous source seam accepted",
+      "file": "test/type_paths/poly/activation/activation_support.py",
+      "original": "if text.count(before) != 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "accepted parent snapshots not copied",
+      "file": "test/type_paths/poly/activation/activation_native.py",
+      "original": "copies.append(driver.copy_artifact(path, destination / name, ref, deadline=deadline))",
+      "replacement": "copies.append(ref)"
+    },
+    {
+      "name": "accepted snapshot directory not allocated",
+      "file": "test/type_paths/poly/activation/activation_native.py",
+      "original": "destination.mkdir()",
+      "replacement": "pass"
+    },
+    {
+      "name": "accepted snapshots absent from evidence",
+      "file": "test/type_paths/poly/activation/activation_native.py",
+      "original": "return origins, copies",
+      "replacement": "return origins, [x for x in copies if Path(x['path']).parent.name != 'accepted-poly']"
+    }
+  ]
+}
