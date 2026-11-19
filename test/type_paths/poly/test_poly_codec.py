@@ -49,7 +49,7 @@ class PolygonProofTests(unittest.TestCase):
                   int("a2b2667f7e725ceea70c673093bf67663e0312623c8e091b13cf2c0f11ef652", 16))
         codec.fixture_signature.cache_clear()
         try:
-            with patch.object(codec, "GENERATOR", public):
+            with patch.object(codec, "FIXTURE_PUBLIC_KEYS", (public, codec.FIXTURE_PUBLIC_KEYS[1])):
                 codec.fixture_signature(digest, 1, r, s, 1)
                 for args in ((digest, 0, r, s, 1), (digest, 1, r, s, 2), (digest, 1, r + 1, s, 1),
                              (bytes(32), 1, r, s, 1), (digest, 0, r, codec.ORDER - s, 1)):
@@ -64,6 +64,23 @@ class PolygonProofTests(unittest.TestCase):
         section = accepted[accepted.index(start):accepted.index(end)].strip()
         self.assertIn(section, actual)
         self.assertEqual(codec.keccak256(b"").hex(), "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+
+    def test_recovery_x_coordinate_is_not_only_modulo_order(self):
+        # Construct a valid ECDSA equation with R.x = n+2. Ethereum's
+        # recovery encoding has only the parity bit, so r=2 cannot encode R.
+        x = codec.ORDER + 2
+        y = pow((x**3 + 7) % codec.FIELD, (codec.FIELD + 1) // 4, codec.FIELD)
+        self.assertEqual(y*y % codec.FIELD, (x**3 + 7) % codec.FIELD)
+        negative_g = (codec.GENERATOR[0], -codec.GENERATOR[1] % codec.FIELD)
+        public = codec.point_multiply(pow(2, -1, codec.ORDER), codec.point_add((x, y), negative_g))
+        self.assertEqual(codec.point_add(codec.GENERATOR, codec.point_multiply(2, public)), (x, y))
+        codec.fixture_signature.cache_clear()
+        try:
+            with patch.object(codec, "FIXTURE_PUBLIC_KEYS", (public, codec.FIXTURE_PUBLIC_KEYS[1])):
+                with self.assertRaisesRegex(ValueError, "expected fixture key"):
+                    codec.fixture_signature((1).to_bytes(32, "big"), y % 2, 2, 1, 1)
+        finally:
+            codec.fixture_signature.cache_clear()
 
     def test_pinned_native_single_leaf_vector(self):
         # Bor 3a018e3 trie/trie_test.go TestInsert: A => fifty 'a' bytes.

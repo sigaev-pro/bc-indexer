@@ -394,6 +394,7 @@ def component_claims(components, head):
           integer(fields[4]) == 21000 and fields[5] == octets(SUCCESS) and integer(fields[6]) == 0 and
           fields[7] == b"" and fields[8] == [] and integer(fields[9]) == 1 and
           fields[10] == [b"\x01" + bytes(31)], "wrong blob component input")
+    codec.fixture_signature(codec.keccak256(b"\x03" + codec.rlp(fields[:-3])), integer(fields[-3]), integer(fields[-2]), integer(fields[-1]), 1)
     check(components["blob_pool_error"] == "transaction type not supported: received type 3", "wrong native blob pool refusal")
     check(components["blob_body_import"] == "NOT_RUN", "pool refusal cannot grant blob body-import credit")
     rows = components["unknown_block_decode"]
@@ -425,6 +426,8 @@ def refusal_claims(rows, blocks, blob_raw):
             check(len(normal) == 9 and [integer(x) for x in normal[:3]] == [8, 5_000_000_000, 21000] and
                   normal[3] == octets(SUCCESS) and normal[4:6] == [b"\x01", b""] and
                   integer(normal[6]) in (30037, 30038), "non-final control ordinary input differs")
+            digest = codec.keccak256(codec.rlp(normal[:6] + [(15001).to_bytes(2, "big"), b"", b""]))
+            codec.fixture_signature(digest, integer(normal[6]) - 30037, integer(normal[7]), integer(normal[8]), 1)
         elif case == "duplicate-body":
             check(txs == [original, original], "StateSync duplicate control differs")
         else:

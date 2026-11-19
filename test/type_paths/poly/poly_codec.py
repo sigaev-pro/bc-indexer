@@ -265,6 +265,9 @@ def point_multiply(scalar, point):
     return result
 
 
+FIXTURE_PUBLIC_KEYS = (GENERATOR, point_add(GENERATOR, GENERATOR))
+
+
 @functools.lru_cache(maxsize=4096)
 def fixture_signature(digest, parity, r, s, fixture_key):
     """Verify both ECDSA and Ethereum recovery parity for public fixture1/2.
@@ -277,7 +280,7 @@ def fixture_signature(digest, parity, r, s, fixture_key):
         raise ValueError("invalid fixture signature domain")
     if parity not in (0, 1) or not 0 < r < ORDER or not 0 < s <= ORDER // 2:
         raise ValueError("invalid fixture signature scalar/parity")
-    public = GENERATOR if fixture_key == 1 else point_add(GENERATOR, GENERATOR)
+    public = FIXTURE_PUBLIC_KEYS[fixture_key - 1]
     inverse = pow(s, -1, ORDER)
     recovered_r = point_add(point_multiply(int.from_bytes(digest, "big") * inverse % ORDER, GENERATOR),
                             point_multiply(r * inverse % ORDER, public))

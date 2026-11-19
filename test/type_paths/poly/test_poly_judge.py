@@ -108,7 +108,7 @@ def signed_wire(kind, fields):
 
 
 def component_vector(head):
-    raw = b"\x03" + c.rlp([num(15001), num(8), num(2_000_000_000), num(5_000_000_000), num(21000),
+    raw = signed_wire(3, [num(15001), num(8), num(2_000_000_000), num(5_000_000_000), num(21000),
                            bytes.fromhex(judge.SUCCESS[2:]), b"", b"", [], b"\x01", [b"\x01" + bytes(31)], b"", b"\x01", b"\x01"])
     return {"head_before": head, "head_after": head, "blob_raw": raw.hex(), "blob_hash": "0x" + c.keccak256(raw).hex(),
             "blob_pool_error": "transaction type not supported: received type 3", "blob_body_import": "NOT_RUN",
@@ -151,6 +151,72 @@ class PolygonJudgeProofTests(unittest.TestCase):
     def test_retained_native_diagnostic_still_cannot_pass_complete_judge(self):
         self.assertEqual(judge.judge(self.native)["result"], "FAIL")
 
+    def test_complete_ordered_roots_match_retained_native_headers(self):
+        for row in self.native["blocks"]:
+            body = judge.plain_rlp(c.rlp_list(bytes.fromhex(row["raw_block"])))
+            txs = [c.rlp(tx) if isinstance(tx, list) else tx for tx in body[1]]
+            self.assertEqual(c.ordered_root(txs), body[0][4])
+            receipts = []
+            for receipt in row["receipts"]:
+                wire = c.rlp([num(judge.quantity(receipt["status"])), num(judge.quantity(receipt["cumulativeGasUsed"])),
+                              bytes.fromhex(receipt["logsBloom"][2:]), judge.consensus_logs(receipt["logs"])])
+                kind = judge.quantity(receipt.get("type", "0x0"))
+                receipts.append((bytes([kind]) if kind else b"") + wire)
+            self.assertEqual(c.ordered_root(receipts), body[0][5])
+            if txs:
+                self.assertNotEqual(c.ordered_root(txs[:-1]), body[0][4])
+                self.assertNotEqual(c.ordered_root(receipts + [receipts[-1]]), body[0][5])
+
+    def test_inclusion_proof_cannot_hide_an_extra_body_or_zero_gas_receipt(self):
+        row = block_vector()
+        tx = b"\x7f\xc0"
+        bind_body(row, [tx, tx])
+        body = judge.plain_rlp(c.rlp_list(bytes.fromhex(row["raw_block"])))
+        body[1].pop()
+        row["raw_block"] = c.rlp(body).hex()
+        row["transaction_proofs"].pop()
+        with self.assertRaisesRegex(ValueError, "complete body"):
+            judge.native_block(row)
+        row, header, txs = receipt_vector()
+        wire = bytes.fromhex(row["receipt_proofs"][0]["value"])
+        zero, one = c.rlp([b"\x30", wire]), c.rlp([b"\x31", wire])
+        branch = [b""] * 17
+        branch[8], branch[0] = c.keccak256(zero), c.keccak256(one)
+        root_node = c.rlp(branch)
+        header[5] = c.keccak256(root_node)
+        row["receipt_proofs"][0]["nodes"] = [root_node.hex(), zero.hex()]
+        with self.assertRaisesRegex(ValueError, "complete receipt"):
+            judge.receipt_claims(row, header, txs)
+
+    def test_fixture_sender_and_authority_signatures_are_independently_bound(self):
+        for index, kind in enumerate((0, 0, 1, 1, 2, 2, 4, 4)):
+            raw = tx_wire(kind, index)
+            fields = judge.plain_rlp(c.rlp_list(raw if kind == 0 else raw[1:]))
+            digest = c.keccak256((bytes([kind]) if kind else b"") + c.rlp(fields[:-3] if kind else fields[:6] + [num(15001), b"", b""]))
+            for change in ("key", "parity", "r", "s"):
+                bad = copy.deepcopy(fields)
+                if change == "key":
+                    bad[-3:] = sign_fixture(digest, 2)
+                    if kind == 0:
+                        bad[-3] = num(int.from_bytes(bad[-3], "big") + 30037)
+                elif change == "parity":
+                    bad[-3] = num(30037 + (30038 - int.from_bytes(bad[-3], "big")) if kind == 0 else 1 - int.from_bytes(bad[-3], "big"))
+                else:
+                    position = -2 if change == "r" else -1
+                    bad[position] = num(int.from_bytes(bad[position], "big") + 1)
+                with self.subTest(kind=kind, change=change), self.assertRaises(ValueError):
+                    judge.ordinary_fields((bytes([kind]) if kind else b"") + c.rlp(bad), index)
+        fields = judge.plain_rlp(c.rlp_list(tx_wire(4, 6)[1:]))
+        for change in ("key", "parity"):
+            bad = copy.deepcopy(fields)
+            auth = bad[9][0]
+            if change == "key":
+                auth[-3:] = sign_fixture(c.keccak256(b"\x05" + c.rlp(auth[:3])), 1)
+            else:
+                auth[-3] = num(1 - int.from_bytes(auth[-3], "big"))
+            with self.subTest(auth=change), self.assertRaises(ValueError):
+                judge.ordinary_fields(signed_wire(4, bad), 6)
+
     def test_component_refusal_boundaries(self):
         head = self.native["head_hash"]
         original = component_vector(head)
@@ -166,7 +232,7 @@ class PolygonJudgeProofTests(unittest.TestCase):
         bad = copy.deepcopy(original)
         fields = judge.plain_rlp(c.rlp_list(bytes.fromhex(bad["blob_raw"])[1:]))
         fields[9] = b"\x02"
-        raw = b"\x03" + c.rlp(fields)
+        raw = signed_wire(3, fields)
         bad.update(blob_raw=raw.hex(), blob_hash="0x" + c.keccak256(raw).hex())
         with self.assertRaises(ValueError):
             judge.component_claims(bad, head)
@@ -178,7 +244,7 @@ class PolygonJudgeProofTests(unittest.TestCase):
         items = judge.plain_rlp(c.rlp_list(original[1:]))
         changed = copy.deepcopy(items)
         changed[0][3] = (153).to_bytes(32, "big")
-        normal = c.rlp([num(8), num(5_000_000_000), num(21000), bytes.fromhex(judge.SUCCESS[2:]), b"\x01", b"", num(30037), b"\x01", b"\x01"])
+        normal = signed_wire(0, [num(8), num(5_000_000_000), num(21000), bytes.fromhex(judge.SUCCESS[2:]), b"\x01", b"", num(30037), b"\x01", b"\x01"])
         bodies = {"missing": [], "non-final": [original, normal], "mismatched-l1-hash": [b"\x7f" + c.rlp(changed)],
                   "reordered-items": [b"\x7f" + c.rlp(list(reversed(items)))], "duplicate-body": [original, original],
                   "blob-native-header": [bytes.fromhex(blob), original]}
