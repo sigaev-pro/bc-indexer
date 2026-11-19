@@ -1,0 +1,13 @@
+{
+  "activation_commit": "6400125",
+  "activation_source_sha256": "d011263583f5339fa0d0735a46c6428ed64c713f7c9f86d00d66dd86d0a4033e",
+  "activation_functions": {
+    "historical_config": "7b1403cab2896b97c239816ed08a2b25429fc70954be9bb1dbec6b79c8e274ea",
+    "raw_block": "f278e781a9440f500dd73ee8b055de8f4f564dd9b4971cd4028d0b99c3c3518d",
+    "inclusion": "1f7279d97edaf60b3a4e427a9f20f71d7b6df5318a881be816646092aab03109",
+    "block": "cef5717c6f976fe279af623c60abc8b3579f167fa5dabb8e82e33c604fb3c6a3",
+    "signed_input": "d484f0d05d719f1740e50a82d777fd8f6b12385dd3ba4c8133f35aed24d16c9a"
+  },
+  "accepted_records_source_sha256": "67f25cf41b3ac6f423732ea82c8fcb7f09064ff3e587c6184b68f4beee023239",
+  "records_adaptation": "Only add observation_offset argument and apply it to decision member observation identity; rejected admission consumes sequence zero before successful decisions."
+}
