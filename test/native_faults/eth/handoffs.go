@@ -161,16 +161,30 @@ func interrupted(work, id, commit string, genesis *core.Genesis, index int) case
 	armed := false
 	var n *node
 	var err error
-	point := "final"
+	headWrites := 0
+	var wrap func(ethdb.KeyValueStore) ethdb.KeyValueStore
 	if id == "geth.sethead-interrupted" {
-		point = "rewound"
+		wrap = func(store ethdb.KeyValueStore) ethdb.KeyValueStore {
+			return &handoffStore{KeyValueStore: store, before: func(keys []string) {
+				if !armed || !headWrite(keys) {
+					return
+				}
+				headWrites++
+				if headWrites == 2 {
+					// The first native marker batch persisted head 5. Stop
+					// before the second batch can persist head 4; target is 3.
+					check(n.db.SyncKeyValue())
+					panic(faultHit{id})
+				}
+			}}
+		}
 	}
 	n, err = openHandoff(mem, dir, genesis, cfg, nil, extractorgeth.LifecycleOptions{Point: func(p string) {
-		if armed && p == point {
+		if armed && id == "geth.mid-reorg-long-branch" && p == "final" {
 			check(n.db.SyncKeyValue())
 			panic(faultHit{id})
 		}
-	}}, nil)
+	}}, wrap)
 	check(err)
 	_, err = n.chain.InsertChain(types.Blocks{old[0]})
 	check(err)
@@ -194,6 +208,10 @@ func interrupted(work, id, commit string, genesis *core.Genesis, index int) case
 	})
 	row := caseResult{"hit": hit, "step_error": errText(stepErr), "old_head": plainHash(old[5].Hash().Hex()),
 		"records_before": prefixed(n.db, n.db, decisionPrefix), "head_before_restart": plainHash(rawdb.ReadHeadBlockHash(n.db).Hex())}
+	if id == "geth.sethead-interrupted" {
+		row["head_write_attempts"] = headWrites
+		row["intermediate"] = map[string]any{"number": old[4].NumberU64(), "hash": plainHash(old[4].Hash().Hex()), "root": plainHash(old[4].Root().Hex())}
+	}
 	target := old[2]
 	if id == "geth.mid-reorg-long-branch" {
 		target = next[6]
@@ -220,7 +238,7 @@ func interrupted(work, id, commit string, genesis *core.Genesis, index int) case
 		_, e := r.chain.StateAt(target.Root(), target.Number(), target.Time())
 		row["state_error"] = errText(e)
 	}
-	row["old_branch_length"] = 4
+	row["old_branch_length"] = len(old) - 2
 	return row
 }
 
