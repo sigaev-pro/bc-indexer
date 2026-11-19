@@ -67,6 +67,16 @@ def election():
 
 
 class SystemControls(unittest.TestCase):
+    def test_deposit_sender_and_election_input_are_independent(self):
+        row = deposit(False)
+        row["before"][judge.VALIDATOR]["balance"] = "10001"
+        with self.assertRaisesRegex(ValueError, "system sender balance"):
+            judge.check_system(row)
+        row = election()
+        row["value"] = "1"; row["before"][judge.VALIDATOR]["balance"] = "1"
+        with self.assertRaisesRegex(ValueError, "wrong election input"):
+            judge.check_system(row)
+
     def test_source_initializer_cases(self):
         for case in INITIALIZERS:
             with self.subTest(contract=case[0]): judge.check_system(initializer(case))

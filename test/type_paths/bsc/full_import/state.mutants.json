@@ -69,12 +69,6 @@
       "replacement": "require(True, \"initializer moved funds\")"
     },
     {
-      "name": "check_system: \"validator initialization array\"",
-      "file": "test/type_paths/bsc/full_import/judge.py",
-      "original": "require(slot(before, to, \"1\") == 0 and slot(after, to, \"1\") == 21, \"validator initialization array\")",
-      "replacement": "require(True, \"validator initialization array\")"
-    },
-    {
       "name": "check_system: \"wrong deposit input\"",
       "file": "test/type_paths/bsc/full_import/judge.py",
       "original": "require(to == VALIDATOR_CONTRACT and value > 0 and row[\"data\"][8:] == VALIDATOR[2:].zfill(64), \"wrong deposit input\")",

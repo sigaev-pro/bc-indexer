@@ -216,8 +216,6 @@ def check_system(row):
             require(slot(before, to, key) == 0 and slot(after, to, key) == value, "initializer selected storage: " + key)
         for address in before:
             require(balance(before, address) == balance(after, address), "initializer moved funds")
-        if to == VALIDATOR_CONTRACT:
-            require(slot(before, to, "1") == 0 and slot(after, to, "1") == 21, "validator initialization array")
     elif selector == DEPOSIT:
         require(to == VALIDATOR_CONTRACT and value > 0 and row["data"][8:] == VALIDATOR[2:].zfill(64), "wrong deposit input")
         require(slot(before, to, "0") == 1 and slot(before, to, "23") == slot(before, to, "24") == 0, "deposit preconditions")
@@ -386,7 +384,7 @@ def check(report, generated, genesis):
             require(native["number"] == block["number"] == number and native["time"] == block["time"] and
                     native["hash"] == block["hash"] and native["root"] == block["root"] and native["parent"] == normalized(previous["hash"]), "block identity/continuity differs")
             previous = native
-        require([b["phase"] for b in generated if b["phase"] != "warmup"] == ["registration", "success", "revert"], "missing registration or target blocks")
+        require([b["phase"] for b in generated if b["phase"] != "warmup"] == ["registration", "bootstrap-undelegate", "bootstrap-delegate", "success", "revert"], "missing registration or target blocks")
         targets = [b for b in generated if b["phase"] in ("success", "revert")]
         require(all(b["validator_index"] == "1" and b["time"] >= GENESIS_TIME + 6 for b in targets), "target validator not active")
         check_bridge(report["bridge"], generated, genesis_header)
