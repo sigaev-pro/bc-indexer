@@ -236,6 +236,13 @@ class PolygonJudgeProofTests(unittest.TestCase):
         bad.update(blob_raw=raw.hex(), blob_hash="0x" + c.keccak256(raw).hex())
         with self.assertRaises(ValueError):
             judge.component_claims(bad, head)
+        bad = copy.deepcopy(original)
+        fields = judge.plain_rlp(c.rlp_list(bytes.fromhex(bad["blob_raw"])[1:]))
+        fields[-2] = num(int.from_bytes(fields[-2], "big") + 1)
+        raw = b"\x03" + c.rlp(fields)
+        bad.update(blob_raw=raw.hex(), blob_hash="0x" + c.keccak256(raw).hex())
+        with self.assertRaises(ValueError):
+            judge.component_claims(bad, head)
 
     def test_import_refusals_bind_candidate_body_and_durable_frontiers(self):
         blocks = self.native["blocks"]
@@ -261,6 +268,32 @@ class PolygonJudgeProofTests(unittest.TestCase):
                                   for key, field in (("counter", "next"), ("lowwater", "sequence"), ("purged", "sequence"))})
             rows.append(row)
         judge.refusal_claims(rows, blocks, blob)
+        with self.assertRaises(ValueError):
+            judge.refusal_claims(rows[:-1], blocks, blob)
+        bad = copy.deepcopy(rows)
+        body = judge.plain_rlp(c.rlp_list(bytes.fromhex(bad[0]["raw_block"])))
+        body[0][0] = bytes.fromhex("aa" * 32)
+        bad[0].update(raw_block=c.rlp(body).hex(), parent="0x" + "aa" * 32,
+                      hash="0x" + c.keccak256(c.rlp(body[0])).hex())
+        with self.assertRaises(ValueError):
+            judge.refusal_claims(bad, blocks, blob)
+        for change in ("price", "signature"):
+            bad = copy.deepcopy(rows)
+            fields = judge.plain_rlp(c.rlp_list(normal))
+            if change == "price":
+                fields[1] = num(6_000_000_000)
+                wrong_normal = signed_wire(0, fields)
+            else:
+                fields[-3:] = sign_fixture(c.keccak256(c.rlp(fields[:6] + [num(15001), b"", b""])), 2)
+                fields[-3] = num(int.from_bytes(fields[-3], "big") + 30037)
+                wrong_normal = c.rlp(fields)
+            bind_body(bad[1], [original, wrong_normal])
+            with self.subTest(nonfinal=change), self.assertRaises(ValueError):
+                judge.refusal_claims(bad, blocks, blob)
+        bad = copy.deepcopy(rows)
+        bind_body(bad[2], [b"\x7e" + bodies["mismatched-l1-hash"][0][1:]])
+        with self.assertRaises(ValueError):
+            judge.refusal_claims(bad, blocks, blob)
         for index in range(6):
             for change in (lambda row: row.update(error="unrelated error"), lambda row: row.update(head_after="other"),
                            lambda row: row.update(decisions={}), lambda row: row.update(control_error="failed control")):
@@ -629,6 +662,7 @@ class PolygonJudgeProofTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 judge.native_block(row)
         for change in (lambda row: row["transaction_proofs"].append(copy.deepcopy(row["transaction_proofs"][0])),
+                       lambda row: row["transaction_proofs"][0].update(value="01"),
                        lambda row: row["transaction_proofs"][0].update(index=3),
                        lambda row: row["transaction_proofs"][0].update(key="7f")):
             row = block_vector()
@@ -660,7 +694,7 @@ class PolygonJudgeProofTests(unittest.TestCase):
             for position in positions:
                 bad = copy.deepcopy(fields)
                 bad[position] = [[b"bad"]] if position >= 0 else (b"\x09" if position == -3 else b"")
-                wire = (bytes([kind]) if kind else b"") + c.rlp(bad)
+                wire = signed_wire(kind, bad) if position >= 0 else (bytes([kind]) if kind else b"") + c.rlp(bad)
                 with self.subTest(kind=kind, position=position), self.assertRaises(ValueError):
                     judge.ordinary_fields(wire, index)
         with self.assertRaises(ValueError):
@@ -668,11 +702,11 @@ class PolygonJudgeProofTests(unittest.TestCase):
         fields = judge.plain_rlp(c.rlp_list(tx_wire(2, 4)[1:]))
         fields.insert(9, b"ignored")
         with self.assertRaises(ValueError):
-            judge.ordinary_fields(b"\x02" + c.rlp(fields), 4)
+            judge.ordinary_fields(signed_wire(2, fields), 4)
         fields = judge.plain_rlp(c.rlp_list(tx_wire(4, 6)[1:]))
         fields[9].append(copy.deepcopy(fields[9][0]))
         with self.assertRaises(ValueError):
-            judge.ordinary_fields(b"\x04" + c.rlp(fields), 6)
+            judge.ordinary_fields(signed_wire(4, fields), 6)
 
     def test_ordinary_source_field_controls_cover_each_fee_and_authorization(self):
         for index, kind in enumerate((0, 0, 1, 1, 2, 2, 4, 4)):

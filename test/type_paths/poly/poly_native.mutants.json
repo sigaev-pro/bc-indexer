@@ -132,7 +132,8 @@
       "name": "native_block: nonempty transaction root for empty body",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(header[4] == codec.EMPTY_ROOT, \"nonempty transaction root for empty body\")",
-      "replacement": "check(True, 'nonempty transaction root for empty body')"
+      "replacement": "check(True, 'nonempty transaction root for empty body')",
+      "equivalent": "Equivalent: unconditional complete ordered-root reconstruction independently requires EMPTY_ROOT for an empty value list before acceptance."
     },
     {
       "name": "native_block: wrong transaction proof key",
@@ -302,7 +303,8 @@
       "name": "receipt_claims: nonempty receipt root for empty body",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(header[5] == codec.EMPTY_ROOT, \"nonempty receipt root for empty body\")",
-      "replacement": "check(True, 'nonempty receipt root for empty body')"
+      "replacement": "check(True, 'nonempty receipt root for empty body')",
+      "equivalent": "Equivalent: unconditional complete ordered-root reconstruction independently requires EMPTY_ROOT for an empty value list before acceptance."
     },
     {
       "name": "receipt_claims: wrong receipt proof key",
@@ -380,13 +382,15 @@
       "name": "ordinary_fields: invalid typed signature parity",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(kind == 0 or integer(v) in (0, 1), \"invalid typed signature parity\")",
-      "replacement": "check(True, 'invalid typed signature parity')"
+      "replacement": "check(True, 'invalid typed signature parity')",
+      "equivalent": "Equivalent: the following fixture_signature call independently enforces parity0/1 and strict secp256k1 scalar/low-s bounds, which imply this weaker expected-valid outer-signature guard."
     },
     {
       "name": "ordinary_fields: invalid transaction signature",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(0 < integer(r) < 2**256 and 0 < integer(s) < 2**256, \"invalid transaction signature\")",
-      "replacement": "check(True, 'invalid transaction signature')"
+      "replacement": "check(True, 'invalid transaction signature')",
+      "equivalent": "Equivalent: the following fixture_signature call independently enforces parity0/1 and strict secp256k1 scalar/low-s bounds, which imply this weaker expected-valid outer-signature guard."
     },
     {
       "name": "ordinary_fields: wrong ordinary transaction input",
@@ -398,7 +402,8 @@
       "name": "ordinary_fields: wrong legacy chain/signature domain",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(integer(v) in (30037, 30038), \"wrong legacy chain/signature domain\")",
-      "replacement": "check(True, 'wrong legacy chain/signature domain')"
+      "replacement": "check(True, 'wrong legacy chain/signature domain')",
+      "equivalent": "Equivalent: fixture_signature requires parity in (0,1), and the legacy caller derives parity as v-30037. This independently restricts v to exactly 30037 or 30038."
     },
     {
       "name": "ordinary_fields: wrong legacy fee",
@@ -446,7 +451,8 @@
       "name": "ordinary_fields: invalid authorization signature",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(integer(parity) in (0, 1) and 0 < integer(ar) < 2**256 and 0 < integer(ass) < 2**256,\n                  \"invalid authorization signature\")",
-      "replacement": "check(True, 'invalid authorization signature')"
+      "replacement": "check(True, 'invalid authorization signature')",
+      "equivalent": "Equivalent: the following fixture_signature call independently enforces parity0/1, 0<r<secp256k1 order and 0<s<=order/2, which strictly imply these weaker expected-valid authorization checks."
     },
     {
       "name": "ordinary_state: ordinary fixture incomplete",
@@ -728,8 +734,8 @@
     {
       "name": "empty leaf admitted",
       "file": "test/type_paths/poly/poly_codec.py",
-      "original": "if not isinstance(value, bytes) or not value:",
-      "replacement": "if not isinstance(value, bytes):"
+      "original": "if not isinstance(value, bytes) or not value:\n                raise ValueError(\"empty or non-byte leaf value\")",
+      "replacement": "if not isinstance(value, bytes):\n                raise ValueError(\"empty or non-byte leaf value\")"
     },
     {
       "name": "wrong ordinary transaction input conjunct 0",

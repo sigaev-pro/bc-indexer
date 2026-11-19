@@ -12,6 +12,21 @@ spec.loader.exec_module(codec)
 
 
 class PolygonProofTests(unittest.TestCase):
+    def test_independent_native_ordered_vectors(self):
+        # Standalone BSC native Trie + StackTrie component output at producer
+        # befd0a7, native-trie-vectors.json SHA256 a0f93bd40e689a8ec9948ae14208fd7ecd1786be7fb7e808a3641ef7bd567c68.
+        # The enclosing BSC election run failed; no import acceptance is inferred.
+        roots = {0: "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+                 1: "7da536f7df63a0dfb481590e53be0e3063d9b798925cc3d479a3eb3155d0b394",
+                 2: "da7f4d8db553a6e062936cd08ab474ff3708b65b3b7846478f7d24b4b260cac5",
+                 16: "887d924e407fb71c6a45bb933a2da6300e5c072e62906420e295a4df9c810f41",
+                 128: "d3b0ef405eaa24d4081a2719c9ae2810eda4a2ef5fcd5d714af71402d28f910a",
+                 129: "288bfe9491b1472c4a9114003fd9de2140541eaf1fc286cbe165d8698c850aa2",
+                 300: "72a5f9be2b6901e9b659d369ec467fb8ecdf8fd12a35cfe524fb9a05dad8f867"}
+        for count, root in roots.items():
+            with self.subTest(count=count):
+                self.assertEqual(codec.ordered_root([bytes([i % 251]) for i in range(count)]).hex(), root)
+
     def test_ordered_root_empty_tiny_and_index_extension_vectors(self):
         self.assertEqual(codec.ordered_root([]), codec.EMPTY_ROOT)
         branch = [b""] * 17
