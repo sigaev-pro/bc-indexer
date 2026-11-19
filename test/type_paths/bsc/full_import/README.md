@@ -2,6 +2,12 @@
 
 Status: implementation in progress; native import NOT_RUN.
 
+This checkpoint is a prototype, not an acceptance candidate. The pending judge
+still needs exact per-contract initializer storage provenance, independent
+StakeHub registration outputs, and ordered block-transaction/receipt wire
+binding. Its current assertions cannot establish acceptance. Portable negative
+controls and mutation checks are also pending; no native preparation has run.
+
 This continuation starts from accepted PR188. It must use the accepted BSC
 capture patches and an actual Parlia chain, with no fake engine or modified
 consensus rules. It does not claim public/mainnet replay equivalence.

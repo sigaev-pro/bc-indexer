@@ -259,6 +259,22 @@ func modernGenerate(t *testing.T, work string) fixture {
 		if err := engine.Prepare(chain, header); err != nil {
 			t.Fatal(err)
 		}
+		// Prepare is a live mining helper and clamps historical time to now.
+		// This single in-turn validator uses the parent snapshot's native interval;
+		// Seal and InsertChain still enforce every ordinary consensus check.
+		interval := uint64(3000)
+		if genesis.Config.IsFermi(parent.Number, parent.Time) {
+			interval = 450
+		}
+		millis := parent.MilliTimestamp() + interval
+		header.Time = millis / 1000
+		header.MixDigest = common.Hash{}
+		if genesis.Config.IsLorentz(header.Number, header.Time) {
+			header.SetMilliseconds(millis % 1000)
+		}
+		if err := engine.SetExtraData(chain, header); err != nil {
+			t.Fatal(err)
+		}
 		header.BaseFee = eip1559.CalcBaseFee(genesis.Config, parent)
 		body := &types.Body{}
 		if genesis.Config.IsCancun(header.Number, header.Time) {
