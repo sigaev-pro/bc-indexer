@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "scope": "read-only official source provenance, not bytecode recompilation",
+  "sources": [
+    {
+      "name": "stakehub",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/041881a02475638b19f3d840871b7621cdebd8f8/contracts/StakeHub.sol",
+      "git_blob": "f1992c2f5a2e4106ac73200ea9ee1a67c3d94b84",
+      "sha256": "fd7166fe15da7e359dbcd2d07a0bab0e24364ded239e9c8fa2486da07aa086f1",
+      "size_bytes": 53484
+    },
+    {
+      "name": "validatorfullsource",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/44ebc6c17a00bd24db3240141a78091528dcebbb/contracts/BSCValidatorSet.sol",
+      "git_blob": "fc9ffda0e5890bff813a551d58cf56a1a306f77d",
+      "sha256": "93fd53c9ca5d97d1c0b1bebef003737facf8d36c6a0edbb89e51c110d0dbca08",
+      "size_bytes": 48559
+    },
+    {
+      "name": "modern_TokenHub",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/TokenHub.sol",
+      "git_blob": "45f5d0d85eb2f54e1fc4686be4a264966f8807ad",
+      "sha256": "7c70d30712f5cd606de6dca2dba8572d062e9254ca3f311086ef0a37d07b63ea",
+      "size_bytes": 14167
+    },
+    {
+      "name": "modern_SlashIndicator",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/SlashIndicator.sol",
+      "git_blob": "5200bdbc02201cac36ff07950a1a494a29af3d2c",
+      "sha256": "6fae75bb22b0707cc9493b1cf3f2daa3836daf0f5d52a43e746e1090601a8c93",
+      "size_bytes": 17399
+    },
+    {
+      "name": "modern_CrossChain",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/deprecated/CrossChain.sol",
+      "git_blob": "0a06226666c9a8174f908966000020ff99b41ead",
+      "sha256": "114652fac6138203d3c3b500597af38d84fd4855004cb8f25b97cf82d726daea",
+      "size_bytes": 7128
+    },
+    {
+      "name": "modern_RelayerHub",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/deprecated/RelayerHub.sol",
+      "git_blob": "41564dd5da50572bfcfce9d6dc0ddb931c9a00ed",
+      "sha256": "d8216d104fbde3e532f6a50e22bbce0fd14f031da7e8b01150bbeca49b48ef4b",
+      "size_bytes": 3925
+    },
+    {
+      "name": "modern_RelayerIncentivize",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/deprecated/RelayerIncentivize.sol",
+      "git_blob": "4554a985e54a7e25d0a260cf336f7b2887f413f4",
+      "sha256": "e066d810c254cc3ba19ed388c9ebcf5c2d4a4aa1f043a66c54027faed97f280d",
+      "size_bytes": 2798
+    },
+    {
+      "name": "modern_TendermintLightClient",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/deprecated/TendermintLightClient.sol",
+      "git_blob": "db5ffbd20c29df50c6a6d8d4495df50899f1931a",
+      "sha256": "e02748af5352c52b10201dbc0dd2989668d03d0204d3565b32693fe3f00bdf20",
+      "size_bytes": 4040
+    },
+    {
+      "name": "modern_BSCGovernor",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/041881a02475638b19f3d840871b7621cdebd8f8/contracts/BSCGovernor.sol",
+      "git_blob": "b568b11f9892dfae5c2c5016ff70ae37091461d7",
+      "sha256": "4509e87eda35bc495ae2195d50ad53425d3158a5d88175e01dfba3907898707b",
+      "size_bytes": 13587
+    },
+    {
+      "name": "modern_GovToken",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/GovToken.sol",
+      "git_blob": "b338e8326e2b31ffae93cf22da1a2c1a79bd4fc4",
+      "sha256": "23eabaece1da3ac38413badd5a693a0275c8f0ad0ae277031c4c4d5107a92492",
+      "size_bytes": 4466
+    },
+    {
+      "name": "modern_BSCTimelock",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/BSCTimelock.sol",
+      "git_blob": "3049069bdced9bf020b7e709e3e2f7df72f8cb0a",
+      "sha256": "0c5667a8bda15b63c272cb4854761662fad2b39de8c43d1389cdd6047143123e",
+      "size_bytes": 1532
+    },
+    {
+      "name": "modern_TokenRecoverPortal",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/TokenRecoverPortal.sol",
+      "git_blob": "db5cc3dff7ecb77b841e12a348c6f7629ee7e467",
+      "sha256": "268f9df05adfeecb2cd1b3ddc5ee5ec6d777b1b8dabf006563fd1c2bf33cecfe",
+      "size_bytes": 11553
+    },
+    {
+      "name": "modern_SystemV2",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/041881a02475638b19f3d840871b7621cdebd8f8/contracts/SystemV2.sol",
+      "git_blob": "9b198a5c7c85237923a37b691bdf6f102966bd9c",
+      "sha256": "e463b43c58f9b5f00ffaac74a77b1c1017972e9c137131e63a7a56e104269929",
+      "size_bytes": 3595
+    },
+    {
+      "name": "stakecredit",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/StakeCredit.sol",
+      "git_blob": "025e875a15044594f029016b40fa3f0394ddfe63",
+      "sha256": "8f364e5a928111a907c8675c304051ecf72f78420b965e650dbe88895af6e5ab",
+      "size_bytes": 13889
+    },
+    {
+      "name": "protectable",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/041881a02475638b19f3d840871b7621cdebd8f8/contracts/extension/Protectable.sol",
+      "git_blob": "0f3ee7e334e761d19be51a20247e1112d78d487a",
+      "sha256": "05288d91d42bcd54249f2768d98d33df5c4c8331ac0a6bcb2157faf7e13f70bd",
+      "size_bytes": 3091
+    },
+    {
+      "name": "package-lock",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/041881a02475638b19f3d840871b7621cdebd8f8/package-lock.json",
+      "git_blob": "8c086d19eac07f19f5c35261f1f986d79b365b59",
+      "sha256": "e68fb5738a491691457c70c0651aa93cba340dd0f23f20868c5c98ca7a3adf99",
+      "size_bytes": 45492
+    },
+    {
+      "name": "generate",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/041881a02475638b19f3d840871b7621cdebd8f8/scripts/generate.py",
+      "git_blob": "b52f8c334d6b22067518843b7d0c7acc0627097c",
+      "sha256": "ebb00eea95ae0c7b2efcc536820fdb4296b79ecab4e983d5be20f6875cf7dadf",
+      "size_bytes": 25539
+    },
+    {
+      "name": "Initializable",
+      "url": "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/v4.9.6/contracts/proxy/utils/Initializable.sol",
+      "git_blob": "47658dc68289c3371ba3a06357292b275a99f4a0",
+      "sha256": "a2c4e5c274a586f145d278293ae33198cd8f412ab7e6d26f2394c8949b32b24b",
+      "size_bytes": 6641
+    },
+    {
+      "name": "ReentrancyGuard",
+      "url": "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/v4.9.6/contracts/security/ReentrancyGuardUpgradeable.sol",
+      "git_blob": "66b24250b506e0beff8676e3044c81ddbf815ede",
+      "sha256": "82789e6bdc1d6b5d8348a741281ec7a1e46c602017e1e4b7ae805bd55bfed26b",
+      "size_bytes": 3683
+    },
+    {
+      "name": "Context",
+      "url": "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/v4.9.6/contracts/utils/ContextUpgradeable.sol",
+      "git_blob": "91ea6fb1b8314a5d9c7a027ab3cdc8350f11f7b5",
+      "sha256": "2d3d7dc6e116cb8ebb8517208141cb3d0950b337a285f15f8476ec3df29d824e",
+      "size_bytes": 1484
+    },
+    {
+      "name": "ERC20",
+      "url": "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/v4.9.6/contracts/token/ERC20/ERC20Upgradeable.sol",
+      "git_blob": "bbb2c87bb10a331b5130f220dc9a2c17404e759f",
+      "sha256": "41b11f70764d014fd808bcaa33aa16dbad5554263c4e7e9ef1f3359ada116a11",
+      "size_bytes": 13494
+    }
+  ],
+  "native_source_commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+  "bytecode_provenance": "../modern_init/provenance.json",
+  "bytecode_provenance_sha256": "6391550d9083ef5b8e8f32043c3e807d7bab4de4c163e10ad4d876fc42a15473",
+  "limitations": [
+    "Source-derived storage layout; no independent Solidity recompilation claim.",
+    "Native execution and complete negative controls remain separate gates."
+  ]
+}

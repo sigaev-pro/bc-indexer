@@ -28,6 +28,8 @@ BINARY = "bsc-full-type-import.test"
 PACKAGE = "extractor/bsc/decision"
 INPUTS = {"native.py": HERE / "native.py", "native_test.go": HERE / "native_test.go", "judge.py": HERE / "judge.py",
           "wire.py": HERE / "wire.py",
+          "ledger.py": HERE / "ledger.py",
+          "oracle_sources.json": HERE / "oracle_sources.json",
           "corpus_test.go": ROOT / "test/native_corpus/bsc/corpus_test.go",
           "provenance.json": HERE.parent / "modern_init/provenance.json",
           "eth_type_judge.py": ROOT / "test/type_paths/eth/eth_type_judge.py"}

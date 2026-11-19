@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "description": "Absolute private balance/nonce ledger single-check controls; no native credit.",
+  "copy": [
+    "test/type_paths/bsc/full_import/*.py",
+    "test/type_paths/bsc/modern_init/provenance.json",
+    "test/type_paths/eth/eth_type_judge.py"
+  ],
+  "test": [
+    "{python}",
+    "test/type_paths/bsc/full_import/test_ledger.py",
+    "-v"
+  ],
+  "import": [
+    "test_ledger"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "before absolute state",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.require_state(row[\"before\"], \"before\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "after absolute state",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.require_state(row[\"after\"], \"after\")",
+      "replacement": "pass"
+    },
+    {
+      "name": "account set",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "set(state) != set(self.balances)",
+      "replacement": "False"
+    },
+    {
+      "name": "absolute balances",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.quantity(account[\"balance\"]) != self.balances[address]",
+      "replacement": "False"
+    },
+    {
+      "name": "nonce type",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "type(account[\"nonce\"]) is not int",
+      "replacement": "False"
+    },
+    {
+      "name": "nonce value",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "account[\"nonce\"] != self.nonces[address]",
+      "replacement": "False"
+    },
+    {
+      "name": "pre-deposit sweep",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.move(a[\"system\"], a[\"validator\"], self.balances[a[\"system\"]])",
+      "replacement": "pass"
+    },
+    {
+      "name": "deposit completeness",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "value != self.balances[a[\"validator\"]]",
+      "replacement": "False"
+    },
+    {
+      "name": "deposit reward fraction",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "value * 625 // 10000",
+      "replacement": "value * 624 // 10000"
+    },
+    {
+      "name": "deposit burn fraction",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "value * 1000 // 10000",
+      "replacement": "value * 999 // 10000"
+    },
+    {
+      "name": "election dusk transfer",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.move(a[\"validator_contract\"], a[\"reward\"], self.balances[a[\"validator_contract\"]])",
+      "replacement": "pass"
+    },
+    {
+      "name": "legacy fee price",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "2000000000 if kind <= 1 else 1000000000",
+      "replacement": "1000000000"
+    },
+    {
+      "name": "blob fee",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "131072 if kind == 3 else 0",
+      "replacement": "0"
+    },
+    {
+      "name": "stake funding",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "2001 * 10**18",
+      "replacement": "2000 * 10**18"
+    },
+    {
+      "name": "authorization nonce",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.nonces[a[\"authority\"]] += 1",
+      "replacement": "pass"
+    },
+    {
+      "name": "transfer nonnegative",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "value < 0",
+      "replacement": "False"
+    },
+    {
+      "name": "transfer sufficient",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.balances[sender] < value",
+      "replacement": "False"
+    }
+  ]
+}

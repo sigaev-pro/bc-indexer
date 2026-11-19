@@ -13,6 +13,9 @@ spec.loader.exec_module(encoding)
 wire_spec = importlib.util.spec_from_file_location("bsc_full_import_wire", HERE / "wire.py")
 wire = importlib.util.module_from_spec(wire_spec)
 wire_spec.loader.exec_module(wire)
+ledger_spec = importlib.util.spec_from_file_location("bsc_full_import_balance_ledger", HERE / "ledger.py")
+ledger_module = importlib.util.module_from_spec(ledger_spec)
+ledger_spec.loader.exec_module(ledger_module)
 q = encoding.quantity
 SENDER = "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"
 AUTHORITY = "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf"
@@ -66,6 +69,19 @@ def check_genesis(genesis, config):
         require(actual == row["bytecode_sha256"], "modern contract bytecode differs")
         require(q(account["balance"]) == 0 and not account.get("storage"), "unexpected preinitialized system state")
         require(q(account.get("nonce", 0)) == 0, "unexpected system genesis nonce")
+    expected_allocations = {row["address"][2:] for row in provenance()} | {SENDER[2:], SUCCESS[2:], REVERT[2:]}
+    require(set(genesis["alloc"]) == expected_allocations, "unexpected genesis account set")
+    for address, balance, code in ((SENDER, 100000 * 10**18, ""), (SUCCESS, 0, "600160005500"), (REVERT, 0, "600260005560006000fd")):
+        account = genesis["alloc"][address[2:]]
+        require(q(account["balance"]) == balance and q(account.get("nonce", 0)) == 0 and not account.get("storage") and
+                account.get("code", "").removeprefix("0x") == code, "unexpected private genesis allocation")
+
+
+def ledger_addresses():
+    return {"all": {row["address"] for row in provenance()} | {SENDER, AUTHORITY, VALIDATOR, SUCCESS, REVERT, SYSTEM, BURN, CREDIT},
+            "sender": SENDER, "authority": AUTHORITY, "validator": VALIDATOR, "success": SUCCESS,
+            "system": SYSTEM, "burn": BURN, "credit": CREDIT, "stake_hub": STAKE_HUB,
+            "validator_contract": VALIDATOR_CONTRACT, "reward": REWARD}
 
 
 def check_bridge(bridge, blocks, genesis_header):
@@ -305,6 +321,7 @@ def check(report, generated, genesis):
         rows = report["transactions"]
         require(len(rows) == sum(b["transactions"] for b in generated), "missing transaction snapshots")
         user_index = 0; init_seen = set(); feynman_seen = set(); election_count = 0
+        ledger = ledger_module.BalanceLedger(genesis, ledger_addresses(), q)
         for block in generated:
             block_rows = [r for r in rows if r["block"] == block["number"]]
             require(len(block_rows) == block["transactions"], "wrong per-block row count")
@@ -332,6 +349,7 @@ def check(report, generated, genesis):
                     require(not seen_system, "user transaction after system transaction")
                     check_user(row, block["phase"], user_index); user_index += 1
                     if block["phase"] in ("success", "revert"): target_types.append(row["type"])
+                ledger.apply(row, block["phase"])
             if block["phase"] in ("success", "revert"):
                 require(target_types == list(range(5)), "missing native type variant")
             require(cumulative_gas == wire.integer(header[10]), "header gas differs")
