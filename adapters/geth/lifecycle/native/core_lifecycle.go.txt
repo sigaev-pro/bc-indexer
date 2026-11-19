@@ -55,6 +55,9 @@ type ExtractorLifecycle interface {
 	// Rewind records the CANONICAL intent of a SetHead rewind from old to
 	// target, the head that the native rewind will keep.
 	Rewind(old, target *types.Header) error
+	// ResumeRewind restores the pending context of the original saved
+	// rewind during recovery, without recording a replacement intent.
+	ResumeRewind(current, target *types.Header) error
 	// Rewinding reports whether a decided SetHead rewind is in progress.
 	Rewinding() bool
 	// Rewound checks the rewound head against the intent and returns the
@@ -294,6 +297,25 @@ func (bc *BlockChain) extractorBeginRewind(head, time uint64) (func(error) error
 		exit()
 		return err
 	}, nil
+}
+
+// ExtractorCompleteRewind resumes a saved rewind under the recovery pass.
+// ResumeRewind validates the original intent and restores its pending
+// context, so extractorFinishRewind retains marker/settle/finality order.
+func (bc *BlockChain) ExtractorCompleteRewind(block *types.Block) error {
+	defer bc.extractorLock()()
+	l := bc.extractorLifecycle
+	if l == nil || block == nil {
+		return fmt.Errorf("extractor: saved rewind has no lifecycle or target")
+	}
+	if !bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
+		return fmt.Errorf("extractor: rewind target %d %s has no stored state", block.NumberU64(), block.Hash())
+	}
+	if err := l.ResumeRewind(bc.CurrentBlock(), block.Header()); err != nil {
+		return err
+	}
+	_, err := bc.setHeadBeyondRoot(block.NumberU64(), 0, common.Hash{}, false)
+	return l.Settle(err)
 }
 
 // extractorRewinding reports whether setHeadBeyondRoot runs a decided

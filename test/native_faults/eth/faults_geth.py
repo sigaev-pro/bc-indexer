@@ -128,7 +128,7 @@ def handoff_verdicts(probe):
                 good = len(pending) == 1
                 intent = pending[0][1] if good else {}
                 target = row["target"]
-                evidence = "native_head_is_new_head" if name == "geth.sethead-interrupted" else \
+                evidence = "completed_inside_rewind" if name == "geth.sethead-interrupted" else \
                     "completed_inside_reorg"
                 good = (good and intent["kind"] == "CANONICAL" and
                         intent["old_head"]["hash"] == row["old_head"] and
@@ -137,6 +137,14 @@ def handoff_verdicts(probe):
                         row["phase"] == "LIVE" and row["head"] == target and row["state_error"] is None and
                         len(row["settled"]) == 1 and row["settled"][0]["sequence"] == intent["sequence"] and
                         row["settled"][0]["evidence"] == evidence)
+                if name == "geth.sethead-interrupted":
+                    intermediate = row["intermediate"]
+                    good = (good and type(row["head_write_attempts"]) is int and
+                            row["head_write_attempts"] == 2 and
+                            type(intermediate["number"]) is int and
+                            target["number"] < intermediate["number"] < intent["old_head"]["number"] and
+                            row["head_before_restart"] == intermediate["hash"] and
+                            row["head_before_restart"] not in (row["old_head"], target["hash"]))
                 if name == "geth.mid-reorg-long-branch":
                     good = good and row["old_branch_length"] > 1 and \
                         row["head_before_restart"] not in (row["old_head"], target["hash"])
