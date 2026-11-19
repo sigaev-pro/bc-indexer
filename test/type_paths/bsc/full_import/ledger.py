@@ -67,6 +67,10 @@ class BalanceLedger:
                 self.move(a["sender"], a["credit"], 2001 * 10**18)
                 self.nonces[a["stake_hub"]] += 1
                 self.nonces[a["credit"]] = 1
+            elif phase == "bootstrap-undelegate":
+                pass
+            elif phase == "bootstrap-delegate":
+                self.move(a["sender"], a["credit"], 10**18)
             elif phase in ("success", "revert"):
                 if kind == 4:
                     self.nonces[a["authority"]] += 1

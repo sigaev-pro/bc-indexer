@@ -51,3 +51,12 @@ transaction. This fixture independently requires its intended valid
 authorizations. Native-vector and mutation controls cover the test-only
 codec; pending diagnostic vectors must cover embedded trie children and
 shared paths before acceptance.
+
+The genuine bootstrap calls are modeled separately: undelegating one self-share
+BNB creates the pending request through StakeCredit, and the StakeHub call into
+ValidatorSet materializes the legacy extra array. Redelegating one BNB restores
+2001 BNB pooled stake and 2000 operator shares. The proxy's native balance is
+2002 BNB because the pending request remains funded. Request shares/amount,
+seven-day unlock, queue packing/hash, sequence and governance-token supply and
+operator balance have separate before/after expectations. The pending unlock is
+also carried across subsequent rows; correlated substitutions cannot reset it.

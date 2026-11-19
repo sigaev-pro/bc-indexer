@@ -125,6 +125,12 @@
       "file": "test/type_paths/bsc/full_import/ledger.py",
       "original": "self.nonces[a[\"stake_hub\"]] != 1",
       "replacement": "False"
+    },
+    {
+      "name": "restake native transfer",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.move(a[\"sender\"], a[\"credit\"], 10**18)",
+      "replacement": "pass"
     }
   ]
 }

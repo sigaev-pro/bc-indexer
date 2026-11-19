@@ -67,6 +67,16 @@ def fixtures():
     state[judge.SYSTEM]["balance"] = "140000000131072"
     state[judge.SUCCESS]["balance"] = "1"
     save(before, False, "success", kind=3, gas=30000, value=1)
+    before = copy.deepcopy(state)
+    state[judge.SENDER] = {"balance": str(FUND - STAKE - 540000000131074), "nonce": 5}
+    state[judge.SYSTEM]["balance"] = "340000000131072"
+    save(before, False, "bootstrap-undelegate", gas=100000)
+
+    before = copy.deepcopy(state)
+    state[judge.SENDER] = {"balance": str(FUND - STAKE - 10**18 - 740000000131074), "nonce": 6}
+    state[judge.SYSTEM]["balance"] = "540000000131072"
+    state[judge.CREDIT]["balance"] = str(STAKE + 10**18)
+    save(before, False, "bootstrap-delegate", gas=100000, value=10**18)
     return genesis, accounts, rows
 
 
@@ -81,8 +91,8 @@ def check(rows):
 class LedgerControls(unittest.TestCase):
     def test_absolute_genesis_fees_stake_sweep_election_and_authorization(self):
         ledger = check(fixtures()[2])
-        self.assertEqual(ledger.balances[judge.SENDER], FUND - STAKE - 340000000131074)
-        self.assertEqual(ledger.balances[judge.CREDIT], STAKE)
+        self.assertEqual(ledger.balances[judge.SENDER], FUND - STAKE - 10**18 - 740000000131074)
+        self.assertEqual(ledger.balances[judge.CREDIT], STAKE + 10**18)
         self.assertEqual(ledger.nonces[judge.AUTHORITY], 2)
 
     def test_every_account_balance_and_nonce_at_both_boundaries(self):

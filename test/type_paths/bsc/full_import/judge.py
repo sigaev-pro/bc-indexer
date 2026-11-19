@@ -209,7 +209,7 @@ def check_system(row):
             "1004": {"1": 2 * 10**15, "native_decimals": 18},
             "1005": {"1": 1, "2": 5, "3": 1, "4": 80},
             "1006": {"1": 10**20, "2": 10**17}, "2000": {"1": 50, "2": 0, "3": 0, "4": 2**64 - 1},
-            "2002": {"53": 5000, "54": 2000 * 10**18, "55": 10**18, "56": 45, "74": 2},
+            "2002": {"53": 5000, "54": 2000 * 10**18, "55": 10**18, "56": 45, "57": 604800, "74": 2},
             "3000": {"1": 1, "51": PROTECTOR << 8},
         }.get(to[-4:], {})
         for key, value in expected_slots.items():
@@ -261,6 +261,45 @@ def check_registration_input(row, vote):
                 "wrong registration description")
 
 
+def check_bootstrap(row, phase):
+    before, after = row["before"], row["after"]
+    restore = phase == "bootstrap-delegate"
+    require(row["type"] == 0 and row["to"].lower() == STAKE_HUB and row["nonce"] == (2 if restore else 1), "wrong bootstrap sender context")
+    fields = row["fields"]
+    require(q(fields["chainId"]) == 714 and q(fields["gas"]) == 2000000 and q(fields["gasPrice"]) == 2000000000, "wrong bootstrap envelope")
+    expected = ("982ef0a7" if restore else "4d99dd16") + SENDER[2:].zfill(64) + (0 if restore else 10**18).to_bytes(32, "big").hex()
+    require(row["data"] == expected, "wrong bootstrap ABI")
+    require(slot(before, VALIDATOR_CONTRACT, "11") == (21 if restore else 0) and slot(after, VALIDATOR_CONTRACT, "11") == 21,
+            "validator extras not initialized")
+    for state in (before, after):
+        require(slot(state, VALIDATOR_CONTRACT, "validator_index") == 0 and slot(state, VALIDATOR_CONTRACT, "1") == 21,
+                "bootstrap changed validator membership")
+        require(slot(state, STAKE_HUB, "validator_jail_until") == 0 and slot(state, STAKE_HUB, "73") == 0, "bootstrap jailed only validator")
+        require(slot(state, STAKE_HUB, "57") == 604800, "unexpected unbond period")
+    gov = "0x" + "2005".zfill(40)
+    for state, pooled, own in ((before, 2000 if restore else 2001, 1999 if restore else 2000),
+                               (after, 2001 if restore else 2000, 2000 if restore else 1999)):
+        for key in ("103", "152"):
+            require(slot(state, CREDIT, key) == pooled * 10**18, "bootstrap credit pool/supply")
+        require(slot(state, CREDIT, "operator_shares") == own * 10**18 and slot(state, CREDIT, "locked_shares") == 10**18,
+                "bootstrap credit shares")
+        require(slot(state, gov, "gov_supply") == own * 10**18 and slot(state, gov, "gov_operator") == own * 10**18 and slot(state, gov, "gov_dead") == 0,
+                "bootstrap governance sync")
+    require(balance(before, CREDIT) == 2001 * 10**18 and balance(after, CREDIT) == (2002 if restore else 2001) * 10**18,
+            "pending unbond native funds")
+    request_hash = int.from_bytes(encoding.keccak256(bytes.fromhex(SENDER[2:]) + bytes(32)), "big")
+    pending = {"unbond_shares": 10**18, "unbond_amount": 10**18, "unbond_sequence": 1,
+               "unbond_queue": 1 << 128, "unbond_first": request_hash}
+    for key, value in pending.items():
+        require(slot(before, CREDIT, key) == (value if restore else 0) and slot(after, CREDIT, key) == value, "pending unbond field: " + key)
+    if restore:
+        require(slot(before, CREDIT, "unbond_unlock") == slot(after, CREDIT, "unbond_unlock") and
+                row["time"] < slot(after, CREDIT, "unbond_unlock"), "delegate changed pending unlock")
+    else:
+        require(slot(before, CREDIT, "unbond_unlock") == 0 and slot(after, CREDIT, "unbond_unlock") == row["time"] + 604800,
+                "wrong unbond unlock time")
+
+
 def check_user(row, phase, index, vote):
     before, after, receipt = row["before"], row["after"], row["receipt"]
     kind, fields = row["type"], row["fields"]
@@ -274,7 +313,7 @@ def check_user(row, phase, index, vote):
     if kind == 3:
         require(q(receipt["blobGasUsed"]) == 131072 and q(receipt["blobGasPrice"]) == 1, "wrong blob fees")
         fee += 131072
-    value = 2001 * 10**18 if phase == "registration" else 1
+    value = {"registration": 2001 * 10**18, "bootstrap-undelegate": 0, "bootstrap-delegate": 10**18}.get(phase, 1)
     require(q(row["value"]) == value and balance(before, SENDER) - balance(after, SENDER) == fee + status * value, "user fee/value accounting")
     require(balance(after, SYSTEM) - balance(before, SYSTEM) == fee, "system fee accumulation")
     if phase == "registration":
@@ -297,8 +336,15 @@ def check_user(row, phase, index, vote):
                            "operator_shares": 2000 * 10**18, "locked_shares": 10**18, "implementation": 0x2003, "admin": 0xdead}
         for key, expected in expected_credit.items():
             require(slot(before, CREDIT, key) == 0 and slot(after, CREDIT, key) == expected, "registration credit storage: " + key)
+        gov = "0x" + "2005".zfill(40)
+        for key in ("gov_supply", "gov_operator"):
+            require(slot(before, gov, key) == 0 and slot(after, gov, key) == 2000 * 10**18, "registration governance sync")
+        require(slot(after, gov, "gov_dead") == 0, "registration governance dead balance")
         return
-    require(phase in ("success", "revert") and kind == (index - 1) % 5 and row["time"] >= GENESIS_TIME + 6, "wrong current type row")
+    if phase in ("bootstrap-undelegate", "bootstrap-delegate"):
+        check_bootstrap(row, phase)
+        return
+    require(phase in ("success", "revert") and kind == (index - 3) % 5 and row["time"] >= GENESIS_TIME + 6, "wrong current type row")
     target = SUCCESS if phase == "success" else REVERT
     recipient = AUTHORITY if kind == 4 else target
     require(row["to"].lower() == recipient and q(fields["chainId"]) == 714 and q(fields["gas"]) == 150000 and fields["input"] == "0x", "wrong source fields")
@@ -347,7 +393,7 @@ def check(report, generated, genesis):
         require(report["reimport_before"] == report["bridge"] == report["reimport_after"], "reimport changed durable capture")
         rows = report["transactions"]
         require(len(rows) == sum(b["transactions"] for b in generated), "missing transaction snapshots")
-        user_index = 0; init_seen = set(); feynman_seen = set(); election_count = 0
+        user_index = 0; init_seen = set(); feynman_seen = set(); election_count = 0; pending_unlock = None
         ledger = ledger_module.BalanceLedger(genesis, ledger_addresses(), q)
         for block in generated:
             block_rows = [r for r in rows if r["block"] == block["number"]]
@@ -379,11 +425,17 @@ def check(report, generated, genesis):
                     require(not seen_system, "user transaction after system transaction")
                     check_user(row, block["phase"], user_index, vote); user_index += 1
                     if block["phase"] in ("success", "revert"): target_types.append(row["type"])
+                if not row["system"] and block["phase"] == "bootstrap-undelegate":
+                    pending_unlock = row["time"] + 604800
+                if pending_unlock is not None:
+                    require(slot(row["after"], CREDIT, "unbond_unlock") == pending_unlock, "pending unlock continuity")
+                    if row["system"] or block["phase"] != "bootstrap-undelegate":
+                        require(slot(row["before"], CREDIT, "unbond_unlock") == pending_unlock, "pending unlock before continuity")
                 ledger.apply(row, block["phase"])
             if block["phase"] in ("success", "revert"):
                 require(target_types == list(range(5)), "missing native type variant")
             require(cumulative_gas == wire.integer(header[10]), "header gas differs")
-        require(user_index == 11 and init_seen == LEGACY_INIT and feynman_seen == FEYNMAN_INIT and election_count == 1, "incomplete bootstrap/current execution")
+        require(user_index == 13 and init_seen == LEGACY_INIT and feynman_seen == FEYNMAN_INIT and election_count == 1, "incomplete bootstrap/current execution")
         return {"result": "PASS", "errors": [], "scope": "private current-fork import selected-state fixture", "public_profile_credit": False,
                 "activation_import_controls": "NOT_RUN", "unknown_import_control": "NOT_RUN"}
     except (ValueError, KeyError, TypeError, IndexError, AttributeError) as error:
