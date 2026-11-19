@@ -2,7 +2,7 @@
 
 ## Autonomous campaign — 2026-11-19 (D107)
 
-Finalization in progress (03:15 UTC). Authorized window:2026-11-18 22:23:22–2026-11-19 04:23:22 UTC (01:23:22–07:23:22 Europe/Moscow). Accepted implementation checkpoint:`0b518f9527c905bd2501e337b9601ec98df6c300`. All campaign native sessions are idle; final report/recovery checks continue. See [campaign report](evidence/D107.campaign-20261119.md).
+Finalization in progress (03:36 UTC). Authorized window:2026-11-18 22:23:22–2026-11-19 04:23:22 UTC (01:23:22–07:23:22 Europe/Moscow). Accepted implementation checkpoint:`0b518f9527c905bd2501e337b9601ec98df6c300`. All campaign native sessions are idle; final report/recovery checks continue. See [campaign report](evidence/D107.campaign-20261119.md).
 
 Accepted this campaign: native type source inventory PR183; BSC component proof PR185 and modern-init prerequisite PR188; ETH private current-fork proof PR186; Bor fault partB PR181; Polygon current-fork proof PR189 and preactivation proof PR193. Authorization/checkpoint PRs180,184,187,190,192 are also accepted. All12merges were independently reconciled against exact head/base parents, successful CI and the review-body/status digest. Baseline BSC partB PR179 is not new work.
 
@@ -25,6 +25,8 @@ Checkpoint05 preserves accepted code and11selected branch refs. Actual restore m
 Earlier runtime snapshots remain in Git history and versioned checkpoint archives. The report above and current release recovery metadata supersede those snapshots; acceptance scope and normative decisions are unchanged.
 
 ## E01-04.early_faults — Early capture and decision boundaries under power loss (issue #20)
+
+> Historical task snapshots below. Current campaign state: BSC partB (including skipBlock) and Bor partB are accepted; Geth partB and parent issue #20 remain incomplete. Use the [campaign report](evidence/D107.campaign-20261119.md) for the current stopping points. Earlier “in review”/“open” part-level labels below describe past snapshots.
 
 Status: IN_PROGRESS. Block 0 (faults-core) merged in PR #174 at `bdf3919`,
 its correction 01 and the Geth block part A in PRs #175 and #176 at
