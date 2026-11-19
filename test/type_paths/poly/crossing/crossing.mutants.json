@@ -814,6 +814,48 @@
       "file": "test/type_paths/poly/crossing/crossing_native.py",
       "original": "return origins, copies",
       "replacement": "return origins, [x for x in copies if Path(x[\"path\"]).parent.name not in (\"accepted-poly\", \"activation-helpers\")]"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing admission counters are not integers:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(all(type(value) is int for record in admission.values() for value in record.values()), \"crossing admission counters are not integers\")",
+      "replacement": "check(True, \"crossing admission counters are not integers\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing decision counter is not an integer:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(type(decoded[prefix + \"counter\"][\"next\"]) is int, \"crossing decision counter is not an integer\")",
+      "replacement": "check(True, \"crossing decision counter is not an integer\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing refusal created decision records:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(row[\"decisions\"] == {}, \"crossing refusal created decision records\")",
+      "replacement": "check(True, \"crossing refusal created decision records\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing refused admission frontier differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(admission == {prefix + \"counter\": {\"next\": 1}, prefix + \"lowwater\": {\"sequence\": 1},\n                            prefix + \"purged\": {\"sequence\": 1}}, \"crossing refused admission frontier differs\")",
+      "replacement": "check(True, \"crossing refused admission frontier differs\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing durable head numbers are not integers:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(type(intent[\"old_head\"][\"number\"]) is int and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
+      "replacement": "check(True and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")"
+    },
+    {
+      "name": "crossing_judge.py:records:crossing durable head numbers are not integers:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(type(intent[\"old_head\"][\"number\"]) is int and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
+      "replacement": "check(type(intent[\"old_head\"][\"number\"]) is int and True, \"crossing durable head numbers are not integers\")"
+    },
+    {
+      "name": "crossing_judge.py:configuration_numbers:crossing configuration has a noninteger numeric value:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(type(value) not in (bool, float), \"crossing configuration has a noninteger numeric value\")",
+      "replacement": "check(True, \"crossing configuration has a noninteger numeric value\")"
     }
   ]
 }

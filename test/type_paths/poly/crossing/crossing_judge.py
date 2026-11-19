@@ -89,7 +89,23 @@ def stored(row, header, tx, kind, oracle):
 
 def records(row, views, head, frontier, error):
     check(row["head_hash"] == head, "crossing actual head differs")
-    h.check_records(row["decisions"], row["admission"], views, frontier, observation_offset=1)
+    admission = {key: prior.native_json(value) for key, value in row["admission"].items()}
+    check(all(type(value) is int for record in admission.values() for value in record.values()), "crossing admission counters are not integers")
+    if views:
+        decoded = {key: prior.native_json(value) for key, value in row["decisions"].items()}
+        prefix = "extractor-decision-v1/bor.run-1/"
+        check(type(decoded[prefix + "counter"]["next"]) is int, "crossing decision counter is not an integer")
+        for sequence in range(len(views)):
+            intent = decoded[prefix + f"{sequence:016x}/intent"]
+            check(type(intent["old_head"]["number"]) is int and type(intent["new_head"]["number"]) is int, "crossing durable head numbers are not integers")
+        h.check_records(row["decisions"], row["admission"], views, frontier, observation_offset=1)
+    else:
+        # decision.Open reads an absent counter as zero; only the first intent
+        # writes it. The rejected first admission creates no decision records.
+        check(row["decisions"] == {}, "crossing refusal created decision records")
+        prefix = "extractor-admission-v1/bor.run-1/"
+        check(admission == {prefix + "counter": {"next": 1}, prefix + "lowwater": {"sequence": 1},
+                            prefix + "purged": {"sequence": 1}}, "crossing refused admission frontier differs")
     observed = [1] if frontier == 1 else [1, 1, 2]
     keys = {"1": ["bor.run-1.0000000000000000"]} if frontier == 1 else {
         "1": ["bor.run-1.0000000000000000", "bor.run-1.0000000000000001"],
@@ -98,11 +114,19 @@ def records(row, views, head, frontier, error):
           row["keys"] == keys and row["observer_errors"] == [error], "crossing observation frontier differs")
 
 
+def configuration_numbers(value):
+    check(type(value) not in (bool, float), "crossing configuration has a noninteger numeric value")
+    if isinstance(value, dict):
+        for child in value.values():
+            configuration_numbers(child)
+
+
 def case(row, expected):
     name, gate, kind, eth_prefix, bor_prefix = expected
     check(row["name"] == name and type(row["type"]) is int and row["type"] == kind and
           type(row["activation_block"]) is int and row["activation_block"] == 2, "crossing case identity differs")
     config = copy.deepcopy(row["config"])
+    configuration_numbers(config)
     check(type(config[gate]) is int and config[gate] == 2, "crossing activation schedule differs")
     config[gate] = 8
     h.historical_config(config, eth_prefix, bor_prefix)
