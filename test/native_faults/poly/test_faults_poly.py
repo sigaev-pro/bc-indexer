@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -37,6 +38,43 @@ def case_of(probe, point, variant):
     raise KeyError(point)
 
 
+def handoff_sample():
+    """Synthetic native facts for judge controls, never measured evidence."""
+    blocks = json.loads((HERE / "sample_report.json").read_text())["blocks"]
+    block = {"hash": blocks["1"], "root": "cd" * 32}
+    boundary = dict(block, number=1)
+    reach = {"bor.milestone-lock": {"Passes": 1, "Intents": 0, "Refusals": 0}}
+    common = {"phase_at_start": "BOOTSTRAP", "block1": block, "head": 2}
+    vote = dict(common, vote_locked=True, guard_matches_vote=True,
+                order=["chain-locked", "guard-contended", "vote-release", "guard-acquired"], boundary_held=None,
+                boundary_before_vote_release=None, decisions_held={}, decisions_before_golive={},
+                coverage_before={}, coverage_held=reach, coverage_released=reach,
+                golive_error=None, phase="LIVE", boundary=boundary)
+    rows = {
+        "bor.pass-at-golive": dict(common, native_head_write_held=True, golive_attempted=True,
+                                   boundary_during_import=None, import_error=None, golive_error=None,
+                                   block2_error=None, boundary=boundary, observations_before_block2=0,
+                                   decided_before_block2=[], decided=[2]),
+        "bor.below-h-rewind": dict(common, rewind_error="rewind to 0 is below the live boundary 1",
+                                   boundary_before=boundary, boundary_after=boundary,
+                                   head_before="ef" * 32, head_after="ef" * 32,
+                                   decisions_before={"intent": "native"}, decisions_after={"intent": "native"}),
+        "bor.bootstrap-vote-pass": copy.deepcopy(vote),
+        "bor.golive-order": copy.deepcopy(vote),
+        "bor.power-loss-model": dict(common, root_present_before_fixture=True, fixture_deletion_synced=True,
+                                     sentinel_before_reset=True, sentinel_after_reset=False, reset_to_synced=True,
+                                     fixture_root_after_reset=False, restart_error=None, phase_after="LIVE",
+                                     head_before=4, head_after=3, decided_before=[1, 2, 3, 4], undecided=[],
+                                     roots_distinct=True, predecessor_state_before=True, predecessor_state_after=True,
+                                     predecessor={"number": 3, "hash": blocks["3"], "root": "12" * 32},
+                                     boundary_before={"number": 0}, boundary_after={"number": 0},
+                                     recovery={"repaired": {"number": 3, "hash": blocks["3"]}}),
+    }
+    for hid, row in rows.items():
+        row["id"] = hid
+    return rows
+
+
 class JudgeTests(unittest.TestCase):
     def verdict(self, probe):
         return faults_poly.judge(probe, source=SOURCE)[0]
@@ -50,10 +88,67 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(verdict["result"], "INCOMPLETE")
         self.assertEqual(set(verdict["handoffs"]), HANDOFFS)
 
-    def test_handoffs_pass_through(self):
+    def test_supplied_handoff_verdicts_are_not_trusted(self):
         probe = sample()
         probe["handoffs"] = [{"id": hid, "verdict": "PASS", "evidence": "x"} for hid in sorted(HANDOFFS)]
+        self.assertEqual(self.verdict(probe)["result"], "INCOMPLETE")
+
+    def test_handoff_facts_pass_and_each_required_fact_is_bound(self):
+        probe = sample()
+        probe["handoff_runs"] = handoff_sample()
         self.assertEqual(self.verdict(probe)["result"], "PASS")
+        for hid, row in handoff_sample().items():
+            for key in row:
+                if key == "head" and hid != "bor.pass-at-golive" and hid != "bor.below-h-rewind":
+                    continue
+                changed = {"blocks": probe["blocks"], "handoff_runs": copy.deepcopy(probe["handoff_runs"])}
+                del changed["handoff_runs"][hid][key]
+                with self.subTest(handoff=hid, key=key):
+                    verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(changed)}
+                    self.assertEqual(verdicts[hid], "FAIL")
+
+    def test_handoff_hashes_bind_native_corpus_and_repair(self):
+        for field in ("block1", "predecessor", "repaired"):
+            probe = sample()
+            probe["handoff_runs"] = handoff_sample()
+            row = probe["handoff_runs"]["bor.power-loss-model"]
+            target = row["recovery"] if field == "repaired" else row
+            target[field]["hash"] = "00" * 32
+            verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(probe)}
+            self.assertEqual(verdicts["bor.power-loss-model"], "FAIL", field)
+
+        probe = sample()
+        probe["handoff_runs"] = handoff_sample()
+        row = probe["handoff_runs"]["bor.power-loss-model"]
+        row["predecessor"]["hash"] = row["recovery"]["repaired"]["hash"] = "00" * 32
+        verdicts = {r["id"]: r["verdict"] for r in faults_poly.handoff_verdicts(probe)}
+        self.assertEqual(verdicts["bor.power-loss-model"], "FAIL")
+
+    def test_handoff_faults_and_refusals_fail_closed(self):
+        for hid in handoff_sample():
+            for broken in (None, {}, {"child_error": "timeout"}):
+                probe = sample()
+                probe["handoff_runs"] = handoff_sample()
+                probe["handoff_runs"][hid] = broken
+                self.assertEqual(self.verdict(probe)["result"], "FAIL")
+        for hid, key, value in (("bor.pass-at-golive", "decided", [1, 2]),
+                                ("bor.pass-at-golive", "golive_error", "failure"),
+                                ("bor.below-h-rewind", "head_after", "different"),
+                                ("bor.bootstrap-vote-pass", "vote_locked", False),
+                                ("bor.golive-order", "order", ["chain-locked", "guard-acquired", "vote-release"]),
+                                ("bor.golive-order", "decisions_held", {"intent": "unexpected"}),
+                                ("bor.power-loss-model", "sentinel_after_reset", True)):
+            probe = sample()
+            probe["handoff_runs"] = handoff_sample()
+            probe["handoff_runs"][hid][key] = value
+            self.assertEqual(self.verdict(probe)["result"], "FAIL")
+
+    def test_stale_probe_help_fails_doc_handoff(self):
+        probe = sample()
+        probe["handoff_runs"] = handoff_sample()
+        with mock.patch.object(faults_poly, "HELP_PROBE") as help_probe:
+            help_probe.read_text.return_value = "stale text"
+            self.assertEqual(self.verdict(probe)["handoffs"]["bor.probe-flag-help"], "FAIL")
 
     def failing(self, change, message, point="adm.after-admitted-sync", variant="power_loss"):
         probe = sample()
@@ -216,10 +311,9 @@ class CopiedCodeTests(unittest.TestCase):
 }""")
 
     def test_fail_closed_probe_steps(self):
-        # A failed child stays in the report as a case with child_error, so
-        # the judge fails it instead of finding a case missing.
-        self.assertIn('cases = append(cases, map[string]any{"point": point, "variant": variant,\n'
-                      '\t\t\t\t\t"child_error": fmt.Sprintf("%v: %s", err, tail)})', go_block(self.ours, "func run("))
+        # Child termination and report continuation are exercised by the
+        # real subprocess controls in children_test.go.
+        self.assertIn('identity: map[string]any{"point": point, "variant": variant}', go_block(self.ours, "func run("))
         start = go_block(self.ours, "func start(")
         self.assertIn('if n.fs == nil {\n\t\treturn n, errors.New("the node did not open its store through the fault '
                       'store")', start)
@@ -236,10 +330,43 @@ class CopiedCodeTests(unittest.TestCase):
         self.assertLess(start.index("whitelist.ExtractorEnter = nil"), start.index("newStack(dataDir)"))
 
     def test_each_case_runs_in_its_own_process(self):
-        self.assertIn('cmd.Args[1] = "case"', go_block(self.ours, "func run("))
+        self.assertIn('args[0] = "case"', go_block(self.ours, "func run("))
+
+    def test_contention_hook_is_test_only_and_reports_the_actual_mutex(self):
+        patches = json.loads((faults_poly.NATIVE / "patches.json").read_text())["patches"]
+        patch = next(p for p in patches if p["name"] == "guard_contention_probe")
+        self.assertEqual(patch["file"], "extractor/admission/admission.go")
+        shared = (faults_poly.ROOT / "adapters/bor/admission/admission.go").read_text()
+        self.assertEqual(shared.count(patch["original"]), 1)
+        self.assertNotIn("ExtractorFaultGuardAcquire", shared)
+        self.assertIn('if !g.lock.TryLock() {\n\t\t\thook(g, "contended")', patch["replacement"])
+        self.assertIn('\t\t\tg.lock.Lock()\n\t\t}\n\t\thook(g, "acquired")', patch["replacement"])
+        self.assertTrue(patch["replacement"].endswith('\t} else {\n\t\tg.lock.Lock()\n\t}\n'))
+
+    def test_child_deadlines_and_error_last_contract(self):
+        run = go_block(self.ours, "func run(")
+        self.assertEqual(run.count("30*time.Second"), 2)
+        self.assertIn("runChildren(self, caseJobs,", run)
+        self.assertIn("runChildren(self, handoffJobs,", run)
+        self.assertIn("func (n *instance) insert(blocks []*types.Block) (int, []map[string]any, error)", self.ours)
 
 
 class CommandTests(unittest.TestCase):
+    def test_run_refuses_corpus_from_another_native_source_before_creating_output(self):
+        tool = {"kind": "bor-faults-tool", "native_source_commit": "accepted"}
+        corpus = {"kind": "poly-corpus-run", "result": "PASS",
+                  "preparation": {"path": "/fixture/preparation.json", "sha256": "0" * 64}}
+        preparation = {"kind": "poly-corpus-preparation", "result": "PASS",
+                       "bor": {"source_commit": "other"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "must-not-exist"
+            with mock.patch.object(faults_poly, "pinned_json", side_effect=[({}, tool), ({}, corpus),
+                                                                         ({}, preparation)]):
+                with self.assertRaisesRegex(ValueError, "another Bor source"):
+                    faults_poly.run(Path("/fixture/tool.json"), "0" * 64, Path("/fixture/run.json"),
+                                    "0" * 64, output)
+            self.assertFalse(output.exists())
+
     def test_judge_command_exit_code(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "report.json"
