@@ -265,7 +265,8 @@
       "name": "judge missing valid historical controls",
       "file": "test/type_paths/poly/activation/activation_judge.py",
       "original": "check(len(control[\"blocks\"]) == 2, \"missing valid historical controls\")",
-      "replacement": "check(True, 'missing valid historical controls')"
+      "replacement": "check(True, 'missing valid historical controls')",
+      "equivalent": "Verdict-equivalent: immediate first,empty=control['blocks'] unpack independently requires exactly two items; other JSON cardinalities raise caught ValueError/TypeError and malformed two-item maps/strings fail downstream indexing. Diagnostic text may differ. Independently audited at judge SHA d011263583f5339fa0d0735a46c6428ed64c713f7c9f86d00d66dd86d0a4033e."
     },
     {
       "name": "judge private genesis/control gas limit differs",
@@ -349,7 +350,8 @@
       "name": "judge reserved preactivation changed authenticated state",
       "file": "test/type_paths/poly/activation/activation_judge.py",
       "original": "check(candidate_state == state2 and hc[3] == h2[3], \"reserved preactivation changed authenticated state\")",
-      "replacement": "check(True, 'reserved preactivation changed authenticated state')"
+      "replacement": "check(True, 'reserved preactivation changed authenticated state')",
+      "equivalent": "Verdict-equivalent under existing commitment assumptions: earlier candidate-header equality excludes only indices4/12, so state roots at3 must match. Both mandatory stored/account_claims calls authenticate exactly WATCHED nonce,balance,code,slots0..3 to that same root; snapshot canonicalizes exactly those fields. Distinct accepted snapshots would require a commitment collision. Depends on those independent checks remaining mandatory. Independently audited at judge SHA d011263583f5339fa0d0735a46c6428ed64c713f7c9f86d00d66dd86d0a4033e."
     },
     {
       "name": "judge wrong native activation identity/result",
