@@ -142,6 +142,69 @@ class PolygonJudgeProofTests(unittest.TestCase):
             with self.subTest(change=index), self.assertRaises(ValueError):
                 judge.system_state(bad, txs, parent)
 
+    def test_correlated_ordinary_state_changes_preserve_continuity(self):
+        original = self.native["blocks"][0]
+        outer = c.rlp_list(bytes.fromhex(original["raw_block"]))
+        header = c.header_fields(outer[0][1])
+        txs = [raw if isinstance(value, list) else value for value, raw in outer[1][0]]
+        for address, field, start in ((judge.SENDER, "nonce", 0), (judge.SENDER, "balance", 0),
+                                      (judge.SUCCESS, "balance", 0), (judge.REVERT, "balance", 0),
+                                      (judge.AUTHORITY, "nonce", 7)):
+            row = copy.deepcopy(original)
+            for index, trace in enumerate(row["transactions"]):
+                for side in ("before", "after"):
+                    if index > start or index == start and side == "after":
+                        value = trace[side][address][field]
+                        trace[side][address][field] = int(value) + 1 if field == "nonce" else str(int(value) + 1)
+            final = row["state_after"][address[2:]]
+            final[field] = int(final[field]) + 1 if field == "nonce" else str(int(final[field]) + 1)
+            with self.subTest(address=address, field=field), self.assertRaises(ValueError):
+                judge.ordinary_state(row, header, txs)
+        for change in (lambda x: x["calls"][0].update(output="01"),
+                       lambda x: x["receipts"][0]["logs"].append({"address": judge.REVERT}),
+                       lambda x: x["state_after"][judge.SENDER[2:]].update(nonce=100),
+                       lambda x: x["transactions"][0]["before"][judge.SUCCESS].update(balance="1")):
+            row = copy.deepcopy(original)
+            change(row)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                judge.ordinary_state(row, header, txs)
+
+    def test_correlated_decision_digest_controls(self):
+        r = self.native
+        key = "extractor-decision-v1/bor.run-1/0000000000000000"
+        changes = [lambda x: x.update(extra=True),
+                   lambda x: x["new_head"].update(hash="ab" * 32),
+                   lambda x: x["old_head"].update(number=77),
+                   lambda x: x["members"].append(copy.deepcopy(x["members"][0])),
+                   lambda x: x["members"][0].update(extra=True),
+                   lambda x: x["members"][0].update(child_root="ab" * 32),
+                   lambda x: x["members"][0].update(observation="other")]
+        for change in changes:
+            records = copy.deepcopy(r["decisions"])
+            intent, decided = json.loads(records[key + "/intent"]), json.loads(records[key + "/decided"])
+            change(intent)
+            intent["digest"] = judge.intent_digest(intent)
+            decided["intent_digest"] = intent["digest"]
+            decided["digest"] = judge.decided_digest(intent["digest"], "BATCH")
+            records[key + "/intent"], records[key + "/decided"] = json.dumps(intent), json.dumps(decided)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                judge.check_records(records, r["admission"], r["blocks"])
+        for target, change in (("intent", lambda x: x.update(digest="ab" * 32)),
+                               ("decided", lambda x: x.update(extra=True)),
+                               ("decided", lambda x: x.update(sequence=99)),
+                               ("decided", lambda x: x.update(digest="ab" * 32)),
+                               ("decided", lambda x: x.update(delivery="CHECKPOINT"))):
+            records = copy.deepcopy(r["decisions"])
+            value = json.loads(records[key + "/" + target])
+            change(value)
+            records[key + "/" + target] = json.dumps(value)
+            with self.subTest(target=target, change=change), self.assertRaises(ValueError):
+                judge.check_records(records, r["admission"], r["blocks"])
+        records = copy.deepcopy(r["decisions"])
+        records["extractor-decision-v1/bor.run-1/counter"] = '{"next": 99}'
+        with self.assertRaises(ValueError):
+            judge.check_records(records, r["admission"], r["blocks"])
+
     def test_actual_native_decisions_and_correlated_views(self):
         r = self.native
         judge.check_records(r["decisions"], r["admission"], r["blocks"])
@@ -217,6 +280,57 @@ class PolygonJudgeProofTests(unittest.TestCase):
         row["transaction_proofs"][0]["value"] = outer[1][0].hex()
         with self.assertRaisesRegex(ValueError, "authenticated"):
             judge.native_block(row)
+
+    def test_block_shape_and_index_controls(self):
+        for change in (lambda body: body.append([]), lambda body: body[0].append(b""),
+                       lambda body: body[0].__setitem__(1, b""), lambda body: body.__setitem__(2, [b"uncle"]),
+                       lambda body: body.__setitem__(1, [])):
+            row = block_vector()
+            body = judge.plain_rlp(c.rlp_list(bytes.fromhex(row["raw_block"])))
+            change(body)
+            row["raw_block"] = c.rlp(body).hex()
+            row["hash"] = "0x" + c.keccak256(c.rlp(body[0])).hex()
+            if not body[1]:
+                row["transaction_proofs"] = []
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                judge.native_block(row)
+        for change in (lambda row: row["transaction_proofs"].append(copy.deepcopy(row["transaction_proofs"][0])),
+                       lambda row: row["transaction_proofs"][0].update(index=3),
+                       lambda row: row["transaction_proofs"][0].update(key="7f")):
+            row = block_vector()
+            change(row)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                judge.native_block(row)
+
+    def test_receipt_trace_and_empty_root_controls(self):
+        for change in (lambda row, header: row["receipts"].append(copy.deepcopy(row["receipts"][0])),
+                       lambda row, header: header.__setitem__(10, b"\x01"),
+                       lambda row, header: row["transactions"][0].update(hash="0x" + "aa" * 32),
+                       lambda row, header: row["transactions"][0]["receipt"].update(status="0x0")):
+            row, header, txs = receipt_vector()
+            change(row, header)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                judge.receipt_claims(row, header, txs)
+        row, header, _ = receipt_vector()
+        row.update(receipts=[], receipt_proofs=[], transactions=[])
+        with self.assertRaises(ValueError):
+            judge.receipt_claims(row, header, [])
+
+    def test_fixture_signatures_and_access_lists(self):
+        for kind, index in ((0, 0), (1, 2), (2, 4), (4, 6)):
+            raw = tx_wire(kind, index)
+            fields = judge.plain_rlp(c.rlp_list(raw if kind == 0 else raw[1:]))
+            positions = [-3, -2, -1]
+            if kind:
+                positions.append(7 if kind == 1 else 8)
+            for position in positions:
+                bad = copy.deepcopy(fields)
+                bad[position] = [[b"bad"]] if position >= 0 else (b"\x09" if position == -3 else b"")
+                wire = (bytes([kind]) if kind else b"") + c.rlp(bad)
+                with self.subTest(kind=kind, position=position), self.assertRaises(ValueError):
+                    judge.ordinary_fields(wire, index)
+        with self.assertRaises(ValueError):
+            judge.ordinary_fields(tx_wire(1, 2), 0)
 
     def test_ordinary_source_field_controls_cover_each_fee_and_authorization(self):
         for index, kind in enumerate((0, 0, 1, 1, 2, 2, 4, 4)):

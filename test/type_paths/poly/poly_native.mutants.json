@@ -667,6 +667,66 @@
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(inner_before[TARGET][\"storage\"] == (0, 0, 0, 0) and inner_after[TARGET] == after[TARGET], \"successful action before/after state differs\")",
       "replacement": "check(True, 'successful action before/after state differs')"
+    },
+    {
+      "name": "proof duplicate node admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if len(nodes) != len(proof):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "empty trie admits proof",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if proof:\n            raise ValueError(\"nonempty proof of empty trie\")",
+      "replacement": "if False:\n            raise ValueError(\"nonempty proof of empty trie\")"
+    },
+    {
+      "name": "unused proof nodes admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if used != set(nodes):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "hashed short child admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not first and len(encoded) < 32:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "oversized embedded child admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not isinstance(reference, list) or encoded is None or len(encoded) >= 32:",
+      "replacement": "if not isinstance(reference, list) or encoded is None:"
+    },
+    {
+      "name": "invalid compact flags admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if flag > 3 or (not flag & 1 and compact[0] & 15):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "empty extension admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not leaf and not segment:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "leaf path mismatch ignored",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if path[:len(segment)] != segment:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "index boundary drops prefix",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "path = [part for byte in key for part in (byte >> 4, byte & 15)]",
+      "replacement": "path = [part for byte in key[-1:] for part in (byte >> 4, byte & 15)]"
+    },
+    {
+      "name": "empty leaf admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not isinstance(value, bytes) or not value:",
+      "replacement": "if not isinstance(value, bytes):"
     }
   ]
 }
