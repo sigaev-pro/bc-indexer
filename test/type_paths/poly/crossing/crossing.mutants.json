@@ -851,14 +851,14 @@
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(type(intent[\"old_head\"][\"number\"]) is int and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
       "replacement": "check(True and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
-      "equivalent": "The mandatory check_records recomputes intent_digest, whose head_ref serializes old_head.number through strict uint64 (exact int, excluding bool/float). Removing this early domain check cannot admit an alias."
+      "equivalent": "The mandatory check_records recomputes intent_digest, whose head loop serializes old_head.number through strict uint64 (exact int, excluding bool/float). Removing this early domain check cannot admit an alias."
     },
     {
       "name": "crossing_judge.py:records:crossing durable head numbers are not integers:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(type(intent[\"old_head\"][\"number\"]) is int and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
       "replacement": "check(type(intent[\"old_head\"][\"number\"]) is int and True, \"crossing durable head numbers are not integers\")",
-      "equivalent": "The mandatory check_records recomputes intent_digest, whose head_ref serializes new_head.number through strict uint64 (exact int, excluding bool/float). Removing this early domain check cannot admit an alias."
+      "equivalent": "The mandatory check_records recomputes intent_digest, whose head loop serializes new_head.number through strict uint64 (exact int, excluding bool/float). Removing this early domain check cannot admit an alias."
     },
     {
       "name": "crossing_judge.py:configuration_numbers:crossing configuration has a noninteger numeric value:1",
