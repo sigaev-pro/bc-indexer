@@ -36,6 +36,18 @@ class CrossingBlockControls(unittest.TestCase):
             with self.subTest(index=index), self.assertRaises(ValueError):
                 j.h.raw_block(j.codec.rlp(body).hex(), 20)
 
+    def test_empty_genesis_transaction_container_and_header_widths(self):
+        original = j.prior.plain_rlp(j.codec.rlp_list(bytes.fromhex(self.native["cases"][0]["genesis_raw"])))
+        body = copy.deepcopy(original)
+        body[1] = b""
+        with self.assertRaises(ValueError):
+            j.h.raw_block(j.codec.rlp(body).hex(), 15)
+        for index in (0, 1, 3, 5):
+            body = copy.deepcopy(original)
+            body[0][index] = b"\x01"
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                j.h.raw_block(j.codec.rlp(body).hex(), 15)
+
 
 if __name__ == "__main__":
     unittest.main()

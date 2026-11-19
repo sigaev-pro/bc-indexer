@@ -86,6 +86,12 @@ class CrossingRenderingTests(unittest.TestCase):
         self.assertTrue(generated.endswith(unchanged))
 
     def test_pin_drift_and_nonunique_seams_are_rejected(self):
+        corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
+        source = native.support.parent.render_support(corpus).decode()
+        source = source.replace("import (", "// removed imports (")
+        with patch.object(native.support.parent, "render_support", return_value=source.encode()):
+            with self.assertRaises(ValueError):
+                native.support.render_support(corpus)
         with patch.dict(native.support.ACTIVATION_PINS, {"probe.go": "0" * 64}):
             with self.assertRaises(ValueError):
                 native.support.activation_source("probe.go")

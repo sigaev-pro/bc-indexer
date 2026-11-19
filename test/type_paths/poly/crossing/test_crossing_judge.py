@@ -85,6 +85,16 @@ class CrossingJudgeInputs(unittest.TestCase):
         with self.assertRaises(ValueError):
             j.h.signed_input(vectors.signed_wire(4, changed), 4, 1)
 
+    def test_type_tag_and_extra_signed_fields(self):
+        for kind in (1, 2, 4):
+            wire = vectors.signed_wire(kind, fields(kind, 1))
+            with self.subTest(tag=kind), self.assertRaises(ValueError):
+                j.h.signed_input(bytes([kind + 1]) + wire[1:], kind, 1)
+            extended = fields(kind, 1)
+            extended.insert(-3, b"\x01")
+            with self.subTest(extra=kind), self.assertRaises(ValueError):
+                j.h.signed_input(vectors.signed_wire(kind, extended), kind, 1)
+
     def test_incomplete_and_malformed_reports_fail(self):
         for value in (None, [], {}, {"native_source": j.prior.NATIVE, "scope": "private-ordinary-activation-crossing", "public_profile_credit": False, "cases": []}):
             self.assertEqual(j.judge(value)["result"], "FAIL")

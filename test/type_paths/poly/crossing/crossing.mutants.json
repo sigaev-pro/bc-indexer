@@ -320,14 +320,14 @@
     {
       "name": "crossing_judge.py:case:crossing final authenticated state differs:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "check(state2 == expected_state and h1[3] != h2[3], \"crossing final authenticated state differs\")",
-      "replacement": "check(True and h1[3] != h2[3], \"crossing final authenticated state differs\")"
+      "original": "check(state2 == expected, \"crossing final authenticated state differs\")",
+      "replacement": "check(True, \"crossing final authenticated state differs\")"
     },
     {
       "name": "crossing_judge.py:case:crossing final authenticated state differs:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "check(state2 == expected_state and h1[3] != h2[3], \"crossing final authenticated state differs\")",
-      "replacement": "check(state2 == expected_state and True, \"crossing final authenticated state differs\")"
+      "original": "check(h1[3] != h2[3], \"crossing state root did not advance\")",
+      "replacement": "check(True, \"crossing state root did not advance\")"
     },
     {
       "name": "crossing_judge.py:case:crossing negative body is not distinct:1",
@@ -866,7 +866,7 @@
     {
       "name": "authorization absence not invoked",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "        absent_authority(first, h1[3])",
+      "original": "        absent_authority(first, first_root)",
       "replacement": "        pass"
     }
   ]

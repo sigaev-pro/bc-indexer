@@ -40,6 +40,17 @@ def absent_authority(row, root):
     check(leaf is None, "crossing authorization authority already exists")
 
 
+def transition_state(first, first_root, state1, state2, kind, sender_after):
+    if kind == 4:
+        absent_authority(first, first_root)
+    expected = copy.deepcopy(state1)
+    expected[prior.SENDER].update(nonce=2, balance=sender_after)
+    expected[prior.SUCCESS]["balance"] = 14
+    if kind == 4:
+        expected[prior.AUTHORITY].update(nonce=1, code=b"\xef\x01\x00" + octets(prior.SUCCESS))
+    check(state2 == expected, "crossing final authenticated state differs")
+
+
 def receipt_oracle(kind, base_fee, sender_before, recipient_before, signer_before):
     # Pinned core/state_transition.go: 21000 plus 25000 for a newly created
     # authorization authority. The absent authority earns no existing-account
@@ -160,14 +171,8 @@ def case(row, expected):
     state1 = stored(first, h1, tx1[0], 0, oracle1)
     state2 = stored(second, h2, tx2[0], kind, oracle2)
     legacy_state(state1, oracle1["sender_after"])
-    if kind == 4:
-        absent_authority(first, h1[3])
-    expected_state = copy.deepcopy(state1)
-    expected_state[prior.SENDER].update(nonce=2, balance=oracle2["sender_after"])
-    expected_state[prior.SUCCESS]["balance"] = 14
-    if kind == 4:
-        expected_state[prior.AUTHORITY].update(nonce=1, code=b"\xef\x01\x00" + octets(prior.SUCCESS))
-    check(state2 == expected_state and h1[3] != h2[3], "crossing final authenticated state differs")
+    transition_state(first, h1[3], state1, state2, kind, oracle2["sender_after"])
+    check(h1[3] != h2[3], "crossing state root did not advance")
     candidate = negative["block"]
     hn, txn = h.block(candidate, width1, 1, genesis_hash)
     check(len(txn) == 1 and candidate["hash"] != first["hash"] and hn[4] != h1[4], "crossing negative body is not distinct")
