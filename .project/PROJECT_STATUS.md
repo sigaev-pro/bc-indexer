@@ -4,15 +4,15 @@
 
 Status: IN_PROGRESS. Owner-authorized window: 01:23:22–07:23:22 Europe/Moscow. Baseline: `3c9414043600a57cf0c68ca5217dd606ebd9c789`. BSC part B is merged in PR #179; its earlier pending-merge entries below are historical.
 
-Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-03`. Latest update: 02:43 Europe/Moscow. Reconcile live processes and GitHub after interruption. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
+Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-04`. Latest update: 03:00 Europe/Moscow. Reconcile live processes and GitHub after interruption. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
 
-Latest verified changes (supersede the earlier checkpoint details below; merge update 02:48 Europe/Moscow):
+Latest verified changes (supersede the earlier checkpoint details below):
 
 - ETH private current-fork type paths accepted in PR #186, merge `da59a1a1a208d2823132ac4bf42d4f4203052ffe`, reviewed head `a5ae6ba48a6e8d95b9e657cda5d466d44f2bd0bf`. Both independent reviews and exact-head CI passed. Native producer `6f46e18` passed preparation/run 02 with cleanup. Repaired judge binds decisions to canonical raw RLP headers, actual hashes, roots and chain continuity. Retained final validation: 103 tests; judge mutation campaign: 69 kills. Earlier failed native run and inadequate judge records remain retained. Issue #21 remains open; public profiles and full outside-transaction semantics are not covered.
 - BSC initialization prerequisite PR #188 accepted at `de4e297c54be7cd3191f409d9140a7a4ce23c473`, reviewed head `11b7c1934cfed9b313a4841ac64a695ac44738dc`. Both independent delta reviews and exact-head CI passed after merging accepted ETH main; retained integration validation has 110 tests. Native producer `0aefa19` passed preparation/run with cleanup. This proves explicit modern contract-bytecode initialization and deprecated/unmapped-validator deposit behavior only, not full modern import or active-validator state. Follow-on implementation must use native initialization, registration and election, with an explicit coherent private activation schedule and independent state oracle.
-- Bor native run 03 at `783b432` passed all 30 catalog cases and six handoffs with cleanup. Subsequent independent review required real child-process failure/deadline controls; the new shared helper has three behavioral tests and 12 compiled mutants passing. Preparation 04 at `5540d98` failed compilation because an existing RPC call still needed the removed `context` import; failure retained, cleanup complete. Corrected frozen `6d1b51dfb34f16736dda582434c986f68fe953ae` owns the exclusive native slot for preparation 05. No Bor part B acceptance yet.
+- Bor part B accepted in PR #181 at `718a5b2bbafe0911c713e6137123c2b75ea3bfb9`, reviewed head `8f43d82051c3230d74bb38caecd256357cb2f5e0`. Both independent reviews and exact-head CI passed. Native preparation/run05 at `6d1b51dfb34f16736dda582434c986f68fe953ae` passed all 30 catalog cases and six handoffs with cleanup. Final validation has 29 Python tests, three actual Go child-process tests and identity checks for 11 executed source files. The shared child helper passed 12 compiled mutants; previous review's missing behavioral proof is resolved. Preparation04's missing-import failure and earlier diagnostic/mutation failures are retained. Power-loss repair explicitly starts from a persisted missing-state prerequisite. Parent issue #20 remains open because Geth is incomplete.
 - Geth #20 remains stopped at pushed `20ecb95` after repeated platform restrictions; its compile failure and incomplete SetHead scenario remain outstanding. E01 and E02 gates remain unchanged.
-- ETH native result archive [checkpoint 06](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-06-eth-native-result.tar.gz), SHA-256 `57c4385a99d94bd55dfa7fc0fd2430368299de3ad7561996ebc39cead61a21ca`, is remotely verified. Its original judge evidence is historical; final repaired-judge records require their separate archive.
+- ETH native result archive [checkpoint 06](https://github.com/sigaev-pro/bc-indexer/releases/download/backup-2026-11-19-3c94140/checkpoint-06-eth-native-result.tar.gz), SHA-256 `57c4385a99d94bd55dfa7fc0fd2430368299de3ad7561996ebc39cead61a21ca`, is remotely verified. Its original judge evidence is historical; final repaired-judge records are in the separate accepted ETH archive listed below.
 
 Additional remotely digest-verified evidence assets in the same backup release:
 
@@ -22,8 +22,14 @@ Additional remotely digest-verified evidence assets in the same backup release:
 | `checkpoint-08-bsc-init-native.tar.gz` | `c2c5187cfd2d44247dc579fd8c2ae8e1225cf1a3f98ebb6081fec4aa00babd16` | Native BSC initialization records |
 | `checkpoint-09-bsc-init-validation.tar.gz` | `6fff5892935043d6e43d932897e90498715226b1d85154caaaf8fc315c75ff4b` | BSC independent source oracles, mutation history, exact-head validation |
 | `eth-type-paths-evidence-da59a1a-20261119.tar.gz` | `333d8fabfee2bcf3dd4af848ffa01ee1f0e0028129776eabb218f327804e1a8e` | Accepted repaired ETH judge evidence, member hashes verified |
+| `checkpoint-10-recovery-review.tar.gz` | `ecd1ea87a0c4103e32adb1e950fe5599c29a7114df734ae954ec9077b6becd55` | Recovery journal, interim report and independent reviews through PR187/188 |
+| `checkpoint-11-bor-native05.tar.gz` | `f04901459a752d15b3dc1ae07874db6310c1d1ed73b06d14553c326429b23b02` | Successful final Bor native preparation/run05 |
 
 Polygon #21 implementation is assigned to `/root/type_paths` in a separate worktree, limited to `test/type_paths/poly/**`, `adapters/bor/type_mapping/native/**` and its evidence. Preserve native applicability distinctions, including StateSync `0x7f`; generic decoding alone does not prove Bor execution applicability. No edits to active Bor #20 sources are allowed.
+
+Current runtime owner: Polygon diagnostic `389a1de`, preparation/run01 under `d107-poly-type-paths-*`. This is a compatibility diagnostic with no acceptance verdict; type3 applicability remains explicitly unresolved. BSC full import continues on `codex/e01-05-bsc-full-import`, checkpoint `0e67745`, and must request the next native slot. Coordinator checkpoint PR187 was accepted at `679afc76d3e634123b1f51b7fd48db1415c422ab`.
+
+### Earlier campaign checkpoint (historical)
 
 | Session | Block | Exclusive implementation scope |
 |---|---|---|
