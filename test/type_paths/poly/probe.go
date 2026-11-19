@@ -236,17 +236,20 @@ func accountProofs(run *nodeRun, block *types.Block) (map[string]any, error) {
 	return rows, nil
 }
 
-func componentControls(run *nodeRun, stateSyncBlock *types.Block) (map[string]any, error) {
+func blobControlTransaction(config *params.ChainConfig) (*types.Transaction, error) {
 	key, err := senderKey()
 	if err != nil {
 		return nil, err
 	}
-	config := run.chain.Config()
-	blob, err := types.SignNewTx(key, types.LatestSigner(config), &types.BlobTx{
+	return types.SignNewTx(key, types.LatestSigner(config), &types.BlobTx{
 		ChainID: uint256.MustFromBig(config.ChainID), Nonce: 8, To: recipient, Gas: 21_000,
 		GasTipCap: uint256.NewInt(2_000_000_000), GasFeeCap: uint256.NewInt(5_000_000_000),
 		Value: new(uint256.Int), BlobFeeCap: uint256.NewInt(1), BlobHashes: []common.Hash{{1}},
 	})
+}
+
+func componentControls(run *nodeRun, stateSyncBlock *types.Block) (map[string]any, error) {
+	blob, err := blobControlTransaction(run.chain.Config())
 	if err != nil {
 		return nil, err
 	}
@@ -316,13 +319,13 @@ func componentControls(run *nodeRun, stateSyncBlock *types.Block) (map[string]an
 		"blob_body_import": "NOT_RUN", "unknown_block_decode": unknown}, nil
 }
 
-func rejectedStateSync(in inputs, bodies, directory, keySource string, blocks []*types.Block) ([]map[string]any, error) {
+func rejectedImports(in inputs, bodies, directory, keySource string, blocks []*types.Block) ([]map[string]any, error) {
 	key, err := signerKey(keySource)
 	if err != nil {
 		return nil, err
 	}
 	rows := []map[string]any{}
-	for _, name := range []string{"missing", "non-final", "mismatched-l1-hash", "reordered-items", "duplicate-body"} {
+	for _, name := range []string{"missing", "non-final", "mismatched-l1-hash", "reordered-items", "duplicate-body", "blob-native-header"} {
 		row := map[string]any{"case": name}
 		rows = append(rows, row)
 		run, err := start(in, bodies, filepath.Join(directory, name), pinnedCommit, row)
@@ -342,6 +345,18 @@ func rejectedStateSync(in inputs, bodies, directory, keySource string, blocks []
 			header := original.Header()
 			switch name {
 			case "missing":
+			case "blob-native-header":
+				// Keep the native current-fork header's nil blob fields and no
+				// BlobSchedule. This tests body validation in that profile only.
+				if header.BlobGasUsed != nil || header.ExcessBlobGas != nil || in.genesis.Config.BlobScheduleConfig != nil {
+					return fmt.Errorf("unexpected blob header/profile")
+				}
+				blob, err := blobControlTransaction(in.genesis.Config)
+				if err != nil {
+					return err
+				}
+				body.Transactions = types.Transactions{blob, tx}
+				header.GasUsed = 21_000
 			case "non-final":
 				sender, err := senderKey()
 				if err != nil {
@@ -370,7 +385,7 @@ func rejectedStateSync(in inputs, bodies, directory, keySource string, blocks []
 				}
 				body.Transactions = types.Transactions{types.NewTx(&types.StateSyncTx{StateSyncData: items})}
 			}
-			header.TxHash = types.DeriveSha(body.Transactions, trie.NewStackTrie(nil))
+			header.TxHash = types.DeriveSha(types.Transactions(body.Transactions), trie.NewStackTrie(nil))
 			signature, err := crypto.Sign(bor.SealHash(header, in.genesis.Config.Bor).Bytes(), key)
 			if err != nil {
 				return err
@@ -401,7 +416,11 @@ func rejectedStateSync(in inputs, bodies, directory, keySource string, blocks []
 				}
 				row[label] = records
 			}
-			if !errors.Is(importErr, core.ErrStateSyncMismatch) {
+			if name == "blob-native-header" {
+				if importErr == nil || importErr.Error() != "data blobs present in block body" {
+					return fmt.Errorf("expected native-header blob body refusal, got %v", importErr)
+				}
+			} else if !errors.Is(importErr, core.ErrStateSyncMismatch) {
 				return fmt.Errorf("%s: expected StateSync mismatch, got %v", name, importErr)
 			}
 			if run.chain.CurrentBlock().Hash() != before {
@@ -500,8 +519,8 @@ func observe(directory, genesisPath, configPath, bodies, blocksPath, keySource, 
 	}
 	run.close()
 	mainOpen = false
-	rejections, err := rejectedStateSync(in, bodies, directory+"-refusals", keySource, blocks)
-	result["state_sync_refusals"] = rejections
+	rejections, err := rejectedImports(in, bodies, directory+"-refusals", keySource, blocks)
+	result["import_refusals"] = rejections
 	if err != nil {
 		return err
 	}
