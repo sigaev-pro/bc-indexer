@@ -75,8 +75,8 @@
     {
       "name": "diagnostic grants acceptance",
       "file": "test/type_paths/poly/poly_native.py",
-      "original": "\"ac_verdict\": None",
-      "replacement": "\"ac_verdict\": \"PASS\""
+      "original": "\"public_profile_credit\": False, \"ac_verdict\": None, \"error\": None",
+      "replacement": "\"public_profile_credit\": False, \"ac_verdict\": \"PASS\", \"error\": None"
     },
     {
       "name": "snapshot source bytes not retained",
