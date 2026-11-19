@@ -217,7 +217,7 @@ func interrupted(work, id, commit string, genesis *core.Genesis, index int) case
 		row["head"] = nativeAt(r.db, r.chain.CurrentBlock().Number.Uint64())
 		row["boundary"] = boundaryOf(r.db)
 		row["records_after"] = prefixed(r.db, r.db, decisionPrefix)
-		_, e := r.chain.StateAt(target.Root(), target.NumberU64(), target.Time())
+		_, e := r.chain.StateAt(target.Root(), target.Number(), target.Time())
 		row["state_error"] = errText(e)
 	}
 	row["old_branch_length"] = 4
