@@ -1,0 +1,1023 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../..",
+  "copy": [
+    "test/type_paths/poly/*",
+    "test/type_paths/eth/eth_type_judge.py",
+    "adapters/bor/decision/vectors.json",
+    "test/native_corpus/poly/*.py",
+    "test/native_corpus/poly/main.go",
+    "test/native_corpus/*.py",
+    "test/harness/*.py",
+    "test/evidence/*.py",
+    "test/native_corpus/poly/stub/*",
+    "test/native_corpus/expected/poly.json",
+    "test/harness/fixtures/source_inputs_bor/heimdallstub/stub.go"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/type_paths/poly",
+    "-v"
+  ],
+  "timeout_seconds": 30,
+  "mutants": [
+    {
+      "name": "accepted corpus identity ignored",
+      "file": "test/type_paths/poly/poly_support.py",
+      "original": "if hashlib.sha256(source).hexdigest() != CORPUS_SHA256:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "unscheduled Hampi admitted",
+      "file": "test/type_paths/poly/poly_profile.py",
+      "original": "if bor.get(\"hampiBlock\") is not None:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "non Bor schedule admitted",
+      "file": "test/type_paths/poly/poly_profile.py",
+      "original": "if config.get(field) is not None:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "prepared fixture identity ignored",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require(set(tool[\"fixture\"]) == set(FILES) and all(\n        tool[\"fixture\"][name] == reference(HERE / name) for name in FILES),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "prepared input membership ignored",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require({Path(item[\"path\"]).name for item in tool[field]} == expected and len(tool[field]) == len(expected),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "prepared input ownership ignored",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require(all(Path(item[\"path\"]).parent == tool_path.parent / \"bor\" / field for item in tool[field]),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "mutable runtime accepted",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", tool[\"runtime\"]),",
+      "replacement": "require(True,"
+    },
+    {
+      "name": "owned snapshot directory allocation omitted",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "(output / destination).mkdir()",
+      "replacement": "pass"
+    },
+    {
+      "name": "diagnostic grants acceptance",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "\"public_profile_credit\": False, \"ac_verdict\": None, \"error\": None",
+      "replacement": "\"public_profile_credit\": False, \"ac_verdict\": \"PASS\", \"error\": None"
+    },
+    {
+      "name": "snapshot source bytes not retained",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "copies.append(copy_artifact(directory / name, output / destination / name, origin, deadline=deadline))",
+      "replacement": "copies.append(origin)"
+    },
+    {
+      "name": "native_block: unexpected Bor block envelope",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(outer) == 3, \"unexpected Bor block envelope\")",
+      "replacement": "check(True, 'unexpected Bor block envelope')"
+    },
+    {
+      "name": "native_block: unexpected private Bor header fields",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(header) == 16, \"unexpected private Bor header fields\")",
+      "replacement": "check(True, 'unexpected private Bor header fields')"
+    },
+    {
+      "name": "native_block: invalid header hash width",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(all(len(header[index]) == 32 for index in (0, 1, 3, 4, 5)), \"invalid header hash width\")",
+      "replacement": "check(True, 'invalid header hash width')"
+    },
+    {
+      "name": "native_block: reported block identity differs from raw header",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(type(row[\"number\"]) is int and row[\"number\"] == number and row[\"hash\"] == digest, \"reported block identity differs from raw header\")",
+      "replacement": "check(True, 'reported block identity differs from raw header')"
+    },
+    {
+      "name": "native_block: reported block roots differ",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(row[\"root\"] == \"0x\" + header[3].hex() and row[\"parent\"] == \"0x\" + header[0].hex(), \"reported block roots differ\")",
+      "replacement": "check(True, 'reported block roots differ')"
+    },
+    {
+      "name": "native_block: invalid Bor body/uncles",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(isinstance(outer[1][0], list) and outer[2][0] == [], \"invalid Bor body/uncles\")",
+      "replacement": "check(True, 'invalid Bor body/uncles')"
+    },
+    {
+      "name": "native_block: transaction proof count differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(proofs) == len(txs), \"transaction proof count differs\")",
+      "replacement": "check(True, 'transaction proof count differs')"
+    },
+    {
+      "name": "native_block: nonempty transaction root for empty body",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(header[4] == codec.EMPTY_ROOT, \"nonempty transaction root for empty body\")",
+      "replacement": "check(True, 'nonempty transaction root for empty body')",
+      "equivalent": "Equivalent: unconditional complete ordered-root reconstruction independently requires EMPTY_ROOT for an empty value list before acceptance."
+    },
+    {
+      "name": "native_block: wrong transaction proof key",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(type(proof[\"index\"]) is int and proof[\"index\"] == index and octets(proof[\"key\"]) == key, \"wrong transaction proof key\")",
+      "replacement": "check(True, 'wrong transaction proof key')"
+    },
+    {
+      "name": "native_block: body transaction not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(authenticated == tx == octets(proof[\"value\"]), \"body transaction not authenticated\")",
+      "replacement": "check(True, 'body transaction not authenticated')"
+    },
+    {
+      "name": "check_records: wrong durable decision frontier",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(set(records) == expected and records[prefix + \"counter\"] == {\"next\": len(views)}, \"wrong durable decision frontier\")",
+      "replacement": "check(True, 'wrong durable decision frontier')"
+    },
+    {
+      "name": "check_records: wrong admission frontier",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(actual == {prefix + \"counter\": {\"next\": frontier}, prefix + \"lowwater\": {\"sequence\": frontier},\n                     prefix + \"purged\": {\"sequence\": frontier}}, \"wrong admission frontier\")",
+      "replacement": "check(True, 'wrong admission frontier')"
+    },
+    {
+      "name": "check_records: invalid intent schema",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(set(intent) == {\"native_store_id\", \"producer\", \"sequence\", \"kind\", \"old_head\", \"new_head\", \"members\", \"evidence_digest\", \"events\", \"digest\"}, \"invalid intent schema\")",
+      "replacement": "check(True, 'invalid intent schema')"
+    },
+    {
+      "name": "check_records: wrong native identity",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(intent[\"native_store_id\"] == \"0123456789abcdef0123456789abcdef\" and intent[\"producer\"] == \"bor.run-1\", \"wrong native identity\")",
+      "replacement": "check(True, 'wrong native identity')"
+    },
+    {
+      "name": "check_records: wrong decision kind/sequence",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")",
+      "replacement": "check(True, 'wrong decision kind/sequence')"
+    },
+    {
+      "name": "check_records: decision/native header mismatch",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(intent[\"old_head\"] == {\"number\": row[\"number\"] - 1, \"hash\": row[\"parent\"][2:]} and\n              intent[\"new_head\"] == {\"number\": row[\"number\"], \"hash\": row[\"hash\"][2:]}, \"decision/native header mismatch\")",
+      "replacement": "check(True, 'decision/native header mismatch')"
+    },
+    {
+      "name": "check_records: wrong decision member count",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(intent[\"members\"]) == 1, \"wrong decision member count\")",
+      "replacement": "check(True, 'wrong decision member count')"
+    },
+    {
+      "name": "check_records: invalid decision member schema",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(set(member) == {\"observation\", \"block\", \"exec_ready_digest\", \"child_root\"}, \"invalid decision member schema\")",
+      "replacement": "check(True, 'invalid decision member schema')"
+    },
+    {
+      "name": "check_records: decision member/root mismatch",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(member[\"observation\"] == f\"bor.run-1.{sequence:016x}\" and member[\"block\"] == row[\"hash\"][2:] and\n              member[\"child_root\"] == row[\"root\"][2:], \"decision member/root mismatch\")",
+      "replacement": "check(True, 'decision member/root mismatch')"
+    },
+    {
+      "name": "check_records: invalid intent digest",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(intent[\"digest\"] == intent_digest(intent), \"invalid intent digest\")",
+      "replacement": "check(True, 'invalid intent digest')"
+    },
+    {
+      "name": "check_records: invalid decided schema",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(set(decided) == {\"sequence\", \"intent_digest\", \"delivery\", \"digest\"}, \"invalid decided schema\")",
+      "replacement": "check(True, 'invalid decided schema')"
+    },
+    {
+      "name": "check_records: invalid decided binding",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid decided binding\")",
+      "replacement": "check(True, 'invalid decided binding')"
+    },
+    {
+      "name": "account_claims: missing or extra account proofs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(set(proofs) == WATCHED and set(after) == {a[2:] for a in WATCHED}, \"missing or extra account proofs\")",
+      "replacement": "check(True, 'missing or extra account proofs')"
+    },
+    {
+      "name": "account_claims: substituted account proof address",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(proof[\"address\"].lower() == address, \"substituted account proof address\")",
+      "replacement": "check(True, 'substituted account proof address')"
+    },
+    {
+      "name": "account_claims: account amount/nonce not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(quantity(proof[\"nonce\"]) == account[\"nonce\"] == nonce and quantity(proof[\"balance\"]) == quantity(account[\"balance\"]) == balance, \"account amount/nonce not authenticated\")",
+      "replacement": "check(True, 'account amount/nonce not authenticated')"
+    },
+    {
+      "name": "account_claims: account subroot mismatch",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(octets(proof[\"storageHash\"], 32) == storage_root and octets(proof[\"codeHash\"], 32) == code_hash, \"account subroot mismatch\")",
+      "replacement": "check(True, 'account subroot mismatch')"
+    },
+    {
+      "name": "account_claims: account code not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check((codec.keccak256(octets(account[\"code\"])) if leaf is not None else bytes(32)) == code_hash and\n              (leaf is not None or account[\"code\"] == \"\"), \"account code not authenticated\")",
+      "replacement": "check(True, 'account code not authenticated')"
+    },
+    {
+      "name": "account_claims: missing or duplicate storage proofs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(slots) == 4 and {quantity(item[\"key\"]) for item in slots} == set(range(4)), \"missing or duplicate storage proofs\")",
+      "replacement": "check(True, 'missing or duplicate storage proofs')"
+    },
+    {
+      "name": "account_claims: invalid account leaf",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(fields) == 4, \"invalid account leaf\")",
+      "replacement": "check(True, 'invalid account leaf')",
+      "equivalent": "Equivalent: assigning storage_root, code_hash = fields[2:] requires exactly two values, and indexing fields[0:2] requires two preceding values. Every other leaf arity raises ValueError or IndexError, both rejected by judge."
+    },
+    {
+      "name": "account_claims: invalid account commitments",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(storage_root) == len(code_hash) == 32, \"invalid account commitments\")",
+      "replacement": "check(True, 'invalid account commitments')",
+      "equivalent": "Equivalent: the later account subroot binding compares each commitment against octets(JSON field, 32), which independently requires exactly 32 bytes. A commitment of any other width cannot satisfy equality."
+    },
+    {
+      "name": "account_claims: storage value not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(quantity(item[\"value\"]) == expected == state_value(account, slot), \"storage value not authenticated\")",
+      "replacement": "check(True, 'storage value not authenticated')"
+    },
+    {
+      "name": "account_claims: storage proof for absent account",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(not nodes, \"storage proof for absent account\")",
+      "replacement": "check(True, 'storage proof for absent account')"
+    },
+    {
+      "name": "account_claims: storage value has trailing data",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(end == len(value), \"storage value has trailing data\")",
+      "replacement": "check(True, 'storage value has trailing data')"
+    },
+    {
+      "name": "receipt_claims: receipt/body/trace count differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(receipts) == len(proofs) == len(traces) == len(txs), \"receipt/body/trace count differs\")",
+      "replacement": "check(True, 'receipt/body/trace count differs')"
+    },
+    {
+      "name": "receipt_claims: receipt gas does not match header",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(cumulative == integer(header[10]), \"receipt gas does not match header\")",
+      "replacement": "check(True, 'receipt gas does not match header')"
+    },
+    {
+      "name": "receipt_claims: nonempty receipt root for empty body",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(header[5] == codec.EMPTY_ROOT, \"nonempty receipt root for empty body\")",
+      "replacement": "check(True, 'nonempty receipt root for empty body')",
+      "equivalent": "Equivalent: unconditional complete ordered-root reconstruction independently requires EMPTY_ROOT for an empty value list before acceptance."
+    },
+    {
+      "name": "receipt_claims: wrong receipt proof key",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(type(proof[\"index\"]) is int and proof[\"index\"] == index and octets(proof[\"key\"]) == key, \"wrong receipt proof key\")",
+      "replacement": "check(True, 'wrong receipt proof key')"
+    },
+    {
+      "name": "receipt_claims: receipt bytes not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(wire is not None and wire == octets(proof[\"value\"]), \"receipt bytes not authenticated\")",
+      "replacement": "check(True, 'receipt bytes not authenticated')"
+    },
+    {
+      "name": "receipt_claims: receipt envelope type differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(typ == 0 or wire[0] == typ, \"receipt envelope type differs\")",
+      "replacement": "check(True, 'receipt envelope type differs')"
+    },
+    {
+      "name": "receipt_claims: invalid receipt payload",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(fields) == 4 and len(fields[2]) == 256, \"invalid receipt payload\")",
+      "replacement": "check(True, 'invalid receipt payload')"
+    },
+    {
+      "name": "receipt_claims: invalid receipt status/gas",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(status in (0, 1) and total >= cumulative, \"invalid receipt status/gas\")",
+      "replacement": "check(True, 'invalid receipt status/gas')"
+    },
+    {
+      "name": "receipt_claims: receipt status/gas not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(quantity(receipt.get(\"type\", \"0x0\")) == typ and quantity(receipt[\"status\"]) == status and\n              quantity(receipt[\"cumulativeGasUsed\"]) == total and quantity(receipt[\"gasUsed\"]) == total - cumulative,\n              \"receipt status/gas not authenticated\")",
+      "replacement": "check(True, 'receipt status/gas not authenticated')"
+    },
+    {
+      "name": "receipt_claims: receipt logs not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(octets(receipt[\"logsBloom\"], 256) == fields[2] and consensus_logs(receipt[\"logs\"]) == fields[3], \"receipt logs not authenticated\")",
+      "replacement": "check(True, 'receipt logs not authenticated')"
+    },
+    {
+      "name": "receipt_claims: receipt metadata identity differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(receipt[\"transactionHash\"] == tx_hash and receipt[\"blockHash\"] == row[\"hash\"] and\n              quantity(receipt[\"blockNumber\"]) == row[\"number\"] and quantity(receipt[\"transactionIndex\"]) == index,\n              \"receipt metadata identity differs\")",
+      "replacement": "check(True, 'receipt metadata identity differs')"
+    },
+    {
+      "name": "receipt_claims: trace/body identity differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(trace[\"hash\"] == tx_hash and trace[\"type\"] == typ and octets(trace[\"raw\"]) == tx, \"trace/body identity differs\")",
+      "replacement": "check(True, 'trace/body identity differs')"
+    },
+    {
+      "name": "receipt_claims: live receipt differs from stored proof",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(quantity(observed[\"status\"]) == status and quantity(observed[\"gasUsed\"]) == total - cumulative and\n              quantity(observed[\"cumulativeGasUsed\"]) == total and consensus_logs(observed[\"logs\"]) == fields[3], \"live receipt differs from stored proof\")",
+      "replacement": "check(True, 'live receipt differs from stored proof')"
+    },
+    {
+      "name": "ordinary_fields: wrong ordinary type order",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(kind == (0, 0, 1, 1, 2, 2, 4, 4)[index], \"wrong ordinary type order\")",
+      "replacement": "check(True, 'wrong ordinary type order')"
+    },
+    {
+      "name": "ordinary_fields: wrong ordinary field count",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(fields) == {0: 9, 1: 11, 2: 12, 4: 13}[kind], \"wrong ordinary field count\")",
+      "replacement": "check(True, 'wrong ordinary field count')"
+    },
+    {
+      "name": "ordinary_fields: invalid typed signature parity",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(kind == 0 or integer(v) in (0, 1), \"invalid typed signature parity\")",
+      "replacement": "check(True, 'invalid typed signature parity')",
+      "equivalent": "Equivalent: the following fixture_signature call independently enforces parity0/1 and strict secp256k1 scalar/low-s bounds, which imply this weaker expected-valid outer-signature guard."
+    },
+    {
+      "name": "ordinary_fields: invalid transaction signature",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(0 < integer(r) < 2**256 and 0 < integer(s) < 2**256, \"invalid transaction signature\")",
+      "replacement": "check(True, 'invalid transaction signature')",
+      "equivalent": "Equivalent: the following fixture_signature call independently enforces parity0/1 and strict secp256k1 scalar/low-s bounds, which imply this weaker expected-valid outer-signature guard."
+    },
+    {
+      "name": "ordinary_fields: wrong ordinary transaction input",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(True, 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "ordinary_fields: wrong legacy chain/signature domain",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(v) in (30037, 30038), \"wrong legacy chain/signature domain\")",
+      "replacement": "check(True, 'wrong legacy chain/signature domain')",
+      "equivalent": "Equivalent: fixture_signature requires parity in (0,1), and the legacy caller derives parity as v-30037. This independently restricts v to exactly 30037 or 30038."
+    },
+    {
+      "name": "ordinary_fields: wrong legacy fee",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(price) == 5_000_000_000, \"wrong legacy fee\")",
+      "replacement": "check(True, 'wrong legacy fee')"
+    },
+    {
+      "name": "ordinary_fields: wrong access-list chain/fee",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(price) == 5_000_000_000, \"wrong access-list chain/fee\")",
+      "replacement": "check(True, 'wrong access-list chain/fee')"
+    },
+    {
+      "name": "ordinary_fields: wrong ordered access list",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(access == [[octets(REVERT), [bytes(32)]]], \"wrong ordered access list\")",
+      "replacement": "check(True, 'wrong ordered access list')"
+    },
+    {
+      "name": "ordinary_fields: wrong dynamic fee fields",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000,\n              \"wrong dynamic fee fields\")",
+      "replacement": "check(True, 'wrong dynamic fee fields')"
+    },
+    {
+      "name": "ordinary_fields: unexpected access list",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(access == [], \"unexpected access list\")",
+      "replacement": "check(True, 'unexpected access list')"
+    },
+    {
+      "name": "ordinary_fields: wrong authorization count/shape",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(auth) == 1 and len(auth[0]) == 6, \"wrong authorization count/shape\")",
+      "replacement": "check(True, 'wrong authorization count/shape')"
+    },
+    {
+      "name": "ordinary_fields: wrong authorization domain/target/nonce",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6,\n                  \"wrong authorization domain/target/nonce\")",
+      "replacement": "check(True, 'wrong authorization domain/target/nonce')"
+    },
+    {
+      "name": "ordinary_fields: invalid authorization signature",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(parity) in (0, 1) and 0 < integer(ar) < 2**256 and 0 < integer(ass) < 2**256,\n                  \"invalid authorization signature\")",
+      "replacement": "check(True, 'invalid authorization signature')",
+      "equivalent": "Equivalent: the following fixture_signature call independently enforces parity0/1, 0<r<secp256k1 order and 0<s<=order/2, which strictly imply these weaker expected-valid authorization checks."
+    },
+    {
+      "name": "ordinary_state: ordinary fixture incomplete",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(txs) == 8 and len(row[\"calls\"]) == 8, \"ordinary fixture incomplete\")",
+      "replacement": "check(True, 'ordinary fixture incomplete')"
+    },
+    {
+      "name": "ordinary_state: ordinary end state differs from authenticated state",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(previous == snapshot(row[\"state_after\"], False), \"ordinary end state differs from authenticated state\")",
+      "replacement": "check(True, 'ordinary end state differs from authenticated state')"
+    },
+    {
+      "name": "ordinary_state: wrong sender/status",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(trace[\"from\"].lower() == SENDER and quantity(receipt[\"status\"]) == status, \"wrong sender/status\")",
+      "replacement": "check(True, 'wrong sender/status')"
+    },
+    {
+      "name": "ordinary_state: sender nonce boundary differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(after[SENDER][\"nonce\"] == before[SENDER][\"nonce\"] + 1 == index + 1, \"sender nonce boundary differs\")",
+      "replacement": "check(True, 'sender nonce boundary differs')"
+    },
+    {
+      "name": "ordinary_state: wrong effective fee or gas",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(price == expected_price and gas > 0, \"wrong effective fee or gas\")",
+      "replacement": "check(True, 'wrong effective fee or gas')"
+    },
+    {
+      "name": "ordinary_state: sender balance effect differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(before[SENDER][\"balance\"] - after[SENDER][\"balance\"] == gas * price + status * 7, \"sender balance effect differs\")",
+      "replacement": "check(True, 'sender balance effect differs')"
+    },
+    {
+      "name": "ordinary_state: successful value transfer differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(after[SUCCESS][\"balance\"] - before[SUCCESS][\"balance\"] == status * 7, \"successful value transfer differs\")",
+      "replacement": "check(True, 'successful value transfer differs')"
+    },
+    {
+      "name": "ordinary_state: reverted or unrelated state changed",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(after[REVERT] == before[REVERT] and after[TARGET] == before[TARGET] and after[RECEIVER] == before[RECEIVER], \"reverted or unrelated state changed\")",
+      "replacement": "check(True, 'reverted or unrelated state changed')"
+    },
+    {
+      "name": "ordinary_state: wrong ordinary native call",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(call[\"transaction\"] == trace[\"hash\"] and call[\"depth\"] == 0 and call[\"type\"] == 241 and\n              call[\"from\"].lower() == SENDER and call[\"to\"].lower() == target and call[\"input\"] == \"\" and\n              call[\"reverted\"] is (not bool(status)), \"wrong ordinary native call\")",
+      "replacement": "check(True, 'wrong ordinary native call')"
+    },
+    {
+      "name": "ordinary_state: wrong ordinary call result",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(call[\"output\"] == (\"\" if status else \"00\" * 31 + \"ee\") and\n              (call.get(\"error\") is None if status else call.get(\"error\") == \"execution reverted\"), \"wrong ordinary call result\")",
+      "replacement": "check(True, 'wrong ordinary call result')"
+    },
+    {
+      "name": "ordinary_state: reverted log survived",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(not any(log[\"address\"].lower() == REVERT for log in receipt[\"logs\"]), \"reverted log survived\")",
+      "replacement": "check(True, 'reverted log survived')"
+    },
+    {
+      "name": "ordinary_state: ordinary transaction state discontinuity",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(before == previous, \"ordinary transaction state discontinuity\")",
+      "replacement": "check(True, 'ordinary transaction state discontinuity')"
+    },
+    {
+      "name": "ordinary_state: wrong initial fixture state",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(before[SENDER][\"balance\"] == 10**19 and before[SENDER][\"nonce\"] == 0 and\n                  before[SUCCESS][\"balance\"] == 0 and before[AUTHORITY][\"nonce\"] == 0, \"wrong initial fixture state\")",
+      "replacement": "check(True, 'wrong initial fixture state')"
+    },
+    {
+      "name": "ordinary_state: authorization effects missing",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(after[AUTHORITY][\"nonce\"] == index - 5 and after[AUTHORITY][\"code\"] == b\"\\xef\\x01\\x00\" + octets(SUCCESS), \"authorization effects missing\")",
+      "replacement": "check(True, 'authorization effects missing')"
+    },
+    {
+      "name": "ordinary_state: unexpected authorization effects",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(after[AUTHORITY] == before[AUTHORITY], \"unexpected authorization effects\")",
+      "replacement": "check(True, 'unexpected authorization effects')"
+    },
+    {
+      "name": "system_state: missing body StateSync/actions",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(txs) == 1 and txs[0][0] == 127 and len(row[\"calls\"]) == 5, \"missing body StateSync/actions\")",
+      "replacement": "check(True, 'missing body StateSync/actions')"
+    },
+    {
+      "name": "system_state: wrong ordered StateSync body items/L1 hashes",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(plain_rlp(codec.rlp_list(txs[0][1:])) == expected_items, \"wrong ordered StateSync body items/L1 hashes\")",
+      "replacement": "check(True, 'wrong ordered StateSync body items/L1 hashes')"
+    },
+    {
+      "name": "system_state: wrong actual StateSync hook sender",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(tx[\"from\"].lower() == SYSTEM, \"wrong actual StateSync hook sender\")",
+      "replacement": "check(True, 'wrong actual StateSync hook sender')"
+    },
+    {
+      "name": "system_state: StateSync receipt treated as ordinary gas transaction",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(quantity(receipt[\"status\"]) == 1 and quantity(receipt[\"gasUsed\"]) == 0 and\n          quantity(receipt[\"effectiveGasPrice\"]) == 0, \"StateSync receipt treated as ordinary gas transaction\")",
+      "replacement": "check(True, 'StateSync receipt treated as ordinary gas transaction')"
+    },
+    {
+      "name": "system_state: system state boundary not authenticated",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(before == parent_state and after == snapshot(row[\"state_after\"], False), \"system state boundary not authenticated\")",
+      "replacement": "check(True, 'system state boundary not authenticated')"
+    },
+    {
+      "name": "system_state: wrong receiver progress",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(before[RECEIVER][\"storage\"][0] == 0 and after[RECEIVER][\"storage\"][0] == 2, \"wrong receiver progress\")",
+      "replacement": "check(True, 'wrong receiver progress')",
+      "equivalent": "Equivalent: first outer_before equals initial before and is checked at index-1 = 0; each outer_after is checked at index, and the last action after equals authenticated after. These action continuity checks force exactly 0 to 2."
+    },
+    {
+      "name": "system_state: successful system target effects differ",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(after[TARGET][\"storage\"] == (1, int(RECEIVER, 16), len(EVENT_DATA), int.from_bytes(EVENT_DATA.ljust(32, b\"\\0\"), \"big\")), \"successful system target effects differ\")",
+      "replacement": "check(True, 'successful system target effects differ')"
+    },
+    {
+      "name": "system_state: wrong StateSync logs or reverted logs survived",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(consensus_logs(receipt[\"logs\"]) == [[octets(TARGET), [(94).to_bytes(32, \"big\")], (1).to_bytes(32, \"big\")]], \"wrong StateSync logs or reverted logs survived\")",
+      "replacement": "check(True, 'wrong StateSync logs or reverted logs survived')"
+    },
+    {
+      "name": "system_state: wrong native StateSync call order",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check([call[\"depth\"] for call in row[\"calls\"]] == [0, 1, 2, 1, 2], \"wrong native StateSync call order\")",
+      "replacement": "check(True, 'wrong native StateSync call order')"
+    },
+    {
+      "name": "system_state: invalid synthetic StateSync root",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(root[\"from\"].lower() == SYSTEM and root[\"to\"].lower() == RECEIVER and root[\"input\"] == \"\" and\n          root[\"reverted\"] is False and root.get(\"error\") is None, \"invalid synthetic StateSync root\")",
+      "replacement": "check(True, 'invalid synthetic StateSync root')"
+    },
+    {
+      "name": "system_state: synthetic root state differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(snapshot(root[\"before\"], True) == before and snapshot(root[\"after\"], True) == after, \"synthetic root state differs\")",
+      "replacement": "check(True, 'synthetic root state differs')"
+    },
+    {
+      "name": "system_state: last action state differs from authenticated end state",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(previous == after, \"last action state differs from authenticated end state\")",
+      "replacement": "check(True, 'last action state differs from authenticated end state')"
+    },
+    {
+      "name": "system_state: system action charged or changed unrelated account",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(before[address] == after[address], \"system action charged or changed unrelated account\")",
+      "replacement": "check(True, 'system action charged or changed unrelated account')"
+    },
+    {
+      "name": "system_state: uncorrelated system call",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(call[\"transaction\"] == tx[\"hash\"] and call[\"type\"] == 241, \"uncorrelated system call\")",
+      "replacement": "check(True, 'uncorrelated system call')"
+    },
+    {
+      "name": "system_state: wrong receiver system-call identity/data",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(outer[\"from\"].lower() == SYSTEM and outer[\"to\"].lower() == RECEIVER and\n              octets(outer[\"input\"]) == abi_bytes(bytes.fromhex(\"19494a17\"), 1558348306, event), \"wrong receiver system-call identity/data\")",
+      "replacement": "check(True, 'wrong receiver system-call identity/data')"
+    },
+    {
+      "name": "system_state: receiver action state discontinuity",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(outer_before == previous and outer_before[RECEIVER][\"storage\"][0] == index - 1 and\n              outer_after[RECEIVER][\"storage\"][0] == index, \"receiver action state discontinuity\")",
+      "replacement": "check(True, 'receiver action state discontinuity')"
+    },
+    {
+      "name": "system_state: wrong target system-call identity/data",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(inner[\"from\"].lower() == RECEIVER and inner[\"to\"].lower() == target_address and\n              octets(inner[\"input\"]) == abi_bytes(bytes.fromhex(\"26c53bea\"), index, EVENT_DATA), \"wrong target system-call identity/data\")",
+      "replacement": "check(True, 'wrong target system-call identity/data')"
+    },
+    {
+      "name": "system_state: receiver progress not visible during action",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(inner_before[RECEIVER][\"storage\"][0] == index and inner_after[RECEIVER][\"storage\"][0] == index,\n              \"receiver progress not visible during action\")",
+      "replacement": "check(True, 'receiver progress not visible during action')"
+    },
+    {
+      "name": "system_state: receiver action outcome differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(outer_after == inner_after and outer[\"reverted\"] is False and outer.get(\"error\") is None and\n              outer[\"output\"] == (1 if index == 1 else 0).to_bytes(32, \"big\").hex(), \"receiver action outcome differs\")",
+      "replacement": "check(True, 'receiver action outcome differs')"
+    },
+    {
+      "name": "system_state: nested action outcome differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(inner[\"reverted\"] is (index == 2) and inner[\"output\"] == (\"\" if index == 1 else \"00\" * 31 + \"ee\") and\n              (inner.get(\"error\") is None if index == 1 else inner.get(\"error\") == \"execution reverted\"), \"nested action outcome differs\")",
+      "replacement": "check(True, 'nested action outcome differs')"
+    },
+    {
+      "name": "system_state: failed nested action retained state",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(inner_before == inner_after, \"failed nested action retained state\")",
+      "replacement": "check(True, 'failed nested action retained state')"
+    },
+    {
+      "name": "system_state: successful action before/after state differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(inner_before[TARGET][\"storage\"] == (0, 0, 0, 0) and inner_after[TARGET] == after[TARGET], \"successful action before/after state differs\")",
+      "replacement": "check(True, 'successful action before/after state differs')"
+    },
+    {
+      "name": "proof duplicate node admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if len(nodes) != len(proof):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "empty trie admits proof",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if proof:\n            raise ValueError(\"nonempty proof of empty trie\")",
+      "replacement": "if False:\n            raise ValueError(\"nonempty proof of empty trie\")"
+    },
+    {
+      "name": "unused proof nodes admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if used != set(nodes):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "hashed short child admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not first and len(encoded) < 32:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "oversized embedded child admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not isinstance(reference, list) or encoded is None or len(encoded) >= 32:",
+      "replacement": "if not isinstance(reference, list) or encoded is None:"
+    },
+    {
+      "name": "invalid compact flags admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if flag > 3 or (not flag & 1 and compact[0] & 15):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "empty extension admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not leaf and not segment:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "leaf path mismatch ignored",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if path[:len(segment)] != segment:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "index boundary drops prefix",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "path = [part for byte in key for part in (byte >> 4, byte & 15)]",
+      "replacement": "path = [part for byte in key[-1:] for part in (byte >> 4, byte & 15)]"
+    },
+    {
+      "name": "empty leaf admitted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if not isinstance(value, bytes) or not value:\n                raise ValueError(\"empty or non-byte leaf value\")",
+      "replacement": "if not isinstance(value, bytes):\n                raise ValueError(\"empty or non-byte leaf value\")"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(value) == 7 and data == b\"\" and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 2",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(gas) == 150000 and data == b\"\" and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 3",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 4",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\", 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong access-list chain/fee conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(price) == 5_000_000_000, \"wrong access-list chain/fee\")",
+      "replacement": "check(integer(price) == 5_000_000_000, 'wrong access-list chain/fee')"
+    },
+    {
+      "name": "wrong access-list chain/fee conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(price) == 5_000_000_000, \"wrong access-list chain/fee\")",
+      "replacement": "check(integer(chain) == 15001, 'wrong access-list chain/fee')"
+    },
+    {
+      "name": "wrong dynamic fee fields conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000,\n              \"wrong dynamic fee fields\")",
+      "replacement": "check(integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000, 'wrong dynamic fee fields')"
+    },
+    {
+      "name": "wrong dynamic fee fields conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000,\n              \"wrong dynamic fee fields\")",
+      "replacement": "check(integer(chain) == 15001 and integer(cap) == 5_000_000_000, 'wrong dynamic fee fields')"
+    },
+    {
+      "name": "wrong dynamic fee fields conjunct 2",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000,\n              \"wrong dynamic fee fields\")",
+      "replacement": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000, 'wrong dynamic fee fields')"
+    },
+    {
+      "name": "wrong authorization domain/target/nonce conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6,\n                  \"wrong authorization domain/target/nonce\")",
+      "replacement": "check(delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6, 'wrong authorization domain/target/nonce')"
+    },
+    {
+      "name": "wrong authorization domain/target/nonce conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6,\n                  \"wrong authorization domain/target/nonce\")",
+      "replacement": "check(integer(chain_id) == 15001 and integer(auth_nonce) == index - 6, 'wrong authorization domain/target/nonce')"
+    },
+    {
+      "name": "wrong authorization domain/target/nonce conjunct 2",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6,\n                  \"wrong authorization domain/target/nonce\")",
+      "replacement": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS), 'wrong authorization domain/target/nonce')"
+    },
+    {
+      "name": "wrong effective fee or gas conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(price == expected_price and gas > 0, \"wrong effective fee or gas\")",
+      "replacement": "check(gas > 0, 'wrong effective fee or gas')"
+    },
+    {
+      "name": "wrong effective fee or gas conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(price == expected_price and gas > 0, \"wrong effective fee or gas\")",
+      "replacement": "check(price == expected_price, 'wrong effective fee or gas')"
+    },
+    {
+      "name": "component_claims: component control moved head",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(components[\"head_before\"] == components[\"head_after\"] == head, \"component control moved head\")",
+      "replacement": "check(True, 'component control moved head')"
+    },
+    {
+      "name": "component_claims: blob decoder identity differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(raw[0] == 3 and components[\"blob_hash\"] == \"0x\" + codec.keccak256(raw).hex(), \"blob decoder identity differs\")",
+      "replacement": "check(True, 'blob decoder identity differs')"
+    },
+    {
+      "name": "component_claims: wrong blob component input",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(fields) == 14 and integer(fields[0]) == 15001 and integer(fields[1]) == 8 and\n          integer(fields[2]) == 2_000_000_000 and integer(fields[3]) == 5_000_000_000 and\n          integer(fields[4]) == 21000 and fields[5] == octets(SUCCESS) and integer(fields[6]) == 0 and\n          fields[7] == b\"\" and fields[8] == [] and integer(fields[9]) == 1 and\n          fields[10] == [b\"\\x01\" + bytes(31)], \"wrong blob component input\")",
+      "replacement": "check(True, 'wrong blob component input')"
+    },
+    {
+      "name": "component_claims: wrong native blob pool refusal",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(components[\"blob_pool_error\"] == \"transaction type not supported: received type 3\", \"wrong native blob pool refusal\")",
+      "replacement": "check(True, 'wrong native blob pool refusal')"
+    },
+    {
+      "name": "component_claims: pool refusal cannot grant blob body-import credit",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(components[\"blob_body_import\"] == \"NOT_RUN\", \"pool refusal cannot grant blob body-import credit\")",
+      "replacement": "check(True, 'pool refusal cannot grant blob body-import credit')"
+    },
+    {
+      "name": "component_claims: unknown block-decoder coverage incomplete",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check([row[\"type\"] for row in rows] == list(range(5, 127)), \"unknown block-decoder coverage incomplete\")",
+      "replacement": "check(True, 'unknown block-decoder coverage incomplete')"
+    },
+    {
+      "name": "component_claims: wrong unknown block-decoder refusal",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(all(isinstance(row[\"error\"], str) and \"transaction type not supported\" in row[\"error\"] for row in rows), \"wrong unknown block-decoder refusal\")",
+      "replacement": "check(True, 'wrong unknown block-decoder refusal')"
+    },
+    {
+      "name": "refusal_claims: native import refusal cases incomplete",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check([row[\"case\"] for row in rows] == names, \"native import refusal cases incomplete\")",
+      "replacement": "check(True, 'native import refusal cases incomplete')"
+    },
+    {
+      "name": "refusal_claims: missing expected native import refusal",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(\"control_error\" not in row and isinstance(row.get(\"error\"), str) and expected_error in row[\"error\"].lower(), \"missing expected native import refusal\")",
+      "replacement": "check(True, 'missing expected native import refusal')"
+    },
+    {
+      "name": "refusal_claims: refused import changed canonical head",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(row[\"head_before\"] == row[\"head_after\"] == blocks[2][\"hash\"], \"refused import changed canonical head\")",
+      "replacement": "check(True, 'refused import changed canonical head')"
+    },
+    {
+      "name": "refusal_claims: refusal does not target expected parent",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(header[8]) == 4 and header[0] == octets(blocks[2][\"hash\"]), \"refusal does not target expected parent\")",
+      "replacement": "check(True, 'refusal does not target expected parent')"
+    },
+    {
+      "name": "refusal_claims: missing-StateSync control has transactions",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(txs == [], \"missing-StateSync control has transactions\")",
+      "replacement": "check(True, 'missing-StateSync control has transactions')"
+    },
+    {
+      "name": "refusal_claims: blob refusal does not bind native header profile and otherwise valid fixture input",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(row[\"error\"] == expected_error and txs == [octets(blob_raw), original] and len(header) == 16,\n                  \"blob refusal does not bind native header profile and otherwise valid fixture input\")",
+      "replacement": "check(True, 'blob refusal does not bind native header profile and otherwise valid fixture input')"
+    },
+    {
+      "name": "refusal_claims: StateSync is not followed by ordinary tx",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(txs) == 2 and txs[0] == original and txs[1][0] >= 192, \"StateSync is not followed by ordinary tx\")",
+      "replacement": "check(True, 'StateSync is not followed by ordinary tx')"
+    },
+    {
+      "name": "refusal_claims: non-final control ordinary input differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(normal) == 9 and [integer(x) for x in normal[:3]] == [8, 5_000_000_000, 21000] and\n                  normal[3] == octets(SUCCESS) and normal[4:6] == [b\"\\x01\", b\"\"] and\n                  integer(normal[6]) in (30037, 30038), \"non-final control ordinary input differs\")",
+      "replacement": "check(True, 'non-final control ordinary input differs')"
+    },
+    {
+      "name": "refusal_claims: StateSync duplicate control differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(txs == [original, original], \"StateSync duplicate control differs\")",
+      "replacement": "check(True, 'StateSync duplicate control differs')"
+    },
+    {
+      "name": "refusal_claims: wrong mismatched StateSync envelope",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(txs) == 1 and txs[0][0] == 127, \"wrong mismatched StateSync envelope\")",
+      "replacement": "check(True, 'wrong mismatched StateSync envelope')"
+    },
+    {
+      "name": "refusal_claims: L1 hash mismatch control absent",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(items == changed, \"L1 hash mismatch control absent\")",
+      "replacement": "check(True, 'L1 hash mismatch control absent')"
+    },
+    {
+      "name": "refusal_claims: item-order mismatch control absent",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(items == list(reversed(expected_items)), \"item-order mismatch control absent\")",
+      "replacement": "check(True, 'item-order mismatch control absent')"
+    },
+    {
+      "name": "omit signature binding line 294",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(digest, parity, integer(r), integer(s), 1)",
+      "replacement": "pass"
+    },
+    {
+      "name": "omit signature binding line 397",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(codec.keccak256(b\"\\x03\" + codec.rlp(fields[:-3])), integer(fields[-3]), integer(fields[-2]), integer(fields[-1]), 1)",
+      "replacement": "pass"
+    },
+    {
+      "name": "complete body transaction root differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(codec.ordered_root(txs) == header[4], \"complete body transaction root differs\")",
+      "replacement": "check(True, 'complete body transaction root differs')"
+    },
+    {
+      "name": "complete receipt root differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(codec.ordered_root(receipt_wires) == header[5], \"complete receipt root differs\")",
+      "replacement": "check(True, 'complete receipt root differs')"
+    },
+    {
+      "name": "omit signature binding line 283",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(codec.keccak256(b\"\\x05\" + codec.rlp(auth[0][:3])), integer(parity), integer(ar), integer(ass), 2)",
+      "replacement": "pass"
+    },
+    {
+      "name": "omit signature binding line 430",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "codec.fixture_signature(digest, integer(normal[6]) - 30037, integer(normal[7]), integer(normal[8]), 1)",
+      "replacement": "pass"
+    },
+    {
+      "name": "recovery parity ignored",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "recovered_r[0] != r or recovered_r[1] % 2 != parity",
+      "replacement": "recovered_r[0] != r"
+    },
+    {
+      "name": "recovery x accepted only modulo order",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "recovered_r[0] != r or recovered_r[1] % 2 != parity",
+      "replacement": "recovered_r[0] % ORDER != r or recovered_r[1] % 2 != parity"
+    },
+    {
+      "name": "high s accepted",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "not 0 < s <= ORDER // 2",
+      "replacement": "not 0 < s < ORDER"
+    },
+    {
+      "name": "ordered root hashes embedded children",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "return node if len(wire) < 32 else keccak256(wire)",
+      "replacement": "return keccak256(wire)"
+    },
+    {
+      "name": "ordered root loses shared extension",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "if shared:\n            return [compact",
+      "replacement": "if False:\n            return [compact"
+    },
+    {
+      "name": "ordered root loses RLP index prefix",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "key = rlp(index.to_bytes((index.bit_length() + 7) // 8, \"big\"))",
+      "replacement": "key = index.to_bytes((index.bit_length() + 7) // 8, \"big\")"
+    },
+    {
+      "name": "ordered root drops final item",
+      "file": "test/type_paths/poly/poly_codec.py",
+      "original": "for index, value in enumerate(values):",
+      "replacement": "for index, value in enumerate(values[:-1]):"
+    }
+  ]
+}
