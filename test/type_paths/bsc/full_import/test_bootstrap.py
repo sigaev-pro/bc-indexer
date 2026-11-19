@@ -17,7 +17,8 @@ def fixture(restore):
         state[j.CREDIT]['storage'] = {'103': str(pooled * 10**18), '152': str(pooled * 10**18), 'operator_shares': str(own * 10**18), 'locked_shares': str(10**18)}
         state[GOV]['storage'] = {'gov_supply': str(own * 10**18), 'gov_operator': str(own * 10**18), 'gov_dead': '0'}
         state[j.VALIDATOR_CONTRACT]['storage'] = {'11': '21', '1': '21', 'validator_index': '0'}
-        state[j.STAKE_HUB]['storage'] = {'validator_jail_until': '0', '73': '0', '57': '604800'}
+        state[j.STAKE_HUB]['storage'] = {'validator_jailed': '0', 'validator_jail_until': '0', 'validator_agent': '0', '73': '0', '57': '604800'}
+        state[j.STAKE_HUB]['storage'].update(validator_updated='17', validator_word_10='0', validator_word_11='0', validator_word_12='17', validator_word_13='0')
     before[j.VALIDATOR_CONTRACT]['storage']['11'] = '21' if restore else '0'
     before[j.CREDIT]['balance'] = str(2001 * 10**18); after[j.CREDIT]['balance'] = str((2002 if restore else 2001) * 10**18)
     pending = {'unbond_shares': 10**18, 'unbond_amount': 10**18, 'unbond_sequence': 1, 'unbond_queue': 1 << 128,
@@ -31,6 +32,16 @@ def fixture(restore):
 
 
 class BootstrapControls(unittest.TestCase):
+    def test_correlated_validator_flags_do_not_replace_expected_values(self):
+        for restore in (False, True):
+            for offset, label in ((10, 'jailed'), (11, 'jail_until'), (13, 'agent')):
+                row = fixture(restore)
+                for boundary in ('before', 'after'):
+                    row[boundary][j.STAKE_HUB]['storage']['validator_' + label] = '1'
+                    row[boundary][j.STAKE_HUB]['storage']['validator_word_' + str(offset)] = '1'
+                with self.subTest(restore=restore, label=label), self.assertRaises(ValueError):
+                    j.check_bootstrap(row, 'bootstrap-delegate' if restore else 'bootstrap-undelegate')
+
     def test_both_source_derived_transitions(self):
         for restore in (False, True): j.check_bootstrap(fixture(restore), 'bootstrap-delegate' if restore else 'bootstrap-undelegate')
 

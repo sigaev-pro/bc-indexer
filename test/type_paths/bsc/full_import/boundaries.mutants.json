@@ -178,7 +178,8 @@
       "name": "check_receipt: \"receipt arity differs\"",
       "file": "test/type_paths/bsc/full_import/judge.py",
       "original": "require(len(fields) == 4, \"receipt arity differs\")",
-      "replacement": "require(True, \"receipt arity differs\")"
+      "replacement": "require(True, \"receipt arity differs\")",
+      "equivalent": "Removing the explicit len(fields)==4 check cannot change the verdict: the immediately following mandatory four-target tuple unpack raises ValueError for every other cardinality. The top-level judge catches ValueError. This relies on keeping that unpack unchanged; error wording may differ."
     },
     {
       "name": "check_receipt: \"receipt gas/status differs\"",

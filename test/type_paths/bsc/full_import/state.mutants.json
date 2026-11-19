@@ -397,6 +397,36 @@
       "file": "test/type_paths/bsc/full_import/judge.py",
       "original": "require(slot(before, gov, key) == 0 and slot(after, gov, key) == 2000 * 10**18, \"registration governance sync\")",
       "replacement": "require(True, \"registration governance sync\")"
+    },
+    {
+      "name": "bootstrap validator jailed",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"validator_jailed\") == 0, \"bootstrap validator jailed flag\")",
+      "replacement": "require(True, \"removed validator check\")"
+    },
+    {
+      "name": "registration validator jailed",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "\"validator_jailed\": 0, ",
+      "replacement": ""
+    },
+    {
+      "name": "bootstrap validator agent",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"validator_agent\") == 0, \"bootstrap validator agent\")",
+      "replacement": "require(True, \"removed validator check\")"
+    },
+    {
+      "name": "registration validator agent",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "\"validator_agent\": 0, ",
+      "replacement": ""
+    },
+    {
+      "name": "validator raw word binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"validator_\" + label) == slot(state, STAKE_HUB, \"validator_word_\" + str(offset)),\n                \"validator label differs from raw word: \" + label)",
+      "replacement": "require(True, \"removed raw word binding\")"
     }
   ]
 }

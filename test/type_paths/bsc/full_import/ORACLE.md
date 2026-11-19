@@ -60,3 +60,21 @@ ValidatorSet materializes the legacy extra array. Redelegating one BNB restores
 seven-day unlock, queue packing/hash, sequence and governance-token supply and
 operator balance have separate before/after expectations. The pending unlock is
 also carried across subsequent rows; correlated substitutions cannot reset it.
+
+D108 offline follow-up binds the selected Validator tail labels to separate
+raw-word observations at offsets 10 (jailed), 11 (jailUntil), 12 (updateTime),
+and 13 (agent), relative to the operator entry in mapping slot 65. Registration
+expects zero jailed/jailUntil/agent and the block timestamp for updateTime.
+Bootstrap requires zero jailed/jailUntil/agent independently of label/word
+agreement. Correlated changes to both representations must still fail the
+expected-value checks. The producer adds those four words in a separate
+literal-offset loop at `0b0a5a9`; this oracle branch does not modify native code.
+These are selected state observations, not Merkle-authenticated storage proofs.
+
+Receipt controls distinguish an empty RLP topic list from an empty byte string,
+even when both observed receipt wires and reported topics are changed together.
+The explicit four-field receipt arity guard has a verdict-equivalent deletion:
+the immediately following four-target tuple unpack still rejects every other
+cardinality with ValueError. This equivalence depends on retaining that unpack;
+it does not justify removing both checks. Earlier failed mutation records stay
+retained. Offline controls do not establish native bootstrap or import success.

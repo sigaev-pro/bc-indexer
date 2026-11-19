@@ -78,6 +78,20 @@ class BoundaryControls(unittest.TestCase):
             bad_config = copy.deepcopy(genesis['config']); bad_config['chainId'] = 1
             with self.assertRaises(ValueError): j.check_genesis(genesis, bad_config)
 
+    def test_receipt_topics_must_be_a_list_even_when_empty(self):
+        for kind in range(5):
+            row, block, fields = receipt_fixture(kind)
+            fields[3][0][1] = []
+            row['receipt']['logs'][0]['topics'] = []
+            prefix = bytes([kind]) if kind else b''
+            row['stored_receipt_wire'] = row['observed_receipt_wire'] = (prefix + j.wire.encode(fields)).hex()
+            self.assertEqual(j.check_receipt(row, 15000, 1, block), 45000)
+            # RLP empty bytes and empty list differ although both iterate empty.
+            fields[3][0][1] = b''
+            row['stored_receipt_wire'] = row['observed_receipt_wire'] = (prefix + j.wire.encode(fields)).hex()
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                j.check_receipt(row, 15000, 1, block)
+
     def test_receipt_context_status_logs_and_canonical_wire(self):
         for kind in range(5):
             row, block, fields = receipt_fixture(kind)

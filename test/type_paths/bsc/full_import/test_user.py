@@ -64,10 +64,12 @@ def registration():
     row['after'][j.STAKE_HUB]['nonce'] = 1
     row['after'][j.SUCCESS]['balance'] = '0'
     hub = {'63': 1, 'operator_index': 1, 'consensus_operator': int(j.SENDER, 16),
+           'validator_word_10': 0, 'validator_word_11': 0, 'validator_word_12': row['time'], 'validator_word_13': 0,
            'validator_consensus': int(j.VALIDATOR, 16), 'validator_operator': int(j.SENDER, 16),
            'validator_credit': int(j.CREDIT, 16), 'validator_created': row['time'], 'validator_updated': row['time'],
            'validator_vote': 97, 'validator_commission': 100 | (1000 << 64) | (100 << 128),
-           'validator_jail_until': 0, 'validator_identity': 0, 'validator_website': 0,
+           'validator_jailed': 0, 'validator_jail_until': 0, 'validator_agent': 0,
+           'validator_identity': 0, 'validator_website': 0,
            'validator_moniker': int.from_bytes(b'Extractor'.ljust(31, b'\0') + b'\x12', 'big'),
            'validator_details': int.from_bytes(b'bounded fixture'.ljust(31, b'\0') + b'\x1e', 'big')}
     credit = {'0': 1, '1': 1, '103': value, '151': int(j.SENDER, 16), '152': value,
@@ -80,6 +82,32 @@ def registration():
 
 
 class UserControls(unittest.TestCase):
+    def test_validator_tail_fields_use_the_source_layout(self):
+        row = registration()
+        # StakeHub.sol Validator: jailed, jailUntil, updateTime, agent.
+        words = {10: 0, 11: 0, 12: row['time'], 13: 0}
+        fields = {10: 'validator_jailed', 11: 'validator_jail_until',
+                  12: 'validator_updated', 13: 'validator_agent'}
+        for offset, name in fields.items():
+            row['after'][j.STAKE_HUB]['storage'][name] = str(words[offset])
+        j.check_user(row, 'registration', 0, VOTE)
+        for offset, name in fields.items():
+            bad = copy.deepcopy(row)
+            bad['after'][j.STAKE_HUB]['storage'][name] = str(words[offset] + 1)
+            bad['after'][j.STAKE_HUB]['storage']['validator_word_' + str(offset)] = str(words[offset] + 1)
+            with self.subTest(correlated=name), self.assertRaises(ValueError):
+                j.check_user(bad, 'registration', 0, VOTE)
+        for name in fields.values():
+            bad = copy.deepcopy(row)
+            del bad['after'][j.STAKE_HUB]['storage'][name]
+            with self.subTest(missing=name), self.assertRaises(KeyError):
+                j.check_user(bad, 'registration', 0, VOTE)
+        bad = copy.deepcopy(row)
+        bad['after'][j.STAKE_HUB]['storage']['validator_jail_until'] = str(words[10])
+        bad['after'][j.STAKE_HUB]['storage']['validator_updated'] = str(words[11])
+        with self.assertRaises(ValueError):
+            j.check_user(bad, 'registration', 0, VOTE)
+
     def test_ten_type_and_outcome_cases(self):
         for phase in ('success', 'revert'):
             for kind in range(5):

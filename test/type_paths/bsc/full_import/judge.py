@@ -259,6 +259,13 @@ def check_registration_input(row, vote):
                 "wrong registration description")
 
 
+def check_validator_tail(state):
+    # Pinned StakeHub Validator layout; raw words come from a separate producer loop.
+    for offset, label in ((10, "jailed"), (11, "jail_until"), (12, "updated"), (13, "agent")):
+        require(slot(state, STAKE_HUB, "validator_" + label) == slot(state, STAKE_HUB, "validator_word_" + str(offset)),
+                "validator label differs from raw word: " + label)
+
+
 def check_bootstrap(row, phase):
     before, after = row["before"], row["after"]
     restore = phase == "bootstrap-delegate"
@@ -270,9 +277,12 @@ def check_bootstrap(row, phase):
     require(slot(before, VALIDATOR_CONTRACT, "11") == (21 if restore else 0) and slot(after, VALIDATOR_CONTRACT, "11") == 21,
             "validator extras not initialized")
     for state in (before, after):
+        check_validator_tail(state)
         require(slot(state, VALIDATOR_CONTRACT, "validator_index") == 0 and slot(state, VALIDATOR_CONTRACT, "1") == 21,
                 "bootstrap changed validator membership")
         require(slot(state, STAKE_HUB, "validator_jail_until") == 0 and slot(state, STAKE_HUB, "73") == 0, "bootstrap jailed only validator")
+        require(slot(state, STAKE_HUB, "validator_jailed") == 0, "bootstrap validator jailed flag")
+        require(slot(state, STAKE_HUB, "validator_agent") == 0, "bootstrap validator agent")
         require(slot(state, STAKE_HUB, "57") == 604800, "unexpected unbond period")
     gov = "0x" + "2005".zfill(40)
     for state, pooled, own in ((before, 2000 if restore else 2001, 1999 if restore else 2000),
@@ -315,6 +325,8 @@ def check_user(row, phase, index, vote):
     require(q(row["value"]) == value and balance(before, SENDER) - balance(after, SENDER) == fee + status * value, "user fee/value accounting")
     require(balance(after, SYSTEM) - balance(before, SYSTEM) == fee, "system fee accumulation")
     if phase == "registration":
+        check_validator_tail(before)
+        check_validator_tail(after)
         check_registration_input(row, vote)
         require(kind == 0 and row["to"].lower() == STAKE_HUB and value == 2001 * 10**18, "wrong registration")
         require(before[STAKE_HUB]["nonce"] == 0 and after[STAKE_HUB]["nonce"] == 1 and before[CREDIT]["nonce"] == 0 and
@@ -325,7 +337,8 @@ def check_user(row, phase, index, vote):
                         "validator_consensus": int(VALIDATOR, 16), "validator_operator": int(SENDER, 16),
                         "validator_credit": int(CREDIT, 16), "validator_created": row["time"], "validator_updated": row["time"],
                         "validator_vote": 97, "validator_commission": 100 | (1000 << 64) | (100 << 128),
-                        "validator_jail_until": 0, "validator_identity": 0, "validator_website": 0}
+                        "validator_jailed": 0, "validator_jail_until": 0, "validator_agent": 0,
+                        "validator_identity": 0, "validator_website": 0}
         expected_hub["validator_moniker"] = int.from_bytes(b"Extractor".ljust(31, b"\0") + bytes([18]), "big")
         expected_hub["validator_details"] = int.from_bytes(b"bounded fixture".ljust(31, b"\0") + bytes([30]), "big")
         for key, expected in expected_hub.items():
