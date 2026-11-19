@@ -419,7 +419,7 @@
     {
       "name": "registration validator agent",
       "file": "test/type_paths/bsc/full_import/judge.py",
-      "original": "\"validator_agent\": 0, ",
+      "original": "\"validator_agent\": 0,",
       "replacement": ""
     },
     {
