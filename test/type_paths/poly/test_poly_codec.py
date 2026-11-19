@@ -72,6 +72,24 @@ class PolygonProofTests(unittest.TestCase):
         self.assertEqual(codec.proof_value(codec.keccak256(root_node), b"\xab", [root_node]), b"terminal")
         self.assertIsNone(codec.proof_value(codec.keccak256(root_node), b"\xac", [root_node]))
 
+    def test_ordered_index_encoding_boundary(self):
+        # RLP(index) changes from a direct byte at 127 to a length-prefixed
+        # integer at 128. Both manually constructed leaves share one branch.
+        branch = [b""] * 17
+        branch[7] = [b"\x3f", b"index127"]
+        branch[8] = [b"\x31\x80", b"index128"]
+        node = codec.rlp(branch)
+        root = codec.keccak256(node)
+        self.assertEqual(codec.rlp(b"\x7f"), b"\x7f")
+        self.assertEqual(codec.rlp(b"\x80"), b"\x81\x80")
+        self.assertEqual(codec.proof_value(root, b"\x7f", [node]), b"index127")
+        self.assertEqual(codec.proof_value(root, b"\x81\x80", [node]), b"index128")
+        self.assertIsNone(codec.proof_value(root, b"\x80", [node]))
+        changed = list(branch)
+        changed[7], changed[8] = branch[8], branch[7]
+        with self.assertRaisesRegex(ValueError, "reference"):
+            codec.proof_value(root, b"\x7f", [codec.rlp(changed)])
+
     def test_noncanonical_paths_and_references_are_refused(self):
         for node in ([b"\x40", b"x"], [b"\x21", b"x"], [b"\x00", b"x" * 32],
                      [b"\x00\xab", b""], [b"\x00\xab", b"short"], [b"\x20", b""]):

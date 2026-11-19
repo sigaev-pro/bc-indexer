@@ -34,7 +34,7 @@ def local_module(name):
 
 
 profile, support = local_module("poly_profile"), local_module("poly_support")
-FILES = ("poly_native.py", "poly_profile.py", "poly_support.py", "probe.go", "ORACLE.md")
+FILES = ("poly_native.py", "poly_profile.py", "poly_support.py", "poly_codec.py", "poly_judge.py", "probe.go", "ORACLE.md")
 LIMIT = 512 * 1024 * 1024
 
 

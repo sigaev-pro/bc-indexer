@@ -4,6 +4,8 @@
   "root": "../../..",
   "copy": [
     "test/type_paths/poly/*",
+    "test/type_paths/eth/eth_type_judge.py",
+    "adapters/bor/decision/vectors.json",
     "test/native_corpus/poly/*.py",
     "test/native_corpus/poly/main.go",
     "test/native_corpus/*.py",

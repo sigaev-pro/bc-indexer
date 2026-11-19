@@ -176,15 +176,15 @@ func durableRecords(db ethdb.Database, prefix string) (map[string]string, error)
 	return out, it.Error()
 }
 
-func receiptProofs(receipts types.Receipts, expected common.Hash) ([]map[string]any, error) {
+func orderedProofs(items types.DerivableList, expected common.Hash) ([]map[string]any, error) {
 	database := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
 	defer database.Close()
 	tree := trie.NewEmpty(database)
-	values := make([][]byte, len(receipts))
-	keys := make([][]byte, len(receipts))
-	for i := range receipts {
+	values := make([][]byte, items.Len())
+	keys := make([][]byte, items.Len())
+	for i := 0; i < items.Len(); i++ {
 		var encoded bytes.Buffer
-		receipts.EncodeIndex(i, &encoded)
+		items.EncodeIndex(i, &encoded)
 		values[i] = append([]byte(nil), encoded.Bytes()...)
 		key, err := rlp.EncodeToBytes(uint(i))
 		if err != nil {
@@ -196,7 +196,7 @@ func receiptProofs(receipts types.Receipts, expected common.Hash) ([]map[string]
 		}
 	}
 	if tree.Hash() != expected {
-		return nil, fmt.Errorf("receipt trie differs from imported header")
+		return nil, fmt.Errorf("ordered trie differs from imported header")
 	}
 	rows := []map[string]any{}
 	for i, key := range keys {
@@ -384,6 +384,12 @@ func rejectedStateSync(in inputs, bodies, directory, keySource string, blocks []
 				return err
 			}
 			row["raw_block"] = hex.EncodeToString(raw)
+			row["number"], row["hash"], row["root"], row["parent"] = candidate.NumberU64(), candidate.Hash().Hex(), candidate.Root().Hex(), candidate.ParentHash().Hex()
+			proofs, err := orderedProofs(candidate.Transactions(), candidate.TxHash())
+			if err != nil {
+				return err
+			}
+			row["transaction_proofs"] = proofs
 			if importErr != nil {
 				row["error"] = importErr.Error()
 			}
@@ -458,7 +464,11 @@ func observe(directory, genesisPath, configPath, bodies, blocksPath, keySource, 
 			return err
 		}
 		receipts := run.chain.GetReceiptsByHash(block.Hash())
-		receiptProof, err := receiptProofs(receipts, block.ReceiptHash())
+		receiptProof, err := orderedProofs(receipts, block.ReceiptHash())
+		if err != nil {
+			return err
+		}
+		txProof, err := orderedProofs(block.Transactions(), block.TxHash())
 		if err != nil {
 			return err
 		}
@@ -469,7 +479,7 @@ func observe(directory, genesisPath, configPath, bodies, blocksPath, keySource, 
 		rows = append(rows, map[string]any{"number": block.NumberU64(), "hash": block.Hash().Hex(),
 			"parent": block.ParentHash().Hex(), "root": block.Root().Hex(), "raw_block": hex.EncodeToString(raw),
 			"transactions": live.Rows, "calls": live.Calls, "receipts": receipts,
-			"receipt_proofs": receiptProof, "account_proofs": accountProof,
+			"receipt_proofs": receiptProof, "transaction_proofs": txProof, "account_proofs": accountProof,
 			"state_after": readAccounts(after, watched), "state_sync": run.chain.HeaderChain().GetStateSync()})
 	}
 	result["blocks"], result["head_hash"] = rows, run.chain.CurrentBlock().Hash().Hex()
