@@ -57,6 +57,11 @@ class CrossingRecordControls(unittest.TestCase):
                              ("delivery", "REPLAY"), ("digest", "ab" * 32)):
             with self.subTest(field=field, value=value):
                 self.corrupt(lambda intent, decided: decided.update({field: value}), refresh=False)
+        def correlated(intent, decided):
+            intent["digest"] = "ab" * 32
+            decided["intent_digest"] = intent["digest"]
+            decided["digest"] = j.prior.decided_digest(intent["digest"], "BATCH")
+        self.corrupt(correlated, refresh=False)
 
     def test_extra_records_and_counter(self):
         for key, value in (("unexpected", "{}"), ("extractor-decision-v1/bor.run-1/counter", '{"next":3}')):

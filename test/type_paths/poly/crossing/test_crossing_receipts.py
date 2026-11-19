@@ -50,6 +50,23 @@ class CrossingReceiptControls(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 j.stored(row, header, tx, 0, oracle)
 
+    def test_valid_inclusion_does_not_replace_complete_receipt_root(self):
+        row, header, tx, oracle = self.inputs()
+        root, proofs = reports.ordered_pair(oracle["wire"], oracle["wire"])
+        header[5] = root
+        row["receipt_proofs"] = proofs[:1]
+        j.h.inclusion(proofs[:1], [oracle["wire"]], root)
+        with self.assertRaises(ValueError):
+            j.stored(row, header, tx, 0, oracle)
+
+    def test_boolean_second_proof_index_is_not_integer_one(self):
+        _, _, _, oracle = self.inputs()
+        root, proofs = reports.ordered_pair(oracle["wire"], oracle["wire"])
+        j.h.inclusion(proofs, [oracle["wire"]] * 2, root)
+        proofs[1]["index"] = True
+        with self.assertRaises(ValueError):
+            j.h.inclusion(proofs, [oracle["wire"]] * 2, root)
+
 
 if __name__ == "__main__":
     unittest.main()

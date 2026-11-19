@@ -25,6 +25,20 @@ def edit_header(row, index, value):
                parent="0x" + body[0][0].hex(), root="0x" + body[0][3].hex(), number=j.integer(body[0][8]))
 
 
+def ordered_pair(first, second):
+    # RLP indexes 0 and 1 are 0x80 and 0x01: distinct first nibbles.
+    leaves = [j.codec.rlp([b"\x30", first]), j.codec.rlp([b"\x31", second])]
+    branch = [b""] * 17
+    branch[8], branch[0] = [j.codec.keccak256(node) for node in leaves]
+    node = j.codec.rlp(branch)
+    root = j.codec.keccak256(node)
+    proofs = [{"index": index, "key": key, "value": wire.hex(), "nodes": [node.hex(), leaves[index].hex()]}
+              for index, (key, wire) in enumerate((("80", first), ("01", second)))]
+    if root != j.codec.ordered_root([first, second]):
+        raise ValueError("two-leaf fixture root differs")
+    return root, proofs
+
+
 def relink(case):
     first, second = case["crossing"]["blocks"]
     negative = case["before_activation"]
@@ -36,10 +50,11 @@ def relink(case):
     negative["head_before"] = negative["head_hash"] = genesis_hash
     case["crossing"]["head_hash"] = second["hash"]
     for sequence, row in enumerate((first, second)):
+        header = j.prior.plain_rlp(j.codec.rlp_list(bytes.fromhex(row["raw_block"])))[0]
         for receipt in row["receipts"]:
             receipt.update(blockHash=row["hash"], blockNumber=hex(row["number"]))
             for log in receipt["logs"]:
-                log.update(blockHash=row["hash"], blockNumber=hex(row["number"]))
+                log.update(blockHash=row["hash"], blockNumber=hex(row["number"]), blockTimestamp=hex(j.integer(header[11])))
         records = case["crossing"]["decisions"]
         prefix = f"extractor-decision-v1/bor.run-1/{sequence:016x}"
         intent, decided = json.loads(records[prefix + "/intent"]), json.loads(records[prefix + "/decided"])
@@ -148,12 +163,73 @@ class CrossingNativeReport(unittest.TestCase):
                 edit_header(row["crossing"]["blocks"][1], field, vectors.num(value))
                 relink(row)
             self.reject(change)
+
+    def test_genesis_number_parent_and_body_are_independent(self):
+        for field in ("number", "parent", "transactions"):
+            def change(report):
+                case = report["cases"][0]
+                body = j.prior.plain_rlp(j.codec.rlp_list(bytes.fromhex(case["genesis_raw"])))
+                if field == "number":
+                    body[0][8] = b"\x01"
+                elif field == "parent":
+                    body[0][0] = bytes([1]) * 32
+                else:
+                    wire = bytes.fromhex(case["crossing"]["blocks"][0]["transaction_proofs"][0]["value"])
+                    body[1] = [j.prior.plain_rlp(j.codec.rlp_list(wire))]
+                    body[0][4] = j.codec.ordered_root([wire])
+                case["genesis_raw"] = j.codec.rlp(body).hex()
+                relink(case)
+            with self.subTest(field=field):
+                self.reject(change)
+
+    def test_correlated_initial_gas_limit(self):
+        def change(report):
+            case = report["cases"][0]
+            body = j.prior.plain_rlp(j.codec.rlp_list(bytes.fromhex(case["genesis_raw"])))
+            body[0][9] = vectors.num(9_000_000)
+            case["genesis_raw"] = j.codec.rlp(body).hex()
+            edit_header(case["crossing"]["blocks"][0], 9, vectors.num(9_000_000))
+            edit_header(case["before_activation"]["block"], 9, vectors.num(9_000_000))
+            relink(case)
+        self.reject(change)
         for index in range(3):
             def change(r):
                 row = r["cases"][index]
                 edit_header(row["before_activation"]["block"], 9, vectors.num(1))
                 relink(row)
             self.reject(change)
+
+    def test_first_timestamp_and_base_fee_correlated_with_candidate(self):
+        for case_index, field, value in ((0, 11, 1), (2, 15, 1)):
+            def change(report):
+                case = report["cases"][case_index]
+                first, second = case["crossing"]["blocks"]
+                if field == 11:
+                    header = j.prior.plain_rlp(j.codec.rlp_list(bytes.fromhex(first["raw_block"])))[0]
+                    chosen = j.integer(header[11]) + 1
+                    edit_header(second, 11, vectors.num(chosen + 1))
+                else:
+                    chosen = value
+                edit_header(first, field, vectors.num(chosen))
+                edit_header(case["before_activation"]["block"], field, vectors.num(chosen))
+                relink(case)
+            self.reject(change)
+
+    def test_extra_authenticated_transaction_is_not_ignored(self):
+        for negative in (False, True):
+            def change(report):
+                case = report["cases"][0]
+                row = case["before_activation"]["block"] if negative else case["crossing"]["blocks"][0]
+                wire = bytes.fromhex(row["transaction_proofs"][0]["value"])
+                root, proofs = ordered_pair(wire, wire)
+                body = j.prior.plain_rlp(j.codec.rlp_list(bytes.fromhex(row["raw_block"])))
+                body[1].append(copy.deepcopy(body[1][0]))
+                row["raw_block"] = j.codec.rlp(body).hex()
+                row["transaction_proofs"] = proofs
+                edit_header(row, 4, root)
+                relink(case)
+            with self.subTest(negative=negative):
+                self.reject(change)
 
 
 if __name__ == "__main__":
