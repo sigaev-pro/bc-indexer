@@ -38,7 +38,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -640,6 +639,9 @@ func start(c config, in inputs, storeID, dataDir string, mem *vfs.MemFS) (*insta
 	pebble.ExtractorFS = mem
 	node.ExtractorWrap = func(kv ethdb.KeyValueStore) ethdb.KeyValueStore {
 		n.fs = &faultStore{KeyValueStore: kv}
+		if handoffWrap != nil {
+			return handoffWrap(n.fs)
+		}
 		return n.fs
 	}
 	defer func() { node.ExtractorWrap = nil }()
@@ -679,20 +681,20 @@ func (n *instance) phase() string {
 }
 
 // insert imports the blocks one by one through the native import path and
-// returns the index of the first failed block, the error, and the state sync
-// data the native engine recorded for each processed block.
-func (n *instance) insert(blocks []*types.Block) (int, error, []map[string]any) {
+// returns the index of the first failed block, the state sync data the
+// native engine recorded for each processed block, and the error.
+func (n *instance) insert(blocks []*types.Block) (int, []map[string]any, error) {
 	events := []map[string]any{}
 	for i, block := range blocks {
 		if _, err := n.chain.InsertChain([]*types.Block{block}, false); err != nil {
-			return i, err, events
+			return i, events, err
 		}
 		for _, data := range n.chain.HeaderChain().GetStateSync() {
 			events = append(events, map[string]any{"block": block.NumberU64(), "id": data.ID,
 				"contract": hex.EncodeToString(data.Contract[:]), "data": hex.EncodeToString(data.Data)})
 		}
 	}
-	return len(blocks), nil, events
+	return len(blocks), events, nil
 }
 
 // ---------------------------------------------------------------- one case
@@ -776,7 +778,7 @@ func runCase(c config, in inputs, index int, point, variant string, blocks []*ty
 		liveErr = r.run.GoLive()
 	}
 	result["golive_error"] = errText(liveErr)
-	imported, importErr, events := r.insert(blocks)
+	imported, events, importErr := r.insert(blocks)
 	result["import"] = map[string]any{"index": imported, "error": errText(importErr)}
 	result["state_sync"] = events
 	final := map[string]any{"mode": r.phase(), "head": r.chain.CurrentBlock().Number.Uint64()}
@@ -876,34 +878,30 @@ func run(c config) {
 	}
 	self, err := os.Executable()
 	check(err)
-	cases := []any{}
+	caseJobs := []childJob{}
 	for index, point := range points {
 		for v, variant := range []string{"crash", "power_loss"} {
 			out := filepath.Join(c.work, fmt.Sprintf("case-%02d.json", index*2+v))
-			cmd := exec.Command(self, append(c.args(), "-index", fmt.Sprint(index*2+v), "-point", point,
-				"-variant", variant, "-out", out)...)
-			cmd.Args[1] = "case"
-			var stderr bytes.Buffer
-			cmd.Stdout, cmd.Stderr = io.Discard, &stderr
-			if err := cmd.Run(); err != nil {
-				tail := stderr.String()
-				if len(tail) > 2000 {
-					tail = tail[len(tail)-2000:]
-				}
-				cases = append(cases, map[string]any{"point": point, "variant": variant,
-					"child_error": fmt.Sprintf("%v: %s", err, tail)})
-				continue
-			}
-			data, err := os.ReadFile(out)
-			check(err)
-			var result map[string]any
-			check(json.Unmarshal(data, &result))
-			cases = append(cases, result)
+			args := append(c.args(), "-index", fmt.Sprint(index*2+v), "-point", point, "-variant", variant, "-out", out)
+			args[0] = "case"
+			caseJobs = append(caseJobs, childJob{args: args, output: out, identity: map[string]any{"point": point, "variant": variant}})
 		}
+	}
+	cases := runChildren(self, caseJobs, 30*time.Second)
+	handoffJobs := []childJob{}
+	for _, id := range []string{"bor.pass-at-golive", "bor.below-h-rewind", "bor.golive-order", "bor.bootstrap-vote-pass", "bor.power-loss-model"} {
+		out := filepath.Join(c.work, id+".json")
+		args := append(c.args(), "-point", id, "-out", out)
+		args[0] = "handoff"
+		handoffJobs = append(handoffJobs, childJob{args: args, output: out, identity: map[string]any{"id": id}})
+	}
+	handoffs := map[string]any{}
+	for index, result := range runChildren(self, handoffJobs, 30*time.Second) {
+		handoffs[handoffJobs[index].identity["id"].(string)] = result
 	}
 	report := map[string]any{"schema_version": 1, "kind": "native-faults-probe", "family": "poly",
 		"storage_model": "pebble-v1-strict-mem", "native_commit": c.commit,
-		"genesis_hash": ci.in.genesis.ToBlock().Hash().Hex(), "cases": cases, "blocks": hashes,
+		"genesis_hash": ci.in.genesis.ToBlock().Hash().Hex(), "cases": cases, "blocks": hashes, "handoff_runs": handoffs,
 		"elapsed_seconds": time.Since(started).Seconds()}
 	data, err := json.MarshalIndent(report, "", " ")
 	check(err)
@@ -918,7 +916,7 @@ func (c config) args() []string {
 }
 
 func main() {
-	if len(os.Args) < 2 || (os.Args[1] != "run" && os.Args[1] != "case") {
+	if len(os.Args) < 2 || (os.Args[1] != "run" && os.Args[1] != "case" && os.Args[1] != "handoff") {
 		fmt.Fprintln(os.Stderr, "usage: extractor-faults-bor run -genesis G -config C -bodies DIR -blocks RLP "+
 			"-commit SHA -accounts LIST -work DIR -report FILE")
 		os.Exit(2)
@@ -943,6 +941,12 @@ func main() {
 	}
 	if os.Args[1] == "case" {
 		caseCommand(c, *index, *point, *variant, *out)
+		return
+	}
+	if os.Args[1] == "handoff" {
+		data, err := json.Marshal(runHandoff(c, *point))
+		check(err)
+		check(os.WriteFile(*out, append(data, '\n'), 0o600))
 		return
 	}
 	run(c)
