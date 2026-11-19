@@ -33,7 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/bsc"
-	"github.com/ethereum/go-ethereum/extractor/stateprovider"
+	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/holiman/uint256"
