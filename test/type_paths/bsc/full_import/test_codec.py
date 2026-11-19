@@ -69,6 +69,21 @@ class CodecControls(unittest.TestCase):
             with self.subTest(raw=raw.hex()), self.assertRaises(ValueError):
                 wire.transaction(raw, encoding)
 
+    def test_valid_outer_signature_high_s_malleation_is_rejected(self):
+        raw = bytes.fromhex(VECTORS["transactions"][2]["wire"])
+        fields = wire.unpack(encoding.rlp_list(raw[1:]))
+        fields[-3] = 1 - wire.integer(fields[-3])
+        fields[-1] = wire.N - wire.integer(fields[-1])
+        with self.assertRaisesRegex(ValueError, "signature scalar"):
+            wire.transaction(b"\x02" + wire.encode(fields), encoding)
+
+    def test_invalid_authorization_is_decoded_without_whole_transaction_policy(self):
+        raw = bytes.fromhex(VECTORS["transactions"][4]["wire"])
+        fields = wire.unpack(encoding.rlp_list(raw[1:]))
+        fields[9][0][-2] = b""  # invalid r, structurally valid tuple
+        decoded = wire.transaction(b"\x04" + wire.encode(fields), encoding)
+        self.assertIsNone(decoded["authorizationList"][0]["authority"])
+
     def test_native_transaction_and_receipt_roots(self):
         self.assertEqual(wire.trie_root([], encoding.keccak256).hex(), "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
         for block in VECTORS["blocks"]:

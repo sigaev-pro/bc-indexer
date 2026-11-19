@@ -1,4 +1,4 @@
-"""Canonical signed envelopes and ordered native trie roots for the private fixture."""
+"""Signed fixture envelopes and ordered roots; this is not native admission policy."""
 P = 2**256 - 2**32 - 977
 N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
 G = (0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
@@ -126,7 +126,12 @@ def transaction(raw, encoding):
             for auth in fields[9]:
                 require(isinstance(auth, list) and len(auth) == 6, "invalid authorization")
                 ac, target, an, av, ar, ass = auth
-                recovered = recover(encoding.keccak256(b"\x05" + encode(auth[:3])), integer(av), integer(ar), integer(ass), encoding.keccak256)
+                # EIP-7702 skips invalid authorization signatures; they do not
+                # make the containing transaction structurally undecodable.
+                try:
+                    recovered = recover(encoding.keccak256(b"\x05" + encode(auth[:3])), integer(av), integer(ar), integer(ass), encoding.keccak256)
+                except ValueError:
+                    recovered = None
                 auths.append({"chainId": integer(ac), "address": address(target), "nonce": integer(an),
                               "yParity": integer(av), "r": integer(ar), "s": integer(ass), "authority": recovered})
             expected["authorizationList"] = auths

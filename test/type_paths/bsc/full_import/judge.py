@@ -248,6 +248,8 @@ def check_user(row, phase, index):
                         "validator_credit": int(CREDIT, 16), "validator_created": row["time"], "validator_updated": row["time"],
                         "validator_vote": 97, "validator_commission": 100 | (1000 << 64) | (100 << 128),
                         "validator_jail_until": 0, "validator_identity": 0, "validator_website": 0}
+        expected_hub["validator_moniker"] = int.from_bytes(b"Extractor".ljust(31, b"\0") + bytes([18]), "big")
+        expected_hub["validator_details"] = int.from_bytes(b"bounded fixture".ljust(31, b"\0") + bytes([30]), "big")
         for key, expected in expected_hub.items():
             require(slot(before, STAKE_HUB, key) == 0 and slot(after, STAKE_HUB, key) == expected, "registration hub storage: " + key)
         expected_credit = {"0": 1, "1": 1, "103": value, "151": int(SENDER, 16), "152": value,

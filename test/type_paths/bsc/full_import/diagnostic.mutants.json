@@ -68,7 +68,7 @@
       "name": "signature low s",
       "file": "test/type_paths/bsc/full_import/wire.py",
       "original": "0 < s <= N // 2",
-      "replacement": "True"
+      "replacement": "0 < s < N"
     },
     {
       "name": "canonical integer",

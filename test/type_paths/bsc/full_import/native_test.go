@@ -36,6 +36,7 @@ import (
 	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
 	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
 )
@@ -130,14 +131,14 @@ func modernGenesis(t *testing.T, validator common.Address, vote []byte) *core.Ge
 
 const modernRegisterABI = `[{"type":"function","name":"createValidator","inputs":[{"name":"consensusAddress","type":"address"},{"name":"voteAddress","type":"bytes"},{"name":"blsProof","type":"bytes"},{"name":"commission","type":"tuple","components":[{"name":"rate","type":"uint64"},{"name":"maxRate","type":"uint64"},{"name":"maxChangeRate","type":"uint64"}]},{"name":"description","type":"tuple","components":[{"name":"moniker","type":"string"},{"name":"identity","type":"string"},{"name":"website","type":"string"},{"name":"details","type":"string"}]}]}]`
 
-func modernRegistration(t *testing.T, config *params.ChainConfig, validator common.Address, vote, proof []byte) *types.Transaction {
+func modernRegistration(t *testing.T, config *params.ChainConfig, validator common.Address, vote, proof []byte, moniker string) *types.Transaction {
 	t.Helper()
 	a, err := abi.JSON(strings.NewReader(modernRegisterABI))
 	if err != nil {
 		t.Fatal(err)
 	}
 	commission := struct{ Rate, MaxRate, MaxChangeRate uint64 }{100, 1000, 100}
-	description := struct{ Moniker, Identity, Website, Details string }{"extractor-private", "", "", "bounded fixture"}
+	description := struct{ Moniker, Identity, Website, Details string }{moniker, "", "", "bounded fixture"}
 	data, err := a.Pack("createValidator", validator, vote, proof, commission, description)
 	if err != nil {
 		t.Fatal(err)
@@ -149,6 +150,47 @@ func modernRegistration(t *testing.T, config *params.ChainConfig, validator comm
 		t.Fatal(err)
 	}
 	return tx
+}
+
+// These small ordered values exercise trie branches absent from full-size
+// transaction vectors. Both independent native trie implementations must agree.
+type modernTrieValues [][]byte
+
+func (values modernTrieValues) Len() int { return len(values) }
+func (values modernTrieValues) EncodeIndex(index int, buffer *bytes.Buffer) {
+	buffer.Write(values[index])
+}
+
+func modernTrieVectors(t *testing.T, work string) {
+	rows := []map[string]any{}
+	for _, count := range []int{0, 1, 2, 16, 128, 129, 300} {
+		values := make(modernTrieValues, count)
+		encoded := []string{}
+		for i := range values {
+			values[i] = []byte{byte(i % 251)}
+			encoded = append(encoded, hexOf(values[i]))
+		}
+		stack := types.DeriveSha(values, trie.NewStackTrie(nil))
+		plain := types.DeriveSha(values, trie.NewListHasher())
+		if stack != plain {
+			t.Fatal("native ordered trie implementations disagree")
+		}
+		rows = append(rows, map[string]any{"count": count, "values": encoded, "root": stack})
+	}
+	writeJSON(t, filepath.Join(work, "native-trie-vectors.json"), rows)
+}
+
+type modernExit struct {
+	Output   string `json:"output"`
+	Error    any    `json:"error"`
+	Reverted bool   `json:"reverted"`
+	GasUsed  uint64 `json:"gas_used"`
+}
+
+func (result *modernExit) hook(depth int, output []byte, gasUsed uint64, err error, reverted bool) {
+	if depth == 0 {
+		*result = modernExit{Output: hexOf(output), Error: errText(err), Reverted: reverted, GasUsed: gasUsed}
+	}
 }
 
 func modernUserTx(t *testing.T, config *params.ChainConfig, kind uint8, nonce uint64, failed bool, blobHash common.Hash) *types.Transaction {
@@ -209,7 +251,7 @@ func modernGenerate(t *testing.T, work string) fixture {
 	owner := crypto.PubkeyToAddress(modernKey(t, 1).PublicKey)
 	message := crypto.Keccak256(append(append(owner.Bytes(), vote...), common.LeftPadBytes(genesis.Config.ChainID.Bytes(), 32)...))
 	proof := blsKey.Sign(message).Marshal()
-	writeJSON(t, filepath.Join(work, "registration-input.json"), map[string]any{"operator": owner, "consensus": validator, "vote": hexOf(vote), "bls_proof": hexOf(proof), "message": hexOf(message), "value": "2001000000000000000000"})
+	writeJSON(t, filepath.Join(work, "registration-input.json"), map[string]any{"operator": owner, "consensus": validator, "vote": hexOf(vote), "bls_proof": hexOf(proof), "message": hexOf(message), "value": "2001000000000000000000", "moniker": "Extractor"})
 	db := rawdb.NewMemoryDatabase()
 	defer db.Close()
 	api, backend := bsc.NewSystemCallAPI()
@@ -295,7 +337,8 @@ func modernGenerate(t *testing.T, work string) fixture {
 			t.Fatal(err)
 		}
 		systemcontracts.TryUpdateBuildInSystemContract(genesis.Config, header.Number, parent.Time, header.Time, st, true)
-		evm := vm.NewEVM(core.NewEVMBlockContext(header, chain, &validator), st, genesis.Config, vm.Config{})
+		var executionExit modernExit
+		evm := vm.NewEVM(core.NewEVMBlockContext(header, chain, &validator), st, genesis.Config, vm.Config{Tracer: &tracing.Hooks{OnExit: executionExit.hook}})
 		if header.ParentBeaconRoot != nil {
 			core.ProcessBeaconBlockRoot(*header.ParentBeaconRoot, evm)
 		}
@@ -305,7 +348,28 @@ func modernGenerate(t *testing.T, work string) fixture {
 		users := []*types.Transaction{}
 		phase := "warmup"
 		if number == 3 {
-			users = append(users, modernRegistration(t, genesis.Config, validator, vote, proof))
+			// Reproduce the prior failure on a separate state copy. No invalid
+			// registration is inserted into the canonical or captured chain.
+			priorRoot := st.Copy().IntermediateRoot(true)
+			priorHead := chain.CurrentBlock().Hash()
+			control := st.Copy()
+			bad := modernRegistration(t, genesis.Config, validator, vote, proof, "extractor-private")
+			control.SetTxContext(bad.Hash(), 0)
+			var rejectedExit modernExit
+			controlHeader := types.CopyHeader(header)
+			controlEVM := vm.NewEVM(core.NewEVMBlockContext(controlHeader, chain, &validator), control, genesis.Config, vm.Config{Tracer: &tracing.Hooks{OnExit: rejectedExit.hook}})
+			receipt, err := core.ApplyTransaction(controlEVM, core.NewGasPool(header.GasLimit), control, controlHeader, bad, core.NewReceiptBloomGenerator())
+			controlEVM.Release()
+			afterRoot, afterHead := st.Copy().IntermediateRoot(true), chain.CurrentBlock().Hash()
+			badWire, wireErr := bad.MarshalBinary()
+			if wireErr != nil {
+				t.Fatal(wireErr)
+			}
+			writeJSON(t, filepath.Join(work, "invalid-moniker-control.json"), map[string]any{"wire": hexOf(badWire), "moniker": "extractor-private", "receipt": receipt, "apply_error": errText(err), "exit": rejectedExit, "prior_state_root": priorRoot, "after_state_root": afterRoot, "prior_head": priorHead, "after_head": afterHead, "capture_started": false})
+			if err != nil || receipt == nil || receipt.Status != 0 || rejectedExit.Output != "5dba5ad7" || priorRoot != afterRoot || priorHead != afterHead {
+				t.Fatalf("invalid moniker control: receipt=%v err=%v exit=%+v", receipt, err, rejectedExit)
+			}
+			users = append(users, modernRegistration(t, genesis.Config, validator, vote, proof, "Extractor"))
 			phase = "registration"
 		} else if elected {
 			if !genesis.Config.IsPasteur(header.Number, header.Time) || genesis.Config.IsJenner(header.Number, header.Time) {
@@ -323,6 +387,7 @@ func modernGenerate(t *testing.T, work string) fixture {
 		pool := core.NewGasPool(header.GasLimit)
 		receipts := []*types.Receipt{}
 		for _, tx := range users {
+			executionExit = modernExit{}
 			st.SetTxContext(tx.Hash(), len(body.Transactions))
 			receipt, err := core.ApplyTransaction(evm, pool, st, header, tx, core.NewReceiptBloomGenerator())
 			if err != nil {
@@ -333,7 +398,8 @@ func modernGenerate(t *testing.T, work string) fixture {
 				want = 0
 			}
 			if receipt.Status != want {
-				t.Fatalf("%s type%d status %d", phase, tx.Type(), receipt.Status)
+				writeJSON(t, filepath.Join(work, "failed-user-execution.json"), map[string]any{"phase": phase, "type": tx.Type(), "receipt": receipt, "exit": executionExit})
+				t.Fatalf("%s type%d status %d exit=%+v", phase, tx.Type(), receipt.Status, executionExit)
 			}
 			body.Transactions = append(body.Transactions, tx)
 			receipts = append(receipts, receipt)
@@ -478,6 +544,7 @@ func modernNode(t *testing.T, fx fixture, home string, hooks *tracing.Hooks, emi
 
 func TestBSCFullTypeImport(t *testing.T) {
 	work := probeEnv(t, "EXTRACTOR_MODERN_WORK")
+	modernTrieVectors(t, work)
 	fx := modernGenerate(t, work)
 	validator := crypto.PubkeyToAddress(modernKey(t, 3).PublicKey)
 	addresses := []common.Address{crypto.PubkeyToAddress(modernKey(t, 1).PublicKey), crypto.PubkeyToAddress(modernKey(t, 2).PublicKey), validator, modernSuccess, modernRevert, consensus.SystemAddress, common.HexToAddress("0xdead")}
