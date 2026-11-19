@@ -168,6 +168,90 @@ class PolygonJudgeProofTests(unittest.TestCase):
             change(row)
             with self.subTest(change=change), self.assertRaises(ValueError):
                 judge.ordinary_state(row, header, txs)
+        row = copy.deepcopy(original)
+        with self.assertRaises(ValueError):
+            judge.ordinary_state(row, header, txs + [txs[0]])
+        # Alter the final transaction's before and after states together;
+        # local deltas remain valid but the prior transaction no longer joins.
+        row = copy.deepcopy(original)
+        for side in ("before", "after"):
+            row["transactions"][7][side][judge.REVERT]["balance"] = "1"
+        row["state_after"][judge.REVERT[2:]]["balance"] = "1"
+        with self.assertRaises(ValueError):
+            judge.ordinary_state(row, header, txs)
+
+    def test_correlated_system_action_states(self):
+        original = self.native["blocks"][3]
+        txs = [bytes.fromhex(original["transactions"][0]["raw"])]
+        parent = judge.snapshot(self.native["blocks"][2]["state_after"], False)
+        for variant in (txs + txs, [b"\x02" + txs[0][1:]],
+                        [b"\x7f" + c.rlp(list(reversed(judge.plain_rlp(c.rlp_list(txs[0][1:])))))]):
+            with self.subTest(variant=variant), self.assertRaises(ValueError):
+                judge.system_state(copy.deepcopy(original), variant, parent)
+        bad_parent = copy.deepcopy(parent)
+        bad_parent[judge.SENDER]["balance"] += 1
+        with self.assertRaises(ValueError):
+            judge.system_state(copy.deepcopy(original), txs, bad_parent)
+        for action in ("root", "target_effect", "charge", "failed_rollback", "success_before", "last_state"):
+            row = copy.deepcopy(original)
+            tx = row["transactions"][0]
+            calls = row["calls"]
+            if action == "root":
+                calls[0]["before"][judge.SENDER]["balance"] = "1"
+            elif action == "target_effect":
+                snapshots = [tx["after"], calls[0]["after"], calls[1]["after"], calls[2]["after"],
+                             calls[3]["before"], calls[3]["after"], calls[4]["before"], calls[4]["after"]]
+                for value in snapshots:
+                    value[judge.TARGET]["storage"]["0x" + "00" * 32] = "0x09"
+                row["state_after"][judge.TARGET[2:]]["storage"]["0"] = "09"
+            elif action == "charge":
+                snapshots = [tx["after"], calls[0]["after"], calls[1]["after"], calls[2]["before"], calls[2]["after"],
+                             calls[3]["before"], calls[3]["after"], calls[4]["before"], calls[4]["after"]]
+                for value in snapshots:
+                    value[judge.SENDER]["balance"] = "1"
+                row["state_after"][judge.SENDER[2:]]["balance"] = "1"
+            elif action == "failed_rollback":
+                calls[4]["before"][judge.TARGET]["balance"] = "1"
+            elif action == "success_before":
+                calls[2]["before"][judge.TARGET]["storage"]["0x" + "00" * 32] = "0x09"
+            else:
+                for value in (calls[3]["after"], calls[4]["before"], calls[4]["after"]):
+                    value[judge.TARGET]["balance"] = "1"
+            with self.subTest(action=action), self.assertRaises(ValueError):
+                judge.system_state(row, txs, parent)
+    def test_correlated_ordinary_fees_initial_state_and_authorization(self):
+        original = self.native["blocks"][0]
+        outer = c.rlp_list(bytes.fromhex(original["raw_block"]))
+        header = c.header_fields(outer[0][1])
+        txs = [raw if isinstance(value, list) else value for value, raw in outer[1][0]]
+        # A globally offset recipient balance preserves every transfer delta.
+        row = copy.deepcopy(original)
+        for trace in row["transactions"]:
+            for side in ("before", "after"):
+                account = trace[side][judge.SUCCESS]
+                account["balance"] = str(int(account["balance"]) + 1)
+        row["state_after"][judge.SUCCESS[2:]]["balance"] = "29"
+        with self.assertRaises(ValueError):
+            judge.ordinary_state(row, header, txs)
+        row = copy.deepcopy(original)
+        for index, trace in enumerate(row["transactions"]):
+            for side in ("before", "after"):
+                if 0 < index < 6 or index == 0 and side == "after" or index == 6 and side == "before":
+                    trace[side][judge.AUTHORITY]["nonce"] = 1
+        with self.assertRaises(ValueError):
+            judge.ordinary_state(row, header, txs)
+        row = copy.deepcopy(original)
+        refunded = judge.quantity(row["receipts"][0]["gasUsed"]) * judge.quantity(row["receipts"][0]["effectiveGasPrice"])
+        row["receipts"][0]["gasUsed"] = "0x0"
+        for index, trace in enumerate(row["transactions"]):
+            for side in ("before", "after"):
+                if index or side == "after":
+                    account = trace[side][judge.SENDER]
+                    account["balance"] = str(int(account["balance"]) + refunded)
+        account = row["state_after"][judge.SENDER[2:]]
+        account["balance"] = str(int(account["balance"]) + refunded)
+        with self.assertRaises(ValueError):
+            judge.ordinary_state(row, header, txs)
 
     def test_correlated_decision_digest_controls(self):
         r = self.native
@@ -204,6 +288,13 @@ class PolygonJudgeProofTests(unittest.TestCase):
         records["extractor-decision-v1/bor.run-1/counter"] = '{"next": 99}'
         with self.assertRaises(ValueError):
             judge.check_records(records, r["admission"], r["blocks"])
+        records = copy.deepcopy(r["decisions"])
+        intent, decided = json.loads(records[key + "/intent"]), json.loads(records[key + "/decided"])
+        intent["digest"] = decided["intent_digest"] = "ab" * 32
+        decided["digest"] = judge.decided_digest(intent["digest"], "BATCH")
+        records[key + "/intent"], records[key + "/decided"] = json.dumps(intent), json.dumps(decided)
+        with self.assertRaises(ValueError):
+            judge.check_records(records, r["admission"], r["blocks"])
 
     def test_actual_native_decisions_and_correlated_views(self):
         r = self.native
@@ -226,6 +317,8 @@ class PolygonJudgeProofTests(unittest.TestCase):
         with patch.object(judge, "WATCHED", {judge.SENDER}):
             judge.account_claims(row, root)
             changes = [lambda x: x["state_after"][judge.SENDER[2:]].update(balance="101"),
+                       lambda x: x["account_proofs"].update({judge.SUCCESS: x["account_proofs"][judge.SENDER]}),
+                       lambda x: x["account_proofs"][judge.SENDER].update(address=judge.SUCCESS),
                        lambda x: x["state_after"][judge.SENDER[2:]].update(nonce=3),
                        lambda x: x["state_after"][judge.SENDER[2:]].update(code="01"),
                        lambda x: x["account_proofs"][judge.SENDER].update(balance="0x65"),
@@ -251,6 +344,50 @@ class PolygonJudgeProofTests(unittest.TestCase):
             bad["receipts"][0][field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
                 judge.receipt_claims(bad, header, txs)
+
+    def test_authenticated_malformed_receipt_payloads(self):
+        for kind in ("type", "extra", "status"):
+            row, header, txs = receipt_vector()
+            fields = [b"\x02" if kind == "status" else b"\x01", b"", bytes(256), []]
+            if kind == "extra":
+                fields.append(b"extra")
+            wire = (b"\x02" if kind == "type" else b"\x7f") + c.rlp(fields)
+            proof = row["receipt_proofs"][0]
+            node = leaf(bytes.fromhex(proof["key"]), wire)
+            proof.update(value=wire.hex(), nodes=[node.hex()])
+            header[5] = c.keccak256(node)
+            if kind == "status":
+                row["receipts"][0]["status"] = row["transactions"][0]["receipt"]["status"] = "0x2"
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                judge.receipt_claims(row, header, txs)
+
+    def test_absent_account_and_authenticated_storage_encoding(self):
+        row, _ = account_vector()
+        account = row["state_after"][judge.SENDER[2:]]
+        proof = row["account_proofs"][judge.SENDER]
+        account.update(nonce=0, balance="0", storage={str(i): "0" for i in range(4)})
+        proof.update(nonce="0x0", balance="0x0", storageHash="0x" + "00" * 32,
+                     codeHash="0x" + "00" * 32, accountProof=[])
+        for item in proof["storageProof"]:
+            item.update(value="0x0", proof=[])
+        with patch.object(judge, "WATCHED", {judge.SENDER}):
+            judge.account_claims(row, c.EMPTY_ROOT)
+            proof["storageProof"][0]["proof"] = ["80"]
+            with self.assertRaises(ValueError):
+                judge.account_claims(row, c.EMPTY_ROOT)
+            row, _ = account_vector()
+            proof = row["account_proofs"][judge.SENDER]
+            storage = leaf(c.keccak256(bytes(32)), b"\x09\x00")
+            storage_root = c.keccak256(storage)
+            encoded = c.rlp([b"\x02", b"\x64", storage_root, c.keccak256(b"")])
+            account_node = leaf(c.keccak256(bytes.fromhex(judge.SENDER[2:])), encoded)
+            proof.update(storageHash="0x" + storage_root.hex(), accountProof=[account_node.hex()])
+            for item in proof["storageProof"]:
+                item["proof"] = [storage.hex()]
+            with self.assertRaises(ValueError):
+                judge.account_claims(row, c.keccak256(account_node))
+    def test_receipt_proof_indices_and_values(self):
+        row, header, txs = receipt_vector()
         for field, value in {"index": 1, "key": "01", "value": "7fc0", "nodes": []}.items():
             bad = copy.deepcopy(row)
             bad["receipt_proofs"][0][field] = value
@@ -330,7 +467,15 @@ class PolygonJudgeProofTests(unittest.TestCase):
                 with self.subTest(kind=kind, position=position), self.assertRaises(ValueError):
                     judge.ordinary_fields(wire, index)
         with self.assertRaises(ValueError):
-            judge.ordinary_fields(tx_wire(1, 2), 0)
+            judge.ordinary_fields(tx_wire(1, 0), 0)
+        fields = judge.plain_rlp(c.rlp_list(tx_wire(2, 4)[1:]))
+        fields.insert(9, b"ignored")
+        with self.assertRaises(ValueError):
+            judge.ordinary_fields(b"\x02" + c.rlp(fields), 4)
+        fields = judge.plain_rlp(c.rlp_list(tx_wire(4, 6)[1:]))
+        fields[9].append(copy.deepcopy(fields[9][0]))
+        with self.assertRaises(ValueError):
+            judge.ordinary_fields(b"\x04" + c.rlp(fields), 6)
 
     def test_ordinary_source_field_controls_cover_each_fee_and_authorization(self):
         for index, kind in enumerate((0, 0, 1, 1, 2, 2, 4, 4)):

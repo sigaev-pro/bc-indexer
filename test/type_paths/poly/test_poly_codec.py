@@ -104,6 +104,14 @@ class PolygonProofTests(unittest.TestCase):
         root = codec.rlp([b"\x00\xab", long_child])
         with self.assertRaisesRegex(ValueError, "embedded"):
             codec.proof_value(codec.keccak256(root), b"\xab", [root])
+        child = [b"\x20", b"value"]
+        root = codec.rlp([b"\x00", child])
+        with self.assertRaisesRegex(ValueError, "empty extension"):
+            codec.proof_value(codec.keccak256(root), b"", [root])
+        leaf = codec.rlp(child)
+        unused = codec.rlp([b"\x20", b"unused"])
+        with self.assertRaisesRegex(ValueError, "unused"):
+            codec.proof_value(codec.keccak256(leaf), b"", [leaf, unused])
 
     def test_correlated_leaf_change_cannot_keep_header_root(self):
         original = codec.rlp([b"\x20", b"correct"])
