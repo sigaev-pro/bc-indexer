@@ -37,8 +37,8 @@ def render_support(corpus):
         raise ValueError("non-unique activation helper boundary")
     helpers = source[:source.index(marker)]
     helpers = replace_once(helpers, "func historical(input, output string, ethPrefix, borPrefix int)",
-                           "func crossingInputs(input, output string, ethPrefix, borPrefix int, gate string)")
-    helpers = replace_once(helpers, "\tif ethPrefix < 2 {", "\tconfig[gate] = 2\n\tif ethPrefix < 2 {")
+                           "func crossingInputs(input, output string, ethPrefix, borPrefix int, gate, borGate string)")
+    helpers = replace_once(helpers, "\tif ethPrefix < 2 {", "\tconfig[gate] = 2\n\tif borGate != \"\" {\n\t\tengine[borGate] = 2\n\t}\n\tif ethPrefix < 2 {")
     helpers = replace_once(helpers, "func activationTransaction(config *params.ChainConfig, kind byte)",
                            "func crossingTransaction(config *params.ChainConfig, kind byte, nonce uint64)")
     if helpers.count("Nonce: 1,") != 3:

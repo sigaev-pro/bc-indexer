@@ -4,13 +4,23 @@ Partial E01-05 follow-on, dependent on the frozen preactivation producer
 `e4a559069426e69f13478623ae69387b252c1323`. Native execution and independent
 acceptance are pending. This directory does not change that producer.
 
-Each separate private profile schedules Berlin, London or Prague at block 2,
+The first three private profiles isolate Ethereum signer gates: Berlin, London
+or Prague at block 2,
 with earlier Ethereum forks at 0 and later forks at 8. Bor prefixes match the
 preactivation fixtures; all other native configuration remains source-derived.
 The pinned native generator applies a signed legacy nonce-0 transfer at block
 1 and the selected type 1, 2 or 4 nonce-1 transaction at block 2. Its existing
 London gas-limit doubling, base-fee calculation, pre-transaction system calls,
 native execution, finalization and seal are preserved.
+
+Two additional private profiles schedule London with Jaipur at 2, and Prague
+with Bhilai at 2, following the pinned source's paired mainnet schedules while
+retaining private allocations. Jaipur changes native SealHash; the generator
+and candidate signer use the corresponding full configuration. Bhilai's fee
+denominator reads the parent height, so block 2 still uses Delhi's denominator
+16; this two-block fixture does not claim the block-3 denominator64 transition.
+Neither the isolated gates nor these paired private schedules establish public
+fork bundles, contract upgrades or complete historical coverage.
 
 A fresh importer first attempts the selected type with nonce 0 at block 1,
 using the valid generated block-1 header with only transaction root and seal

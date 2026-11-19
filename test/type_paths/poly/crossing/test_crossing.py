@@ -72,6 +72,17 @@ class CrossingRenderingTests(unittest.TestCase):
         unchanged = activation[activation.index("func activationView("):activation.index("func activationCase(")]
         self.assertTrue(generated.endswith(unchanged))
 
+    def test_private_pairing_seam_preserves_other_profile_logic(self):
+        corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
+        generated = native.support.render_support(corpus).decode()
+        source = native.support.activation_source("probe.go").decode()
+        original = source[source.index("func historical("):source.index("func activationTransaction(")]
+        expected = original.replace("func historical(input, output string, ethPrefix, borPrefix int)",
+                                    "func crossingInputs(input, output string, ethPrefix, borPrefix int, gate, borGate string)")
+        expected = expected.replace("\tif ethPrefix < 2 {", "\tconfig[gate] = 2\n\tif borGate != \"\" {\n\t\tengine[borGate] = 2\n\t}\n\tif ethPrefix < 2 {")
+        actual = generated[generated.index("func crossingInputs("):generated.index("func crossingTransaction(")]
+        self.assertEqual(actual, expected)
+
     def test_pin_drift_and_nonunique_seams_are_rejected(self):
         with patch.dict(native.support.ACTIVATION_PINS, {"probe.go": "0" * 64}):
             with self.assertRaises(ValueError):

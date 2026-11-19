@@ -73,11 +73,11 @@ func crossingRecords(run *nodeRun, row map[string]any) (map[string]any, error) {
 	return snapshot, nil
 }
 
-func crossingCase(input, bodies, keySource, directory, gate string, kind byte, ethPrefix, borPrefix int, result map[string]any) error {
+func crossingCase(input, bodies, keySource, directory, gate, borGate string, kind byte, ethPrefix, borPrefix int, result map[string]any) error {
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return err
 	}
-	in, err := crossingInputs(input, filepath.Join(directory, "inputs"), ethPrefix, borPrefix, gate)
+	in, err := crossingInputs(input, filepath.Join(directory, "inputs"), ethPrefix, borPrefix, gate, borGate)
 	if err != nil {
 		return err
 	}
@@ -177,13 +177,14 @@ func crossingMain(input, bodies, keySource, output, report string) (returned err
 		return err
 	}
 	for _, item := range []struct {
-		name, gate string
-		kind       byte
-		eth, bor   int
-	}{{"Berlin", "berlinBlock", 1, 0, 0}, {"London", "londonBlock", 2, 1, 0}, {"Prague", "pragueBlock", 4, 4, 4}} {
-		row := map[string]any{"name": item.name, "type": item.kind, "activation_block": 2}
+		name, gate, borGate string
+		kind                byte
+		eth, bor            int
+	}{{"Berlin", "berlinBlock", "", 1, 0, 0}, {"London", "londonBlock", "", 2, 1, 0}, {"Prague", "pragueBlock", "", 4, 4, 4},
+		{"LondonJaipur", "londonBlock", "jaipurBlock", 2, 1, 0}, {"PragueBhilai", "pragueBlock", "bhilaiBlock", 4, 4, 4}} {
+		row := map[string]any{"name": item.name, "type": item.kind, "activation_block": 2, "bor_activation": item.borGate}
 		result["cases"] = append(result["cases"].([]map[string]any), row)
-		if err := crossingCase(input, bodies, keySource, filepath.Join(output, item.name), item.gate, item.kind, item.eth, item.bor, row); err != nil {
+		if err := crossingCase(input, bodies, keySource, filepath.Join(output, item.name), item.gate, item.borGate, item.kind, item.eth, item.bor, row); err != nil {
 			return err
 		}
 	}
