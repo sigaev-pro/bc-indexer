@@ -8,7 +8,10 @@
     "test/native_corpus/poly/main.go",
     "test/native_corpus/*.py",
     "test/harness/*.py",
-    "test/evidence/*.py"
+    "test/evidence/*.py",
+    "test/native_corpus/poly/stub/*",
+    "test/native_corpus/expected/poly.json",
+    "test/harness/fixtures/source_inputs_bor/heimdallstub/stub.go"
   ],
   "test": [
     "{python}",
@@ -62,6 +65,24 @@
       "file": "test/type_paths/poly/poly_native.py",
       "original": "require(re.fullmatch(r\"docker.io/library/debian@sha256:[0-9a-f]{64}\", tool[\"runtime\"]),",
       "replacement": "require(True,"
+    },
+    {
+      "name": "owned snapshot directory allocation omitted",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "(output / destination).mkdir()",
+      "replacement": "pass"
+    },
+    {
+      "name": "diagnostic grants acceptance",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "\"ac_verdict\": None",
+      "replacement": "\"ac_verdict\": \"PASS\""
+    },
+    {
+      "name": "snapshot source bytes not retained",
+      "file": "test/type_paths/poly/poly_native.py",
+      "original": "copies.append(copy_artifact(directory / name, output / destination / name, origin, deadline=deadline))",
+      "replacement": "copies.append(origin)"
     }
   ]
 }

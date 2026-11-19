@@ -47,6 +47,7 @@ def keep_code(output, deadline):
         (HARNESS, ("pins.py", "native.py", "owned.py", "artifacts.py", "capture_probe.py",
                    "bor_admission_tree.py", "admission.py"), "harness"),
     ):
+        (output / destination).mkdir()
         for name in names:
             origin = reference(directory / name, deadline=deadline)
             origins.append(origin)
@@ -96,7 +97,7 @@ def prepare(manifest_path, sha, output):
         (probe / "corpus_support.go").write_bytes(support.render_support(accepted))
         copy_artifact(HERE / "probe.go", probe / "main.go", reference(HERE / "probe.go"), deadline=deadline)
         capture_probe.copy_sources(("stub.go",), poly_corpus.STUB_SOURCES, probe / "heimdallstub", deadline)
-        for name in ("bin", "build-cache", "gopath", "gotmp", "inputs", "bodies"):
+        for name in ("bin", "build-cache", "gopath", "gotmp", "inputs"):
             (directory / name).mkdir()
         mounts = [(directory, "/work", True), (manifest_path.parent / "cache/bor/mod", "/modules", True)]
         mounts += [(directory / name, "/work/" + name, False) for name in ("bin", "build-cache", "gopath", "gotmp")]
@@ -109,7 +110,8 @@ def prepare(manifest_path, sha, output):
         document = profile.private_genesis(json.loads(genesis))
         (directory / "inputs/genesis.json").write_bytes(admission.canonical(json.dumps(document).encode()))
         (directory / "inputs/chain-config.json").write_bytes(admission.canonical(json.dumps(document["config"]).encode()))
-        capture_probe.copy_sources(("helper.go",), source / "tests/bor", directory / "inputs", deadline)
+        copy_artifact(source / "tests/bor/helper.go", directory / "inputs/helper.go",
+                      reference(source / "tests/bor/helper.go"), deadline=deadline)
         capture_probe.copy_sources(poly_corpus.BODY_FILES, CORPUS / "stub", directory / "bodies", deadline)
         events_path = directory / "bodies/clerk-corpus-from-1.json"
         events = load(events_path)

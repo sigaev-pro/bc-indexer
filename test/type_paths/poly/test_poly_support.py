@@ -4,6 +4,8 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+import time
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
@@ -13,6 +15,18 @@ spec.loader.exec_module(native)
 
 
 class PolygonSupportTests(unittest.TestCase):
+    def test_source_retention_creates_owned_directories_and_verifies_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            origins, copies = native.keep_code(output, time.monotonic() + 30)
+            self.assertEqual(len(origins), len(copies))
+            self.assertGreater(len(copies), len(native.FILES))
+            for origin, retained in zip(origins, copies):
+                self.assertEqual(Path(origin["path"]).read_bytes(), Path(retained["path"]).read_bytes())
+                self.assertTrue(Path(retained["path"]).is_relative_to(output))
+            with self.assertRaises(FileExistsError):
+                native.keep_code(output, time.monotonic() + 30)
+
     def test_accepted_support_is_pinned_and_seams_leave_native_helpers_intact(self):
         source = (native.CORPUS / "main.go").read_bytes()
         generated = native.support.render_support(source)
