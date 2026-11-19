@@ -1,0 +1,429 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "copy": [
+    "test/type_paths/poly/*",
+    "test/type_paths/eth/eth_type_judge.py",
+    "adapters/bor/decision/vectors.json",
+    "test/native_corpus/poly/*.py",
+    "test/native_corpus/poly/main.go",
+    "test/native_corpus/*.py",
+    "test/harness/*.py",
+    "test/evidence/*.py",
+    "test/native_corpus/poly/stub/*",
+    "test/native_corpus/expected/poly.json",
+    "test/harness/fixtures/source_inputs_bor/heimdallstub/stub.go",
+    "test/type_paths/poly/activation/*"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/type_paths/poly/activation",
+    "-v"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "accepted parent identity ignored",
+      "file": "test/type_paths/poly/activation/activation_support.py",
+      "original": "if hashlib.sha256(data).hexdigest() != PINS[name]:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "ambiguous source seam accepted",
+      "file": "test/type_paths/poly/activation/activation_support.py",
+      "original": "if text.count(before) != 1:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "accepted parent snapshots not copied",
+      "file": "test/type_paths/poly/activation/activation_native.py",
+      "original": "copies.append(driver.copy_artifact(path, destination / name, ref, deadline=deadline))",
+      "replacement": "copies.append(ref)"
+    },
+    {
+      "name": "accepted snapshot directory not allocated",
+      "file": "test/type_paths/poly/activation/activation_native.py",
+      "original": "destination.mkdir()",
+      "replacement": "pass"
+    },
+    {
+      "name": "accepted snapshots absent from evidence",
+      "file": "test/type_paths/poly/activation/activation_native.py",
+      "original": "return origins, copies",
+      "replacement": "return origins, [x for x in copies if Path(x['path']).parent.name != 'accepted-poly']"
+    },
+    {
+      "name": "judge historical native configuration differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(config == eth, \"historical native configuration differs\")",
+      "replacement": "check(True, 'historical native configuration differs')"
+    },
+    {
+      "name": "judge invalid historical block envelope",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(outer) == (4 if width == 20 else 3) and isinstance(outer[1][0], list) and outer[2][0] == [], \"invalid historical block envelope\")",
+      "replacement": "check(True, 'invalid historical block envelope')"
+    },
+    {
+      "name": "judge historical header fork shape differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(header) == width, \"historical header fork shape differs\")",
+      "replacement": "check(True, 'historical header fork shape differs')"
+    },
+    {
+      "name": "judge invalid historical header hashes",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(all(len(header[i]) == 32 for i in (0, 1, 3, 4, 5)), \"invalid historical header hashes\")",
+      "replacement": "check(True, 'invalid historical header hashes')"
+    },
+    {
+      "name": "judge wrong native genesis fork tail",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(outer[3][0] == [] and header[15:] == [(10**9).to_bytes(4, \"big\"), codec.EMPTY_ROOT, b\"\", b\"\", bytes(32)], \"wrong native genesis fork tail\")",
+      "replacement": "check(True, 'wrong native genesis fork tail')"
+    },
+    {
+      "name": "judge complete historical body root differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(codec.ordered_root(txs) == header[4], \"complete historical body root differs\")",
+      "replacement": "check(True, 'complete historical body root differs')"
+    },
+    {
+      "name": "judge historical proof count differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(proofs) == len(wires), \"historical proof count differs\")",
+      "replacement": "check(True, 'historical proof count differs')"
+    },
+    {
+      "name": "judge historical proof key differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(type(proof[\"index\"]) is int and proof[\"index\"] == index and octets(proof[\"key\"]) == key, \"historical proof key differs\")",
+      "replacement": "check(True, 'historical proof key differs')"
+    },
+    {
+      "name": "judge historical proof bytes differ",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(octets(proof[\"value\"]) == wire == codec.proof_value(root, key, [octets(x) for x in proof[\"nodes\"]]), \"historical proof bytes differ\")",
+      "replacement": "check(True, 'historical proof bytes differ')"
+    },
+    {
+      "name": "judge historical block number differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(type(row[\"number\"]) is int and row[\"number\"] == integer(header[8]) == number, \"historical block number differs\")",
+      "replacement": "check(True, 'historical block number differs')"
+    },
+    {
+      "name": "judge historical block chain differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(row[\"hash\"] == digest and row[\"parent\"] == \"0x\" + header[0].hex() == parent, \"historical block chain differs\")",
+      "replacement": "check(True, 'historical block chain differs')"
+    },
+    {
+      "name": "judge historical state root differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(row[\"root\"] == \"0x\" + header[3].hex(), \"historical state root differs\")",
+      "replacement": "check(True, 'historical state root differs')"
+    },
+    {
+      "name": "judge wrong activation transaction type",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check((raw[0] if raw[0] < 128 else 0) == kind, \"wrong activation transaction type\")",
+      "replacement": "check(True, 'wrong activation transaction type')"
+    },
+    {
+      "name": "judge wrong activation transaction fields",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(fields) == {0: 9, 1: 11, 2: 12, 4: 13}[kind], \"wrong activation transaction fields\")",
+      "replacement": "check(True, 'wrong activation transaction fields')"
+    },
+    {
+      "name": "judge wrong legacy fixture price",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(price) == 5_000_000_000, \"wrong legacy fixture price\")",
+      "replacement": "check(True, 'wrong legacy fixture price')"
+    },
+    {
+      "name": "judge wrong typed fixture chain",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(fields[0]) == 15001, \"wrong typed fixture chain\")",
+      "replacement": "check(True, 'wrong typed fixture chain')"
+    },
+    {
+      "name": "judge wrong access-list fixture price",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(price) == 5_000_000_000, \"wrong access-list fixture price\")",
+      "replacement": "check(True, 'wrong access-list fixture price')"
+    },
+    {
+      "name": "judge wrong typed fixture fee caps",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000, \"wrong typed fixture fee caps\")",
+      "replacement": "check(True, 'wrong typed fixture fee caps')"
+    },
+    {
+      "name": "judge wrong fixture access list",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(access == [], \"wrong fixture access list\")",
+      "replacement": "check(True, 'wrong fixture access list')"
+    },
+    {
+      "name": "judge wrong fixture authorization count",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(auth) == 1 and len(auth[0]) == 6, \"wrong fixture authorization count\")",
+      "replacement": "check(True, 'wrong fixture authorization count')"
+    },
+    {
+      "name": "judge wrong fixture authorization domain",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(chain) == 15001 and target == octets(prior.SUCCESS) and integer(auth_nonce) == 0, \"wrong fixture authorization domain\")",
+      "replacement": "check(True, 'wrong fixture authorization domain')"
+    },
+    {
+      "name": "judge wrong activation transaction inputs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(n) == nonce and integer(gas) == (100000 if kind == 4 else 21000) and\n          to == octets(prior.SUCCESS) and integer(value) == 7 and data == b\"\", \"wrong activation transaction inputs\")",
+      "replacement": "check(True, 'wrong activation transaction inputs')"
+    },
+    {
+      "name": "judge malformed native receipt collection",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(row[\"receipts\"] is None or isinstance(row[\"receipts\"], list), \"malformed native receipt collection\")",
+      "replacement": "check(True, 'malformed native receipt collection')"
+    },
+    {
+      "name": "judge historical receipt count differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(receipts) == len(proofs) == (1 if legacy_receipt else 0), \"historical receipt count differs\")",
+      "replacement": "check(True, 'historical receipt count differs')"
+    },
+    {
+      "name": "judge complete historical receipt root differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(codec.ordered_root(wires) == header[5], \"complete historical receipt root differs\")",
+      "replacement": "check(True, 'complete historical receipt root differs')"
+    },
+    {
+      "name": "judge historical header gas/bloom differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(header[10]) == (21000 if legacy_receipt else 0) and header[6] == bloom, \"historical header gas/bloom differs\")",
+      "replacement": "check(True, 'historical header gas/bloom differs')"
+    },
+    {
+      "name": "judge legacy control receipt differs from native transfer oracle",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(wires == [expected_wire], \"legacy control receipt differs from native transfer oracle\")",
+      "replacement": "check(True, 'legacy control receipt differs from native transfer oracle')"
+    },
+    {
+      "name": "judge legacy receipt claim differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(quantity(receipt.get(\"type\", \"0x0\")) == 0 and quantity(receipt[\"status\"]) == 1 and\n              quantity(receipt[\"gasUsed\"]) == quantity(receipt[\"cumulativeGasUsed\"]) == 21000, \"legacy receipt claim differs\")",
+      "replacement": "check(True, 'legacy receipt claim differs')"
+    },
+    {
+      "name": "judge legacy receipt logs differ",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(prior.consensus_logs(receipt[\"logs\"]) == expected_logs and octets(receipt[\"logsBloom\"]) == bloom, \"legacy receipt logs differ\")",
+      "replacement": "check(True, 'legacy receipt logs differ')"
+    },
+    {
+      "name": "judge legacy receipt identity differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(receipt[\"transactionHash\"] == \"0x\" + codec.keccak256(txs[0]).hex() and receipt[\"blockHash\"] == row[\"hash\"] and\n              quantity(receipt[\"blockNumber\"]) == 1 and quantity(receipt[\"transactionIndex\"]) == 0, \"legacy receipt identity differs\")",
+      "replacement": "check(True, 'legacy receipt identity differs')"
+    },
+    {
+      "name": "judge actual native head differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(row[\"head_hash\"] == head, \"actual native head differs\")",
+      "replacement": "check(True, 'actual native head differs')"
+    },
+    {
+      "name": "judge actual capture observation differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(row[\"observer_errors\"] == ([rejection] if rejection else []) and row[\"observed\"] == [1, 2] and\n          row[\"keys\"] == {\"1\": [\"bor.run-1.0000000000000000\"], \"2\": [\"bor.run-1.0000000000000001\"]}, \"actual capture observation differs\")",
+      "replacement": "check(True, 'actual capture observation differs')"
+    },
+    {
+      "name": "judge activation case identity differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(row[\"name\"] == name and row[\"type\"] == kind, \"activation case identity differs\")",
+      "replacement": "check(True, 'activation case identity differs')"
+    },
+    {
+      "name": "judge invalid historical genesis",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(genesis[8]) == 0 and genesis[0] == bytes(32) and not genesis_txs, \"invalid historical genesis\")",
+      "replacement": "check(True, 'invalid historical genesis')"
+    },
+    {
+      "name": "judge missing valid historical controls",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(control[\"blocks\"]) == 2, \"missing valid historical controls\")",
+      "replacement": "check(True, 'missing valid historical controls')",
+      "equivalent": "Verdict-equivalent: immediate first,empty=control['blocks'] unpack independently requires exactly two items; other JSON cardinalities raise caught ValueError/TypeError and malformed two-item maps/strings fail downstream indexing. Diagnostic text may differ. Independently audited at judge SHA d011263583f5339fa0d0735a46c6428ed64c713f7c9f86d00d66dd86d0a4033e."
+    },
+    {
+      "name": "judge private genesis/control gas limit differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(all(integer(header[9]) == 10_000_000 for header in (genesis, h1, h2)), \"private genesis/control gas limit differs\")",
+      "replacement": "check(True, 'private genesis/control gas limit differs')"
+    },
+    {
+      "name": "judge historical native base fee transition differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(integer(h1[15]) == base1 and integer(h2[15]) == base2, \"historical native base fee transition differs\")",
+      "replacement": "check(True, 'historical native base fee transition differs')"
+    },
+    {
+      "name": "judge legacy/empty control body differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(tx1) == 1 and not tx2, \"legacy/empty control body differs\")",
+      "replacement": "check(True, 'legacy/empty control body differs')"
+    },
+    {
+      "name": "judge legacy control state/funding differs",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(state1[prior.SENDER][\"nonce\"] == 1 and state1[prior.SENDER][\"balance\"] == 10**19 - 21000 * 5_000_000_000 - 7 and\n          state1[prior.SUCCESS][\"balance\"] == 7, \"legacy control state/funding differs\")",
+      "replacement": "check(True, 'legacy control state/funding differs')"
+    },
+    {
+      "name": "judge empty control changed authenticated state",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(h1[3] == h2[3] and state1 == state2, \"empty control changed authenticated state\")",
+      "replacement": "check(True, 'empty control changed authenticated state')"
+    },
+    {
+      "name": "judge candidate body is not distinct",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(txc) == 1 and candidate[\"hash\"] != empty[\"hash\"] and hc[4] != h2[4], \"candidate body is not distinct\")",
+      "replacement": "check(True, 'candidate body is not distinct')"
+    },
+    {
+      "name": "judge candidate changed empty-control execution commitments",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(all(hc[i] == h2[i] for i in range(width) if i not in (4, 12)), \"candidate changed empty-control execution commitments\")",
+      "replacement": "check(True, 'candidate changed empty-control execution commitments')"
+    },
+    {
+      "name": "judge wrong seeded native head",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(attempt[\"head_before\"] == first[\"hash\"], \"wrong seeded native head\")",
+      "replacement": "check(True, 'wrong seeded native head')"
+    },
+    {
+      "name": "judge missing native preactivation refusal",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(attempt[\"accepted\"] is False and attempt[\"error\"] == expected_error, \"missing native preactivation refusal\")",
+      "replacement": "check(True, 'missing native preactivation refusal')"
+    },
+    {
+      "name": "judge rejected candidate has durable state claims",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(not any(key in candidate for key in (\"receipts\", \"receipt_proofs\", \"account_proofs\", \"state_after\")), \"rejected candidate has durable state claims\")",
+      "replacement": "check(True, 'rejected candidate has durable state claims')"
+    },
+    {
+      "name": "judge wrong reserved envelope",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(txc[0][0] == 127, \"wrong reserved envelope\")",
+      "replacement": "check(True, 'wrong reserved envelope')"
+    },
+    {
+      "name": "judge wrong reserved body fixture",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(fields == [[b\"\\x01\", octets(prior.TARGET), b\"%\", bytes(31) + b\"\\x01\"]], \"wrong reserved body fixture\")",
+      "replacement": "check(True, 'wrong reserved body fixture')"
+    },
+    {
+      "name": "judge reserved behavior differs from scoped native observation",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(attempt[\"classification\"] == \"native-preMadhugiri-observation-no-refusal-credit\" and attempt[\"accepted\"] is True and \"error\" not in attempt, \"reserved behavior differs from scoped native observation\")",
+      "replacement": "check(True, 'reserved behavior differs from scoped native observation')"
+    },
+    {
+      "name": "judge reserved preactivation changed authenticated state",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(candidate_state == state2 and hc[3] == h2[3], \"reserved preactivation changed authenticated state\")",
+      "replacement": "check(True, 'reserved preactivation changed authenticated state')",
+      "equivalent": "Verdict-equivalent under existing commitment assumptions: earlier candidate-header equality excludes only indices4/12, so state roots at3 must match. Both mandatory stored/account_claims calls authenticate exactly WATCHED nonce,balance,code,slots0..3 to that same root; snapshot canonicalizes exactly those fields. Distinct accepted snapshots would require a commitment collision. Depends on those independent checks remaining mandatory. Independently audited at judge SHA d011263583f5339fa0d0735a46c6428ed64c713f7c9f86d00d66dd86d0a4033e."
+    },
+    {
+      "name": "judge wrong native activation identity/result",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(report[\"native_source\"] == prior.NATIVE and report[\"scope\"] == \"private-preactivation\" and\n              report[\"public_profile_credit\"] is False and \"error\" not in report, \"wrong native activation identity/result\")",
+      "replacement": "check(True, 'wrong native activation identity/result')"
+    },
+    {
+      "name": "judge incomplete activation cases",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(len(report[\"cases\"]) == len(CASES), \"incomplete activation cases\")",
+      "replacement": "check(True, 'incomplete activation cases')"
+    },
+    {
+      "name": "integer(tip) == 2_000_000_000",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "integer(tip) == 2_000_000_000",
+      "replacement": "True"
+    },
+    {
+      "name": "integer(cap) == 5_000_000_000",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "integer(cap) == 5_000_000_000",
+      "replacement": "True"
+    },
+    {
+      "name": "omit prior.account_claims(row, header[3])",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "prior.account_claims(row, header[3])",
+      "replacement": "None"
+    },
+    {
+      "name": "omit prior.check_records(row[\"decisions\"], row[\"admission\"], views, frontier)",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "prior.check_records(row[\"decisions\"], row[\"admission\"], views, frontier)",
+      "replacement": "None"
+    },
+    {
+      "name": "omit codec.fixture_signature(digest, parity, r, s, 1)",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "codec.fixture_signature(digest, parity, r, s, 1)",
+      "replacement": "None"
+    },
+    {
+      "name": "omit codec.fixture_signature(codec.keccak256(b\"\\x05\" + codec.rlp(auth[0][:3])), integer(av), integer(ar), integer(ass), 2)",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "codec.fixture_signature(codec.keccak256(b\"\\x05\" + codec.rlp(auth[0][:3])), integer(av), integer(ar), integer(ass), 2)",
+      "replacement": "None"
+    },
+    {
+      "name": "oracle 21000 * (5_000_000_000 - base_fee)",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "21000 * (5_000_000_000 - base_fee)",
+      "replacement": "21000 * 5_000_000_000"
+    },
+    {
+      "name": "oracle 10**19 - bought - 7",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "10**19 - bought - 7",
+      "replacement": "10**19 - bought"
+    },
+    {
+      "name": "oracle 10**21 + tip",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "10**21 + tip",
+      "replacement": "10**21"
+    },
+    {
+      "name": "oracle digest[offset:offset + 2]",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "digest[offset:offset + 2]",
+      "replacement": "digest[offset:offset + 1]"
+    }
+  ]
+}
