@@ -1,6 +1,7 @@
 """Synthetic component controls; native evidence is separately retained."""
 
 import copy
+import json
 import importlib.util
 from pathlib import Path
 import unittest
@@ -35,6 +36,43 @@ def fields(kind):
 
 
 class ActivationJudgeInputs(unittest.TestCase):
+    def test_actual_record_bindings_include_head_and_observation_not_just_counts(self):
+        helpers.PolygonJudgeProofTests.setUpClass()
+        native = copy.deepcopy(helpers.PolygonJudgeProofTests.native)
+        views = native["blocks"][:2]
+        decisions = {key: value for key, value in native["decisions"].items()
+                     if "/0000000000000002/" not in key and "/0000000000000003/" not in key}
+        decisions["extractor-decision-v1/bor.run-1/counter"] = json.dumps({"next": 2})
+        prefix = "extractor-admission-v1/bor.run-1/"
+        admission = {prefix + "counter": json.dumps({"next": 2}),
+                     prefix + "lowwater": json.dumps({"sequence": 2}), prefix + "purged": json.dumps({"sequence": 2})}
+        row = {"decisions": decisions, "admission": admission, "head_hash": views[-1]["hash"],
+               "observed": [1, 2], "keys": {"1": ["bor.run-1.0000000000000000"], "2": ["bor.run-1.0000000000000001"]}, "observer_errors": []}
+        j.records(row, views, views[-1]["hash"], 2)
+        for field, value in (("head_hash", views[0]["hash"]), ("observed", [1]), ("keys", {}), ("observer_errors", ["capture failed"]),
+                             ("decisions", {}), ("admission", {})):
+            changed = copy.deepcopy(row)
+            changed[field] = value
+            with self.subTest(field=field), self.assertRaises((ValueError, KeyError)):
+                j.records(changed, views, views[-1]["hash"], 2)
+
+    def test_historical_profile_has_only_scheduled_coherent_forks(self):
+        baseline = {name: 0 for name in ("homesteadBlock", "eip150Block", "eip155Block", "eip158Block", "byzantiumBlock", "constantinopleBlock", "petersburgBlock", "istanbulBlock", "muirGlacierBlock")}
+        baseline.update(chainId=15001, eip150Hash="0x" + "00" * 32)
+        engine = {"hampiBlock": None, "sprint": {"0": 4}, "period": {"0": 1}, "producerDelay": {"0": 6}, "backupMultiplier": {"0": 1}, "stateSyncConfirmationDelay": {"0": 0}, "coinbase": {"0": "0x" + "00" * 20}, "burntContract": {"0": "0x" + "00" * 20}, "stateReceiverContract": "0x0000000000000000000000000000000000001001", "validatorContract": "0x0000000000000000000000000000000000001000"}
+        for _, _, eth_count, bor_count in j.CASES:
+            config = copy.deepcopy(baseline)
+            config.update({name: 0 if i < eth_count else 8 for i, name in enumerate(j.profile.ETHEREUM_SCHEDULE)})
+            config["bor"] = copy.deepcopy(engine)
+            config["bor"].update({name: 0 if i < bor_count else 8 for i, name in enumerate(j.profile.BOR_SCHEDULE)})
+            j.historical_config(config, eth_count, bor_count)
+            for nested, field in ((False, "berlinBlock"), (False, "chainId"), (False, "osakaTime"), (False, "blobSchedule"), (True, "hampiBlock"), (True, "madhugiriBlock")):
+                changed = copy.deepcopy(config)
+                target = changed["bor"] if nested else changed
+                target[field] = 999
+                with self.subTest(eth=eth_count, field=field), self.assertRaises(ValueError):
+                    j.historical_config(changed, eth_count, bor_count)
+
     def test_valid_signed_native_domains(self):
         for kind in (0, 1, 2, 4):
             with self.subTest(kind=kind):

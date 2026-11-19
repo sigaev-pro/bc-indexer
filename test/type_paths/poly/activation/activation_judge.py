@@ -112,8 +112,8 @@ def stored(row, header, txs, legacy_receipt):
 def records(row, views, head, frontier):
     check(row["head_hash"] == head, "actual native head differs")
     prior.check_records(row["decisions"], row["admission"], views, frontier)
-    check(row["observer_errors"] in (None, []) and row["observed"] == 2 and
-          row["keys"] == ["bor.run-1.0000000000000000", "bor.run-1.0000000000000001"], "actual capture observation differs")
+    check(row["observer_errors"] in (None, []) and row["observed"] == [1, 2] and
+          row["keys"] == {"1": ["bor.run-1.0000000000000000"], "2": ["bor.run-1.0000000000000001"]}, "actual capture observation differs")
 
 
 def case(row, expected):
@@ -142,7 +142,8 @@ def case(row, expected):
     check(attempt["head_before"] == first["hash"], "wrong seeded native head")
     if kind != 127:
         signed_input(txc[0], kind, 1)
-        check(attempt["accepted"] is False and "transaction type not supported" in attempt["error"], "missing native preactivation refusal")
+        expected_error = "could not apply tx 0 [0x" + codec.keccak256(txc[0]).hex() + "]: transaction type not supported"
+        check(attempt["accepted"] is False and attempt["error"] == expected_error, "missing native preactivation refusal")
         check(not any(key in candidate for key in ("receipts", "receipt_proofs", "account_proofs", "state_after")), "rejected candidate has durable state claims")
         records(attempt, [first], first["hash"], 2)
     else:
@@ -165,7 +166,7 @@ def judge(report):
         return {"result": "PASS", "ordinary_preactivation_refusals": [1, 2, 4],
                 "reserved127": "accepted_without_execution_no_activation_refusal_credit",
                 "paired_boundary_crossing": "NOT_RUN", "public_profile_credit": False}
-    except (ValueError, TypeError, KeyError, IndexError, OverflowError) as error:
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError, AttributeError) as error:
         return {"result": "FAIL", "error": str(error), "public_profile_credit": False}
 
 
