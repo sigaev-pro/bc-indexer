@@ -113,6 +113,23 @@ class ActivationJudgeInputs(unittest.TestCase):
                 with self.subTest(kind=kind, signature=index), self.assertRaises(ValueError):
                     j.signed_input(corrupted, kind, int(kind != 0))
 
+    def test_envelope_shape_and_authority_signature_have_direct_controls(self):
+        typed = helpers.signed_wire(1, fields(1))
+        with self.assertRaises(ValueError):
+            j.signed_input(b"\x02" + typed[1:], 1, 1)
+        extra = fields(4)
+        extra.insert(-3, b"\x01")
+        with self.assertRaises(ValueError):
+            j.signed_input(helpers.signed_wire(4, extra), 4, 1)
+        duplicate = fields(4)
+        duplicate[9] += copy.deepcopy(duplicate[9])
+        with self.assertRaises(ValueError):
+            j.signed_input(helpers.signed_wire(4, duplicate), 4, 1)
+        invalid_auth = fields(4)
+        invalid_auth[9][0][-2] = num(j.integer(invalid_auth[9][0][-2]) + 1)
+        with self.assertRaises(ValueError):
+            j.signed_input(helpers.signed_wire(4, invalid_auth), 4, 1)
+
     def test_historical_width_body_and_reported_chain_are_authenticated(self):
         row = helpers.block_vector()
         header, txs, digest = j.raw_block(row["raw_block"], 16)
@@ -130,11 +147,79 @@ class ActivationJudgeInputs(unittest.TestCase):
         malformed = c.rlp([header, [], []]).hex()
         with self.assertRaises(ValueError):
             j.raw_block(malformed, 16)
+        with self.assertRaises(ValueError):
+            j.raw_block(c.rlp([header, [txs[0]], [], []]).hex(), 16)
+        short = copy.deepcopy(header)
+        short[1] = bytes(31)
+        with self.assertRaises(ValueError):
+            j.raw_block(c.rlp([short, [txs[0]], []]).hex(), 16)
+        for field, value in (("index", 1), ("key", "01"), ("value", "01"), ("nodes", [])):
+            changed = copy.deepcopy(row)
+            changed["transaction_proofs"][0][field] = value
+            with self.subTest(proof=field), self.assertRaises(ValueError):
+                j.block(changed, 16, 1, row["parent"])
 
     def test_incomplete_reports_never_gain_acceptance(self):
         for report in ({}, {"native_source": j.prior.NATIVE, "scope": "private-preactivation",
                             "public_profile_credit": False, "cases": []}):
             self.assertEqual(j.judge(report)["result"], "FAIL")
+
+    def test_receipt_consensus_and_metadata_are_checked_separately(self):
+        helpers.PolygonJudgeProofTests.setUpClass()
+        row = copy.deepcopy(helpers.PolygonJudgeProofTests.native["blocks"][-1])
+        header, _, _ = j.raw_block(row["raw_block"], 16)
+        accounts, root = helpers.account_vector()
+        sender_proof = accounts["account_proofs"][j.prior.SENDER]
+        for address in j.prior.WATCHED - {j.prior.SENDER}:
+            accounts["account_proofs"][address] = {
+                "address": address, "nonce": "0x0", "balance": "0x0", "codeHash": "0x" + "00" * 32,
+                "storageHash": "0x" + "00" * 32, "accountProof": sender_proof["accountProof"],
+                "storageProof": [{"key": hex(i), "value": "0x0", "proof": []} for i in range(4)]}
+            accounts["state_after"][address[2:]] = {"nonce": 0, "balance": "0", "code": "", "storage": {str(i): "00" * 32 for i in range(4)}}
+        row.update(accounts)
+        header[3] = root
+        tx = helpers.signed_wire(0, fields(0))
+        wire = c.rlp([b"\x01", num(21000), bytes(256), []])
+        key = c.rlp(b"")
+        node = helpers.leaf(key, wire)
+        header[5], header[6], header[10] = c.keccak256(node), bytes(256), num(21000)
+        receipt = {"type": "0x0", "status": "0x1", "gasUsed": hex(21000), "cumulativeGasUsed": hex(21000),
+                   "logs": [], "logsBloom": "0x" + bytes(256).hex(), "transactionHash": "0x" + c.keccak256(tx).hex(),
+                   "blockHash": row["hash"], "blockNumber": "0x1", "transactionIndex": "0x0"}
+        row["receipts"] = [receipt]
+        row["receipt_proofs"] = [{"index": 0, "key": key.hex(), "value": wire.hex(), "nodes": [node.hex()]}]
+        j.stored(row, header, [tx], True)
+        for field, value in (("status", "0x0"), ("gasUsed", "0x1"), ("cumulativeGasUsed", "0x1"),
+                             ("type", "0x1"), ("logsBloom", "0x" + "01" * 256), ("logs", [{}]),
+                             ("transactionHash", "0x" + "01" * 32), ("blockHash", "0x" + "01" * 32),
+                             ("blockNumber", "0x2"), ("transactionIndex", "0x1")):
+            changed = copy.deepcopy(row)
+            changed["receipts"][0][field] = value
+            with self.subTest(receipt=field), self.assertRaises(ValueError):
+                j.stored(changed, header, [tx], True)
+        for index in (5, 6, 10):
+            changed = copy.deepcopy(header)
+            changed[index] = bytes(len(changed[index])) if index != 6 else bytes([1]) * 256
+            with self.subTest(header=index), self.assertRaises(ValueError):
+                j.stored(row, changed, [tx], True)
+        changed = copy.deepcopy(row)
+        changed["receipts"].append(copy.deepcopy(receipt))
+        with self.assertRaises(ValueError):
+            j.stored(changed, header, [tx], True)
+        changed = copy.deepcopy(row)
+        changed["account_proofs"][j.prior.SENDER]["accountProof"] = []
+        with self.assertRaises(ValueError):
+            j.stored(changed, header, [tx], True)
+        # A correctly re-committed failed receipt must still fail the expected
+        # successful transfer oracle, independently of the proof/root check.
+        failed = c.rlp([b"", num(21000), bytes(256), []])
+        changed, failed_header = copy.deepcopy(row), copy.deepcopy(header)
+        failed_node = helpers.leaf(key, failed)
+        failed_header[5] = c.keccak256(failed_node)
+        changed["receipt_proofs"][0].update(value=failed.hex(), nodes=[failed_node.hex()])
+        changed["receipts"][0]["status"] = "0x0"
+        with self.assertRaises(ValueError):
+            j.stored(changed, failed_header, [tx], True)
 
 
 if __name__ == "__main__":
