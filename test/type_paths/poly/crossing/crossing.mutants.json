@@ -856,6 +856,18 @@
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(type(value) not in (bool, float), \"crossing configuration has a noninteger numeric value\")",
       "replacement": "check(True, \"crossing configuration has a noninteger numeric value\")"
+    },
+    {
+      "name": "authorization authority absence ignored",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(leaf is None, \"crossing authorization authority already exists\")",
+      "replacement": "check(True, \"crossing authorization authority already exists\")"
+    },
+    {
+      "name": "authorization absence not invoked",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "        absent_authority(first, h1[3])",
+      "replacement": "        pass"
     }
   ]
 }

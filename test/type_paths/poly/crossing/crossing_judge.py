@@ -33,6 +33,13 @@ def legacy_state(state, sender_after):
     check(actual == expected, "crossing legacy state differs from source genesis")
 
 
+def absent_authority(row, root):
+    proof = row["account_proofs"][prior.AUTHORITY]
+    leaf = codec.proof_value(root, codec.keccak256(octets(prior.AUTHORITY)),
+                             [octets(node) for node in proof["accountProof"]])
+    check(leaf is None, "crossing authorization authority already exists")
+
+
 def receipt_oracle(kind, base_fee, sender_before, recipient_before, signer_before):
     # Pinned core/state_transition.go: 21000 plus 25000 for a newly created
     # authorization authority. The absent authority earns no existing-account
@@ -153,6 +160,8 @@ def case(row, expected):
     state1 = stored(first, h1, tx1[0], 0, oracle1)
     state2 = stored(second, h2, tx2[0], kind, oracle2)
     legacy_state(state1, oracle1["sender_after"])
+    if kind == 4:
+        absent_authority(first, h1[3])
     expected_state = copy.deepcopy(state1)
     expected_state[prior.SENDER].update(nonce=2, balance=oracle2["sender_after"])
     expected_state[prior.SUCCESS]["balance"] = 14
