@@ -867,7 +867,7 @@ func restart(args []string) error {
 	crashBootstrap := flags.Bool("crash-bootstrap", false, "exit after the BOOTSTRAP imports (crash point)")
 	goLive := flags.Bool("golive", false, "end BOOTSTRAP (GoLive) after the imports")
 	importLive := flags.String("import-live", "", "comma-separated blocks to import after GoLive")
-	whitelistDuring := flags.String("whitelist-during-golive", "", "block whose milestone the whitelist writes while GoLive runs")
+	whitelistDuring := flags.String("whitelist-during-golive", "", "block whose milestone is written in BOOTSTRAP before a vote holds the guard across GoLive")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

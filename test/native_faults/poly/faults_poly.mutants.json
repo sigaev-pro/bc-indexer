@@ -29,6 +29,162 @@
   "timeout_seconds": 300,
   "mutants": [
     {
+      "name": "actual guard contention order",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"order\"] == [\"chain-locked\", \"guard-contended\", \"vote-release\", \"guard-acquired\"]",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "distinct predecessor state before loss",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"roots_distinct\"] is True and row[\"predecessor_state_before\"] is True",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "predecessor state survives reset",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"predecessor_state_after\"] is True and row[\"predecessor\"][\"number\"] == 3",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "handoff identity and starting phase",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = row[\"id\"] == hid and row[\"phase_at_start\"] == \"BOOTSTRAP\" and not row.get(\"child_error\")",
+      "replacement": "valid = True"
+    },
+    {
+      "name": "held native import facts",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and all(row[k] is True for k in (\"native_head_write_held\", \"golive_attempted\"))",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "boundary during held import",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"boundary_during_import\"] is None",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "handoff import and golive errors",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and all(row[k] is None for k in (\"import_error\", \"golive_error\", \"block2_error\"))",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "bootstrap import remains uncaptured",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"observations_before_block2\"] == 0 and row[\"decided_before_block2\"] == []",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "post-boundary import captured",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"decided\"] == [2] and row[\"head\"] == 2",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "below-h refusal reason",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and \"rewind to 0 is below the live boundary 1\" in row[\"rewind_error\"]",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "rewind retains native head",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"head_before\"] == row[\"head_after\"] and row[\"head\"] == 2",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "rewind retains decisions",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"decisions_before\"] == row[\"decisions_after\"]",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "vote lock and recovery lock facts",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"vote_locked\"] is True and row[\"guard_matches_vote\"] is True",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "vote holds boundary absent",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"boundary_held\"] is None and row[\"boundary_before_vote_release\"] is None",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "vote remains uncaptured",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"decisions_held\"] == {} and row[\"decisions_before_golive\"] == {}",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "vote coverage after release",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"coverage_released\"][\"bor.milestone-lock\"] == held",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "vote golive result",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"golive_error\"] is None and row[\"phase\"] == \"LIVE\"",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "missing-state fixture synced",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"root_present_before_fixture\"] is True and row[\"fixture_deletion_synced\"] is True",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "power loss drops sentinel",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"sentinel_before_reset\"] is True and row[\"sentinel_after_reset\"] is False",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "power loss restores synced fixture",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"reset_to_synced\"] is True and row[\"fixture_root_after_reset\"] is False",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "repaired restart returns live",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"restart_error\"] is None and row[\"phase_after\"] == \"LIVE\"",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "repaired native head",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"head_before\"] == 4 and row[\"head_after\"] == 3",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "repair resolves native intent",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"decided_before\"] == [1, 2, 3, 4] and row[\"undecided\"] == []",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "repair retains H",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"boundary_before\"][\"number\"] == 0\n                valid = valid and row[\"boundary_after\"] == row[\"boundary_before\"]",
+      "replacement": "valid = valid and row[\"boundary_before\"][\"number\"] == 0"
+    },
+    {
+      "name": "repair binds expected block",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and repaired[\"number\"] == 3 and repaired[\"hash\"] == row[\"predecessor\"][\"hash\"]",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "corrected flag help",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "checks = {\"bor.probe-flag-help\": HELP_TEXT in HELP_PROBE.read_text()}",
+      "replacement": "checks = {\"bor.probe-flag-help\": True}"
+    },
+    {
       "name": "decision rows dropped",
       "file": "test/native_faults/poly/faults_poly.py",
       "original": "rows = [row for row in comparison[\"differences\"] if row[\"field\"] not in DECISION_FIELDS]",
@@ -141,6 +297,18 @@
       "file": "test/native_faults/poly/faults_poly.py",
       "original": "            return 0 if verdict[\"result\"] == \"PASS\" else 1",
       "replacement": "            return 0"
+    },
+    {
+      "name": "handoff native block binding",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"block1\"][\"hash\"] == probe[\"blocks\"][\"1\"]",
+      "replacement": "valid = valid"
+    },
+    {
+      "name": "repair native predecessor binding",
+      "file": "test/native_faults/poly/faults_poly.py",
+      "original": "valid = valid and row[\"predecessor\"][\"hash\"] == probe[\"blocks\"][\"3\"]",
+      "replacement": "valid = valid"
     }
   ]
 }
