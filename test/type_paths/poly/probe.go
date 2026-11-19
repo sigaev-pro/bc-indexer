@@ -2,9 +2,12 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -12,13 +15,21 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/holiman/uint256"
 )
 
@@ -165,7 +176,242 @@ func durableRecords(db ethdb.Database, prefix string) (map[string]string, error)
 	return out, it.Error()
 }
 
-func observe(directory, genesisPath, configPath, bodies, blocksPath, output string) (returned error) {
+func receiptProofs(receipts types.Receipts, expected common.Hash) ([]map[string]any, error) {
+	database := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
+	defer database.Close()
+	tree := trie.NewEmpty(database)
+	values := make([][]byte, len(receipts))
+	keys := make([][]byte, len(receipts))
+	for i := range receipts {
+		var encoded bytes.Buffer
+		receipts.EncodeIndex(i, &encoded)
+		values[i] = append([]byte(nil), encoded.Bytes()...)
+		key, err := rlp.EncodeToBytes(uint(i))
+		if err != nil {
+			return nil, err
+		}
+		keys[i] = key
+		if err := tree.Update(key, values[i]); err != nil {
+			return nil, err
+		}
+	}
+	if tree.Hash() != expected {
+		return nil, fmt.Errorf("receipt trie differs from imported header")
+	}
+	rows := []map[string]any{}
+	for i, key := range keys {
+		proof := memorydb.New()
+		if err := tree.Prove(key, proof); err != nil {
+			proof.Close()
+			return nil, err
+		}
+		iterator := proof.NewIterator(nil, nil)
+		nodes := []string{}
+		for iterator.Next() {
+			nodes = append(nodes, hex.EncodeToString(iterator.Value()))
+		}
+		err := iterator.Error()
+		iterator.Release()
+		proof.Close()
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, map[string]any{"index": i, "key": hex.EncodeToString(key),
+			"value": hex.EncodeToString(values[i]), "nodes": nodes})
+	}
+	return rows, nil
+}
+
+func accountProofs(run *nodeRun, block *types.Block) (map[string]any, error) {
+	api := ethapi.NewBlockChainAPI(run.eth.APIBackend)
+	rows := map[string]any{}
+	for _, address := range watched {
+		proof, err := api.GetProof(context.Background(), address, []string{"0x0", "0x1", "0x2", "0x3"},
+			rpc.BlockNumberOrHashWithHash(block.Hash(), true))
+		if err != nil {
+			return nil, err
+		}
+		rows[strings.ToLower(address.Hex())] = proof
+	}
+	return rows, nil
+}
+
+func componentControls(run *nodeRun, stateSyncBlock *types.Block) (map[string]any, error) {
+	key, err := senderKey()
+	if err != nil {
+		return nil, err
+	}
+	config := run.chain.Config()
+	blob, err := types.SignNewTx(key, types.LatestSigner(config), &types.BlobTx{
+		ChainID: uint256.MustFromBig(config.ChainID), Nonce: 8, To: recipient, Gas: 21_000,
+		GasTipCap: uint256.NewInt(2_000_000_000), GasFeeCap: uint256.NewInt(5_000_000_000),
+		Value: new(uint256.Int), BlobFeeCap: uint256.NewInt(1), BlobHashes: []common.Hash{{1}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	raw, err := blob.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	var decoded types.Transaction
+	if err := decoded.UnmarshalBinary(raw); err != nil {
+		return nil, err
+	}
+	if decoded.Hash() != blob.Hash() {
+		return nil, fmt.Errorf("blob decode identity changed")
+	}
+	head := run.chain.CurrentBlock().Hash()
+	errs := run.eth.TxPool().Add([]*types.Transaction{blob}, true)
+	if len(errs) != 1 || !errors.Is(errs[0], core.ErrTxTypeNotSupported) {
+		return nil, fmt.Errorf("expected native blob pool refusal, got %v", errs)
+	}
+	if run.chain.CurrentBlock().Hash() != head {
+		return nil, fmt.Errorf("pool control changed native head")
+	}
+	blockRaw, err := rlp.EncodeToBytes(stateSyncBlock)
+	if err != nil {
+		return nil, err
+	}
+	var fields []rlp.RawValue
+	if err := rlp.DecodeBytes(blockRaw, &fields); err != nil {
+		return nil, err
+	}
+	var txs []rlp.RawValue
+	if err := rlp.DecodeBytes(fields[1], &txs); err != nil {
+		return nil, err
+	}
+	if len(txs) != 1 {
+		return nil, fmt.Errorf("unknown control needs one typed body transaction")
+	}
+	var envelope []byte
+	if err := rlp.DecodeBytes(txs[0], &envelope); err != nil {
+		return nil, err
+	}
+	unknown := []map[string]any{}
+	for typ := byte(5); typ < types.StateSyncTxType; typ++ {
+		changed := append([]byte(nil), envelope...)
+		changed[0] = typ
+		txWire, err := rlp.EncodeToBytes(changed)
+		if err != nil {
+			return nil, err
+		}
+		fields[1], err = rlp.EncodeToBytes([]rlp.RawValue{txWire})
+		if err != nil {
+			return nil, err
+		}
+		wire, err := rlp.EncodeToBytes(fields)
+		if err != nil {
+			return nil, err
+		}
+		var block types.Block
+		err = rlp.DecodeBytes(wire, &block)
+		if err == nil {
+			return nil, fmt.Errorf("native block decoder accepted unknown type %d", typ)
+		}
+		unknown = append(unknown, map[string]any{"type": typ, "error": err.Error()})
+	}
+	return map[string]any{"blob_raw": hex.EncodeToString(raw), "blob_hash": blob.Hash().Hex(),
+		"blob_pool_error": errs[0].Error(), "head_before": head.Hex(), "head_after": run.chain.CurrentBlock().Hash().Hex(),
+		"blob_body_import": "NOT_RUN", "unknown_block_decode": unknown}, nil
+}
+
+func rejectedStateSync(in inputs, bodies, directory, keySource string, blocks []*types.Block) ([]map[string]any, error) {
+	key, err := signerKey(keySource)
+	if err != nil {
+		return nil, err
+	}
+	rows := []map[string]any{}
+	for _, name := range []string{"missing", "non-final", "mismatched-l1-hash", "reordered-items", "duplicate-body"} {
+		row := map[string]any{"case": name}
+		rows = append(rows, row)
+		run, err := start(in, bodies, filepath.Join(directory, name), pinnedCommit, row)
+		if err != nil {
+			return nil, err
+		}
+		err = func() error {
+			defer run.close()
+			for _, block := range blocks[:3] {
+				if _, err := run.chain.InsertChain([]*types.Block{block}, false); err != nil {
+					return err
+				}
+			}
+			original := blocks[3]
+			tx := original.Transactions()[0]
+			body := &types.Body{}
+			header := original.Header()
+			switch name {
+			case "missing":
+			case "non-final":
+				sender, err := senderKey()
+				if err != nil {
+					return err
+				}
+				normal, err := types.SignNewTx(sender, types.LatestSigner(in.genesis.Config), &types.LegacyTx{
+					Nonce: 8, GasPrice: big.NewInt(5_000_000_000), Gas: 21_000, To: &recipient, Value: big.NewInt(1)})
+				if err != nil {
+					return err
+				}
+				body.Transactions = types.Transactions{tx, normal}
+				header.GasUsed = 21_000
+			case "duplicate-body":
+				body.Transactions = types.Transactions{tx, tx}
+			default:
+				items := []*types.StateSyncData{}
+				for _, item := range tx.GetStateSyncData() {
+					copy := *item
+					copy.Data = append([]byte(nil), item.Data...)
+					items = append(items, &copy)
+				}
+				if name == "mismatched-l1-hash" {
+					items[0].TxHash = common.HexToHash("0x99")
+				} else {
+					items[0], items[1] = items[1], items[0]
+				}
+				body.Transactions = types.Transactions{types.NewTx(&types.StateSyncTx{StateSyncData: items})}
+			}
+			header.TxHash = types.DeriveSha(body.Transactions, trie.NewStackTrie(nil))
+			signature, err := crypto.Sign(bor.SealHash(header, in.genesis.Config.Bor).Bytes(), key)
+			if err != nil {
+				return err
+			}
+			copy(header.Extra[len(header.Extra)-types.ExtraSealLength:], signature)
+			candidate := types.NewBlockWithHeader(header).WithBody(*body)
+			before := run.chain.CurrentBlock().Hash()
+			_, importErr := run.chain.InsertChain([]*types.Block{candidate}, false)
+			raw, err := rlp.EncodeToBytes(candidate)
+			if err != nil {
+				return err
+			}
+			row["raw_block"] = hex.EncodeToString(raw)
+			if importErr != nil {
+				row["error"] = importErr.Error()
+			}
+			row["head_before"], row["head_after"] = before.Hex(), run.chain.CurrentBlock().Hash().Hex()
+			for label, prefix := range map[string]string{"admission": "extractor-admission-v1/", "decisions": "extractor-decision-v1/"} {
+				records, err := durableRecords(run.eth.ChainDb(), prefix)
+				if err != nil {
+					return err
+				}
+				row[label] = records
+			}
+			if !errors.Is(importErr, core.ErrStateSyncMismatch) {
+				return fmt.Errorf("%s: expected StateSync mismatch, got %v", name, importErr)
+			}
+			if run.chain.CurrentBlock().Hash() != before {
+				return fmt.Errorf("rejected StateSync moved head")
+			}
+			return nil
+		}()
+		if err != nil {
+			row["control_error"] = err.Error()
+			return rows, err
+		}
+	}
+	return rows, nil
+}
+
+func observe(directory, genesisPath, configPath, bodies, blocksPath, keySource, output string) (returned error) {
 	result := map[string]any{"native_source": pinnedCommit, "public_profile_credit": false}
 	defer func() {
 		if returned != nil {
@@ -187,7 +433,12 @@ func observe(directory, genesisPath, configPath, bodies, blocksPath, output stri
 	if err != nil {
 		return err
 	}
-	defer run.close()
+	mainOpen := true
+	defer func() {
+		if mainOpen {
+			run.close()
+		}
+	}()
 	rows := []map[string]any{}
 	for _, block := range blocks {
 		live.Rows, live.Calls = []map[string]any{}, []map[string]any{}
@@ -206,12 +457,27 @@ func observe(directory, genesisPath, configPath, bodies, blocksPath, output stri
 		if err != nil {
 			return err
 		}
+		receipts := run.chain.GetReceiptsByHash(block.Hash())
+		receiptProof, err := receiptProofs(receipts, block.ReceiptHash())
+		if err != nil {
+			return err
+		}
+		accountProof, err := accountProofs(run, block)
+		if err != nil {
+			return err
+		}
 		rows = append(rows, map[string]any{"number": block.NumberU64(), "hash": block.Hash().Hex(),
 			"parent": block.ParentHash().Hex(), "root": block.Root().Hex(), "raw_block": hex.EncodeToString(raw),
-			"transactions": live.Rows, "calls": live.Calls, "receipts": run.chain.GetReceiptsByHash(block.Hash()),
+			"transactions": live.Rows, "calls": live.Calls, "receipts": receipts,
+			"receipt_proofs": receiptProof, "account_proofs": accountProof,
 			"state_after": readAccounts(after, watched), "state_sync": run.chain.HeaderChain().GetStateSync()})
 	}
 	result["blocks"], result["head_hash"] = rows, run.chain.CurrentBlock().Hash().Hex()
+	controls, err := componentControls(run, blocks[3])
+	if err != nil {
+		return err
+	}
+	result["components"] = controls
 	run.count.mu.Lock()
 	result["observed"], result["keys"], result["observer_errors"] = run.count.seen, run.count.keys, run.count.errs
 	run.count.mu.Unlock()
@@ -221,6 +487,13 @@ func observe(directory, genesisPath, configPath, bodies, blocksPath, output stri
 			return err
 		}
 		result[name] = records
+	}
+	run.close()
+	mainOpen = false
+	rejections, err := rejectedStateSync(in, bodies, directory+"-refusals", keySource, blocks)
+	result["state_sync_refusals"] = rejections
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -241,7 +514,7 @@ func main() {
 		"--bodies", bodies, "--out", output})
 	if err == nil {
 		err = observe(filepath.Join(output, "import-data"), genesis, config, bodies,
-			filepath.Join(output, "blocks.rlp"), os.Args[5])
+			filepath.Join(output, "blocks.rlp"), keySource, os.Args[5])
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
