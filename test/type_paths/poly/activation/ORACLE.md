@@ -14,6 +14,9 @@ and an empty block at2. A separate same-genesis import seeds block1 and tries a
 correctly signed, funded type1/2/4 transaction before its native signer gate
 (Berlin/London/Prague). Require the actual native type refusal, unchanged head,
 one durable import decision and two closed admission attempts.
+Candidates retain the empty control's execution commitments to reach the
+earlier native signer gate. They are not claimed execution-valid after the
+fork, and these are preactivation refusals, not a paired boundary crossing.
 
 Body127 is a diagnostic, not a presumed refusal: pinned state_processor.go
 skips StateSync unconditionally, while Bor Finalize and receipt-count equality

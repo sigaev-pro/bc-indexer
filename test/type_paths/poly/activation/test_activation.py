@@ -23,6 +23,28 @@ base.driver = native.driver
 class ActivationOwnershipTests(base.PolygonOrchestrationTests):
     """Run the accepted direct failure/ownership tests against this wrapper."""
 
+    def test_prepare_retains_exact_accepted_helper_snapshots(self):
+        result = self.prepare()
+        self.saved(result, self.prepared, "preparation.json", "PASS")
+        copied = self.prepared / "accepted-poly"
+        self.assertEqual({p.name for p in copied.iterdir()}, set(native.support.PINS))
+        for name in native.support.PINS:
+            self.assertEqual((copied / name).read_bytes(), native.support.accepted(name))
+        retained = {Path(x["path"]).name for x in result["code"] if Path(x["path"]).parent == copied}
+        self.assertEqual(retained, set(native.support.PINS))
+
+    def test_accepted_snapshot_copy_failure_is_owned_and_retained(self):
+        real_copy = native.driver.copy_artifact
+        def copy(source, destination, *args, **kwargs):
+            if destination.parent.name == "accepted-poly":
+                raise OSError("accepted snapshot failure")
+            return real_copy(source, destination, *args, **kwargs)
+        with patch.object(native.driver, "copy_artifact", side_effect=copy):
+            result = self.prepare()
+        self.saved(result, self.prepared, "preparation.json", "FAIL")
+        self.assertIn("accepted snapshot failure", result["error"])
+        self.assertEqual(result["commands"], [])
+
 
 class ActivationSeamTests(unittest.TestCase):
     def test_checked_source_render_keeps_capture_and_two_block_controls(self):
