@@ -48,3 +48,15 @@ commands and the coordinator's exclusive runtime slot. Preserve failures.
 Bootstrap-only results remain explicitly separate if later phases fail.
 Public profiles and any unexecuted activation/unknown-type controls remain
 NOT_RUN. Issue #21 remains open until its full accepted criteria are met.
+
+Bootstrap diagnostic continuation: `ValidatorSet.init()` creates 21 legacy
+validators but leaves the later `validatorExtraSet` empty. Diagnostic04 reached
+real registration and ten imported generation blocks, then failed with INVALID
+at the first breathe block. The source-backed repair uses two genuine operator
+transactions before election: undelegate one BNB of shares, then delegate one
+BNB. StakeHub's self-delegation check calls `felony` through its normal contract
+identity, materializing the extra array before the unmapped-validator return.
+The sole eligible validator remains unjailed. The second call restores pooled
+stake/supply to 2001 BNB, while the credit proxy holds 2002 BNB because one BNB
+remains pending unbond. This route is diagnostic until native execution and the
+independent pending-request, governance-token and absolute-balance oracle pass.

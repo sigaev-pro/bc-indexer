@@ -152,6 +152,26 @@ func modernRegistration(t *testing.T, config *params.ChainConfig, validator comm
 	return tx
 }
 
+// Genuine operator calls materialize legacy validator-extra storage through
+// StakeHub's self-delegation check, then restore the active election stake.
+func modernBootstrapTx(t *testing.T, config *params.ChainConfig, restore bool) *types.Transaction {
+	t.Helper()
+	owner := crypto.PubkeyToAddress(modernKey(t, 1).PublicKey)
+	nonce, value := uint64(1), big.NewInt(0)
+	data := append(common.FromHex("0x4d99dd16"), common.LeftPadBytes(owner.Bytes(), 32)...)
+	data = append(data, common.LeftPadBytes(big.NewInt(params.Ether).Bytes(), 32)...)
+	if restore {
+		nonce, value = 2, big.NewInt(params.Ether)
+		data = append(common.FromHex("0x982ef0a7"), common.LeftPadBytes(owner.Bytes(), 32)...)
+		data = append(data, make([]byte, 32)...)
+	}
+	tx, err := types.SignTx(types.NewTransaction(nonce, modernStakeHub, value, 2000000, big.NewInt(2000000000), data), types.LatestSigner(config), modernKey(t, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tx
+}
+
 // These small ordered values exercise trie branches absent from full-size
 // transaction vectors. Both independent native trie implementations must agree.
 type modernTrieValues [][]byte
@@ -371,6 +391,12 @@ func modernGenerate(t *testing.T, work string) fixture {
 			}
 			users = append(users, modernRegistration(t, genesis.Config, validator, vote, proof, "Extractor"))
 			phase = "registration"
+		} else if number == 4 || number == 5 {
+			users = append(users, modernBootstrapTx(t, genesis.Config, number == 5))
+			phase = "bootstrap-undelegate"
+			if number == 5 {
+				phase = "bootstrap-delegate"
+			}
 		} else if elected {
 			if !genesis.Config.IsPasteur(header.Number, header.Time) || genesis.Config.IsJenner(header.Number, header.Time) {
 				t.Fatal("target not in full current fork interval")
@@ -380,13 +406,15 @@ func modernGenerate(t *testing.T, work string) fixture {
 				phase = "revert"
 			}
 			for kind := uint8(0); kind < 5; kind++ {
-				users = append(users, modernUserTx(t, genesis.Config, kind, 1+uint64(targets)*5+uint64(kind), targets == 1, blobHash))
+				users = append(users, modernUserTx(t, genesis.Config, kind, 3+uint64(targets)*5+uint64(kind), targets == 1, blobHash))
 			}
 			targets++
 		}
 		pool := core.NewGasPool(header.GasLimit)
 		receipts := []*types.Receipt{}
 		for _, tx := range users {
+			bootstrapAddresses := []common.Address{owner, validator, modernStakeHub, modernValidatorContract, crypto.CreateAddress(modernStakeHub, 0), common.HexToAddress("0x2005"), common.HexToAddress("0xdead"), consensus.SystemAddress}
+			userBefore := modernState(st, bootstrapAddresses, validator)
 			executionExit = modernExit{}
 			st.SetTxContext(tx.Hash(), len(body.Transactions))
 			receipt, err := core.ApplyTransaction(evm, pool, st, header, tx, core.NewReceiptBloomGenerator())
@@ -400,6 +428,13 @@ func modernGenerate(t *testing.T, work string) fixture {
 			if receipt.Status != want {
 				writeJSON(t, filepath.Join(work, "failed-user-execution.json"), map[string]any{"phase": phase, "type": tx.Type(), "receipt": receipt, "exit": executionExit})
 				t.Fatalf("%s type%d status %d exit=%+v", phase, tx.Type(), receipt.Status, executionExit)
+			}
+			if phase == "registration" || strings.HasPrefix(phase, "bootstrap-") {
+				raw, wireErr := tx.MarshalBinary()
+				if wireErr != nil {
+					t.Fatal(wireErr)
+				}
+				writeJSON(t, filepath.Join(work, phase+"-state.json"), map[string]any{"block": number, "time": header.Time, "wire": hexOf(raw), "before": userBefore, "after": modernState(st, bootstrapAddresses, validator), "receipt": receipt, "exit": executionExit})
 			}
 			body.Transactions = append(body.Transactions, tx)
 			receipts = append(receipts, receipt)
@@ -444,7 +479,7 @@ func modernGenerate(t *testing.T, work string) fixture {
 		if err != nil {
 			t.Fatal(err)
 		}
-		row := map[string]any{"number": number, "time": block.Time(), "hash": block.Hash(), "root": block.Root(), "phase": phase, "validator_index": index.String(), "transactions": len(block.Transactions()), "wire": hexOf(wire)}
+		row := map[string]any{"number": number, "time": block.Time(), "hash": block.Hash(), "root": block.Root(), "phase": phase, "validator_index": index.String(), "transactions": len(block.Transactions()), "validator_extra_count": current.GetState(modernValidatorContract, common.BigToHash(big.NewInt(11))).Big().String(), "wire": hexOf(wire)}
 		rows = append(rows, row)
 		writeJSON(t, filepath.Join(work, fmt.Sprintf("generated-%02d.json", number)), row)
 	}
@@ -472,7 +507,7 @@ func modernState(st tracing.StateDB, addresses []common.Address, validator commo
 	for _, address := range addresses {
 		row := map[string]any{"balance": st.GetBalance(address).String(), "nonce": st.GetNonce(address), "code_hash": st.GetCodeHash(address)}
 		slots := map[string]string{}
-		for _, n := range []int64{0, 1, 2, 3, 4, 5, 6, 15, 20, 23, 24, 51} {
+		for _, n := range []int64{0, 1, 2, 3, 4, 5, 6, 11, 15, 20, 23, 24, 51} {
 			slots[fmt.Sprint(n)] = st.GetState(address, common.BigToHash(big.NewInt(n))).Hex()
 		}
 		if address == common.HexToAddress("0x1004") {
@@ -483,9 +518,17 @@ func modernState(st tracing.StateDB, addresses []common.Address, validator commo
 			slots["validator_index"] = st.GetState(address, key).Hex()
 			incoming := new(big.Int).Add(crypto.Keccak256Hash(common.LeftPadBytes([]byte{1}, 32)).Big(), big.NewInt(3))
 			slots["first_validator_incoming"] = st.GetState(address, common.BigToHash(incoming)).Hex()
+			extraBase := crypto.Keccak256Hash(common.LeftPadBytes([]byte{11}, 32)).Big()
+			for i, name := range []string{"extra_enter_height", "extra_maintaining", "extra_vote"} {
+				slots[name] = st.GetState(address, common.BigToHash(new(big.Int).Add(extraBase, big.NewInt(int64(i))))).Hex()
+			}
+			voteBase := crypto.Keccak256Hash(common.BigToHash(new(big.Int).Add(extraBase, big.NewInt(2))).Bytes()).Big()
+			slots["extra_vote_first"] = st.GetState(address, common.BigToHash(voteBase)).Hex()
+			slots["extra_vote_second"] = st.GetState(address, common.BigToHash(new(big.Int).Add(voteBase, big.NewInt(1)))).Hex()
+
 		}
 		if address == modernStakeHub {
-			for _, n := range []int64{53, 54, 55, 56, 63, 74} {
+			for _, n := range []int64{53, 54, 55, 56, 57, 63, 73, 74} {
 				slots[fmt.Sprint(n)] = st.GetState(address, common.BigToHash(big.NewInt(n))).Hex()
 			}
 			slots["operator_index"] = st.GetState(address, mappingKey(operator, 64)).Hex()
@@ -496,10 +539,26 @@ func modernState(st tracing.StateDB, addresses []common.Address, validator commo
 				slots["validator_"+name] = st.GetState(address, key).Hex()
 			}
 		}
+		if address == common.HexToAddress("0x2005") {
+			slots["gov_supply"] = st.GetState(address, common.BigToHash(big.NewInt(53))).Hex()
+			slots["gov_operator"] = st.GetState(address, mappingKey(operator, 51)).Hex()
+			slots["gov_dead"] = st.GetState(address, mappingKey(common.HexToAddress("0xdead"), 51)).Hex()
+		}
 		if address == credit {
 			for _, n := range []int64{103, 151, 152} {
 				slots[fmt.Sprint(n)] = st.GetState(address, common.BigToHash(big.NewInt(n))).Hex()
 			}
+			requestHash := crypto.Keccak256Hash(append(operator.Bytes(), make([]byte, 32)...))
+			requestBase := crypto.Keccak256Hash(append(requestHash.Bytes(), common.LeftPadBytes([]byte{153}, 32)...)).Big()
+			for i, name := range []string{"unbond_shares", "unbond_amount", "unbond_unlock"} {
+				slots[name] = st.GetState(address, common.BigToHash(new(big.Int).Add(requestBase, big.NewInt(int64(i))))).Hex()
+			}
+			queueBase := mappingKey(operator, 154)
+			slots["unbond_queue"] = st.GetState(address, queueBase).Hex()
+			queueMap := new(big.Int).Add(queueBase.Big(), big.NewInt(1))
+			queueKey := crypto.Keccak256Hash(append(make([]byte, 32), common.LeftPadBytes(queueMap.Bytes(), 32)...))
+			slots["unbond_first"] = st.GetState(address, queueKey).Hex()
+			slots["unbond_sequence"] = st.GetState(address, mappingKey(operator, 155)).Hex()
 			slots["operator_shares"] = st.GetState(address, mappingKey(operator, 101)).Hex()
 			slots["locked_shares"] = st.GetState(address, mappingKey(common.HexToAddress("0xdead"), 101)).Hex()
 			for _, name := range []string{"implementation", "admin"} {
