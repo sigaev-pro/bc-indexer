@@ -49,3 +49,27 @@ judge checkpoint `6400125`; that checkpoint is a dependency, not an acceptance
 claim. The accepted durable-record checker is adapted only to distinguish
 successful decision sequences 0/1 from admission observation sequences 1/2
 after the first refused admission. Native replay and controls remain pending.
+
+## D108 offline continuation
+
+The retained three-case native observation at producer `b3b51d8` is embedded
+as a digest-bound test vector. This proves only the isolated private Ethereum
+gate cases. Paired London/Jaipur and Prague/Bhilai producer `37e59cb` has a
+successful retained preparation; its runtime remains pending. Neither result
+establishes a full historical or public fork profile. Type 127 remains excluded
+from this ordinary-type judge.
+
+The type-4 no-refund premise now requires an authenticated absent authority
+account at the first block, not merely zero nonce/balance and empty code. A
+valid proof of an existing empty account is a separate rejection control.
+Transition-state checks cover every watched account's nonce, balance, code
+and storage. Receipt controls include a valid inclusion proof in a larger
+receipt trie, which must fail the separate complete-root check. Correlated
+decision controls recompute digests so semantic identity checks are exercised.
+
+All failed mutation attempts remain retained. The table explains nine
+candidate equivalent guard deletions, including their mandatory downstream
+checks and cryptographic assumptions where relevant. Independent review and a
+fresh complete mutation audit are required before those explanations receive
+acceptance. Portable extracted Go controls pass all 14 mutants; their explicit
+native type doubles do not provide signing, execution or import evidence.

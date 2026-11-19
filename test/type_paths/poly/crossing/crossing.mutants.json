@@ -243,7 +243,8 @@
       "name": "crossing_judge.py:case:crossing activation schedule differs:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(type(config[gate]) is int and config[gate] == 2, \"crossing activation schedule differs\")",
-      "replacement": "check(True and config[gate] == 2, \"crossing activation schedule differs\")"
+      "replacement": "check(True and config[gate] == 2, \"crossing activation schedule differs\")",
+      "equivalent": "For decoded JSON, configuration_numbers rejects bool and float recursively before this check. The remaining equality to integer 2 excludes null, strings, arrays and objects. Thus removing only type(config[gate]) is int does not change the verdict."
     },
     {
       "name": "crossing_judge.py:case:crossing activation schedule differs:2",
@@ -273,7 +274,8 @@
       "name": "crossing_judge.py:case:crossing needs two successful blocks:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(len(positive[\"blocks\"]) == 2, \"crossing needs two successful blocks\")",
-      "replacement": "check(True, \"crossing needs two successful blocks\")"
+      "replacement": "check(True, \"crossing needs two successful blocks\")",
+      "equivalent": "The immediately following mandatory first, second = positive[\"blocks\"] unpack rejects every other cardinality. This relies on retaining that unpack and the top-level caught exception types."
     },
     {
       "name": "crossing_judge.py:case:crossing transaction count differs:1",
@@ -327,7 +329,8 @@
       "name": "crossing_judge.py:case:crossing final authenticated state differs:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(h1[3] != h2[3], \"crossing state root did not advance\")",
-      "replacement": "check(True, \"crossing state root did not advance\")"
+      "replacement": "check(True, \"crossing state root did not advance\")",
+      "equivalent": "Under the same collision-resistance assumption used by the authenticated MPT verifier, equal state roots cannot prove sender nonce 1 in block1 and nonce 2 in block2. Both account proofs and absolute first-state plus transition_state checks remain mandatory. Removing only root inequality does not admit another report without violating those checks."
     },
     {
       "name": "crossing_judge.py:case:crossing negative body is not distinct:1",
@@ -339,13 +342,15 @@
       "name": "crossing_judge.py:case:crossing negative body is not distinct:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and hn[4] != h1[4], \"crossing negative body is not distinct\")",
-      "replacement": "check(len(txn) == 1 and True and hn[4] != h1[4], \"crossing negative body is not distinct\")"
+      "replacement": "check(len(txn) == 1 and True and hn[4] != h1[4], \"crossing negative body is not distinct\")",
+      "equivalent": "Under the header hash collision-resistance assumption, equal block hashes require equal committed headers including transaction roots. Complete body roots and strict signed_input checks require legacy type0 at positive block1 but selected type1/2/4 at negative block1; their distinct envelopes cannot share a complete trie root without a hash collision. Other checks remain present."
     },
     {
       "name": "crossing_judge.py:case:crossing negative body is not distinct:3",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and hn[4] != h1[4], \"crossing negative body is not distinct\")",
-      "replacement": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and True, \"crossing negative body is not distinct\")"
+      "replacement": "check(len(txn) == 1 and candidate[\"hash\"] != first[\"hash\"] and True, \"crossing negative body is not distinct\")",
+      "equivalent": "Under the MPT hash collision-resistance assumption, complete one-transaction body roots cannot coincide for the independently checked legacy type0 positive body and selected type1/2/4 negative body. Removing only explicit transaction-root inequality leaves complete-root recomputation and both strict signed_input checks."
     },
     {
       "name": "crossing_judge.py:case:crossing negative changed control header commitments:1",
@@ -609,7 +614,8 @@
       "name": "crossing_helpers.py:signed_input:wrong fixture authorization count:2",
       "file": "test/type_paths/poly/crossing/crossing_helpers.py",
       "original": "check(len(auth) == 1 and len(auth[0]) == 6, \"wrong fixture authorization count\")",
-      "replacement": "check(len(auth) == 1 and True, \"wrong fixture authorization count\")"
+      "replacement": "check(len(auth) == 1 and True, \"wrong fixture authorization count\")",
+      "equivalent": "The immediately following chain, target, auth_nonce, av, ar, ass = auth[0] mandatory six-target unpack enforces the same cardinality and raises caught ValueError for every other length."
     },
     {
       "name": "crossing_helpers.py:signed_input:wrong fixture authorization domain:1",
@@ -669,7 +675,8 @@
       "name": "crossing_helpers.py:check_records:wrong decision kind/sequence:1",
       "file": "test/type_paths/poly/crossing/crossing_helpers.py",
       "original": "check(type(intent[\"sequence\"]) is int and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")",
-      "replacement": "check(True and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")"
+      "replacement": "check(True and intent[\"sequence\"] == sequence and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True, \"wrong decision kind/sequence\")",
+      "equivalent": "intent_digest is recomputed unconditionally later and serializes sequence through uint64, which requires type(value) is int and the uint64 domain. Invalid boolean/float aliases therefore fail independently; missing or malformed fields also remain rejected."
     },
     {
       "name": "crossing_helpers.py:check_records:wrong decision kind/sequence:2",
@@ -843,13 +850,15 @@
       "name": "crossing_judge.py:records:crossing durable head numbers are not integers:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(type(intent[\"old_head\"][\"number\"]) is int and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
-      "replacement": "check(True and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")"
+      "replacement": "check(True and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
+      "equivalent": "The mandatory check_records recomputes intent_digest, whose head_ref serializes old_head.number through strict uint64 (exact int, excluding bool/float). Removing this early domain check cannot admit an alias."
     },
     {
       "name": "crossing_judge.py:records:crossing durable head numbers are not integers:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "check(type(intent[\"old_head\"][\"number\"]) is int and type(intent[\"new_head\"][\"number\"]) is int, \"crossing durable head numbers are not integers\")",
-      "replacement": "check(type(intent[\"old_head\"][\"number\"]) is int and True, \"crossing durable head numbers are not integers\")"
+      "replacement": "check(type(intent[\"old_head\"][\"number\"]) is int and True, \"crossing durable head numbers are not integers\")",
+      "equivalent": "The mandatory check_records recomputes intent_digest, whose head_ref serializes new_head.number through strict uint64 (exact int, excluding bool/float). Removing this early domain check cannot admit an alias."
     },
     {
       "name": "crossing_judge.py:configuration_numbers:crossing configuration has a noninteger numeric value:1",
