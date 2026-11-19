@@ -217,9 +217,16 @@ class ActivationJudgeInputs(unittest.TestCase):
         failed_node = helpers.leaf(key, failed)
         failed_header[5] = c.keccak256(failed_node)
         changed["receipt_proofs"][0].update(value=failed.hex(), nodes=[failed_node.hex()])
-        changed["receipts"][0]["status"] = "0x0"
         with self.assertRaises(ValueError):
             j.stored(changed, failed_header, [tx], True)
+        empty = copy.deepcopy(row)
+        empty["receipts"], empty["receipt_proofs"] = [], []
+        empty_header = copy.deepcopy(header)
+        empty_header[5], empty_header[6], empty_header[10] = c.EMPTY_ROOT, bytes(256), b""
+        j.stored(empty, empty_header, [], False)
+        empty_header[5] = header[5]
+        with self.assertRaises(ValueError):
+            j.stored(empty, empty_header, [], False)
 
 
 if __name__ == "__main__":
