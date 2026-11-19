@@ -15,7 +15,27 @@ check, octets, integer, quantity = prior.check, prior.octets, prior.integer, pri
 CASES = (("preBerlin", 1, 0, 0), ("preLondon", 2, 1, 0), ("prePrague", 4, 4, 4), ("preMadhugiri", 127, 5, 6))
 
 
+def native_numbers(value, events=False):
+    """Reject JSON numeric aliases before exact native schema/value checks.
+
+    Only the native intent's events member is deliberately boolean; the
+    accepted schema checker independently requires that member to be true.
+    Bounds and exact values remain the responsibility of each native schema.
+    """
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if events and key == "events":
+                continue
+            native_numbers(child, events)
+    elif isinstance(value, list):
+        for child in value:
+            native_numbers(child, events)
+    elif isinstance(value, (bool, float)):
+        raise ValueError("native numeric metadata requires JSON integers")
+
+
 def historical_config(config, eth_prefix, bor_prefix):
+    native_numbers(config)
     eth = {name: 0 if i < eth_prefix else 8 for i, name in enumerate(profile.ETHEREUM_SCHEDULE)}
     bor = {name: 0 if i < bor_prefix else 8 for i, name in enumerate(profile.BOR_SCHEDULE)}
     bor.update({"hampiBlock": None, "sprint": {"0": 4}, "period": {"0": 1},
@@ -139,20 +159,25 @@ def stored(row, header, txs, legacy_receipt):
         check(prior.consensus_logs(receipt["logs"]) == expected_logs and octets(receipt["logsBloom"]) == bloom, "legacy receipt logs differ")
         check(receipt["transactionHash"] == "0x" + codec.keccak256(txs[0]).hex() and receipt["blockHash"] == row["hash"] and
               quantity(receipt["blockNumber"]) == 1 and quantity(receipt["transactionIndex"]) == 0, "legacy receipt identity differs")
+    for account in row["state_after"].values():
+        check(type(account["nonce"]) is int, "native state nonce is not a JSON integer")
     prior.account_claims(row, header[3])
     return prior.snapshot(row["state_after"], False)
 
 
 def records(row, views, head, frontier, rejection=None):
     check(row["head_hash"] == head, "actual native head differs")
+    native_numbers({key: prior.native_json(value) for key, value in row["decisions"].items()}, events=True)
+    native_numbers({key: prior.native_json(value) for key, value in row["admission"].items()})
     prior.check_records(row["decisions"], row["admission"], views, frontier)
+    native_numbers(row["observed"])
     check(row["observer_errors"] == ([rejection] if rejection else []) and row["observed"] == [1, 2] and
           row["keys"] == {"1": ["bor.run-1.0000000000000000"], "2": ["bor.run-1.0000000000000001"]}, "actual capture observation differs")
 
 
 def case(row, expected):
     name, kind, eth_prefix, bor_prefix = expected
-    check(row["name"] == name and row["type"] == kind, "activation case identity differs")
+    check(row["name"] == name and type(row["type"]) is int and row["type"] == kind, "activation case identity differs")
     historical_config(row["config"], eth_prefix, bor_prefix)
     width = 15 if eth_prefix < 2 else 16
     genesis, genesis_txs, genesis_hash = raw_block(row["genesis_raw"], 20 if eth_prefix >= 4 else width)

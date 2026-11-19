@@ -204,6 +204,62 @@ class ActivationNativeReport(unittest.TestCase):
             relink(row)
         self.reject(change)
 
+    def test_native_numeric_domains_reject_bool_and_float_aliases(self):
+        for index in range(4):
+            for value in (float(self.native["cases"][index]["type"]), True):
+                self.reject(lambda x: x["cases"][index].update(type=value))
+            for label in ("control", "attempt"):
+                for field in ("decisions", "admission"):
+                    records = self.native["cases"][index][label][field]
+                    for key, raw in records.items():
+                        original = json.loads(raw)
+                        # Counter/frontier records carry one integer. Intent
+                        # numbers also receive the accepted digest-domain check.
+                        if not isinstance(original, dict) or len(original) != 1:
+                            continue
+                        name, number = next(iter(original.items()))
+                        for value in (float(number), bool(number)):
+                            def change(x):
+                                x["cases"][index][label][field][key] = json.dumps({name: value})
+                            with self.subTest(case=index, label=label, field=field, key=key, value=value):
+                                self.reject(change)
+                for values in ([True, 2], [1.0, 2], [1, 2.0]):
+                    self.reject(lambda x: x["cases"][index][label].update(observed=values))
+            for address in j.prior.WATCHED:
+                for value in (float(self.native["cases"][index]["control"]["blocks"][0]["state_after"][address[2:]]["nonce"]),
+                              bool(self.native["cases"][index]["control"]["blocks"][0]["state_after"][address[2:]]["nonce"])):
+                    self.reject(lambda x: x["cases"][index]["control"]["blocks"][0]["state_after"][address[2:]].update(nonce=value))
+
+    def test_every_numeric_historical_config_leaf_rejects_aliases(self):
+        def leaves(value, path=()):
+            for key, item in value.items():
+                if isinstance(item, dict):
+                    yield from leaves(item, path + (key,))
+                elif type(item) is int:
+                    yield path + (key,), item
+        for index, row in enumerate(self.native["cases"]):
+            for path, number in leaves(row["config"]):
+                for value in (float(number), bool(number)):
+                    def change(x):
+                        target = x["cases"][index]["config"]
+                        for key in path[:-1]:
+                            target = target[key]
+                        target[path[-1]] = value
+                    with self.subTest(case=index, path=path, value=value):
+                        self.reject(change)
+
+    def test_other_claimed_native_numbers_keep_strict_domains(self):
+        for value in (True, 1.0):
+            self.reject(lambda x: x["cases"][0]["control"]["blocks"][0].update(number=value))
+            self.reject(lambda x: x["cases"][0]["control"]["blocks"][0]["account_proofs"][j.prior.SENDER].update(nonce=value))
+        for field in ("transaction_proofs", "receipt_proofs"):
+            for value in (False, 0.0):
+                self.reject(lambda x: x["cases"][0]["control"]["blocks"][0][field][0].update(index=value))
+        for field, value in (("type", False), ("type", 0.0), ("status", True), ("status", 1.0),
+                             ("gasUsed", 21000.0), ("cumulativeGasUsed", 21000.0),
+                             ("blockNumber", True), ("blockNumber", 1.0), ("transactionIndex", False), ("transactionIndex", 0.0)):
+            self.reject(lambda x: x["cases"][0]["control"]["blocks"][0]["receipts"][0].update({field: value}))
+
 
 if __name__ == "__main__":
     unittest.main()

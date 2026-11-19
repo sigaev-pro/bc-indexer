@@ -238,6 +238,12 @@
       "replacement": "check(True, 'legacy receipt identity differs')"
     },
     {
+      "name": "judge native state nonce is not a JSON integer",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "check(type(account[\"nonce\"]) is int, \"native state nonce is not a JSON integer\")",
+      "replacement": "check(True, 'native state nonce is not a JSON integer')"
+    },
+    {
       "name": "judge actual native head differs",
       "file": "test/type_paths/poly/activation/activation_judge.py",
       "original": "check(row[\"head_hash\"] == head, \"actual native head differs\")",
@@ -252,7 +258,7 @@
     {
       "name": "judge activation case identity differs",
       "file": "test/type_paths/poly/activation/activation_judge.py",
-      "original": "check(row[\"name\"] == name and row[\"type\"] == kind, \"activation case identity differs\")",
+      "original": "check(row[\"name\"] == name and type(row[\"type\"]) is int and row[\"type\"] == kind, \"activation case identity differs\")",
       "replacement": "check(True, 'activation case identity differs')"
     },
     {
@@ -424,6 +430,66 @@
       "file": "test/type_paths/poly/activation/activation_judge.py",
       "original": "digest[offset:offset + 2]",
       "replacement": "digest[offset:offset + 1]"
+    },
+    {
+      "name": "numeric domain 0",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "type(row[\"type\"]) is int",
+      "replacement": "True"
+    },
+    {
+      "name": "numeric domain 1",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "native_numbers(config)",
+      "replacement": "None"
+    },
+    {
+      "name": "numeric domain 2",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "native_numbers({key: prior.native_json(value) for key, value in row[\"decisions\"].items()}, events=True)",
+      "replacement": "None"
+    },
+    {
+      "name": "numeric domain 3",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "native_numbers({key: prior.native_json(value) for key, value in row[\"admission\"].items()})",
+      "replacement": "None"
+    },
+    {
+      "name": "numeric domain 4",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "native_numbers(row[\"observed\"])",
+      "replacement": "None"
+    },
+    {
+      "name": "numeric domain 5",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "elif isinstance(value, (bool, float)):",
+      "replacement": "elif isinstance(value, bool):"
+    },
+    {
+      "name": "numeric domain 6",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "elif isinstance(value, (bool, float)):",
+      "replacement": "elif isinstance(value, float):"
+    },
+    {
+      "name": "numeric domain 7",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "if isinstance(value, dict):",
+      "replacement": "if False:"
+    },
+    {
+      "name": "numeric domain 8",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "elif isinstance(value, list):",
+      "replacement": "elif False:"
+    },
+    {
+      "name": "numeric domain 9",
+      "file": "test/type_paths/poly/activation/activation_judge.py",
+      "original": "if events and key == \"events\":",
+      "replacement": "if False:"
     }
   ]
 }
