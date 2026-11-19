@@ -119,6 +119,12 @@
       "file": "test/type_paths/bsc/full_import/ledger.py",
       "original": "self.balances[sender] < value",
       "replacement": "False"
+    },
+    {
+      "name": "election registration prerequisite",
+      "file": "test/type_paths/bsc/full_import/ledger.py",
+      "original": "self.nonces[a[\"stake_hub\"]] != 1",
+      "replacement": "False"
     }
   ]
 }

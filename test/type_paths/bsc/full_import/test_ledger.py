@@ -150,6 +150,12 @@ class LedgerControls(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unmodelled ledger user phase"):
             check(bad)
 
+    def test_election_requires_registered_credit_funding(self):
+        rows = fixtures()[2][:1]
+        rows[0][0]["data"] = judge.ELECTION
+        with self.assertRaisesRegex(ValueError, "election precedes expected registered stake"):
+            check(rows)
+
 
 if __name__ == "__main__":
     unittest.main()

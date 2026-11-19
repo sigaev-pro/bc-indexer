@@ -50,6 +50,8 @@ class BalanceLedger:
                 self.move(a["validator"], a["burn"], burn)
                 self.move(a["validator"], a["validator_contract"], value - reward - burn)
             elif selector == "1e4c1524":
+                if self.nonces[a["stake_hub"]] != 1:
+                    raise ValueError("election precedes expected registered stake")
                 self.move(a["validator_contract"], a["reward"], self.balances[a["validator_contract"]])
             else:
                 raise ValueError("unmodelled ledger system transaction")

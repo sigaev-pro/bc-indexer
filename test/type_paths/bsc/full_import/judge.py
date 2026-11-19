@@ -34,6 +34,7 @@ INIT = "e1c7392a"
 INITIALIZE = "8129fc1c"
 DEPOSIT = "f340fa01"
 ELECTION = "1e4c1524"
+REGISTER = encoding.keccak256(b"createValidator(address,bytes,bytes,(uint64,uint64,uint64),(string,string,string,string))")[:4].hex()
 LEGACY_INIT = {"0x" + n.zfill(40) for n in ("1000", "1001", "1003", "1006", "1004", "1005", "2000")}
 FEYNMAN_INIT = {"0x" + n.zfill(40) for n in ("2002", "2004", "2005", "2006", "3000")}
 CURRENT_TIMES = ("feynmanTime", "feynmanFixTime", "cancunTime", "haberTime", "haberFixTime", "bohrTime",
@@ -57,6 +58,10 @@ def provenance():
 def check_genesis(genesis, config):
     require(genesis["config"] == config and config["chainId"] == 714, "wrong private configuration")
     require(q(genesis["timestamp"]) == GENESIS_TIME, "wrong genesis time")
+    require(q(genesis["gasLimit"]) == 40000000 and q(genesis["difficulty"]) == 1, "wrong genesis block parameters")
+    extra = bytes.fromhex(genesis["extraData"].removeprefix("0x"))
+    require(len(extra) == 166 and extra[:33] == bytes(32) + b"\x01" and extra[33:53] == bytes.fromhex(VALIDATOR[2:]) and
+            extra[101:] == bytes(65) and extra[53:101] != bytes(48), "wrong private validator genesis")
     require(all(config[key] == GENESIS_TIME + 6 for key in CURRENT_TIMES), "incoherent current fork schedule")
     require(config["jennerTime"] == GENESIS_TIME + 864000 and config["keplerTime"] == config["shanghaiTime"] == 0,
             "wrong warmup or future fork")
@@ -199,7 +204,7 @@ def check_system(row):
         packed = (PROTECTOR << 24) | 1 if to in (STAKE_HUB, "0x" + "2004".zfill(40)) else 1
         require(slot(before, to, "0") == 0 and slot(after, to, "0") == packed, "initializer packed state")
         expected_slots = {
-            "1000": {"1": 21}, "1001": {"4": 50, "5": 150},
+            "1000": {"1": 21, "validator_index": 0, "3": 0, "first_validator_incoming": 0}, "1001": {"4": 50, "5": 150},
             "1003": {"3": 0, "4": int.from_bytes(b"Binance-Chain-Tigris".ljust(32, b"\0"), "big"), "5": 10**16},
             "1004": {"1": 2 * 10**15, "native_decimals": 18},
             "1005": {"1": 1, "2": 5, "3": 1, "4": 80},
@@ -237,7 +242,26 @@ def check_system(row):
         raise ValueError("unmodelled system transaction")
 
 
-def check_user(row, phase, index):
+def check_registration_input(row, vote):
+    fields = row["fields"]
+    require(q(fields["chainId"]) == 714 and q(fields["gas"]) == 8000000 and q(fields["gasPrice"]) == 2000000000,
+            "wrong registration envelope")
+    data = bytes.fromhex(row["data"])
+    require(data[:4].hex() == REGISTER and len(data) == 772, "wrong registration ABI size/selector")
+    args = data[4:]
+    word = lambda offset: int.from_bytes(args[offset:offset + 32], "big")
+    require(word(0) == int(VALIDATOR, 16) and [word(i * 32) for i in (1, 2, 3, 4, 5, 6)] == [224, 320, 100, 1000, 100, 448],
+            "wrong registration ABI head")
+    require(word(224) == 48 and args[256:304] == vote and args[304:320] == bytes(16), "wrong registration vote bytes")
+    require(word(320) == 96 and args[352:448] != bytes(96), "wrong registration proof bytes")
+    require([word(448 + i * 32) for i in range(4)] == [128, 192, 224, 256], "wrong registration description offsets")
+    for offset, expected in ((576, b"Extractor"), (640, b""), (672, b""), (704, b"bounded fixture")):
+        width = ((len(expected) + 31) // 32) * 32
+        require(word(offset) == len(expected) and args[offset + 32:offset + 32 + width] == expected.ljust(width, b"\0"),
+                "wrong registration description")
+
+
+def check_user(row, phase, index, vote):
     before, after, receipt = row["before"], row["after"], row["receipt"]
     kind, fields = row["type"], row["fields"]
     require(row["from"].lower() == SENDER and row["nonce"] == index and before[SENDER]["nonce"] == index and after[SENDER]["nonce"] == index + 1,
@@ -254,6 +278,7 @@ def check_user(row, phase, index):
     require(q(row["value"]) == value and balance(before, SENDER) - balance(after, SENDER) == fee + status * value, "user fee/value accounting")
     require(balance(after, SYSTEM) - balance(before, SYSTEM) == fee, "system fee accumulation")
     if phase == "registration":
+        check_registration_input(row, vote)
         require(kind == 0 and row["to"].lower() == STAKE_HUB and value == 2001 * 10**18, "wrong registration")
         require(before[STAKE_HUB]["nonce"] == 0 and after[STAKE_HUB]["nonce"] == 1 and before[CREDIT]["nonce"] == 0 and
                 after[CREDIT]["nonce"] == 1, "credit CREATE nonce differs")
@@ -305,10 +330,12 @@ def check(report, generated, genesis):
         require(type(report.get("schema_version")) is int and report["schema_version"] == 1 and report["scope"] == "private-current-fork-parlia-import", "wrong report")
         require(all(report[key] == "NOT_RUN" for key in ("public_profiles", "activation_import_controls", "unknown_import_control")), "unexecuted profile/control credit")
         check_genesis(genesis, report["config"])
+        vote = bytes.fromhex(genesis["extraData"].removeprefix("0x"))[53:101]
         require(4 <= len(generated) <= 40 and report["blocks"] == len(generated), "wrong block coverage")
         genesis_header = encoding.native_header(report["genesis_wire"])
         previous = genesis_header
         for number, block in enumerate(generated, 1):
+            require(all(type(block[key]) is int and block[key] >= 0 for key in ("number", "time", "transactions")), "wrong block scalar types")
             native = encoding.native_header(block["wire"])
             require(native["number"] == block["number"] == number and native["time"] == block["time"] and
                     native["hash"] == block["hash"] and native["root"] == block["root"] and native["parent"] == normalized(previous["hash"]), "block identity/continuity differs")
@@ -329,6 +356,7 @@ def check(report, generated, genesis):
             seen_system = False; target_types = []
             cumulative_gas = 0
             for transaction_index, row in enumerate(block_rows):
+                require(all(type(row[key]) is int and row[key] >= 0 for key in ("block", "time", "type", "nonce")), "wrong transaction scalar types")
                 check_wire(row)
                 cumulative_gas = check_receipt(row, cumulative_gas, transaction_index, block)
                 require(row["time"] == block["time"] and type(row["system"]) is bool, "wrong transaction context")
@@ -345,9 +373,11 @@ def check(report, generated, genesis):
                     if selector == INITIALIZE:
                         require(row["to"].lower() not in feynman_seen and row["block"] == 2, "repeated Feynman initializer"); feynman_seen.add(row["to"].lower())
                     if selector == ELECTION: election_count += 1
+                    if selector == DEPOSIT:
+                        require(slot(row["before"], VALIDATOR_CONTRACT, "validator_index") == int(election_count > 0), "deposit election branch differs")
                 else:
                     require(not seen_system, "user transaction after system transaction")
-                    check_user(row, block["phase"], user_index); user_index += 1
+                    check_user(row, block["phase"], user_index, vote); user_index += 1
                     if block["phase"] in ("success", "revert"): target_types.append(row["type"])
                 ledger.apply(row, block["phase"])
             if block["phase"] in ("success", "revert"):

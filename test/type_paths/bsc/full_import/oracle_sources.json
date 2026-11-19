@@ -148,6 +148,13 @@
       "git_blob": "bbb2c87bb10a331b5130f220dc9a2c17404e759f",
       "sha256": "41b11f70764d014fd808bcaa33aa16dbad5554263c4e7e9ef1f3359ada116a11",
       "size_bytes": 13494
+    },
+    {
+      "name": "PascalSystem",
+      "url": "https://github.com/bnb-chain/bsc-genesis-contract/blob/020c0459e37d1f9d635c1cff86dd1099ab1383fa/contracts/System.sol",
+      "git_blob": "1f785c7849c91d2cd46abc848410f72a545e39a8",
+      "sha256": "e22ba9b5eb526e776d91d9e6b2549ddb794b13279ad6c2417df6e04f2a86b67e",
+      "size_bytes": 4251
     }
   ],
   "native_source_commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",

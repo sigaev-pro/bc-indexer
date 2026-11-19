@@ -89,6 +89,15 @@ class CodecControls(unittest.TestCase):
         for block in VECTORS["blocks"]:
             judge.check_block_wires({"wire": block["raw_block"]}, block_rows(block))
 
+    def test_native_small_children_and_extended_index_paths(self):
+        vectors = json.loads((HERE / "trie_vectors.json").read_text())["vectors"]
+        self.assertEqual([v["count"] for v in vectors], [0, 1, 2, 16, 128, 129, 300])
+        for vector in vectors:
+            with self.subTest(count=vector["count"]):
+                values = [bytes.fromhex(value) for value in vector["values"]]
+                self.assertEqual(len(values), vector["count"])
+                self.assertEqual("0x" + wire.trie_root(values, encoding.keccak256).hex(), vector["root"])
+
     def test_correlated_substitution_and_reordering(self):
         block = VECTORS["blocks"][0]
         for mutation in ("swap", "wire-swap", "substitute", "receipt", "remove"):
