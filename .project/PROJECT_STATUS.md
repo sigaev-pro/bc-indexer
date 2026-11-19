@@ -4,7 +4,7 @@
 
 Status: IN_PROGRESS. Owner-authorized window: 01:23:22–07:23:22 Europe/Moscow. Baseline: `3c9414043600a57cf0c68ca5217dd606ebd9c789`. BSC part B is merged in PR #179; its earlier pending-merge entries below are historical.
 
-Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-04`. Latest update: 03:00 Europe/Moscow. Reconcile live processes and GitHub after interruption. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
+Coordinator: `/root`, checkpoint branch `codex/campaign-checkpoint-04`. Latest update: 03:12 Europe/Moscow. Reconcile live processes and GitHub after interruption. Authorization PR #180 merged at `8b1e5ed58bd7e60c1d8443aa4939d8a8c9b118b9` after exact-head CI and independent Spec and Standards reviews passed. Standing permission for passing PR merges is recorded in D107. Required independent reviews and checks remain intact.
 
 Latest verified changes (supersede the earlier checkpoint details below):
 
@@ -24,10 +24,16 @@ Additional remotely digest-verified evidence assets in the same backup release:
 | `eth-type-paths-evidence-da59a1a-20261119.tar.gz` | `333d8fabfee2bcf3dd4af848ffa01ee1f0e0028129776eabb218f327804e1a8e` | Accepted repaired ETH judge evidence, member hashes verified |
 | `checkpoint-10-recovery-review.tar.gz` | `ecd1ea87a0c4103e32adb1e950fe5599c29a7114df734ae954ec9077b6becd55` | Recovery journal, interim report and independent reviews through PR187/188 |
 | `checkpoint-11-bor-native05.tar.gz` | `f04901459a752d15b3dc1ae07874db6310c1d1ed73b06d14553c326429b23b02` | Successful final Bor native preparation/run05 |
+| `checkpoint-12-bor-acceptance.tar.gz` | `e22a8a596c3939d9094d63939e6d6cd64092dcd198ae99a976cc936db0644a50` | Final Bor exact-head validation/reviews and recovery update |
+| `checkpoint-13-poly-preparation-controls.tar.gz` | `996d211a25318ef4c5e249dcec402d32d5284a2149ba3e1826cbd85b42098d4c` | Polygon failed preparation01, orchestration controls and mutation history |
 
 Polygon #21 implementation is assigned to `/root/type_paths` in a separate worktree, limited to `test/type_paths/poly/**`, `adapters/bor/type_mapping/native/**` and its evidence. Preserve native applicability distinctions, including StateSync `0x7f`; generic decoding alone does not prove Bor execution applicability. No edits to active Bor #20 sources are allowed.
 
-Current runtime owner: Polygon diagnostic `389a1de`, preparation/run01 under `d107-poly-type-paths-*`. This is a compatibility diagnostic with no acceptance verdict; type3 applicability remains explicitly unresolved. BSC full import continues on `codex/e01-05-bsc-full-import`, checkpoint `0e67745`, and must request the next native slot. Coordinator checkpoint PR187 was accepted at `679afc76d3e634123b1f51b7fd48db1415c422ab`.
+Current runtime owner: Polygon diagnostic frozen `b4d53ce3432c3dce84f09e05be5cf0fda85e17cc`, preparation/run02 under `d107-poly-type-paths-*`. Preparation01 at389a1de failed before native commands because the snapshot directory was missing; cleanup completed. Corrected orchestration has 17 portable tests and 10 mutant kills, including actual temporary filesystem/ownership controls. This is a compatibility diagnostic with no acceptance verdict. Source inspection establishes native type3 pool refusal; body-import behavior is a separate outstanding proof, and generic decoding is not execution support.
+
+BSC full import continues in `.worktrees/bsc-full-type-import`, branch `codex/e01-05-bsc-full-import`, draft PR191 at `e6a0814`. Native execution is NOT_RUN. Independent design preflight found historical timestamp replacement by native Prepare, inadequate per-contract initializer/storage oracles, missing actual registration-state proof, and missing ordered wire/receipt bindings. Timestamp construction is corrected for later native validation; the remaining oracle work is explicit and unfinished. BSC must request the next native slot. Coordinator checkpoint PR187 was accepted at `679afc76d3e634123b1f51b7fd48db1415c422ab`.
+
+The completed failed Bor preparation04's disposable build cache (1.7GiB) was removed after realpath, ownership, retained cleanup record and process checks; logs, source archives, snapshots and artifacts were retained. Release asset `RECOVERY.md` provides recovery steps, SHA-256 `f7f9f0db7ed91fb1fd1165fb0a6b3b518ac10a7bba924fe28c3de50c6c3b2ca1`, remotely verified.
 
 ### Earlier campaign checkpoint (historical)
 
