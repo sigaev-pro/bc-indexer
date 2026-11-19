@@ -1,4 +1,4 @@
-package decision
+package bscdecision
 
 import (
 	"bytes"
