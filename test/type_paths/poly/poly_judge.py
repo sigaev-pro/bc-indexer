@@ -389,20 +389,24 @@ def component_claims(components, head):
     check(all(isinstance(row["error"], str) and "transaction type not supported" in row["error"] for row in rows), "wrong unknown block-decoder refusal")
 
 
-def refusal_claims(rows, blocks):
-    names = ["missing", "non-final", "mismatched-l1-hash", "reordered-items", "duplicate-body"]
-    check([row["case"] for row in rows] == names, "StateSync refusal cases incomplete")
+def refusal_claims(rows, blocks, blob_raw):
+    names = ["missing", "non-final", "mismatched-l1-hash", "reordered-items", "duplicate-body", "blob-native-header"]
+    check([row["case"] for row in rows] == names, "native import refusal cases incomplete")
     expected_items = [[bytes([index]), octets(address), EVENT_DATA, index.to_bytes(32, "big")]
                       for index, address in ((1, TARGET), (2, REVERT))]
     original = b"\x7f" + codec.rlp(expected_items)
     for row in rows:
-        check("control_error" not in row and isinstance(row.get("error"), str) and "state-sync mismatch" in row["error"].lower(), "missing native StateSync refusal")
+        case = row["case"]
+        expected_error = "data blobs present in block body" if case == "blob-native-header" else "state-sync mismatch"
+        check("control_error" not in row and isinstance(row.get("error"), str) and expected_error in row["error"].lower(), "missing expected native import refusal")
         check(row["head_before"] == row["head_after"] == blocks[2]["hash"], "refused import changed canonical head")
         header, txs = native_block(row)
         check(integer(header[8]) == 4 and header[0] == octets(blocks[2]["hash"]), "refusal does not target expected parent")
-        case = row["case"]
         if case == "missing":
             check(txs == [], "missing-StateSync control has transactions")
+        elif case == "blob-native-header":
+            check(row["error"] == expected_error and txs == [octets(blob_raw), original] and len(header) == 16,
+                  "blob refusal does not bind native header profile and otherwise valid fixture input")
         elif case == "non-final":
             check(len(txs) == 2 and txs[0] == original and txs[1][0] >= 192, "StateSync is not followed by ordinary tx")
             normal = plain_rlp(codec.rlp_list(txs[1]))
@@ -420,7 +424,9 @@ def refusal_claims(rows, blocks):
                 check(items == changed, "L1 hash mismatch control absent")
             else:
                 check(items == list(reversed(expected_items)), "item-order mismatch control absent")
-        check_records(row["decisions"], row["admission"], blocks[:3], frontier=4)
+        # ValidateBody precedes admission; StateSync mismatch is discovered
+        # during execution after admission. Native records must reflect this.
+        check_records(row["decisions"], row["admission"], blocks[:3], frontier=3 if case == "blob-native-header" else 4)
 
 
 def judge(report):
@@ -449,12 +455,12 @@ def judge(report):
         check(report["keys"] == {str(i + 1): [f"bor.run-1.{i:016x}"] for i in range(4)}, "adapter observation keys differ")
         check_records(report["decisions"], report["admission"], blocks)
         component_claims(report["components"], previous_hash)
-        refusal_claims(report["state_sync_refusals"], blocks)
+        refusal_claims(report["import_refusals"], blocks, report["components"]["blob_raw"])
     except (KeyError, TypeError, ValueError, IndexError, OverflowError) as error:
         return {"result": "FAIL", "error": f"{type(error).__name__}: {error}", "public_profile_credit": False}
     return {"result": "PASS", "scope": "private-current-fork-import-and-system-state",
             "ordinary_types": [0, 1, 2, 4], "body_state_sync": True,
-            "blob_body_import": "NOT_RUN", "activation_boundaries": "NOT_RUN", "public_profile_credit": False}
+            "blob_body_import": "native-header-body-refusal-only", "activation_boundaries": "NOT_RUN", "public_profile_credit": False}
 
 
 def main():

@@ -84,6 +84,38 @@ def tx_wire(kind, index):
     return (bytes([kind]) if kind else b"") + c.rlp(fields)
 
 
+def component_vector(head):
+    raw = b"\x03" + c.rlp([num(15001), num(8), num(2_000_000_000), num(5_000_000_000), num(21000),
+                           bytes.fromhex(judge.SUCCESS[2:]), b"", b"", [], b"\x01", [b"\x01" + bytes(31)], b"", b"\x01", b"\x01"])
+    return {"head_before": head, "head_after": head, "blob_raw": raw.hex(), "blob_hash": "0x" + c.keccak256(raw).hex(),
+            "blob_pool_error": "transaction type not supported: received type 3", "blob_body_import": "NOT_RUN",
+            "unknown_block_decode": [{"type": i, "error": "transaction type not supported"} for i in range(5, 127)]}
+
+
+def bind_body(row, txs):
+    body = judge.plain_rlp(c.rlp_list(bytes.fromhex(row["raw_block"])))
+    header = body[0]
+    keys = [c.rlp(num(i)) for i in range(len(txs))]
+    nodes = [c.rlp([bytes([0x30 | (key[-1] & 15)]), tx]) for key, tx in zip(keys, txs)]
+    if len(txs) == 2:
+        branch = [b""] * 17
+        for key, node in zip(keys, nodes):
+            branch[key[0] >> 4] = c.keccak256(node)
+        root_node = c.rlp(branch)
+        proofs = [[root_node, node] for node in nodes]
+    elif txs:
+        root_node = leaf(keys[0], txs[0])
+        proofs = [[root_node]]
+    else:
+        root_node, proofs = None, []
+    header[4] = c.keccak256(root_node) if root_node else c.EMPTY_ROOT
+    # Legacy body entries are nested RLP lists; typed entries are byte strings.
+    body[1] = [judge.plain_rlp(c.rlp_list(tx)) if tx[0] >= 192 else tx for tx in txs]
+    row.update(raw_block=c.rlp(body).hex(), hash="0x" + c.keccak256(c.rlp(header)).hex(),
+               transaction_proofs=[{"index": i, "key": keys[i].hex(), "value": tx.hex(), "nodes": [x.hex() for x in proofs[i]]}
+                                   for i, tx in enumerate(txs)])
+
+
 class PolygonJudgeProofTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -95,6 +127,62 @@ class PolygonJudgeProofTests(unittest.TestCase):
 
     def test_retained_native_diagnostic_still_cannot_pass_complete_judge(self):
         self.assertEqual(judge.judge(self.native)["result"], "FAIL")
+
+    def test_component_refusal_boundaries(self):
+        head = self.native["head_hash"]
+        original = component_vector(head)
+        judge.component_claims(original, head)
+        changes = [lambda x: x.update(head_after="other"), lambda x: x.update(blob_hash="other"),
+                   lambda x: x.update(blob_pool_error="wrong failure"), lambda x: x.update(blob_body_import="PASS"),
+                   lambda x: x["unknown_block_decode"].pop(), lambda x: x["unknown_block_decode"][0].update(error="bad signature")]
+        for change in changes:
+            bad = copy.deepcopy(original)
+            change(bad)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                judge.component_claims(bad, head)
+        bad = copy.deepcopy(original)
+        fields = judge.plain_rlp(c.rlp_list(bytes.fromhex(bad["blob_raw"])[1:]))
+        fields[9] = b"\x02"
+        raw = b"\x03" + c.rlp(fields)
+        bad.update(blob_raw=raw.hex(), blob_hash="0x" + c.keccak256(raw).hex())
+        with self.assertRaises(ValueError):
+            judge.component_claims(bad, head)
+
+    def test_import_refusals_bind_candidate_body_and_durable_frontiers(self):
+        blocks = self.native["blocks"]
+        blob = component_vector(self.native["head_hash"])["blob_raw"]
+        original = bytes.fromhex(blocks[3]["transactions"][0]["raw"])
+        items = judge.plain_rlp(c.rlp_list(original[1:]))
+        changed = copy.deepcopy(items)
+        changed[0][3] = (153).to_bytes(32, "big")
+        normal = c.rlp([num(8), num(5_000_000_000), num(21000), bytes.fromhex(judge.SUCCESS[2:]), b"\x01", b"", num(30037), b"\x01", b"\x01"])
+        bodies = {"missing": [], "non-final": [original, normal], "mismatched-l1-hash": [b"\x7f" + c.rlp(changed)],
+                  "reordered-items": [b"\x7f" + c.rlp(list(reversed(items)))], "duplicate-body": [original, original],
+                  "blob-native-header": [bytes.fromhex(blob), original]}
+        rows = []
+        for name, txs in bodies.items():
+            row = copy.deepcopy(blocks[3])
+            bind_body(row, txs)
+            records = {k: v for k, v in self.native["decisions"].items() if "/0000000000000003/" not in k}
+            records["extractor-decision-v1/bor.run-1/counter"] = '{"next":3}'
+            frontier = 3 if name == "blob-native-header" else 4
+            row.update(case=name, error="data blobs present in block body" if name == "blob-native-header" else "state-sync mismatch",
+                       head_before=blocks[2]["hash"], head_after=blocks[2]["hash"], decisions=records,
+                       admission={"extractor-admission-v1/bor.run-1/" + key: json.dumps({field: frontier})
+                                  for key, field in (("counter", "next"), ("lowwater", "sequence"), ("purged", "sequence"))})
+            rows.append(row)
+        judge.refusal_claims(rows, blocks, blob)
+        for index in range(6):
+            for change in (lambda row: row.update(error="unrelated error"), lambda row: row.update(head_after="other"),
+                           lambda row: row.update(decisions={}), lambda row: row.update(control_error="failed control")):
+                bad = copy.deepcopy(rows)
+                change(bad[index])
+                with self.subTest(index=index, change=change), self.assertRaises((ValueError, KeyError)):
+                    judge.refusal_claims(bad, blocks, blob)
+            bad = copy.deepcopy(rows)
+            bind_body(bad[index], [original] if index != 4 else [])
+            with self.subTest(body=index), self.assertRaises(ValueError):
+                judge.refusal_claims(bad, blocks, blob)
 
     def test_actual_native_ordinary_semantics_and_corruptions(self):
         row = copy.deepcopy(self.native["blocks"][0])

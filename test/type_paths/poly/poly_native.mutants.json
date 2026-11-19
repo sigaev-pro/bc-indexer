@@ -820,6 +820,120 @@
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(price == expected_price and gas > 0, \"wrong effective fee or gas\")",
       "replacement": "check(price == expected_price, 'wrong effective fee or gas')"
+    },
+    {
+      "name": "component_claims: component control moved head",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(components[\"head_before\"] == components[\"head_after\"] == head, \"component control moved head\")",
+      "replacement": "check(True, 'component control moved head')"
+    },
+    {
+      "name": "component_claims: blob decoder identity differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(raw[0] == 3 and components[\"blob_hash\"] == \"0x\" + codec.keccak256(raw).hex(), \"blob decoder identity differs\")",
+      "replacement": "check(True, 'blob decoder identity differs')"
+    },
+    {
+      "name": "component_claims: wrong blob component input",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(fields) == 14 and integer(fields[0]) == 15001 and integer(fields[1]) == 8 and\n          integer(fields[2]) == 2_000_000_000 and integer(fields[3]) == 5_000_000_000 and\n          integer(fields[4]) == 21000 and fields[5] == octets(SUCCESS) and integer(fields[6]) == 0 and\n          fields[7] == b\"\" and fields[8] == [] and integer(fields[9]) == 1 and\n          fields[10] == [b\"\\x01\" + bytes(31)], \"wrong blob component input\")",
+      "replacement": "check(True, 'wrong blob component input')"
+    },
+    {
+      "name": "component_claims: wrong native blob pool refusal",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(components[\"blob_pool_error\"] == \"transaction type not supported: received type 3\", \"wrong native blob pool refusal\")",
+      "replacement": "check(True, 'wrong native blob pool refusal')"
+    },
+    {
+      "name": "component_claims: pool refusal cannot grant blob body-import credit",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(components[\"blob_body_import\"] == \"NOT_RUN\", \"pool refusal cannot grant blob body-import credit\")",
+      "replacement": "check(True, 'pool refusal cannot grant blob body-import credit')"
+    },
+    {
+      "name": "component_claims: unknown block-decoder coverage incomplete",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check([row[\"type\"] for row in rows] == list(range(5, 127)), \"unknown block-decoder coverage incomplete\")",
+      "replacement": "check(True, 'unknown block-decoder coverage incomplete')"
+    },
+    {
+      "name": "component_claims: wrong unknown block-decoder refusal",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(all(isinstance(row[\"error\"], str) and \"transaction type not supported\" in row[\"error\"] for row in rows), \"wrong unknown block-decoder refusal\")",
+      "replacement": "check(True, 'wrong unknown block-decoder refusal')"
+    },
+    {
+      "name": "refusal_claims: native import refusal cases incomplete",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check([row[\"case\"] for row in rows] == names, \"native import refusal cases incomplete\")",
+      "replacement": "check(True, 'native import refusal cases incomplete')"
+    },
+    {
+      "name": "refusal_claims: missing expected native import refusal",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(\"control_error\" not in row and isinstance(row.get(\"error\"), str) and expected_error in row[\"error\"].lower(), \"missing expected native import refusal\")",
+      "replacement": "check(True, 'missing expected native import refusal')"
+    },
+    {
+      "name": "refusal_claims: refused import changed canonical head",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(row[\"head_before\"] == row[\"head_after\"] == blocks[2][\"hash\"], \"refused import changed canonical head\")",
+      "replacement": "check(True, 'refused import changed canonical head')"
+    },
+    {
+      "name": "refusal_claims: refusal does not target expected parent",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(header[8]) == 4 and header[0] == octets(blocks[2][\"hash\"]), \"refusal does not target expected parent\")",
+      "replacement": "check(True, 'refusal does not target expected parent')"
+    },
+    {
+      "name": "refusal_claims: missing-StateSync control has transactions",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(txs == [], \"missing-StateSync control has transactions\")",
+      "replacement": "check(True, 'missing-StateSync control has transactions')"
+    },
+    {
+      "name": "refusal_claims: blob refusal does not bind native header profile and otherwise valid fixture input",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(row[\"error\"] == expected_error and txs == [octets(blob_raw), original] and len(header) == 16,\n                  \"blob refusal does not bind native header profile and otherwise valid fixture input\")",
+      "replacement": "check(True, 'blob refusal does not bind native header profile and otherwise valid fixture input')"
+    },
+    {
+      "name": "refusal_claims: StateSync is not followed by ordinary tx",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(txs) == 2 and txs[0] == original and txs[1][0] >= 192, \"StateSync is not followed by ordinary tx\")",
+      "replacement": "check(True, 'StateSync is not followed by ordinary tx')"
+    },
+    {
+      "name": "refusal_claims: non-final control ordinary input differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(normal) == 9 and [integer(x) for x in normal[:3]] == [8, 5_000_000_000, 21000] and\n                  normal[3] == octets(SUCCESS) and normal[4:6] == [b\"\\x01\", b\"\"] and\n                  integer(normal[6]) in (30037, 30038), \"non-final control ordinary input differs\")",
+      "replacement": "check(True, 'non-final control ordinary input differs')"
+    },
+    {
+      "name": "refusal_claims: StateSync duplicate control differs",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(txs == [original, original], \"StateSync duplicate control differs\")",
+      "replacement": "check(True, 'StateSync duplicate control differs')"
+    },
+    {
+      "name": "refusal_claims: wrong mismatched StateSync envelope",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(len(txs) == 1 and txs[0][0] == 127, \"wrong mismatched StateSync envelope\")",
+      "replacement": "check(True, 'wrong mismatched StateSync envelope')"
+    },
+    {
+      "name": "refusal_claims: L1 hash mismatch control absent",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(items == changed, \"L1 hash mismatch control absent\")",
+      "replacement": "check(True, 'L1 hash mismatch control absent')"
+    },
+    {
+      "name": "refusal_claims: item-order mismatch control absent",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(items == list(reversed(expected_items)), \"item-order mismatch control absent\")",
+      "replacement": "check(True, 'item-order mismatch control absent')"
     }
   ]
 }
