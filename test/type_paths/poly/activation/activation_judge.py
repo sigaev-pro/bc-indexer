@@ -32,10 +32,14 @@ def historical_config(config, eth_prefix, bor_prefix):
 
 def raw_block(raw, width):
     outer = codec.rlp_list(octets(raw))
-    check(len(outer) == 3 and isinstance(outer[1][0], list) and outer[2][0] == [], "invalid historical block envelope")
+    check(len(outer) == (4 if width == 20 else 3) and isinstance(outer[1][0], list) and outer[2][0] == [], "invalid historical block envelope")
     header = codec.header_fields(outer[0][1])
     check(len(header) == width, "historical header fork shape differs")
     check(all(len(header[i]) == 32 for i in (0, 1, 3, 4, 5)), "invalid historical header hashes")
+    if width == 20:
+        # Pinned core/genesis.go: Shanghai/Cancun genesis has empty withdrawals
+        # and zero blob/beacon fields; ordinary Bor headers still have16fields.
+        check(outer[3][0] == [] and header[15:] == [(10**9).to_bytes(4, "big"), codec.EMPTY_ROOT, b"", b"", bytes(32)], "wrong native genesis fork tail")
     txs = [encoded if isinstance(value, list) else value for value, encoded in outer[1][0]]
     check(codec.ordered_root(txs) == header[4], "complete historical body root differs")
     return header, txs, "0x" + codec.keccak256(outer[0][1]).hex()
@@ -89,30 +93,60 @@ def signed_input(raw, kind, nonce):
     codec.fixture_signature(digest, parity, r, s, 1)
 
 
+def transfer_receipt(base_fee):
+    """Bor core/bor_fee_log.go + state_transition.go; independent fixture amounts.
+
+    Sender starts at10 ETH, span signer at1000 ETH, recipient at zero. Gas
+    purchase precedes the value-transfer log. Fee-log balances deliberately
+    describe tip movement (the native deprecated event), not final balances.
+    """
+    address = octets("0000000000000000000000000000000000001010")
+    sender = octets(prior.SENDER).rjust(32, b"\x00")
+    signer = octets("71562b71999873db5b286df957af199ec94617f7").rjust(32, b"\x00")
+    bought = 21000 * 5_000_000_000
+    tip = 21000 * (5_000_000_000 - base_fee)
+    signatures = ("e6497e3ee548a3372136af2fcb0696db31fc6cf20260707645068bd3fe97f3c4", "4dfe1bbbcf077ddc3e01291eea2d5c70c2b422b415d95645b9adcfd678cb1d63")
+    amounts = ((7, 10**19 - bought, 0, 10**19 - bought - 7, 7),
+               (tip, 10**19, 10**21, 10**19 - tip, 10**21 + tip))
+    logs = [[address, [octets(signature), address.rjust(32, b"\x00"), sender, target],
+             b"".join(value.to_bytes(32, "big") for value in values)]
+            for signature, target, values in zip(signatures, (octets(prior.SUCCESS).rjust(32, b"\x00"), signer), amounts)]
+    # core/types/bloom9.go: three 11-bit positions from Keccak for address/topics.
+    bloom = 0
+    for address, topics, _ in logs:
+        for item in [address] + topics:
+            digest = codec.keccak256(item)
+            for offset in (0, 2, 4):
+                bloom |= 1 << (int.from_bytes(digest[offset:offset + 2], "big") & 2047)
+    return codec.rlp([b"\x01", (21000).to_bytes(2, "big"), bloom.to_bytes(256, "big"), logs]), logs, bloom.to_bytes(256, "big")
+
+
 def stored(row, header, txs, legacy_receipt):
+    check(row["receipts"] is None or isinstance(row["receipts"], list), "malformed native receipt collection")
     receipts = row["receipts"] or []
     proofs = row["receipt_proofs"]
     wires = [octets(proof["value"]) for proof in proofs]
     check(len(receipts) == len(proofs) == (1 if legacy_receipt else 0), "historical receipt count differs")
     check(codec.ordered_root(wires) == header[5], "complete historical receipt root differs")
     inclusion(proofs, wires, header[5])
-    check(integer(header[10]) == (21000 if legacy_receipt else 0) and header[6] == bytes(256), "historical header gas/bloom differs")
+    expected_wire, expected_logs, bloom = transfer_receipt(integer(header[15]) if len(header) == 16 else 0) if legacy_receipt else (None, [], bytes(256))
+    check(integer(header[10]) == (21000 if legacy_receipt else 0) and header[6] == bloom, "historical header gas/bloom differs")
     if legacy_receipt:
-        check(wires == [codec.rlp([b"\x01", (21000).to_bytes(2, "big"), bytes(256), []])], "legacy control receipt is not successful plain transfer")
+        check(wires == [expected_wire], "legacy control receipt differs from native transfer oracle")
         receipt = receipts[0]
         check(quantity(receipt.get("type", "0x0")) == 0 and quantity(receipt["status"]) == 1 and
               quantity(receipt["gasUsed"]) == quantity(receipt["cumulativeGasUsed"]) == 21000, "legacy receipt claim differs")
-        check(receipt["logs"] == [] and octets(receipt["logsBloom"]) == bytes(256), "legacy receipt logs differ")
+        check(prior.consensus_logs(receipt["logs"]) == expected_logs and octets(receipt["logsBloom"]) == bloom, "legacy receipt logs differ")
         check(receipt["transactionHash"] == "0x" + codec.keccak256(txs[0]).hex() and receipt["blockHash"] == row["hash"] and
               quantity(receipt["blockNumber"]) == 1 and quantity(receipt["transactionIndex"]) == 0, "legacy receipt identity differs")
     prior.account_claims(row, header[3])
     return prior.snapshot(row["state_after"], False)
 
 
-def records(row, views, head, frontier):
+def records(row, views, head, frontier, rejection=None):
     check(row["head_hash"] == head, "actual native head differs")
     prior.check_records(row["decisions"], row["admission"], views, frontier)
-    check(row["observer_errors"] in (None, []) and row["observed"] == [1, 2] and
+    check(row["observer_errors"] == ([rejection] if rejection else []) and row["observed"] == [1, 2] and
           row["keys"] == {"1": ["bor.run-1.0000000000000000"], "2": ["bor.run-1.0000000000000001"]}, "actual capture observation differs")
 
 
@@ -121,13 +155,21 @@ def case(row, expected):
     check(row["name"] == name and row["type"] == kind, "activation case identity differs")
     historical_config(row["config"], eth_prefix, bor_prefix)
     width = 15 if eth_prefix < 2 else 16
-    genesis, genesis_txs, genesis_hash = raw_block(row["genesis_raw"], width)
+    genesis, genesis_txs, genesis_hash = raw_block(row["genesis_raw"], 20 if eth_prefix >= 4 else width)
     check(integer(genesis[8]) == 0 and genesis[0] == bytes(32) and not genesis_txs, "invalid historical genesis")
     control, attempt = row["control"], row["attempt"]
     check(len(control["blocks"]) == 2, "missing valid historical controls")
     first, empty = control["blocks"]
     h1, tx1 = block(first, width, 1, genesis_hash)
     h2, tx2 = block(empty, width, 2, first["hash"])
+    check(all(integer(header[9]) == 10_000_000 for header in (genesis, h1, h2)), "private genesis/control gas limit differs")
+    if width == 16:
+        # params.BaseFeeChangeDenominator: Delhi16, Bhilai64; Dandeli's
+        # percentage target is still future in both selected profiles.
+        denominator = 64 if bor_prefix >= 5 else 16
+        base1 = 10**9 - 10**9 // denominator
+        base2 = base1 - base1 * (5_000_000 - 21000) // 5_000_000 // denominator
+        check(integer(h1[15]) == base1 and integer(h2[15]) == base2, "historical native base fee transition differs")
     check(len(tx1) == 1 and not tx2, "legacy/empty control body differs")
     signed_input(tx1[0], 0, 0)
     state1, state2 = stored(first, h1, tx1, True), stored(empty, h2, tx2, False)
@@ -145,7 +187,7 @@ def case(row, expected):
         expected_error = "could not apply tx 0 [0x" + codec.keccak256(txc[0]).hex() + "]: transaction type not supported"
         check(attempt["accepted"] is False and attempt["error"] == expected_error, "missing native preactivation refusal")
         check(not any(key in candidate for key in ("receipts", "receipt_proofs", "account_proofs", "state_after")), "rejected candidate has durable state claims")
-        records(attempt, [first], first["hash"], 2)
+        records(attempt, [first], first["hash"], 2, expected_error)
     else:
         check(txc[0][0] == 127, "wrong reserved envelope")
         fields = prior.plain_rlp(codec.rlp_list(txc[0][1:]))

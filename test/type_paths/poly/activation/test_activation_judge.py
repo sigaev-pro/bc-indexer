@@ -179,18 +179,18 @@ class ActivationJudgeInputs(unittest.TestCase):
         row.update(accounts)
         header[3] = root
         tx = helpers.signed_wire(0, fields(0))
-        wire = c.rlp([b"\x01", num(21000), bytes(256), []])
+        wire, expected_logs, bloom = j.transfer_receipt(j.integer(header[15]))
         key = c.rlp(b"")
         node = helpers.leaf(key, wire)
-        header[5], header[6], header[10] = c.keccak256(node), bytes(256), num(21000)
+        header[5], header[6], header[10] = c.keccak256(node), bloom, num(21000)
         receipt = {"type": "0x0", "status": "0x1", "gasUsed": hex(21000), "cumulativeGasUsed": hex(21000),
-                   "logs": [], "logsBloom": "0x" + bytes(256).hex(), "transactionHash": "0x" + c.keccak256(tx).hex(),
+                   "logs": [{"address": "0x" + address.hex(), "topics": ["0x" + topic.hex() for topic in topics], "data": "0x" + data.hex()} for address, topics, data in expected_logs], "logsBloom": "0x" + bloom.hex(), "transactionHash": "0x" + c.keccak256(tx).hex(),
                    "blockHash": row["hash"], "blockNumber": "0x1", "transactionIndex": "0x0"}
         row["receipts"] = [receipt]
         row["receipt_proofs"] = [{"index": 0, "key": key.hex(), "value": wire.hex(), "nodes": [node.hex()]}]
         j.stored(row, header, [tx], True)
         for field, value in (("status", "0x0"), ("gasUsed", "0x1"), ("cumulativeGasUsed", "0x1"),
-                             ("type", "0x1"), ("logsBloom", "0x" + "01" * 256), ("logs", [{}]),
+                             ("type", "0x1"), ("logsBloom", "0x" + "01" * 256), ("logs", []),
                              ("transactionHash", "0x" + "01" * 32), ("blockHash", "0x" + "01" * 32),
                              ("blockNumber", "0x2"), ("transactionIndex", "0x1")):
             changed = copy.deepcopy(row)
@@ -212,7 +212,7 @@ class ActivationJudgeInputs(unittest.TestCase):
             j.stored(changed, header, [tx], True)
         # A correctly re-committed failed receipt must still fail the expected
         # successful transfer oracle, independently of the proof/root check.
-        failed = c.rlp([b"", num(21000), bytes(256), []])
+        failed = c.rlp([b"", num(21000), bloom, expected_logs])
         changed, failed_header = copy.deepcopy(row), copy.deepcopy(header)
         failed_node = helpers.leaf(key, failed)
         failed_header[5] = c.keccak256(failed_node)
