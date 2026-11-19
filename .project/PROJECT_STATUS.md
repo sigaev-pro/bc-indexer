@@ -1,5 +1,17 @@
 # Состояние проекта
 
+## E01 completion resumed — D108
+
+Status: IN_PROGRESS. The owner requested completion of E01 after the six-hour campaign. Baseline main is `7ad7e2b1be147e4fb45466b6ab022544c7ae5f5b`; final campaign06 source/history and all closing evidence are saved in the backup release. The earlier campaign section below is historical.
+
+Current work: reconcile Geth partB (#20), BSC full native import and the required private type-path matrix (#21), then review G.E01 (#78). No E02 work or acceptance downgrade. Prior platform stops remain recorded; first inspect exact local scenarios and restrictions before any new execution.
+
+| Role | Initial task | Allowed paths |
+| --- | --- | --- |
+| Coordinator | Recovery reconciliation, Geth source diagnosis, status and acceptance records | `.project/docs/DECISIONS.md`, `.project/PROJECT_STATUS.md`, `.project/evidence/`, local run records; Geth code remains read-only during initial diagnosis |
+| Independent Spec investigator | Read-only E01 gate and applicability matrix reconciliation | Existing task, decision, evidence and issue records; no writes |
+| Independent native investigator | Read-only BSC fixture and source-layout diagnosis | Preserved BSC producer/oracle trees and evidence; no writes or native execution |
+
 ## Autonomous campaign — 2026-11-19 (D107)
 
 Finalization in progress (03:36 UTC). Authorized window:2026-11-18 22:23:22–2026-11-19 04:23:22 UTC (01:23:22–07:23:22 Europe/Moscow). Accepted implementation checkpoint:`0b518f9527c905bd2501e337b9601ec98df6c300`. All campaign native sessions are idle; final report/recovery checks continue. See [campaign report](evidence/D107.campaign-20261119.md).

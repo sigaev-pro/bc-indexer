@@ -1,5 +1,9 @@
 # Дерево решений и журнал интервью
 
+## D108 — Resume work to complete E01 (2026-11-19)
+
+After the six-hour campaign and saved report, the owner explicitly requested completion of E01. Work resumes from accepted main `7ad7e2b1be147e4fb45466b6ab022544c7ae5f5b`. The new objective is E01 completion; no new time limit or E02 work was requested. Preserve the existing specification, independent reviews, branch protection, serialized native execution, resource limits and durable checkpoints. Existing implementation and parallel-review roles remain applicable. This instruction does not waive acceptance evidence or platform restrictions. Reconcile prior stopped sessions before any execution; do not evade a denied operation or relabel incomplete evidence as accepted.
+
 ## D107 — Six-hour autonomous development and durable checkpoints (2026-11-19)
 
 The owner explicitly accepted the coordinator's six recommendations and requested six hours of work, followed by saved results and a report. The owner also requested intermediate saves to minimize loss after Internet or computer failure.
