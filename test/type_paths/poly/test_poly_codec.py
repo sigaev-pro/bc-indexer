@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("type_paths_poly_codec", HERE / "poly_codec.py")
@@ -11,6 +12,51 @@ spec.loader.exec_module(codec)
 
 
 class PolygonProofTests(unittest.TestCase):
+    def test_ordered_root_empty_tiny_and_index_extension_vectors(self):
+        self.assertEqual(codec.ordered_root([]), codec.EMPTY_ROOT)
+        branch = [b""] * 17
+        branch[8], branch[0] = [b"\x30", b"a"], [b"\x31", b"b"]
+        self.assertEqual(codec.ordered_root([b"a", b"b"]), codec.keccak256(codec.rlp(branch)))
+        values = [bytes([97 + i % 26]) for i in range(130)]
+        def ref(node):
+            raw = codec.rlp(node)
+            return node if len(raw) < 32 else codec.keccak256(raw)
+        root = [b""] * 17
+        for first in range(8):
+            group = [b""] * 17
+            for last in range(16):
+                index = first * 16 + last
+                if index:
+                    group[last] = [b"\x20", values[index]]
+            root[first] = ref(group)
+        ending = [b""] * 17
+        ending[0], ending[1] = [b"\x20", values[128]], [b"\x20", values[129]]
+        self.assertLess(len(codec.rlp(ending)), 32)
+        group8 = [b""] * 17
+        group8[0], group8[1] = [b"\x20", values[0]], [b"\x18", ending]
+        root[8] = ref(group8)
+        expected = codec.keccak256(codec.rlp(root))
+        self.assertEqual(codec.ordered_root(values), expected)
+        for bad in (values[:-1], values + [b"extra"], list(reversed(values))):
+            self.assertNotEqual(codec.ordered_root(bad), expected)
+
+    def test_pinned_native_signature_vector_and_recovery_parity(self):
+        # Bor 3a018e3 crypto/signature_test.go TestEcrecover/VerifySignature.
+        digest = bytes.fromhex("ce0677bb30baa8cf067c88db9811f4333d131bf8bcf12fe7065d211dce971008")
+        r = int("90f27b8b488db00b00606796d2987f6a5f59ae62ea05effe84fef5b8b0e54998", 16)
+        s = int("4a691139ad57a3f0b906637673aa2f63d1f55cb1a69199d4009eea23ceaddc93", 16)
+        public = (int("e32df42865e97135acfb65f3bae71bdc86f4d49150ad6a440b6f15878109880a", 16),
+                  int("a2b2667f7e725ceea70c673093bf67663e0312623c8e091b13cf2c0f11ef652", 16))
+        codec.fixture_signature.cache_clear()
+        try:
+            with patch.object(codec, "GENERATOR", public):
+                codec.fixture_signature(digest, 1, r, s, 1)
+                for args in ((digest, 0, r, s, 1), (digest, 1, r, s, 2), (digest, 1, r + 1, s, 1),
+                             (bytes(32), 1, r, s, 1), (digest, 0, r, codec.ORDER - s, 1)):
+                    with self.subTest(args=args), self.assertRaises(ValueError):
+                        codec.fixture_signature(*args)
+        finally:
+            codec.fixture_signature.cache_clear()
     def test_codec_is_exact_accepted_reuse(self):
         accepted = (HERE.parent / "eth/eth_type_judge.py").read_text()
         actual = (HERE / "poly_codec.py").read_text()

@@ -110,6 +110,7 @@ def native_block(row):
     check(row["root"] == "0x" + header[3].hex() and row["parent"] == "0x" + header[0].hex(), "reported block roots differ")
     check(isinstance(outer[1][0], list) and outer[2][0] == [], "invalid Bor body/uncles")
     txs = [raw if isinstance(value, list) else value for value, raw in outer[1][0]]
+    check(codec.ordered_root(txs) == header[4], "complete body transaction root differs")
     proofs = row["transaction_proofs"]
     check(len(proofs) == len(txs), "transaction proof count differs")
     if not txs:
@@ -211,10 +212,12 @@ def receipt_claims(row, header, txs):
     if not receipts:
         check(header[5] == codec.EMPTY_ROOT, "nonempty receipt root for empty body")
     cumulative = 0
+    receipt_wires = []
     for index, (receipt, proof, trace, tx) in enumerate(zip(receipts, proofs, traces, txs)):
         key = codec.rlp(index.to_bytes((index.bit_length() + 7) // 8, "big"))
         check(type(proof["index"]) is int and proof["index"] == index and octets(proof["key"]) == key, "wrong receipt proof key")
         wire = codec.proof_value(header[5], key, [octets(x) for x in proof["nodes"]])
+        receipt_wires.append(wire)
         check(wire is not None and wire == octets(proof["value"]), "receipt bytes not authenticated")
         typ = tx[0] if tx[0] < 128 else 0
         payload = wire if typ == 0 else wire[1:]
@@ -237,6 +240,7 @@ def receipt_claims(row, header, txs):
               quantity(observed["cumulativeGasUsed"]) == total and consensus_logs(observed["logs"]) == fields[3], "live receipt differs from stored proof")
         cumulative = total
     check(cumulative == integer(header[10]), "receipt gas does not match header")
+    check(codec.ordered_root(receipt_wires) == header[5], "complete receipt root differs")
 
 
 def snapshot(value, traced):
@@ -276,10 +280,18 @@ def ordinary_fields(raw, index):
                   "wrong authorization domain/target/nonce")
             check(integer(parity) in (0, 1) and 0 < integer(ar) < 2**256 and 0 < integer(ass) < 2**256,
                   "invalid authorization signature")
+            codec.fixture_signature(codec.keccak256(b"\x05" + codec.rlp(auth[0][:3])), integer(parity), integer(ar), integer(ass), 2)
     check(kind == 0 or integer(v) in (0, 1), "invalid typed signature parity")
     check(0 < integer(r) < 2**256 and 0 < integer(s) < 2**256, "invalid transaction signature")
     check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b"" and
           to == octets(SUCCESS if index % 2 == 0 else REVERT), "wrong ordinary transaction input")
+    if kind == 0:
+        digest = codec.keccak256(codec.rlp(fields[:6] + [(15001).to_bytes(2, "big"), b"", b""]))
+        parity = integer(v) - 30037
+    else:
+        digest = codec.keccak256(bytes([kind]) + codec.rlp(fields[:-3]))
+        parity = integer(v)
+    codec.fixture_signature(digest, parity, integer(r), integer(s), 1)
 
 
 def ordinary_state(row, header, txs):

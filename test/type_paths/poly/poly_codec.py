@@ -186,3 +186,100 @@ def proof_value(root, key, proof):
         if reference == b"":
             raise ValueError("empty extension child")
     raise ValueError("cyclic or excessive proof path")
+
+
+def ordered_root(values):
+    """Reconstruct the complete fixture body/receipt trie, excluding extra leaves.
+
+    Native oracle: pinned Bor trie/stacktrie.go and core/types/hashing.go.
+    This only builds the RLP-indexed trie of a complete ordered value list.
+    """
+    pairs = []
+    for index, value in enumerate(values):
+        if not isinstance(value, bytes) or not value:
+            raise ValueError("empty or non-byte ordered value")
+        key = rlp(index.to_bytes((index.bit_length() + 7) // 8, "big"))
+        pairs.append(([n for byte in key for n in (byte >> 4, byte & 15)], value))
+
+    def compact(path, leaf):
+        flag = (2 if leaf else 0) + len(path) % 2
+        parts = [flag] + path if len(path) % 2 else [flag, 0] + path
+        return bytes(parts[i] * 16 + parts[i + 1] for i in range(0, len(parts), 2))
+
+    def child(node):
+        wire = rlp(node)
+        return node if len(wire) < 32 else keccak256(wire)
+
+    def build(items):
+        if len(items) == 1:
+            path, value = items[0]
+            return [compact(path, True), value]
+        shared = 0
+        while all(len(path) > shared and path[shared] == items[0][0][shared] for path, _ in items):
+            shared += 1
+        if shared:
+            return [compact(items[0][0][:shared], False), child(build([(path[shared:], value) for path, value in items]))]
+        branch = [b""] * 17
+        for digit in range(16):
+            group = [(path[1:], value) for path, value in items if path and path[0] == digit]
+            if group:
+                branch[digit] = child(build(group))
+        for path, value in items:
+            if not path:
+                branch[16] = value
+        return branch
+
+    return keccak256(rlp(build(pairs))) if pairs else EMPTY_ROOT
+
+
+# Pinned Bor crypto/secp256k1/libsecp256k1 curve parameters. This verifier is
+# restricted to the two public fixture keys; it does not decode arbitrary keys
+# or implement native transaction-admission policy.
+FIELD = 2**256 - 2**32 - 977
+ORDER = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+GENERATOR = (0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
+             0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+
+
+def point_add(left, right):
+    if left is None:
+        return right
+    if right is None:
+        return left
+    x, y = left
+    u, v = right
+    if x == u and (y != v or y == 0):
+        return None
+    slope = ((3 * x * x) * pow(2 * y, -1, FIELD) if left == right else (v - y) * pow(u - x, -1, FIELD)) % FIELD
+    result_x = (slope * slope - x - u) % FIELD
+    return result_x, (slope * (x - result_x) - y) % FIELD
+
+
+def point_multiply(scalar, point):
+    result = None
+    while scalar:
+        if scalar & 1:
+            result = point_add(result, point)
+        scalar >>= 1
+        point = point_add(point, point)
+    return result
+
+
+@functools.lru_cache(maxsize=4096)
+def fixture_signature(digest, parity, r, s, fixture_key):
+    """Verify both ECDSA and Ethereum recovery parity for public fixture1/2.
+
+    r must equal R.x (not merely R.x modulo n), matching Ethereum's one-bit
+    recovery convention. Expected-valid fixture authorization assertions are
+    separate from native EIP-7702 behavior, which skips invalid authorizations.
+    """
+    if not isinstance(digest, bytes) or len(digest) != 32 or fixture_key not in (1, 2):
+        raise ValueError("invalid fixture signature domain")
+    if parity not in (0, 1) or not 0 < r < ORDER or not 0 < s <= ORDER // 2:
+        raise ValueError("invalid fixture signature scalar/parity")
+    public = GENERATOR if fixture_key == 1 else point_add(GENERATOR, GENERATOR)
+    inverse = pow(s, -1, ORDER)
+    recovered_r = point_add(point_multiply(int.from_bytes(digest, "big") * inverse % ORDER, GENERATOR),
+                            point_multiply(r * inverse % ORDER, public))
+    if recovered_r is None or recovered_r[0] != r or recovered_r[1] % 2 != parity:
+        raise ValueError("signature does not bind expected fixture key and parity")

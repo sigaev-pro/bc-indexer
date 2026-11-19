@@ -81,6 +81,29 @@ def tx_wire(kind, index):
         if kind == 4:
             fields.append([[num(15001), bytes.fromhex(judge.SUCCESS[2:]), num(index - 6), b"", b"\x01", b"\x01"]])
         fields += [b"", b"\x01", b"\x01"]
+    if kind == 4:
+        fields[9][0][-3:] = sign_fixture(c.keccak256(b"\x05" + c.rlp(fields[9][0][:3])), 2)
+    return signed_wire(kind, fields)
+
+
+def sign_fixture(digest, key):
+    # Test input construction only. Retained native signatures independently
+    # exercise the verifier, so this helper is not its correctness oracle.
+    point = c.point_multiply(7, c.GENERATOR)
+    r = point[0]
+    s = pow(7, -1, c.ORDER) * (int.from_bytes(digest, "big") + r * key) % c.ORDER
+    parity = point[1] % 2
+    if s > c.ORDER // 2:
+        s, parity = c.ORDER - s, 1 - parity
+    return [num(parity), num(r), num(s)]
+
+
+def signed_wire(kind, fields):
+    fields = copy.deepcopy(fields)
+    digest = c.keccak256((bytes([kind]) if kind else b"") + c.rlp(fields[:-3] if kind else fields[:6] + [num(15001), b"", b""]))
+    fields[-3:] = sign_fixture(digest, 1)
+    if kind == 0:
+        fields[-3] = num(int.from_bytes(fields[-3], "big") + 30037)
     return (bytes([kind]) if kind else b"") + c.rlp(fields)
 
 
@@ -523,7 +546,7 @@ class PolygonJudgeProofTests(unittest.TestCase):
         outer[1][0] = b"\x7f\xc1\x01"
         row["raw_block"] = c.rlp(outer).hex()
         row["transaction_proofs"][0]["value"] = outer[1][0].hex()
-        with self.assertRaisesRegex(ValueError, "authenticated"):
+        with self.assertRaisesRegex(ValueError, "root|authenticated"):
             judge.native_block(row)
 
     def test_block_shape_and_index_controls(self):
@@ -594,15 +617,17 @@ class PolygonJudgeProofTests(unittest.TestCase):
             for position in positions:
                 bad = copy.deepcopy(fields)
                 bad[position] = b"\x09"
-                encoded = (bytes([kind]) if kind else b"") + c.rlp(bad)
+                encoded = signed_wire(kind, bad)
                 with self.subTest(kind=kind, position=position), self.assertRaises(ValueError):
                     judge.ordinary_fields(encoded, index)
             if kind == 4:
                 for position in range(6):
                     bad = copy.deepcopy(fields)
                     bad[9][0][position] = b"\x09" if position < 4 else b""
+                    if position < 3:
+                        bad[9][0][-3:] = sign_fixture(c.keccak256(b"\x05" + c.rlp(bad[9][0][:3])), 2)
                     with self.subTest(authorization=position), self.assertRaises(ValueError):
-                        judge.ordinary_fields(b"\x04" + c.rlp(bad), index)
+                        judge.ordinary_fields(signed_wire(4, bad), index)
 
     def test_native_decision_digest_vectors(self):
         vectors = json.loads((HERE.parents[2] / "adapters/bor/decision/vectors.json").read_text())
