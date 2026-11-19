@@ -58,7 +58,7 @@
       "name": "typed kind wrong",
       "file": "logic.go",
       "original": "crossingTransaction(config, kind, 1)",
-      "replacement": "crossingTransaction(config, 1, 1)"
+      "replacement": "crossingTransaction(config, kind | 1, 1)"
     },
     {
       "name": "gate error discarded",
