@@ -13,6 +13,9 @@ spec.loader.exec_module(encoding)
 wire_spec = importlib.util.spec_from_file_location("bsc_full_import_wire", HERE / "wire.py")
 wire = importlib.util.module_from_spec(wire_spec)
 wire_spec.loader.exec_module(wire)
+ledger_spec = importlib.util.spec_from_file_location("bsc_full_import_balance_ledger", HERE / "ledger.py")
+ledger_module = importlib.util.module_from_spec(ledger_spec)
+ledger_spec.loader.exec_module(ledger_module)
 q = encoding.quantity
 SENDER = "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"
 AUTHORITY = "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf"
@@ -31,6 +34,7 @@ INIT = "e1c7392a"
 INITIALIZE = "8129fc1c"
 DEPOSIT = "f340fa01"
 ELECTION = "1e4c1524"
+REGISTER = encoding.keccak256(b"createValidator(address,bytes,bytes,(uint64,uint64,uint64),(string,string,string,string))")[:4].hex()
 LEGACY_INIT = {"0x" + n.zfill(40) for n in ("1000", "1001", "1003", "1006", "1004", "1005", "2000")}
 FEYNMAN_INIT = {"0x" + n.zfill(40) for n in ("2002", "2004", "2005", "2006", "3000")}
 CURRENT_TIMES = ("feynmanTime", "feynmanFixTime", "cancunTime", "haberTime", "haberFixTime", "bohrTime",
@@ -54,6 +58,10 @@ def provenance():
 def check_genesis(genesis, config):
     require(genesis["config"] == config and config["chainId"] == 714, "wrong private configuration")
     require(q(genesis["timestamp"]) == GENESIS_TIME, "wrong genesis time")
+    require(q(genesis["gasLimit"]) == 40000000 and q(genesis["difficulty"]) == 1, "wrong genesis block parameters")
+    extra = bytes.fromhex(genesis["extraData"].removeprefix("0x"))
+    require(len(extra) == 166 and extra[:33] == bytes(32) + b"\x01" and extra[33:53] == bytes.fromhex(VALIDATOR[2:]) and
+            extra[101:] == bytes(65) and extra[53:101] != bytes(48), "wrong private validator genesis")
     require(all(config[key] == GENESIS_TIME + 6 for key in CURRENT_TIMES), "incoherent current fork schedule")
     require(config["jennerTime"] == GENESIS_TIME + 864000 and config["keplerTime"] == config["shanghaiTime"] == 0,
             "wrong warmup or future fork")
@@ -66,6 +74,19 @@ def check_genesis(genesis, config):
         require(actual == row["bytecode_sha256"], "modern contract bytecode differs")
         require(q(account["balance"]) == 0 and not account.get("storage"), "unexpected preinitialized system state")
         require(q(account.get("nonce", 0)) == 0, "unexpected system genesis nonce")
+    expected_allocations = {row["address"][2:] for row in provenance()} | {SENDER[2:], SUCCESS[2:], REVERT[2:]}
+    require(set(genesis["alloc"]) == expected_allocations, "unexpected genesis account set")
+    for address, balance, code in ((SENDER, 100000 * 10**18, ""), (SUCCESS, 0, "600160005500"), (REVERT, 0, "600260005560006000fd")):
+        account = genesis["alloc"][address[2:]]
+        require(q(account["balance"]) == balance and q(account.get("nonce", 0)) == 0 and not account.get("storage") and
+                account.get("code", "").removeprefix("0x") == code, "unexpected private genesis allocation")
+
+
+def ledger_addresses():
+    return {"all": {row["address"] for row in provenance()} | {SENDER, AUTHORITY, VALIDATOR, SUCCESS, REVERT, SYSTEM, BURN, CREDIT},
+            "sender": SENDER, "authority": AUTHORITY, "validator": VALIDATOR, "success": SUCCESS,
+            "system": SYSTEM, "burn": BURN, "credit": CREDIT, "stake_hub": STAKE_HUB,
+            "validator_contract": VALIDATOR_CONTRACT, "reward": REWARD}
 
 
 def check_bridge(bridge, blocks, genesis_header):
@@ -183,20 +204,18 @@ def check_system(row):
         packed = (PROTECTOR << 24) | 1 if to in (STAKE_HUB, "0x" + "2004".zfill(40)) else 1
         require(slot(before, to, "0") == 0 and slot(after, to, "0") == packed, "initializer packed state")
         expected_slots = {
-            "1000": {"1": 21}, "1001": {"4": 50, "5": 150},
+            "1000": {"1": 21, "validator_index": 0, "3": 0, "first_validator_incoming": 0}, "1001": {"4": 50, "5": 150},
             "1003": {"3": 0, "4": int.from_bytes(b"Binance-Chain-Tigris".ljust(32, b"\0"), "big"), "5": 10**16},
             "1004": {"1": 2 * 10**15, "native_decimals": 18},
             "1005": {"1": 1, "2": 5, "3": 1, "4": 80},
             "1006": {"1": 10**20, "2": 10**17}, "2000": {"1": 50, "2": 0, "3": 0, "4": 2**64 - 1},
-            "2002": {"53": 5000, "54": 2000 * 10**18, "55": 10**18, "56": 45, "74": 2},
+            "2002": {"53": 5000, "54": 2000 * 10**18, "55": 10**18, "56": 45, "57": 604800, "74": 2},
             "3000": {"1": 1, "51": PROTECTOR << 8},
         }.get(to[-4:], {})
         for key, value in expected_slots.items():
             require(slot(before, to, key) == 0 and slot(after, to, key) == value, "initializer selected storage: " + key)
         for address in before:
             require(balance(before, address) == balance(after, address), "initializer moved funds")
-        if to == VALIDATOR_CONTRACT:
-            require(slot(before, to, "1") == 0 and slot(after, to, "1") == 21, "validator initialization array")
     elif selector == DEPOSIT:
         require(to == VALIDATOR_CONTRACT and value > 0 and row["data"][8:] == VALIDATOR[2:].zfill(64), "wrong deposit input")
         require(slot(before, to, "0") == 1 and slot(before, to, "23") == slot(before, to, "24") == 0, "deposit preconditions")
@@ -221,7 +240,75 @@ def check_system(row):
         raise ValueError("unmodelled system transaction")
 
 
-def check_user(row, phase, index):
+def check_registration_input(row, vote):
+    fields = row["fields"]
+    require(q(fields["chainId"]) == 714 and q(fields["gas"]) == 8000000 and q(fields["gasPrice"]) == 2000000000,
+            "wrong registration envelope")
+    data = bytes.fromhex(row["data"])
+    require(data[:4].hex() == REGISTER and len(data) == 772, "wrong registration ABI size/selector")
+    args = data[4:]
+    word = lambda offset: int.from_bytes(args[offset:offset + 32], "big")
+    require(word(0) == int(VALIDATOR, 16) and [word(i * 32) for i in (1, 2, 3, 4, 5, 6)] == [224, 320, 100, 1000, 100, 448],
+            "wrong registration ABI head")
+    require(word(224) == 48 and args[256:304] == vote and args[304:320] == bytes(16), "wrong registration vote bytes")
+    require(word(320) == 96 and args[352:448] != bytes(96), "wrong registration proof bytes")
+    require([word(448 + i * 32) for i in range(4)] == [128, 192, 224, 256], "wrong registration description offsets")
+    for offset, expected in ((576, b"Extractor"), (640, b""), (672, b""), (704, b"bounded fixture")):
+        width = ((len(expected) + 31) // 32) * 32
+        require(word(offset) == len(expected) and args[offset + 32:offset + 32 + width] == expected.ljust(width, b"\0"),
+                "wrong registration description")
+
+
+def check_validator_tail(state):
+    # Pinned StakeHub Validator layout; raw words come from a separate producer loop.
+    for offset, label in ((10, "jailed"), (11, "jail_until"), (12, "updated"), (13, "agent")):
+        require(slot(state, STAKE_HUB, "validator_" + label) == slot(state, STAKE_HUB, "validator_word_" + str(offset)),
+                "validator label differs from raw word: " + label)
+
+
+def check_bootstrap(row, phase):
+    before, after = row["before"], row["after"]
+    restore = phase == "bootstrap-delegate"
+    require(row["type"] == 0 and row["to"].lower() == STAKE_HUB and row["nonce"] == (2 if restore else 1), "wrong bootstrap sender context")
+    fields = row["fields"]
+    require(q(fields["chainId"]) == 714 and q(fields["gas"]) == 2000000 and q(fields["gasPrice"]) == 2000000000, "wrong bootstrap envelope")
+    expected = ("982ef0a7" if restore else "4d99dd16") + SENDER[2:].zfill(64) + (0 if restore else 10**18).to_bytes(32, "big").hex()
+    require(row["data"] == expected, "wrong bootstrap ABI")
+    require(slot(before, VALIDATOR_CONTRACT, "11") == (21 if restore else 0) and slot(after, VALIDATOR_CONTRACT, "11") == 21,
+            "validator extras not initialized")
+    for state in (before, after):
+        check_validator_tail(state)
+        require(slot(state, VALIDATOR_CONTRACT, "validator_index") == 0 and slot(state, VALIDATOR_CONTRACT, "1") == 21,
+                "bootstrap changed validator membership")
+        require(slot(state, STAKE_HUB, "validator_jail_until") == 0 and slot(state, STAKE_HUB, "73") == 0, "bootstrap jailed only validator")
+        require(slot(state, STAKE_HUB, "validator_jailed") == 0, "bootstrap validator jailed flag")
+        require(slot(state, STAKE_HUB, "validator_agent") == 0, "bootstrap validator agent")
+        require(slot(state, STAKE_HUB, "57") == 604800, "unexpected unbond period")
+    gov = "0x" + "2005".zfill(40)
+    for state, pooled, own in ((before, 2000 if restore else 2001, 1999 if restore else 2000),
+                               (after, 2001 if restore else 2000, 2000 if restore else 1999)):
+        for key in ("103", "152"):
+            require(slot(state, CREDIT, key) == pooled * 10**18, "bootstrap credit pool/supply")
+        require(slot(state, CREDIT, "operator_shares") == own * 10**18 and slot(state, CREDIT, "locked_shares") == 10**18,
+                "bootstrap credit shares")
+        require(slot(state, gov, "gov_supply") == own * 10**18 and slot(state, gov, "gov_operator") == own * 10**18 and slot(state, gov, "gov_dead") == 0,
+                "bootstrap governance sync")
+    require(balance(before, CREDIT) == 2001 * 10**18 and balance(after, CREDIT) == (2002 if restore else 2001) * 10**18,
+            "pending unbond native funds")
+    request_hash = int.from_bytes(encoding.keccak256(bytes.fromhex(SENDER[2:]) + bytes(32)), "big")
+    pending = {"unbond_shares": 10**18, "unbond_amount": 10**18, "unbond_sequence": 1,
+               "unbond_queue": 1 << 128, "unbond_first": request_hash}
+    for key, value in pending.items():
+        require(slot(before, CREDIT, key) == (value if restore else 0) and slot(after, CREDIT, key) == value, "pending unbond field: " + key)
+    if restore:
+        require(slot(before, CREDIT, "unbond_unlock") == slot(after, CREDIT, "unbond_unlock") and
+                row["time"] < slot(after, CREDIT, "unbond_unlock"), "delegate changed pending unlock")
+    else:
+        require(slot(before, CREDIT, "unbond_unlock") == 0 and slot(after, CREDIT, "unbond_unlock") == row["time"] + 604800,
+                "wrong unbond unlock time")
+
+
+def check_user(row, phase, index, vote):
     before, after, receipt = row["before"], row["after"], row["receipt"]
     kind, fields = row["type"], row["fields"]
     require(row["from"].lower() == SENDER and row["nonce"] == index and before[SENDER]["nonce"] == index and after[SENDER]["nonce"] == index + 1,
@@ -234,10 +321,13 @@ def check_user(row, phase, index):
     if kind == 3:
         require(q(receipt["blobGasUsed"]) == 131072 and q(receipt["blobGasPrice"]) == 1, "wrong blob fees")
         fee += 131072
-    value = 2001 * 10**18 if phase == "registration" else 1
+    value = {"registration": 2001 * 10**18, "bootstrap-undelegate": 0, "bootstrap-delegate": 10**18}.get(phase, 1)
     require(q(row["value"]) == value and balance(before, SENDER) - balance(after, SENDER) == fee + status * value, "user fee/value accounting")
     require(balance(after, SYSTEM) - balance(before, SYSTEM) == fee, "system fee accumulation")
     if phase == "registration":
+        check_validator_tail(before)
+        check_validator_tail(after)
+        check_registration_input(row, vote)
         require(kind == 0 and row["to"].lower() == STAKE_HUB and value == 2001 * 10**18, "wrong registration")
         require(before[STAKE_HUB]["nonce"] == 0 and after[STAKE_HUB]["nonce"] == 1 and before[CREDIT]["nonce"] == 0 and
                 after[CREDIT]["nonce"] == 1, "credit CREATE nonce differs")
@@ -247,7 +337,8 @@ def check_user(row, phase, index):
                         "validator_consensus": int(VALIDATOR, 16), "validator_operator": int(SENDER, 16),
                         "validator_credit": int(CREDIT, 16), "validator_created": row["time"], "validator_updated": row["time"],
                         "validator_vote": 97, "validator_commission": 100 | (1000 << 64) | (100 << 128),
-                        "validator_jail_until": 0, "validator_identity": 0, "validator_website": 0}
+                        "validator_jailed": 0, "validator_jail_until": 0, "validator_agent": 0,
+                        "validator_identity": 0, "validator_website": 0}
         expected_hub["validator_moniker"] = int.from_bytes(b"Extractor".ljust(31, b"\0") + bytes([18]), "big")
         expected_hub["validator_details"] = int.from_bytes(b"bounded fixture".ljust(31, b"\0") + bytes([30]), "big")
         for key, expected in expected_hub.items():
@@ -256,8 +347,15 @@ def check_user(row, phase, index):
                            "operator_shares": 2000 * 10**18, "locked_shares": 10**18, "implementation": 0x2003, "admin": 0xdead}
         for key, expected in expected_credit.items():
             require(slot(before, CREDIT, key) == 0 and slot(after, CREDIT, key) == expected, "registration credit storage: " + key)
+        gov = "0x" + "2005".zfill(40)
+        for key in ("gov_supply", "gov_operator"):
+            require(slot(before, gov, key) == 0 and slot(after, gov, key) == 2000 * 10**18, "registration governance sync")
+        require(slot(after, gov, "gov_dead") == 0, "registration governance dead balance")
         return
-    require(phase in ("success", "revert") and kind == (index - 1) % 5 and row["time"] >= GENESIS_TIME + 6, "wrong current type row")
+    if phase in ("bootstrap-undelegate", "bootstrap-delegate"):
+        check_bootstrap(row, phase)
+        return
+    require(phase in ("success", "revert") and kind == (index - 3) % 5 and row["time"] >= GENESIS_TIME + 6, "wrong current type row")
     target = SUCCESS if phase == "success" else REVERT
     recipient = AUTHORITY if kind == 4 else target
     require(row["to"].lower() == recipient and q(fields["chainId"]) == 714 and q(fields["gas"]) == 150000 and fields["input"] == "0x", "wrong source fields")
@@ -289,22 +387,25 @@ def check(report, generated, genesis):
         require(type(report.get("schema_version")) is int and report["schema_version"] == 1 and report["scope"] == "private-current-fork-parlia-import", "wrong report")
         require(all(report[key] == "NOT_RUN" for key in ("public_profiles", "activation_import_controls", "unknown_import_control")), "unexecuted profile/control credit")
         check_genesis(genesis, report["config"])
+        vote = bytes.fromhex(genesis["extraData"].removeprefix("0x"))[53:101]
         require(4 <= len(generated) <= 40 and report["blocks"] == len(generated), "wrong block coverage")
         genesis_header = encoding.native_header(report["genesis_wire"])
         previous = genesis_header
         for number, block in enumerate(generated, 1):
+            require(all(type(block[key]) is int and block[key] >= 0 for key in ("number", "time", "transactions")), "wrong block scalar types")
             native = encoding.native_header(block["wire"])
             require(native["number"] == block["number"] == number and native["time"] == block["time"] and
                     native["hash"] == block["hash"] and native["root"] == block["root"] and native["parent"] == normalized(previous["hash"]), "block identity/continuity differs")
             previous = native
-        require([b["phase"] for b in generated if b["phase"] != "warmup"] == ["registration", "success", "revert"], "missing registration or target blocks")
+        require([b["phase"] for b in generated if b["phase"] != "warmup"] == ["registration", "bootstrap-undelegate", "bootstrap-delegate", "success", "revert"], "missing registration or target blocks")
         targets = [b for b in generated if b["phase"] in ("success", "revert")]
         require(all(b["validator_index"] == "1" and b["time"] >= GENESIS_TIME + 6 for b in targets), "target validator not active")
         check_bridge(report["bridge"], generated, genesis_header)
         require(report["reimport_before"] == report["bridge"] == report["reimport_after"], "reimport changed durable capture")
         rows = report["transactions"]
         require(len(rows) == sum(b["transactions"] for b in generated), "missing transaction snapshots")
-        user_index = 0; init_seen = set(); feynman_seen = set(); election_count = 0
+        user_index = 0; init_seen = set(); feynman_seen = set(); election_count = 0; pending_unlock = None
+        ledger = ledger_module.BalanceLedger(genesis, ledger_addresses(), q)
         for block in generated:
             block_rows = [r for r in rows if r["block"] == block["number"]]
             require(len(block_rows) == block["transactions"], "wrong per-block row count")
@@ -312,6 +413,7 @@ def check(report, generated, genesis):
             seen_system = False; target_types = []
             cumulative_gas = 0
             for transaction_index, row in enumerate(block_rows):
+                require(all(type(row[key]) is int and row[key] >= 0 for key in ("block", "time", "type", "nonce")), "wrong transaction scalar types")
                 check_wire(row)
                 cumulative_gas = check_receipt(row, cumulative_gas, transaction_index, block)
                 require(row["time"] == block["time"] and type(row["system"]) is bool, "wrong transaction context")
@@ -328,14 +430,23 @@ def check(report, generated, genesis):
                     if selector == INITIALIZE:
                         require(row["to"].lower() not in feynman_seen and row["block"] == 2, "repeated Feynman initializer"); feynman_seen.add(row["to"].lower())
                     if selector == ELECTION: election_count += 1
+                    if selector == DEPOSIT:
+                        require(slot(row["before"], VALIDATOR_CONTRACT, "validator_index") == int(election_count > 0), "deposit election branch differs")
                 else:
                     require(not seen_system, "user transaction after system transaction")
-                    check_user(row, block["phase"], user_index); user_index += 1
+                    check_user(row, block["phase"], user_index, vote); user_index += 1
                     if block["phase"] in ("success", "revert"): target_types.append(row["type"])
+                if not row["system"] and block["phase"] == "bootstrap-undelegate":
+                    pending_unlock = row["time"] + 604800
+                if pending_unlock is not None:
+                    require(slot(row["after"], CREDIT, "unbond_unlock") == pending_unlock, "pending unlock continuity")
+                    if row["system"] or block["phase"] != "bootstrap-undelegate":
+                        require(slot(row["before"], CREDIT, "unbond_unlock") == pending_unlock, "pending unlock before continuity")
+                ledger.apply(row, block["phase"])
             if block["phase"] in ("success", "revert"):
                 require(target_types == list(range(5)), "missing native type variant")
             require(cumulative_gas == wire.integer(header[10]), "header gas differs")
-        require(user_index == 11 and init_seen == LEGACY_INIT and feynman_seen == FEYNMAN_INIT and election_count == 1, "incomplete bootstrap/current execution")
+        require(user_index == 13 and init_seen == LEGACY_INIT and feynman_seen == FEYNMAN_INIT and election_count == 1, "incomplete bootstrap/current execution")
         return {"result": "PASS", "errors": [], "scope": "private current-fork import selected-state fixture", "public_profile_credit": False,
                 "activation_import_controls": "NOT_RUN", "unknown_import_control": "NOT_RUN"}
     except (ValueError, KeyError, TypeError, IndexError, AttributeError) as error:

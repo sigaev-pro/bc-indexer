@@ -9,7 +9,9 @@
     "test/type_paths/bsc/modern_init/provenance.json",
     "test/type_paths/eth/eth_type_judge.py",
     "test/harness/*.py",
-    "test/evidence/*.py"
+    "test/evidence/*.py",
+    "test/type_paths/bsc/full_import/trie_vectors.json",
+    "test/type_paths/bsc/full_import/oracle_sources.json"
   ],
   "test": [
     "{python}",
@@ -99,6 +101,18 @@
       "file": "test/type_paths/bsc/full_import/native.py",
       "original": "diagnostic or checked[\"result\"] == \"PASS\"",
       "replacement": "True"
+    },
+    {
+      "name": "short trie child embedding",
+      "file": "test/type_paths/bsc/full_import/wire.py",
+      "original": "return node if len(raw) < 32 else keccak(raw)",
+      "replacement": "return keccak(raw)"
+    },
+    {
+      "name": "shared trie extension path",
+      "file": "test/type_paths/bsc/full_import/wire.py",
+      "original": "if common:",
+      "replacement": "if False:"
     }
   ]
 }

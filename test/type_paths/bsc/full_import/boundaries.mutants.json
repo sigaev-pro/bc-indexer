@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "description": "Genesis, receipt and durable decision boundary controls.",
+  "copy": [
+    "test/type_paths/bsc/full_import/*.py",
+    "test/type_paths/bsc/modern_init/provenance.json",
+    "test/type_paths/eth/eth_type_judge.py"
+  ],
+  "test": [
+    "{python}",
+    "test/type_paths/bsc/full_import/test_boundaries.py",
+    "-v"
+  ],
+  "import": [
+    "test_boundaries"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "normalized: \"invalid hash\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(isinstance(value, str) and re.fullmatch(r\"(?:0x)?[0-9a-fA-F]{64}\", value) is not None, \"invalid hash\")",
+      "replacement": "require(True, \"invalid hash\")"
+    },
+    {
+      "name": "check_genesis: \"wrong private configuration\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(genesis[\"config\"] == config and config[\"chainId\"] == 714, \"wrong private configuration\")",
+      "replacement": "require(True, \"wrong private configuration\")"
+    },
+    {
+      "name": "check_genesis: \"wrong genesis time\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(genesis[\"timestamp\"]) == GENESIS_TIME, \"wrong genesis time\")",
+      "replacement": "require(True, \"wrong genesis time\")"
+    },
+    {
+      "name": "check_genesis: \"wrong genesis block parameters\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(genesis[\"gasLimit\"]) == 40000000 and q(genesis[\"difficulty\"]) == 1, \"wrong genesis block parameters\")",
+      "replacement": "require(True, \"wrong genesis block parameters\")"
+    },
+    {
+      "name": "check_genesis: \"wrong private validator genesis\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(len(extra) == 166 and extra[:33] == bytes(32) + b\"\\x01\" and extra[33:53] == bytes.fromhex(VALIDATOR[2:]) and\n            extra[101:] == bytes(65) and extra[53:101] != bytes(48), \"wrong private validator genesis\")",
+      "replacement": "require(True, \"wrong private validator genesis\")"
+    },
+    {
+      "name": "check_genesis: \"incoherent current fork schedule\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(all(config[key] == GENESIS_TIME + 6 for key in CURRENT_TIMES), \"incoherent current fork schedule\")",
+      "replacement": "require(True, \"incoherent current fork schedule\")"
+    },
+    {
+      "name": "check_genesis: \"wrong warmup or future fork\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(config[\"jennerTime\"] == GENESIS_TIME + 864000 and config[\"keplerTime\"] == config[\"shanghaiTime\"] == 0,\n            \"wrong warmup or future fork\")",
+      "replacement": "require(True, \"wrong warmup or future fork\")"
+    },
+    {
+      "name": "check_genesis: \"unexpected genesis account set\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(set(genesis[\"alloc\"]) == expected_allocations, \"unexpected genesis account set\")",
+      "replacement": "require(True, \"unexpected genesis account set\")"
+    },
+    {
+      "name": "check_genesis: \"modern contract bytecode differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(actual == row[\"bytecode_sha256\"], \"modern contract bytecode differs\")",
+      "replacement": "require(True, \"modern contract bytecode differs\")"
+    },
+    {
+      "name": "check_genesis: \"unexpected preinitialized system state\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(account[\"balance\"]) == 0 and not account.get(\"storage\"), \"unexpected preinitialized system state\")",
+      "replacement": "require(True, \"unexpected preinitialized system state\")"
+    },
+    {
+      "name": "check_genesis: \"unexpected system genesis nonce\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(account.get(\"nonce\", 0)) == 0, \"unexpected system genesis nonce\")",
+      "replacement": "require(True, \"unexpected system genesis nonce\")"
+    },
+    {
+      "name": "check_genesis: \"unexpected private genesis allocation\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(account[\"balance\"]) == balance and q(account.get(\"nonce\", 0)) == 0 and not account.get(\"storage\") and\n                account.get(\"code\", \"\").removeprefix(\"0x\") == code, \"unexpected private genesis allocation\")",
+      "replacement": "require(True, \"unexpected private genesis allocation\")"
+    },
+    {
+      "name": "check_genesis: \"delayed block fork\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(value == 0, \"delayed block fork\")",
+      "replacement": "require(True, \"delayed block fork\")"
+    },
+    {
+      "name": "check_bridge: \"wrong captured head\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(bridge[\"mode\"] == \"LIVE\" and bridge[\"head_number\"] == n and\n            bridge[\"head_hash\"] == normalized(blocks[-1][\"hash\"]), \"wrong captured head\")",
+      "replacement": "require(True, \"wrong captured head\")"
+    },
+    {
+      "name": "check_bridge: \"wrong observation frontier\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(bridge[\"counters\"] == [n, n] and bridge[\"open_observations\"] == [], \"wrong observation frontier\")",
+      "replacement": "require(True, \"wrong observation frontier\")"
+    },
+    {
+      "name": "check_bridge: \"wrong admission frontier\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(bridge[\"admission_records\"] == {\"counter\": {\"next\": n}, \"lowwater\": {\"sequence\": n}, \"purged\": {\"sequence\": n}},\n            \"wrong admission frontier\")",
+      "replacement": "require(True, \"wrong admission frontier\")"
+    },
+    {
+      "name": "check_bridge: \"wrong decision frontier\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(set(records) == expected_keys and records[\"counter\"] == {\"next\": n}, \"wrong decision frontier\")",
+      "replacement": "require(True, \"wrong decision frontier\")"
+    },
+    {
+      "name": "check_bridge: \"wrong delivery obligations\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(bridge[\"obligations\"] == expected_obligations, \"wrong delivery obligations\")",
+      "replacement": "require(True, \"wrong delivery obligations\")"
+    },
+    {
+      "name": "check_bridge: \"wrong intent schema\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(set(intent) == {\"native_store_id\", \"producer\", \"sequence\", \"kind\", \"old_head\", \"new_head\", \"members\", \"evidence_digest\", \"events\", \"digest\"}, \"wrong intent schema\")",
+      "replacement": "require(True, \"wrong intent schema\")"
+    },
+    {
+      "name": "check_bridge: \"wrong intent identity\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(intent[\"native_store_id\"] == \"0123456789abcdef0123456789abcdef\" and intent[\"producer\"] == \"bsc-probe.run-1\" and\n                type(intent[\"sequence\"]) is int and intent[\"sequence\"] == index and intent[\"kind\"] == \"IMPORT\" and intent[\"events\"] is True,\n                \"wrong intent identity\")",
+      "replacement": "require(True, \"wrong intent identity\")"
+    },
+    {
+      "name": "check_bridge: \"wrong decision heads\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(intent[\"old_head\"] == previous and intent[\"new_head\"] == head, \"wrong decision heads\")",
+      "replacement": "require(True, \"wrong decision heads\")"
+    },
+    {
+      "name": "check_bridge: \"wrong member count\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(len(intent[\"members\"]) == 1, \"wrong member count\")",
+      "replacement": "require(True, \"wrong member count\")"
+    },
+    {
+      "name": "check_bridge: \"wrong capture member\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(set(member) == {\"observation\", \"block\", \"exec_ready_digest\", \"child_root\"} and\n                member[\"observation\"] == f\"bsc-probe.run-1.{index:016x}\" and member[\"block\"] == head[\"hash\"] and\n                member[\"child_root\"] == normalized(block[\"root\"]), \"wrong capture member\")",
+      "replacement": "require(True, \"wrong capture member\")"
+    },
+    {
+      "name": "check_bridge: \"wrong intent digest\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(intent[\"digest\"] == encoding.intent_digest(intent), \"wrong intent digest\")",
+      "replacement": "require(True, \"wrong intent digest\")"
+    },
+    {
+      "name": "check_bridge: \"wrong decided record\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(decided == {\"sequence\": index, \"intent_digest\": intent[\"digest\"], \"delivery\": \"BATCH\",\n                            \"digest\": encoding.decided_digest(intent[\"digest\"], \"BATCH\")}, \"wrong decided record\")",
+      "replacement": "require(True, \"wrong decided record\")"
+    },
+    {
+      "name": "check_receipt: \"stored receipt differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(raw == bytes.fromhex(row[\"observed_receipt_wire\"]), \"stored receipt differs\")",
+      "replacement": "require(True, \"stored receipt differs\")"
+    },
+    {
+      "name": "check_receipt: \"receipt arity differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(len(fields) == 4, \"receipt arity differs\")",
+      "replacement": "require(True, \"receipt arity differs\")",
+      "equivalent": "Removing the explicit len(fields)==4 check cannot change the verdict: the immediately following mandatory four-target tuple unpack raises ValueError for every other cardinality. The top-level judge catches ValueError. This relies on keeping that unpack unchanged; error wording may differ."
+    },
+    {
+      "name": "check_receipt: \"receipt gas/status differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(wire.integer(status) == q(receipt[\"status\"]) and wire.integer(cumulative) == q(receipt[\"cumulativeGasUsed\"]) and\n            wire.integer(cumulative) - prior_gas == q(receipt[\"gasUsed\"]), \"receipt gas/status differs\")",
+      "replacement": "require(True, \"receipt gas/status differs\")"
+    },
+    {
+      "name": "check_receipt: \"receipt bloom differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(len(bloom) == 256 and \"0x\" + bloom.hex() == receipt[\"logsBloom\"], \"receipt bloom differs\")",
+      "replacement": "require(True, \"receipt bloom differs\")"
+    },
+    {
+      "name": "check_receipt: \"receipt log count differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(isinstance(logs, list) and len(logs) == len(observed_logs), \"receipt log count differs\")",
+      "replacement": "require(True, \"receipt log count differs\")"
+    },
+    {
+      "name": "check_receipt: \"receipt block context differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(receipt[\"transactionIndex\"]) == transaction_index and q(receipt[\"blockNumber\"]) == block[\"number\"] and\n            normalized(receipt[\"blockHash\"]) == normalized(block[\"hash\"]), \"receipt block context differs\")",
+      "replacement": "require(True, \"receipt block context differs\")"
+    },
+    {
+      "name": "check_receipt: \"receipt envelope type differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(raw[0] == kind, \"receipt envelope type differs\")",
+      "replacement": "require(True, \"receipt envelope type differs\")"
+    },
+    {
+      "name": "check_receipt: \"invalid receipt log\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(isinstance(encoded, list) and len(encoded) == 3 and isinstance(encoded[1], list), \"invalid receipt log\")",
+      "replacement": "require(True, \"invalid receipt log\")"
+    },
+    {
+      "name": "check_receipt: \"receipt log differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(wire.address(address) == actual[\"address\"] and all(isinstance(topic, bytes) and len(topic) == 32 for topic in topics) and\n                [\"0x\" + topic.hex() for topic in topics] == actual[\"topics\"] and \"0x\" + data.hex() == actual[\"data\"], \"receipt log differs\")",
+      "replacement": "require(True, \"receipt log differs\")"
+    }
+  ]
+}
