@@ -258,13 +258,15 @@
       "name": "account_claims: invalid account leaf",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(len(fields) == 4, \"invalid account leaf\")",
-      "replacement": "check(True, 'invalid account leaf')"
+      "replacement": "check(True, 'invalid account leaf')",
+      "equivalent": "Equivalent: assigning storage_root, code_hash = fields[2:] requires exactly two values, and indexing fields[0:2] requires two preceding values. Every other leaf arity raises ValueError or IndexError, both rejected by judge."
     },
     {
       "name": "account_claims: invalid account commitments",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(len(storage_root) == len(code_hash) == 32, \"invalid account commitments\")",
-      "replacement": "check(True, 'invalid account commitments')"
+      "replacement": "check(True, 'invalid account commitments')",
+      "equivalent": "Equivalent: the later account subroot binding compares each commitment against octets(JSON field, 32), which independently requires exactly 32 bytes. A commitment of any other width cannot satisfy equality."
     },
     {
       "name": "account_claims: storage value not authenticated",
@@ -570,7 +572,8 @@
       "name": "system_state: wrong receiver progress",
       "file": "test/type_paths/poly/poly_judge.py",
       "original": "check(before[RECEIVER][\"storage\"][0] == 0 and after[RECEIVER][\"storage\"][0] == 2, \"wrong receiver progress\")",
-      "replacement": "check(True, 'wrong receiver progress')"
+      "replacement": "check(True, 'wrong receiver progress')",
+      "equivalent": "Equivalent: first outer_before equals initial before and is checked at index-1 = 0; each outer_after is checked at index, and the last action after equals authenticated after. These action continuity checks force exactly 0 to 2."
     },
     {
       "name": "system_state: successful system target effects differ",
