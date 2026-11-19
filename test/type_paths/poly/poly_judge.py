@@ -392,6 +392,9 @@ def component_claims(components, head):
 def refusal_claims(rows, blocks):
     names = ["missing", "non-final", "mismatched-l1-hash", "reordered-items", "duplicate-body"]
     check([row["case"] for row in rows] == names, "StateSync refusal cases incomplete")
+    expected_items = [[bytes([index]), octets(address), EVENT_DATA, index.to_bytes(32, "big")]
+                      for index, address in ((1, TARGET), (2, REVERT))]
+    original = b"\x7f" + codec.rlp(expected_items)
     for row in rows:
         check("control_error" not in row and isinstance(row.get("error"), str) and "state-sync mismatch" in row["error"].lower(), "missing native StateSync refusal")
         check(row["head_before"] == row["head_after"] == blocks[2]["hash"], "refused import changed canonical head")
@@ -401,16 +404,22 @@ def refusal_claims(rows, blocks):
         if case == "missing":
             check(txs == [], "missing-StateSync control has transactions")
         elif case == "non-final":
-            check(len(txs) == 2 and txs[0][0] == 127 and txs[1][0] >= 192, "StateSync is not followed by ordinary tx")
+            check(len(txs) == 2 and txs[0] == original and txs[1][0] >= 192, "StateSync is not followed by ordinary tx")
+            normal = plain_rlp(codec.rlp_list(txs[1]))
+            check(len(normal) == 9 and [integer(x) for x in normal[:3]] == [8, 5_000_000_000, 21000] and
+                  normal[3] == octets(SUCCESS) and normal[4:6] == [b"\x01", b""] and
+                  integer(normal[6]) in (30037, 30038), "non-final control ordinary input differs")
         elif case == "duplicate-body":
-            check(len(txs) == 2 and txs[0] == txs[1] and txs[0][0] == 127, "StateSync duplicate control differs")
+            check(txs == [original, original], "StateSync duplicate control differs")
         else:
             check(len(txs) == 1 and txs[0][0] == 127, "wrong mismatched StateSync envelope")
             items = plain_rlp(codec.rlp_list(txs[0][1:]))
             if case == "mismatched-l1-hash":
-                check(items[0][3] == (153).to_bytes(32, "big"), "L1 hash mismatch control absent")
+                changed = [list(item) for item in expected_items]
+                changed[0][3] = (153).to_bytes(32, "big")
+                check(items == changed, "L1 hash mismatch control absent")
             else:
-                check([integer(item[0]) for item in items] == [2, 1], "item-order mismatch control absent")
+                check(items == list(reversed(expected_items)), "item-order mismatch control absent")
         check_records(row["decisions"], row["admission"], blocks[:3], frontier=4)
 
 
