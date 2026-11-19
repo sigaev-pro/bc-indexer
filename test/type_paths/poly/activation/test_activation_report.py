@@ -180,6 +180,30 @@ class ActivationNativeReport(unittest.TestCase):
             relink(row)
         self.reject(change)
 
+    def test_extra_legacy_transaction_cannot_hide_behind_valid_first_receipt(self):
+        def change(x):
+            row = x["cases"][0]
+            first = row["control"]["blocks"][0]
+            tx = bytes.fromhex(first["transaction_proofs"][0]["value"])
+            vectors.bind_body(first, [tx, tx])
+            relink(row)
+        self.reject(change)
+
+    def test_other_authenticated_native_state_is_not_the_control_outcome(self):
+        alternate = json.loads((HERE / "alternate_state.json").read_text())["state"]
+        # This proof is valid, but its sender nonce/balance and recipient amount
+        # follow eight actual transactions from accepted PR189, not one here.
+        j.prior.account_claims(alternate, bytes.fromhex(alternate["root"][2:]))
+        def change(x):
+            row = x["cases"][0]
+            for block in row["control"]["blocks"]:
+                block["account_proofs"] = copy.deepcopy(alternate["account_proofs"])
+                block["state_after"] = copy.deepcopy(alternate["state_after"])
+                edit_header(block, 3, bytes.fromhex(alternate["root"][2:]))
+            edit_header(row["attempt"]["block"], 3, bytes.fromhex(alternate["root"][2:]))
+            relink(row)
+        self.reject(change)
+
 
 if __name__ == "__main__":
     unittest.main()
