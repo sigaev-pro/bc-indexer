@@ -538,6 +538,10 @@ func modernState(st tracing.StateDB, addresses []common.Address, validator commo
 				key := common.BigToHash(new(big.Int).Add(base, big.NewInt(int64(i))))
 				slots["validator_"+name] = st.GetState(address, key).Hex()
 			}
+			for _, offset := range []int64{10, 11, 12, 13} {
+				key := common.BigToHash(new(big.Int).Add(base, big.NewInt(offset)))
+				slots[fmt.Sprintf("validator_word_%d", offset)] = st.GetState(address, key).Hex()
+			}
 		}
 		if address == common.HexToAddress("0x2005") {
 			slots["gov_supply"] = st.GetState(address, common.BigToHash(big.NewInt(53))).Hex()
