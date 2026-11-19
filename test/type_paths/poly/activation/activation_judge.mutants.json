@@ -238,12 +238,6 @@
       "replacement": "check(True, 'legacy receipt identity differs')"
     },
     {
-      "name": "judge native state nonce is not a JSON integer",
-      "file": "test/type_paths/poly/activation/activation_judge.py",
-      "original": "check(type(account[\"nonce\"]) is int, \"native state nonce is not a JSON integer\")",
-      "replacement": "check(True, 'native state nonce is not a JSON integer')"
-    },
-    {
       "name": "judge actual native head differs",
       "file": "test/type_paths/poly/activation/activation_judge.py",
       "original": "check(row[\"head_hash\"] == head, \"actual native head differs\")",

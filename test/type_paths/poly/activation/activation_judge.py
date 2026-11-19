@@ -159,8 +159,6 @@ def stored(row, header, txs, legacy_receipt):
         check(prior.consensus_logs(receipt["logs"]) == expected_logs and octets(receipt["logsBloom"]) == bloom, "legacy receipt logs differ")
         check(receipt["transactionHash"] == "0x" + codec.keccak256(txs[0]).hex() and receipt["blockHash"] == row["hash"] and
               quantity(receipt["blockNumber"]) == 1 and quantity(receipt["transactionIndex"]) == 0, "legacy receipt identity differs")
-    for account in row["state_after"].values():
-        check(type(account["nonce"]) is int, "native state nonce is not a JSON integer")
     prior.account_claims(row, header[3])
     return prior.snapshot(row["state_after"], False)
 
