@@ -10,6 +10,9 @@ ROOT = HERE.parents[3]
 spec = importlib.util.spec_from_file_location("bsc_full_import_encodings", ROOT / "test/type_paths/eth/eth_type_judge.py")
 encoding = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(encoding)
+wire_spec = importlib.util.spec_from_file_location("bsc_full_import_wire", HERE / "wire.py")
+wire = importlib.util.module_from_spec(wire_spec)
+wire_spec.loader.exec_module(wire)
 q = encoding.quantity
 SENDER = "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"
 AUTHORITY = "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf"
@@ -22,6 +25,8 @@ REWARD = "0x" + "1002".zfill(40)
 BURN = "0x" + "dead".zfill(40)
 SYSTEM = "0x" + "f" * 39 + "e"
 GENESIS_TIME = 1794959990
+PROTECTOR = int("08E68Ec70FA3b629784fDB28887e206ce8561E08", 16)
+CREDIT = "0x" + encoding.keccak256(wire.encode([bytes.fromhex(STAKE_HUB[2:]), 0]))[-20:].hex()
 INIT = "e1c7392a"
 INITIALIZE = "8129fc1c"
 DEPOSIT = "f340fa01"
@@ -60,6 +65,7 @@ def check_genesis(genesis, config):
         actual = hashlib.sha256(bytes.fromhex(account["code"].removeprefix("0x"))).hexdigest()
         require(actual == row["bytecode_sha256"], "modern contract bytecode differs")
         require(q(account["balance"]) == 0 and not account.get("storage"), "unexpected preinitialized system state")
+        require(q(account.get("nonce", 0)) == 0, "unexpected system genesis nonce")
 
 
 def check_bridge(bridge, blocks, genesis_header):
@@ -105,6 +111,65 @@ def slot(state, address, key):
     return q(state[address]["storage"][key])
 
 
+def check_wire(row):
+    decoded = wire.transaction(bytes.fromhex(row["wire"]), encoding)
+    numeric = {"type", "chainId", "nonce", "gas", "value", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "maxFeePerBlobGas", "r", "s", "v"}
+    for name, expected in decoded.items():
+        if name == "from":
+            require(row["from"].lower() == expected, "recovered sender differs")
+        elif name == "authorizationList":
+            observed = row["fields"][name]
+            require(len(observed) == len(expected), "authorization count differs")
+            for actual, wanted in zip(observed, expected):
+                require(wanted["authority"] == AUTHORITY, "unexpected authorization signer")
+                for field, value in wanted.items():
+                    if field != "authority":
+                        require((actual[field].lower() if field == "address" else q(actual[field])) == value, "authorization wire differs")
+        else:
+            actual = row["fields"][name]
+            require((q(actual) if name in numeric else actual) == expected, "transaction JSON differs from wire: " + name)
+    require(row["type"] == decoded["type"] and row["nonce"] == decoded["nonce"] and q(row["value"]) == decoded["value"] and
+            row["to"].lower() == decoded["to"] and "0x" + row["data"] == decoded["input"] and
+            "0x" + normalized(row["hash"]) == decoded["hash"], "snapshot envelope differs")
+
+
+def check_receipt(row, prior_gas, transaction_index, block):
+    raw = bytes.fromhex(row["stored_receipt_wire"])
+    require(raw == bytes.fromhex(row["observed_receipt_wire"]), "stored receipt differs")
+    kind = row["type"]
+    if kind:
+        require(raw[0] == kind, "receipt envelope type differs")
+        raw = raw[1:]
+    fields = wire.unpack(encoding.rlp_list(raw))
+    require(len(fields) == 4, "receipt arity differs")
+    status, cumulative, bloom, logs = fields
+    receipt = row["receipt"]
+    require(wire.integer(status) == q(receipt["status"]) and wire.integer(cumulative) == q(receipt["cumulativeGasUsed"]) and
+            wire.integer(cumulative) - prior_gas == q(receipt["gasUsed"]), "receipt gas/status differs")
+    require(len(bloom) == 256 and "0x" + bloom.hex() == receipt["logsBloom"], "receipt bloom differs")
+    observed_logs = receipt["logs"] if receipt["logs"] is not None else []
+    require(isinstance(logs, list) and len(logs) == len(observed_logs), "receipt log count differs")
+    for encoded, actual in zip(logs, observed_logs):
+        require(isinstance(encoded, list) and len(encoded) == 3 and isinstance(encoded[1], list), "invalid receipt log")
+        address, topics, data = encoded
+        require(wire.address(address) == actual["address"] and all(isinstance(topic, bytes) and len(topic) == 32 for topic in topics) and
+                ["0x" + topic.hex() for topic in topics] == actual["topics"] and "0x" + data.hex() == actual["data"], "receipt log differs")
+    require(q(receipt["transactionIndex"]) == transaction_index and q(receipt["blockNumber"]) == block["number"] and
+            normalized(receipt["blockHash"]) == normalized(block["hash"]), "receipt block context differs")
+    return wire.integer(cumulative)
+
+
+def check_block_wires(block, rows):
+    body = encoding.rlp_list(bytes.fromhex(block["wire"]))
+    header = wire.unpack(body[0][0])
+    transactions = [raw if isinstance(value, list) else value for value, raw in body[1][0]]
+    require(transactions == [bytes.fromhex(row["wire"]) for row in rows], "ordered block transactions differ")
+    require(wire.trie_root(transactions, encoding.keccak256) == header[4], "transaction trie root differs")
+    receipts = [bytes.fromhex(row["stored_receipt_wire"]) for row in rows]
+    require(wire.trie_root(receipts, encoding.keccak256) == header[5], "receipt trie root differs")
+    return header
+
+
 def check_system(row):
     before, after = row["before"], row["after"]
     to, selector, value = row["to"].lower(), row["data"][:8], q(row["value"])
@@ -115,7 +180,19 @@ def check_system(row):
     if selector in (INIT, INITIALIZE):
         expected = LEGACY_INIT if selector == INIT else FEYNMAN_INIT
         require(to in expected and value == 0, "wrong initializer")
-        require(slot(before, to, "0") == 0 and slot(after, to, "0") == 1, "initializer state flag")
+        packed = (PROTECTOR << 24) | 1 if to in (STAKE_HUB, "0x" + "2004".zfill(40)) else 1
+        require(slot(before, to, "0") == 0 and slot(after, to, "0") == packed, "initializer packed state")
+        expected_slots = {
+            "1000": {"1": 21}, "1001": {"4": 50, "5": 150},
+            "1003": {"3": 0, "4": int.from_bytes(b"Binance-Chain-Tigris".ljust(32, b"\0"), "big"), "5": 10**16},
+            "1004": {"1": 2 * 10**15, "native_decimals": 18},
+            "1005": {"1": 1, "2": 5, "3": 1, "4": 80},
+            "1006": {"1": 10**20, "2": 10**17}, "2000": {"1": 50, "2": 0, "3": 0, "4": 2**64 - 1},
+            "2002": {"53": 5000, "54": 2000 * 10**18, "55": 10**18, "56": 45, "74": 2},
+            "3000": {"1": 1, "51": PROTECTOR << 8},
+        }.get(to[-4:], {})
+        for key, value in expected_slots.items():
+            require(slot(before, to, key) == 0 and slot(after, to, key) == value, "initializer selected storage: " + key)
         for address in before:
             require(balance(before, address) == balance(after, address), "initializer moved funds")
         if to == VALIDATOR_CONTRACT:
@@ -162,6 +239,21 @@ def check_user(row, phase, index):
     require(balance(after, SYSTEM) - balance(before, SYSTEM) == fee, "system fee accumulation")
     if phase == "registration":
         require(kind == 0 and row["to"].lower() == STAKE_HUB and value == 2001 * 10**18, "wrong registration")
+        require(before[STAKE_HUB]["nonce"] == 0 and after[STAKE_HUB]["nonce"] == 1 and before[CREDIT]["nonce"] == 0 and
+                after[CREDIT]["nonce"] == 1, "credit CREATE nonce differs")
+        require(balance(before, CREDIT) == 0 and balance(after, CREDIT) == value and balance(before, STAKE_HUB) == balance(after, STAKE_HUB) == 0 and
+                balance(before, BURN) == balance(after, BURN), "registration fund movement differs")
+        expected_hub = {"63": 1, "operator_index": 1, "consensus_operator": int(SENDER, 16),
+                        "validator_consensus": int(VALIDATOR, 16), "validator_operator": int(SENDER, 16),
+                        "validator_credit": int(CREDIT, 16), "validator_created": row["time"], "validator_updated": row["time"],
+                        "validator_vote": 97, "validator_commission": 100 | (1000 << 64) | (100 << 128),
+                        "validator_jail_until": 0, "validator_identity": 0, "validator_website": 0}
+        for key, expected in expected_hub.items():
+            require(slot(before, STAKE_HUB, key) == 0 and slot(after, STAKE_HUB, key) == expected, "registration hub storage: " + key)
+        expected_credit = {"0": 1, "1": 1, "103": value, "151": int(SENDER, 16), "152": value,
+                           "operator_shares": 2000 * 10**18, "locked_shares": 10**18, "implementation": 0x2003, "admin": 0xdead}
+        for key, expected in expected_credit.items():
+            require(slot(before, CREDIT, key) == 0 and slot(after, CREDIT, key) == expected, "registration credit storage: " + key)
         return
     require(phase in ("success", "revert") and kind == (index - 1) % 5 and row["time"] >= GENESIS_TIME + 6, "wrong current type row")
     target = SUCCESS if phase == "success" else REVERT
@@ -214,8 +306,12 @@ def check(report, generated, genesis):
         for block in generated:
             block_rows = [r for r in rows if r["block"] == block["number"]]
             require(len(block_rows) == block["transactions"], "wrong per-block row count")
+            header = check_block_wires(block, block_rows)
             seen_system = False; target_types = []
-            for row in block_rows:
+            cumulative_gas = 0
+            for transaction_index, row in enumerate(block_rows):
+                check_wire(row)
+                cumulative_gas = check_receipt(row, cumulative_gas, transaction_index, block)
                 require(row["time"] == block["time"] and type(row["system"]) is bool, "wrong transaction context")
                 require(encoding.keccak256(bytes.fromhex(row["wire"])).hex() == normalized(row["hash"]), "wire identity differs")
                 require(normalized(row["receipt"]["transactionHash"]) == normalized(row["hash"]) and q(row["receipt"]["type"]) == row["type"] and
@@ -236,6 +332,7 @@ def check(report, generated, genesis):
                     if block["phase"] in ("success", "revert"): target_types.append(row["type"])
             if block["phase"] in ("success", "revert"):
                 require(target_types == list(range(5)), "missing native type variant")
+            require(cumulative_gas == wire.integer(header[10]), "header gas differs")
         require(user_index == 11 and init_seen == LEGACY_INIT and feynman_seen == FEYNMAN_INIT and election_count == 1, "incomplete bootstrap/current execution")
         return {"result": "PASS", "errors": [], "scope": "private current-fork import selected-state fixture", "public_profile_credit": False,
                 "activation_import_controls": "NOT_RUN", "unknown_import_control": "NOT_RUN"}

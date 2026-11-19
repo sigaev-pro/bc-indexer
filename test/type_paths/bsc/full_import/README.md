@@ -2,11 +2,14 @@
 
 Status: implementation in progress; native import NOT_RUN.
 
-This checkpoint is a prototype, not an acceptance candidate. The pending judge
-still needs exact per-contract initializer storage provenance, independent
-StakeHub registration outputs, and ordered block-transaction/receipt wire
-binding. Its current assertions cannot establish acceptance. Portable negative
-controls and mutation checks are also pending; no native preparation has run.
+This checkpoint is a prototype, not an acceptance candidate. The judge now
+checks ordered transaction and receipt trie roots, signed envelope fields and
+recovered senders against retained native vectors. Source-derived selected
+initializer and StakeHub/credit registration storage checks are provisional;
+their complete provenance manifest and exhaustive controls remain pending.
+Use the explicit `diagnose` command for an execution-only attempt: it retains
+the provisional judgement while leaving `ac_verdict=null`. A diagnostic PASS
+is never acceptance. No native preparation has run at this checkpoint.
 
 This continuation starts from accepted PR188. It must use the accepted BSC
 capture patches and an actual Parlia chain, with no fake engine or modified

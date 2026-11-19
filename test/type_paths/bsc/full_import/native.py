@@ -27,6 +27,7 @@ TEST = "TestBSCFullTypeImport"
 BINARY = "bsc-full-type-import.test"
 PACKAGE = "extractor/bsc/decision"
 INPUTS = {"native.py": HERE / "native.py", "native_test.go": HERE / "native_test.go", "judge.py": HERE / "judge.py",
+          "wire.py": HERE / "wire.py",
           "corpus_test.go": ROOT / "test/native_corpus/bsc/corpus_test.go",
           "provenance.json": HERE.parent / "modern_init/provenance.json",
           "eth_type_judge.py": ROOT / "test/type_paths/eth/eth_type_judge.py"}
@@ -43,7 +44,7 @@ def keep_code(output, deadline):
 
 def record(kind, seconds):
     return {"schema_version": 1, "kind": kind, "source_commit": pins.source_commit(), "run_id": uuid.uuid4().hex,
-            "result": "FAIL", "deadline_seconds": seconds, "public_profile_credit": False, "error": None}
+            "result": "FAIL", "deadline_seconds": seconds, "public_profile_credit": False, "ac_verdict": None, "error": None}
 
 
 def prepare(manifest_path, sha, output):
@@ -83,7 +84,7 @@ def prepare(manifest_path, sha, output):
     return pins.owned_attempt(output, started, deadline, proof, "preparation.json", body)
 
 
-def run(tool_path, sha, output):
+def run(tool_path, sha, output, diagnostic=False):
     started = time.monotonic(); deadline = started + 900
     require(tool_path.is_absolute() and output.is_absolute(), "Paths must be absolute")
     tool_ref, tool = pinned_json(tool_path, sha, deadline=deadline)
@@ -91,6 +92,7 @@ def run(tool_path, sha, output):
     require(tool["inputs"] == {name: reference(path) for name, path in INPUTS.items()}, "Prepared source differs")
     binary = artifact(tool["binary"], 1024 * 1024 * 1024, deadline=deadline)
     proof = record("bsc-full-type-import-run", 900); proof["tool"] = tool_ref
+    proof["diagnostic_only"] = diagnostic
 
     def body(output, runner):
         origins, proof["code"] = keep_code(output, deadline)
@@ -103,18 +105,18 @@ def run(tool_path, sha, output):
         proof["outputs"] = {p.name: reference(p, 64 * 1024 * 1024, deadline) for p in work.iterdir() if p.is_file()}
         checked = judge.check(load(work / "report.json"), load(work / "generated.json"), load(work / "genesis.json"))
         pins.save(output / "judgement.json", checked); proof["judgement"] = reference(output / "judgement.json")
-        require(checked["result"] == "PASS", "Independent judge failed: " + str(checked["errors"]))
+        require(diagnostic or checked["result"] == "PASS", "Independent judge failed: " + str(checked["errors"]))
         sources_unchanged(origins, deadline); artifact(tool["binary"], 1024 * 1024 * 1024, deadline=deadline)
     return pins.owned_attempt(output, started, deadline, proof, "run.json", body)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("prepare", "run")); parser.add_argument("input", type=Path)
+    parser.add_argument("phase", choices=("prepare", "run", "diagnose")); parser.add_argument("input", type=Path)
     parser.add_argument("--sha256", required=True); parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     try:
-        result = (prepare if args.phase == "prepare" else run)(args.input, args.sha256, args.output)
+        result = prepare(args.input, args.sha256, args.output) if args.phase == "prepare" else run(args.input, args.sha256, args.output, diagnostic=args.phase == "diagnose")
         print(json.dumps(result, indent=2)); return int(result["result"] != "PASS")
     except (Rejected, OSError, ValueError, KeyError, TypeError) as error:
         print(f"Rejected: {error}", file=sys.stderr); return 2

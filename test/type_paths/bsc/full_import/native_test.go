@@ -398,17 +398,48 @@ func modernGenerate(t *testing.T, work string) fixture {
 
 func modernState(st tracing.StateDB, addresses []common.Address, validator common.Address) map[string]any {
 	out := map[string]any{}
+	operator := addresses[0]
+	credit := crypto.CreateAddress(modernStakeHub, 0)
+	mappingKey := func(key common.Address, slot int64) common.Hash {
+		return crypto.Keccak256Hash(common.LeftPadBytes(key.Bytes(), 32), common.LeftPadBytes(big.NewInt(slot).Bytes(), 32))
+	}
 	for _, address := range addresses {
 		row := map[string]any{"balance": st.GetBalance(address).String(), "nonce": st.GetNonce(address), "code_hash": st.GetCodeHash(address)}
 		slots := map[string]string{}
-		for _, n := range []int64{0, 1, 3, 6, 15, 20, 23, 24} {
+		for _, n := range []int64{0, 1, 2, 3, 4, 5, 6, 15, 20, 23, 24, 51} {
 			slots[fmt.Sprint(n)] = st.GetState(address, common.BigToHash(big.NewInt(n))).Hex()
+		}
+		if address == common.HexToAddress("0x1004") {
+			slots["native_decimals"] = st.GetState(address, mappingKey(common.Address{}, 2)).Hex()
 		}
 		if address == modernValidatorContract {
 			key := crypto.Keccak256Hash(common.LeftPadBytes(validator.Bytes(), 32), common.LeftPadBytes([]byte{4}, 32))
 			slots["validator_index"] = st.GetState(address, key).Hex()
 			incoming := new(big.Int).Add(crypto.Keccak256Hash(common.LeftPadBytes([]byte{1}, 32)).Big(), big.NewInt(3))
 			slots["first_validator_incoming"] = st.GetState(address, common.BigToHash(incoming)).Hex()
+		}
+		if address == modernStakeHub {
+			for _, n := range []int64{53, 54, 55, 56, 63, 74} {
+				slots[fmt.Sprint(n)] = st.GetState(address, common.BigToHash(big.NewInt(n))).Hex()
+			}
+			slots["operator_index"] = st.GetState(address, mappingKey(operator, 64)).Hex()
+			slots["consensus_operator"] = st.GetState(address, mappingKey(validator, 67)).Hex()
+			base := mappingKey(operator, 65).Big()
+			for i, name := range []string{"consensus", "operator", "credit", "created", "vote", "moniker", "identity", "website", "details", "commission", "jail_until", "updated"} {
+				key := common.BigToHash(new(big.Int).Add(base, big.NewInt(int64(i))))
+				slots["validator_"+name] = st.GetState(address, key).Hex()
+			}
+		}
+		if address == credit {
+			for _, n := range []int64{103, 151, 152} {
+				slots[fmt.Sprint(n)] = st.GetState(address, common.BigToHash(big.NewInt(n))).Hex()
+			}
+			slots["operator_shares"] = st.GetState(address, mappingKey(operator, 101)).Hex()
+			slots["locked_shares"] = st.GetState(address, mappingKey(common.HexToAddress("0xdead"), 101)).Hex()
+			for _, name := range []string{"implementation", "admin"} {
+				key := new(big.Int).Sub(crypto.Keccak256Hash([]byte("eip1967.proxy."+name)).Big(), big.NewInt(1))
+				slots[name] = st.GetState(address, common.BigToHash(key)).Hex()
+			}
 		}
 		row["storage"] = slots
 		out[strings.ToLower(address.Hex())] = row
@@ -450,6 +481,7 @@ func TestBSCFullTypeImport(t *testing.T) {
 	fx := modernGenerate(t, work)
 	validator := crypto.PubkeyToAddress(modernKey(t, 3).PublicKey)
 	addresses := []common.Address{crypto.PubkeyToAddress(modernKey(t, 1).PublicKey), crypto.PubkeyToAddress(modernKey(t, 2).PublicKey), validator, modernSuccess, modernRevert, consensus.SystemAddress, common.HexToAddress("0xdead")}
+	addresses = append(addresses, crypto.CreateAddress(modernStakeHub, 0))
 	for text := range modernCodes() {
 		addresses = append(addresses, common.HexToAddress(text))
 	}
