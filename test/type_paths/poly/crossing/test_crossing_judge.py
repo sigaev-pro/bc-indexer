@@ -73,6 +73,18 @@ class CrossingJudgeInputs(unittest.TestCase):
                 decoded = j.prior.plain_rlp(c.rlp_list(payload))
                 self.assertEqual(decoded, [b"\x01", num(gas), result["bloom"], result["logs"]])
 
+    def test_resigned_authorization_domain_and_count(self):
+        for index, value in ((0, num(15002)), (1, j.octets(j.prior.TARGET)), (2, num(1))):
+            changed = fields(4, 1)
+            changed[9][0][index] = value
+            changed[9][0][-3:] = vectors.sign_fixture(c.keccak256(b"\x05" + c.rlp(changed[9][0][:3])), 2)
+            with self.subTest(field=index), self.assertRaises(ValueError):
+                j.h.signed_input(vectors.signed_wire(4, changed), 4, 1)
+        changed = fields(4, 1)
+        changed[9].append(copy.deepcopy(changed[9][0]))
+        with self.assertRaises(ValueError):
+            j.h.signed_input(vectors.signed_wire(4, changed), 4, 1)
+
     def test_incomplete_and_malformed_reports_fail(self):
         for value in (None, [], {}, {"native_source": j.prior.NATIVE, "scope": "private-ordinary-activation-crossing", "public_profile_credit": False, "cases": []}):
             self.assertEqual(j.judge(value)["result"], "FAIL")
