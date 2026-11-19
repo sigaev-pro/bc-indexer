@@ -730,6 +730,96 @@
       "file": "test/type_paths/poly/poly_codec.py",
       "original": "if not isinstance(value, bytes) or not value:",
       "replacement": "if not isinstance(value, bytes):"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(value) == 7 and data == b\"\" and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 2",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(gas) == 150000 and data == b\"\" and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 3",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and to == octets(SUCCESS if index % 2 == 0 else REVERT), 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong ordinary transaction input conjunct 4",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\" and\n          to == octets(SUCCESS if index % 2 == 0 else REVERT), \"wrong ordinary transaction input\")",
+      "replacement": "check(integer(nonce) == index and integer(gas) == 150000 and integer(value) == 7 and data == b\"\", 'wrong ordinary transaction input')"
+    },
+    {
+      "name": "wrong access-list chain/fee conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(price) == 5_000_000_000, \"wrong access-list chain/fee\")",
+      "replacement": "check(integer(price) == 5_000_000_000, 'wrong access-list chain/fee')"
+    },
+    {
+      "name": "wrong access-list chain/fee conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(price) == 5_000_000_000, \"wrong access-list chain/fee\")",
+      "replacement": "check(integer(chain) == 15001, 'wrong access-list chain/fee')"
+    },
+    {
+      "name": "wrong dynamic fee fields conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000,\n              \"wrong dynamic fee fields\")",
+      "replacement": "check(integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000, 'wrong dynamic fee fields')"
+    },
+    {
+      "name": "wrong dynamic fee fields conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000,\n              \"wrong dynamic fee fields\")",
+      "replacement": "check(integer(chain) == 15001 and integer(cap) == 5_000_000_000, 'wrong dynamic fee fields')"
+    },
+    {
+      "name": "wrong dynamic fee fields conjunct 2",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000 and integer(cap) == 5_000_000_000,\n              \"wrong dynamic fee fields\")",
+      "replacement": "check(integer(chain) == 15001 and integer(tip) == 2_000_000_000, 'wrong dynamic fee fields')"
+    },
+    {
+      "name": "wrong authorization domain/target/nonce conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6,\n                  \"wrong authorization domain/target/nonce\")",
+      "replacement": "check(delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6, 'wrong authorization domain/target/nonce')"
+    },
+    {
+      "name": "wrong authorization domain/target/nonce conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6,\n                  \"wrong authorization domain/target/nonce\")",
+      "replacement": "check(integer(chain_id) == 15001 and integer(auth_nonce) == index - 6, 'wrong authorization domain/target/nonce')"
+    },
+    {
+      "name": "wrong authorization domain/target/nonce conjunct 2",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS) and integer(auth_nonce) == index - 6,\n                  \"wrong authorization domain/target/nonce\")",
+      "replacement": "check(integer(chain_id) == 15001 and delegate == octets(SUCCESS), 'wrong authorization domain/target/nonce')"
+    },
+    {
+      "name": "wrong effective fee or gas conjunct 0",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(price == expected_price and gas > 0, \"wrong effective fee or gas\")",
+      "replacement": "check(gas > 0, 'wrong effective fee or gas')"
+    },
+    {
+      "name": "wrong effective fee or gas conjunct 1",
+      "file": "test/type_paths/poly/poly_judge.py",
+      "original": "check(price == expected_price and gas > 0, \"wrong effective fee or gas\")",
+      "replacement": "check(price == expected_price, 'wrong effective fee or gas')"
     }
   ]
 }

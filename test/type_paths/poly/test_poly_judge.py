@@ -288,6 +288,26 @@ class PolygonJudgeProofTests(unittest.TestCase):
         records["extractor-decision-v1/bor.run-1/counter"] = '{"next": 99}'
         with self.assertRaises(ValueError):
             judge.check_records(records, r["admission"], r["blocks"])
+
+    def test_correlated_wrong_price_keeps_balance_arithmetic_valid(self):
+        row = copy.deepcopy(self.native["blocks"][0])
+        outer = c.rlp_list(bytes.fromhex(row["raw_block"]))
+        header = c.header_fields(outer[0][1])
+        txs = [raw if isinstance(value, list) else value for value, raw in outer[1][0]]
+        delta = judge.quantity(row["receipts"][0]["gasUsed"]) * (judge.quantity(row["receipts"][0]["effectiveGasPrice"]) - 1)
+        row["receipts"][0]["effectiveGasPrice"] = "0x1"
+        for index, trace in enumerate(row["transactions"]):
+            for side in ("before", "after"):
+                if index or side == "after":
+                    account = trace[side][judge.SENDER]
+                    account["balance"] = str(int(account["balance"]) + delta)
+        account = row["state_after"][judge.SENDER[2:]]
+        account["balance"] = str(int(account["balance"]) + delta)
+        with self.assertRaises(ValueError):
+            judge.ordinary_state(row, header, txs)
+    def test_correlated_wrong_intent_and_decided_digest(self):
+        r = self.native
+        key = "extractor-decision-v1/bor.run-1/0000000000000000"
         records = copy.deepcopy(r["decisions"])
         intent, decided = json.loads(records[key + "/intent"]), json.loads(records[key + "/decided"])
         intent["digest"] = decided["intent_digest"] = "ab" * 32
