@@ -8,9 +8,11 @@ Current work: reconcile Geth partB (#20), BSC full native import and the require
 
 | Role | Initial task | Allowed paths |
 | --- | --- | --- |
-| Coordinator | Recovery reconciliation, Geth source diagnosis, status and acceptance records | `.project/docs/DECISIONS.md`, `.project/PROJECT_STATUS.md`, `.project/evidence/`, local run records; Geth code remains read-only during initial diagnosis |
+| Coordinator | Recovery reconciliation, local Geth test repair, status and acceptance records | `.project/docs/DECISIONS.md`, `.project/PROJECT_STATUS.md`, `.project/evidence/`, local run records; preserved Geth worktree `test/native_faults/eth/**` and its lifecycle fixture tests |
 | Independent Spec investigator | Read-only E01 gate and applicability matrix reconciliation | Existing task, decision, evidence and issue records; no writes |
 | Independent native investigator | Read-only BSC fixture and source-layout diagnosis | Preserved BSC producer/oracle trees and evidence; no writes or native execution |
+
+Geth operation reconciliation: the retained failing request is `go vet` in the pinned compiler container with network disabled, read-only source, dropped capabilities and bounded resources. The local fixture uses a synthetic chain and an in-memory filesystem. Its recorded failure is a Go type mismatch in `StateAt`, not a denied operation. A narrow source correction and ordinary checked preparation are within the resumed task. Preserve the original failed preparation unchanged; any actual tool denial remains binding. Native execution still requires a free serialized slot and resource preflight.
 
 ## Autonomous campaign — 2026-11-19 (D107)
 
