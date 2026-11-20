@@ -66,3 +66,34 @@ may the judge flip `reserved127` off NOT_EVALUATED.
 One offline iteration to unblock PR #194 (audit + equivalence review);
 3-4 total including the paired-judge extension; Madhugiri is a further
 follow-up.
+
+## Results (2026-11-21, coordinator session)
+
+The owner directed continuing with maximal parallelism; the offline
+unblocking completed:
+
+- **Mutation audit 06** at `694a22c`:
+  `.project/automation/runs/e01-completion-20261119/poly-crossing-mutants-06-694a22c/mutants.json`
+  — baseline PASS, **131 KILLED + 9 EQUIVALENT**, zero SURVIVED, zero
+  NOT_APPLIED, `mislabeled_equivalent: []`, result PASS (Python 3.13.5,
+  49-test offline gate PASS before the audit).
+- **Independent equivalence review: 9/9 UPHELD.** The read-only reviewer
+  verified each subsuming mechanism in the code as written — the recursive
+  `configuration_numbers` type rejection; the unconditional two-element
+  unpack converted to FAIL by the caught exception set; the strict `uint64`
+  serialization inside the recomputed `intent_digest` (empirically rejecting
+  bool/float aliases — the load-bearing subsumer for the sequence and head
+  number guards); the six-target authorization unpack; and the three
+  keccak256 collision-resistance assumptions (state-root advance,
+  header-hash and tx-root distinctness), the same assumption the
+  authenticated verifiers already import. Two observations recorded for the
+  acceptance review: the Python `True == 1` dict-equality alone would not
+  subsume (the digest recomputation is what carries claims 7-9), and the
+  collision-relative nature of claims 3-5.
+
+With this, the offline blockers of draft PR #194 are cleared. Remaining
+before it can be accepted: the paired-judge extension (in progress),
+the paired native runtime (serialized slot; the paired preparation02 tool
+record is retained and its command is fixed above), independent Spec and
+Standards review of the whole draft, and the owner's merge approval.
+The Madhugiri/MadhugiriPro fixture design is being drafted in parallel.
