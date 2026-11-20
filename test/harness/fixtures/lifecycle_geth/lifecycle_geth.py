@@ -244,6 +244,15 @@ def crash_failures(rows):
         # A restart that must stop leaves its intent unresolved for the next start.
         if stop is None and any(d.get("state") == "INTENT" for d in row.get("decisions") or []):
             failures.append(f"crashes: {name}: an intent stays unresolved")
+        if name == "repaired":
+            unresolved = [d for d in row.get("decisions") or [] if d.get("state") == "INTENT"]
+            if len(unresolved) != 1 or decision_shape(unresolved[0]) != \
+                    ("CANONICAL", "A4", "J6", ["J5", "J6"]):
+                failures.append("crashes: repaired: the expected unresolved canonical intent is missing or changed")
+            elif (not isinstance(unresolved[0].get("sequence"), int) or
+                  isinstance(unresolved[0].get("sequence"), bool) or
+                  f"of intent {unresolved[0]['sequence']}," not in (attach or "")):
+                failures.append("crashes: repaired: the refusal does not identify the unresolved intent")
         if (row.get("refs") or {}).get("head_hash") != head:
             failures.append(f"crashes: {name}: the native head is not {head}")
         if sum(e.get("event") == "lifecycle_decided" for e in row.get("settled") or []) != decided:

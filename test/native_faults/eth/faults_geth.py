@@ -53,7 +53,7 @@ import lifecycle_geth  # noqa: E402
 from native import Native, new_output  # noqa: E402
 
 PROBE_PATH = "cmd/extractor-faults-geth/main.go"
-FIXTURE_FILES = ("probe.go", "faults_geth.py", "README.md")
+FIXTURE_FILES = ("probe.go", "handoffs.go", "faults_geth.py", "README.md")
 NATIVE_FILES = ("patches.json", "README.md")
 GENESIS = HARNESS / "fixtures" / "genesis.json"
 EXPECTED = ROOT / "test" / "native_corpus" / "expected" / "eth.json"
@@ -98,7 +98,90 @@ def to_faults_report(probe, expected, source):
                      {"final": final})
     return {"schema_version": 1, "kind": "native-faults-report", "family": "eth",
             "storage_model": probe.get("storage_model"), "source": source, "cases": cases,
-            "handoffs": probe.get("handoffs", [])}, corpus
+            "handoffs": handoff_verdicts(probe)}, corpus
+
+
+def handoff_verdicts(probe):
+    """Derive handoff verdicts from native facts; never accept producer verdicts."""
+    runs = probe.get("handoff_runs") or {}
+    verdicts = []
+    for name in ("geth.pass-at-golive", "geth.sethead-interrupted", "geth.mid-reorg-long-branch",
+                 "geth.repaired-judge"):
+        row = runs.get(name)
+        if not isinstance(row, dict):
+            continue
+        good = False
+        try:
+            if name == "geth.pass-at-golive":
+                boundary, block = row["boundary"], row["block1"]
+                good = (row["held"] is True and row["phase_during_pass"] == "BOOTSTRAP" and
+                        row["boundary_during_pass"] is None and row["import_error"] is None and
+                        row["golive_error"] is None and row["block2_error"] is None and
+                        row["observations_before_block2"] == 0 and row["decisions_before_block2"] == 0 and
+                        boundary["number"] == 1 and boundary["hash"] == block["hash"] and
+                        boundary["root"] == block["root"] and row["head"] == 2 and
+                        (row["returned_during_pass"] is False or isinstance(row["during_error"], str)))
+            elif name == "geth.repaired-judge":
+                # The stop leaves exactly the saved reorganization unresolved:
+                # one CANONICAL intent from the old head to the new head with
+                # the two member blocks of its branch. The head was lowered
+                # below the fork point, to neither decision head, and the
+                # restart refused to complete the reorganization, naming the
+                # unresolved intent and settling nothing.
+                records = row["records_before"]
+                pending = [(key, json.loads(value)) for key, value in records.items()
+                           if key.endswith("/intent") and key[:-7] + "/decided" not in records and
+                           key[:-7] + "/rejected" not in records]
+                good = len(pending) == 1
+                intent = pending[0][1] if good else {}
+                blocks = [member.get("block") for member in intent.get("members") or []]
+                good = (good and intent["kind"] == "CANONICAL" and
+                        isinstance(intent.get("sequence"), int) and
+                        not isinstance(intent.get("sequence"), bool) and
+                        intent["old_head"]["hash"] == row["old_head"] and
+                        intent["new_head"]["hash"] == row["target"]["hash"] and
+                        blocks == row["member_blocks"] and blocks[-1] == row["target"]["hash"] and
+                        row["hit"] == name and row["step_error"] is None and
+                        row["lowered_head"]["number"] < intent["old_head"]["number"] < row["target"]["number"] and
+                        row["head_before_restart"] == row["lowered_head"]["hash"] and
+                        row["head_before_restart"] not in (row["old_head"], row["target"]["hash"]) and
+                        isinstance(row["restart_error"], str) and
+                        "neither the old nor the new head" in row["restart_error"] and
+                        f"of intent {intent['sequence']}," in row["restart_error"] and
+                        row["settled"] == [])
+            else:
+                records = row["records_before"]
+                pending = [(key, json.loads(value)) for key, value in records.items()
+                           if key.endswith("/intent") and key[:-7] + "/decided" not in records and
+                           key[:-7] + "/rejected" not in records]
+                good = len(pending) == 1
+                intent = pending[0][1] if good else {}
+                target = row["target"]
+                evidence = "completed_inside_rewind" if name == "geth.sethead-interrupted" else \
+                    "completed_inside_reorg"
+                good = (good and intent["kind"] == "CANONICAL" and
+                        intent["old_head"]["hash"] == row["old_head"] and
+                        intent["new_head"]["hash"] == target["hash"] and
+                        row["hit"] == name and row["step_error"] is None and row["restart_error"] is None and
+                        row["phase"] == "LIVE" and row["head"] == target and row["state_error"] is None and
+                        len(row["settled"]) == 1 and row["settled"][0]["sequence"] == intent["sequence"] and
+                        row["settled"][0]["evidence"] == evidence)
+                if name == "geth.sethead-interrupted":
+                    intermediate = row["intermediate"]
+                    good = (good and type(row["head_write_attempts"]) is int and
+                            row["head_write_attempts"] == 2 and
+                            type(intermediate["number"]) is int and
+                            target["number"] < intermediate["number"] < intent["old_head"]["number"] and
+                            row["head_before_restart"] == intermediate["hash"] and
+                            row["head_before_restart"] not in (row["old_head"], target["hash"]))
+                if name == "geth.mid-reorg-long-branch":
+                    good = good and row["old_branch_length"] > 1 and \
+                        row["head_before_restart"] not in (row["old_head"], target["hash"])
+        except (KeyError, TypeError, ValueError, IndexError):
+            good = False
+        verdicts.append({"id": name, "verdict": "PASS" if good else "FAIL",
+                         "evidence": f"handoff_runs.{name}"})
+    return verdicts
 
 
 def reexecution_errors(tag, observation):
@@ -232,6 +315,8 @@ def prepare(accepted_path, expected_sha, output):
             probe = source / PROBE_PATH
             probe.parent.mkdir(parents=True)
             record["probe_source"] = copy_artifact(FIXTURE / "probe.go", probe, reference(FIXTURE / "probe.go"))
+            record["handoff_source"] = copy_artifact(FIXTURE / "handoffs.go", probe.parent / "handoffs.go",
+                                                      reference(FIXTURE / "handoffs.go"))
             for name in ("bin", "build-cache", "gopath", "gotmp"):
                 (directory / name).mkdir()
             mounts = [(directory, "/work", True), (manifest_root / "cache" / "geth" / "mod", "/modules", True)]
