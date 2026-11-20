@@ -161,4 +161,45 @@ class BoundaryControls(unittest.TestCase):
             with self.subTest(index=index), self.assertRaises(ValueError): j.check_bridge(bad, blocks, genesis)
 
 
+class ImportControlTests(unittest.TestCase):
+    def report(self):
+        return {'config': {'cancunTime': j.GENESIS_TIME + 6},
+                'activation_import_controls': {'number': 1, 'time': j.GENESIS_TIME + 3, 'tx_type': 3,
+                                               'wire': '7fc0', 'error': 'transaction type not supported',
+                                               'unsupported': True, 'head_after': 0},
+                'unknown_import_control': {'wire': '7fc0', 'error': 'transaction type not supported',
+                                           'unsupported': True}}
+
+    def test_the_two_refusals_pass(self):
+        j.check_import_controls(self.report())
+
+    def refusing(self, change):
+        report = self.report()
+        change(report)
+        with self.assertRaises((ValueError, KeyError)):
+            j.check_import_controls(report)
+
+    def test_the_activation_refusal_is_bound(self):
+        self.refusing(lambda r: r['activation_import_controls'].update(unsupported=False))
+        self.refusing(lambda r: r['activation_import_controls'].update(error=''))
+        self.refusing(lambda r: r['activation_import_controls'].update(error=None))
+        self.refusing(lambda r: r['activation_import_controls'].update(head_after=1))
+        self.refusing(lambda r: r['activation_import_controls'].update(tx_type=2))
+        self.refusing(lambda r: r['activation_import_controls'].update(number=2))
+
+    def test_the_control_window_is_before_the_activation(self):
+        self.refusing(lambda r: r['activation_import_controls'].update(time=j.GENESIS_TIME + 6))
+        self.refusing(lambda r: r['config'].update(cancunTime=j.GENESIS_TIME + 3))
+
+    def test_the_unknown_refusal_is_bound(self):
+        self.refusing(lambda r: r['unknown_import_control'].update(unsupported=False))
+        self.refusing(lambda r: r['unknown_import_control'].update(error=''))
+        self.refusing(lambda r: r['unknown_import_control'].update(wire='02c0'))
+
+    def test_missing_or_string_controls_refuse(self):
+        self.refusing(lambda r: r.update(activation_import_controls='NOT_RUN'))
+        self.refusing(lambda r: r.update(unknown_import_control='NOT_RUN'))
+        self.refusing(lambda r: r.pop('activation_import_controls'))
+
+
 if __name__ == '__main__': unittest.main()

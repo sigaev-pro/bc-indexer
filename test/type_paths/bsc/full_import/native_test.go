@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"path/filepath"
@@ -640,6 +641,76 @@ func modernNode(t *testing.T, fx fixture, home string, hooks *tracing.Hooks, emi
 	return n, nil
 }
 
+// preActivationControl imports a sealed block one height above the genesis,
+// still before the typed-fork activation time, whose body carries a real
+// type-3 transaction. The importer must refuse it with the unsupported-type
+// error and keep the head at the genesis.
+func preActivationControl(t *testing.T, fx fixture, home string, blobHash common.Hash) map[string]any {
+	t.Helper()
+	db := openDisk(t, home)
+	defer db.Close()
+	api, backend := bsc.NewSystemCallAPI()
+	engine := parlia.New(fx.genesis.Config, db, api, fx.genesis.ToBlock().Hash())
+	chain, err := core.NewBlockChain(db, fx.genesis, engine, core.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer chain.Stop()
+	backend.Bind(chain, nil)
+	parent := chain.Genesis().Header()
+	header := &types.Header{ParentHash: parent.Hash(), Number: big.NewInt(1), GasLimit: parent.GasLimit,
+		Time: parent.Time + 3, Difficulty: big.NewInt(1)}
+	if fx.genesis.Config.IsCancun(header.Number, header.Time) {
+		t.Fatal("the control block is not before the typed-fork activation")
+	}
+	if err := engine.Prepare(chain, header); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.SetExtraData(chain, header); err != nil {
+		t.Fatal(err)
+	}
+	header.BaseFee = eip1559.CalcBaseFee(fx.genesis.Config, parent)
+	st, err := chain.StateAt(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	systemcontracts.TryUpdateBuildInSystemContract(fx.genesis.Config, header.Number, parent.Time, header.Time, st, true)
+	tx := modernUserTx(t, fx.genesis.Config, 3, 0, false, blobHash)
+	block, _, err := core.AssembleBlock(engine, chain, header, st, &types.Body{Transactions: types.Transactions{tx}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, stop := make(chan *types.Block, 1), make(chan struct{})
+	if err := engine.Seal(chain, block, result, stop); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case block = <-result:
+	case <-time.After(30 * time.Second):
+		close(stop)
+		t.Fatal("control seal deadline")
+	}
+	close(stop)
+	wire, err := tx.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, importErr := chain.InsertChain(types.Blocks{block})
+	return map[string]any{"number": header.Number.Uint64(), "time": header.Time, "tx_type": tx.Type(),
+		"wire": hexOf(wire), "error": execError(importErr), "unsupported": errors.Is(importErr, types.ErrTxTypeNotSupported),
+		"head_after": chain.CurrentBlock().Number.Uint64()}
+}
+
+// unknownEnvelopeControl decodes an envelope of an unsupported typed ID at
+// the transaction boundary the importer uses for block bodies.
+func unknownEnvelopeControl() map[string]any {
+	wire := []byte{0x7f, 0xc0}
+	tx := &types.Transaction{}
+	err := tx.UnmarshalBinary(wire)
+	return map[string]any{"wire": hexOf(wire), "error": execError(err),
+		"unsupported": errors.Is(err, types.ErrTxTypeNotSupported)}
+}
+
 func TestBSCFullTypeImport(t *testing.T) {
 	work := probeEnv(t, "EXTRACTOR_MODERN_WORK")
 	modernTrieVectors(t, work)
@@ -738,5 +809,11 @@ func TestBSCFullTypeImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(work, "report.json"), map[string]any{"schema_version": 1, "scope": "private-current-fork-parlia-import", "public_profiles": "NOT_RUN", "activation_import_controls": "NOT_RUN", "unknown_import_control": "NOT_RUN", "config": fx.genesis.Config, "genesis_wire": hexOf(genesisWire), "blocks": len(fx.blocks), "transactions": rows, "bridge": bridge, "reimport_before": before, "reimport_after": after})
+	// Importer controls: the pre-activation typed transaction and the
+	// unknown envelope must both be refused explicitly, and a refused
+	// import does not move the head.
+	activation := preActivationControl(t, fx, filepath.Join(work, "control-activation"), blobHash)
+	unknown := unknownEnvelopeControl()
+	writeJSON(t, filepath.Join(work, "import-controls.json"), map[string]any{"activation": activation, "unknown": unknown})
+	writeJSON(t, filepath.Join(work, "report.json"), map[string]any{"schema_version": 1, "scope": "private-current-fork-parlia-import", "public_profiles": "NOT_RUN", "activation_import_controls": activation, "unknown_import_control": unknown, "config": fx.genesis.Config, "genesis_wire": hexOf(genesisWire), "blocks": len(fx.blocks), "transactions": rows, "bridge": bridge, "reimport_before": before, "reimport_after": after})
 }

@@ -113,6 +113,36 @@
       "file": "test/type_paths/bsc/full_import/wire.py",
       "original": "if common:",
       "replacement": "if False:"
+    },
+    {
+      "name": "activation refusal unbound",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "activation[\"unsupported\"] is True and isinstance(activation[\"error\"], str) and activation[\"error\"] and",
+      "replacement": "True and"
+    },
+    {
+      "name": "activation window unchecked",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "activation[\"time\"] < config[\"cancunTime\"] and",
+      "replacement": "True and"
+    },
+    {
+      "name": "activation head unchecked",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "activation[\"head_after\"] == 0, \"importer accepted a pre-activation typed transaction\")",
+      "replacement": "True, \"importer accepted a pre-activation typed transaction\")"
+    },
+    {
+      "name": "unknown wire unchecked",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "bytes.fromhex(unknown[\"wire\"])[0] not in (0, 1, 2, 3, 4), \"importer accepted an unknown envelope\")",
+      "replacement": "True, \"importer accepted an unknown envelope\")"
+    },
+    {
+      "name": "unknown refusal unbound",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "isinstance(unknown, dict) and unknown[\"unsupported\"] is True and",
+      "replacement": "isinstance(unknown, dict) and True and"
     }
   ]
 }

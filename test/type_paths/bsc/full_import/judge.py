@@ -397,10 +397,26 @@ def check_user(row, phase, index, vote):
         require(slot(after, AUTHORITY, "0") == 1, "authority execution state differs")
 
 
+def check_import_controls(report):
+    """The importer must refuse a typed transaction before its activation and
+    an unknown envelope, and a refused import must not move the head."""
+    config = report["config"]
+    activation = report["activation_import_controls"]
+    require(isinstance(activation, dict) and activation["tx_type"] == 3 and activation["number"] == 1 and
+            activation["time"] < config["cancunTime"] and
+            activation["unsupported"] is True and isinstance(activation["error"], str) and activation["error"] and
+            activation["head_after"] == 0, "importer accepted a pre-activation typed transaction")
+    unknown = report["unknown_import_control"]
+    require(isinstance(unknown, dict) and unknown["unsupported"] is True and
+            isinstance(unknown["error"], str) and unknown["error"] and
+            bytes.fromhex(unknown["wire"])[0] not in (0, 1, 2, 3, 4), "importer accepted an unknown envelope")
+
+
 def check(report, generated, genesis):
     try:
         require(type(report.get("schema_version")) is int and report["schema_version"] == 1 and report["scope"] == "private-current-fork-parlia-import", "wrong report")
-        require(all(report[key] == "NOT_RUN" for key in ("public_profiles", "activation_import_controls", "unknown_import_control")), "unexecuted profile/control credit")
+        require(report["public_profiles"] == "NOT_RUN", "unexecuted profile credit")
+        check_import_controls(report)
         check_genesis(genesis, report["config"])
         vote = bytes.fromhex(genesis["extraData"].removeprefix("0x"))[53:101]
         require(4 <= len(generated) <= 40 and report["blocks"] == len(generated), "wrong block coverage")
@@ -466,6 +482,6 @@ def check(report, generated, genesis):
             require(cumulative_gas == wire.integer(header[10]), "header gas differs")
         require(user_index == 13 and init_seen == LEGACY_INIT and feynman_seen == FEYNMAN_INIT and election_count == 1, "incomplete bootstrap/current execution")
         return {"result": "PASS", "errors": [], "scope": "private current-fork import selected-state fixture", "public_profile_credit": False,
-                "activation_import_controls": "NOT_RUN", "unknown_import_control": "NOT_RUN"}
+                "activation_import_controls": "PASS", "unknown_import_control": "PASS"}
     except (ValueError, KeyError, TypeError, IndexError, AttributeError) as error:
         return {"result": "FAIL", "errors": [str(error)], "public_profile_credit": False}
