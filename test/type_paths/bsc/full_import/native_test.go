@@ -645,12 +645,30 @@ func modernNode(t *testing.T, fx fixture, home string, hooks *tracing.Hooks, emi
 // still before the typed-fork activation time, whose body carries a real
 // type-3 transaction. The importer must refuse it with the unsupported-type
 // error and keep the head at the genesis.
-func preActivationControl(t *testing.T, fx fixture, home string, blobHash common.Hash) map[string]any {
+func preActivationControl(t *testing.T, fx fixture, home string) map[string]any {
 	t.Helper()
 	db := openDisk(t, home)
 	defer db.Close()
 	api, backend := bsc.NewSystemCallAPI()
 	engine := parlia.New(fx.genesis.Config, db, api, fx.genesis.ToBlock().Hash())
+	defer engine.Close()
+	// The same authorized validator signer as the generator: the parlia
+	// finalizer signs the Feynman initializer system transactions while the
+	// control block is assembled.
+	validatorKey := modernKey(t, 3)
+	validator := crypto.PubkeyToAddress(validatorKey.PublicKey)
+	engine.Authorize(validator,
+		func(account accounts.Account, mime string, data []byte) ([]byte, error) {
+			if account.Address != validator || mime != accounts.MimetypeParlia {
+				return nil, fmt.Errorf("unexpected signer")
+			}
+			return crypto.Sign(crypto.Keccak256(data), validatorKey)
+		}, func(account accounts.Account, tx *types.Transaction, id *big.Int) (*types.Transaction, error) {
+			if account.Address != validator || id.Cmp(big.NewInt(714)) != 0 {
+				return nil, fmt.Errorf("unexpected signer")
+			}
+			return types.SignTx(tx, types.LatestSigner(fx.genesis.Config), validatorKey)
+		})
 	chain, err := core.NewBlockChain(db, fx.genesis, engine, core.DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -660,11 +678,19 @@ func preActivationControl(t *testing.T, fx fixture, home string, blobHash common
 	parent := chain.Genesis().Header()
 	header := &types.Header{ParentHash: parent.Hash(), Number: big.NewInt(1), GasLimit: parent.GasLimit,
 		Time: parent.Time + 3, Difficulty: big.NewInt(1)}
-	if fx.genesis.Config.IsCancun(header.Number, header.Time) {
-		t.Fatal("the control block is not before the typed-fork activation")
-	}
 	if err := engine.Prepare(chain, header); err != nil {
 		t.Fatal(err)
+	}
+	// Prepare is a live mining helper and clamps historical time to now;
+	// keep the pre-activation window from the parent, as the generator does.
+	millis := parent.MilliTimestamp() + 3000
+	header.Time = millis / 1000
+	header.MixDigest = common.Hash{}
+	if fx.genesis.Config.IsLorentz(header.Number, header.Time) {
+		header.SetMilliseconds(millis % 1000)
+	}
+	if fx.genesis.Config.IsCancun(header.Number, header.Time) {
+		t.Fatal("the control block is not before the typed-fork activation")
 	}
 	if err := engine.SetExtraData(chain, header); err != nil {
 		t.Fatal(err)
@@ -675,6 +701,14 @@ func preActivationControl(t *testing.T, fx fixture, home string, blobHash common
 		t.Fatal(err)
 	}
 	systemcontracts.TryUpdateBuildInSystemContract(fx.genesis.Config, header.Number, parent.Time, header.Time, st, true)
+	// The same verified zero blob as the generator uses, so the refused
+	// transaction has the exact shape of the accepted type-3 row.
+	var blob kzg4844.Blob
+	commitment, err := kzg4844.BlobToCommitment(&blob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blobHash := kzg4844.CalcBlobHashV1(sha256.New(), &commitment)
 	tx := modernUserTx(t, fx.genesis.Config, 3, 0, false, blobHash)
 	block, _, err := core.AssembleBlock(engine, chain, header, st, &types.Body{Transactions: types.Transactions{tx}}, nil)
 	if err != nil {
@@ -812,7 +846,7 @@ func TestBSCFullTypeImport(t *testing.T) {
 	// Importer controls: the pre-activation typed transaction and the
 	// unknown envelope must both be refused explicitly, and a refused
 	// import does not move the head.
-	activation := preActivationControl(t, fx, filepath.Join(work, "control-activation"), blobHash)
+	activation := preActivationControl(t, fx, filepath.Join(work, "control-activation"))
 	unknown := unknownEnvelopeControl()
 	writeJSON(t, filepath.Join(work, "import-controls.json"), map[string]any{"activation": activation, "unknown": unknown})
 	writeJSON(t, filepath.Join(work, "report.json"), map[string]any{"schema_version": 1, "scope": "private-current-fork-parlia-import", "public_profiles": "NOT_RUN", "activation_import_controls": activation, "unknown_import_control": unknown, "config": fx.genesis.Config, "genesis_wire": hexOf(genesisWire), "blocks": len(fx.blocks), "transactions": rows, "bridge": bridge, "reimport_before": before, "reimport_after": after})
