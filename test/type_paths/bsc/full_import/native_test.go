@@ -643,8 +643,8 @@ func modernNode(t *testing.T, fx fixture, home string, hooks *tracing.Hooks, emi
 
 // preActivationControl imports a sealed block one height above the genesis,
 // still before the typed-fork activation time, whose body carries a real
-// type-3 transaction. The importer must refuse it with the unsupported-type
-// error and keep the head at the genesis.
+// type-3 transaction. The importer's block-body validation must refuse it
+// and the head must stay at the genesis.
 func preActivationControl(t *testing.T, fx fixture, home string) map[string]any {
 	t.Helper()
 	db := openDisk(t, home)

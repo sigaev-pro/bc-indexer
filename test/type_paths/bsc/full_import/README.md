@@ -1,8 +1,9 @@
 # Coherent private current-fork BSC import
 
-Status: the judged private import PASSed (run09 at `54d048c`, 2026-11-20);
-the importer activation and unknown-type refusal controls are added on top
-and await their native run and review. Issue #21 stays open.
+Status: the judged private import and both importer refusal controls
+PASSed (run09 and run15 at `54d048c`/`92afc8c`, 2026-11-20). Issue #21
+stays open: the selected-state scope, the Hertz/Haber/Pascal
+applicable-crossings question, public profiles and the merge remain.
 
 The judge checks ordered transaction and receipt trie roots, signed envelope
 fields and recovered senders against retained native vectors, and binds the
@@ -18,9 +19,13 @@ INVALID at block 11 (empty validator-extra array; repaired by the two
 bootstrap transactions below); diagnostic05/07 at `8e08e63`/`c2d364c`
 (missing blob sidecars at insert 12; target block not blob-eligible under
 BEP-657); diagnostic08 at `c15cac0` (native PASS, judge FAIL on the receipt
-and access-list encodings, aligned at `54d048c`); then judged run09 PASS.
-Preparation10/11 vet failures of the control draft are retained with the
-run records.
+and access-list encodings, aligned at `54d048c`); judged run09 PASS;
+preparation10/11 vet failures of the control draft (method value as field;
+blob hash out of scope); run12 parlia finalize panic (the control engine
+lacked the generator's Authorize signer); run13 refused by the data
+availability check after parlia.prepare clamped the historical time to now;
+run14 judged refusal binding too strict for the native blob-body error —
+then judged run15 PASS with both controls at `92afc8c`.
 
 This continuation starts from accepted PR188. It must use the accepted BSC
 capture patches and an actual Parlia chain, with no fake engine or modified
