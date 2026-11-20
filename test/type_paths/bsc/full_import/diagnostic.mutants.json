@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "description": "Diagnostic codec/driver controls only; full state oracle controls remain pending.",
+  "copy": [
+    "test/type_paths/bsc/full_import/*.py",
+    "test/type_paths/bsc/full_import/codec_vectors.json",
+    "test/type_paths/bsc/modern_init/provenance.json",
+    "test/type_paths/eth/eth_type_judge.py",
+    "test/harness/*.py",
+    "test/evidence/*.py",
+    "test/type_paths/bsc/full_import/trie_vectors.json",
+    "test/type_paths/bsc/full_import/oracle_sources.json"
+  ],
+  "test": [
+    "{python}",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "test/type_paths/bsc/full_import",
+    "-p",
+    "test_*.py",
+    "-v"
+  ],
+  "import": [
+    "test_codec",
+    "test_driver"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "sender recovery binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "row[\"from\"].lower() == expected",
+      "replacement": "True"
+    },
+    {
+      "name": "transaction JSON binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "(q(actual) if name in numeric else actual) == expected",
+      "replacement": "True"
+    },
+    {
+      "name": "snapshot envelope binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "row[\"nonce\"] == decoded[\"nonce\"]",
+      "replacement": "True"
+    },
+    {
+      "name": "ordered body binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "transactions == [bytes.fromhex(row[\"wire\"]) for row in rows]",
+      "replacement": "True"
+    },
+    {
+      "name": "transaction root binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "wire.trie_root(transactions, encoding.keccak256) == header[4]",
+      "replacement": "True"
+    },
+    {
+      "name": "receipt root binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "wire.trie_root(receipts, encoding.keccak256) == header[5]",
+      "replacement": "True"
+    },
+    {
+      "name": "signature low s",
+      "file": "test/type_paths/bsc/full_import/wire.py",
+      "original": "0 < s <= N // 2",
+      "replacement": "0 < s < N"
+    },
+    {
+      "name": "canonical integer",
+      "file": "test/type_paths/bsc/full_import/wire.py",
+      "original": "(not value or value[0] != 0)",
+      "replacement": "True"
+    },
+    {
+      "name": "tool kind",
+      "file": "test/type_paths/bsc/full_import/native.py",
+      "original": "tool.get(\"kind\") == \"bsc-full-type-import-tool\"",
+      "replacement": "True"
+    },
+    {
+      "name": "native source",
+      "file": "test/type_paths/bsc/full_import/native.py",
+      "original": "tool.get(\"native_source_commit\") == COMMIT",
+      "replacement": "True"
+    },
+    {
+      "name": "prepared input binding",
+      "file": "test/type_paths/bsc/full_import/native.py",
+      "original": "tool[\"inputs\"] == {name: reference(path) for name, path in INPUTS.items()}",
+      "replacement": "True"
+    },
+    {
+      "name": "ordinary judge boundary",
+      "file": "test/type_paths/bsc/full_import/native.py",
+      "original": "diagnostic or checked[\"result\"] == \"PASS\"",
+      "replacement": "True"
+    },
+    {
+      "name": "short trie child embedding",
+      "file": "test/type_paths/bsc/full_import/wire.py",
+      "original": "return node if len(raw) < 32 else keccak(raw)",
+      "replacement": "return keccak(raw)"
+    },
+    {
+      "name": "shared trie extension path",
+      "file": "test/type_paths/bsc/full_import/wire.py",
+      "original": "if common:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "activation refusal unbound",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "(activation[\"unsupported\"] is True or activation[\"error\"] == \"data blobs present in block body\") and",
+      "replacement": "True and"
+    },
+    {
+      "name": "activation window unchecked",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "activation[\"time\"] < config[\"cancunTime\"] and",
+      "replacement": "True and"
+    },
+    {
+      "name": "activation head unchecked",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "activation[\"head_after\"] == 0, \"importer accepted a pre-activation typed transaction\")",
+      "replacement": "True, \"importer accepted a pre-activation typed transaction\")"
+    },
+    {
+      "name": "unknown wire unchecked",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "bytes.fromhex(unknown[\"wire\"])[0] not in (0, 1, 2, 3, 4), \"importer accepted an unknown envelope\")",
+      "replacement": "True, \"importer accepted an unknown envelope\")"
+    },
+    {
+      "name": "unknown refusal unbound",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "isinstance(unknown, dict) and unknown[\"unsupported\"] is True and",
+      "replacement": "isinstance(unknown, dict) and True and"
+    }
+  ]
+}

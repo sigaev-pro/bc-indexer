@@ -1,0 +1,432 @@
+{
+  "schema_version": 1,
+  "language": "python",
+  "root": "../../../..",
+  "description": "Source-derived system, registration and staking user transition guard controls; no native credit.",
+  "copy": [
+    "test/type_paths/bsc/full_import/*.py",
+    "test/type_paths/bsc/modern_init/provenance.json",
+    "test/type_paths/eth/eth_type_judge.py"
+  ],
+  "test": [
+    "{python}",
+    "-c",
+    "import sys,unittest; sys.path.insert(0,'test/type_paths/bsc/full_import'); result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(['test_system','test_user','test_bootstrap'])); sys.exit(not result.wasSuccessful())"
+  ],
+  "import": [
+    "test_system",
+    "test_user",
+    "test_bootstrap"
+  ],
+  "timeout_seconds": 60,
+  "mutants": [
+    {
+      "name": "check_system: \"wrong native system transaction\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(row[\"type\"] == 0 and row[\"from\"].lower() == VALIDATOR and q(row[\"gas_price\"]) == 0, \"wrong native system transaction\")",
+      "replacement": "require(True, \"wrong native system transaction\")"
+    },
+    {
+      "name": "check_system: \"system nonce transition\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(after[VALIDATOR][\"nonce\"] == before[VALIDATOR][\"nonce\"] + 1 and row[\"nonce\"] == before[VALIDATOR][\"nonce\"], \"system nonce transition\")",
+      "replacement": "require(True, \"system nonce transition\")"
+    },
+    {
+      "name": "check_system: \"system sender balance\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(after, VALIDATOR) == balance(before, VALIDATOR) - value, \"system sender balance\")",
+      "replacement": "require(True, \"system sender balance\")"
+    },
+    {
+      "name": "check_system: \"failed system transaction\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(row[\"receipt\"][\"status\"]) == 1 and row[\"error\"] is None, \"failed system transaction\")",
+      "replacement": "require(True, \"failed system transaction\")"
+    },
+    {
+      "name": "check_system: \"wrong initializer\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(to in expected and value == 0, \"wrong initializer\")",
+      "replacement": "require(True, \"wrong initializer\")"
+    },
+    {
+      "name": "check_system: \"initializer packed state\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, to, \"0\") == 0 and slot(after, to, \"0\") == packed, \"initializer packed state\")",
+      "replacement": "require(True, \"initializer packed state\")"
+    },
+    {
+      "name": "check_system: \"initializer selected storage: \" + key",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, to, key) == 0 and slot(after, to, key) == value, \"initializer selected storage: \" + key)",
+      "replacement": "require(True, \"initializer selected storage: \" + key)"
+    },
+    {
+      "name": "check_system: \"initializer moved funds\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(before, address) == balance(after, address), \"initializer moved funds\")",
+      "replacement": "require(True, \"initializer moved funds\")"
+    },
+    {
+      "name": "check_system: \"wrong deposit input\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(to == VALIDATOR_CONTRACT and value > 0 and row[\"data\"][8:] == VALIDATOR[2:].zfill(64), \"wrong deposit input\")",
+      "replacement": "require(True, \"wrong deposit input\")"
+    },
+    {
+      "name": "check_system: \"deposit preconditions\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, to, \"0\") == 1 and slot(before, to, \"23\") == slot(before, to, \"24\") == 0, \"deposit preconditions\")",
+      "replacement": "require(True, \"deposit preconditions\")"
+    },
+    {
+      "name": "check_system: \"deposit ratios\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(after, to, \"6\") == 1000 and slot(after, to, \"15\") == 625 and slot(after, to, \"20\") == 1, \"deposit ratios\")",
+      "replacement": "require(True, \"deposit ratios\")"
+    },
+    {
+      "name": "check_system: \"deposit distribution\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(after, to) - balance(before, to) == remaining and balance(after, REWARD) - balance(before, REWARD) == reward and\n                balance(after, BURN) - balance(before, BURN) == burn, \"deposit distribution\")",
+      "replacement": "require(True, \"deposit distribution\")"
+    },
+    {
+      "name": "check_system: \"deposit validator mapping\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(index in (0, 1) and slot(after, to, \"validator_index\") == index, \"deposit validator mapping\")",
+      "replacement": "require(True, \"deposit validator mapping\")"
+    },
+    {
+      "name": "check_system: \"deposit active income\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(after, to, \"3\") - slot(before, to, \"3\") == delta and\n                slot(after, to, \"first_validator_incoming\") - slot(before, to, \"first_validator_incoming\") == delta,\n                \"deposit active income\")",
+      "replacement": "require(True, \"deposit active income\")"
+    },
+    {
+      "name": "check_system: \"wrong election input\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(to == VALIDATOR_CONTRACT and value == 0, \"wrong election input\")",
+      "replacement": "require(True, \"wrong election input\")"
+    },
+    {
+      "name": "check_system: \"election did not install owned validator\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, to, \"validator_index\") == 0 and slot(after, to, \"validator_index\") == 1 and\n                slot(after, to, \"1\") == 1 and slot(after, to, \"3\") == slot(after, to, \"first_validator_incoming\") == 0,\n                \"election did not install owned validator\")",
+      "replacement": "require(True, \"election did not install owned validator\")"
+    },
+    {
+      "name": "check_system: \"election dusk transfer\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(after, to) == 0 and balance(after, REWARD) - balance(before, REWARD) == balance(before, to), \"election dusk transfer\")",
+      "replacement": "require(True, \"election dusk transfer\")"
+    },
+    {
+      "name": "check_registration_input: \"wrong registration envelope\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(fields[\"chainId\"]) == 714 and q(fields[\"gas\"]) == 8000000 and q(fields[\"gasPrice\"]) == 2000000000,\n            \"wrong registration envelope\")",
+      "replacement": "require(True, \"wrong registration envelope\")"
+    },
+    {
+      "name": "check_registration_input: \"wrong registration ABI size/selector\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(data[:4].hex() == REGISTER and len(data) == 772, \"wrong registration ABI size/selector\")",
+      "replacement": "require(True, \"wrong registration ABI size/selector\")"
+    },
+    {
+      "name": "check_registration_input: \"wrong registration ABI head\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(word(0) == int(VALIDATOR, 16) and [word(i * 32) for i in (1, 2, 3, 4, 5, 6)] == [224, 320, 100, 1000, 100, 448],\n            \"wrong registration ABI head\")",
+      "replacement": "require(True, \"wrong registration ABI head\")"
+    },
+    {
+      "name": "check_registration_input: \"wrong registration vote bytes\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(word(224) == 48 and args[256:304] == vote and args[304:320] == bytes(16), \"wrong registration vote bytes\")",
+      "replacement": "require(True, \"wrong registration vote bytes\")"
+    },
+    {
+      "name": "check_registration_input: \"wrong registration proof bytes\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(word(320) == 96 and args[352:448] != bytes(96), \"wrong registration proof bytes\")",
+      "replacement": "require(True, \"wrong registration proof bytes\")"
+    },
+    {
+      "name": "check_registration_input: \"wrong registration description offsets\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require([word(448 + i * 32) for i in range(4)] == [128, 192, 224, 256], \"wrong registration description offsets\")",
+      "replacement": "require(True, \"wrong registration description offsets\")"
+    },
+    {
+      "name": "check_registration_input: \"wrong registration description\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(word(offset) == len(expected) and args[offset + 32:offset + 32 + width] == expected.ljust(width, b\"\\0\"),\n                \"wrong registration description\")",
+      "replacement": "require(True, \"wrong registration description\")"
+    },
+    {
+      "name": "check_bootstrap: \"wrong bootstrap sender context\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(row[\"type\"] == 0 and row[\"to\"].lower() == STAKE_HUB and row[\"nonce\"] == (2 if restore else 1), \"wrong bootstrap sender context\")",
+      "replacement": "require(True, \"wrong bootstrap sender context\")"
+    },
+    {
+      "name": "check_bootstrap: \"wrong bootstrap envelope\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(fields[\"chainId\"]) == 714 and q(fields[\"gas\"]) == 2000000 and q(fields[\"gasPrice\"]) == 2000000000, \"wrong bootstrap envelope\")",
+      "replacement": "require(True, \"wrong bootstrap envelope\")"
+    },
+    {
+      "name": "check_bootstrap: \"wrong bootstrap ABI\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(row[\"data\"] == expected, \"wrong bootstrap ABI\")",
+      "replacement": "require(True, \"wrong bootstrap ABI\")"
+    },
+    {
+      "name": "check_bootstrap: \"validator extras not initialized\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, VALIDATOR_CONTRACT, \"11\") == (21 if restore else 0) and slot(after, VALIDATOR_CONTRACT, \"11\") == 21,\n            \"validator extras not initialized\")",
+      "replacement": "require(True, \"validator extras not initialized\")"
+    },
+    {
+      "name": "check_bootstrap: \"pending unbond native funds\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(before, CREDIT) == 2001 * 10**18 and balance(after, CREDIT) == (2002 if restore else 2001) * 10**18,\n            \"pending unbond native funds\")",
+      "replacement": "require(True, \"pending unbond native funds\")"
+    },
+    {
+      "name": "check_bootstrap: \"bootstrap changed validator membership\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, VALIDATOR_CONTRACT, \"validator_index\") == 0 and slot(state, VALIDATOR_CONTRACT, \"1\") == 21,\n                \"bootstrap changed validator membership\")",
+      "replacement": "require(True, \"bootstrap changed validator membership\")"
+    },
+    {
+      "name": "check_bootstrap: \"bootstrap jailed only validator\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"validator_jail_until\") == 0 and slot(state, STAKE_HUB, \"73\") == 0, \"bootstrap jailed only validator\")",
+      "replacement": "require(True, \"bootstrap jailed only validator\")"
+    },
+    {
+      "name": "check_bootstrap: \"unexpected unbond period\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"57\") == 604800, \"unexpected unbond period\")",
+      "replacement": "require(True, \"unexpected unbond period\")"
+    },
+    {
+      "name": "check_bootstrap: \"bootstrap credit shares\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, CREDIT, \"operator_shares\") == own * 10**18 and slot(state, CREDIT, \"locked_shares\") == 10**18,\n                \"bootstrap credit shares\")",
+      "replacement": "require(True, \"bootstrap credit shares\")"
+    },
+    {
+      "name": "check_bootstrap: \"bootstrap governance sync\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, gov, \"gov_supply\") == own * 10**18 and slot(state, gov, \"gov_operator\") == own * 10**18 and slot(state, gov, \"gov_dead\") == 0,\n                \"bootstrap governance sync\")",
+      "replacement": "require(True, \"bootstrap governance sync\")"
+    },
+    {
+      "name": "check_bootstrap: \"pending unbond field: \" + key",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, CREDIT, key) == (value if restore else 0) and slot(after, CREDIT, key) == value, \"pending unbond field: \" + key)",
+      "replacement": "require(True, \"pending unbond field: \" + key)"
+    },
+    {
+      "name": "check_bootstrap: \"delegate changed pending unlock\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, CREDIT, \"unbond_unlock\") == slot(after, CREDIT, \"unbond_unlock\") and\n                row[\"time\"] < slot(after, CREDIT, \"unbond_unlock\"), \"delegate changed pending unlock\")",
+      "replacement": "require(True, \"delegate changed pending unlock\")"
+    },
+    {
+      "name": "check_bootstrap: \"wrong unbond unlock time\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, CREDIT, \"unbond_unlock\") == 0 and slot(after, CREDIT, \"unbond_unlock\") == row[\"time\"] + 604800,\n                \"wrong unbond unlock time\")",
+      "replacement": "require(True, \"wrong unbond unlock time\")"
+    },
+    {
+      "name": "check_bootstrap: \"bootstrap credit pool/supply\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, CREDIT, key) == pooled * 10**18, \"bootstrap credit pool/supply\")",
+      "replacement": "require(True, \"bootstrap credit pool/supply\")"
+    },
+    {
+      "name": "check_user: \"user sender/nonce transition\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(row[\"from\"].lower() == SENDER and row[\"nonce\"] == index and before[SENDER][\"nonce\"] == index and after[SENDER][\"nonce\"] == index + 1,\n            \"user sender/nonce transition\")",
+      "replacement": "require(True, \"user sender/nonce transition\")"
+    },
+    {
+      "name": "check_user: \"wrong effective fee\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(row[\"gas_price\"]) == price, \"wrong effective fee\")",
+      "replacement": "require(True, \"wrong effective fee\")"
+    },
+    {
+      "name": "check_user: \"wrong user status\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(receipt[\"status\"]) == status and row[\"error\"] is None, \"wrong user status\")",
+      "replacement": "require(True, \"wrong user status\")"
+    },
+    {
+      "name": "check_user: \"user fee/value accounting\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(row[\"value\"]) == value and balance(before, SENDER) - balance(after, SENDER) == fee + status * value, \"user fee/value accounting\")",
+      "replacement": "require(True, \"user fee/value accounting\")"
+    },
+    {
+      "name": "check_user: \"system fee accumulation\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(after, SYSTEM) - balance(before, SYSTEM) == fee, \"system fee accumulation\")",
+      "replacement": "require(True, \"system fee accumulation\")"
+    },
+    {
+      "name": "check_user: \"wrong current type row\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(phase in (\"success\", \"revert\") and kind == (index - 3) % 5 and row[\"time\"] >= GENESIS_TIME + 6, \"wrong current type row\")",
+      "replacement": "require(True, \"wrong current type row\")"
+    },
+    {
+      "name": "check_user: \"wrong source fields\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(row[\"to\"].lower() == recipient and q(fields[\"chainId\"]) == 714 and q(fields[\"gas\"]) == 150000 and fields[\"input\"] == \"0x\", \"wrong source fields\")",
+      "replacement": "require(True, \"wrong source fields\")"
+    },
+    {
+      "name": "check_user: \"user target value\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(after, recipient) - balance(before, recipient) == status, \"user target value\")",
+      "replacement": "require(True, \"user target value\")"
+    },
+    {
+      "name": "check_user: \"reverted storage survived\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(after, REVERT, \"0\") == 0, \"reverted storage survived\")",
+      "replacement": "require(True, \"reverted storage survived\")"
+    },
+    {
+      "name": "check_user: \"wrong blob fees\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(receipt[\"blobGasUsed\"]) == 131072 and q(receipt[\"blobGasPrice\"]) == 1, \"wrong blob fees\")",
+      "replacement": "require(True, \"wrong blob fees\")"
+    },
+    {
+      "name": "check_user: \"wrong registration\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(kind == 0 and row[\"to\"].lower() == STAKE_HUB and value == 2001 * 10**18, \"wrong registration\")",
+      "replacement": "require(True, \"wrong registration\")"
+    },
+    {
+      "name": "check_user: \"credit CREATE nonce differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(before[STAKE_HUB][\"nonce\"] == 0 and after[STAKE_HUB][\"nonce\"] == 1 and before[CREDIT][\"nonce\"] == 0 and\n                after[CREDIT][\"nonce\"] == 1, \"credit CREATE nonce differs\")",
+      "replacement": "require(True, \"credit CREATE nonce differs\")"
+    },
+    {
+      "name": "check_user: \"registration fund movement differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(balance(before, CREDIT) == 0 and balance(after, CREDIT) == value and balance(before, STAKE_HUB) == balance(after, STAKE_HUB) == 0 and\n                balance(before, BURN) == balance(after, BURN), \"registration fund movement differs\")",
+      "replacement": "require(True, \"registration fund movement differs\")"
+    },
+    {
+      "name": "check_user: \"registration governance dead balance\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(after, gov, \"gov_dead\") == 0, \"registration governance dead balance\")",
+      "replacement": "require(True, \"registration governance dead balance\")"
+    },
+    {
+      "name": "check_user: \"wrong gasPrice\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(fields[\"gasPrice\"]) == 2000000000, \"wrong gasPrice\")",
+      "replacement": "require(True, \"wrong gasPrice\")"
+    },
+    {
+      "name": "check_user: \"wrong fee caps\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(q(fields[\"maxFeePerGas\"]) == 2000000000 and q(fields[\"maxPriorityFeePerGas\"]) == 1000000000, \"wrong fee caps\")",
+      "replacement": "require(True, \"wrong fee caps\")"
+    },
+    {
+      "name": "check_user: \"access list order differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(len(observed) == 2 and\n                observed[0][\"address\"].lower() == target and\n                observed[0][\"storageKeys\"] == [\"0x\" + \"0\" * 64] * 2 and\n                observed[1][\"address\"].lower() == target and\n                (observed[1][\"storageKeys\"] or []) == [], \"access list order differs\")",
+      "replacement": "require(True, \"access list order differs\")"
+    },
+    {
+      "name": "check_user: \"wrong blob input\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(fields[\"blobVersionedHashes\"] == [expected_hash] and q(fields[\"maxFeePerBlobGas\"]) == 1000000000, \"wrong blob input\")",
+      "replacement": "require(True, \"wrong blob input\")"
+    },
+    {
+      "name": "check_user: \"successful storage missing\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(after, recipient, \"0\") == 1, \"successful storage missing\")",
+      "replacement": "require(True, \"successful storage missing\")"
+    },
+    {
+      "name": "check_user: \"wrong authorization\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(len(auth) == 1 and q(auth[0][\"chainId\"]) == 714 and q(auth[0][\"nonce\"]) == nonce and auth[0][\"address\"].lower() == target,\n                \"wrong authorization\")",
+      "replacement": "require(True, \"wrong authorization\")"
+    },
+    {
+      "name": "check_user: \"authorization did not persist\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(before[AUTHORITY][\"nonce\"] == nonce and after[AUTHORITY][\"nonce\"] == nonce + 1 and\n                normalized(after[AUTHORITY][\"code_hash\"]) == encoding.keccak256(bytes.fromhex(\"ef0100\" + target[2:])).hex(), \"authorization did not persist\")",
+      "replacement": "require(True, \"authorization did not persist\")"
+    },
+    {
+      "name": "check_user: \"authority execution state differs\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(after, AUTHORITY, \"0\") == 1, \"authority execution state differs\")",
+      "replacement": "require(True, \"authority execution state differs\")"
+    },
+    {
+      "name": "check_user: \"registration hub storage: \" + key",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, STAKE_HUB, key) == 0 and slot(after, STAKE_HUB, key) == expected, \"registration hub storage: \" + key)",
+      "replacement": "require(True, \"registration hub storage: \" + key)"
+    },
+    {
+      "name": "check_user: \"registration credit storage: \" + key",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, CREDIT, key) == 0 and slot(after, CREDIT, key) == expected, \"registration credit storage: \" + key)",
+      "replacement": "require(True, \"registration credit storage: \" + key)"
+    },
+    {
+      "name": "check_user: \"registration governance sync\"",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(before, gov, key) == 0 and slot(after, gov, key) == 2000 * 10**18, \"registration governance sync\")",
+      "replacement": "require(True, \"registration governance sync\")"
+    },
+    {
+      "name": "bootstrap validator jailed",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"validator_jailed\") == 0, \"bootstrap validator jailed flag\")",
+      "replacement": "require(True, \"removed validator check\")"
+    },
+    {
+      "name": "registration validator jailed",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "\"validator_jailed\": 0, ",
+      "replacement": ""
+    },
+    {
+      "name": "bootstrap validator agent",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"validator_agent\") == 0, \"bootstrap validator agent\")",
+      "replacement": "require(True, \"removed validator check\")"
+    },
+    {
+      "name": "registration validator agent",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "\"validator_agent\": 0,",
+      "replacement": ""
+    },
+    {
+      "name": "validator raw word binding",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(slot(state, STAKE_HUB, \"validator_\" + label) == slot(state, STAKE_HUB, \"validator_word_\" + str(offset)),\n                \"validator label differs from raw word: \" + label)",
+      "replacement": "require(True, \"removed raw word binding\")"
+    }
+  ]
+}
