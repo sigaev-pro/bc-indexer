@@ -397,7 +397,10 @@ func modernGenerate(t *testing.T, work string) fixture {
 			if number == 5 {
 				phase = "bootstrap-delegate"
 			}
-		} else if elected {
+		} else if elected && eip4844.IsBlobEligibleBlock(genesis.Config, header.Number.Uint64(), header.Time) {
+			// BEP-657 allows blob transactions only in eligible blocks
+			// (every fifth block), so the type matrix lands on those heights;
+			// the blocks between stay warmup.
 			if !genesis.Config.IsPasteur(header.Number, header.Time) || genesis.Config.IsJenner(header.Number, header.Time) {
 				t.Fatal("target not in full current fork interval")
 			}
