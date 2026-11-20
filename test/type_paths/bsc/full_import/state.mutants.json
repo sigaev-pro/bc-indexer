@@ -347,7 +347,7 @@
     {
       "name": "check_user: \"access list order differs\"",
       "file": "test/type_paths/bsc/full_import/judge.py",
-      "original": "require(fields[\"accessList\"] == [{\"address\": target, \"storageKeys\": [\"0x\" + \"0\" * 64] * 2}, {\"address\": target, \"storageKeys\": []}], \"access list order differs\")",
+      "original": "require(len(observed) == 2 and\n                observed[0][\"address\"].lower() == target and\n                observed[0][\"storageKeys\"] == [\"0x\" + \"0\" * 64] * 2 and\n                observed[1][\"address\"].lower() == target and\n                (observed[1][\"storageKeys\"] or []) == [], \"access list order differs\")",
       "replacement": "require(True, \"access list order differs\")"
     },
     {

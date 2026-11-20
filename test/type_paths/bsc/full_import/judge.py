@@ -138,6 +138,14 @@ def check_wire(row):
     for name, expected in decoded.items():
         if name == "from":
             require(row["from"].lower() == expected, "recovered sender differs")
+        elif name == "accessList":
+            # The native transaction JSON encodes an entry without storage
+            # keys as null; the wire decoding yields an empty list.
+            observed = row["fields"][name]
+            require(len(observed) == len(expected), "access list count differs")
+            for actual, wanted in zip(observed, expected):
+                require(actual["address"].lower() == wanted["address"] and
+                        (actual.get("storageKeys") or []) == wanted["storageKeys"], "access list wire differs")
         elif name == "authorizationList":
             observed = row["fields"][name]
             require(len(observed) == len(expected), "authorization count differs")
@@ -364,7 +372,14 @@ def check_user(row, phase, index, vote):
     else:
         require(q(fields["maxFeePerGas"]) == 2000000000 and q(fields["maxPriorityFeePerGas"]) == 1000000000, "wrong fee caps")
     if kind:
-        require(fields["accessList"] == [{"address": target, "storageKeys": ["0x" + "0" * 64] * 2}, {"address": target, "storageKeys": []}], "access list order differs")
+        observed = fields["accessList"]
+        # The second entry carries no storage keys: the native JSON encodes
+        # that as null, the wire decoding as an empty list.
+        require(len(observed) == 2 and
+                observed[0]["address"].lower() == target and
+                observed[0]["storageKeys"] == ["0x" + "0" * 64] * 2 and
+                observed[1]["address"].lower() == target and
+                (observed[1]["storageKeys"] or []) == [], "access list order differs")
     if kind == 3:
         expected_hash = "0x01" + hashlib.sha256(bytes([192]) + bytes(47)).hexdigest()[2:]
         require(fields["blobVersionedHashes"] == [expected_hash] and q(fields["maxFeePerBlobGas"]) == 1000000000, "wrong blob input")
@@ -418,7 +433,10 @@ def check(report, generated, genesis):
                 cumulative_gas = check_receipt(row, cumulative_gas, transaction_index, block)
                 require(row["time"] == block["time"] and type(row["system"]) is bool, "wrong transaction context")
                 require(encoding.keccak256(bytes.fromhex(row["wire"])).hex() == normalized(row["hash"]), "wire identity differs")
-                require(normalized(row["receipt"]["transactionHash"]) == normalized(row["hash"]) and q(row["receipt"]["type"]) == row["type"] and
+                # The native receipt JSON omits "type" for legacy receipts
+                # (type 0), so an absent field binds to the legacy type.
+                require(normalized(row["receipt"]["transactionHash"]) == normalized(row["hash"]) and
+                        q(row["receipt"].get("type", 0)) == row["type"] and
                         row["observed_receipt_wire"] == row["stored_receipt_wire"] and bool(row["stored_receipt_wire"]), "receipt binding differs")
                 classified = row["from"].lower() == VALIDATOR and row["to"].lower() in {r["address"] for r in provenance()} and q(row["gas_price"]) == 0
                 require(row["system"] == classified, "native classifier boundary differs")

@@ -213,6 +213,15 @@ func (result *modernExit) hook(depth int, output []byte, gasUsed uint64, err err
 	}
 }
 
+// execError is the row convention of the independent judge: a transaction
+// without an error carries null, not an empty string.
+func execError(err error) any {
+	if err == nil {
+		return nil
+	}
+	return err.Error()
+}
+
 func modernUserTx(t *testing.T, config *params.ChainConfig, kind uint8, nonce uint64, failed bool, blobHash common.Hash) *types.Transaction {
 	t.Helper()
 	to := modernSuccess
@@ -662,7 +671,7 @@ func TestBSCFullTypeImport(t *testing.T) {
 		if current == nil {
 			t.Fatal("end without start")
 		}
-		current["error"] = errText(err)
+		current["error"] = execError(err)
 		current["after"] = modernState(live, addresses, validator)
 		current["receipt"] = receipt
 		rows = append(rows, current)
