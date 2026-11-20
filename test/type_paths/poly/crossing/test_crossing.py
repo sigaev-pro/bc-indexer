@@ -1,6 +1,8 @@
 """Owned-file controls and exact rendering checks; no native execution claim."""
 
+import base64
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -78,10 +80,35 @@ class CrossingRenderingTests(unittest.TestCase):
         source = native.support.activation_source("probe.go").decode()
         original = source[source.index("func historical("):source.index("func activationTransaction(")]
         expected = original.replace("func historical(input, output string, ethPrefix, borPrefix int)",
-                                    "func crossingInputs(input, output string, ethPrefix, borPrefix int, gate, borGate string)")
-        expected = expected.replace("\tif ethPrefix < 2 {", "\tconfig[gate] = 2\n\tif borGate != \"\" {\n\t\tengine[borGate] = 2\n\t}\n\tif ethPrefix < 2 {")
+                                    "func crossingInputs(input, output string, ethPrefix, borPrefix int, gate, borGate string, sprint uint64)")
+        expected = expected.replace("\tif ethPrefix < 2 {",
+                                    "\tif gate != \"\" {\n\t\tconfig[gate] = 2\n\t}\n\tif borGate != \"\" {\n\t\tengine[borGate] = 2\n\t}\n\tif sprint != 0 {\n\t\tengine[\"sprint\"] = map[string]any{\"0\": sprint}\n\t}\n\tif ethPrefix < 2 {")
         actual = generated[generated.index("func crossingInputs("):generated.index("func crossingTransaction(")]
         self.assertEqual(actual, expected)
+
+    def test_state_sync_seam_tracks_the_stub_event_page(self):
+        corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
+        generated = native.support.render_support(corpus).decode()
+        source = native.support.activation_source("probe.go").decode()
+        # The activation helper pinned a synthetic single event; the crossing
+        # seam must instead carry the two-event page the accepted prepare
+        # serves: the tracked stub event plus its sequential rewrite.
+        stub = json.loads((HERE.parents[3] / "test/native_corpus/poly/stub/clerk-corpus-from-1.json").read_text())
+        first = stub["event_records"][0]
+        data = base64.b64decode(first["data"]).decode()
+        self.assertEqual(data, "extractor-corpus-state-sync-1")
+        second = dict(first, id="2", contract="0x3000000000000000000000000000000000000002",
+                      tx_hash="0x" + "00" * 31 + "02", log_index="2")
+        items = []
+        for record in (first, second):
+            items.append('{ID: %s, Contract: common.HexToAddress("%s"), '
+                         'Data: []byte("%s"), TxHash: common.HexToHash("0x0%s")}' %
+                         (record["id"], record["contract"], data, record["id"]))
+        expected = ("\t\treturn types.NewTx(&types.StateSyncTx{StateSyncData: []*types.StateSyncData{\n"
+                    "\t\t\t" + items[0] + ",\n\t\t\t" + items[1] + ",\n\t\t}}), nil")
+        self.assertIn(expected, generated)
+        self.assertIn("Data: []byte{37}, TxHash: common.HexToHash(\"0x01\")", source)
+        self.assertNotIn("Data: []byte{37}", generated)
 
     def test_pin_drift_and_nonunique_seams_are_rejected(self):
         with patch.dict(native.support.ACTIVATION_PINS, {"probe.go": "0" * 64}):

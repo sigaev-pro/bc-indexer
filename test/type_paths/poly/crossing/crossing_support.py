@@ -37,10 +37,16 @@ def render_support(corpus):
         raise ValueError("non-unique activation helper boundary")
     helpers = source[:source.index(marker)]
     helpers = replace_once(helpers, "func historical(input, output string, ethPrefix, borPrefix int)",
-                           "func crossingInputs(input, output string, ethPrefix, borPrefix int, gate, borGate string)")
-    helpers = replace_once(helpers, "\tif ethPrefix < 2 {", "\tconfig[gate] = 2\n\tif borGate != \"\" {\n\t\tengine[borGate] = 2\n\t}\n\tif ethPrefix < 2 {")
+                           "func crossingInputs(input, output string, ethPrefix, borPrefix int, gate, borGate string, sprint uint64)")
+    helpers = replace_once(helpers, "\tif ethPrefix < 2 {",
+                           "\tif gate != \"\" {\n\t\tconfig[gate] = 2\n\t}\n\tif borGate != \"\" {\n\t\tengine[borGate] = 2\n\t}\n\tif sprint != 0 {\n\t\tengine[\"sprint\"] = map[string]any{\"0\": sprint}\n\t}\n\tif ethPrefix < 2 {")
     helpers = replace_once(helpers, "func activationTransaction(config *params.ChainConfig, kind byte)",
                            "func crossingTransaction(config *params.ChainConfig, kind byte, nonce uint64)")
+    helpers = replace_once(helpers, "\t\treturn types.NewTx(&types.StateSyncTx{StateSyncData: []*types.StateSyncData{{ID: 1, Contract: common.HexToAddress(\"0x3000000000000000000000000000000000000003\"), Data: []byte{37}, TxHash: common.HexToHash(\"0x01\")}}}), nil",
+                           "\t\treturn types.NewTx(&types.StateSyncTx{StateSyncData: []*types.StateSyncData{\n"
+                           "\t\t\t{ID: 1, Contract: common.HexToAddress(\"0x3000000000000000000000000000000000000003\"), Data: []byte(\"extractor-corpus-state-sync-1\"), TxHash: common.HexToHash(\"0x01\")},\n"
+                           "\t\t\t{ID: 2, Contract: common.HexToAddress(\"0x3000000000000000000000000000000000000002\"), Data: []byte(\"extractor-corpus-state-sync-1\"), TxHash: common.HexToHash(\"0x02\")},\n"
+                           "\t\t}}), nil")
     if helpers.count("Nonce: 1,") != 3:
         raise ValueError("unexpected typed transaction nonce seams")
     helpers = helpers.replace("Nonce: 1,", "Nonce: nonce,")
