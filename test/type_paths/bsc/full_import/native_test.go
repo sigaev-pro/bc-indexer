@@ -459,6 +459,29 @@ func modernGenerate(t *testing.T, work string) fixture {
 			t.Fatal("seal deadline")
 		}
 		close(stop)
+		// BSC carries blob sidecars with the block body: the data-availability
+		// check of InsertChain requires one verified sidecar per blob
+		// transaction, bound to this block and the transaction's position.
+		var sidecars types.BlobSidecars
+		for i, tx := range body.Transactions {
+			if tx.Type() != types.BlobTxType {
+				continue
+			}
+			sidecars = append(sidecars, &types.BlobSidecar{
+				BlobTxSidecar: types.BlobTxSidecar{
+					Blobs:       []kzg4844.Blob{blob},
+					Commitments: []kzg4844.Commitment{commitment},
+					Proofs:      []kzg4844.Proof{blobProof},
+				},
+				BlockNumber: block.Number(),
+				BlockHash:   block.Hash(),
+				TxIndex:     uint64(i),
+				TxHash:      tx.Hash(),
+			})
+		}
+		if len(sidecars) > 0 {
+			block = block.WithSidecars(sidecars)
+		}
 		if n, err := chain.InsertChain(types.Blocks{block}); err != nil || n != 1 {
 			t.Fatalf("insert %d: %d %v", number, n, err)
 		}
