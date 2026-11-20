@@ -105,7 +105,8 @@ def handoff_verdicts(probe):
     """Derive handoff verdicts from native facts; never accept producer verdicts."""
     runs = probe.get("handoff_runs") or {}
     verdicts = []
-    for name in ("geth.pass-at-golive", "geth.sethead-interrupted", "geth.mid-reorg-long-branch"):
+    for name in ("geth.pass-at-golive", "geth.sethead-interrupted", "geth.mid-reorg-long-branch",
+                 "geth.repaired-judge"):
         row = runs.get(name)
         if not isinstance(row, dict):
             continue
@@ -120,6 +121,34 @@ def handoff_verdicts(probe):
                         boundary["number"] == 1 and boundary["hash"] == block["hash"] and
                         boundary["root"] == block["root"] and row["head"] == 2 and
                         (row["returned_during_pass"] is False or isinstance(row["during_error"], str)))
+            elif name == "geth.repaired-judge":
+                # The stop leaves exactly the saved reorganization unresolved:
+                # one CANONICAL intent from the old head to the new head with
+                # the two member blocks of its branch. The head was lowered
+                # below the fork point, to neither decision head, and the
+                # restart refused to complete the reorganization, naming the
+                # unresolved intent and settling nothing.
+                records = row["records_before"]
+                pending = [(key, json.loads(value)) for key, value in records.items()
+                           if key.endswith("/intent") and key[:-7] + "/decided" not in records and
+                           key[:-7] + "/rejected" not in records]
+                good = len(pending) == 1
+                intent = pending[0][1] if good else {}
+                blocks = [member.get("block") for member in intent.get("members") or []]
+                good = (good and intent["kind"] == "CANONICAL" and
+                        isinstance(intent.get("sequence"), int) and
+                        not isinstance(intent.get("sequence"), bool) and
+                        intent["old_head"]["hash"] == row["old_head"] and
+                        intent["new_head"]["hash"] == row["target"]["hash"] and
+                        blocks == row["member_blocks"] and blocks[-1] == row["target"]["hash"] and
+                        row["hit"] == name and row["step_error"] is None and
+                        row["lowered_head"]["number"] < intent["old_head"]["number"] < row["target"]["number"] and
+                        row["head_before_restart"] == row["lowered_head"]["hash"] and
+                        row["head_before_restart"] not in (row["old_head"], row["target"]["hash"]) and
+                        isinstance(row["restart_error"], str) and
+                        "neither the old nor the new head" in row["restart_error"] and
+                        f"of intent {intent['sequence']}," in row["restart_error"] and
+                        row["settled"] == [])
             else:
                 records = row["records_before"]
                 pending = [(key, json.loads(value)) for key, value in records.items()

@@ -132,6 +132,54 @@
       "file": "test/native_faults/eth/faults_geth.py",
       "original": "final = dict(case.get(\"final\") or {}, corpus=result)",
       "replacement": "final = dict(case.get(\"final\") or {}, corpus=\"PASS\")"
+    },
+    {
+      "name": "repaired old head unbound",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "intent[\"old_head\"][\"hash\"] == row[\"old_head\"] and\n                        intent[\"new_head\"][\"hash\"] == row[\"target\"][\"hash\"] and",
+      "replacement": "True and\n                        intent[\"new_head\"][\"hash\"] == row[\"target\"][\"hash\"] and"
+    },
+    {
+      "name": "repaired members unbound",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "blocks == row[\"member_blocks\"] and blocks[-1] == row[\"target\"][\"hash\"] and",
+      "replacement": "blocks[-1] == row[\"target\"][\"hash\"] and"
+    },
+    {
+      "name": "repaired several pending intents",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "good = len(pending) == 1\n                intent = pending[0][1] if good else {}\n                blocks = [member.get(\"block\") for member in intent.get(\"members\") or []]",
+      "replacement": "good = len(pending) >= 1\n                intent = pending[0][1] if good else {}\n                blocks = [member.get(\"block\") for member in intent.get(\"members\") or []]"
+    },
+    {
+      "name": "repaired fork point unchecked",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "row[\"lowered_head\"][\"number\"] < intent[\"old_head\"][\"number\"] < row[\"target\"][\"number\"] and",
+      "replacement": "True and"
+    },
+    {
+      "name": "repaired head at a decision head",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "row[\"head_before_restart\"] not in (row[\"old_head\"], row[\"target\"][\"hash\"]) and",
+      "replacement": "True and"
+    },
+    {
+      "name": "repaired refusal reason unbound",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "\"neither the old nor the new head\" in row[\"restart_error\"] and",
+      "replacement": "True and"
+    },
+    {
+      "name": "repaired sequence unbound",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "f\"of intent {intent['sequence']},\" in row[\"restart_error\"] and",
+      "replacement": "True and"
+    },
+    {
+      "name": "repaired settlement ignored",
+      "file": "test/native_faults/eth/faults_geth.py",
+      "original": "row[\"settled\"] == [])",
+      "replacement": "True)"
     }
   ]
 }

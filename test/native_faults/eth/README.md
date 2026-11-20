@@ -89,6 +89,25 @@ The export helpers of `probe.go` are copied from
 `test/native_corpus/eth/probe.go`. A portable test keeps them identical.
 The one difference is in `decisions`: a rejected intent is not undecided.
 
+## Handoffs
+
+Each handoff is one native scenario of `handoffs.go`; the driver derives its
+verdict from the recorded facts and never accepts a producer verdict.
+
+- `geth.pass-at-golive`: a canonical import held open across `GoLive` must be
+  refused, finish before H is set, and leave no observation or decision.
+- `geth.sethead-interrupted`: a `SetHead` rewind stopped between its two head
+  batches must complete from the durable intermediate head, and the recovery
+  must settle the saved intent inside the rewind.
+- `geth.mid-reorg-long-branch`: a reorganization stopped before its final head
+  batch, with more than one block on the old branch, must complete from the
+  stored transition and settle the intent inside the reorg.
+- `geth.repaired-judge`: the same stop as the reorg, with the head lowered to
+  a shared ancestor below the fork point, as a native startup repair would
+  leave it. The restart must refuse to complete the reorganization, name the
+  one unresolved CANONICAL intent, and settle nothing; the verdict binds the
+  refusal, the intent heads, the two member blocks and the lowered head.
+
 ## Commands
 
 From the repository root, in a clean checkout (both take

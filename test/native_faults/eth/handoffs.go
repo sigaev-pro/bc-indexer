@@ -242,10 +242,88 @@ func interrupted(work, id, commit string, genesis *core.Genesis, index int) case
 	return row
 }
 
+// repaired covers geth.repaired-judge: a stop before the final head batch of
+// a two-block reorganization, with the head lowered to a shared ancestor as
+// if a native startup repair had rewound it below the fork point. The restart
+// must refuse to complete the reorganization from there and name the one
+// unresolved intent; the Python driver binds that refusal to the intent.
+func repaired(work, id, commit string, genesis *core.Genesis, index int) caseResult {
+	dir, mem, cfg := handoffSetup(work, id, commit, genesis, index)
+	// The forked branch must build on the state of its parent block, so both
+	// branches are generated over one shared state database, as the lifecycle
+	// probe does.
+	db, old, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), 6,
+		func(i int, b *core.BlockGen) {
+			b.SetCoinbase(coinbase)
+			if i >= 2 {
+				b.SetExtra([]byte{1})
+			}
+		})
+	defer db.Close()
+	forked, _ := core.GenerateChain(genesis.Config, old[3], ethash.NewFaker(), db, 2,
+		func(i int, b *core.BlockGen) { b.SetCoinbase(coinbase) })
+	armed := false
+	var n *node
+	var err error
+	n, err = openHandoff(mem, dir, genesis, cfg, nil, extractorgeth.LifecycleOptions{Point: func(p string) {
+		if armed && p == "final" {
+			// As if a native startup repair had lowered the head to the
+			// third block, below the fork point of the reorganization.
+			rawdb.WriteHeadBlockHash(n.db, old[2].Hash())
+			check(n.db.SyncKeyValue())
+			panic(faultHit{id})
+		}
+	}}, nil)
+	check(err)
+	_, err = n.chain.InsertChain(types.Blocks{old[0]})
+	check(err)
+	_, err = n.life.GoLive()
+	check(err)
+	_, err = n.chain.InsertChain(old[1:4])
+	check(err)
+	for _, b := range forked {
+		_, err = n.chain.InsertBlockWithoutSetHead(context.Background(), b, false)
+		check(err)
+	}
+	armed = true
+	hit, stepErr := guarded(func() error {
+		_, e := n.chain.SetCanonical(forked[1])
+		return e
+	})
+	row := caseResult{"hit": hit, "step_error": errText(stepErr), "old_head": plainHash(old[3].Hash().Hex()),
+		"records_before":      prefixed(n.db, n.db, decisionPrefix),
+		"head_before_restart": plainHash(rawdb.ReadHeadBlockHash(n.db).Hex())}
+	row["target"] = map[string]any{"number": forked[1].NumberU64(), "hash": plainHash(forked[1].Hash().Hex()),
+		"root": plainHash(forked[1].Root().Hex())}
+	row["lowered_head"] = map[string]any{"number": old[2].NumberU64(), "hash": plainHash(old[2].Hash().Hex()),
+		"root": plainHash(old[2].Root().Hex())}
+	row["member_blocks"] = []any{plainHash(forked[0].Hash().Hex()), plainHash(forked[1].Hash().Hex())}
+	clone := mem.CrashClone(vfs.CrashCloneCfg{UnsyncedDataPercent: 0})
+	events := []map[string]any{}
+	r, restartErr := open(clone, dir, genesis, cfg, func(event string, fields map[string]any) {
+		if event == "settling" {
+			m := map[string]any{"event": event}
+			for k, v := range fields {
+				m[k] = v
+			}
+			events = append(events, m)
+		}
+	})
+	row["restart_error"] = errText(restartErr)
+	row["settled"] = events
+	if restartErr == nil {
+		// A completed attach is itself a failure; record why for the driver.
+		row["phase"] = phaseText(r.life.Gate().Phase())
+		row["head"] = nativeAt(r.db, r.chain.CurrentBlock().Number.Uint64())
+	}
+	return row
+}
+
 func runHandoffs(work string, genesis *core.Genesis, blocks []*types.Block, commit string) map[string]any {
 	return map[string]any{
 		"geth.pass-at-golive":        passAtGoLive(work, genesis, blocks, commit),
 		"geth.sethead-interrupted":   interrupted(work, "geth.sethead-interrupted", commit, genesis, 101),
 		"geth.mid-reorg-long-branch": interrupted(work, "geth.mid-reorg-long-branch", commit, genesis, 102),
+		"geth.repaired-judge":        repaired(work, "geth.repaired-judge", commit, genesis, 103),
 	}
 }
