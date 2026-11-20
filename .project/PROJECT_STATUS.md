@@ -1,6 +1,32 @@
 # Состояние проекта
 
+## Autonomous campaign — 2026-11-19 (D107)
+
+Finalization in progress (03:36 UTC). Authorized window:2026-11-18 22:23:22–2026-11-19 04:23:22 UTC (01:23:22–07:23:22 Europe/Moscow). Accepted implementation checkpoint:`0b518f9527c905bd2501e337b9601ec98df6c300`. All campaign native sessions are idle; final report/recovery checks continue. See [campaign report](evidence/D107.campaign-20261119.md).
+
+Accepted this campaign: native type source inventory PR183; BSC component proof PR185 and modern-init prerequisite PR188; ETH private current-fork proof PR186; Bor fault partB PR181; Polygon current-fork proof PR189 and preactivation proof PR193. Authorization/checkpoint PRs180,184,187,190,192 are also accepted. All12merges were independently reconciled against exact head/base parents, successful CI and the review-body/status digest. Baseline BSC partB PR179 is not new work.
+
+PR193 final validation:204tests/13modules,96source identities, strict actual-observation replay,74killed mutants and2independently justified equivalents. Numeric bool/float aliases found by Standards review were repaired before acceptance. Reserved127 was actually accepted/skipped beforeMadhugiri with unchanged authenticated state; no refusal credit. Private evidence is not public-profile proof.
+
+Direct E01 work still outstanding:
+- #20 Geth partB: draftPR182 at20ecb958; compile failure and required recovery handoffs remain unaccepted.
+- #21 BSC complete current-fork import/system-state proof: draftPR191 producer3439237, oracle7b64adf; election diagnostic failed, bootstrap unexecuted, storage-label correction unapplied.
+- Reconcile the required private path/applicability matrix, then independently review #20/#21 and G.E01 (#78). E02 remains blocked until G.E01 passes.
+
+These implementations and optional Polygon crossing PR194 stopped after platform agent-turn flags. Do not reroute stopped implementation. Crossing producer37e59cb andjudgef9e74f2 are clean/pushed; original3isolated diagnostic/replay passed, but mutation audit failed74kills/64survivors. Paired-case preparation02 completedPASS/cleanuptrue; paired runtime remainsNOT_RUN. No acceptance is granted to that draft.
+
+D96/D98/D100/D106 retain public-network evidence under E06/E07; publicNOT_RUN alone is not a blanket E01 blocker. Full normalization/protocol semantics remain E04 and combined Gateway/native faults remain E05. No production deployment, paid resources or mainnet signing occurred.
+
+Backup release: https://github.com/sigaev-pro/bc-indexer/releases/tag/backup-2026-11-19-3c94140
+Checkpoint05 preserves accepted code and11selected branch refs. Actual restore matched819files/content/modes and fsck passed;204portable tests and docs checks passed from restored source. Compact archives01–34 preserve failures as well as passes. Native caches/external build trees are excluded; no cold offline native-build claim. Final coordinator/recovery metadata will identify closing refs.
+
+### Earlier campaign checkpoint (historical)
+
+Earlier runtime snapshots remain in Git history and versioned checkpoint archives. The report above and current release recovery metadata supersede those snapshots; acceptance scope and normative decisions are unchanged.
+
 ## E01-04.early_faults — Early capture and decision boundaries under power loss (issue #20)
+
+> Historical task snapshots below. Current campaign state: BSC partB (including skipBlock) and Bor partB are accepted; Geth partB and parent issue #20 remain incomplete. Use the [campaign report](evidence/D107.campaign-20261119.md) for the current stopping points. Earlier “in review”/“open” part-level labels below describe past snapshots.
 
 Status: IN_PROGRESS. Block 0 (faults-core) merged in PR #174 at `bdf3919`,
 its correction 01 and the Geth block part A in PRs #175 and #176 at

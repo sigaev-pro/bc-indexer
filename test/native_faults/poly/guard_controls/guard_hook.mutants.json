@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "language": "go",
+  "description": "Portable mutex controls over the exact installed Bor admission source; copy this table and its test beside the retained package snapshot before execution.",
+  "copy": ["*.go", "go.mod"],
+  "test": ["go", "test", "-count=1", "-timeout=5s", "./..."],
+  "timeout_seconds": 120,
+  "mutants": [
+    {"name": "contention event omitted", "file": "admission.go", "original": "\t\t\thook(g, \"contended\")\n", "replacement": ""},
+    {"name": "contended acquisition omitted", "file": "admission.go", "original": "\t\t\tg.lock.Lock()\n", "replacement": ""},
+    {"name": "acquisition event omitted", "file": "admission.go", "original": "\t\thook(g, \"acquired\")\n", "replacement": ""},
+    {"name": "nil hook locking omitted", "file": "admission.go", "original": "\t} else {\n\t\tg.lock.Lock()\n\t}\n", "replacement": "\t} else {\n\t}\n"}
+  ]
+}

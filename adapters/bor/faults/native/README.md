@@ -1,6 +1,6 @@
 # Bor faults patch set (E01-04.early_faults, test-only)
 
-`patches.json` adds two package variables, used only by the Bor fault probe
+`patches.json` adds four package variables, used only by the Bor fault probe
 ([test/native_faults/poly](../../../../test/native_faults/poly/README.md)):
 
 - `ExtractorFS` (`vfs.FS`, pebble v1) in `ethdb/pebble`. When it is not nil,
@@ -11,6 +11,12 @@
   key-value store it opens through this function. The probe starts a full
   node stack (the Bor lifecycle wiring needs the eth backend), so this is
   where it wraps the store in its fault store.
+- `ExtractorFaultRecoveryStep` in `core` observes recovery before and after
+  taking the chain mutex.
+- `ExtractorFaultGuardAcquire` in the installed native `extractor/admission`
+  package observes a failed `TryLock` and the subsequent successful `Lock`.
+  The probe checks the guard identity and releases the native vote only after
+  actual contention. The hook cannot substitute for acquiring the guard.
 
 Production code never sets them. With the default nil values the node opens
 and uses its store exactly as before. The patch set applies after the Bor
@@ -25,6 +31,8 @@ occurs exactly once.
 | `pebble_vfs_open` | `ethdb/pebble/pebble.go` | `opt.FS = ExtractorFS` before `pebble.Open` when it is set |
 | `node_store_wrap_var` | `node/database.go` | `var ExtractorWrap func(ethdb.KeyValueStore) ethdb.KeyValueStore` |
 | `node_store_wrap_apply` | `node/database.go` | `newPebbleDBDatabase` returns `ExtractorWrap(db)` when it is set |
+| `recovery_order_probe` | `core/zz_extractor_decision.go` | observe native chain mutex acquisition |
+| `guard_contention_probe` | `extractor/admission/admission.go` | observe contention and acquisition on the real guard; nil retains original `Lock` |
 
 The eth backend opens one pebble store, `chaindata`, so the wrap reaches the
 store that the native chain and every extractor package use.

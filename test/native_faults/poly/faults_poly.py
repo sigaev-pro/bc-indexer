@@ -53,12 +53,15 @@ import pins  # noqa: E402
 import poly_corpus  # noqa: E402
 
 PROBE = FIXTURE / "main.go"
+HELP_PROBE = ROOT / "adapters/bor/lifecycle/native/probe/main.go"
+HELP_TEXT = '"block whose milestone is written in BOOTSTRAP before a vote holds the guard across GoLive"'
 PROBE_DIR = "cmd/extractor-faults-bor"
 STUB = HARNESS / "fixtures" / "source_inputs_bor" / "heimdallstub" / "stub.go"
 EXPECTED = ROOT / "test" / "native_corpus" / "expected" / "poly.json"
 HARNESS_FILES = ("artifacts.py", "native.py", "owned.py", "pins.py", "bor_admission_tree.py", "admission.py",
                  "capture_probe.py")
 BLOCK_FILES = ("test/native_faults/poly/faults_poly.py", "test/native_faults/poly/main.go",
+               "test/native_faults/poly/handoffs.go", "test/native_faults/poly/children.go", "adapters/bor/lifecycle/native/probe/main.go",
                "adapters/bor/faults/native/patches.json", "adapters/bor/lifecycle/native/lifecycle_tree.py",
                "test/native_corpus/poly/poly_corpus.py", "test/native_corpus/corpus_compare.py",
                "test/native_faults/faults_judge.py", "test/native_faults/faults.json")
@@ -122,7 +125,67 @@ def to_faults_report(probe, expected, source):
                      {"final": final})
     return {"schema_version": 1, "kind": "native-faults-report", "family": "poly",
             "storage_model": probe.get("storage_model"), "source": source, "cases": cases,
-            "handoffs": probe.get("handoffs", [])}, corpus
+            "handoffs": handoff_verdicts(probe)}, corpus
+
+
+def handoff_verdicts(probe):
+    """Derive every handoff from required native facts, never supplied verdicts."""
+    runs = probe.get("handoff_runs")
+    if not isinstance(runs, dict):
+        return []
+    checks = {"bor.probe-flag-help": HELP_TEXT in HELP_PROBE.read_text()}
+    for hid, row in runs.items():
+        if not isinstance(row, dict):
+            checks[hid] = False
+            continue
+        try:
+            valid = row["id"] == hid and row["phase_at_start"] == "BOOTSTRAP" and not row.get("child_error")
+            valid = valid and row["block1"]["hash"] == probe["blocks"]["1"]
+            if hid == "bor.pass-at-golive":
+                valid = valid and all(row[k] is True for k in ("native_head_write_held", "golive_attempted"))
+                valid = valid and row["boundary_during_import"] is None
+                valid = valid and all(row[k] is None for k in ("import_error", "golive_error", "block2_error"))
+                valid = valid and row["boundary"] == dict(row["block1"], number=1)
+                valid = valid and row["observations_before_block2"] == 0 and row["decided_before_block2"] == []
+                valid = valid and row["decided"] == [2] and row["head"] == 2
+            elif hid == "bor.below-h-rewind":
+                valid = valid and "rewind to 0 is below the live boundary 1" in row["rewind_error"]
+                valid = valid and row["boundary_before"] == dict(row["block1"], number=1)
+                valid = valid and row["boundary_after"] == row["boundary_before"]
+                valid = valid and row["head_before"] == row["head_after"] and row["head"] == 2
+                valid = valid and row["decisions_before"] == row["decisions_after"]
+            elif hid in ("bor.bootstrap-vote-pass", "bor.golive-order"):
+                valid = valid and row["vote_locked"] is True and row["guard_matches_vote"] is True
+                valid = valid and row["order"] == ["chain-locked", "guard-contended", "vote-release", "guard-acquired"]
+                valid = valid and row["boundary_held"] is None and row["boundary_before_vote_release"] is None
+                valid = valid and row["decisions_held"] == {} and row["decisions_before_golive"] == {}
+                before = row["coverage_before"].get("bor.milestone-lock", {"Passes": 0, "Intents": 0, "Refusals": 0})
+                held = row["coverage_held"]["bor.milestone-lock"]
+                valid = valid and held == dict(before, Passes=before["Passes"] + 1)
+                valid = valid and row["coverage_released"]["bor.milestone-lock"] == held
+                valid = valid and row["golive_error"] is None and row["phase"] == "LIVE"
+                valid = valid and row["boundary"] == dict(row["block1"], number=1)
+            elif hid == "bor.power-loss-model":
+                valid = valid and row["root_present_before_fixture"] is True and row["fixture_deletion_synced"] is True
+                valid = valid and row["sentinel_before_reset"] is True and row["sentinel_after_reset"] is False
+                valid = valid and row["reset_to_synced"] is True and row["fixture_root_after_reset"] is False
+                valid = valid and row["restart_error"] is None and row["phase_after"] == "LIVE"
+                valid = valid and row["head_before"] == 4 and row["head_after"] == 3
+                valid = valid and row["decided_before"] == [1, 2, 3, 4] and row["undecided"] == []
+                valid = valid and row["roots_distinct"] is True and row["predecessor_state_before"] is True
+                valid = valid and row["predecessor_state_after"] is True and row["predecessor"]["number"] == 3
+                valid = valid and row["predecessor"]["hash"] == probe["blocks"]["3"]
+                valid = valid and row["boundary_before"]["number"] == 0
+                valid = valid and row["boundary_after"] == row["boundary_before"]
+                repaired = row["recovery"]["repaired"]
+                valid = valid and repaired["number"] == 3 and repaired["hash"] == row["predecessor"]["hash"]
+            else:
+                valid = False
+        except (KeyError, TypeError, AttributeError):
+            valid = False
+        checks[hid] = valid
+    return [{"id": hid, "verdict": "PASS" if passed else "FAIL", "evidence": f"handoff_runs.{hid}"}
+            for hid, passed in sorted(checks.items())]
 
 
 def native_errors(probe):
@@ -232,6 +295,12 @@ def prepare(manifest_path, expected_sha, output):
         (target / "heimdallstub").mkdir(parents=True)
         probe_ref = copy_artifact(PROBE, target / "main.go", reference(PROBE, 4 * 1024 * 1024, deadline),
                                   4 * 1024 * 1024, deadline)
+        handoff = FIXTURE / "handoffs.go"
+        handoff_ref = copy_artifact(handoff, target / handoff.name, reference(handoff, deadline=deadline),
+                                    deadline=deadline)
+        children = FIXTURE / "children.go"
+        children_ref = copy_artifact(children, target / children.name, reference(children, deadline=deadline),
+                                     deadline=deadline)
         stub_ref = copy_artifact(STUB, target / "heimdallstub" / "stub.go", reference(STUB, 4 * 1024 * 1024, deadline),
                                  4 * 1024 * 1024, deadline)
         for name in ("bin", "build-cache", "gopath", "gotmp"):
@@ -254,7 +323,8 @@ def prepare(manifest_path, expected_sha, output):
         tool = {"schema_version": 1, "kind": "bor-faults-tool", "build_manifest": manifest_ref,
                 "native_source_commit": closure["source_commit"], "source_archive": copied, "compiler": compiler,
                 "runtime": runtime, "installed": installed, "faults_install": faults, "probe": probe_ref,
-                "heimdall_stub": stub_ref, "binary": reference(root / "bin" / "probe", BINARY_LIMIT, deadline)}
+                "heimdall_stub": stub_ref, "handoffs": handoff_ref, "children": children_ref,
+                "binary": reference(root / "bin" / "probe", BINARY_LIMIT, deadline)}
         pins.save(output / "tool.json", tool)
         proof["tool"] = reference(output / "tool.json", deadline=deadline)
 
