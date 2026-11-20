@@ -13,9 +13,13 @@ check, octets, integer, quantity = prior.check, prior.octets, prior.integer, pri
 native_json, intent_digest, decided_digest = prior.native_json, prior.intent_digest, prior.decided_digest
 
 
-def historical_config(config, eth_prefix, bor_prefix):
+def historical_config(config, eth_prefix, bor_prefix, bor_gate=""):
     eth = {name: 0 if i < eth_prefix else 8 for i, name in enumerate(profile.ETHEREUM_SCHEDULE)}
     bor = {name: 0 if i < bor_prefix else 8 for i, name in enumerate(profile.BOR_SCHEDULE)}
+    if bor_gate:
+        # Paired schedules activate the Bor gate at the crossing block itself,
+        # ahead of its historical position in the prefix.
+        bor[bor_gate] = 2
     bor.update({"hampiBlock": None, "sprint": {"0": 4}, "period": {"0": 1},
                 "producerDelay": {"0": 6}, "backupMultiplier": {"0": 1},
                 "stateSyncConfirmationDelay": {"0": 0},

@@ -11,7 +11,11 @@ h = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(h)
 prior, codec = h.prior, h.codec
 check, octets, integer, quantity = h.check, h.octets, h.integer, h.quantity
-CASES = (("Berlin", "berlinBlock", 1, 0, 0), ("London", "londonBlock", 2, 1, 0), ("Prague", "pragueBlock", 4, 4, 4))
+CASES = (("Berlin", "berlinBlock", "", 1, 0, 0), ("London", "londonBlock", "", 2, 1, 0), ("Prague", "pragueBlock", "", 4, 4, 4))
+# The paired producer retains the frozen unpaired three and appends two rows
+# that also schedule Jaipur or Bhilai at the crossing block itself.
+PAIRED_CASES = CASES + (("LondonJaipur", "londonBlock", "jaipurBlock", 2, 1, 0),
+                        ("PragueBhilai", "pragueBlock", "bhilaiBlock", 4, 4, 4))
 SIGNER = "71562b71999873db5b286df957af199ec94617f7"
 INITIAL_CODE_HASHES = {
     prior.SENDER: "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
@@ -139,15 +143,17 @@ def configuration_numbers(value):
             configuration_numbers(child)
 
 
-def case(row, expected):
-    name, gate, kind, eth_prefix, bor_prefix = expected
+def case(row, expected, paired):
+    name, gate, bor_gate, kind, eth_prefix, bor_prefix = expected
     check(row["name"] == name and type(row["type"]) is int and row["type"] == kind and
           type(row["activation_block"]) is int and row["activation_block"] == 2, "crossing case identity differs")
+    check(("bor_activation" in row) == paired and
+          (not paired or row["bor_activation"] == bor_gate), "crossing bor activation differs")
     config = copy.deepcopy(row["config"])
     configuration_numbers(config)
     check(type(config[gate]) is int and config[gate] == 2, "crossing activation schedule differs")
     config[gate] = 8
-    h.historical_config(config, eth_prefix, bor_prefix)
+    h.historical_config(config, eth_prefix, bor_prefix, bor_gate)
     width1, width2 = (16, 16) if kind == 4 else ((15, 16) if kind == 2 else (15, 15))
     genesis, txg, genesis_hash = h.raw_block(row["genesis_raw"], 20 if kind == 4 else 15)
     check(integer(genesis[8]) == 0 and genesis[0] == bytes(32) and not txg, "crossing genesis differs")
@@ -189,9 +195,18 @@ def judge(report):
     try:
         check(report["native_source"] == prior.NATIVE and report["scope"] == "private-ordinary-activation-crossing" and
               report["public_profile_credit"] is False and "error" not in report, "crossing native identity/result differs")
-        check(len(report["cases"]) == len(CASES), "crossing case matrix differs")
-        for row, expected in zip(report["cases"], CASES):
-            case(row, expected)
+        # The paired producer appends two paired rows to the frozen unpaired
+        # three; every paired-report row declares bor_activation, naming the
+        # Bor gate only for the appended pair.
+        paired = len(report["cases"]) > len(CASES)
+        if paired:
+            check(len(report["cases"]) == len(PAIRED_CASES), "crossing paired case matrix differs")
+            matrix = PAIRED_CASES
+        else:
+            check(len(report["cases"]) == len(CASES), "crossing case matrix differs")
+            matrix = CASES
+        for row, expected in zip(report["cases"], matrix):
+            case(row, expected, paired)
         return {"result": "PASS", "private_activation_crossings": [1, 2, 4], "reserved127": "NOT_EVALUATED", "public_profile_credit": False}
     except (ValueError, TypeError, KeyError, IndexError, OverflowError, AttributeError) as error:
         return {"result": "FAIL", "error": str(error), "public_profile_credit": False}

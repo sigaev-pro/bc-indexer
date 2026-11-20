@@ -877,6 +877,60 @@
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "        absent_authority(first, first_root)",
       "replacement": "        pass"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing bor activation differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check((\"bor_activation\" in row) == paired and",
+      "replacement": "check(True and"
+    },
+    {
+      "name": "crossing_judge.py:case:crossing bor activation differs:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "(not paired or row[\"bor_activation\"] == bor_gate), \"crossing bor activation differs\")",
+      "replacement": "True, \"crossing bor activation differs\")"
+    },
+    {
+      "name": "crossing_judge.py:judge:crossing paired case matrix differs:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(report[\"cases\"]) == len(PAIRED_CASES), \"crossing paired case matrix differs\")",
+      "replacement": "check(True, \"crossing paired case matrix differs\")"
+    },
+    {
+      "name": "crossing_judge.py:judge:paired dispatch ignored:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "paired = len(report[\"cases\"]) > len(CASES)",
+      "replacement": "paired = False"
+    },
+    {
+      "name": "crossing_judge.py:judge:paired dispatch ignored:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "paired = len(report[\"cases\"]) > len(CASES)",
+      "replacement": "paired = True"
+    },
+    {
+      "name": "crossing_judge.py:judge:paired flag forced:1",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "            case(row, expected, paired)",
+      "replacement": "            case(row, expected, True)"
+    },
+    {
+      "name": "crossing_judge.py:judge:paired flag forced:2",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "            case(row, expected, paired)",
+      "replacement": "            case(row, expected, False)"
+    },
+    {
+      "name": "crossing_helpers.py:historical_config:paired bor gate schedule ignored:1",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "if bor_gate:",
+      "replacement": "if False:"
+    },
+    {
+      "name": "crossing_helpers.py:historical_config:paired bor gate schedule ignored:2",
+      "file": "test/type_paths/poly/crossing/crossing_helpers.py",
+      "original": "bor[bor_gate] = 2",
+      "replacement": "bor[bor_gate] = 8"
     }
   ]
 }

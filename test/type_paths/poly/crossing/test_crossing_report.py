@@ -92,7 +92,7 @@ class CrossingNativeReport(unittest.TestCase):
             self.reject(lambda r: r["cases"][0].update({field: value}))
 
     def test_configuration_gate_and_numeric_domains(self):
-        for index, (_, gate, _, _, _) in enumerate(j.CASES):
+        for index, (_, gate, _, _, _, _) in enumerate(j.CASES):
             for value in (0, 8, 2.0, True):
                 self.reject(lambda r: r["cases"][index]["config"].update({gate: value}))
         self.reject(lambda r: r["cases"][0]["config"].update(chainId=1))

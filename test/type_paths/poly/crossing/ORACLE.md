@@ -73,3 +73,36 @@ checks and cryptographic assumptions where relevant. Independent review and a
 fresh complete mutation audit are required before those explanations receive
 acceptance. Portable extracted Go controls pass all 14 mutants; their explicit
 native type doubles do not provide signing, execution or import evidence.
+
+## Paired Bor-schedule matrix
+
+The judge now accepts both retained observation shapes. The frozen unpaired
+three-case vector above remains valid unchanged, and the paired producer at
+`37e59cb` is judged as a five-case matrix: its retained unpaired three plus
+London with Jaipur at 2 and Prague with Bhilai at 2. Dispatch is by case count;
+a report of any other length fails against whichever matrix is closer. Every
+paired-report row carries `bor_activation`: an empty string for the retained
+unpaired rows, `jaipurBlock` or `bhilaiBlock` for the paired rows. Unpaired
+rows must not carry the field, so the frozen vector cannot be relabeled as a
+paired observation.
+
+The paired Bor gate sits inside the nested `bor` configuration and activates
+at the crossing block itself, ahead of its historical prefix position;
+`historical_config` now expects that gate at 2 for the paired rows while the
+unpaired expectations (London Jaipur 8, Prague Bhilai 8) stay binding for the
+original three. Gate values, presence, count, order and both Ethereum gates
+are rejected when changed. Bhilai's fee denominator reads the parent height,
+so block 2 still uses Delhi's denominator 16; the unchanged base-fee oracle
+keeps that expectation for PragueBhilai, and this fixture still does not claim
+the block-3 denominator-64 transition. Jaipur changes the native SealHash and
+the producer signs with the full configuration, but the offline judge does not
+authenticate block seals, so the pairing is bound through the configuration
+gate rather than the seal bytes.
+
+The paired producer's runtime is pending, so the offline paired controls pair
+the retained unpaired payloads with paired identity and configuration only;
+its retained preparation does not make those blocks paired evidence. A genuine
+paired native observation must still be judged as a whole when retained. Nine
+new single-check mutants cover the paired dispatch, matrix, `bor_activation`
+and gate bindings; all existing checks and mutants are retained unchanged,
+and the complete audit remains required for acceptance.
