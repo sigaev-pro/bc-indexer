@@ -117,7 +117,7 @@
     {
       "name": "activation refusal unbound",
       "file": "test/type_paths/bsc/full_import/judge.py",
-      "original": "activation[\"unsupported\"] is True and isinstance(activation[\"error\"], str) and activation[\"error\"] and",
+      "original": "(activation[\"unsupported\"] is True or activation[\"error\"] == \"data blobs present in block body\") and",
       "replacement": "True and"
     },
     {

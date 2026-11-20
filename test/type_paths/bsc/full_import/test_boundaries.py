@@ -165,13 +165,18 @@ class ImportControlTests(unittest.TestCase):
     def report(self):
         return {'config': {'cancunTime': j.GENESIS_TIME + 6},
                 'activation_import_controls': {'number': 1, 'time': j.GENESIS_TIME + 3, 'tx_type': 3,
-                                               'wire': '7fc0', 'error': 'transaction type not supported',
-                                               'unsupported': True, 'head_after': 0},
+                                               'wire': '7fc0', 'error': 'data blobs present in block body',
+                                               'unsupported': False, 'head_after': 0},
                 'unknown_import_control': {'wire': '7fc0', 'error': 'transaction type not supported',
                                            'unsupported': True}}
 
     def test_the_two_refusals_pass(self):
         j.check_import_controls(self.report())
+
+    def test_a_typed_refusal_with_the_flag_also_passes(self):
+        report = self.report()
+        report['activation_import_controls'].update(unsupported=True, error='transaction type not supported')
+        j.check_import_controls(report)
 
     def refusing(self, change):
         report = self.report()
@@ -180,9 +185,9 @@ class ImportControlTests(unittest.TestCase):
             j.check_import_controls(report)
 
     def test_the_activation_refusal_is_bound(self):
-        self.refusing(lambda r: r['activation_import_controls'].update(unsupported=False))
         self.refusing(lambda r: r['activation_import_controls'].update(error=''))
         self.refusing(lambda r: r['activation_import_controls'].update(error=None))
+        self.refusing(lambda r: r['activation_import_controls'].update(error='some other refusal'))
         self.refusing(lambda r: r['activation_import_controls'].update(head_after=1))
         self.refusing(lambda r: r['activation_import_controls'].update(tx_type=2))
         self.refusing(lambda r: r['activation_import_controls'].update(number=2))

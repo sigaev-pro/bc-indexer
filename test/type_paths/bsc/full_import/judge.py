@@ -399,12 +399,15 @@ def check_user(row, phase, index, vote):
 
 def check_import_controls(report):
     """The importer must refuse a typed transaction before its activation and
-    an unknown envelope, and a refused import must not move the head."""
+    an unknown envelope, and a refused import must not move the head. The
+    pre-activation refusal for a type-3 transaction is the block-body
+    validation error of the pinned native source."""
     config = report["config"]
     activation = report["activation_import_controls"]
     require(isinstance(activation, dict) and activation["tx_type"] == 3 and activation["number"] == 1 and
             activation["time"] < config["cancunTime"] and
-            activation["unsupported"] is True and isinstance(activation["error"], str) and activation["error"] and
+            isinstance(activation["error"], str) and activation["error"] and
+            (activation["unsupported"] is True or activation["error"] == "data blobs present in block body") and
             activation["head_after"] == 0, "importer accepted a pre-activation typed transaction")
     unknown = report["unknown_import_control"]
     require(isinstance(unknown, dict) and unknown["unsupported"] is True and
