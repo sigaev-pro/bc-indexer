@@ -1145,20 +1145,20 @@
     {
       "name": "crossing_judge.py:madhugiri:log-identity:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "            check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n                  quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == index and\n                  quantity(log[\"logIndex\"]) == position and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n                  log[\"removed\"] is False, \"madhugiri log identity differs\")",
-      "replacement": "            check(True and log[\"blockHash\"] == row[\"hash\"] and\n                  quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == index and\n                  quantity(log[\"logIndex\"]) == position and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n                  log[\"removed\"] is False, \"madhugiri log identity differs\")"
+      "original": "            check(log[\"transactionHash\"] == tx_hash and log[\"blockHash\"] == row[\"hash\"] and\n                  quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == index and\n                  quantity(log[\"logIndex\"]) == log_offset + position and\n                  quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n                  log[\"removed\"] is False, \"madhugiri log identity differs\")",
+      "replacement": "            check(True and log[\"blockHash\"] == row[\"hash\"] and\n                  quantity(log[\"blockNumber\"]) == row[\"number\"] and quantity(log[\"transactionIndex\"]) == index and\n                  quantity(log[\"logIndex\"]) == log_offset + position and\n                  quantity(log[\"blockTimestamp\"]) == integer(header[11]) and\n                  log[\"removed\"] is False, \"madhugiri log identity differs\")"
     },
     {
       "name": "crossing_judge.py:madhugiri:log-identity:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "                  quantity(log[\"logIndex\"]) == position and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and",
+      "original": "quantity(log[\"logIndex\"]) == log_offset + position and\n                  quantity(log[\"blockTimestamp\"]) == integer(header[11]) and",
       "replacement": "                  True and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and"
     },
     {
       "name": "crossing_judge.py:madhugiri:log-identity:3",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "                  quantity(log[\"logIndex\"]) == position and quantity(log[\"blockTimestamp\"]) == integer(header[11]) and",
-      "replacement": "                  quantity(log[\"logIndex\"]) == position and True and"
+      "original": "quantity(log[\"logIndex\"]) == log_offset + position and\n                  quantity(log[\"blockTimestamp\"]) == integer(header[11]) and",
+      "replacement": "quantity(log[\"logIndex\"]) == log_offset + position and\n                  True and"
     },
     {
       "name": "crossing_judge.py:madhugiri:log-identity:4",
@@ -1457,7 +1457,7 @@
     {
       "name": "crossing_judge.py:madhugiri:live-receipt:3",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "          quantity(observed[\"effectiveGasPrice\"]) == 0 and",
+      "original": "(observed[\"effectiveGasPrice\"] is None or quantity(observed[\"effectiveGasPrice\"]) == 0) and",
       "replacement": "          True and"
     },
     {
@@ -1469,20 +1469,20 @@
     {
       "name": "crossing_judge.py:madhugiri:call-order",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "    check([call[\"depth\"] for call in calls] == [0, 1, 2, 1, 2], \"wrong madhugiri native call order\")",
-      "replacement": "    check(True, \"wrong madhugiri native call order\")"
+      "original": "check([call[\"depth\"] for call in calls] == [0, 0, 1, 2, 1, 2], \"wrong madhugiri native call order\")",
+      "replacement": "check(True, \"wrong madhugiri native call order\")"
     },
     {
       "name": "crossing_judge.py:madhugiri:call-correlation:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "        check(call[\"transaction\"] == system_hash and call[\"type\"] == 241, \"uncorrelated madhugiri system call\")",
-      "replacement": "        check(True and call[\"type\"] == 241, \"uncorrelated madhugiri system call\")"
+      "original": "check(correlated and call[\"type\"] == 241, \"uncorrelated madhugiri system call\")",
+      "replacement": "check(True and call[\"type\"] == 241, \"uncorrelated madhugiri system call\")"
     },
     {
       "name": "crossing_judge.py:madhugiri:call-correlation:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "        check(call[\"transaction\"] == system_hash and call[\"type\"] == 241, \"uncorrelated madhugiri system call\")",
-      "replacement": "        check(call[\"transaction\"] == system_hash and True, \"uncorrelated madhugiri system call\")"
+      "original": "check(correlated and call[\"type\"] == 241, \"uncorrelated madhugiri system call\")",
+      "replacement": "check(correlated and True, \"uncorrelated madhugiri system call\")"
     },
     {
       "name": "crossing_judge.py:madhugiri:root-call:1",
@@ -1727,8 +1727,8 @@
     {
       "name": "crossing_judge.py:madhugiri:live-receipt:5",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "          quantity(observed[\"cumulativeGasUsed\"]) == cumulative and\n          quantity(observed[\"effectiveGasPrice\"]) == 0 and",
-      "replacement": "          True and\n          quantity(observed[\"effectiveGasPrice\"]) == 0 and"
+      "original": "quantity(observed[\"cumulativeGasUsed\"]) == cumulative and\n          (observed[\"effectiveGasPrice\"] is None or quantity(observed[\"effectiveGasPrice\"]) == 0) and",
+      "replacement": "True and\n          (observed[\"effectiveGasPrice\"] is None or quantity(observed[\"effectiveGasPrice\"]) == 0) and"
     },
     {
       "name": "crossing_judge.py:madhugiri:case-identity:1",
@@ -1937,14 +1937,14 @@
     {
       "name": "crossing_judge.py:madhugiri:observation-records:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "        check(negative[\"decisions\"] == {} and admission == {",
-      "replacement": "        check(True and admission == {"
+      "original": "check(set(records) == {prefix + \"counter\", prefix + \"0000000000000000/intent\",\n                               prefix + \"0000000000000000/decided\"} and",
+      "replacement": "check(True or set(records) == {prefix + \"counter\", prefix + \"0000000000000000/intent\",\n                               prefix + \"0000000000000000/decided\"} and"
     },
     {
       "name": "crossing_judge.py:madhugiri:observation-records:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "            \"extractor-admission-v1/bor.run-1/purged\": {\"sequence\": 1}}, \"madhugiri observation durable records differ\")",
-      "replacement": "            \"extractor-admission-v1/bor.run-1/purged\": {\"sequence\": 2}}, \"madhugiri observation durable records differ\")"
+      "original": "\"extractor-admission-v1/bor.run-1/purged\": {\"sequence\": 1}} and",
+      "replacement": "\"extractor-admission-v1/bor.run-1/purged\": {\"sequence\": 2}} and"
     },
     {
       "name": "crossing_judge.py:madhugiri:observation-head",
@@ -1983,18 +1983,6 @@
       "replacement": "        check(bor[\"present\"] is True and True,\n              \"pre-madhugiri separate bor receipt differs\")"
     },
     {
-      "name": "crossing_judge.py:madhugiri:pre-gate-live:1",
-      "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "        check(len(second[\"transactions\"]) == 1 and second[\"calls\"] == [], \"pre-madhugiri live carrier rows differ\")",
-      "replacement": "        check(True and second[\"calls\"] == [], \"pre-madhugiri live carrier rows differ\")"
-    },
-    {
-      "name": "crossing_judge.py:madhugiri:pre-gate-live:2",
-      "file": "test/type_paths/poly/crossing/crossing_judge.py",
-      "original": "        check(len(second[\"transactions\"]) == 1 and second[\"calls\"] == [], \"pre-madhugiri live carrier rows differ\")",
-      "replacement": "        check(len(second[\"transactions\"]) == 1 and True, \"pre-madhugiri live carrier rows differ\")"
-    },
-    {
       "name": "crossing_judge.py:madhugiri:dispatch-matrix:1",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "        madhugiri = len(report[\"cases\"]) > len(PAIRED_CASES)",
@@ -2029,6 +2017,18 @@
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "        check(type(decided[\"sequence\"]) is int and decided[\"sequence\"] == sequence and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == prior.decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid madhugiri decided binding\")",
       "replacement": "        check(type(decided[\"sequence\"]) is int and True and\n              decided[\"intent_digest\"] == intent[\"digest\"] and decided[\"delivery\"] == \"BATCH\" and\n              decided[\"digest\"] == prior.decided_digest(intent[\"digest\"], \"BATCH\"), \"invalid madhugiri decided binding\")"
+    },
+    {
+      "name": "pre-madhugiri live call count unbound",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "check(len(second[\"transactions\"]) == 1 and len(second[\"calls\"]) == 1 and",
+      "replacement": "check(True and True and"
+    },
+    {
+      "name": "pre-madhugiri live call identity unbound",
+      "file": "test/type_paths/poly/crossing/crossing_judge.py",
+      "original": "second[\"calls\"][0][\"to\"].lower() == \"0x\" + legacy[3].hex() and\n              second[\"calls\"][0][\"reverted\"] is False, \"pre-madhugiri live carrier rows differ\")",
+      "replacement": "True and\n              True, \"pre-madhugiri live carrier rows differ\")"
     }
   ]
 }

@@ -28,7 +28,7 @@ SYNC_TOPIC = (94).to_bytes(32, "big")
 # pair of the sprint-2 profiles. The receipts remain fully pinned to the
 # header values, so only the two integers are deferred; the coordinator
 # derives them from the native run and replaces the None.
-MADHUGIRI_BASE_FEES = None
+MADHUGIRI_BASE_FEES = (984_375_000, 969_058_741)
 SIGNER = "71562b71999873db5b286df957af199ec94617f7"
 INITIAL_CODE_HASHES = {
     prior.SENDER: "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
@@ -183,6 +183,7 @@ def madhugiri_receipts(row, header, txs, oracles, header_bloom):
           "madhugiri receipt wire/root differs")
     h.inclusion(proofs, wires, header[5])
     cumulative = 0
+    log_offset = 0
     for index, (receipt, tx, oracle) in enumerate(zip(receipts, txs, oracles)):
         cumulative += oracle["gas"]
         tx_hash = "0x" + codec.keccak256(tx).hex()
@@ -196,10 +197,13 @@ def madhugiri_receipts(row, header, txs, oracles, header_bloom):
               quantity(receipt["blockNumber"]) == row["number"] and
               quantity(receipt["transactionIndex"]) == index, "madhugiri receipt identity differs")
         for position, log in enumerate(receipt["logs"]):
+            # The log index counts across the whole block, receipt by receipt.
             check(log["transactionHash"] == tx_hash and log["blockHash"] == row["hash"] and
                   quantity(log["blockNumber"]) == row["number"] and quantity(log["transactionIndex"]) == index and
-                  quantity(log["logIndex"]) == position and quantity(log["blockTimestamp"]) == integer(header[11]) and
+                  quantity(log["logIndex"]) == log_offset + position and
+                  quantity(log["blockTimestamp"]) == integer(header[11]) and
                   log["removed"] is False, "madhugiri log identity differs")
+        log_offset += len(receipt["logs"])
     check(cumulative == integer(header[10]), "madhugiri header gas differs")
     if header_bloom is not None:
         # The pre-gate header bloom may also fold in the separate Bor receipt
@@ -251,9 +255,13 @@ def reorg_records(row, genesis_hash, candidate, first, second):
           for sequence in range(3) for part in ("intent", "decided")}, "madhugiri reorg decision keys differ")
     check(records[prefix + "counter"] == {"next": 3}, "madhugiri reorg decision counter differs")
     candidate_head = {"number": 1, "hash": candidate["hash"][2:]}
+    generated_head = {"number": 1, "hash": first["hash"][2:]}
+    # The accepted observation candidate imports as canonical block 1; the
+    # generated block 1 then replaces it at the same height through a
+    # CANONICAL transition, and block 2 imports on top.
     transitions = (("IMPORT", {"number": 0, "hash": genesis_hash[2:]}, candidate_head, [(0, candidate)]),
-                   ("SIDE", candidate_head, candidate_head, [(1, first)]),
-                   ("CANONICAL", candidate_head, {"number": 2, "hash": second["hash"][2:]}, [(1, first), (2, second)]))
+                   ("CANONICAL", candidate_head, generated_head, [(1, first)]),
+                   ("IMPORT", generated_head, {"number": 2, "hash": second["hash"][2:]}, [(2, second)]))
     for sequence, (kind, old_head, new_head, members) in enumerate(transitions):
         key = prefix + f"{sequence:016x}"
         intent, decided = records[key + "/intent"], records[key + "/decided"]
@@ -302,17 +310,24 @@ def system_actions(row, txs, state1, mid_state, state2, cumulative):
     check(legacy_before == state1 and legacy_after == mid_state and system_before == mid_state and
           system_after == state2, "madhugiri live state boundaries differ")
     observed = system_trace["receipt"]
+    # A free system transaction marshals its effective gas price as null.
     check(quantity(observed["status"]) == 1 and quantity(observed["gasUsed"]) == 0 and
           quantity(observed["cumulativeGasUsed"]) == cumulative and
-          quantity(observed["effectiveGasPrice"]) == 0 and
+          (observed["effectiveGasPrice"] is None or quantity(observed["effectiveGasPrice"]) == 0) and
           prior.consensus_logs(observed["logs"]) == [[octets(prior.TARGET), [SYNC_TOPIC], (1).to_bytes(32, "big")]],
           "madhugiri live system receipt differs")
     calls = row["calls"]
-    check([call["depth"] for call in calls] == [0, 1, 2, 1, 2], "wrong madhugiri native call order")
-    root, first, target, second, rejected = calls
+    # Every live transaction owns a depth-0 frame; the system call then fans
+    # out into the receiver and its two nested commits.
+    check([call["depth"] for call in calls] == [0, 0, 1, 2, 1, 2], "wrong madhugiri native call order")
+    legacy_frame, root, first, target, second, rejected = calls
     system_hash = system_trace["hash"]
     for call in calls:
-        check(call["transaction"] == system_hash and call["type"] == 241, "uncorrelated madhugiri system call")
+        correlated = call["transaction"] in (system_hash, legacy_trace["hash"])
+        check(correlated and call["type"] == 241, "uncorrelated madhugiri system call")
+    check(legacy_frame["transaction"] == legacy_trace["hash"] and legacy_frame["from"].lower() == prior.SENDER and
+          legacy_frame["to"].lower() == prior.SUCCESS and legacy_frame["input"] == "" and
+          legacy_frame["reverted"] is False, "invalid madhugiri legacy frame")
     check(root["from"].lower() == prior.SYSTEM and root["to"].lower() == prior.RECEIVER and root["input"] == "" and
           root["reverted"] is False and root.get("error") is None, "invalid madhugiri synthetic root call")
     check(prior.snapshot(root["before"], True) == system_before and
@@ -457,10 +472,22 @@ def madhugiri_case(row, expected):
               "error" not in negative, "madhugiri pre-gate observation differs")
         check(negative["head_before"] == genesis_hash, "madhugiri observation seeded head differs")
         admission = {key: prior.native_json(value) for key, value in negative["admission"].items()}
-        check(negative["decisions"] == {} and admission == {
-            "extractor-admission-v1/bor.run-1/counter": {"next": 1},
-            "extractor-admission-v1/bor.run-1/lowwater": {"sequence": 1},
-            "extractor-admission-v1/bor.run-1/purged": {"sequence": 1}}, "madhugiri observation durable records differ")
+        records = {key: prior.native_json(value) for key, value in negative["decisions"].items()}
+        prefix = "extractor-decision-v1/bor.run-1/"
+        # The accepted candidate is a real import: the decider records one
+        # IMPORT transition onto it before the crossing resumes; reorg_records
+        # later validates the same sequence's full digest binding.
+        check(set(records) == {prefix + "counter", prefix + "0000000000000000/intent",
+                               prefix + "0000000000000000/decided"} and
+              records[prefix + "counter"] == {"next": 1} and
+              admission == {"extractor-admission-v1/bor.run-1/counter": {"next": 1},
+                            "extractor-admission-v1/bor.run-1/lowwater": {"sequence": 1},
+                            "extractor-admission-v1/bor.run-1/purged": {"sequence": 1}} and
+              records[prefix + "0000000000000000/intent"]["kind"] == "IMPORT" and
+              records[prefix + "0000000000000000/intent"]["old_head"] == {"number": 0, "hash": genesis_hash[2:]} and
+              records[prefix + "0000000000000000/intent"]["new_head"] == {"number": 1, "hash": candidate["hash"][2:]} and
+              len(records[prefix + "0000000000000000/intent"]["members"]) == 1,
+              "madhugiri observation durable records differ")
         observation_claims(negative, [1], {"1": ["bor.run-1.0000000000000000"]})
         check(negative["head_hash"] == candidate["hash"], "madhugiri observation head differs")
         reorg_records(positive, genesis_hash, candidate, first, second)
@@ -477,7 +504,13 @@ def madhugiri_case(row, expected):
         bor = second["bor_receipt"]
         check(bor["present"] is True and prior.consensus_logs(bor["logs"]) == sync_oracle["logs"],
               "pre-madhugiri separate bor receipt differs")
-        check(len(second["transactions"]) == 1 and second["calls"] == [], "pre-madhugiri live carrier rows differ")
+        # The StateSync effects ride the separate Bor receipt, so the only
+        # live execution is the legacy transaction's own frame.
+        legacy = h.prior.plain_rlp(h.codec.rlp_list(tx2[0]))
+        check(len(second["transactions"]) == 1 and len(second["calls"]) == 1 and
+              second["calls"][0]["depth"] == 0 and
+              second["calls"][0]["to"].lower() == "0x" + legacy[3].hex() and
+              second["calls"][0]["reverted"] is False, "pre-madhugiri live carrier rows differ")
         plain_records(positive, second["hash"], [first, second], 2)
     check(h1[3] != h2[3], "madhugiri state root did not advance")
     return h2[3], state2

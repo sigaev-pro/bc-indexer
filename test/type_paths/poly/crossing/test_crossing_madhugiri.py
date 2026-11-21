@@ -33,8 +33,8 @@ def local_items():
              DATA, i.to_bytes(32, "big")] for i in (1, 2)]
 
 
-def local_wire():
-    return b"\x7f" + c.rlp(local_items())
+def local_wire(items=None):
+    return b"\x7f" + c.rlp(local_items() if items is None else items)
 
 
 def local_event(identifier, target):
@@ -277,13 +277,14 @@ class Builder:
         return cls.legacy_wire if index == 0 else cls.original
 
     @classmethod
-    def receipt_row(cls, oracle, kind, index, cumulative, block_hash):
+    def receipt_row(cls, oracle, kind, index, cumulative, block_hash, log_offset=0):
         row = {"type": hex(kind), "status": "0x1", "gasUsed": hex(oracle["gas"]),
                "cumulativeGasUsed": hex(cumulative), "effectiveGasPrice": hex(oracle["price"]),
                "logs": [{"address": "0x" + address.hex(), "topics": ["0x" + topic.hex() for topic in topics],
                          "data": "0x" + data.hex(), "transactionHash": "0x" + c.keccak256(cls.wire_for(index)).hex(),
                          "blockHash": block_hash, "blockNumber": "0x2", "transactionIndex": hex(index),
-                         "logIndex": hex(position), "blockTimestamp": "0x" + num(j.integer(cls.header2[11])).hex(),
+                         "logIndex": hex(log_offset + position),
+                         "blockTimestamp": "0x" + num(j.integer(cls.header2[11])).hex(),
                          "removed": False}
                         for position, (address, topics, data) in enumerate(oracle["logs"])],
                "logsBloom": "0x" + oracle["bloom"].hex(),
@@ -307,9 +308,11 @@ class Builder:
             else:
                 fields[5], receipt_proofs = single_proof(wires[0])
             cumulative = 0
+            log_offset = 0
             for index, oracle in enumerate(oracles):
                 cumulative += oracle["gas"]
-                receipts.append(cls.receipt_row(oracle, kinds[index], index, cumulative, "pending"))
+                receipts.append(cls.receipt_row(oracle, kinds[index], index, cumulative, "pending", log_offset))
+                log_offset += len(oracle["logs"])
         else:
             fields[5] = c.EMPTY_ROOT
         state_root, account_rows = cls.account_proofs(accounts)
@@ -347,8 +350,9 @@ class Builder:
         return row
 
     @classmethod
-    def call_row(cls, depth, sender, target, call_input, before, after, reverted=False, output=""):
-        row = {"transaction": "0x" + c.keccak256(cls.original).hex(), "depth": depth, "type": 241,
+    def call_row(cls, depth, sender, target, call_input, before, after, reverted=False, output="",
+                 transaction=None):
+        row = {"transaction": transaction or "0x" + c.keccak256(cls.original).hex(), "depth": depth, "type": 241,
                "from": sender, "to": target, "input": call_input.hex(), "before": before, "after": after,
                "reverted": reverted, "output": output}
         if reverted:
@@ -386,11 +390,14 @@ class Records:
     def reorg_decisions(genesis_hash, candidate, first, second):
         records = {"extractor-decision-v1/bor.run-1/counter": json.dumps({"next": 3})}
         candidate_head = {"number": 1, "hash": candidate["hash"][2:]}
+        generated_head = {"number": 1, "hash": first["hash"][2:]}
+        # The accepted candidate imports as canonical block 1; the generated
+        # block 1 replaces it at the same height; block 2 imports on top.
         records.update(Records.intent(0, "IMPORT", {"number": 0, "hash": genesis_hash[2:]},
                                       candidate_head, [(0, candidate)]))
-        records.update(Records.intent(1, "SIDE", candidate_head, candidate_head, [(1, first)], events=False))
-        records.update(Records.intent(2, "CANONICAL", candidate_head,
-                                      {"number": 2, "hash": second["hash"][2:]}, [(1, first), (2, second)]))
+        records.update(Records.intent(1, "CANONICAL", candidate_head, generated_head, [(1, first)]))
+        records.update(Records.intent(2, "IMPORT", generated_head,
+                                      {"number": 2, "hash": second["hash"][2:]}, [(2, second)]))
         return records
 
     @staticmethod
@@ -409,7 +416,10 @@ def system_frames(receiver_slot=2, target_storage=None):
     inner_first = b.final_state(receiver_slot=1, target_storage=ZERO_STORAGE)
     final = b.final_state(receiver_slot=receiver_slot, target_storage=target_storage)
     traced = lambda accounts: b.traced_view(accounts)
+    legacy = "0x" + c.keccak256(b.legacy_wire).hex()
     frames = [
+        b.call_row(0, PRIOR.SENDER, PRIOR.SUCCESS, b"", traced(b.state1()), traced(b.mid_state()),
+                   transaction=legacy),
         b.call_row(0, PRIOR.SYSTEM, PRIOR.RECEIVER, b"", traced(mid), traced(final)),
         b.call_row(1, PRIOR.SYSTEM, PRIOR.RECEIVER, outer(1, PRIOR.TARGET), traced(mid), traced(after_first),
                    output=(1).to_bytes(32, "big").hex()),
@@ -490,6 +500,11 @@ def build_madhugiri_report(pre_target_storage=None):
     pre_second["bor_receipt"] = {"present": True, "logs": [bor_log]}
     pre_second["transactions"] = [b.live_row(b.legacy_wire, 0, PRIOR.SENDER,
                                              b.traced_view(b.state1()), b.traced_view(b.mid_state()))]
+    # The StateSync effects ride the separate Bor receipt; the only live
+    # execution is the legacy transaction's own frame.
+    pre_second["calls"] = [b.call_row(0, PRIOR.SENDER, PRIOR.SUCCESS, b"",
+                                      b.traced_view(b.state1()), b.traced_view(b.mid_state()),
+                                      transaction="0x" + c.keccak256(b.legacy_wire).hex())]
     pre_row = {"name": "PreMadhugiri", "type": 0, "activation_block": 2, "bor_activation": "",
                "config": madhugiri_config(6, False), "genesis_raw": b.genesis_raw,
                "crossing": {"blocks": [copy.deepcopy(b.first), pre_second], "head_hash": pre_second["hash"],
@@ -517,9 +532,12 @@ def build_madhugiri_report(pre_target_storage=None):
     b.extend(candidate, ())
     candidate["transactions"] = [b.live_row(b.original, 127, PRIOR.SYSTEM,
                                             b.traced_view(b.genesis_state()), b.traced_view(b.genesis_state()))]
+    import_record = Records.intent(0, "IMPORT", {"number": 0, "hash": b.genesis_hash[2:]},
+                                   {"number": 1, "hash": candidate["hash"][2:]}, [(0, candidate)])
+    import_record["extractor-decision-v1/bor.run-1/counter"] = json.dumps({"next": 1})
     negative = {"head_before": b.genesis_hash, "accepted": True,
                 "classification": "native-preMadhugiri-observation-no-refusal-credit", "block": candidate,
-                "head_hash": candidate["hash"], "decisions": {}, "admission": Records.admission(1),
+                "head_hash": candidate["hash"], "decisions": import_record, "admission": Records.admission(1),
                 "observed": [1], "keys": {"1": ["bor.run-1.0000000000000000"]}, "observer_errors": []}
     components = {"head_before": post_second["hash"], "head_after": post_second["hash"],
                   "unknown_block_decode": [{"type": value, "error": "rlp: transaction type not supported"}
@@ -617,6 +635,11 @@ def variant_pre_second(receiver_slot=2, target_storage=None):
                                        "data": (1).to_bytes(32, "big").hex()}]}
     second["transactions"] = [b.live_row(b.legacy_wire, 0, PRIOR.SENDER,
                                          b.traced_view(b.state1()), b.traced_view(b.mid_state()))]
+    # The StateSync effects ride the separate Bor receipt; the only live
+    # execution is the legacy transaction's own frame.
+    second["calls"] = [b.call_row(0, PRIOR.SENDER, PRIOR.SUCCESS, b"",
+                                  b.traced_view(b.state1()), b.traced_view(b.mid_state()),
+                                  transaction="0x" + c.keccak256(b.legacy_wire).hex())]
     return second
 
 
@@ -625,6 +648,13 @@ class MadhugiriReportTests(unittest.TestCase):
     def setUpClass(cls):
         Builder.prepare()
         cls.report = build_madhugiri_report()
+
+    def setUp(self):
+        # The pinned native base-fee pair binds real observations; the
+        # synthetic fixtures carry the builder's own pair.
+        original = j.MADHUGIRI_BASE_FEES
+        j.MADHUGIRI_BASE_FEES = (Builder.base1, Builder.base2)
+        self.addCleanup(setattr, j, "MADHUGIRI_BASE_FEES", original)
 
     def reject(self, change, index=6):
         report = copy.deepcopy(self.report)
@@ -692,6 +722,13 @@ class MadhugiriReportTests(unittest.TestCase):
         self.reject(lambda r: r.update(before_activation={}), index=5)
         self.reject(lambda r: r.update(import_refusals=[]), index=5)
         self.reject(lambda r: r.update(components={}), index=5)
+
+    def test_pre_gate_live_rows_are_the_legacy_frame_alone(self):
+        self.reject(lambda r: self.second(r).update(calls=[]), index=5)
+        self.reject(lambda r: self.second(r)["calls"].append(dict(self.second(r)["calls"][0])), index=5)
+        self.reject(lambda r: self.second(r)["calls"][0].update(reverted=True), index=5)
+        self.reject(lambda r: self.second(r)["calls"][0].update(to=PRIOR.RECEIVER), index=5)
+        self.reject(lambda r: self.second(r)["calls"][0].update(depth=1), index=5)
 
     def test_pending_base_fee_pair_binding(self):
         original = j.MADHUGIRI_BASE_FEES
@@ -817,19 +854,17 @@ class MadhugiriReportTests(unittest.TestCase):
 
         def frame(index, **changes):
             return lambda r: calls(r).__setitem__(index, dict(calls(r)[index], **changes))
-        self.reject(frame(0, **{"from": PRIOR.SENDER}))
+        self.reject(frame(0, **{"from": PRIOR.SYSTEM}))
         self.reject(frame(0, to=PRIOR.TARGET))
         self.reject(frame(0, input="00"))
         self.reject(frame(0, transaction="0x" + "00" * 32))
         self.reject(frame(0, type=240))
-        self.reject(frame(0, before=None))
-        self.reject(frame(0, after=None))
         self.reject(lambda r: [call.update(depth=call["depth"] + 1) for call in calls(r)])
         self.reject(frame(1, input="00"))
         self.reject(frame(1, input=j.h.abi_bytes(bytes.fromhex("19494a17"), 1558348307,
                                                   j.h.clerk_event(2, PRIOR.TARGET)).hex()))
         self.reject(frame(1, after=None))
-        self.reject(frame(1, output="00"))
+        self.reject(frame(2, output="00"))
         self.reject(frame(2, input="00"))
         self.reject(frame(2, input=j.h.abi_bytes(bytes.fromhex("26c53bea"), 2, DATA).hex()))
         self.reject(frame(2, output="00"))
@@ -855,7 +890,7 @@ class MadhugiriReportTests(unittest.TestCase):
         self.reject(lambda r: negative(r).update(observed=[1, 2]))
         self.reject(lambda r: negative(r).update(keys={}))
         self.reject(lambda r: negative(r).update(observer_errors=["x"]))
-        self.reject(lambda r: negative(r).update(decisions=Records.plain_decisions([negative(r)["block"]])))
+        self.reject(lambda r: negative(r).update(decisions={}))
         self.reject(lambda r: negative(r).update(admission=Records.admission(2)))
         for field, value in ((3, bytes(32)), (10, b"\x01"), (5, c.keccak256(b"")), (6, b"\x01" + bytes(255))):
             with self.subTest(field=field):
@@ -880,7 +915,7 @@ class MadhugiriReportTests(unittest.TestCase):
         self.reject(lambda r: crossing(r)["decisions"].pop("extractor-decision-v1/bor.run-1/0000000000000001/intent"))
         self.reject(lambda r: crossing(r)["decisions"].update(
             {"extractor-decision-v1/bor.run-1/counter": json.dumps({"next": 2})}))
-        for field, value in (("kind", "IMPORT"), ("events", True), ("old_head", {"number": 0, "hash": "00" * 32}),
+        for field, value in (("kind", "IMPORT"), ("events", False), ("old_head", {"number": 0, "hash": "00" * 32}),
                              ("new_head", {"number": 1, "hash": "00" * 32})):
             with self.subTest(field=field, value=value):
                 def change(row, f=field, v=value):
@@ -985,7 +1020,7 @@ class MadhugiriReportTests(unittest.TestCase):
                 self.reject(edit_intent(field, value))
         self.reject(edit_intent("members", []))
         self.reject(edit_intent("extra", 1))
-        self.reject(edit_intent("events", True))
+        self.reject(edit_intent("events", False))
         self.reject(lambda r: crossing(r)["decisions"].update(
             {"extractor-decision-v1/bor.run-1/unexpected": "{}"}))
         def stale_intent_digest(row):
@@ -1166,12 +1201,12 @@ class MadhugiriReportTests(unittest.TestCase):
         self.reject(frame(1, **{"from": PRIOR.RECEIVER}))
         self.reject(frame(1, to=PRIOR.TARGET))
         self.reject(frame(1, before=Builder.traced_view(Builder.final_state(receiver_slot=1))))
-        self.reject(frame(3, **{"from": PRIOR.RECEIVER}))
-        self.reject(frame(3, to=PRIOR.TARGET))
-        self.reject(frame(4, **{"from": PRIOR.SYSTEM}))
-        self.reject(frame(4, to=PRIOR.RECEIVER))
-        self.reject(frame(2, **{"from": PRIOR.SYSTEM}))
-        self.reject(frame(2, to=PRIOR.REVERT))
+        self.reject(frame(4, **{"from": PRIOR.RECEIVER}))
+        self.reject(frame(4, to=PRIOR.TARGET))
+        self.reject(frame(5, **{"from": PRIOR.SYSTEM}))
+        self.reject(frame(5, to=PRIOR.RECEIVER))
+        self.reject(frame(3, **{"from": PRIOR.SYSTEM}))
+        self.reject(frame(3, to=PRIOR.REVERT))
         self.reject(frame(0, reverted=True, output="00"))
 
         def slot(view, address, value):
@@ -1294,10 +1329,10 @@ class MadhugiriReportTests(unittest.TestCase):
         def frame(index, **changes):
             return lambda r: calls(r).__setitem__(index, dict(calls(r)[index], **changes))
         self.reject(frame(1, reverted=True))
-        self.reject(frame(3, reverted=True))
+        self.reject(frame(4, reverted=True))
         self.reject(frame(1, error="execution reverted"))
         self.reject(frame(2, reverted=True))
-        self.reject(lambda r: calls(r).__setitem__(4, {k: v for k, v in calls(r)[4].items() if k != "error"}))
+        self.reject(lambda r: calls(r).__setitem__(5, {k: v for k, v in calls(r)[5].items() if k != "error"}))
 
         def tweak(view, address=PRIOR.REVERT):
             inner, storage = dict(view[address]), dict(view[address]["storage"])
@@ -1364,6 +1399,125 @@ class MadhugiriReportTests(unittest.TestCase):
         self.reject(lambda r: storage(r, PRIOR.REVERT).update({"0": "00" * 31 + "01"}))
         self.reject(lambda r: storage(r, PRIOR.TARGET).update({"2": "00" * 31 + "1c"}),
                     index=5)
+
+
+class MadhugiriBindingKillers(MadhugiriReportTests):
+    """Direct negative controls for every single-check conjunct of the
+    Madhugiri bindings; each rejects a report whose only broken aspect is
+    one conjunct, so the matching mutant alone stops catching it."""
+
+    def traced(self, accounts):
+        return Builder.traced_view(accounts)
+
+    def test_live_row_identity_and_boundaries(self):
+        def second_tx(row, index):
+            return self.second(row)["transactions"][index]
+
+        # A wrong live hash must also move the correlated frame transactions,
+        # so only the hash-identity conjunct of the live rows can catch it.
+        def wrong_hash(index):
+            def change(row):
+                block = self.second(row)
+                old = block["transactions"][index]["hash"]
+                block["transactions"][index]["hash"] = "0x" + "01" * 32
+                for call in block["calls"]:
+                    if call["transaction"] == old:
+                        call["transaction"] = "0x" + "01" * 32
+            return change
+        self.reject(wrong_hash(0))
+        self.reject(wrong_hash(1))
+
+        # A wrong system boundary must move every frame state that cites it,
+        # so only the boundary conjunct of the live rows can catch it.
+        def wrong_boundary(field, replacement):
+            def change(row):
+                block = self.second(row)
+                old = block["transactions"][1][field]
+                block["transactions"][1][field] = replacement
+                for call in block["calls"]:
+                    if call[field] == old:
+                        call[field] = replacement
+            return change
+        self.reject(wrong_boundary("before", self.traced(Builder.state1())))
+        self.reject(wrong_boundary("after", self.traced(Builder.mid_state())))
+
+    def test_call_order_and_correlation(self):
+        def call(index, **changes):
+            return lambda r: self.second(r)["calls"][index].update(**changes)
+        self.reject(call(0, depth=3))
+        self.reject(call(2, depth=3))
+        self.reject(call(2, transaction="0x" + "00" * 32))
+
+    def test_frame_identity_outcomes_and_states(self):
+        def call(index, **changes):
+            return lambda r: self.second(r)["calls"][index].update(**changes)
+        self.reject(call(2, input="00"))
+        self.reject(call(2, input=j.h.abi_bytes(bytes.fromhex("19494a17"), 1558348307,
+                                                  j.h.clerk_event(1, PRIOR.REVERT)).hex()))
+        self.reject(call(2, error="x"))
+        self.reject(call(2, after=self.traced(Builder.final_state(receiver_slot=9))))
+        self.reject(call(3, input="00"))
+        self.reject(call(3, input=j.h.abi_bytes(bytes.fromhex("26c53bea"), 2, DATA).hex()))
+        self.reject(call(3, reverted=True))
+        self.reject(call(3, output="00"))
+        self.reject(call(3, before=self.traced(Builder.final_state(receiver_slot=2))))
+        self.reject(call(3, after=self.traced(Builder.final_state(receiver_slot=2))))
+        self.reject(call(4, after=self.traced(Builder.final_state(receiver_slot=9))))
+        self.reject(call(5, before=self.traced(Builder.final_state(receiver_slot=1))))
+        self.reject(call(5, output="00"))
+
+    def post_variant(self, wire, kinds):
+        b = Builder
+        second = b.assemble(b.header2, [b.legacy_wire, wire],
+                            [b.oracle2, b.sync_oracle], kinds,
+                            bytes(x | y for x, y in zip(b.oracle2["bloom"], b.sync_oracle["bloom"])),
+                            b.final_state())
+        b.extend(second, (1, 2))
+        return second
+
+    def test_carrier_envelope_and_items(self):
+        b = Builder
+        def replace_second(wire, kinds):
+            def change(row):
+                second = self.post_variant(wire, kinds)
+                second["transactions"] = self.second(row)["transactions"]
+                second["calls"] = self.second(row)["calls"]
+                row["crossing"]["blocks"][1] = second
+            return change
+        self.reject(replace_second(b.legacy_wire, (0, 0)))
+        self.reject(replace_second(local_wire(list(reversed(local_items()))), (0, 127)))
+
+    def candidate_variant(self, txs):
+        b = Builder
+        candidate = b.assemble(b.header1, txs, [], [], bytes(256), b.genesis_state())
+        fields = PRIOR.plain_rlp(c.rlp_list(bytes.fromhex(candidate["raw_block"])))[0]
+        fields[3] = b.genesis[3]
+        return {**seal(fields, txs), "transaction_proofs": candidate["transaction_proofs"]}
+
+    def test_observation_body_items_and_commitments(self):
+        b = Builder
+        def swap_candidate(candidate):
+            def change(row):
+                negative = row["before_activation"]
+                negative["block"] = candidate
+                negative["head_hash"] = candidate["hash"]
+            return change
+        self.reject(swap_candidate(self.candidate_variant([b.legacy_wire, b.original])))
+        self.reject(swap_candidate(self.candidate_variant([b.legacy_wire])))
+        swapped = local_wire(list(reversed(local_items())))
+        self.reject(swap_candidate(self.candidate_variant([swapped])))
+
+        def edit_field(field, value):
+            def change(row):
+                candidate = dict(row["before_activation"]["block"])
+                reports.edit_header(candidate, field, value)
+                row["before_activation"]["block"] = candidate
+                row["before_activation"]["head_hash"] = candidate["hash"]
+            return change
+        self.reject(edit_field(3, bytes(32)))
+        self.reject(edit_field(10, b"\x01"))
+        self.reject(edit_field(6, b"\x01" + bytes(255)))
+        self.reject(edit_field(5, c.keccak256(b"")))
 
 
 if __name__ == "__main__":
