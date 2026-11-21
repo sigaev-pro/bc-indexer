@@ -21,6 +21,8 @@ func TestErrorMessagesNameTheirInputs(t *testing.T) {
 		{&ErrPendingImmutable{Record: "batch/7", Original: idOld, Attempted: idCur}, []string{"batch/7", string(idOld), string(idCur)}},
 		{&ErrTransitionBlocked{Reason: "drain is in progress", Snapshot: DrainSnapshot{Mode: ModeDrain, Pending: 1, MaxDelivery: StateSealed}}, []string{"drain is in progress", "DRAIN", "1 pending", "SEALED"}},
 		{&ErrInvalidSnapshot{Reason: "pending count is negative"}, []string{"pending count is negative"}},
+		{&ErrInvalidClaim{Claim: ClaimType(0)}, []string{"ClaimType(0)"}},
+		{&ErrInvalidClaim{Claim: ClaimType(7)}, []string{"ClaimType(7)"}},
 	}
 	for _, tc := range cases {
 		msg := tc.err.Error()
@@ -60,6 +62,14 @@ func TestEnumStringsRoundTrip(t *testing.T) {
 	}
 	if StateReady.SealedOrLater() || StateNone.SealedOrLater() {
 		t.Fatal("pre-SEALED and none must not report SealedOrLater")
+	}
+	claims := map[ClaimType]string{
+		ClaimWirePlan: "wire/plan", ClaimStoreFormat: "store-format", ClaimType(9): "ClaimType(9)",
+	}
+	for c, want := range claims {
+		if got := c.String(); got != want {
+			t.Fatalf("ClaimType(%d).String() = %q, want %q", uint8(c), got, want)
+		}
 	}
 }
 

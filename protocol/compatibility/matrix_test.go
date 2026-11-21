@@ -75,7 +75,7 @@ func TestCanWriteNewAlwaysTargetsCurrentVersion(t *testing.T) {
 	if m.Current() != idCur {
 		t.Fatalf("current must be %q, got %q", idCur, m.Current())
 	}
-	err := m.CanWriteNew(idCur, idNext)
+	err := m.CanWriteNew(idCur, idNext, ClaimStoreFormat)
 	if err == nil {
 		t.Fatal("new writes must not target a non-current version")
 	}
@@ -84,7 +84,7 @@ func TestCanWriteNewAlwaysTargetsCurrentVersion(t *testing.T) {
 		t.Fatalf("must be ErrWriteTargetNotCurrent naming target and current, got %v", err)
 	}
 	// Even the store's own older format is not a legal new-write target.
-	err = m.CanWriteNew(idOld, idOld)
+	err = m.CanWriteNew(idOld, idOld, ClaimWirePlan)
 	if err == nil {
 		t.Fatal("new writes must not extend an older version")
 	}
@@ -95,7 +95,7 @@ func TestCanWriteNewAlwaysTargetsCurrentVersion(t *testing.T) {
 
 func TestCanWriteNewSameVersionAllowed(t *testing.T) {
 	m := newTestMatrix(t)
-	if err := m.CanWriteNew(idCur, idCur); err != nil {
+	if err := m.CanWriteNew(idCur, idCur, ClaimWirePlan); err != nil {
 		t.Fatalf("new writes in the current version must be allowed: %v", err)
 	}
 }
@@ -104,9 +104,11 @@ func TestCanWriteNewCompatibleTransitionAllowed(t *testing.T) {
 	m := newTestMatrix(t)
 	// The current version reads the store's older format, so switching
 	// new writes to the current version keeps the remaining metadata
-	// readable.
-	if err := m.CanWriteNew(idOld, idCur); err != nil {
-		t.Fatalf("a readable transition must be allowed: %v", err)
+	// readable. Both claim families allow a compatible pair.
+	for _, claim := range []ClaimType{ClaimWirePlan, ClaimStoreFormat} {
+		if err := m.CanWriteNew(idOld, idCur, claim); err != nil {
+			t.Fatalf("%s: a readable transition must be allowed: %v", claim, err)
+		}
 	}
 }
 
@@ -116,7 +118,7 @@ func TestCanWriteNewRejectsReadOnlyCurrentVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewMatrix: %v", err)
 	}
-	err = m.CanWriteNew("record-readonly", "record-readonly")
+	err = m.CanWriteNew("record-readonly", "record-readonly", ClaimWirePlan)
 	if err == nil {
 		t.Fatal("a current version registered read-only must reject new writes")
 	}
@@ -128,9 +130,9 @@ func TestCanWriteNewRejectsReadOnlyCurrentVersion(t *testing.T) {
 
 func TestIncompatibleStoreTransitionRejected(t *testing.T) {
 	m := newTestMatrix(t)
-	err := m.CanWriteNew(idUnread, idCur)
+	err := m.CanWriteNew(idUnread, idCur, ClaimStoreFormat)
 	if err == nil {
-		t.Fatal("a transition to a format that cannot read the store must be rejected")
+		t.Fatal("a transition to a store format that cannot read the store must be rejected")
 	}
 	var s *ErrStoreTransitionRejected
 	if !errors.As(err, &s) || s.From != idUnread || s.To != idCur {
@@ -138,5 +140,37 @@ func TestIncompatibleStoreTransitionRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), string(idUnread)) || !strings.Contains(err.Error(), string(idCur)) {
 		t.Fatalf("message must name both versions: %v", err)
+	}
+}
+
+func TestIncompatibleWirePairPassesCapabilityCheck(t *testing.T) {
+	m := newTestMatrix(t)
+	// The current version does not read the unrelated format, but in the
+	// wire/plan family that is a timing question, not a capability
+	// failure: a completed drain closes every obligation, so the pair is
+	// not rejected here. The DRAINED requirement is the drain guard's.
+	if err := m.CanWriteNew(idUnread, idCur, ClaimWirePlan); err != nil {
+		t.Fatalf("an incompatible wire/plan pair passes the capability check: %v", err)
+	}
+}
+
+func TestCanWriteNewRejectsUnstatedClaim(t *testing.T) {
+	m := newTestMatrix(t)
+	for _, claim := range []ClaimType{0, ClaimType(9)} {
+		err := m.CanWriteNew(idOld, idCur, claim)
+		if err == nil {
+			t.Fatalf("claim %d: an unstated family must be rejected", uint8(claim))
+		}
+		var c *ErrInvalidClaim
+		if !errors.As(err, &c) || c.Claim != claim {
+			t.Fatalf("claim %d: must be ErrInvalidClaim naming the claim, got %T", uint8(claim), err)
+		}
+	}
+	// The unstated family is rejected before any version is consulted:
+	// even an unknown version does not shadow the missing claim.
+	err := m.CanWriteNew("record-unknown", idCur, 0)
+	var c *ErrInvalidClaim
+	if !errors.As(err, &c) {
+		t.Fatalf("an unstated family must be rejected before the versions, got %T", err)
 	}
 }
