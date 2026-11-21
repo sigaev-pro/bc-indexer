@@ -15,7 +15,7 @@ decision bridge, lifecycle seams, smoke corpus, early faults, type paths.
 - **E01-01/02/03**: accepted in PRs #169, #173 and the four E01-02 blocks
   (D106 acceptance audit found no failed check and no bypass without an
   owner).
-- **#20 early_faults**: closed 2026-11-21. Block 0 (PR #174), Geth A/B
+- **#20 early_faults**: closed 2026-11-20T22:20Z. Block 0 (PR #174), Geth A/B
   (#176/#182 merged `ae8b428`; run09 PASS 30/30 cases, 4/4 handoffs,
   review 002 SPEC/Standards PASS), BSC A/B (#177/#179), Bor A/B
   (#178/#181).

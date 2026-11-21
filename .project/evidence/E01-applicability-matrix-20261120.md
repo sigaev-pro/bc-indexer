@@ -54,3 +54,25 @@ reorg/finality faults (E05); native `Synced` GoLive (E06-09).
 | BSC activation/unknown controls; remaining system-state rows | Coordinator (producer) + independent BSC oracle implementer | `.worktrees/bsc-full-type-import`; oracle `.worktrees/bsc-full-type-oracle`; serialized native slot |
 | Polygon crossings (judge repair, paired runtime, Madhugiri fixture) | Polygon transition implementer — original session only; not reassigned | `.worktrees/type-paths-poly-crossing` and `-judge`; `test/type_paths/poly/crossing/**` |
 | G.E01 (#78) review | Independent reviewer | after #20/#21 |
+
+
+## Reconciled state (2026-11-21, preliminary G.E01 pre-check)
+
+The preliminary base-confirmation (recorded in E01-gate-precheck-20261121.md)
+verified against primary records and supersedes the 2026-11-20 rows above:
+
+- ETH #20: **closed** — PR #182 merged at `ae8b428`; block 0, Geth A/B
+  (run09 PASS 30/30 + 4/4 handoffs, review PASS), BSC A/B, Bor A/B all
+  accepted.
+- BSC leg of #21: **merged** — PR #191 at `ccd786a` (judged run09 + run15
+  PASS with both importer refusal controls; three review rounds closed);
+  the access-list offline P3 closed on the follow-up branch.
+- POLY leg of #21: **complete, awaiting the owner** — PR #194 draft at
+  `76a2a15` (producer `e7634d1` two Madhugiri cases + judge integration
+  merge; paired and Madhugiri native runs PASS and judged PASS with
+  reserved127 flipped; audits 06/07/11 PASS, merged-tree audit pending).
+- Minimal remaining set is now exactly two items: (1) the owner's merge
+  approval for PR #194 (its re-confirmation review and merged-tree audit
+  are the last inputs), then close #21; (2) the formal G.E01 (#78)
+  review. The stale rows above ("Draft PR #182/191 open", "mutation
+  audit FAIL", Madhugiri "NOT_RUN") are historical.
