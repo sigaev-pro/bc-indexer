@@ -30,6 +30,10 @@ Queue, in priority order:
 4. Geth P3 gofmt — DONE: branch chore/geth-probe-gofmt (one blank line at probe.go:713 collapsed; the 27-test offline suite passes; pushed; PR left to the owner).
 5. Preliminary read-only G.E01 pre-check — DONE: base confirmed (merged state, PR194 composition at 76a2a15, CI PASS, run15 SHA chain 4/4, audits 06/07/11 PASS); the applicability matrix is reconciled to the 2026-11-21 state and the brief date nit fixed; record in evidence/E01-gate-precheck-20261121.md. For the gate itself: confirm audit-12 PASS on the merged tree and re-read in-flight states.
 
+## E02 open (2026-11-21)
+
+**G.E01 PASS** (formal gate review, zero blocking findings; #78 closed with the verdict; the three P3 notes fixed at 028944b: audit-12 disposition recorded, plan hash typo corrected, BSC combined-activation adjudication line added). **E01 is complete.** E02 opened per evidence/E02-parallel-plan-20261121.md: scaffold branch e02/scaffold (9f62bef, protocol/{semantic,balance,block,profiles,proto,codec,compatibility} + test/lifecycle_validator READMEs) pushed; four stream worktrees created. Phase 1 running: streams A (#22 semantic), B (#23 actions), C (#24 block) as three background implementer agents (D97 limit), stream D (#25 closed_profiles) taken by the coordinator in .worktrees/e02-profiles. Merges serialized with the owner's approval per D95; no native runs needed in phase 1.
+
 ## E01 closure (2026-11-21)
 
 The owner approved completing E01 ("Merge and finish"). **PR194 merged at 7fec9f6** (branch updated to 8e505b5, bootstrap/ci and bootstrap/independent-review both PASS on that head; merge per the standard procedure). **Issue #21 closed** with the full three-family acceptance record (ETH #183/#186; BSC #183/#185/#188/#191 + post-merge P3; POLY #189/#193/#194 — paired and Madhugiri crossings native+judged PASS, audit 323+9). Issues #20 and #21 are both CLOSED; the formal G.E01 (#78) gate review is running against the recorded brief with the confirmed base. On its PASS, #78 closes and E02 (#22) opens.
