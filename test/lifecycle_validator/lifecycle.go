@@ -2,21 +2,33 @@
 // .lifecycle_validator: it folds reordered Applied, Removed and StatusChanged
 // semantic descriptors of one activation into one deterministic record, so
 // that reordering, revision conflicts, duplicates and reinclusion each have
-// exactly one unambiguous result. The automaton is a test oracle over
-// protocol/semantic SemanticDescriptor values only; it validates no
-// schema-level message content (the parallel E02-02.schemas stream owns that
-// half and wires in front of this automaton after its merge) and it is not a
-// production consumer. The design and the normative anchors are in README.md.
-// The package uses only the Go standard library plus protocol/semantic.
+// exactly one unambiguous result. The semantic half (lifecycle.go) is the
+// state machine over protocol/semantic SemanticDescriptor values; the schema
+// half (schema.go) wires the merged protocol/proto layer in front of it:
+// lifecycle events arrive as schema messages (a proto Envelope, its READY
+// event descriptor and the canonical transport frames of its record
+// fragments), are validated there and are folded with the proto
+// record_digest as the content discriminator. Neither half is a production
+// consumer. The design and the normative anchors are in README.md. The
+// package uses only the Go standard library plus protocol/semantic and
+// protocol/proto.
 package lifecycle
 
 import (
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/sigaev-pro/bc-indexer/protocol/semantic"
 )
+
+// ErrUnsetDigest rejects an applied event whose content digest is the unset
+// zero digest: every layer in front of the automaton pins a real digest
+// (the schema half the proto record_digest, a semantic-only caller the
+// descriptor digest), and the zero value is never one.
+var ErrUnsetDigest = errors.New("lifecycle: content digest is unset")
 
 // State is the lifecycle state of one activation record, after the state
 // names of MESSAGE_CONTRACT section 5. States only advance: an activation
@@ -134,18 +146,40 @@ func EntitySignatureOf(d semantic.SemanticDescriptor) EntitySignature {
 	return sig
 }
 
+// Digest is the content discriminator of one applied event: the digest the
+// layer in front of the automaton pins for the event bytes. The schema half
+// supplies the proto record_digest computed over the record's fragment bytes
+// (README, open question 4, resolved); a semantic-only caller supplies the
+// descriptor digest. The same digest at one revision is an idempotent retry
+// (Duplicate); a different digest at an occupied revision is a Conflict.
+type Digest [32]byte
+
+// IsZero reports whether d is the unset zero digest.
+func (d Digest) IsZero() bool { return d == Digest{} }
+
+// String returns the 64 lowercase hex characters of d.
+func (d Digest) String() string { return hex.EncodeToString(d[:]) }
+
 // Record is the accumulated state of one activation. It is a value type:
 // every transition stores a fresh copy, and the maps and pointers of a
 // returned record are never shared with the automaton. Evidence maps each
-// lifecycle revision to the digest of the one event recorded at it; slot 0
-// holds the Applied event, which is also kept in Origin. MaxRevision is the
-// highest recorded evidence revision.
+// lifecycle revision to the content digest of the one event recorded at it;
+// slot 0 holds the Applied event, which is also kept in Origin. MaxRevision
+// is the highest recorded evidence revision.
 type Record struct {
-	State       State
-	Entity      EntitySignature
-	Origin      *semantic.SemanticDescriptor
-	Evidence    map[uint64]semantic.Hash32
-	MaxRevision uint64
+	State  State
+	Entity EntitySignature
+	Origin *semantic.SemanticDescriptor
+	// RemovedRevision is the lifecycle revision of the event that
+	// terminalized the record; it is meaningful only in StateRemoved and
+	// never changes afterwards, not even when later evidence merges into
+	// free slots above it. The schema half uses it to separate a
+	// StatusChanged written before the removal (revision below it, a
+	// legitimate late delivery) from the writer-invalid one written after
+	// it (revision above it: one monotonic counter per activation).
+	RemovedRevision uint64
+	Evidence        map[uint64]Digest
+	MaxRevision     uint64
 }
 
 // cloneDescriptor returns a deep copy of d.
@@ -161,7 +195,7 @@ func cloneDescriptor(d semantic.SemanticDescriptor) semantic.SemanticDescriptor 
 // Clone returns a deep copy of the record.
 func (r Record) Clone() Record {
 	out := r
-	out.Evidence = make(map[uint64]semantic.Hash32, len(r.Evidence)+1)
+	out.Evidence = make(map[uint64]Digest, len(r.Evidence)+1)
 	for rev, digest := range r.Evidence {
 		out.Evidence[rev] = digest
 	}
@@ -173,10 +207,11 @@ func (r Record) Clone() Record {
 }
 
 // Equal reports whether two records carry the same lifecycle content: the
-// same state, entity signature, applied origin (by digest), evidence slots
-// and revision frontier.
+// same state, entity signature, terminal revision, applied origin (by
+// digest), evidence slots and revision frontier.
 func (r Record) Equal(other Record) bool {
-	if r.State != other.State || r.Entity != other.Entity || r.MaxRevision != other.MaxRevision {
+	if r.State != other.State || r.Entity != other.Entity || r.MaxRevision != other.MaxRevision ||
+		r.RemovedRevision != other.RemovedRevision {
 		return false
 	}
 	if (r.Origin == nil) != (other.Origin == nil) {
@@ -208,7 +243,8 @@ func (r Record) Equal(other Record) bool {
 }
 
 // String returns a deterministic one-line dump of the record with the
-// evidence revisions in ascending order.
+// evidence revisions in ascending order; a terminal record also names the
+// revision that terminalized it.
 func (r Record) String() string {
 	revisions := make([]uint64, 0, len(r.Evidence))
 	for rev := range r.Evidence {
@@ -228,7 +264,11 @@ func (r Record) String() string {
 			origin = digest.String()
 		}
 	}
-	return fmt.Sprintf("%s origin=%s max=%d evidence={%s}", r.State, origin,
+	state := r.State.String()
+	if r.State == StateRemoved {
+		state = fmt.Sprintf("%s removed=%d", state, r.RemovedRevision)
+	}
+	return fmt.Sprintf("%s origin=%s max=%d evidence={%s}", state, origin,
 		r.MaxRevision, strings.Join(slots, ","))
 }
 
@@ -288,25 +328,29 @@ func (a *Automaton) Records() map[ActivationKey]Record {
 	return out
 }
 
-// Apply folds one event into the automaton and returns its outcome. A
-// descriptor that fails semantic validation is a caller error, not an
-// outcome: Apply returns the validation error and changes nothing.
-func (a *Automaton) Apply(d semantic.SemanticDescriptor) (Result, error) {
+// Apply folds one event into the automaton and returns its outcome. The
+// content digest is supplied by the layer in front of the automaton: the
+// schema half passes the proto record_digest of the validated envelope
+// (open question 4, resolved — the discriminator is the record-level
+// digest over the event's fragment bytes, not the descriptor digest), and a
+// semantic-only caller passes the descriptor digest. A descriptor that
+// fails semantic validation, or an unset digest, is a caller error, not an
+// outcome: Apply returns the error and changes nothing.
+func (a *Automaton) Apply(d semantic.SemanticDescriptor, content Digest) (Result, error) {
 	if err := d.Validate(); err != nil {
 		return Result{}, err
 	}
-	digest, err := d.Digest()
-	if err != nil {
-		return Result{}, err
+	if content.IsZero() {
+		return Result{}, ErrUnsetDigest
 	}
 	key := KeyOf(d)
 	sig := EntitySignatureOf(d)
 
 	rec, ok := a.records[key]
 	if !ok {
-		return a.startRecord(key, sig, d, digest)
+		return a.startRecord(key, sig, d, content)
 	}
-	return a.stepRecord(key, rec, sig, d, digest)
+	return a.stepRecord(key, rec, sig, d, content)
 }
 
 // startRecord records the first event of an unseen activation. An Applied
@@ -314,8 +358,8 @@ func (a *Automaton) Apply(d semantic.SemanticDescriptor) (Result, error) {
 // Removed only references an activation that has no record yet, so the
 // reference is recorded and the activation itself is not invented.
 func (a *Automaton) startRecord(key ActivationKey, sig EntitySignature,
-	d semantic.SemanticDescriptor, digest semantic.Hash32) (Result, error) {
-	rec := Record{Entity: sig, Evidence: make(map[uint64]semantic.Hash32, 1)}
+	d semantic.SemanticDescriptor, content Digest) (Result, error) {
+	rec := Record{Entity: sig, Evidence: make(map[uint64]Digest, 1)}
 	var class Class
 	var reason string
 	switch d.Kind {
@@ -323,18 +367,19 @@ func (a *Automaton) startRecord(key ActivationKey, sig EntitySignature,
 		rec.State = StateActive
 		origin := cloneDescriptor(d)
 		rec.Origin = &origin
-		rec.Evidence[0] = digest
+		rec.Evidence[0] = content
 		class = ClassAccepted
 		reason = "applied creates an active activation with its original revision-0 snapshot"
 	case semantic.KindStatus:
 		rec.State = StatePendingApplied
-		rec.Evidence[d.Revision] = digest
+		rec.Evidence[d.Revision] = content
 		rec.MaxRevision = d.Revision
 		class = ClassUnknown
 		reason = "status references an unseen activation: evidence recorded by revision, no applied record invented"
 	default:
 		rec.State = StateRemoved
-		rec.Evidence[d.Revision] = digest
+		rec.RemovedRevision = d.Revision
+		rec.Evidence[d.Revision] = content
 		rec.MaxRevision = d.Revision
 		class = ClassUnknown
 		reason = "removed references an unseen activation: tombstone recorded, no applied record invented"
@@ -348,8 +393,8 @@ func (a *Automaton) startRecord(key ActivationKey, sig EntitySignature,
 // kind and state rules. Rejected events (Duplicate, Conflict) leave the
 // stored record unchanged.
 func (a *Automaton) stepRecord(key ActivationKey, rec Record, sig EntitySignature,
-	d semantic.SemanticDescriptor, digest semantic.Hash32) (Result, error) {
-	if rec.Evidence[d.Revision] == digest {
+	d semantic.SemanticDescriptor, content Digest) (Result, error) {
+	if rec.Evidence[d.Revision] == content {
 		return Result{Class: ClassDuplicate, Key: key, State: rec.State, Revision: d.Revision,
 			Reason: fmt.Sprintf("idempotent retry of the event already recorded at revision %d", d.Revision)}, nil
 	}
@@ -372,7 +417,7 @@ func (a *Automaton) stepRecord(key ActivationKey, rec Record, sig EntitySignatur
 		// reactivating it; on a pending record it activates the activation.
 		origin := cloneDescriptor(d)
 		next.Origin = &origin
-		next.Evidence[0] = digest
+		next.Evidence[0] = content
 		if rec.State == StateRemoved {
 			class = ClassStale
 			reason = "late applied merges as the origin of the removed activation; the tombstone keeps its cancel meaning and the terminal state"
@@ -382,7 +427,7 @@ func (a *Automaton) stepRecord(key ActivationKey, rec Record, sig EntitySignatur
 			reason = "applied activates the pending activation with its original record plus the evidence already received"
 		}
 	case semantic.KindStatus:
-		next.Evidence[d.Revision] = digest
+		next.Evidence[d.Revision] = content
 		if d.Revision > rec.MaxRevision {
 			next.MaxRevision = d.Revision
 		}
@@ -401,7 +446,7 @@ func (a *Automaton) stepRecord(key ActivationKey, rec Record, sig EntitySignatur
 		// Removed is terminal regardless of delivery order: it terminalizes
 		// a pending or active record at any free revision slot, and a second
 		// Removed on a terminal record only adds late evidence.
-		next.Evidence[d.Revision] = digest
+		next.Evidence[d.Revision] = content
 		if d.Revision > rec.MaxRevision {
 			next.MaxRevision = d.Revision
 		}
@@ -410,6 +455,7 @@ func (a *Automaton) stepRecord(key ActivationKey, rec Record, sig EntitySignatur
 			reason = "late removed evidence on the terminal activation: recorded in its free revision slot, the record stays removed"
 		} else {
 			next.State = StateRemoved
+			next.RemovedRevision = d.Revision
 			class = ClassAccepted
 			reason = "removed terminalizes the activation; the tombstone keeps its cancel meaning for a late applied"
 		}
