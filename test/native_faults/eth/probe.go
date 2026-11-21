@@ -710,7 +710,6 @@ func main() {
 	os.Exit(2)
 }
 
-
 // ---------------------------------------------------------------- export (from test/native_corpus/eth/probe.go)
 
 func plain(address common.Address) string {
