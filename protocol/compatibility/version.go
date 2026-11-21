@@ -1,21 +1,25 @@
-// Package compatibility is the version-independent policy skeleton of
-// E02-04.compatibility (#29): the read/replay/new-write capability matrix,
-// the immutable-pending rule and the drain guard.
+// Package compatibility is the version policy of E02-04.compatibility
+// (#29): the read/replay/new-write capability matrix, the wire/plan
+// versus persistent-store transition rules, the immutable-pending rule
+// and the drain guard, plus the concrete encoding versions pinned by the
+// proto registry.
 //
 // The rules follow DELIVERY_STATE_MACHINE (preflight versions are checked
 // before any writable mutation; a compatible reader republishes the old
-// bytes; an incompatible persistent store format change is rejected before
-// a write even with empty payload; there are no automatic migrations),
-// CONTROL_WIRE_CONTRACT (an unknown version is a protocol incompatibility
-// with no fallback success) and CONTEXT ("saved-state compatibility": a new
-// version may continue old obligations, and completed delivery does not
-// make an incompatible store compatible).
+// bytes; an incompatible wire/plan upgrade requires DRAINED by the old
+// build; an incompatible persistent store format change is rejected
+// before a write even with empty payload; there are no automatic
+// migrations), CONTROL_WIRE_CONTRACT (an unknown version is a protocol
+// incompatibility with no fallback success) and CONTEXT ("saved-state
+// compatibility": a new version may continue old obligations, and
+// completed delivery does not make an incompatible store compatible).
 //
-// This package defines no concrete encoding versions and no version
-// constants. Concrete versions (the transport_version, record_format_version
-// and sibling identifiers) are owned by E02-02.codec (#27) and register
-// here through the EncodingVersion interface; nothing in this package
-// imports the codec.
+// The concrete ProtocolVersion values mirror the version constants
+// pinned in protocol/proto/registry.go (E02-02.schemas #26) and are
+// registered per kind in DefaultRegistry; this module stays stdlib-only
+// and does not import the proto module. Further versions — including
+// the encodings owned by E02-02.codec (#27) — register through the
+// EncodingVersion interface; nothing in this package imports the codec.
 //
 // The package imports only the Go standard library. It performs no I/O.
 package compatibility
@@ -24,13 +28,15 @@ import "fmt"
 
 // VersionID is the opaque identifier of one encoding version. The policy
 // never parses, orders or assigns meaning to it: it compares identifiers
-// for equality and prints them in errors. Concrete identifiers are defined
-// by the codec module when E02-02.codec (#27) lands.
+// for equality and prints them in errors. Concrete identifiers are
+// defined by this package (the pinned proto versions) and by the codec
+// module for its own encodings.
 type VersionID string
 
 // EncodingVersion is what a versioned encoding must expose so this policy
-// can judge it. Implementations live in the codec module and register
-// through Matrix.Register or NewMatrix.
+// can judge it. Implementations register through Matrix.Register or
+// NewMatrix; this package's ProtocolVersion is the concrete
+// implementation of the pinned proto versions.
 type EncodingVersion interface {
 	// ID returns the opaque, stable identifier of this encoding version.
 	// Two versions are the same version iff their IDs compare equal.

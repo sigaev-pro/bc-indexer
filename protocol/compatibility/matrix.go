@@ -40,13 +40,15 @@ func (e *ErrVersionNotWritable) Error() string {
 	return fmt.Sprintf("compatibility: version %q is registered for reading but not for new writes", e.ID)
 }
 
-// ErrStoreTransitionRejected marks the never-a-silent-migration rule: the
-// candidate new-write version cannot read the version already carried by
-// the durable store, so switching the store to it would abandon or
-// rewrite remaining metadata. The transition is rejected before any
-// write, regardless of drain state (DELIVERY_STATE_MACHINE UPGRADE-01:
-// even a completed drain with empty payload does not permit an
-// incompatible persistent format change).
+// ErrStoreTransitionRejected marks the never-a-silent-migration rule of
+// the persistent store format family (ClaimStoreFormat): the candidate
+// new-write version cannot read the version already carried by the
+// durable store, so switching the store to it would abandon or rewrite
+// remaining metadata. The transition is rejected before any write,
+// regardless of drain state (DELIVERY_STATE_MACHINE: an incompatible
+// persistent store format change is not permitted by a drain, and
+// UPGRADE-01 requires the refusal to hold even after a completed drain
+// with empty payload).
 type ErrStoreTransitionRejected struct{ From, To VersionID }
 
 func (e *ErrStoreTransitionRejected) Error() string {
@@ -158,11 +160,14 @@ func (m *Matrix) CanRead(from, to VersionID) error {
 
 // CanReplay reports whether a process running version to may republish
 // the pending records of version from. Replay retransmits the exact
-// durable bytes and never reserializes them, so its capability claim is
-// the read claim of the same pair (DELIVERY_STATE_MACHINE: a compatible
-// reader publishes the old bytes; a SEALED plan always repeats its
-// original layout, headers and bytes). The rejection type is separate so
-// callers and tests can tell a replay stop from a decode stop.
+// durable bytes and never reserializes them — the transport wrapper
+// carries the original immutable fragment bytes and their independent
+// reserialization is forbidden (CONTROL_WIRE_CONTRACT "TransportFrame
+// layout v2"), and a compatible reader republishes the old bytes
+// (DELIVERY_STATE_MACHINE) — so decode capability is replay capability:
+// the replay claim is the read claim of the same pair, with no separate
+// registered predicate. The rejection type is separate so callers and
+// tests can tell a replay stop from a decode stop.
 func (m *Matrix) CanReplay(from, to VersionID) error {
 	ok, err := m.capability(from, to)
 	if err != nil {
@@ -174,19 +179,42 @@ func (m *Matrix) CanReplay(from, to VersionID) error {
 	return nil
 }
 
-// CanWriteNew reports whether new records may be created in version to
-// while the durable store still carries version from. The rules, in
+// CanWriteNew reports whether the capability rules permit new records to
+// be created in version to while the durable store still carries version
+// from, under the transition policy of the claim family. The rules, in
 // order:
 //
-//  1. from and to must both be registered (unknown versions are protocol
+//  1. claim must be a stated family (wire/plan or store format); the
+//     family is never defaulted.
+//
+//  2. from and to must both be registered (unknown versions are protocol
 //     incompatibilities).
-//  2. to must be the current version; new writes always target it.
-//  3. to must be writable (not registered as read-only).
-//  4. if from and to differ, to must be able to read from: a transition
-//     to a format that cannot read the remaining metadata is rejected
-//     before any write and is never migrated silently. This holds
-//     regardless of drain state; see ErrStoreTransitionRejected.
-func (m *Matrix) CanWriteNew(from, to VersionID) error {
+//
+//  3. to must be the current version; new writes always target it.
+//
+//  4. to must be writable (not registered as read-only).
+//
+//  5. if from and to differ and to cannot read from, the claim family
+//     decides (DELIVERY_STATE_MACHINE "Errors, ENOSPC, совместимость"):
+//
+//     ClaimStoreFormat — rejected here with ErrStoreTransitionRejected,
+//     before any write and regardless of drain state. The store keeps its
+//     identity and lifecycle metadata for its whole life, there are no
+//     automatic migrations, and even a completed drain with empty payload
+//     does not permit the change (UPGRADE-01).
+//
+//     ClaimWirePlan — not a capability failure. A completed drain closes
+//     every saved obligation, so the old format stops mattering for new
+//     writes once the old build is DRAINED. This check returns nil and
+//     the timing requirement (DRAINED by the old build) is enforced by
+//     the drain guard; the matrix alone never authorizes the switch
+//     "now", it only declines to reject the pair. A compatible wire/plan
+//     transition (to reads from) is subject to the ordinary transition
+//     timing, like a compatible store transition.
+func (m *Matrix) CanWriteNew(from, to VersionID, claim ClaimType) error {
+	if !claim.valid() {
+		return &ErrInvalidClaim{Claim: claim}
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	tv, err := m.lookupLocked(to)
@@ -202,7 +230,7 @@ func (m *Matrix) CanWriteNew(from, to VersionID) error {
 	if !tv.WritesNew() {
 		return &ErrVersionNotWritable{ID: to}
 	}
-	if from != to && !tv.Reads(from) {
+	if from != to && !tv.Reads(from) && claim == ClaimStoreFormat {
 		return &ErrStoreTransitionRejected{From: from, To: to}
 	}
 	return nil

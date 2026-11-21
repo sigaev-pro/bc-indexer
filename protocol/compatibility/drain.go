@@ -149,9 +149,9 @@ func (e *ErrTransitionBlocked) Error() string {
 		e.Reason, e.Snapshot.Mode, e.Snapshot.Pending, e.Snapshot.MaxDelivery)
 }
 
-// DrainGuard decides whether a store-format transition may start, given
-// the durable drain facts. The decision is deliberately independent of
-// the capability matrix:
+// DrainGuard decides whether a format transition may start, given the
+// durable drain facts. The decision is deliberately independent of the
+// capability matrix:
 //
 //   - Zero pending obligations and no drain in progress: the transition
 //     timing is allowed (the matrix still applies on its own).
@@ -161,6 +161,9 @@ func (e *ErrTransitionBlocked) Error() string {
 //     because the drain has not yet fixed drain_id/highwater and sealed;
 //     the transition waits for the completed, sealed drain.
 //
+// AllowIncompatibleWireUpgrade adds the stricter timing of an
+// incompatible wire/plan upgrade: the ordinary rules plus mode DRAINED.
+//
 // Reading and replaying pending obligations during a drain are not
 // guarded here: finishing the saved obligations is exactly what a drain
 // does, so those decisions belong to the matrix alone.
@@ -168,7 +171,7 @@ type DrainGuard struct{}
 
 // AllowFormatTransition returns nil when the transition timing is allowed
 // and an error explaining the veto otherwise.
-func (DrainGuard) AllowFormatTransition(s DrainSnapshot) error {
+func (g DrainGuard) AllowFormatTransition(s DrainSnapshot) error {
 	if err := s.validate(); err != nil {
 		return err
 	}
@@ -181,6 +184,32 @@ func (DrainGuard) AllowFormatTransition(s DrainSnapshot) error {
 			reason = "pending obligations at SEALED or later remain and must replay their original bytes"
 		}
 		return &ErrTransitionBlocked{Reason: reason, Snapshot: s}
+	}
+	return nil
+}
+
+// AllowIncompatibleWireUpgrade decides the timing of an incompatible
+// wire/plan upgrade (ClaimWirePlan): the version pair failed the read
+// claim, so DELIVERY_STATE_MACHINE requires the old build to be DRAINED
+// before the new format takes over new writes. Every ordinary transition
+// rule applies first (no pending obligations, no drain in progress);
+// beyond them, mode DRAINED is required explicitly. A quiet LIVE or
+// BLOCKED store is not enough: the saved obligations must be finished
+// and sealed by a build that still understands the old format before a
+// build that cannot read it starts writing.
+//
+// The persistent store format family never reaches this rule: an
+// incompatible store pair is rejected by the matrix regardless of drain
+// state, so no drain state can be spent on permitting it.
+func (g DrainGuard) AllowIncompatibleWireUpgrade(s DrainSnapshot) error {
+	if err := g.AllowFormatTransition(s); err != nil {
+		return err
+	}
+	if s.Mode != ModeDrained {
+		return &ErrTransitionBlocked{
+			Reason:   "incompatible wire/plan upgrade requires DRAINED by the old build",
+			Snapshot: s,
+		}
 	}
 	return nil
 }
