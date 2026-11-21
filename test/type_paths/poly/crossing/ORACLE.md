@@ -106,3 +106,94 @@ paired native observation must still be judged as a whole when retained. Nine
 new single-check mutants cover the paired dispatch, matrix, `bor_activation`
 and gate bindings; all existing checks and mutants are retained unchanged,
 and the complete audit remains required for acceptance.
+
+## Madhugiri body-StateSync carrier crossings
+
+The judge accepts the paired five-case matrix extended to seven rows
+(producer `e7634d1`): `PreMadhugiri` (kind 0, Bor prefix 6 — six forks precede
+Madhugiri, so `madhugiriBlock` stays scheduled at 8) and `Madhugiri`
+(`madhugiriBlock` gated to 2 over Bor prefix 7, where the gate override
+replaces the prefix position 0). Both rows activate every Ethereum signer
+gate from genesis (prefix 5) and move the sprint to `{"0": 2}` through the
+checked seam, so `historical_config` now takes a sprint parameter that the
+frozen rows still default to 4. Dispatch stays by case count, with the
+madhugiri rows routed to `madhugiri_case` before the ordinary paired path.
+
+The gated row is judged end to end. The block-2 body must be the signed
+legacy nonce-1 transfer followed by the native `0x7f` envelope in the final
+position, and the judge re-encodes `[]*StateSyncData` independently:
+sequential ids, the TARGET/REVERT contracts in event order, the corpus data
+and the exact L1 hashes `0x..01`/`0x..02`. The second receipt must be the
+appended type-127 receipt (status 1, gasUsed 0, cumulative equal to the
+header gas, effectiveGasPrice 0, only the successful item's TARGET log,
+recomputed bloom, typed wire `b"\x7f" + rlp(...)` at transactionIndex 1,
+complete receipt root). The live rows must be the legacy row then the
+system-sender row (`0xff..fe`) bracketing the state-sync effects, and the
+five call frames must reproduce the synthetic root wrapper and both receiver
+commits: the outer `19494a17` input wraps the six-field clerk event record
+with the stub's record time, the inner `26c53bea` input carries the event id
+and data, the receiver slot advances only at the outer calls, the reverting
+item retains its before/after state, and the successful item sets the TARGET
+storage quadruple.
+
+The carrier difference is judged across both rows: post-gate
+`bor_receipt.present` must be false, while the pre-gate block 2 carries a
+single legacy transaction, one body receipt and a separate Bor receipt
+holding the single TARGET log; both rows' `state_sync` records must equal the
+two events (SetStateSync runs before the gate branch), both final states must
+be identical (same transition, different carrier) and the state root must
+advance. The pre-gate row must claim no gated controls: no
+`before_activation`, no `import_refusals`, no `components`.
+
+The gated row's `before_activation` is the observation-only candidate of the
+accepted preactivation proof: a hand-built block 1 whose only body
+transaction is the events-derived `0x7f`, accepted with the classification
+label and no refusal credit. Its skip-execution commitments are bound
+directly (unchanged genesis state root, zero gas, empty bloom, empty receipt
+root); its executed-state fields are not required, mirroring the coordinator
+note that the never-executed candidate cannot carry durable state claims.
+The durable reorg records follow the pinned decider source: the candidate
+imports as canonical block 1 (IMPORT), the generated block 1 lands beside it
+as a no-event SIDE write, and block 2 reorgs through a CANONICAL transition
+whose member list carries both branch blocks, with three observations
+(blocks 1, 1, 2) and admission frontier 3. The pre-gate row's plain records
+are two parent-derived IMPORT decisions at admission frontier 2.
+
+The post-gate rejection controls are bound in their two separate sections.
+`import_refusals` holds the three bodies a fresh importer seeded with block 1
+must refuse with the native StateSync mismatch: `missing` (the dropped
+carrier), `non-final` (the carrier first, the legacy transfer last) and
+`mismatched-l1-hash` (the carrier rebuilt with the first item's L1 hash
+changed to `0x..99`); the exact native error strings are pinned from
+bor.go:1321/1330, both hash-mismatch digests are re-derived by the judge, the
+heads stay pinned at the block-1 hash, and each refusal keeps one decision
+with admission frontier 2 (the mismatch surfaces in Finalize after
+admission). `components.unknown_block_decode` sweeps envelope tags 5..126
+over the crossing block's `0x7f` transaction (122 rows, the preceding legacy
+transaction kept) and requires every row to fail native block decoding with
+heads unchanged at the crossing head; type 127 itself decodes, which is why
+the two refusals stay in separate sections.
+
+The verdict flips `reserved127` from `NOT_EVALUATED` to
+`{"madhugiri_crossing": true, "pre_madhugiri_separate_receipt": true}` with
+`public_profile_credit` false. Offline controls build a synthetic
+seven-case report over the retained Prague body with a test-only hexary trie
+builder (account and storage proofs, including absence proofs) and pass it
+plus every negative control; the five-case paired matrix and the frozen
+unpaired three keep passing unchanged, and the existing 149 mutant rows are
+retained untouched; 183 new single-check rows cover the carrier bindings,
+with only subsumed conjuncts (implied by a retained equality or a stronger
+neighbor check) left out of the table.
+
+### Pending the native run
+
+The block-1/2 base-fee pair of the sprint-2 Delhi-denominator profiles is
+not guessed: `MADHUGIRI_BASE_FEES` stays `None`, so the transition is judged
+only for internal consistency (every receipt is re-derived from the actual
+header values) until the coordinator derives the two integers from the
+native run. Two further bindings wait on the same run: the pre-gate block-2
+header bloom (the separate Bor receipt log may or may not fold into it) and
+the reorg record counts above, which follow the pinned decider source but
+must be confirmed around the accepted-candidate reorg. The synthetic
+fixtures pin the shapes the producer at `e7634d1` renders; any divergence
+the native run shows is a judge repair, not a producer change.

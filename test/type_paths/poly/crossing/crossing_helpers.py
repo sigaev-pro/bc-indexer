@@ -13,14 +13,14 @@ check, octets, integer, quantity = prior.check, prior.octets, prior.integer, pri
 native_json, intent_digest, decided_digest = prior.native_json, prior.intent_digest, prior.decided_digest
 
 
-def historical_config(config, eth_prefix, bor_prefix, bor_gate=""):
+def historical_config(config, eth_prefix, bor_prefix, bor_gate="", sprint=4):
     eth = {name: 0 if i < eth_prefix else 8 for i, name in enumerate(profile.ETHEREUM_SCHEDULE)}
     bor = {name: 0 if i < bor_prefix else 8 for i, name in enumerate(profile.BOR_SCHEDULE)}
     if bor_gate:
         # Paired schedules activate the Bor gate at the crossing block itself,
         # ahead of its historical position in the prefix.
         bor[bor_gate] = 2
-    bor.update({"hampiBlock": None, "sprint": {"0": 4}, "period": {"0": 1},
+    bor.update({"hampiBlock": None, "sprint": {"0": sprint}, "period": {"0": 1},
                 "producerDelay": {"0": 6}, "backupMultiplier": {"0": 1},
                 "stateSyncConfirmationDelay": {"0": 0},
                 "coinbase": {"0": "0x" + "00" * 20}, "burntContract": {"0": "0x" + "00" * 20},
@@ -124,3 +124,27 @@ def check_records(decisions, admission, views, frontier=None, observation_offset
     prefix = "extractor-admission-v1/bor.run-1/"
     check(actual == {prefix + "counter": {"next": frontier}, prefix + "lowwater": {"sequence": frontier},
                      prefix + "purged": {"sequence": frontier}}, "wrong admission frontier")
+
+
+def state_sync_items():
+    """Pinned core/types/tx_state_sync.go body items: []*StateSyncData carries
+    only the first four clerk.EventRecord fields (id, contract, data, L1 hash)."""
+    return [[bytes([identifier]), octets(target), prior.EVENT_DATA, identifier.to_bytes(32, "big")]
+            for identifier, target in ((1, prior.TARGET), (2, prior.REVERT))]
+
+
+def state_sync_wire(items=None):
+    """Pinned StateSyncTxType envelope: 0x7f plus the RLP list of body items."""
+    return b"\x7f" + codec.rlp(state_sync_items() if items is None else items)
+
+
+def clerk_event(identifier, target):
+    """Pinned contract/client.go clerk.EventRecord: six fields including the
+    log index and chain id that the body StateSyncData encoding omits."""
+    return codec.rlp([bytes([identifier]), octets(target), prior.EVENT_DATA,
+                      identifier.to_bytes(32, "big"), bytes([identifier]), b"15001"])
+
+
+def abi_bytes(selector, number, data):
+    """Ported receiver-call ABI encoder: selector, one uint256 and one bytes."""
+    return selector + number.to_bytes(32, "big") + (64).to_bytes(32, "big") + len(data).to_bytes(32, "big") + data + bytes(-len(data) % 32)
