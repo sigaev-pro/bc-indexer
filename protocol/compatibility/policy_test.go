@@ -33,23 +33,103 @@ func TestContinuePendingRejectsIncompatibleStore(t *testing.T) {
 	}
 }
 
-func TestPreflightIncompatibleTransitionRejectedRegardlessOfDrain(t *testing.T) {
+func TestPreflightIncompatibleStoreTransitionRejectedRegardlessOfDrain(t *testing.T) {
 	p := NewPolicy(newTestMatrix(t))
 	// The guard snapshot is fully quiet: the incompatible pair is still
 	// rejected by the matrix, before any write, matching UPGRADE-01
-	// (refusal of a persistent format change even after a drain).
-	quiet := DurableState{Version: idUnread, Mode: ModeDrained, Pending: 0, MaxDelivery: StateNone}
-	err := p.PreflightTransition(quiet, idCur)
-	var s *ErrStoreTransitionRejected
-	if !errors.As(err, &s) || s.From != idUnread || s.To != idCur {
-		t.Fatalf("must be ErrStoreTransitionRejected naming both versions, got %v", err)
+	// (refusal of a persistent format change even after a drain). The
+	// prewrite rejection holds for every drain state, so no drain state
+	// is ever spent on permitting it.
+	cases := []struct {
+		name string
+		d    DurableState
+	}{
+		{
+			"quiet drained store",
+			DurableState{Version: idUnread, Mode: ModeDrained, Pending: 0, MaxDelivery: StateNone},
+		},
+		{
+			"quiet live store",
+			DurableState{Version: idUnread, Mode: ModeLive, Pending: 0, MaxDelivery: StateNone},
+		},
+		{
+			"quiet blocked store",
+			DurableState{Version: idUnread, Mode: ModeBlocked, Pending: 0, MaxDelivery: StateNone},
+		},
+		{
+			"mid-drain with pending",
+			DurableState{Version: idUnread, Mode: ModeDrain, Pending: 5, MaxDelivery: StateOutbox},
+		},
+		{
+			"live with pending",
+			DurableState{Version: idUnread, Mode: ModeLive, Pending: 2, MaxDelivery: StateReady},
+		},
 	}
-	// The same incompatible pair is rejected mid-drain as well; the guard
-	// cannot rescue what the matrix refuses.
-	midDrain := DurableState{Version: idUnread, Mode: ModeDrain, Pending: 5, MaxDelivery: StateOutbox}
-	err = p.PreflightTransition(midDrain, idCur)
+	for _, tc := range cases {
+		err := p.PreflightTransition(tc.d, idCur, ClaimStoreFormat)
+		var s *ErrStoreTransitionRejected
+		if !errors.As(err, &s) || s.From != idUnread || s.To != idCur {
+			t.Fatalf("%s: must be ErrStoreTransitionRejected naming both versions, got %v", tc.name, err)
+		}
+	}
+}
+
+func TestPreflightIncompatibleWireUpgradeRequiresDrained(t *testing.T) {
+	p := NewPolicy(newTestMatrix(t))
+	// An incompatible wire/plan pair passes the matrix, but the upgrade
+	// is a timing question: the old build must be DRAINED first. A quiet
+	// LIVE or BLOCKED store, an in-progress drain and any pending
+	// obligation are all rejected.
+	cases := []struct {
+		name string
+		d    DurableState
+	}{
+		{
+			"quiet live store",
+			DurableState{Version: idUnread, Mode: ModeLive, Pending: 0, MaxDelivery: StateNone},
+		},
+		{
+			"quiet blocked store",
+			DurableState{Version: idUnread, Mode: ModeBlocked, Pending: 0, MaxDelivery: StateNone},
+		},
+		{
+			"drain in progress",
+			DurableState{Version: idUnread, Mode: ModeDrain, Pending: 0, MaxDelivery: StateNone},
+		},
+		{
+			"drained but pending obligations remain",
+			DurableState{Version: idUnread, Mode: ModeDrained, Pending: 1, MaxDelivery: StateSealed},
+		},
+	}
+	for _, tc := range cases {
+		err := p.PreflightTransition(tc.d, idCur, ClaimWirePlan)
+		if err == nil {
+			t.Fatalf("%s: an incompatible wire/plan upgrade must wait for DRAINED", tc.name)
+		}
+		var b *ErrTransitionBlocked
+		if !errors.As(err, &b) {
+			t.Fatalf("%s: must be ErrTransitionBlocked (drain-guard veto), got %T", tc.name, err)
+		}
+	}
+}
+
+func TestPreflightIncompatibleWireUpgradeAllowedAfterDrained(t *testing.T) {
+	p := NewPolicy(newTestMatrix(t))
+	// DELIVERY_STATE_MACHINE: an incompatible wire/plan upgrade requires
+	// DRAINED by the old build — and DRAINED is exactly enough, because
+	// the completed drain closed every saved obligation, so the current
+	// version's inability to read the old format stops mattering for new
+	// writes.
+	drained := DurableState{Version: idUnread, Mode: ModeDrained, Pending: 0, MaxDelivery: StateNone}
+	if err := p.PreflightTransition(drained, idCur, ClaimWirePlan); err != nil {
+		t.Fatalf("an incompatible wire/plan upgrade after a completed drain must be allowed: %v", err)
+	}
+	// The same pair stays rejected in the store-format family: a drain
+	// never permits a persistent store format change.
+	err := p.PreflightTransition(drained, idCur, ClaimStoreFormat)
+	var s *ErrStoreTransitionRejected
 	if !errors.As(err, &s) {
-		t.Fatalf("an incompatible transition must stay rejected mid-drain, got %v", err)
+		t.Fatalf("the same drained snapshot must not permit a store format change, got %v", err)
 	}
 }
 
@@ -72,14 +152,16 @@ func TestPreflightCompatibleTransitionBlockedByPendingOrDrain(t *testing.T) {
 			DurableState{Version: idOld, Mode: ModeLive, Pending: 1, MaxDelivery: StateSealed},
 		},
 	}
-	for _, tc := range cases {
-		err := p.PreflightTransition(tc.d, idCur)
-		if err == nil {
-			t.Fatalf("%s: a compatible transition must still be blocked", tc.name)
-		}
-		var b *ErrTransitionBlocked
-		if !errors.As(err, &b) {
-			t.Fatalf("%s: must be ErrTransitionBlocked (guard veto regardless of the matrix), got %T", tc.name, err)
+	for _, claim := range []ClaimType{ClaimWirePlan, ClaimStoreFormat} {
+		for _, tc := range cases {
+			err := p.PreflightTransition(tc.d, idCur, claim)
+			if err == nil {
+				t.Fatalf("%s (%s): a compatible transition must still be blocked", tc.name, claim)
+			}
+			var b *ErrTransitionBlocked
+			if !errors.As(err, &b) {
+				t.Fatalf("%s (%s): must be ErrTransitionBlocked (guard veto regardless of the matrix), got %T", tc.name, claim, err)
+			}
 		}
 	}
 }
@@ -89,12 +171,14 @@ func TestPreflightCompatibleTransitionAllowedOnQuietStore(t *testing.T) {
 	// A completed drain closed every obligation; the matrix allowed the
 	// pair, so the new build may take over the store.
 	drained := DurableState{Version: idOld, Mode: ModeDrained, Pending: 0, MaxDelivery: StateNone}
-	if err := p.PreflightTransition(drained, idCur); err != nil {
-		t.Fatalf("a compatible transition on a quiet drained store must be allowed: %v", err)
-	}
 	live := DurableState{Version: idOld, Mode: ModeLive, Pending: 0, MaxDelivery: StateNone}
-	if err := p.PreflightTransition(live, idCur); err != nil {
-		t.Fatalf("a compatible transition on a quiet live store must be allowed: %v", err)
+	for _, claim := range []ClaimType{ClaimWirePlan, ClaimStoreFormat} {
+		if err := p.PreflightTransition(drained, idCur, claim); err != nil {
+			t.Fatalf("%s: a compatible transition on a quiet drained store must be allowed: %v", claim, err)
+		}
+		if err := p.PreflightTransition(live, idCur, claim); err != nil {
+			t.Fatalf("%s: a compatible transition on a quiet live store must be allowed: %v", claim, err)
+		}
 	}
 }
 
@@ -103,7 +187,7 @@ func TestPreflightSameVersionWritesIgnoreGuard(t *testing.T) {
 	// Writing in the store's current version is not a transition: a live
 	// build keeps capturing while earlier batches are still pending.
 	d := DurableState{Version: idCur, Mode: ModeLive, Pending: 100, MaxDelivery: StateOutbox}
-	if err := p.PreflightTransition(d, idCur); err != nil {
+	if err := p.PreflightTransition(d, idCur, ClaimWirePlan); err != nil {
 		t.Fatalf("same-version new writes must not be drain-guarded: %v", err)
 	}
 }
@@ -111,7 +195,7 @@ func TestPreflightSameVersionWritesIgnoreGuard(t *testing.T) {
 func TestPreflightRejectsNonCurrentTarget(t *testing.T) {
 	p := NewPolicy(newTestMatrix(t))
 	d := DurableState{Version: idCur, Mode: ModeDrained, Pending: 0, MaxDelivery: StateNone}
-	err := p.PreflightTransition(d, idNext)
+	err := p.PreflightTransition(d, idNext, ClaimStoreFormat)
 	var w *ErrWriteTargetNotCurrent
 	if !errors.As(err, &w) || w.Target != idNext {
 		t.Fatalf("must be ErrWriteTargetNotCurrent naming the target, got %v", err)
@@ -141,7 +225,7 @@ func TestConcurrentDecisionsDuringRegistration(t *testing.T) {
 					return
 				}
 				d := DurableState{Version: "record-base", Mode: ModeLive, Pending: 0, MaxDelivery: StateNone}
-				if err := p.PreflightTransition(d, "record-base"); err != nil {
+				if err := p.PreflightTransition(d, "record-base", ClaimWirePlan); err != nil {
 					t.Errorf("same-version preflight must stay allowed during registration: %v", err)
 					return
 				}

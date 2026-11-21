@@ -97,3 +97,68 @@ func TestDrainGuardRejectsInvalidSnapshots(t *testing.T) {
 		}
 	}
 }
+
+func TestIncompatibleWireUpgradeRequiresCompletedDrain(t *testing.T) {
+	g := DrainGuard{}
+	// Only the completed, sealed drain opens an incompatible wire/plan
+	// upgrade; every otherwise-quiet snapshot that is not DRAINED is
+	// rejected with the DRAINED requirement named.
+	drained := DrainSnapshot{Mode: ModeDrained, Pending: 0, MaxDelivery: StateNone}
+	if err := g.AllowIncompatibleWireUpgrade(drained); err != nil {
+		t.Fatalf("DRAINED with zero pending must allow an incompatible wire/plan upgrade: %v", err)
+	}
+	for _, mode := range []Mode{ModeLive, ModeBlocked} {
+		s := DrainSnapshot{Mode: mode, Pending: 0, MaxDelivery: StateNone}
+		err := g.AllowIncompatibleWireUpgrade(s)
+		var b *ErrTransitionBlocked
+		if !errors.As(err, &b) {
+			t.Fatalf("%s: must be ErrTransitionBlocked, got %T", mode, err)
+		}
+		if !strings.Contains(b.Reason, "requires DRAINED") {
+			t.Fatalf("%s: rejection must name the DRAINED requirement, got %q", mode, b.Reason)
+		}
+	}
+}
+
+func TestIncompatibleWireUpgradeKeepsOrdinaryTransitionRules(t *testing.T) {
+	g := DrainGuard{}
+	// The ordinary rules still apply first: an in-progress drain and any
+	// pending obligation block the incompatible upgrade too.
+	cases := []struct {
+		name   string
+		s      DrainSnapshot
+		reason string
+	}{
+		{
+			"drain in progress",
+			DrainSnapshot{Mode: ModeDrain, Pending: 0, MaxDelivery: StateNone},
+			"drain is in progress",
+		},
+		{
+			"pending obligations remain",
+			DrainSnapshot{Mode: ModeDrained, Pending: 2, MaxDelivery: StateReady},
+			"pending obligations remain",
+		},
+		{
+			"sealed pending remain",
+			DrainSnapshot{Mode: ModeLive, Pending: 1, MaxDelivery: StateSealed},
+			"SEALED or later",
+		},
+	}
+	for _, tc := range cases {
+		err := g.AllowIncompatibleWireUpgrade(tc.s)
+		var b *ErrTransitionBlocked
+		if !errors.As(err, &b) {
+			t.Fatalf("%s: must be ErrTransitionBlocked, got %T", tc.name, err)
+		}
+		if !strings.Contains(b.Reason, tc.reason) {
+			t.Fatalf("%s: rejection must name %q, got %q", tc.name, tc.reason, b.Reason)
+		}
+	}
+	// Contradictory input stays invalid input here as well.
+	err := g.AllowIncompatibleWireUpgrade(DrainSnapshot{Mode: ModeUnset})
+	var inv *ErrInvalidSnapshot
+	if !errors.As(err, &inv) {
+		t.Fatalf("an invalid snapshot must stay ErrInvalidSnapshot, got %T", err)
+	}
+}

@@ -51,28 +51,37 @@ func (p *Policy) ContinuePending(d DurableState) error {
 }
 
 // PreflightTransition decides whether new writes may target the target
-// version while the durable store carries d.Version. Both rule families
-// apply, in a fixed order:
+// version while the durable store carries d.Version, under the transition
+// policy of the claim family. Both rule families apply, in a fixed order:
 //
 //  1. The matrix decides capability: registration, the current-version
-//     target rule, writability, and the never-a-silent-migration rule. An
+//     target rule, writability, and — for the store-format family
+//     (ClaimStoreFormat) — the never-a-silent-migration rule. An
 //     incompatible store transition is rejected here regardless of drain
 //     state.
-//  2. For a real transition (d.Version != target), the drain guard
-//     vetoes the timing while any pending obligation or an in-progress
-//     drain exists, regardless of what the matrix allowed.
+//  2. For a real transition (d.Version != target), the drain guard vetoes
+//     the timing. A compatible pair follows the ordinary timing rules
+//     (no pending obligations, no drain in progress). An incompatible
+//     pair survives the matrix only in the wire/plan family
+//     (ClaimWirePlan) and then requires mode DRAINED: the old build must
+//     have finished and sealed every saved obligation before a build that
+//     cannot read the old format starts writing.
 //
 // Writing new records in the store's own current version (d.Version ==
 // target) is not a transition: the guard does not apply, so a live build
 // keeps capturing while earlier batches are still pending.
-func (p *Policy) PreflightTransition(d DurableState, target VersionID) error {
-	if err := p.matrix.CanWriteNew(d.Version, target); err != nil {
+func (p *Policy) PreflightTransition(d DurableState, target VersionID, claim ClaimType) error {
+	if err := p.matrix.CanWriteNew(d.Version, target, claim); err != nil {
 		return err
 	}
-	if d.Version != target {
-		if err := p.guard.AllowFormatTransition(d.snapshot()); err != nil {
-			return err
-		}
+	if d.Version == target {
+		return nil
 	}
-	return nil
+	if p.matrix.CanRead(d.Version, target) == nil {
+		return p.guard.AllowFormatTransition(d.snapshot())
+	}
+	// The pair is incompatible and the matrix did not reject it, so this
+	// is a wire/plan upgrade: only a completed, sealed drain by the old
+	// build opens it.
+	return p.guard.AllowIncompatibleWireUpgrade(d.snapshot())
 }

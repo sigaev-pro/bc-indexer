@@ -6,10 +6,11 @@ import (
 	"testing"
 )
 
-// fakeVersion is the test double for a codec-owned encoding version: an
-// opaque identifier, an explicit list of readability claims and a
-// writability flag. It mirrors how E02-02.codec (#27) will register
-// concrete versions once it lands.
+// fakeVersion is the test double for a codec-owned or store-owned
+// encoding version: an opaque identifier, an explicit list of
+// readability claims and a writability flag. It mirrors how E02-02.codec
+// (#27) and future store formats register concrete versions; the pinned
+// proto versions use the real ProtocolVersion.
 type fakeVersion struct {
 	id     VersionID
 	reads  []VersionID
@@ -106,8 +107,8 @@ func TestUnknownVersionIsRejectedNeverDefaulted(t *testing.T) {
 		{"CanRead to unknown", m.CanRead(idOld, unknown)},
 		{"CanReplay from unknown", m.CanReplay(unknown, idCur)},
 		{"CanReplay to unknown", m.CanReplay(idOld, unknown)},
-		{"CanWriteNew from unknown", m.CanWriteNew(unknown, idCur)},
-		{"CanWriteNew to unknown", m.CanWriteNew(idOld, unknown)},
+		{"CanWriteNew from unknown", m.CanWriteNew(unknown, idCur, ClaimStoreFormat)},
+		{"CanWriteNew to unknown", m.CanWriteNew(idOld, unknown, ClaimWirePlan)},
 	}
 	for _, tc := range cases {
 		if tc.err == nil {
