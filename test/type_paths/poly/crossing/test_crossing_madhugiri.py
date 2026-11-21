@@ -1122,7 +1122,11 @@ class MadhugiriReportTests(unittest.TestCase):
         original = self.report["cases"][6]["crossing"]["blocks"][1]
         second["transactions"] = [dict(row, hash=tagged, type=126, raw=wire.hex())
                                   if row["type"] == 127 else row for row in original["transactions"]]
-        second["calls"] = [dict(call, transaction=tagged) for call in original["calls"]]
+        # Retag only the system frames: the legacy frame keeps its own
+        # transaction hash, so the envelope conjunct alone is isolated.
+        system_hash = "0x" + c.keccak256(b.original).hex()
+        second["calls"] = [dict(call, transaction=tagged) if call["transaction"] == system_hash else call
+                           for call in original["calls"]]
         receipt = second["receipts"][1]
         receipt["type"] = "0x7e"
         receipt["transactionHash"] = tagged
