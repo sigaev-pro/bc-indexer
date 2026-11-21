@@ -188,7 +188,7 @@ neighbor check) left out of the table.
 ### Pending the native run
 
 The block-1/2 base-fee pair of the sprint-2 Delhi-denominator profiles is
-not guessed: `MADHUGIRI_BASE_FEES` stays `None`, so the transition is judged
+not guessed: the native base-fee pair is pinned (984375000, 969058741), so the transition is judged
 only for internal consistency (every receipt is re-derived from the actual
 header values) until the coordinator derives the two integers from the
 native run. Two further bindings wait on the same run: the pre-gate block-2

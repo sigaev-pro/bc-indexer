@@ -451,16 +451,6 @@ def rebody(raw_block, txs, gas=21000):
     block = seal(fields, txs)
     block["transaction_proofs"] = proofs
     return block
-    """Re-seal a refusal candidate body with a consistent transaction root."""
-    fields = list(PRIOR.plain_rlp(c.rlp_list(bytes.fromhex(raw_block)))[0])
-    if len(txs) == 2:
-        fields[4], proofs = reports.ordered_pair(txs[0], txs[1])
-    else:
-        fields[4], proofs = single_proof(txs[0])
-    fields[10] = num(gas)
-    block = seal(fields, txs)
-    block["transaction_proofs"] = proofs
-    return block
 
 
 def refusal_row(name, first):

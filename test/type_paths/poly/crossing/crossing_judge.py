@@ -24,7 +24,7 @@ PAIRED_CASES = CASES + (("LondonJaipur", "londonBlock", "jaipurBlock", 2, 1, 0),
 MADHUGIRI_CASES = PAIRED_CASES + (("PreMadhugiri", "", "", 0, 5, 6),
                                   ("Madhugiri", "", "madhugiriBlock", 127, 5, 7))
 SYNC_TOPIC = (94).to_bytes(32, "big")
-# Pending the native run (design section 3): the Delhi-denominator base-fee
+# The Delhi-denominator base-fee pair, pinned from native run01:
 # pair of the sprint-2 profiles. The receipts remain fully pinned to the
 # header values, so only the two integers are deferred; the coordinator
 # derives them from the native run and replaces the None.
@@ -207,7 +207,7 @@ def madhugiri_receipts(row, header, txs, oracles, header_bloom):
     check(cumulative == integer(header[10]), "madhugiri header gas differs")
     if header_bloom is not None:
         # The pre-gate header bloom may also fold in the separate Bor receipt
-        # log; that pair stays pending the native run.
+        # log; that binding stays open by design (the folded bloom is not
         check(header[6] == header_bloom, "madhugiri header bloom differs")
     prior.account_claims(row, header[3])
     return prior.snapshot(row["state_after"], False)
