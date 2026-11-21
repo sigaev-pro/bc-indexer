@@ -143,6 +143,12 @@
       "file": "test/type_paths/bsc/full_import/judge.py",
       "original": "isinstance(unknown, dict) and unknown[\"unsupported\"] is True and",
       "replacement": "isinstance(unknown, dict) and True and"
+    },
+    {
+      "name": "access-list entries unbound",
+      "file": "test/type_paths/bsc/full_import/judge.py",
+      "original": "require(actual[\"address\"].lower() == wanted[\"address\"] and\n                        (actual.get(\"storageKeys\") or []) == wanted[\"storageKeys\"], \"access list wire differs\")",
+      "replacement": "require(len(observed) == len(expected), \"access list wire differs\")"
     }
   ]
 }

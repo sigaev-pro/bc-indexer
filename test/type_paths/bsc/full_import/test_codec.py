@@ -117,5 +117,41 @@ class CodecControls(unittest.TestCase):
             judge.check_block_wires({"wire": wire.encode(body).hex()}, rows)
 
 
+class CheckWireAccessListTests(unittest.TestCase):
+    """The native transaction JSON encodes an access-list entry without
+    storage keys as null; check_wire must accept that against the wire's
+    empty list and still bind every present key."""
+
+    def access_rows(self):
+        vectors = json.loads((HERE / "codec_vectors.json").read_text())["transactions"]
+        rows = []
+        for vector in vectors:
+            if "accessList" not in vector["fields"]:
+                continue
+            fields = vector["fields"]
+            rows.append({**vector, "value": fields["value"], "to": fields["to"],
+                         "data": fields["input"][2:]})
+        return rows
+
+    def test_native_null_entries_pass(self):
+        for vector in self.access_rows():
+            with self.subTest(type=vector["type"]):
+                judge.check_wire(vector)
+
+    def test_present_keys_are_bound(self):
+        for vector in self.access_rows():
+            row = copy.deepcopy(vector)
+            row["fields"]["accessList"][0]["storageKeys"][0] = "0x" + "11" * 32
+            with self.subTest(type=vector["type"]):
+                with self.assertRaises(ValueError):
+                    judge.check_wire(row)
+
+    def test_entry_addresses_are_bound(self):
+        row = copy.deepcopy(self.access_rows()[0])
+        row["fields"]["accessList"][1]["address"] = "0x" + "22" * 20
+        with self.assertRaises(ValueError):
+            judge.check_wire(row)
+
+
 if __name__ == "__main__":
     unittest.main()
