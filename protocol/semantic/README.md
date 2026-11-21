@@ -1,61 +1,6 @@
-# semantic (E02-01.semantic_descriptors, #22)
+# semantic (E02-01. ~~Removed-event revision~~ RESOLVED by review: CURRENT_SEMANTICS.md:79 (the SEM contract) mandates Removed={activation_ref, revision>0, native_decision, reason=NATIVE_CANONICAL_CHANGE} from the same activation counter; Validate now rejects KindRemoved with revision 0.
 
-`protocol/semantic` is the manifest semantic identity of the current
-delivery: the `SemanticDescriptor` of one public event and the
-decision-to-batch `BatchAllocation` of a native decision. The semantic
-manifest fixes the event kind, the source provenance and sequence, the
-activation refs and the revisions **before DELIVERY_STAGING**; delivery
-attempts never change them ([CONTROL_WIRE_CONTRACT](../../.project/docs/CONTROL_WIRE_CONTRACT.md),
-"Базовые кодирования и идентичности"; D79 in
-[MESSAGE_CONTRACT](../../.project/docs/MESSAGE_CONTRACT.md) section 4).
-
-Task card: `E02-01.semantic_descriptors` in
-[.project/docs/TASK_DECOMPOSITION.md](../../.project/docs/TASK_DECOMPOSITION.md);
-split: stream A of
-[.project/evidence/E02-parallel-plan-20261121.md](../../.project/evidence/E02-parallel-plan-20261121.md).
-
-The package imports only the Go standard library and is its own module,
-`github.com/sigaev-pro/bc-indexer/protocol/semantic` (the path convention
-of `core/capture`).
-
-## What this block does and does not do
-
-It defines and checks the identity contract: registry values (family v1:
-tx=1, block=2, balance.system=3, bor.legacy_receipt=4; kind: applied=1,
-removed=2, status=3), the activation identity
-(`activation_id = native_decision_sequence || entity_ordinal`, qualified by
-producer and run; block ordinal 0, transaction body index+1, optional
-entities after the native body count), the revision rules the contract
-states (Applied 0, StatusChanged > 0), the source provenance
-(`node_instance_id`, `writer_epoch`, `source_sequence` as a separate
-durable counter), the 40-byte `batch_id` (`producer16 || run16 ||
-batch_sequence`, counter starts at 1), deterministic SHA-256 digests over a
-canonical encoding, and the exactly-once allocation model.
-
-It does not persist anything: the durable decision-to-batch commit, the
-attempt allocation `{attempt_generation, event_sequence_base,
-event_count}`, the READY manifest and the producer store are E03-01
- .producer_store. The event descriptor v2 of the READY manifest
-(record digests, fragment counts) is E02-02/E03 territory; it sits on top
-of these identities. The lifecycle transition rules (reordering, revision
-conflicts, reinclusion) are E02-03.lifecycle_validator. This block runs no
-native client and gives no AC verdict.
-
-## Design
-
-### SemanticDescriptor
-
-```
-SemanticDescriptor = { family, kind, network{chain_id, genesis_hash},
-                       activation{producer, run, decision_sequence,
-                                  entity_ordinal, block_hash, tx binding?},
-                       revision, source{node_instance, writer_epoch,
-                                        source_sequence} }
-```
-
-The activation ref is the `BlockActivationRef` of a block event or the
-`ActivationRef` of a transaction event with its inclusion binding (native
-body position and transaction hash), per MESSAGE_CONTRACT section 2. The
+2. The
 network family is EVM only; the digests encode it as byte `0x01`, as the
 network digest formulas of CONTROL_WIRE_CONTRACT do.
 

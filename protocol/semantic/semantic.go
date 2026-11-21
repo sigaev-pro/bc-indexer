@@ -314,9 +314,13 @@ func (d SemanticDescriptor) Validate() error {
 			return fmt.Errorf("%w: StatusChanged revision 0", ErrInvalid)
 		}
 	case KindRemoved:
-		// The contract fixes the revision of Applied and StatusChanged
-		// events; it does not state a revision rule for Removed. See the
-		// open question in README.md.
+		// CURRENT_SEMANTICS.md:79 (the SEM contract MESSAGE_CONTRACT §5
+		// defers to) fixes Removed={activation_ref, revision>0,
+		// native_decision, reason=NATIVE_CANONICAL_CHANGE}, allocated
+		// from the same activation counter as StatusChanged.
+		if d.Revision == 0 {
+			return fmt.Errorf("%w: Removed revision 0", ErrInvalid)
+		}
 	}
 	if d.Source.NodeInstanceID.IsZero() {
 		return fmt.Errorf("%w: unset node instance", ErrInvalid)

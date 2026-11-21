@@ -328,9 +328,13 @@ func TestDescriptorValidation(t *testing.T) {
 			t.Fatalf("%s: error %v, want ErrInvalid", test.name, err)
 		}
 	}
-	// Removed keeps any revision: the contract fixes no rule for it yet
-	// (README.md, open question 1).
-	for _, revision := range []uint64{0, 1, 7} {
+	// Removed mandates revision > 0 from the same activation
+	// counter (CURRENT_SEMANTICS.md:79, the SEM contract).
+	if err := (SemanticDescriptor{Family: FamilyBlock, Kind: KindRemoved,
+		Activation: blockActivation(f), Revision: 0, Source: source(f)}).Validate(); err == nil {
+		t.Fatal("Removed revision 0 must be rejected")
+	}
+	for _, revision := range []uint64{1, 7} {
 		d := SemanticDescriptor{Family: FamilyBlock, Kind: KindRemoved,
 			Activation: blockActivation(f), Revision: revision, Source: source(f)}
 		if err := d.Validate(); err != nil {
