@@ -100,7 +100,7 @@ func optionalEvent(family semantic.Family, kind semantic.Kind, rev, seq, decisio
 
 func mustApply(t *testing.T, a *lifecycle.Automaton, d semantic.SemanticDescriptor) lifecycle.Result {
 	t.Helper()
-	res, err := a.Apply(d)
+	res, err := a.Apply(d, digestOf(t, d))
 	if err != nil {
 		t.Fatalf("apply returned an unexpected error: %v", err)
 	}
@@ -116,13 +116,13 @@ func mustRecord(t *testing.T, a *lifecycle.Automaton, key lifecycle.ActivationKe
 	return rec
 }
 
-func digestOf(t *testing.T, d semantic.SemanticDescriptor) semantic.Hash32 {
+func digestOf(t *testing.T, d semantic.SemanticDescriptor) lifecycle.Digest {
 	t.Helper()
 	digest, err := d.Digest()
 	if err != nil {
 		t.Fatalf("digest: %v", err)
 	}
-	return digest
+	return lifecycle.Digest(digest)
 }
 
 func recordsEqual(left, right map[lifecycle.ActivationKey]lifecycle.Record) bool {
@@ -959,7 +959,9 @@ func TestInvalidDescriptorsAreInputErrors(t *testing.T) {
 	for _, tc := range broken {
 		t.Run(tc.name, func(t *testing.T) {
 			a := lifecycle.New()
-			_, err := a.Apply(tc.event)
+			// The digest argument is irrelevant here: the descriptor itself
+			// is invalid, so any non-zero placeholder content digest does.
+			_, err := a.Apply(tc.event, lifecycle.Digest{0x01})
 			if err == nil {
 				t.Fatal("apply accepted an invalid descriptor")
 			}
@@ -987,7 +989,7 @@ func TestRecordValueSemantics(t *testing.T) {
 
 	// Mutating a returned record must not touch the automaton.
 	got := mustRecord(t, a, key)
-	got.Evidence[9] = semantic.Hash32{}
+	got.Evidence[9] = lifecycle.Digest{}
 	got.Origin = nil
 	got.State = lifecycle.StatePendingApplied
 	fresh := mustRecord(t, a, key)
@@ -998,7 +1000,7 @@ func TestRecordValueSemantics(t *testing.T) {
 		t.Error("returned evidence map aliases the stored map")
 	}
 	all := a.Records()
-	all[key].Evidence[9] = semantic.Hash32{}
+	all[key].Evidence[9] = lifecycle.Digest{}
 	if _, polluted := mustRecord(t, a, key).Evidence[9]; polluted {
 		t.Error("Records returned maps that alias the stored records")
 	}
@@ -1027,7 +1029,7 @@ func TestRecordValueSemantics(t *testing.T) {
 		t.Error("records with different entities compared equal")
 	}
 	held = fresh.Clone()
-	held.Evidence[3] = semantic.Hash32{}
+	held.Evidence[3] = lifecycle.Digest{}
 	if fresh.Equal(held) {
 		t.Error("records with different evidence slots compared equal")
 	}
