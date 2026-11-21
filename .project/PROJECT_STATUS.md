@@ -30,6 +30,10 @@ Queue, in priority order:
 4. Geth P3 gofmt — DONE: branch chore/geth-probe-gofmt (one blank line at probe.go:713 collapsed; the 27-test offline suite passes; pushed; PR left to the owner).
 5. Preliminary read-only G.E01 pre-check — DONE: base confirmed (merged state, PR194 composition at 76a2a15, CI PASS, run15 SHA chain 4/4, audits 06/07/11 PASS); the applicability matrix is reconciled to the 2026-11-21 state and the brief date nit fixed; record in evidence/E01-gate-precheck-20261121.md. For the gate itself: confirm audit-12 PASS on the merged tree and re-read in-flight states.
 
+## E02 phase 1 merged (2026-11-22)
+
+The owner approved merging ("слesвай"). All four phase-1 PRs merged serially after CI+review statuses: **#197 semantic** `b8c41fed`, **#198 actions** `ad49a4a1`, **#199 block** `fd2c3e73`, **#200 profiles** `72958bf9`. Issues **#22-#25 closed** with acceptance records. Review story per PR: initial SPEC/Standards PASS on #197/#199 with pre-merge P2 fixes; #200 REQUEST_CHANGES (P1 non-normative D80 digest + 2xP2) fully repaired and delta code-PASSed, doc-P2 fixed at `6a6053e`; #198 delta PASS on the refund-boundary fix. Phase 2 (E02-02.schemas #26 → codec #27 → lifecycle validator #28 + compatibility #29 in parallel, then G.E02 #79) starts from the merged main.
+
 ## E02 open (2026-11-21)
 
 **G.E01 PASS** (formal gate review, zero blocking findings; #78 closed with the verdict; the three P3 notes fixed at 028944b: audit-12 disposition recorded, plan hash typo corrected, BSC combined-activation adjudication line added). **E01 is complete.** E02 opened per evidence/E02-parallel-plan-20261121.md: scaffold branch e02/scaffold (9f62bef, protocol/{semantic,balance,block,profiles,proto,codec,compatibility} + test/lifecycle_validator READMEs) pushed; four stream worktrees created. Phase 1 running: streams A (#22 semantic), B (#23 actions), C (#24 block) as three background implementer agents (D97 limit), stream D (#25 closed_profiles) taken by the coordinator in .worktrees/e02-profiles. Merges serialized with the owner's approval per D95; no native runs needed in phase 1.
