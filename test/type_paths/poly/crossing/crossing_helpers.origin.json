@@ -1,0 +1,22 @@
+{
+    "activation_commit": "6400125",
+    "activation_source_sha256": "d011263583f5339fa0d0735a46c6428ed64c713f7c9f86d00d66dd86d0a4033e",
+    "activation_functions": {
+        "historical_config": "449d5b85d040645c8fd3e956e92e3ed7c9a2b430046696c3ebe231908f6134bc",
+        "raw_block": "f278e781a9440f500dd73ee8b055de8f4f564dd9b4971cd4028d0b99c3c3518d",
+        "inclusion": "1f7279d97edaf60b3a4e427a9f20f71d7b6df5318a881be816646092aab03109",
+        "block": "cef5717c6f976fe279af623c60abc8b3579f167fa5dabb8e82e33c604fb3c6a3",
+        "signed_input": "d484f0d05d719f1740e50a82d777fd8f6b12385dd3ba4c8133f35aed24d16c9a"
+    },
+    "accepted_records_source_sha256": "67f25cf41b3ac6f423732ea82c8fcb7f09064ff3e587c6184b68f4beee023239",
+    "records_adaptation": "Only add observation_offset argument and apply it to decision member observation identity; rejected admission consumes sequence zero before successful decisions.",
+    "sprint_seam": "Add the sprint parameter (default 4) to historical_config; the frozen rows keep the pinned default and the Madhugiri rows pass 2.",
+    "poly_event_source_commit": "aae2fac",
+    "poly_event_functions": {
+        "state_sync_items": "f219c06e591c89f878f00e347b71d048a512c14fa27a8d14ed56a22bde8dbc65",
+        "state_sync_wire": "5e4fb44776752f6f056093cdaed740a34ab52587821935c14a05539bf3b39152",
+        "clerk_event": "9b3af8abe67ce0aede09ccdefddc5484f3c1c694d277b33aa22036b8e2505a70",
+        "abi_bytes": "3c67adbb256582de6cef975933d2ec14f92ed8eb31ac6bb6dfb258dc7a760d4a"
+    },
+    "poly_event_adaptation": "Port the accepted body-StateSync event/ABI encodings from poly_judge system_state/refusal_claims into named helpers: the four-field StateSyncData body items, the 0x7f envelope, the six-field clerk.EventRecord rlp and the receiver-call abi encoder; the sprint seam above is the only change to an activation function."
+}

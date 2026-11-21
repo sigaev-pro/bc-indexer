@@ -1,0 +1,7 @@
+{
+  "source_file": "test/type_paths/poly/crossing/probe.go",
+  "source_commit": "b3b51d8d72c533c976b1edbe5e907f955db5cebe",
+  "source_sha256": "f21c7afb7227495058eeecbc2bebdcc9ebefba47fda2b03e4bb3ece312d08d79",
+  "selected_body_sha256": "49aacd1bf7077f148c03ac04807a0f03c8ca614905721b642b053d7f21ea0e3c",
+  "selection": "Exact function bodies from crossingKind through crossingRecords, excluding the final separator blank line. Imports added; params/types are explicit portable doubles, no native credit."
+}
