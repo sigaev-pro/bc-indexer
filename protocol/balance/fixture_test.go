@@ -334,14 +334,23 @@ func buildCorpusTx(spec corpusTxSpec) (tx TxBalances, before, after map[Address2
 	// Gas return: only an actual non-zero credit becomes an action; the
 	// summary keeps an explicit zero otherwise (see README.md). An omitted
 	// invocation consumes neither an execution_order nor a protocol
-	// operation index.
+	// operation index. After a root revert the journal restore returns
+	// the payer to payerAfterPurchase before the refund is credited, so
+	// the refund effect's boundary points start there, not on the
+	// non-restored transfer debit.
 	if !refundGas.IsZero() {
-		payerCommitted, err := payerAfterPurchase.SubChecked(value)
-		if err != nil {
-			panic("committed balance underflow in fixture " + spec.name)
+		payerCommitted := payerAfterPurchase
+		if spec.shape != shapeRootRevert {
+			// The committed transfer left the payer; a root revert
+			// restores the post-purchase point before the refund.
+			var err error
+			payerCommitted, err = payerAfterPurchase.SubChecked(value)
+			if err != nil {
+				panic("committed balance underflow in fixture " + spec.name)
+			}
 		}
-		payerAfterReturn, err := payerCommitted.AddChecked(refundGas)
-		if err != nil {
+		payerAfterReturn, err2 := payerCommitted.AddChecked(refundGas)
+		if err2 != nil {
 			panic("gas return overflow in fixture " + spec.name)
 		}
 		tx.Actions = append(tx.Actions, BalanceAction{
