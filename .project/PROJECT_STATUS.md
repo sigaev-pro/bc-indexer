@@ -32,7 +32,7 @@ Queue, in priority order:
 
 ## E02 final merges (2026-11-22)
 
-The owner approved merging ("слesвай"). All three final PRs merged: **#204 compat-codec** `0c29a9b6`, **#205 lifecycle-schema** `c5384614`, **#206 codec** `93afd769`. Issue **#27 closed**; #28/#29 already closed (completion comments posted). **All nine E02 issues (#22-#29) are CLOSED**; all ten PRs (#197-#206) merged. The formal G.E02 (#79) gate review is running against the brief with a clean-checkout verification. On its PASS: E02 is complete, E03 (#30+) opens.
+The owner approved merging ("слesвай"). All three final PRs merged: **#204 compat-codec** `0c29a9b6`, **#205 lifecycle-schema** `c5384614`, **#206 codec** `93afd769`. Issue **#27 closed**; #28/#29 already closed (completion comments posted). **All nine E02 issues (#22-#29) are CLOSED**; all ten PRs (#197-#206) merged. The formal G.E02 (#79) gate review is running against the brief with a clean-checkout verification. On its PASS: E02 is complete. E03 implementation is ON HOLD per the owner direction (do not start until discussed); no E03 streams, agents or worktrees until the owner leads the discussion.
 
 ## E02 phase 2 launched (2026-11-22)
 
