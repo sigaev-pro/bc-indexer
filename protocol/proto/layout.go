@@ -198,6 +198,13 @@ func ComputeLayout(req LayoutRequest) (*LayoutPlan, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The header alone must fit the budget; a budget below it would
+	// underflow the subtraction below and is checked rejection (the
+	// contract mandates LIMIT_INCOMPATIBLE, not a wrapped plan).
+	if req.Budget <= header {
+		return nil, fmt.Errorf("%w: frame budget %d cannot fit the %d-byte header",
+			ErrLimitIncompatible, req.Budget, header)
+	}
 	if err := req.Network.Validate(); err != nil {
 		return nil, err
 	}

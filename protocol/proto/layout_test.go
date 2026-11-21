@@ -345,3 +345,19 @@ func TestLayoutPlanEchoesBudgetInHeaderSize(t *testing.T) {
 		}
 	}
 }
+
+func TestLayoutBudgetBelowHeaderRejected(t *testing.T) {
+	stream := "TEST"
+	header, _ := NatsHeaderSize(stream)
+	for _, budget := range []uint64{1, 100, header} {
+		_, err := ComputeLayout(LayoutRequest{
+			Budget: budget, Stream: stream, Network: goldenNetwork(t),
+			Events: []EventFragments{
+				{Ordinal: 1, FragmentLengths: []uint64{10}},
+			},
+		})
+		if !errors.Is(err, ErrLimitIncompatible) {
+			t.Fatalf("budget %d (header %d): expected ErrLimitIncompatible, got %v", budget, header, err)
+		}
+	}
+}
