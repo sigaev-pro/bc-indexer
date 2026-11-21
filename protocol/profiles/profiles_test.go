@@ -1,9 +1,6 @@
 package profiles
 
-import (
-	"bytes"
-	"testing"
-)
+import "testing"
 
 func TestDefaultProfilesAreClosed(t *testing.T) {
 	for _, family := range []Family{FamilyEth, FamilyBsc, FamilyBor} {
@@ -113,26 +110,78 @@ func TestUnsupportedVersionNoFallback(t *testing.T) {
 	}
 }
 
-func TestSourcesBindingDigestDeterministic(t *testing.T) {
-	keys := [][]byte{[]byte("k1"), []byte("k2")}
-	a := ComputeSourcesBinding(V1, FamilyBor, "3a018e38", keys)
-	b := ComputeSourcesBinding(V1, FamilyBor, "3a018e38", keys)
+func TestSourcesBindingDigestIsSHA256OfFileBytes(t *testing.T) {
+	file := []byte(`{"schema_version":1,"l1":{"deployment_id":"01"}}`)
+	a := ComputeSourcesBindingDigest(file)
+	b := ComputeSourcesBindingDigest(file)
 	if a != b {
-		t.Fatal("same inputs must yield the same digest")
+		t.Fatal("same file bytes must yield the same digest")
 	}
-	c := ComputeSourcesBinding(V1, FamilyBor, "3a018e39", keys)
-	if a == c {
-		t.Fatal("different source commit must change the digest")
+	ws := append(append([]byte{}, file...), ' ')
+	if a == ComputeSourcesBindingDigest(ws) {
+		t.Fatal("whitespace change must change the digest (D80)")
 	}
-	d := ComputeSourcesBinding(V1, FamilyBor, "3a018e38", [][]byte{[]byte("k1"), []byte("k3")})
-	if a == d {
-		t.Fatal("different observation keys must change the digest")
-	}
-	e := ComputeSourcesBinding(V1, FamilyEth, "3a018e38", keys)
-	if a == e {
-		t.Fatal("different family must change the digest")
-	}
-	if bytes.Equal(a[:], make([]byte, 32)) {
+	if a == (SourcesBindingDigest{}) {
 		t.Fatal("digest must never be all-zero")
+	}
+}
+
+func TestSourceObservationRefMandatoryDigest(t *testing.T) {
+	file := []byte("sources")
+	ref := SourceObservationRef{DeploymentID: "d1", Digest: ComputeSourcesBindingDigest(file)}
+	if err := ref.Validate(file); err != nil {
+		t.Fatalf("matching digest must validate: %v", err)
+	}
+	if err := ref.Validate([]byte("other")); err == nil {
+		t.Fatal("mismatched file bytes must be ErrDigestMismatch")
+	}
+	if err := ref.Validate(nil); err == nil {
+		t.Fatal("missing file bytes must be ErrDigestMissing")
+	}
+	var zero SourceObservationRef
+	if err := zero.Validate(file); err == nil {
+		t.Fatal("zero digest must not validate against real bytes")
+	}
+}
+
+func TestL1CheckpointMandatoryDigest(t *testing.T) {
+	file := []byte("sources")
+	cp := L1Checkpoint{Number: 4, Time: 5, Digest: ComputeSourcesBindingDigest(file)}
+	if err := cp.Validate(file); err != nil {
+		t.Fatalf("matching digest must validate: %v", err)
+	}
+	if err := cp.Validate([]byte("x")); err == nil {
+		t.Fatal("mismatch must be rejected")
+	}
+	if err := (L1Checkpoint{}).Validate(nil); err == nil {
+		t.Fatal("missing file must be rejected")
+	}
+}
+
+func TestKind2RequiresNativeType(t *testing.T) {
+	eth, _ := Default(FamilyEth)
+	if err := eth.ValidateReceiptEncoding(ReceiptEncoding{Kind: KindTypedConsensusEnvelope}, true); err == nil {
+		t.Fatal("kind 2 with missing native_type must be rejected (AC-DAT-02-03)")
+	}
+}
+
+func TestBodyKindsForbiddenInAuxiliarySlot(t *testing.T) {
+	bor, _ := Default(FamilyBor)
+	zero := uint32(0)
+	one := uint32(1)
+	if err := bor.ValidateReceiptEncoding(ReceiptEncoding{Kind: KindLegacyConsensusRLP, NativeType: &zero}, false); err == nil {
+		t.Fatal("kind 1 must be forbidden in the auxiliary slot")
+	}
+	if err := bor.ValidateReceiptEncoding(ReceiptEncoding{Kind: KindTypedConsensusEnvelope, NativeType: &one}, false); err == nil {
+		t.Fatal("kind 2 must be forbidden in the auxiliary slot")
+	}
+	if err := bor.ValidateReceiptEncoding(OptionalBorLegacy(), false); err != nil {
+		t.Fatalf("kind 3 in the auxiliary slot must validate: %v", err)
+	}
+}
+
+func TestOriginEnumClosed(t *testing.T) {
+	if OriginInvalid != 0 || OriginBodyMandatory != 1 || OriginBorLegacySynthetic != 2 {
+		t.Fatal("origin enum values must stay closed v1")
 	}
 }

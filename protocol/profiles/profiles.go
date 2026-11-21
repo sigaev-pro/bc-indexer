@@ -7,7 +7,6 @@ package profiles
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 )
 
@@ -62,6 +61,18 @@ const (
 	DetailsEth     NetworkDetails = 1
 	DetailsBsc     NetworkDetails = 2
 	DetailsBor     NetworkDetails = 3
+)
+
+// Origin is the closed receipt origin enum: body receipts carry
+// BODY_MANDATORY; the optional Bor legacy storage receipt carries
+// BOR_LEGACY_SYNTHETIC_RECEIPT. Kind applicability mirrors origins:
+// kinds 1/2 only in BODY_MANDATORY, kind 3 only in the legacy origin.
+type Origin uint8
+
+const (
+	OriginInvalid            Origin = 0
+	OriginBodyMandatory      Origin = 1
+	OriginBorLegacySynthetic Origin = 2
 )
 
 // PayloadVariant names a closed event payload type from MESSAGE_CONTRACT
@@ -172,38 +183,67 @@ func OptionalBorLegacy() ReceiptEncoding {
 	return ReceiptEncoding{Kind: KindBorLegacyStorageRLP, NativeType: nil}
 }
 
-// SourcesBindingDigest implements the D80 mandatory Hash32: the digest
-// binding a source observation reference (or an L1 checkpoint) to its
-// exact source set. It is mandatory in SourceObservationRef and
-// L1Checkpoint and is computed over the domain-separated canonical
-// encoding of the reference's inputs.
+// SourcesBindingDigest is the mandatory D80 Hash32: the SHA-256 of the
+// exact verified bytes of the pinned sources_file. It is required on
+// SourceObservationRef and L1Checkpoint; absence or a length other than
+// 32 bytes is a schema error, never a default.
 type SourcesBindingDigest [32]byte
 
-// ComputeSourcesBinding derives the digest for a source observation: the
-// registry version, family, the source commit identity and the ordered
-// observation keys. The same inputs always yield the same digest; any
-// input change changes the digest.
-func ComputeSourcesBinding(registry RegistryVersion, family Family, sourceCommit string, observationKeys [][]byte) SourcesBindingDigest {
-	h := sha256.New()
-	h.Write([]byte("extractor.sources_binding.v1"))
-	var header [8]byte
-	binary.BigEndian.PutUint16(header[0:2], uint16(registry))
-	header[2] = byte(family)
-	h.Write(header[:3])
-	var lenBuf [4]byte
-	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(sourceCommit)))
-	h.Write(lenBuf[:])
-	h.Write([]byte(sourceCommit))
-	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(observationKeys)))
-	h.Write(lenBuf[:])
-	for _, key := range observationKeys {
-		binary.BigEndian.PutUint32(lenBuf[:], uint32(len(key)))
-		h.Write(lenBuf[:])
-		h.Write(key)
-	}
+// ComputeSourcesBindingDigest derives the digest the normative way:
+// SHA-256 over the exact file bytes. Whitespace changes the digest;
+// the digest is not a deployment ID or a remote attestation.
+func ComputeSourcesBindingDigest(fileBytes []byte) SourcesBindingDigest {
 	var out SourcesBindingDigest
-	copy(out[:], h.Sum(nil))
+	sum := sha256.Sum256(fileBytes)
+	copy(out[:], sum[:])
 	return out
+}
+
+// SourceObservationRef binds one observation to its pinned sources:
+// the digest is mandatory (D80/IR-02) and must equal the digest of the
+// retained file bytes.
+type SourceObservationRef struct {
+	DeploymentID string
+	Digest       SourcesBindingDigest
+}
+
+// L1Checkpoint carries the mandatory digest alongside the checkpoint
+// identity (number/time/roots per CURRENT_SEMANTICS).
+type L1Checkpoint struct {
+	Number uint64
+	Time   uint64
+	TxRoot [32]byte
+	Digest SourcesBindingDigest
+}
+
+// ErrDigestMismatch and ErrDigestMissing are schema errors per D80: an
+// absent or 31/33-byte digest never validates.
+var (
+	ErrDigestMissing  = closed("sources_binding_digest is mandatory (D80)")
+	ErrDigestMismatch = closed("sources_binding_digest does not match the pinned file bytes")
+)
+
+// Validate checks the mandatory digest against the retained file bytes.
+func (r SourceObservationRef) Validate(fileBytes []byte) error {
+	if len(fileBytes) == 0 {
+		return ErrDigestMissing
+	}
+	want := ComputeSourcesBindingDigest(fileBytes)
+	if r.Digest != want {
+		return ErrDigestMismatch
+	}
+	return nil
+}
+
+// Validate checks the mandatory digest and the checkpoint shape.
+func (c L1Checkpoint) Validate(fileBytes []byte) error {
+	if len(fileBytes) == 0 {
+		return ErrDigestMissing
+	}
+	if c.Digest != ComputeSourcesBindingDigest(fileBytes) {
+		return ErrDigestMismatch
+	}
+	return nil
 }
 
 // ValidateReceiptEncoding checks one encoding against the closed table:
@@ -216,22 +256,26 @@ func (p Profile) ValidateReceiptEncoding(enc ReceiptEncoding, bodyReceipt bool) 
 	case KindInvalid:
 		return closed("kind 0 is INVALID, not a default success")
 	case KindLegacyConsensusRLP:
+		if !bodyReceipt {
+			return closed("kind 1 is forbidden in the auxiliary slot (kinds 1/2 never replace raw_encoding)")
+		}
 		if enc.NativeType == nil || *enc.NativeType != 0 {
 			return closed("kind 1 requires native_type present and equal to 0")
 		}
 	case KindTypedConsensusEnvelope:
+		// D75: native_type is mandatory for kind 2 (AC-DAT-02-03 rejects
+		// a missing value); it spans 1..127 with only registry-allowed
+		// values on the wire.
+		if !bodyReceipt {
+			return closed("kind 2 is forbidden in the auxiliary slot (kinds 1/2 never replace raw_encoding)")
+		}
 		if enc.NativeType == nil {
-			// The profile table row without a pinned native_type accepts
-			// any registry-allowed 1..127 value; presence on the wire is
-			// checked by the schema validator, here nil means "table row".
-			return nil
+			return closed("kind 2 requires native_type present (1..127)")
 		}
 		if *enc.NativeType == 0 || *enc.NativeType > NativeTypeMax {
 			return closed(fmt.Sprintf("kind 2 native_type %d outside 1..127", *enc.NativeType))
 		}
-		if p.Family == FamilyBor && *enc.NativeType == 127 {
-			return nil // Bor StateSync body encoding per D75
-		}
+		return nil
 	case KindBorLegacyStorageRLP:
 		if enc.NativeType != nil {
 			return closed("kind 3 must not carry native_type")
