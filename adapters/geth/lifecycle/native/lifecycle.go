@@ -683,6 +683,50 @@ func (l *Lifecycle) Rewind(old, target *types.Header) error {
 	return nil
 }
 
+// partialRewind validates the exact saved SetHead transition against the
+// retained native headers. Missing ancestry is an error, not a height-only
+// fallback. The native rewind separately enforces retention pins.
+func (l *Lifecycle) partialRewind(intent decision.IntentRecord, head, target *types.Header) bool {
+	if !l.recovering || l.gate.Phase() != lifecycle.Recovery || head == nil || target == nil ||
+		intent.Kind != decision.Canonical || len(intent.Members) != 0 || !intent.Events ||
+		headOf(target) != intent.NewHead ||
+		intent.EvidenceDigest != CanonicalEvidence(callerSetHead, intent.OldHead, intent.NewHead, nil) {
+		return false
+	}
+	old := l.chain.GetHeaderByHash(common.HexToHash(intent.OldHead.Hash))
+	boundary, ok := l.gate.Boundary()
+	return ok && old != nil && headOf(old) == intent.OldHead &&
+		target.Number.Uint64() >= boundary.Head.Number &&
+		target.Number.Uint64() < head.Number.Uint64() && head.Number.Uint64() < old.Number.Uint64() &&
+		l.isAncestor(target, headOf(head)) && l.isAncestor(head, intent.OldHead) &&
+		l.chain.HasBlockAndState(target.Hash(), target.Number.Uint64())
+}
+
+// ResumeRewind revalidates the unresolved intent under the native guard and
+// installs its original marker context. It never calls Intend. The normal
+// native rewind finish then resolves this decision before finality changes.
+func (l *Lifecycle) ResumeRewind(current, target *types.Header) error {
+	if l.pending != nil || l.rewind != nil {
+		return fmt.Errorf("%w: another rewind is already pending", ErrLifecycle)
+	}
+	saved, err := l.d.unresolved(l.a.token)
+	if err != nil {
+		return err
+	}
+	if saved == nil || saved.Marker || !l.partialRewind(saved.Intent, current, target) {
+		return fmt.Errorf("%w: native state does not match a saved partial rewind", ErrLifecycle)
+	}
+	value, err := decision.MarkerValue(saved.Intent)
+	if err != nil {
+		return err
+	}
+	l.pending = &pending{intent: saved.Intent,
+		marker: [][]byte{decision.MarkerKey(l.a.producer, saved.Sequence), value},
+		head:   common.HexToHash(saved.Intent.OldHead.Hash)}
+	l.rewind = &rewindState{target: target.Hash()}
+	return nil
+}
+
 // Rewinding reports whether a SetHead rewind is in progress.
 func (l *Lifecycle) Rewinding() bool { return l.rewind != nil }
 
@@ -831,7 +875,8 @@ func (l *Lifecycle) writeIntent(intent decision.IntentRecord) bool {
 // marker the setter did not take durable effect: the intent is rejected. A
 // CANONICAL intent is completed (its marker and view written) when the
 // native head is its new head, rejected when the native head is still its
-// old head, and otherwise stops startup.
+// old head, or resumed only when retained ancestry proves a supported
+// interrupted rewind or reorganization. Other states stop startup.
 func (l *Lifecycle) settleLifecycleIntent() error {
 	release := l.Lock()
 	complete, err := l.settleLocked()
@@ -843,7 +888,7 @@ func (l *Lifecycle) settleLifecycleIntent() error {
 }
 
 // settleLocked settles the intent with the guard held, or returns the
-// completion of a CANONICAL intent interrupted inside its reorganization,
+// completion of a CANONICAL intent interrupted inside its rewind or reorganization,
 // which takes the guard itself.
 func (l *Lifecycle) settleLocked() (func() error, error) {
 	token := l.a.token
@@ -879,11 +924,21 @@ func (l *Lifecycle) settleLocked() (func() error, error) {
 		return nil, reject("native_head_is_old_head")
 	}
 	newHead := l.chain.GetBlockByHash(common.HexToHash(saved.Intent.NewHead.Hash))
+	if newHead != nil && l.partialRewind(saved.Intent, head, newHead.Header()) {
+		sequence := saved.Sequence
+		return func() error {
+			if err := l.chain.ExtractorCompleteRewind(newHead); err != nil {
+				return err
+			}
+			l.a.trace("settling", map[string]any{"sequence": sequence, "evidence": "completed_inside_rewind"})
+			return nil
+		}, nil
+	}
 	// Inside the reorganization means strictly on the new branch: below the
 	// new head, its ancestor, and not on the chain it shares with the old
 	// head. A head that native startup repair lowered to or below the fork
-	// point (and every SetHead rewind, whose new head is below its old head)
-	// is not completed here.
+	// point is not completed here. Valid partial SetHead rewinds, whose new
+	// head is below the current head, use the separate path above.
 	if newHead != nil && head.Number.Uint64() < newHead.NumberU64() && l.isAncestor(head, saved.Intent.NewHead) &&
 		!l.isAncestor(head, saved.Intent.OldHead) {
 		// A crash inside the reorganization left a lower block of the new

@@ -48,12 +48,19 @@ class JudgeTests(unittest.TestCase):
         kinds = {row["kind"] for case in sample()["cases"] for row in case["observation"]["decisions"]}
         self.assertIn("CANONICAL", kinds)
 
-    def test_handoffs_pass_through(self):
+    def test_handoff_verdicts_cannot_be_supplied_without_native_facts(self):
         probe = sample()
         probe["handoffs"] = [{"id": hid, "verdict": "PASS", "evidence": "x"} for hid in
                              ("geth.pass-at-golive", "geth.sethead-interrupted", "geth.repaired-judge",
                               "geth.mid-reorg-long-branch")]
-        self.assertEqual(self.verdict(probe)["result"], "PASS")
+        self.assertEqual(self.verdict(probe)["result"], "INCOMPLETE")
+
+    def test_malformed_handoff_facts_fail_closed(self):
+        for name in ("geth.pass-at-golive", "geth.sethead-interrupted", "geth.mid-reorg-long-branch",
+                     "geth.repaired-judge"):
+            probe = sample()
+            probe["handoff_runs"] = {name: {}}
+            self.assertEqual(self.verdict(probe)["handoffs"][name], "FAIL")
 
     def failing(self, change, message, point="adm.after-admitted-sync", variant="power_loss"):
         probe = sample()
@@ -131,6 +138,81 @@ class JudgeTests(unittest.TestCase):
         verdict = self.verdict(probe)
         self.assertEqual(verdict["result"], "FAIL")
         self.assertIn("case 0: malformed", verdict["native_errors"])
+
+
+class RepairedHandoffTests(unittest.TestCase):
+    """The geth.repaired-judge verdict must bind the one unresolved intent."""
+
+    def verdict_of(self, row):
+        verdicts = faults_geth.handoff_verdicts({"handoff_runs": {"geth.repaired-judge": row}})
+        self.assertEqual(len(verdicts), 1)
+        return verdicts[0]["verdict"]
+
+    def row(self, **changes):
+        intent = {"kind": "CANONICAL", "sequence": 7,
+                  "old_head": {"number": 4, "hash": "a4"}, "new_head": {"number": 6, "hash": "j6"},
+                  "members": [{"block": "j5"}, {"block": "j6"}]}
+        row = {"hit": "geth.repaired-judge", "step_error": None, "old_head": "a4",
+               "target": {"number": 6, "hash": "j6", "root": "r6"},
+               "lowered_head": {"number": 3, "hash": "a3", "root": "r3"},
+               "member_blocks": ["j5", "j6"], "head_before_restart": "a3",
+               "records_before": {"p/0000000000000007/intent": json.dumps(intent)},
+               "restart_error": "lifecycle: native head 3 a3 is neither the old nor the new head of "
+                                "intent 7, nor on its branch",
+               "settled": []}
+        row.update(changes)
+        return row
+
+    def test_the_saved_reorganization_passes(self):
+        self.assertEqual(self.verdict_of(self.row()), "PASS")
+
+    def refusing(self, changes):
+        self.assertEqual(self.verdict_of(self.row(**changes)), "FAIL")
+
+    def test_the_intent_must_be_the_saved_reorganization(self):
+        intent = json.loads(self.row()["records_before"]["p/0000000000000007/intent"])
+        intent["new_head"]["hash"] = "other"
+        self.refusing({"records_before": {"p/0000000000000007/intent": json.dumps(intent)}})
+        intent = json.loads(self.row()["records_before"]["p/0000000000000007/intent"])
+        intent["old_head"]["hash"] = "other"
+        self.refusing({"records_before": {"p/0000000000000007/intent": json.dumps(intent)}})
+        intent = json.loads(self.row()["records_before"]["p/0000000000000007/intent"])
+        intent["kind"] = "SIDE"
+        self.refusing({"records_before": {"p/0000000000000007/intent": json.dumps(intent)}})
+
+    def test_the_members_must_be_the_two_branch_blocks(self):
+        intent = json.loads(self.row()["records_before"]["p/0000000000000007/intent"])
+        intent["members"] = [{"block": "j5"}]
+        self.refusing({"records_before": {"p/0000000000000007/intent": json.dumps(intent)}})
+        self.refusing({"member_blocks": ["j5", "other"]})
+
+    def test_a_second_pending_intent_refuses(self):
+        records = dict(self.row()["records_before"])
+        records["p/0000000000000008/intent"] = records["p/0000000000000007/intent"]
+        self.refusing({"records_before": records})
+        self.refusing({"records_before": {}})
+
+    def test_the_head_must_be_lowered_below_the_fork_point(self):
+        self.refusing({"lowered_head": {"number": 4, "hash": "a3", "root": "r3"}})
+        self.refusing({"lowered_head": {"number": 3, "hash": "a4", "root": "r3"},
+                       "head_before_restart": "a4"})
+        self.refusing({"head_before_restart": "a4"})
+        self.refusing({"head_before_restart": "j6"})
+
+    def test_the_restart_must_refuse_and_name_the_intent(self):
+        self.refusing({"restart_error": None})
+        self.refusing({"restart_error": "of intent 7, settled differently"})
+        self.refusing({"restart_error": "lifecycle: native head 3 a3 is neither the old nor the new head of "
+                                        "intent 8, nor on its branch"})
+        self.refusing({"restart_error": "lifecycle: native head 3 a3 stopped for another reason, intent 7"})
+
+    def test_the_restart_must_settle_nothing(self):
+        self.refusing({"settled": [{"event": "settling", "evidence": "completed_inside_reorg",
+                                    "sequence": 7}]})
+
+    def test_the_step_must_have_stopped_at_the_point(self):
+        self.refusing({"hit": "geth.mid-reorg-long-branch"})
+        self.refusing({"step_error": "boom"})
 
 
 COPIED = ("plain", "accounts", "hexField", "frame", "logs", "receiptView", "txView", "exportBlocks", "counted")
