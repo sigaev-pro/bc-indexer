@@ -1,6 +1,7 @@
 """Owned-file controls and exact rendering checks; no native execution claim."""
 
 import base64
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -50,6 +51,17 @@ class CrossingOwnershipTests(base.PolygonOrchestrationTests):
 
 
 class CrossingRenderingTests(unittest.TestCase):
+    def test_portable_go_bodies_match_frozen_producer(self):
+        source = (HERE / "probe.go").read_bytes()
+        origin = json.loads((HERE / "controls/source.json").read_text())
+        self.assertEqual(hashlib.sha256(source).hexdigest(), origin["source_sha256"])
+        text = source.decode()
+        body = text[text.index("func crossingKind("):text.index("func crossingCase(")].rstrip() + "\n"
+        selected = (HERE / "controls/logic.go").read_text()
+        selected = selected[selected.index("func crossingKind("):]
+        self.assertEqual(body, selected)
+        self.assertEqual(hashlib.sha256(body.encode()).hexdigest(), origin["selected_body_sha256"])
+
     def test_generator_changes_only_transaction_selection(self):
         corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
         before = native.support.parent.render_support(corpus).decode()
@@ -111,11 +123,28 @@ class CrossingRenderingTests(unittest.TestCase):
         self.assertNotIn("Data: []byte{37}", generated)
 
     def test_pin_drift_and_nonunique_seams_are_rejected(self):
+        corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
+        source = native.support.parent.render_support(corpus).decode()
+        source = source.replace("import (", "// removed imports (")
+        with patch.object(native.support.parent, "render_support", return_value=source.encode()):
+            with self.assertRaises(ValueError):
+                native.support.render_support(corpus)
         with patch.dict(native.support.ACTIVATION_PINS, {"probe.go": "0" * 64}):
             with self.assertRaises(ValueError):
                 native.support.activation_source("probe.go")
         with self.assertRaises(ValueError):
             native.support.replace_once("duplicate duplicate", "duplicate", "new")
+
+    def test_unexpected_helper_seams_fail_closed(self):
+        corpus = (HERE.parents[3] / "test/native_corpus/poly/main.go").read_bytes()
+        source = native.support.activation_source("probe.go")
+        for changed in (source + b"\nfunc activationCase(", source.replace(b"Nonce: 1,", b"Nonce: 2,", 1)):
+            with self.subTest(changed=changed[-40:]), patch.object(native.support, "activation_source", return_value=changed):
+                with self.assertRaises(ValueError):
+                    native.support.render_support(corpus)
+        with patch.object(native.support.parent, "render_support", return_value=b"package main\n"):
+            with self.assertRaises(ValueError):
+                native.support.render_support(corpus)
 
 
 if __name__ == "__main__":

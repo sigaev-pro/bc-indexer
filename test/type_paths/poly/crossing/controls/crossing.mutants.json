@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "language": "go",
+  "root": ".",
+  "copy": [
+    "*.go",
+    "go.mod",
+    "params/*.go",
+    "core/types/*.go",
+    "source.json"
+  ],
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "./..."
+  ],
+  "timeout_seconds": 60,
+  "description": "Portable actual function bodies with explicit native type doubles; no signing or import proof.",
+  "mutants": [
+    {
+      "name": "fork number ignored",
+      "file": "logic.go",
+      "original": "fork.block.Cmp(big.NewInt(2)) == 0",
+      "replacement": "true"
+    },
+    {
+      "name": "duplicate gates ignored",
+      "file": "logic.go",
+      "original": "if kind != 0 {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "missing gate ignored",
+      "file": "logic.go",
+      "original": "if kind == 0 {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "legacy block branch disabled",
+      "file": "logic.go",
+      "original": "if number == 1 {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "wrong extra block accepted",
+      "file": "logic.go",
+      "original": "if number != 2 {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "typed nonce wrong",
+      "file": "logic.go",
+      "original": "crossingTransaction(config, kind, 1)",
+      "replacement": "crossingTransaction(config, kind, 0)"
+    },
+    {
+      "name": "typed kind wrong",
+      "file": "logic.go",
+      "original": "crossingTransaction(config, kind, 1)",
+      "replacement": "crossingTransaction(config, kind | 1, 1)"
+    },
+    {
+      "name": "gate error discarded",
+      "file": "logic.go",
+      "original": "kind, err := crossingKind(config)\n\tif err != nil {",
+      "replacement": "kind, err := crossingKind(config)\n\tif false {"
+    },
+    {
+      "name": "transaction error discarded",
+      "file": "logic.go",
+      "original": "tx, err := crossingTransaction(config, kind, 1)\n\tif err != nil {",
+      "replacement": "tx, err := crossingTransaction(config, kind, 1)\n\tif false {"
+    },
+    {
+      "name": "record read error discarded",
+      "file": "logic.go",
+      "original": "if err := activationRecords(run, row); err != nil {",
+      "replacement": "if err := activationRecords(run, row); false {"
+    },
+    {
+      "name": "marshal error replaced by decode error",
+      "file": "logic.go",
+      "original": "encoded, err := json.Marshal(row)\n\tif err != nil {",
+      "replacement": "encoded, err := json.Marshal(row)\n\tif false {"
+    },
+    {
+      "name": "decode error discarded",
+      "file": "logic.go",
+      "original": "if err = json.Unmarshal(encoded, &snapshot); err != nil {",
+      "replacement": "if err = json.Unmarshal(encoded, &snapshot); false {"
+    },
+    {
+      "name": "mutable boundary returned",
+      "file": "logic.go",
+      "original": "return snapshot, nil",
+      "replacement": "return row, nil"
+    },
+    {
+      "name": "nil fork dereferenced",
+      "file": "logic.go",
+      "original": "fork.block != nil && ",
+      "replacement": ""
+    }
+  ]
+}
