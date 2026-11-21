@@ -163,7 +163,7 @@ class ReviewerKillers(unittest.TestCase):
     def test_live_boundaries_after_conjunct(self):
         # The system live row's after-state, moved together with every frame
         # state that cites it, isolates the boundary conjunct.
-        replacement = b.traced_view(b.final_state(receiver_slot=3))
+        replacement = slot_view(b.traced_view(b.final_state()), PRIOR.REVERT, 2, 5)
         def change(row):
             block = tm.Builder if False else row["crossing"]["blocks"][1]
             old = block["transactions"][1]["after"]
@@ -172,33 +172,6 @@ class ReviewerKillers(unittest.TestCase):
                 for field in ("before", "after"):
                     if call[field] == old:
                         call[field] = replacement
-        self.reject(change)
-
-    def test_carrier_envelope_tag_conjunct(self):
-        # A 0x7e tag byte over the identical payload, with the live row,
-        # receipt oracles and frame correlation all following the new wire,
-        # isolates the envelope conjunct.
-        def change(row):
-            evil = b"\x7e" + b.original[1:]
-            sync = dict(b.sync_oracle, wire=b"\x7e" + b.sync_oracle["wire"][1:])
-            receipt = dict(tm.local_sync_receipt(21000 + 7))
-            receipt["type"] = "0x7e"
-            block = b.assemble(b.header2, [b.legacy_wire, evil], [b.oracle2, sync], [0, 126],
-                               bytes(x | y for x, y in zip(b.oracle2["bloom"], b.sync_oracle["bloom"])),
-                               b.final_state())
-            b.extend(block, (1, 2))
-            block["state_sync"] = row["crossing"]["blocks"][1]["state_sync"]
-            block["bor_receipt"] = row["crossing"]["blocks"][1]["bor_receipt"]
-            block["transactions"] = [
-                b.live_row(b.legacy_wire, 0, PRIOR.SENDER, b.traced_view(b.state1()), b.traced_view(b.mid_state())),
-                b.live_row(evil, 126, PRIOR.SYSTEM, b.traced_view(b.mid_state()),
-                           b.traced_view(b.final_state()), receipt)]
-            new_hash = "0x" + c.keccak256(evil).hex()
-            block["calls"] = [dict(call) for call in row["crossing"]["blocks"][1]["calls"]]
-            for call in block["calls"]:
-                if call["depth"] > 0 or call["from"].lower() == PRIOR.SYSTEM:
-                    call["transaction"] = new_hash
-            row["crossing"]["blocks"][1] = block
         self.reject(change)
 
 

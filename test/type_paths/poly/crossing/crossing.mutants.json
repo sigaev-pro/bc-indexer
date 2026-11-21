@@ -1848,7 +1848,8 @@
       "name": "crossing_judge.py:madhugiri:carrier-envelope:2",
       "file": "test/type_paths/poly/crossing/crossing_judge.py",
       "original": "        check(len(tx2) == 2 and tx2[1][0] == 127, \"madhugiri carrier envelope differs\")",
-      "replacement": "        check(len(tx2) == 2 and True, \"madhugiri carrier envelope differs\")"
+      "replacement": "        check(len(tx2) == 2 and True, \"madhugiri carrier envelope differs\")",
+      "equivalent": "The judge derives the 127 receipt oracle from the body tag: madhugiri_case builds state_sync_receipt_oracle unconditionally, and madhugiri_receipts binds the receipt wire set and the trie root to it, so any body first byte other than 127 fails the receipt wire/root equality; no fixture can isolate the envelope conjunct."
     },
     {
       "name": "crossing_judge.py:madhugiri:carrier-items",
