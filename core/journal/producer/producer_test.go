@@ -310,7 +310,7 @@ func TestCommitReadyClosingCommit(t *testing.T) {
 	}
 }
 
-func TestCommitReadyPrunesReplacedAttempt(t *testing.T) {
+func TestCommitReadyLeavesReplacedAttemptForBoundedPrune(t *testing.T) {
 	s, st := newTestStore(t)
 	att, _, _ := s.AllocateBatch(1, 1)
 	att, _ = s.StartAttempt(att.BatchSeq, 1)
@@ -327,6 +327,9 @@ func TestCommitReadyPrunesReplacedAttempt(t *testing.T) {
 	if _, err := s.CommitReady(att.BatchSeq, att.Generation, 12, nil); err != nil {
 		t.Fatal(err)
 	}
+	// The closing commit records only the READY marker; superseded keys
+	// stay for the bounded post-commit prune (the 1 MiB WriteBatch bound
+	// must hold for any chunk count — the review P2).
 	lo, hi := keyRange(attemptRoot(att.BatchSeq))
 	count := 0
 	_ = st.Iterate(lo, hi, func(k, v []byte) error {
@@ -335,8 +338,13 @@ func TestCommitReadyPrunesReplacedAttempt(t *testing.T) {
 		}
 		return nil
 	})
-	if count != 0 {
-		t.Fatalf("%d keys of the replaced attempt survived the closing commit", count)
+	if count == 0 {
+		t.Fatal("superseded keys should still exist after the closing commit (pruned later)")
+	}
+	// The ready state is committed and readable.
+	r, err := s.readReady(att.BatchSeq)
+	if err != nil || r.Attempt != att.Generation {
+		t.Fatalf("ready after commit: %+v %v", r, err)
 	}
 }
 

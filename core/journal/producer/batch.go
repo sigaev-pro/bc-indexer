@@ -217,21 +217,10 @@ func (s *Store) CommitReady(seq, generation uint64, manifestLength uint64, check
 	b.Put(batchKey(seq, "/ready"), encodeReady(ready))
 	b.Put(batchKey(seq, "/checkpoint"), append([]byte(nil), checkpoint...))
 	s.putState(b, seq, StateReady)
-	// The winning attempt replaces the recovery inputs of all earlier
-	// generations in the same closing commit.
-	lo, hi := keyRange(attemptRoot(seq))
-	var doomed [][]byte
-	if err := s.st.Iterate(lo, hi, func(k, _ []byte) error {
-		if genOfAttemptKey(k, seq) < generation {
-			doomed = append(doomed, append([]byte(nil), k...))
-		}
-		return nil
-	}); err != nil {
-		return Ready{}, err
-	}
-	for _, k := range doomed {
-		b.Delete(k)
-	}
+	// The winning attempt's closing commit records only the READY marker;
+	// superseded generation keys are pruned in bounded post-commit steps
+	// (the contract keeps large reference lists outside the closing batch,
+	// and the 1 MiB WriteBatch bound must hold for any chunk count).
 	if err := s.st.Apply(b); err != nil {
 		return Ready{}, err
 	}
