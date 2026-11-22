@@ -2,8 +2,8 @@
 
 `gateway/ingest` is the E03-02.rpc_streaming output: the gRPC control wire
 of the gateway ingest boundary, on top of the [gateway
-journal](../journal) (E03-01.gateway_store) and the [session
-fencing](../session) boundary (E03-02.fencing).
+journal](../journal/README.md) (E03-01.gateway_store) and the [session
+fencing](../session/README.md) boundary (E03-02.fencing).
 
 ## Service
 
