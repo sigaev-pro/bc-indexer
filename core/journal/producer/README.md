@@ -4,7 +4,7 @@
 state machine INTENT -> STAGING -> READY -> SEALED -> ACKED_CLEANUP ->
 release outbox -> RETIRED of
 [DELIVERY_STATE_MACHINE](../../../.project/docs/DELIVERY_STATE_MACHINE.md),
-on the shared [storage seam](../storage).
+on the shared [storage seam](../storage/README.md).
 
 ## State machine
 
