@@ -76,8 +76,10 @@ question correctly deferred: per-network/fork native_type allowlist
 
 ## Phase summary
 
-Four packages, four merged PRs, four closed issues, 90-93% statement
-coverage each, race clean throughout, all review findings resolved
-before merge, all open questions recorded with named downstream owners.
+Four packages, four merged PRs, four closed issues; coverage
+90.1/90.2/93.0/64.6 percent respectively (block is lifecycle-message
+helper residue, per the #199 review), race clean throughout, all review
+findings resolved before merge, all open questions recorded with named
+downstream owners.
 No native runs required or performed. The phase-1 outputs are the
 inputs of phase 2 (#26-#29), running at the time of this record.
