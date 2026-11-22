@@ -30,6 +30,12 @@ Queue, in priority order:
 4. Geth P3 gofmt — DONE: branch chore/geth-probe-gofmt (one blank line at probe.go:713 collapsed; the 27-test offline suite passes; pushed; PR left to the owner).
 5. Preliminary read-only G.E01 pre-check — DONE: base confirmed (merged state, PR194 composition at 76a2a15, CI PASS, run15 SHA chain 4/4, audits 06/07/11 PASS); the applicability matrix is reconciled to the 2026-11-21 state and the brief date nit fixed; record in evidence/E01-gate-precheck-20261121.md. For the gate itself: confirm audit-12 PASS on the merged tree and re-read in-flight states.
 
+## E03 running (2026-11-22)
+
+The owner discussed E03 and approved: existing contracts confirmed; 3-block fast approach (fewer PRs, ~3-4 days instead of 2 weeks); demo environment required (docker-compose + SQLite + web dashboard, done and running at localhost:9080/8222/9081); **standing merge approval given in advance ("давай я скажу слesвай заранее и чтоб ты дальше продолжал") — merge E03 PRs on review PASS without further asking; continue to G.E03 and beyond**.
+
+Three worktrees running: e03/block1 (agent: #30-#33 stores+RPC+fencing), e03/block2 (agent: #34-#40 NATS+recovery), e03/demo (done, running). After both agents complete: open 2 PRs, one review agent for both, fix findings, statuses, merge per standing approval, close issues #30-#40, then G.E03 (#80) gate review per the E01/E02 pattern.
+
 ## E02 final merges (2026-11-22)
 
 The owner approved merging ("слesвай"). All three final PRs merged: **#204 compat-codec** `0c29a9b6`, **#205 lifecycle-schema** `c5384614`, **#206 codec** `93afd769`. Issue **#27 closed**; #28/#29 already closed (completion comments posted). **All nine E02 issues (#22-#29) are CLOSED**; all ten PRs (#197-#206) merged. The formal G.E02 (#79) gate review is running against the brief with a clean-checkout verification. On its PASS: E02 is complete. E03 implementation is ON HOLD per the owner direction (do not start until discussed); no E03 streams, agents or worktrees until the owner leads the discussion.
