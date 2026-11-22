@@ -3,8 +3,8 @@
 `gateway/journal` is the E03-01.gateway_store output: the gateway state
 machine PREPARING -> PREPARED (reservation) -> RECEIVING -> CLOSED ->
 NATS_ACKED -> RELEASING -> RETIRED of
-[DELIVERY_STATE_MACHINE](../../.project/docs/DELIVERY_STATE_MACHINE.md), on
-the shared [storage seam](../../core/journal/storage).
+DELIVERY_STATE_MACHINE, on
+the shared storage seam.
 
 ## State machine
 

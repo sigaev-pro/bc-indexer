@@ -3,8 +3,8 @@
 `core/journal/producer` is the E03-01.producer_store output: the producer
 state machine INTENT -> STAGING -> READY -> SEALED -> ACKED_CLEANUP ->
 release outbox -> RETIRED of
-[DELIVERY_STATE_MACHINE](../../../.project/docs/DELIVERY_STATE_MACHINE.md),
-on the shared [storage seam](../storage/README.md).
+DELIVERY_STATE_MACHINE,
+on the shared storage seam.
 
 ## State machine
 

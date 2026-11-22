@@ -2,7 +2,7 @@
 
 `core/journal/storage` is the shared persistence seam of the E03 Block 1
 stores (`core/journal/producer`, `gateway/journal`). Both state machines of
-[DELIVERY_STATE_MACHINE](../../.project/docs/DELIVERY_STATE_MACHINE.md) run on
+DELIVERY_STATE_MACHINE run on
 RocksDB (10.4.2, grocksdb v1.10.2 per COMPONENT_STACK), but neither store may
 import a concrete database: this module fixes the seam so the stores compile
 and test without a native RocksDB build. The RocksDB adapter is a thin wrapper

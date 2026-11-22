@@ -2,7 +2,7 @@
 
 `gateway/session` is the E03-02.fencing output: session, admission and
 publisher fencing for the gateway
-([DELIVERY_STATE_MACHINE, "Fencing"](../../.project/docs/DELIVERY_STATE_MACHINE.md)).
+(DELIVERY_STATE_MACHINE, "Fencing").
 
 ## Model
 
