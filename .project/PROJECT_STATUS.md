@@ -34,7 +34,7 @@ Queue, in priority order:
 
 The owner discussed E03 and approved: existing contracts confirmed; 3-block fast approach (fewer PRs, ~3-4 days instead of 2 weeks); demo environment required (docker-compose + SQLite + web dashboard, done and running at localhost:9080/8222/9081); **standing merge approval given in advance ("давай я скажу слesвай заранее и чтоб ты дальше продолжал") — merge E03 PRs on review PASS without further asking; continue to G.E03 and beyond**.
 
-Three worktrees running: e03/block1 (agent: #30-#33 stores+RPC+fencing), e03/block2 (agent: #34-#40 NATS+recovery), e03/demo (done, running). After both agents complete: open 2 PRs, one review agent for both, fix findings, statuses, merge per standing approval, close issues #30-#40, then G.E03 (#80) gate review per the E01/E02 pattern.
+Block 1 COMPLETE: commit 68f52ce on e03/block1 — 45 files / 11,525 lines: producer machine (INTENT→…→RETIRED with atomic closing commits and admission generations), gateway journal (reservation retry never re-allocates), gRPC ingest (protobuf-generated, 256KiB/64KiB bounds, SealImport), fencing (epoch tokens, Gate.Mutate, PublisherGate). 60 tests, gofmt/vet/race clean. Draft PR #207 opened. Block 2+3 agent still in progress. After both agents complete: open 2 PRs, one review agent for both, fix findings, statuses, merge per standing approval, close issues #30-#40, then G.E03 (#80) gate review per the E01/E02 pattern.
 
 ## E02 final merges (2026-11-22)
 
