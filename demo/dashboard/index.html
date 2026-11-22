@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extractor Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', Monaco, monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+        h1 { color: #00d4ff; margin-bottom: 20px; font-size: 1.5em; }
+        .stats { display: flex; gap: 15px; margin-bottom: 20px; }
+        .stat { background: #16213e; padding: 15px 25px; border-radius: 8px; border: 1px solid #0f3460; }
+        .stat .num { font-size: 2em; font-weight: bold; color: #00d4ff; }
+        .stat .label { font-size: 0.8em; color: #8899aa; margin-top: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { background: #16213e; color: #00d4ff; padding: 8px 12px; text-align: left; font-size: 0.85em; }
+        td { padding: 6px 12px; border-bottom: 1px solid #0f3460; font-size: 0.8em; }
+        tr:hover { background: #16213e; }
+        .net-ETH { color: #627eea; }
+        .net-BSC { color: #f0b90b; }
+        .net-POLY { color: #8247e5; }
+        .status-success { color: #00ff88; }
+        .status-reverted { color: #ff4444; }
+        #feed { max-height: 500px; overflow-y: auto; }
+        a { color: #00d4ff; text-decoration: none; }
+        .links { margin-bottom: 15px; display: flex; gap: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🏭 Extractor Demo — Live Feed</h1>
+    <div class="links">
+        <a href="http://localhost:8222" target="_blank">NATS Monitoring →</a>
+        <a href="http://localhost:8081/stats" target="_blank">Sink Stats →</a>
+        <a href="http://localhost:8081/recent" target="_blank">Recent (JSON) →</a>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div id="feed">
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th><th>Network</th><th>Block</th><th>Tx Hash</th>
+                    <th>From</th><th>To</th><th>Value</th><th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="txs"></tbody>
+        </table>
+    </div>
+    <script>
+        async function refresh() {
+            try {
+                const stats = await (await fetch('http://localhost:8081/stats')).json();
+                document.getElementById('stats').innerHTML = `
+                    <div class="stat"><div class="num">${stats.transactions||0}</div><div class="label">Transactions</div></div>
+                    <div class="stat"><div class="num">${stats.balances||0}</div><div class="label">Balances</div></div>
+                    <div class="stat"><div class="num">${stats.events||0}</div><div class="label">Other Events</div></div>
+                `;
+                const txs = await (await fetch('http://localhost:8081/recent')).json();
+                const tbody = document.getElementById('txs');
+                tbody.innerHTML = (txs||[]).map(t => `
+                    <tr>
+                        <td>${(t.timestamp||'').substring(11,19)}</td>
+                        <td class="net-${t.network}">${t.network}</td>
+                        <td>${t.block}</td>
+                        <td title="${t.tx_hash}">${(t.tx_hash||'').substring(0,16)}…</td>
+                        <td title="${t.from}">${(t.from||'').substring(0,10)}…</td>
+                        <td title="${t.to}">${(t.to||'').substring(0,10)}…</td>
+                        <td>${parseInt(t.value||'0')/1e18 >= 0.001 ? (parseInt(t.value)/1e18).toFixed(3)+' ETH' : '<1m'}</td>
+                        <td class="status-${t.status}">${t.status}</td>
+                    </tr>
+                `).join('');
+            } catch(e) { /* sink not ready yet */ }
+        }
+        refresh();
+        setInterval(refresh, 2000);
+    </script>
+</body>
+</html>

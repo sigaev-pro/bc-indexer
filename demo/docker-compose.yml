@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222", "--store_dir", "/data"]
+    ports:
+      - "4222:4222"   # NATS client
+      - "8222:8222"   # NATS monitoring web UI
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  sink:
+    build: ./sink
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NATS_URL=nats://nats:4222
+      - DB_PATH=/data/demo.db
+    volumes:
+      - sink-data:/data
+    ports:
+      - "8081:8081"   # simple HTTP endpoint for queries
+
+  dashboard:
+    build: ./dashboard
+    depends_on:
+      - nats
+    environment:
+      - NATS_URL=nats://nats:4222
+    ports:
+      - "8080:8080"   # web dashboard
+
+  mock-producer:
+    build: ./mock-producer
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NETWORKS=ETH,BSC,POLY
+      - TX_INTERVAL=2s
+    # Scale: docker compose up --scale mock-producer=3
+
+volumes:
+  nats-data:
+  sink-data:
