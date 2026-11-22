@@ -1,0 +1,289 @@
+// Control wire of the bc-indexer gateway ingest boundary (E03-02.rpc_streaming).
+//
+// The identities, chunk rules and error registry are fixed by
+// CONTROL_WIRE_CONTRACT ("Служебные запросы и ответы", "Ошибки протокола");
+// the state machine behind them is DELIVERY_STATE_MACHINE. Bounds enforced
+// by this service: one control/chunk RPC is at most 256 KiB including its
+// wrapper (the gRPC max receive message size), and one data chunk payload
+// is at most 64 KiB (MaxDataChunkBytes).
+syntax = "proto3";
+
+package bcindexer.ingest.v2;
+
+option go_package = "github.com/sigaev-pro/bc-indexer/gateway/ingest;ingest";
+
+// ---------------------------------------------------------------------------
+// Identities, session header, typed errors
+// ---------------------------------------------------------------------------
+
+// batch_id = producer_id16 || run_id16 || batch_seq.
+message BatchId {
+  bytes producer_id = 1; // exactly 16 bytes
+  bytes run_id = 2;      // exactly 16 bytes
+  uint64 batch_seq = 3;  // starts at 1
+}
+
+// Mutating RPC header of the contract: token plus the generations and the
+// binding digest the request is bound to.
+message SessionHeader {
+  uint32 protocol_version = 1; // must be 2
+  bytes request_id = 2;        // Id16, kept in every error answer
+  bytes session_token = 3;     // 32 unpredictable bytes
+  bytes producer_id = 4;
+  bytes run_id = 5;
+  uint64 connection_generation = 6;
+  uint64 admission_generation = 7;
+  bytes binding_digest = 8;    // Hash32
+}
+
+// Error code registry v1 of CONTROL_WIRE_CONTRACT.
+enum ErrorCode {
+  ERROR_UNSPECIFIED = 0;
+  TRANSIENT_UNAVAILABLE = 1;
+  SESSION_STALE = 2;
+  OFFSET_MISMATCH = 3;
+  IDENTITY_MISMATCH = 4;
+  BINDING_MISMATCH = 5;
+  MODE_CONFLICT = 6;
+  DRAIN_REQUIRED = 7;
+  GENERATION_CONFLICT = 8;
+  IMMUTABLE_CONFLICT = 9;
+  INVALID_DESCRIPTOR = 10;
+  INVALID_PAYLOAD = 11;
+  LIMIT_INCOMPATIBLE = 12;
+  VERSION_UNSUPPORTED = 13;
+  ALREADY_RETIRED = 14;
+  STORE_FATAL = 15;
+}
+
+// Retry actions of the registry.
+enum RetryAction {
+  RETRY_UNSPECIFIED = 0;
+  RETRY_BACKOFF = 1;
+  RECONNECT = 2;
+  RESUME_AT_OFFSET = 3;
+  FIX_CONFIG = 4;
+  DRAIN_OLD_BUILD = 5;
+  STOP_LOCAL_OWNER = 6;
+  DIAGNOSE_IMMUTABLE = 7;
+}
+
+// Typed error answer: {code, request_id, owner_state, field_path,
+// retry_action, detail_redacted}. The gRPC status is only a transport
+// categorization and never replaces this record.
+message Error {
+  ErrorCode code = 1;
+  bytes request_id = 2;
+  string owner_state = 3;
+  string field_path = 4;
+  RetryAction retry_action = 5;
+  string detail = 6; // redacted: no credentials, no payload bytes
+}
+
+// ---------------------------------------------------------------------------
+// Handshake and session
+// ---------------------------------------------------------------------------
+
+message HelloChallengeRequest {
+  bytes producer_id = 1;
+  bytes run_id = 2;
+  string role = 3;
+  bytes network_digest = 4;
+}
+
+message HelloChallengeResponse {
+  bytes boot_nonce = 1; // changes with every gateway process
+  bytes challenge = 2;  // one outstanding challenge per call
+  Error error = 15;
+}
+
+message OpenSessionRequest {
+  bytes echoed_challenge = 1; // a challenge issued by this boot
+  enum Mode {
+    NORMAL = 0;
+    MAINTENANCE = 1;
+  }
+  Mode mode = 2;
+  bytes active_binding_digest = 3;
+  bytes desired_binding_digest = 4;
+  uint64 retired_prefix = 5;          // producer's durable prefix
+  uint64 admission_generation = 6;
+  uint64 connection_generation = 7;
+  bytes producer_id = 8;
+  bytes run_id = 9;
+}
+
+message OpenSessionResponse {
+  bytes session_token = 1;
+  bytes store_epoch = 2;
+  bytes binding_digest = 3;
+  uint64 retired_prefix = 4; // gateway's durable prefix for the run
+  enum RecoveryAction {
+    NONE = 0;
+    REPLAY = 1;
+    FINISH_RELEASE = 2;
+    FINISH_SWITCH = 3;
+    FINISH_RESUME = 4;
+  }
+  RecoveryAction recovery_action = 5;
+  Error error = 15;
+}
+
+// ---------------------------------------------------------------------------
+// Prepare: manifest descriptor chunks and the reservation
+// ---------------------------------------------------------------------------
+
+enum PrepareMode {
+  PREPARE_NORMAL = 0;
+  PREPARE_IMPORT_SEALED = 1;
+}
+
+message Reservation {
+  bytes seed = 1;        // exact reservation seed bytes v2
+  bytes plan_digest = 2; // SHA-256 of the seed
+}
+
+message BeginPrepareRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes manifest_digest = 3; // Hash32
+  uint64 event_count = 4;
+  uint64 descriptor_bytes_total = 5;
+  PrepareMode mode = 6;
+  bytes import_seed = 7; // required for PREPARE_IMPORT_SEALED
+}
+
+message BeginPrepareResponse {
+  oneof outcome {
+    uint64 resume_offset = 1;   // manifest stream still open: next offset
+    Reservation reservation = 2; // already prepared: saved seed
+  }
+  Error error = 15;
+}
+
+message PrepareChunkRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes manifest_digest = 3;
+  uint64 offset = 4;
+  bytes chunk_sha256 = 5; // Hash32 of data
+  bytes data = 6;         // <= 64 KiB
+}
+
+message PrepareChunkResponse {
+  uint64 next_offset = 1; // durable cursor; also the expected offset on OFFSET_MISMATCH
+  Error error = 15;
+}
+
+message FinalizePrepareRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes manifest_digest = 3;
+}
+
+message FinalizePrepareResponse {
+  bytes seed = 1;
+  bytes plan_digest = 2;
+  Error error = 15;
+}
+
+// ---------------------------------------------------------------------------
+// Publish: transport frames, bounded chunks, closing
+// ---------------------------------------------------------------------------
+
+// One transport frame's declaration, carried by the first chunk of a frame.
+message FrameMeta {
+  uint32 form = 1;              // 0 COMPLETE, 1 PART
+  uint64 capacity = 2;          // COMPLETE: fragment total; PART: part size C
+  uint64 part_count = 3;        // COMPLETE: 1
+  uint64 fragment_total_bytes = 4;
+}
+
+message BeginPublishRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes seed = 3;                 // must equal the stored reservation seed
+  bytes plan_digest = 4;          // SHA-256 of the seed
+  bytes layout_manifest_digest = 5;
+  uint64 entry_count = 6;
+}
+
+message FrameCursor {
+  uint64 ordinal = 1;
+  uint64 fragment_index = 2;
+  uint64 frame_index = 3;
+  uint64 next_offset = 4;
+}
+
+message BeginPublishResponse {
+  repeated FrameCursor resume = 1; // durable resume cursors of declared frames
+  Error error = 15;
+}
+
+message PublishChunkRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes plan_digest = 3;
+  uint64 ordinal = 4;
+  uint64 fragment_index = 5;
+  uint64 frame_index = 6; // 0 for COMPLETE, part index for PART
+  FrameMeta meta = 7;     // required on the first chunk of every frame
+  uint64 offset = 8;
+  bytes chunk_sha256 = 9;
+  bytes data = 10; // <= 64 KiB; RPC <= 256 KiB including the wrapper
+}
+
+message PublishChunkResponse {
+  uint64 next_offset = 1;
+  Error error = 15;
+}
+
+enum BatchState {
+  STATE_UNKNOWN = 0;
+  PREPARING = 1;
+  PREPARED = 2;
+  RECEIVING = 3;
+  CLOSED = 4;
+  NATS_ACKED = 5;
+  RELEASING = 6;
+  RETIRED = 7;
+}
+
+message FinalizePublishRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes plan_digest = 3;
+  bytes manifest_digest = 4;
+  bytes layout_manifest_digest = 5;
+}
+
+message FinalizePublishResponse {
+  BatchState state = 1; // CLOSED on success
+  Error error = 15;
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+service Ingest {
+  // Handshake: the challenge only works inside the boot that issued it.
+  rpc HelloChallenge(HelloChallengeRequest) returns (HelloChallengeResponse);
+  // Opens one session bound to an admission and connection generation.
+  rpc OpenSession(OpenSessionRequest) returns (OpenSessionResponse);
+  // Opens or resumes the manifest descriptor stream of one batch.
+  rpc BeginPrepare(BeginPrepareRequest) returns (BeginPrepareResponse);
+  // One bounded manifest chunk; identical retries return the same cursor.
+  rpc PrepareChunk(PrepareChunkRequest) returns (PrepareChunkResponse);
+  // Verifies the full manifest and returns the exact reservation seed.
+  rpc FinalizePrepare(FinalizePrepareRequest) returns (FinalizePrepareResponse);
+  // Accepts the transport plan and switches the batch to RECEIVING.
+  rpc BeginPublish(BeginPublishRequest) returns (BeginPublishResponse);
+  // Bounded transport frame chunks over a bidirectional stream; one
+  // response per request in order.
+  rpc PublishChunk(stream PublishChunkRequest) returns (stream PublishChunkResponse);
+  // Closes a normal batch: CLOSED after completeness validation.
+  rpc FinalizePublish(FinalizePublishRequest) returns (FinalizePublishResponse);
+  // Closes an IMPORT_SEALED batch with the same validation rules.
+  rpc SealImport(FinalizePublishRequest) returns (FinalizePublishResponse);
+}
