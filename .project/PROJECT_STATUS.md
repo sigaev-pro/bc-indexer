@@ -30,6 +30,10 @@ Queue, in priority order:
 4. Geth P3 gofmt — DONE: branch chore/geth-probe-gofmt (one blank line at probe.go:713 collapsed; the 27-test offline suite passes; pushed; PR left to the owner).
 5. Preliminary read-only G.E01 pre-check — DONE: base confirmed (merged state, PR194 composition at 76a2a15, CI PASS, run15 SHA chain 4/4, audits 06/07/11 PASS); the applicability matrix is reconciled to the 2026-11-21 state and the brief date nit fixed; record in evidence/E01-gate-precheck-20261121.md. For the gate itself: confirm audit-12 PASS on the merged tree and re-read in-flight states.
 
+## E03 COMPLETE (2026-11-22)
+
+Both blocks merged per standing approval: **PR #208** `64a04130` (NATS delivery, cleanup, maintenance, recovery; SPEC/Standards PASS); **PR #207** `ce5a99e1` (producer/gateway stores, gRPC ingest, fencing; P2 fixed, doc-link fixes). **All 11 issues #30-#40 CLOSED.** Cross-block convergence is the pre-G.E03 follow-up. Demo running at localhost:9080. Next: G.E03 (#80), then E04.
+
 ## E03 running (2026-11-22)
 
 The owner discussed E03 and approved: existing contracts confirmed; 3-block fast approach (fewer PRs, ~3-4 days instead of 2 weeks); demo environment required (docker-compose + SQLite + web dashboard, done and running at localhost:9080/8222/9081); **standing merge approval given in advance ("давай я скажу слesвай заранее и чтоб ты дальше продолжал") — merge E03 PRs on review PASS without further asking; continue to G.E03 and beyond**.
