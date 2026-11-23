@@ -496,7 +496,15 @@ func (n *node) mirrorIntent(record decision.IntentRecord, corpusDigests map[stri
 // settle mirrors the settled NATIVE_DECIDED marker of a bridge decision
 // into the registry.
 func (n *node) settle(record decision.IntentRecord) {
-	if err := n.registry.SettleDecided(dref(record.Sequence)); err != nil {
+	delivery := decision.Batch
+	if record.Kind == decision.Side {
+		delivery = decision.Checkpoint
+	}
+	digest, err := decision.DecidedDigest(record.Digest, delivery)
+	if err != nil {
+		panic(err)
+	}
+	if err := n.registry.SettleDecided(dref(record.Sequence), digest); err != nil {
 		panic(err)
 	}
 }
