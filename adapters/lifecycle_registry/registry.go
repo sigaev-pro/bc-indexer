@@ -8,6 +8,7 @@ package registry
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -151,41 +152,38 @@ func Open(db Store) (*Registry, int, error) {
 	return r, completed, nil
 }
 
-// validateAll decodes and verifies every stored record.
+// validateAll decodes and verifies every stored record. The visitor returns
+// its errors unwrapped; the prefix is added exactly once below, because the
+// verify methods already wrap ErrCorrupt.
 func (r *Registry) validateAll() error {
-	wrap := func(err error) error { return fmt.Errorf("%w: %v", ErrCorrupt, err) }
 	err := r.db.Range([]byte(keyPrefix), func(key, value []byte) error {
 		switch {
 		case bytes.HasPrefix(key, []byte(keyPrefix+"decision/")):
 			var d DecisionRecord
 			if err := strictDecode(value, &d); err != nil {
-				return wrap(err)
+				return err
 			}
-			if err := d.verify(); err != nil {
-				return wrap(err)
-			}
+			return d.verify()
 		case bytes.HasPrefix(key, []byte(keyPrefix+"activation/")):
 			var a ActivationRecord
 			if err := strictDecode(value, &a); err != nil {
-				return wrap(err)
+				return err
 			}
-			if err := a.verify(); err != nil {
-				return wrap(err)
-			}
+			return a.verify()
 		case bytes.HasPrefix(key, []byte(keyPrefix+"corpus/")):
 			var c CorpusRecord
 			if err := strictDecode(value, &c); err != nil {
-				return wrap(err)
+				return err
 			}
-			if err := c.verify(); err != nil {
-				return wrap(err)
-			}
+			return c.verify()
 		default:
-			return wrap(fmt.Errorf("unexpected key %s", key))
+			return fmt.Errorf("unexpected key %s", key)
 		}
-		return nil
 	})
 	if err != nil {
+		if errors.Is(err, ErrCorrupt) {
+			return err
+		}
 		return fmt.Errorf("%w: %v", ErrCorrupt, err)
 	}
 	return nil
@@ -328,19 +326,28 @@ func (r *Registry) Intend(ref NativeDecisionRef, net semantic.Network, kind Deci
 	return putRecord(&d, decisionKey(ref.ProducerID, ref.RunID, ref.DecisionSequence), r.db)
 }
 
-// SettleDecided mirrors the settled NATIVE_DECIDED marker. Repeating the
-// marker after the decision was decided or applied is idempotent.
-func (r *Registry) SettleDecided(ref NativeDecisionRef) error {
-	return r.settle(ref, StateDecided)
+// SettleDecided mirrors the settled NATIVE_DECIDED marker with its digest,
+// as the decision bridge computes it over the intent and its delivery.
+// Repeating the marker with the same digest after the decision was decided
+// or applied is idempotent; a different digest of one decision sequence is a
+// conflict.
+func (r *Registry) SettleDecided(ref NativeDecisionRef, decidedDigest string) error {
+	if err := ref.Validate(); err != nil {
+		return err
+	}
+	if !digestPattern.MatchString(decidedDigest) {
+		return fmt.Errorf("%w: decided digest %q", ErrInvalid, decidedDigest)
+	}
+	return r.settle(ref, StateDecided, decidedDigest)
 }
 
 // SettleRejected mirrors the settled NATIVE_REJECTED marker. A rejected
 // decision is terminal: its speculative corpus never becomes Applied.
 func (r *Registry) SettleRejected(ref NativeDecisionRef) error {
-	return r.settle(ref, StateRejected)
+	return r.settle(ref, StateRejected, "")
 }
 
-func (r *Registry) settle(ref NativeDecisionRef, target DecisionState) error {
+func (r *Registry) settle(ref NativeDecisionRef, target DecisionState, decidedDigest string) error {
 	if err := ref.Validate(); err != nil {
 		return err
 	}
@@ -355,22 +362,35 @@ func (r *Registry) settle(ref NativeDecisionRef, target DecisionState) error {
 	}
 	switch d.State {
 	case StateIntended:
-		if target == StateDecided && d.Kind == KindSide {
-			// A SIDE decision carries no public events: settling it
-			// closes its checkpoint, so later decisions of the run are
-			// not blocked behind a decision that never applies.
-			d.State = StateApplied
-			d.Application = &ApplicationPlan{}
+		if target == StateDecided {
+			d.DecidedDigest = decidedDigest
+			if d.Kind == KindSide {
+				// A SIDE decision carries no public events: settling it
+				// closes its checkpoint, so later decisions of the run are
+				// not blocked behind a decision that never applies.
+				d.State = StateApplied
+				d.Application = &ApplicationPlan{}
+			} else {
+				d.State = target
+			}
 		} else {
 			d.State = target
 		}
 		return putRecord(&d, decisionKey(ref.ProducerID, ref.RunID, ref.DecisionSequence), r.db)
 	case target:
+		if d.DecidedDigest != decidedDigest {
+			return fmt.Errorf("%w: %s settled with %s, not %s", ErrDecisionConflict, ref, d.DecidedDigest,
+				decidedDigest)
+		}
 		return nil
 	case StateApplied:
 		// An applied decision was decided before; a repeated decided
 		// marker changes nothing.
 		if target == StateDecided {
+			if d.DecidedDigest != decidedDigest {
+				return fmt.Errorf("%w: %s settled with %s, not %s", ErrDecisionConflict, ref, d.DecidedDigest,
+					decidedDigest)
+			}
 			return nil
 		}
 	}
@@ -383,6 +403,71 @@ func (r *Registry) Decision(ref NativeDecisionRef) (DecisionRecord, bool, error)
 	defer r.mu.Unlock()
 	d, ok, err := r.loadDecision(ref)
 	return d, ok, err
+}
+
+// Mirror is the native decision mirror seam for the accepted decision bridge
+// of E01-02: it reports the applied-decision frontier of one producer run by
+// decision sequence and NATIVE_DECIDED digest, matching the bridge's
+// Mirror.Applied(sequence, decidedDigest) interface, so the bridge can hold
+// the native marker cleanup and the delivery obligation of every decision
+// the registry has not applied yet.
+type Mirror interface {
+	// Applied reports whether the registry durably applied the decision of
+	// the run with this sequence, settled with exactly this decided digest:
+	// the whole application is past the frontier.
+	Applied(sequence uint64, decidedDigest string) (bool, error)
+}
+
+// Mirror returns the mirror view of one producer run. The bridge binds its
+// Mirror to its producer run and asks by decision sequence, so the view
+// carries that identity; the node instance of the mirrored decisions is a
+// record field, not part of the seam.
+func (r *Registry) Mirror(producer, run semantic.ID16) Mirror {
+	return &runMirror{r: r, producer: producer, run: run}
+}
+
+// runMirror is the Mirror view of one producer run.
+type runMirror struct {
+	r        *Registry
+	producer semantic.ID16
+	run      semantic.ID16
+}
+
+// Applied implements Mirror. A decision the mirror never saw is not applied,
+// and a decision settled or applied with another digest is not applied
+// either: the frontier covers exactly this decided digest or nothing.
+func (m *runMirror) Applied(sequence uint64, decidedDigest string) (bool, error) {
+	if m.producer.IsZero() || m.run.IsZero() {
+		return false, fmt.Errorf("%w: unset producer or run of a mirror", ErrInvalid)
+	}
+	if !digestPattern.MatchString(decidedDigest) {
+		return false, fmt.Errorf("%w: decided digest %q", ErrInvalid, decidedDigest)
+	}
+	m.r.mu.Lock()
+	defer m.r.mu.Unlock()
+	key := decisionKey(m.producer, m.run, sequence)
+	ok, err := m.r.db.Has(key)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	data, err := m.r.db.Get(key)
+	if err != nil {
+		return false, err
+	}
+	var d DecisionRecord
+	if err := strictDecode(data, &d); err != nil {
+		return false, fmt.Errorf("%w: %s: %v", ErrCorrupt, key, err)
+	}
+	if err := d.verify(); err != nil {
+		return false, err
+	}
+	if d.Ref.ProducerID != m.producer || d.Ref.RunID != m.run || d.Ref.DecisionSequence != sequence {
+		return false, fmt.Errorf("%w: decision key holds %s", ErrCorrupt, d.Ref)
+	}
+	return d.State == StateApplied && d.DecidedDigest == decidedDigest, nil
 }
 
 // CaptureCorpus records the corpus of one block captured under a decision:
@@ -566,7 +651,8 @@ func (r *Registry) checkPlan(d DecisionRecord, plan ApplicationPlan) ([]semantic
 				return nil, fmt.Errorf("%w: status targets unknown activation %s", ErrPlanConflict,
 					activationName(key))
 			}
-			if rec.MaxRevision == ev.Descriptor.Revision && rec.StatusDigest == ev.Content {
+			if rec.MaxRevision == ev.Descriptor.Revision && rec.StatusDigest == ev.Content &&
+				rec.statusOwnedBy(d.Ref) {
 				continue
 			}
 			if rec.State == ActivationRemoved {
@@ -582,7 +668,7 @@ func (r *Registry) checkPlan(d DecisionRecord, plan ApplicationPlan) ([]semantic
 					activationName(key))
 			}
 			if rec.State == ActivationRemoved {
-				if rec.RemovedRevision == ev.Descriptor.Revision {
+				if rec.RemovedRevision == ev.Descriptor.Revision && rec.removedBy(d.Ref) {
 					continue
 				}
 				return nil, fmt.Errorf("%w: removed targets %s at another revision", ErrTerminalActivation,
@@ -629,6 +715,20 @@ func (a ActivationRecord) sameOrigin(other ActivationRecord) bool {
 		a.HasTx == other.HasTx && a.TxPosition == other.TxPosition && a.TxHash == other.TxHash &&
 		a.OriginDigest == other.OriginDigest && a.CorpusDigest == other.CorpusDigest &&
 		a.Speculative == other.Speculative
+}
+
+// statusOwnedBy reports whether the decision wrote the newest StatusChanged
+// event of the record. Event idempotence keys on the owning decision: only
+// the writer of the recorded status may re-submit it as idempotent, so the
+// shortcut over an interrupted derivation of the same decision is the only
+// one; a different decision falls through to the revision frontier rules.
+func (a ActivationRecord) statusOwnedBy(ref NativeDecisionRef) bool {
+	return a.StatusDecision != nil && *a.StatusDecision == ref
+}
+
+// removedBy reports whether the decision wrote the removal of the record.
+func (a ActivationRecord) removedBy(ref NativeDecisionRef) bool {
+	return a.RemovedDecision != nil && *a.RemovedDecision == ref
 }
 
 // Apply applies one settled canonical decision to the activation records.
@@ -748,19 +848,26 @@ func (r *Registry) commitApplication(d DecisionRecord) (ApplyResult, error) {
 				result.Applied = append(result.Applied, key)
 			}
 		case semantic.KindStatus:
-			if rec.MaxRevision == ev.Descriptor.Revision && rec.StatusDigest == ev.Content {
+			if rec.MaxRevision == ev.Descriptor.Revision && rec.StatusDigest == ev.Content &&
+				rec.statusOwnedBy(d.Ref) {
 				continue
 			}
 			next := rec
 			next.MaxRevision = ev.Descriptor.Revision
 			next.StatusDigest = ev.Content
+			statusOwner := d.Ref
+			next.StatusDecision = &statusOwner
 			if err := putRecord(&next, activationKeyOf(key), r.db); err != nil {
 				return ApplyResult{}, err
 			}
 			result.Statuses = append(result.Statuses, key)
 		default:
 			if rec.State == ActivationRemoved {
-				continue
+				if rec.removedBy(d.Ref) {
+					continue
+				}
+				return ApplyResult{}, fmt.Errorf("%w: activation %s holds the removal of another decision",
+					ErrCorrupt, activationName(key))
 			}
 			next := rec
 			next.State = ActivationRemoved
