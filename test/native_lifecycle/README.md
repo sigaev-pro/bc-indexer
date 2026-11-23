@@ -1,7 +1,7 @@
 # Native lifecycle (E05-02.reorg)
 
 `test/native_lifecycle` owns
-[E05-02.reorg](../.project/docs/TASK_DECOMPOSITION.md): REQ-CAP-08
+E05-02.reorg: REQ-CAP-08
 (AC-CAP-08-02) and REQ-LIF-02 (AC-LIF-02-01) — evidence for reorgs,
 reapplication, known branches and reordered events, with Removed created
 for a READY Applied activation regardless of whether PubAck has arrived.

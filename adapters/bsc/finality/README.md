@@ -1,7 +1,7 @@
 # BSC finality (E05-01.bsc_finality)
 
 `adapters/bsc/finality` is the typed BSC finality evidence seam of
-[E05-01.bsc_finality](../../../.project/docs/TASK_DECOMPOSITION.md): REQ-LIF-06
+E05-01.bsc_finality: REQ-LIF-06
 (AC-LIF-06-01 to 06-03). BSC has two different native finality surfaces —
 the early vote-only result that Parlia's `GetFinalizedHeader` derives from
 the in-memory VotePool quorum (observed at `NotifyFinalized`, the caller row
@@ -24,9 +24,9 @@ only BSC evidence source:
   `LastFinalized` hash alone never becomes an anchor.
 
 The pinned native facts and the logical contract are in
-[ETH_BSC_FINALITY_CONTRACT](../../../.project/docs/research/ETH_BSC_FINALITY_CONTRACT.md);
+ETH_BSC_FINALITY_CONTRACT;
 the typed fields follow the BSC evidence section of
-[CURRENT_SEMANTICS](../../../.project/docs/CURRENT_SEMANTICS.md) (D62).
+CURRENT_SEMANTICS (D62).
 
 ## What this package does not do
 
@@ -169,4 +169,4 @@ anchor gate (accept, advance, unchanged, stale, the two fatal regressions,
 the refused side branches), the retained-early restart semantics, the early
 record integrity and a concurrent-observation check. The reorg, reapply,
 side-branch and reordered-event behavior is in
-[`test/native_lifecycle`](../../../test/native_lifecycle/README.md).
+`test/native_lifecycle`.
