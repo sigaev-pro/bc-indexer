@@ -9,11 +9,11 @@ E04-03.balance_actions, E04-04.import_pressure and E04-02.optional_scope
 ../../.project/docs/DEVELOPMENT_PLAN.md.
 
 Stdlib-only Go module (Go 1.25) composing the repository-local E02
-packages: [protocol/balance](../../../protocol/balance),
-[protocol/block](../../../protocol/block),
-[protocol/profiles](../../../protocol/profiles),
-[protocol/semantic](../../../protocol/semantic) and
-[core/capture](../../capture). No native runs, no I/O outside the
+packages: protocol/balance,
+protocol/block,
+protocol/profiles,
+protocol/semantic and
+core/capture. No native runs, no I/O outside the
 interfaces the caller provides; every fixture value cites its E01 evidence
 file.
 
