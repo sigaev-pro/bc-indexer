@@ -83,12 +83,16 @@ is `ErrSource`, never a status.
 
 ## Observatory
 
-`Observatory` is the durable evidence store of one producer run. Records
-live under `extractor-bsc-finality-v1/<producer>.<run>/{early,evidence,anchor}`
+`Observatory` is the durable evidence store of one producer run. Its own
+records live under `extractor-bsc-finality-v1/<producer>.<run>/{early,evidence}`
 (every key is longer than 33 bytes and starts with "e", so the native
 offline pruner keeps it). Every record carries its store ID and producer and
 a digest; a record of another store or producer is `ErrInvariant`, a damaged
-one `ErrCorrupt`.
+one `ErrCorrupt`. The accepted GC anchor is not a record of this package:
+`Open(token, store, admission, storeID, identity, anchorer)` takes the run
+identity (the network and the NativeDecisionRef identities) and the anchor
+owner — the recovery GC engine of E05-01.activation_gc — and `Anchor`
+returns its shared `recoverygc.AcceptedGcAnchor` record of the network.
 
 - `ObserveEarly(token, evidence, votes)` stores one early vote observation
   of this process together with the digest of the owned snapshot of the
@@ -126,15 +130,18 @@ In order:
 3. **Only the attested snapshot source is a candidate.** A genesis fallback
    gives no candidate (`Refused`). A candidate that is not on the canonical
    execution ancestry gives no candidate either (`Refused`, no error).
-4. **Monotonic by ancestry.** With no anchor the candidate is `Accepted`;
-   an equal candidate is `Unchanged`; a descendant is `Advanced`; a lower
-   candidate on the accepted chain is `Stale` — the anchor stays and
-   nothing is written, because a lower getter snapshot or a vanished
-   VotePool is never a proven regression. A candidate that neither contains
-   the accepted anchor nor lies on its chain — a different hash at the
-   anchor height or an incompatible branch, observed by the authoritative
-   header source — is `ErrRegression` (fatal, the observatory stops; every
-   later call is `ErrFailed`).
+4. **Monotonic by ancestry, through the anchor owner.** The observation
+   and the acceptance stay the recovery GC engine's own sync decisions: the
+   candidate is observed on it and committed through it, so the durable
+   anchor is the engine's `AcceptedGcAnchor` record of the network. With no
+   anchor the candidate is `Accepted`; an equal candidate is `Unchanged`; a
+   descendant is `Advanced`; a lower candidate on the accepted chain is
+   `Stale` — the anchor stays and nothing is written, because a lower
+   getter snapshot or a vanished VotePool is never a proven regression. A
+   candidate that neither contains the accepted anchor nor lies on its
+   chain — a different hash at the anchor height or an incompatible branch,
+   observed by the authoritative header source — is `ErrRegression` (fatal,
+   the observatory stops; every later call is `ErrFailed`).
 
 A stale callback, a lower safe, a vanished VotePool or an unavailable header
 blocks GC and is never fatal; only a proven regression below the accepted
@@ -150,7 +157,10 @@ its number then its 32 raw hash bytes.
 |---|---|---|
 | header snapshot | `extractor-bsc-finality-header-v1` | `ATTESTED`: snapshot head, justified, finalized; `GENESIS_FALLBACK`: snapshot head, reason, genesis, genesis |
 | early evidence | `extractor-bsc-finality-early-v1` | origin, evaluation head, source, target, candidate, validator parent, validator count, quorum, matching, SHA-256 of the vote snapshot |
-| anchor record | `extractor-bsc-finality-anchor-v1` | native store ID, producer (`<producer>.<run>`), anchor head, header evidence digest, decision sequence |
+
+The accepted anchor carries the header evidence digest of its observation
+and the profile reference `adapters/bsc/finality-v1`; its own record digest
+is the recovery GC engine's.
 
 `python3 test/harness/bsc_finality.py vectors` computes the expected values
 of `vectors.json` from these formulas, independently of the Go code;

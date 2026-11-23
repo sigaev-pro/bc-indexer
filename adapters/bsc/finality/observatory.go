@@ -10,6 +10,9 @@ import (
 	"io"
 	"sync"
 
+	recoverygc "github.com/sigaev-pro/bc-indexer/adapters/recovery_gc"
+	"github.com/sigaev-pro/bc-indexer/protocol/semantic"
+
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/decision"
 	"github.com/ethereum/go-ethereum/extractor/lifecycle"
@@ -33,8 +36,9 @@ type Observatory struct {
 	base     string
 	storeID  string
 	producer string
+	id       RunIdentity
+	gc       Anchorer
 	early    *earlyRecord
-	anchor   *AnchorRecord
 	err      error
 }
 
@@ -49,19 +53,65 @@ type earlyRecord struct {
 	Digest        string            `json:"digest"`
 }
 
-// AnchorRecord is the accepted GC anchor: the attested snapshot source, the
-// digest of its header evidence and the native decision sequence that
-// observed it (0 for a startup refresh observation). Only the header-derived
-// finalized source is ever accepted here; a vote-derived effective result,
-// CurrentFinalBlock or a persisted LastFinalized hash alone never becomes an
-// anchor.
-type AnchorRecord struct {
-	NativeStoreID    string        `json:"native_store_id"`
-	Producer         string        `json:"producer"`
-	Anchor           decision.Head `json:"anchor"`
-	HeaderDigest     string        `json:"header_digest"`
-	DecisionSequence uint64        `json:"decision_sequence"`
-	Digest           string        `json:"digest"`
+// RunIdentity is the public semantic identity of the producer run that owns
+// the observatory: the network it observes and the node instance, producer
+// and run identities of the NativeDecisionRef of CURRENT_SEMANTICS. The
+// observatory addresses the GC anchor owner and its finality observations
+// through it.
+type RunIdentity struct {
+	Network  semantic.Network
+	Node     semantic.ID16
+	Producer semantic.ID16
+	Run      semantic.ID16
+}
+
+// Validate checks the identity: every part must be set.
+func (id RunIdentity) Validate() error {
+	if id.Network.GenesisHash == (semantic.Hash32{}) {
+		return fmt.Errorf("%w: unset network genesis of the run identity", ErrInvalid)
+	}
+	if id.Node.IsZero() || id.Producer.IsZero() || id.Run.IsZero() {
+		return fmt.Errorf("%w: unset node, producer or run of the run identity", ErrInvalid)
+	}
+	return nil
+}
+
+// AnchorProfile is the profile reference the observatory vouches for the GC
+// anchor evidence it observes: the attested snapshot header evidence of
+// this package at its current digest domain.
+const AnchorProfile = "adapters/bsc/finality-v1"
+
+// Anchorer owns the durable GC anchor of the network: the recovery GC
+// engine of E05-01.activation_gc, whose AcceptedGcAnchor is the shared
+// anchor contract. Acceptance is the engine's own sync decision over
+// covering candidates.
+type Anchorer interface {
+	// Anchor returns the accepted anchor of the network.
+	Anchor(net semantic.Network) (recoverygc.AcceptedGcAnchor, bool)
+	// ObserveFinality records one finality observation of the network.
+	ObserveFinality(recoverygc.FinalityObservation) (recoverygc.ObservationResult, error)
+	// CommitAnchor accepts the observed candidate of the network.
+	CommitAnchor(net semantic.Network) (recoverygc.AcceptedGcAnchor, error)
+}
+
+// hashOfHead decodes the hash of one head into the shared Hash32 model.
+func hashOfHead(h decision.Head) (semantic.Hash32, error) {
+	raw, err := rawHash(h.Hash)
+	if err != nil {
+		return semantic.Hash32{}, err
+	}
+	var out semantic.Hash32
+	copy(out[:], raw)
+	return out, nil
+}
+
+// headOfAnchor converts the anchor block of the shared GC contract into the
+// head model of this package.
+func headOfAnchor(a recoverygc.AnchorRef) (decision.Head, error) {
+	if a.Hash == (semantic.Hash32{}) {
+		return decision.Head{}, fmt.Errorf("%w: unset anchor hash", ErrInvalid)
+	}
+	return decision.Head{Number: a.Height, Hash: a.Hash.String()}, nil
 }
 
 // evidenceRecord is the last observed full evidence, kept for the restart
@@ -115,8 +165,11 @@ var ErrRegression = fmt.Errorf("%w: a proven regression below the accepted BSC G
 // Open opens the observatory of the producer run of adm on db. It loads the
 // stored records; a stored early record is served with RETAINED_DURABLE
 // provenance, never as a fresh VotePool result. A record of another store or
-// producer, a malformed record or a wrong digest is refused.
-func Open(t *admission.Token, db admission.Store, adm lifecycle.Checker, storeID string) (*Observatory, error) {
+// producer, a malformed record or a wrong digest is refused. id addresses
+// the network and the native decision references of the run, and gc owns
+// the durable GC anchor of the network (the recovery GC engine).
+func Open(t *admission.Token, db admission.Store, adm lifecycle.Checker, storeID string,
+	id RunIdentity, gc Anchorer) (*Observatory, error) {
 	if adm == nil || db == nil {
 		return nil, fmt.Errorf("%w: missing admission or store", ErrInvalid)
 	}
@@ -126,10 +179,16 @@ func Open(t *admission.Token, db admission.Store, adm lifecycle.Checker, storeID
 	if !storeIDPattern.MatchString(storeID) {
 		return nil, fmt.Errorf("%w: native store ID %q", ErrInvalid, storeID)
 	}
+	if err := id.Validate(); err != nil {
+		return nil, err
+	}
+	if gc == nil {
+		return nil, fmt.Errorf("%w: missing GC anchor owner", ErrInvalid)
+	}
 	p := adm.Producer()
 	o := &Observatory{adm: adm, db: db, storeID: storeID,
 		base:     keyPrefix + p.ProducerID + "." + p.RunID + "/",
-		producer: p.ProducerID + "." + p.RunID}
+		producer: p.ProducerID + "." + p.RunID, id: id, gc: gc}
 	if err := db.SyncKeyValue(); err != nil {
 		return nil, err
 	}
@@ -155,19 +214,6 @@ func (o *Observatory) load() error {
 			return err
 		}
 		o.early = early
-	}
-	anchor, ok, err := readRecord[AnchorRecord](o.db, o.key("anchor"))
-	if err != nil {
-		return err
-	}
-	if ok {
-		if anchor.NativeStoreID != o.storeID || anchor.Producer != o.producer {
-			return fmt.Errorf("%w: anchor record of %s %s", ErrInvariant, anchor.NativeStoreID, anchor.Producer)
-		}
-		if err := verifyAnchor(anchor); err != nil {
-			return err
-		}
-		o.anchor = anchor
 	}
 	return nil
 }
@@ -201,28 +247,6 @@ func readRecord[T any](db admission.Store, key []byte) (*T, bool, error) {
 		return nil, false, fmt.Errorf("%w: %s: %v", ErrCorrupt, key, err)
 	}
 	return &value, true, nil
-}
-
-// anchorDigest returns the record digest of an anchor record.
-func anchorDigest(a AnchorRecord) (string, error) {
-	anchor, err := nonZeroHead(a.Anchor, "anchor")
-	if err != nil {
-		return "", err
-	}
-	evidence, err := rawHash(a.HeaderDigest)
-	if err != nil {
-		return "", err
-	}
-	return digestOf(tagAnchor, str(a.NativeStoreID), str(a.Producer), anchor, evidence, u64(a.DecisionSequence)),
-		nil
-}
-
-func verifyAnchor(a *AnchorRecord) error {
-	digest, err := anchorDigest(*a)
-	if err != nil || digest != a.Digest {
-		return fmt.Errorf("%w: anchor record digest", ErrCorrupt)
-	}
-	return nil
 }
 
 func verifyEarly(e *earlyRecord) error {
@@ -290,17 +314,15 @@ func (o *Observatory) Early(t *admission.Token) *EarlyVoteEvidence {
 	return &retained
 }
 
-// Anchor returns the accepted GC anchor record, if one is accepted.
-func (o *Observatory) Anchor(t *admission.Token) (AnchorRecord, bool) {
+// Anchor returns the accepted GC anchor record of the network from the
+// anchor owner, if one is accepted.
+func (o *Observatory) Anchor(t *admission.Token) (recoverygc.AcceptedGcAnchor, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if err := o.enter(t); err != nil {
-		return AnchorRecord{}, false
+		return recoverygc.AcceptedGcAnchor{}, false
 	}
-	if o.anchor == nil {
-		return AnchorRecord{}, false
-	}
-	return *o.anchor, true
+	return o.gc.Anchor(o.id.Network)
 }
 
 // ObserveEarly stores one early vote observation made by this process. The
@@ -389,14 +411,18 @@ func (o *Observatory) ObserveHeader(t *admission.Token, e Evidence, anc Ancestry
 	// An accepted anchor is irreversible: the canonical execution head must
 	// still cover it. A head below or beside the anchor is a proven
 	// regression, not a stale observation.
-	if o.anchor != nil {
-		covers, err := anc.IsAncestorOrSelf(o.anchor.Anchor, e.ObservedExecutionHead)
+	if accepted, ok := o.gc.Anchor(o.id.Network); ok {
+		anchor, err := headOfAnchor(accepted.Anchor)
+		if err != nil {
+			return AnchorResult{}, err
+		}
+		covers, err := anc.IsAncestorOrSelf(anchor, e.ObservedExecutionHead)
 		if err != nil {
 			return AnchorResult{}, fmt.Errorf("%w: anchor ancestry: %w", ErrSource, err)
 		}
 		if !covers {
 			return AnchorResult{}, o.fail(fmt.Errorf("%w: execution head %s does not cover the accepted anchor %s",
-				ErrRegression, e.ObservedExecutionHead.Hash, o.anchor.Anchor.Hash))
+				ErrRegression, e.ObservedExecutionHead.Hash, anchor.Hash))
 		}
 	}
 	result := AnchorResult{Change: Refused}
@@ -419,8 +445,12 @@ func (o *Observatory) ObserveHeader(t *admission.Token, e Evidence, anc Ancestry
 			result.Change = change
 		}
 	}
-	if o.anchor != nil {
-		result.Anchor = o.anchor.Anchor
+	if accepted, ok := o.gc.Anchor(o.id.Network); ok {
+		anchor, err := headOfAnchor(accepted.Anchor)
+		if err != nil {
+			return AnchorResult{}, err
+		}
+		result.Anchor = anchor
 	}
 	// The full evidence record is stored last, after the anchor decision; a
 	// power loss between the two keeps the anchor without the newer
@@ -433,56 +463,76 @@ func (o *Observatory) ObserveHeader(t *admission.Token, e Evidence, anc Ancestry
 	return result, nil
 }
 
-// acceptAnchor applies the anchor monotonicity rules to one canonical
-// candidate and persists a new anchor. The observatory lock is held.
+// acceptAnchor applies the anchor rules to one canonical candidate through
+// the anchor owner: the observation and the acceptance stay the engine's
+// own sync decisions. The observatory lock is held.
 func (o *Observatory) acceptAnchor(candidate decision.Head, headerDigest string,
 	decisionSequence uint64, anc Ancestry) (AnchorChange, error) {
-	if o.anchor == nil {
-		if err := o.writeAnchor(candidate, headerDigest, decisionSequence); err != nil {
+	hash, err := hashOfHead(candidate)
+	if err != nil {
+		return Refused, err
+	}
+	observation := recoverygc.FinalityObservation{Network: o.id.Network,
+		Decision: recoverygc.NativeDecisionRef{NodeInstanceID: o.id.Node, ProducerID: o.id.Producer,
+			RunID: o.id.Run, DecisionSequence: decisionSequence},
+		Anchor:         recoverygc.AnchorRef{Height: candidate.Number, Hash: hash},
+		EvidenceDigest: headerDigest, ProfileRef: AnchorProfile}
+	// The accepted anchor of the observation itself decides the change
+	// name; the observatory lock serializes the whole observation.
+	accepted, has := o.gc.Anchor(o.id.Network)
+	result, err := o.gc.ObserveFinality(observation)
+	if err != nil {
+		return Refused, err
+	}
+	if has {
+		anchor, err := headOfAnchor(accepted.Anchor)
+		if err != nil {
 			return Refused, err
 		}
-		return Accepted, nil
-	}
-	extends, err := anc.IsAncestorOrSelf(o.anchor.Anchor, candidate)
-	if err != nil {
-		return Refused, fmt.Errorf("%w: anchor ancestry: %w", ErrSource, err)
-	}
-	if extends {
-		if candidate == o.anchor.Anchor {
+		switch result {
+		case recoverygc.ObservationSame:
 			return Unchanged, nil
+		case recoverygc.ObservationCandidate:
+			committed, err := o.gc.CommitAnchor(o.id.Network)
+			if err != nil {
+				return Refused, err
+			}
+			return anchorChange(has, committed, accepted), nil
+		case recoverygc.ObservationUnavailable:
+			return Refused, fmt.Errorf("%w: ancestry of the candidate %s against the accepted anchor: %w",
+				ErrSource, candidate.Hash, recoverygc.ErrAncestryUnknown)
 		}
-		if err := o.writeAnchor(candidate, headerDigest, decisionSequence); err != nil {
-			return Refused, err
+		// A stale observation of the engine: the candidate does not cover
+		// the accepted anchor. A lower snapshot on the accepted chain keeps
+		// the anchor and is not a regression; an incomparable candidate —
+		// a different hash at the anchor height or an incompatible branch,
+		// observed by the authoritative header source — is fatal.
+		below, err := anc.IsAncestorOrSelf(candidate, anchor)
+		if err != nil {
+			return Refused, fmt.Errorf("%w: anchor ancestry: %w", ErrSource, err)
 		}
-		return Advanced, nil
+		if below {
+			return Stale, nil
+		}
+		return Refused, o.fail(fmt.Errorf("%w: header source %s does not cover the accepted anchor %s",
+			ErrRegression, candidate.Hash, anchor.Hash))
 	}
-	below, err := anc.IsAncestorOrSelf(candidate, o.anchor.Anchor)
+	committed, err := o.gc.CommitAnchor(o.id.Network)
 	if err != nil {
-		return Refused, fmt.Errorf("%w: anchor ancestry: %w", ErrSource, err)
+		return Refused, err
 	}
-	if below {
-		// A lower snapshot on the accepted chain is stale: the durable
-		// anchor stays and nothing is written. This is not a regression.
-		return Stale, nil
-	}
-	// The candidate does not contain the accepted anchor and is not on its
-	// chain: a different hash at the anchor height or an incompatible
-	// branch, observed by the authoritative header source. Fatal.
-	return Refused, o.fail(fmt.Errorf("%w: header source %s does not cover the accepted anchor %s", ErrRegression,
-		candidate.Hash, o.anchor.Anchor.Hash))
+	return anchorChange(has, committed, accepted), nil
 }
 
-func (o *Observatory) writeAnchor(candidate decision.Head, headerDigest string, decisionSequence uint64) error {
-	record := &AnchorRecord{NativeStoreID: o.storeID, Producer: o.producer, Anchor: candidate,
-		HeaderDigest: headerDigest, DecisionSequence: decisionSequence}
-	digest, err := anchorDigest(*record)
-	if err != nil {
-		return err
+// anchorChange names what the committed anchor is relative to the
+// previously accepted one: a new acceptance with none before, an advance
+// over it, or the same anchor observed again.
+func anchorChange(had bool, committed, accepted recoverygc.AcceptedGcAnchor) AnchorChange {
+	if !had {
+		return Accepted
 	}
-	record.Digest = digest
-	if err := o.put(o.key("anchor"), record); err != nil {
-		return err
+	if committed.Anchor == accepted.Anchor {
+		return Unchanged
 	}
-	o.anchor = record
-	return nil
+	return Advanced
 }

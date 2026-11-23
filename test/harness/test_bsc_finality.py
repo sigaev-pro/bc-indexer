@@ -37,10 +37,6 @@ class Vectors(unittest.TestCase):
         other = bsc_finality.early_digest(e["origin"], e["evaluation"], e["source"], e["target"], e["candidate"],
                                           e["validators"], e["count"], e["quorum"], e["matching"], "other votes")
         self.assertNotEqual(other, v["early_digest"])
-        # The anchor digest changes with the native decision sequence alone.
-        other = bsc_finality.anchor_digest(v["store_id"], f'{v["producer"]}.{v["run"]}', v["finalized"],
-                                           v["attested_digest"], v["sequence"] + 1)
-        self.assertNotEqual(other, v["anchor_digest"])
 
     def test_quorum_is_two_thirds_ceil(self):
         # ceil(2n/3) with a floor of two validators, the native Parlia bound
@@ -57,10 +53,20 @@ class Assembly(unittest.TestCase):
             target = Path(tmp) / "module"
             packages = bsc_finality.assemble(target)
             self.assertIn("extractor/bsc/finality", packages)
+            self.assertIn("extractor/native_lifecycle_bsc", packages)
             self.assertEqual(sorted(p.name for p in (target / "extractor/bsc/finality").iterdir()),
-                             sorted(bsc_finality.PACKAGE_FILES + bsc_finality.REORG_FILES))
+                             sorted(bsc_finality.PACKAGE_FILES))
+            self.assertEqual(sorted(p.name for p in (target / "extractor/native_lifecycle_bsc").iterdir()),
+                             sorted(bsc_finality.REORG_FILES))
+            # The reorg block is its own lifecycle test package, not a file
+            # inside the finality package, and the module graph binds every
+            # repository-local module it composes.
             go_mod = (target / "go.mod").read_text()
-            self.assertIn(f"replace {bsc_finality.SEMANTIC} => ", go_mod)
+            for module in bsc_finality.LOCAL_MODULES:
+                self.assertIn(f"replace {module} => ", go_mod)
+            for required in ("adapters/lifecycle_registry v0.0.0", "adapters/recovery_gc v0.0.0",
+                             "protocol/semantic v0.0.0", "test/lifecycle_validator v0.0.0"):
+                self.assertIn(required, go_mod)
             with self.assertRaises(Exception):
                 bsc_finality.assemble(target)
 

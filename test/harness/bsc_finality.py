@@ -6,15 +6,16 @@ formulas in the package README, independently of the Go code; the Go tests
 read the same values from `vectors.json`, and the portable test
 `test_bsc_finality.py` checks that they match. `assemble DIR` extends the
 lifecycle binding module of `lifecycle.py assemble` with the BSC finality
-package (`adapters/bsc/finality`, installed at `extractor/bsc/finality`) and
-the BSC reorg tests of E05-02.reorg (`test/native_lifecycle/bsc`), and wires
-the repository-local `protocol/semantic` module in with a replace, so `go
-test ./extractor/bsc/finality/` runs the whole slot on an in-memory store.
+package (`adapters/bsc/finality`, installed at `extractor/bsc/finality`)
+and the BSC reorg block of E05-02.reorg (`test/native_lifecycle/bsc`,
+installed at `extractor/native_lifecycle_bsc` as its own lifecycle test
+package, not inside the finality package), and wires the repository-local
+modules the slot composes in with resolved local replaces, so `go test
+./...` runs the whole slot on an in-memory store.
 """
 
 import argparse
 import json
-import os
 from pathlib import Path
 import shutil
 import sys
@@ -26,13 +27,27 @@ import lifecycle as shared_lifecycle  # noqa: E402
 ROOT = admission.ROOT
 PACKAGE = ROOT / "adapters/bsc/finality"
 REORG = ROOT / "test/native_lifecycle/bsc"
-SEMANTIC = "github.com/sigaev-pro/bc-indexer/protocol/semantic"
 PACKAGE_FILES = ("finality.go", "observatory.go", "finality_test.go", "vectors.json")
-REORG_FILES = ("reorg_test.go",)
+REORG_FILES = ("lifecycle_bsc.go", "reorg_test.go", "store.go")
+
+# The repository-local modules the BSC slot composes: the lifecycle
+# registry and the recovery GC anchor owner behind the reorg evidence, the
+# semantic identity model and the E02-03 oracle. Each is bound with a
+# resolved local replace, so an assembly under a symlinked temporary
+# directory resolves the same worktree files.
+LOCAL_MODULES = {
+    "github.com/sigaev-pro/bc-indexer/adapters/lifecycle_registry": "adapters/lifecycle_registry",
+    "github.com/sigaev-pro/bc-indexer/adapters/recovery_gc": "adapters/recovery_gc",
+    "github.com/sigaev-pro/bc-indexer/protocol/balance": "protocol/balance",
+    "github.com/sigaev-pro/bc-indexer/protocol/block": "protocol/block",
+    "github.com/sigaev-pro/bc-indexer/protocol/profiles": "protocol/profiles",
+    "github.com/sigaev-pro/bc-indexer/protocol/proto": "protocol/proto",
+    "github.com/sigaev-pro/bc-indexer/protocol/semantic": "protocol/semantic",
+    "github.com/sigaev-pro/bc-indexer/test/lifecycle_validator": "test/lifecycle_validator",
+}
 
 HEADER_TAG = b"extractor-bsc-finality-header-v1\x00"
 EARLY_TAG = b"extractor-bsc-finality-early-v1\x00"
-ANCHOR_TAG = b"extractor-bsc-finality-anchor-v1\x00"
 
 
 def sha(data):
@@ -78,11 +93,6 @@ def early_digest(origin, evaluation, source, target, candidate, validators, coun
                + head(validators) + u64(count) + u64(quorum) + u64(matching) + sha(votes.encode())).hex()
 
 
-def anchor_digest(store_id, producer, anchor, header_digest, sequence):
-    return sha(ANCHOR_TAG + text(store_id) + text(producer) + head(anchor) + raw(header_digest)
-               + u64(sequence)).hex()
-
-
 def quorum_of(count):
     """The BSC vote quorum of count validators: ceil(2*count/3), at least
     two, the same bound the Go validation requires."""
@@ -115,10 +125,6 @@ def vectors():
     early_value = early_digest(early["origin"], early["evaluation"], early["source"], early["target"],
                                early["candidate"], early["validators"], early["count"], early["quorum"],
                                early["matching"], votes)
-    # The anchor record of the Go vector test: an attested snapshot at the
-    # execution head 9 of the canonical chain, source A5, sequence 7.
-    anchor = {"number": 5, "hash": block_hash("A5")}
-    anchor_header = attested_digest(snapshot, {"number": 6, "hash": block_hash("A6")}, anchor)
     return {
         "store_id": "native-store-1",
         "producer": "producer-1",
@@ -132,7 +138,6 @@ def vectors():
         "fallback_digest": fallback,
         "early": early,
         "early_digest": early_value,
-        "anchor_digest": anchor_digest("native-store-1", "producer-1.run-1", anchor, anchor_header, 7),
         "sequence": 7,
     }
 
@@ -148,22 +153,40 @@ def check(root=ROOT):
 
 def assemble(target, root=ROOT):
     """Extend the lifecycle binding module with this package and the BSC
-    reorg tests; return the package directories."""
+    reorg block; return the package directories."""
     target, root = Path(target), Path(root)
     packages = shared_lifecycle.assemble(target, root)
     (target / "extractor/bsc/finality").mkdir(parents=True)
     for name in PACKAGE_FILES:
         shutil.copyfile(PACKAGE / name, target / "extractor/bsc/finality" / name)
+    (target / "extractor/native_lifecycle_bsc").mkdir(parents=True)
     for name in REORG_FILES:
-        shutil.copyfile(REORG / name, target / "extractor/bsc/finality" / name)
-    # The reorg tests build their semantic descriptors on the repository
-    # local protocol/semantic module; the assembled module reaches it through
-    # a replace, like test/lifecycle_validator.
-    relative = os.path.relpath(root / "protocol/semantic", target).replace(os.sep, "/")
+        shutil.copyfile(REORG / name, target / "extractor/native_lifecycle_bsc" / name)
+    module = ["", "// The repository-local modules the BSC finality slot composes:",
+              "// the lifecycle registry and the recovery GC anchor owner behind",
+              "// the reorg evidence, the semantic identity model and the E02-03",
+              "// oracle. The replaces of a dependency module are ignored, so this",
+              "// main module binds every module of the graph itself.",
+              "require (",
+              "\tgithub.com/sigaev-pro/bc-indexer/adapters/lifecycle_registry v0.0.0",
+              "\tgithub.com/sigaev-pro/bc-indexer/adapters/recovery_gc v0.0.0",
+              "\tgithub.com/sigaev-pro/bc-indexer/protocol/semantic v0.0.0",
+              "\tgithub.com/sigaev-pro/bc-indexer/test/lifecycle_validator v0.0.0",
+              ")",
+              "",
+              "require (",
+              "\tgithub.com/sigaev-pro/bc-indexer/protocol/balance v0.0.0 // indirect",
+              "\tgithub.com/sigaev-pro/bc-indexer/protocol/block v0.0.0 // indirect",
+              "\tgithub.com/sigaev-pro/bc-indexer/protocol/profiles v0.0.0 // indirect",
+              "\tgithub.com/sigaev-pro/bc-indexer/protocol/proto v0.0.0 // indirect",
+              ")",
+              ""]
+    for module_path, relative in sorted(LOCAL_MODULES.items()):
+        local = (root / relative).resolve()
+        module.append(f"replace {module_path} => {local}")
     go_mod = target / "go.mod"
-    go_mod.write_text(go_mod.read_text() + f"\nrequire {SEMANTIC} v0.0.0\n"
-                      f"\nreplace {SEMANTIC} => {relative}\n")
-    return sorted(packages + ["extractor/bsc/finality"])
+    go_mod.write_text(go_mod.read_text() + "\n".join(module) + "\n")
+    return sorted(packages + ["extractor/bsc/finality", "extractor/native_lifecycle_bsc"])
 
 
 def main(argv=None):

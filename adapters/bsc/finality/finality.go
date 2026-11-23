@@ -24,11 +24,12 @@ import (
 	"github.com/ethereum/go-ethereum/extractor/lifecycle"
 )
 
-// Domain tags of the digests, each followed by one zero byte.
+// Domain tags of the digests, each followed by one zero byte. The accepted
+// GC anchor is the recovery GC engine's own record; this package carries
+// only the header and early evidence digests.
 const (
 	tagHeader = "extractor-bsc-finality-header-v1"
 	tagEarly  = "extractor-bsc-finality-early-v1"
-	tagAnchor = "extractor-bsc-finality-anchor-v1"
 )
 
 // keyPrefix starts every key of this package. Every key is longer than 33

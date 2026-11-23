@@ -5,10 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+
+	recoverygc "github.com/sigaev-pro/bc-indexer/adapters/recovery_gc"
+	"github.com/sigaev-pro/bc-indexer/protocol/semantic"
 
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/decision"
@@ -41,9 +46,8 @@ type vectorFile struct {
 		Matching   uint64        `json:"matching"`
 		Votes      string        `json:"votes"`
 	} `json:"early"`
-	EarlyDigest  string `json:"early_digest"`
-	AnchorDigest string `json:"anchor_digest"`
-	Sequence     uint64 `json:"sequence"`
+	EarlyDigest string `json:"early_digest"`
+	Sequence    uint64 `json:"sequence"`
 }
 
 func loadVectors(t *testing.T) vectorFile {
@@ -142,6 +146,35 @@ func (s *memStore) SyncKeyValue() error {
 	return nil
 }
 
+// Range visits every visible key that starts with prefix, in ascending
+// byte order, with the value visible through unsynced writes; a pending
+// delete hides the key. The recovery GC engine reads its records through
+// it.
+func (s *memStore) Range(prefix []byte, visit func(key, value []byte) error) error {
+	view := map[string][]byte{}
+	for key, value := range s.durable {
+		if strings.HasPrefix(key, string(prefix)) {
+			view[key] = value
+		}
+	}
+	for _, w := range s.pending {
+		if !strings.HasPrefix(w.key, string(prefix)) {
+			continue
+		}
+		if w.deleted {
+			delete(view, w.key)
+		} else {
+			view[w.key] = w.value
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(view)) {
+		if err := visit([]byte(key), view[key]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // powerLoss drops every pending write and returns the reopened store.
 func (s *memStore) powerLoss() *memStore {
 	out := &memStore{durable: map[string][]byte{}}
@@ -186,6 +219,87 @@ type errChain struct{ err error }
 
 func (c errChain) IsAncestorOrSelf(decision.Head, decision.Head) (bool, error) { return false, c.err }
 
+// The semantic identity of the fixture run: the network and the ID16
+// identities of the GC anchor contract.
+var (
+	gcNetwork  = semantic.Network{ChainID: semantic.UInt256{1}, GenesisHash: seedHash32("bsc-gc-genesis")}
+	gcNode     = semantic.ID16{0x11}
+	gcProducer = semantic.ID16{0x22}
+	gcRun      = semantic.ID16{0x33}
+)
+
+// seedHash32 derives a fixed Hash32 of a seed: the seed bytes in a 32-byte
+// value.
+func seedHash32(seed string) semantic.Hash32 {
+	var out semantic.Hash32
+	copy(out[:], []byte(seed))
+	return out
+}
+
+// gcOracle adapts a test chain into the ancestry oracle of the recovery GC
+// engine: a nil chain has unknown ancestry, and a lookup failure is
+// unknown evidence, never a guess.
+type gcOracle struct{ chain *chain }
+
+func (o gcOracle) Contains(ancestor, descendant recoverygc.AnchorRef) recoverygc.Verdict {
+	if o.chain == nil {
+		return recoverygc.VerdictUnknown
+	}
+	ok, err := o.chain.IsAncestorOrSelf(
+		decision.Head{Number: ancestor.Height, Hash: ancestor.Hash.String()},
+		decision.Head{Number: descendant.Height, Hash: descendant.Hash.String()})
+	if err != nil {
+		return recoverygc.VerdictUnknown
+	}
+	if ok {
+		return recoverygc.VerdictContains
+	}
+	return recoverygc.VerdictDivergent
+}
+
+// The inert GC seams of the fixture: these tests release nothing.
+type gcNothingPending struct{}
+
+func (gcNothingPending) Pending(recoverygc.EntityID) (recoverygc.PendingReport, error) {
+	return recoverygc.PendingReport{}, nil
+}
+
+type gcReleaser struct{}
+
+func (gcReleaser) ReleaseEntity(recoverygc.EntityID) error { return nil }
+
+type gcPins struct{}
+
+func (gcPins) Release(string) error { return nil }
+
+// openEngine opens the recovery GC engine of the fixture over db with the
+// given chain as its ancestry oracle.
+func openEngine(t *testing.T, db *memStore, anc *chain) *recoverygc.Engine {
+	t.Helper()
+	engine, _, err := recoverygc.Open(db, gcOracle{chain: anc}, gcNothingPending{}, gcReleaser{}, gcPins{})
+	if err != nil {
+		t.Fatalf("recoverygc.Open: %v", err)
+	}
+	return engine
+}
+
+// anchorHead converts the anchor block of the shared GC record into the
+// head model of the tests.
+func anchorHead(t *testing.T, a recoverygc.AcceptedGcAnchor) decision.Head {
+	t.Helper()
+	h, err := headOfAnchor(a.Anchor)
+	if err != nil {
+		t.Fatalf("anchor head: %v", err)
+	}
+	return h
+}
+
+// headOfAnchorUnchecked names the anchor block without the error path of
+// a validated record.
+func headOfAnchorUnchecked(a recoverygc.AcceptedGcAnchor) decision.Head {
+	return decision.Head{Number: a.Anchor.Height, Hash: a.Anchor.Hash.String()}
+}
+
 // fixture is one producer run with its store, admission and observatory.
 type fixture struct {
 	v     vectorFile
@@ -207,9 +321,13 @@ func newFixture(t *testing.T) *fixture {
 	return &fixture{v: v, db: db, token: token, adm: adm}
 }
 
-func (f *fixture) open(t *testing.T, db *memStore) *Observatory {
+// open opens the observatory over db with the recovery GC engine of the
+// run; anc is the chain the engine proves ancestry on (nil: unknown).
+func (f *fixture) open(t *testing.T, db *memStore, anc *chain) *Observatory {
 	t.Helper()
-	o, err := Open(f.token, db, f.adm, f.v.StoreID)
+	o, err := Open(f.token, db, f.adm, f.v.StoreID,
+		RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+		openEngine(t, db, anc))
 	if err != nil {
 		t.Fatalf("observatory open: %v", err)
 	}
@@ -296,35 +414,30 @@ func TestVectors(t *testing.T) {
 	if got, err := EarlyDigest(early, []byte(v.Early.Votes)); err != nil || got != v.EarlyDigest {
 		t.Fatalf("early digest %s %v, want %s", got, err, v.EarlyDigest)
 	}
-	// The anchor record digest, checked through the stored record.
-	f := newFixture(t)
-	o := f.open(t, f.db)
+	// The accepted anchor of the recovery GC engine: the shared
+	// AcceptedGcAnchor record, checked through the observatory.
 	heads, anc := canonicalChain()
+	f := newFixture(t)
+	o := f.open(t, f.db, anc)
 	execution := head(9, "execution-9")
 	snapshot := head(9, "execution-9")
 	anc.add(9, execution.Hash, heads["A7"].Hash)
-	if _, err := o.ObserveHeader(f.token, attestedEvidence(execution,
-		AttestedSnapshot(snapshot, heads["A6"], heads["A5"])), anc, v.Sequence); err != nil {
+	evidence := attestedEvidence(execution, AttestedSnapshot(snapshot, heads["A6"], heads["A5"]))
+	if _, err := o.ObserveHeader(f.token, evidence, anc, v.Sequence); err != nil {
 		t.Fatalf("observe: %v", err)
 	}
-	anchorKey := []byte(keyPrefix + v.Producer + "." + v.Run + "/anchor")
-	ok, err := f.db.Has(anchorKey)
-	if err != nil || !ok {
-		t.Fatalf("anchor record: %v %v", ok, err)
+	stored, ok := o.Anchor(f.token)
+	if !ok {
+		t.Fatal("the observation accepted no anchor")
 	}
-	storedData, err := f.db.Get(anchorKey)
-	if err != nil {
-		t.Fatalf("anchor record: %v", err)
+	if err := stored.Validate(); err != nil {
+		t.Fatalf("the accepted anchor record is invalid: %v", err)
 	}
-	var stored AnchorRecord
-	if err := strictDecode(storedData, &stored); err != nil {
-		t.Fatalf("decode anchor record: %v", err)
-	}
-	if stored.Digest != v.AnchorDigest {
-		t.Fatalf("anchor digest %s, want %s", stored.Digest, v.AnchorDigest)
-	}
-	if stored.Anchor != heads["A5"] || stored.DecisionSequence != v.Sequence {
+	if headOfAnchorUnchecked(stored) != heads["A5"] || stored.Decision.DecisionSequence != v.Sequence {
 		t.Fatalf("anchor record %+v", stored)
+	}
+	if stored.EvidenceDigest == "" || stored.RecordDigest == "" {
+		t.Fatalf("anchor record binds no evidence: %+v", stored)
 	}
 }
 
@@ -512,7 +625,7 @@ func TestProjectSeparateStatuses(t *testing.T) {
 func TestObservatoryAcceptsOnlyHeaderSource(t *testing.T) {
 	heads, anc := canonicalChain()
 	f := newFixture(t)
-	o := f.open(t, f.db)
+	o := f.open(t, f.db, anc)
 	// A genesis fallback gives no anchor.
 	fallback := Evidence{ObservedExecutionHead: heads["A3"], ObservedNativeHeaderHead: heads["A3"],
 		HeaderFinality:           GenesisFallback(heads["A3"], heads["G"], NoAttestation),
@@ -554,7 +667,7 @@ func TestObservatoryAcceptsOnlyHeaderSource(t *testing.T) {
 		t.Fatalf("projection: %s %s %v, want %s %s", h, e, err, Justified, VoteFinalizedObserved)
 	}
 	anchor, ok := o.Anchor(f.token)
-	if !ok || anchor.Anchor != heads["A3"] {
+	if !ok || anchorHead(t, anchor) != heads["A3"] {
 		t.Fatalf("anchor %+v %v", anchor, ok)
 	}
 	// A finalized block of the snapshot that is not on the canonical
@@ -571,7 +684,7 @@ func TestObservatoryAcceptsOnlyHeaderSource(t *testing.T) {
 	if _, err := o.ObserveHeader(f.token, sideHead, anc, 4); !errors.Is(err, ErrBranch) {
 		t.Fatalf("side-branch header head: %v", err)
 	}
-	if anchor, ok = o.Anchor(f.token); !ok || anchor.Anchor != heads["A3"] {
+	if anchor, ok = o.Anchor(f.token); !ok || anchorHead(t, anchor) != heads["A3"] {
 		t.Fatalf("anchor after side branch: %+v %v", anchor, ok)
 	}
 }
@@ -579,7 +692,7 @@ func TestObservatoryAcceptsOnlyHeaderSource(t *testing.T) {
 func TestAnchorMonotonicity(t *testing.T) {
 	heads, anc := canonicalChain()
 	f := newFixture(t)
-	o := f.open(t, f.db)
+	o := f.open(t, f.db, anc)
 	observe := func(executed decision.Head, finalized decision.Head, sequence uint64) AnchorResult {
 		t.Helper()
 		result, err := o.ObserveHeader(f.token,
@@ -622,7 +735,7 @@ func TestAnchorMonotonicity(t *testing.T) {
 func TestExecutionHeadRegressionIsFatal(t *testing.T) {
 	heads, anc := canonicalChain()
 	f := newFixture(t)
-	o := f.open(t, f.db)
+	o := f.open(t, f.db, anc)
 	if _, err := o.ObserveHeader(f.token,
 		attestedEvidence(heads["A5"], AttestedSnapshot(heads["A5"], heads["A5"], heads["A5"])), anc, 1); err != nil {
 		t.Fatal(err)
@@ -637,7 +750,7 @@ func TestExecutionHeadRegressionIsFatal(t *testing.T) {
 	// same way: the head itself was read under the guard, so this is a new
 	// authoritative decision, not a stale callback.
 	f2 := newFixture(t)
-	o2 := f2.open(t, f2.db)
+	o2 := f2.open(t, f2.db, nil)
 	if _, err := o2.ObserveHeader(f2.token,
 		attestedEvidence(heads["A5"], AttestedSnapshot(heads["A5"], heads["A5"], heads["A5"])), anc, 1); err != nil {
 		t.Fatal(err)
@@ -649,7 +762,7 @@ func TestExecutionHeadRegressionIsFatal(t *testing.T) {
 	// A delayed side-branch callback while the canonical head still covers
 	// the anchor is only a refused branch, not a regression.
 	f3 := newFixture(t)
-	o3 := f3.open(t, f3.db)
+	o3 := f3.open(t, f3.db, nil)
 	if _, err := o3.ObserveHeader(f3.token,
 		attestedEvidence(heads["A5"], AttestedSnapshot(heads["A5"], heads["A5"], heads["A5"])), anc, 1); err != nil {
 		t.Fatal(err)
@@ -658,7 +771,7 @@ func TestExecutionHeadRegressionIsFatal(t *testing.T) {
 	if _, err := o3.ObserveHeader(f3.token, delayed, anc, 2); !errors.Is(err, ErrBranch) {
 		t.Fatalf("delayed side branch: %v", err)
 	}
-	if anchor, ok := o3.Anchor(f3.token); !ok || anchor.Anchor != heads["A5"] {
+	if anchor, ok := o3.Anchor(f3.token); !ok || anchorHead(t, anchor) != heads["A5"] {
 		t.Fatalf("anchor after the delayed callback: %+v %v", anchor, ok)
 	}
 }
@@ -668,7 +781,7 @@ func TestRestartRetainsEarlyEvidence(t *testing.T) {
 	v := loadVectors(t)
 	f := newFixture(t)
 	db := newStore()
-	o := f.open(t, db)
+	o := f.open(t, db, anc)
 	early := EarlyVoteEvidence{Origin: NativeLive, EvaluationHead: heads["A7"],
 		SourceJustified: heads["A6"], VoteTarget: heads["A7"], FinalizedCandidate: heads["A5"],
 		ValidatorSnapshotParent: heads["A6"], ValidatorCount: 21, QuorumCount: quorumOf(21),
@@ -686,7 +799,7 @@ func TestRestartRetainsEarlyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A restart with an empty VotePool: the same store, a new observatory.
-	restarted := f.open(t, db)
+	restarted := f.open(t, db, anc)
 	retained := restarted.Early(f.token)
 	if retained == nil {
 		t.Fatal("the early evidence was lost")
@@ -698,7 +811,7 @@ func TestRestartRetainsEarlyEvidence(t *testing.T) {
 		t.Fatalf("retained evidence changed: %+v", retained)
 	}
 	anchor, ok := restarted.Anchor(f.token)
-	if !ok || anchor.Anchor != heads["A3"] {
+	if !ok || anchorHead(t, anchor) != heads["A3"] {
 		t.Fatalf("anchor after restart: %+v %v", anchor, ok)
 	}
 	// A lower stale snapshot after the restart does not lower the durable
@@ -736,7 +849,7 @@ func TestRestartRetainsEarlyEvidence(t *testing.T) {
 func TestEarlyRecordIntegrity(t *testing.T) {
 	heads, _ := canonicalChain()
 	f := newFixture(t)
-	o := f.open(t, f.db)
+	o := f.open(t, f.db, nil)
 	early := EarlyVoteEvidence{Origin: NativeLive, EvaluationHead: heads["A7"],
 		SourceJustified: heads["A6"], VoteTarget: heads["A7"], FinalizedCandidate: heads["A5"],
 		ValidatorSnapshotParent: heads["A6"], ValidatorCount: 4, QuorumCount: quorumOf(4),
@@ -762,12 +875,12 @@ func TestEarlyRecordIntegrity(t *testing.T) {
 	// evidence is lost, and no anchor existed to lower.
 	loss := newStore()
 	f2 := newFixture(t)
-	o2 := f2.open(t, loss)
+	o2 := f2.open(t, loss, nil)
 	loss.crashAt = 1
 	if err := o2.ObserveEarly(f2.token, other, []byte("votes")); !errors.Is(err, errCrash) {
 		t.Fatalf("power loss: %v", err)
 	}
-	if early := f2.open(t, loss.powerLoss()).Early(f2.token); early != nil {
+	if early := f2.open(t, loss.powerLoss(), nil).Early(f2.token); early != nil {
 		t.Fatalf("unsynced record survived: %+v", early)
 	}
 	// A corrupted record is refused at open.
@@ -778,14 +891,18 @@ func TestEarlyRecordIntegrity(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.db.durable[string(key)] = data
-	if _, err := Open(f.token, f.db, f.adm, f.v.StoreID); !errors.Is(err, ErrCorrupt) {
+	if _, err := Open(f.token, f.db, f.adm, f.v.StoreID,
+		RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+		openEngine(t, f.db, nil)); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("corrupt record: %v", err)
 	}
 	// A record of another store is an invariant error.
 	f.db.durable[string(key)] = mustJSON(t, &earlyRecord{NativeStoreID: "other-store",
 		Producer: f.v.Producer + "." + f.v.Run, Evidence: other, VotesDigest: hash("votes"),
 		Digest: hash("digest")})
-	if _, err := Open(f.token, f.db, f.adm, f.v.StoreID); !errors.Is(err, ErrInvariant) {
+	if _, err := Open(f.token, f.db, f.adm, f.v.StoreID,
+		RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+		openEngine(t, f.db, nil)); !errors.Is(err, ErrInvariant) {
 		t.Fatalf("foreign record: %v", err)
 	}
 }
@@ -801,14 +918,20 @@ func mustJSON(t *testing.T, value any) []byte {
 
 func TestOpenValidatesArguments(t *testing.T) {
 	f := newFixture(t)
-	if _, err := Open(f.token, f.db, nil, f.v.StoreID); !errors.Is(err, ErrInvalid) {
+	if _, err := Open(f.token, f.db, nil, f.v.StoreID,
+		RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+		openEngine(t, f.db, nil)); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("missing admission: %v", err)
 	}
-	if _, err := Open(f.token, f.db, f.adm, "bad id"); !errors.Is(err, ErrInvalid) {
+	if _, err := Open(f.token, f.db, f.adm, "bad id",
+		RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+		openEngine(t, f.db, nil)); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("store id: %v", err)
 	}
 	guard := admission.NewGuard()
-	if _, err := Open(guard.Acquire(), f.db, f.adm, f.v.StoreID); err == nil {
+	if _, err := Open(guard.Acquire(), f.db, f.adm, f.v.StoreID,
+		RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+		openEngine(t, f.db, nil)); err == nil {
 		t.Fatal("another guard token was accepted")
 	}
 }
@@ -816,7 +939,7 @@ func TestOpenValidatesArguments(t *testing.T) {
 func TestConcurrentObservations(t *testing.T) {
 	heads, anc := canonicalChain()
 	f := newFixture(t)
-	o := f.open(t, f.db)
+	o := f.open(t, f.db, anc)
 	evidence := attestedEvidence(heads["A5"], AttestedSnapshot(heads["A5"], heads["A5"], heads["A3"]))
 	var group sync.WaitGroup
 	changes := make([]AnchorChange, 4)
@@ -845,7 +968,7 @@ func TestConcurrentObservations(t *testing.T) {
 	if accepted != 1 || repeated != 3 {
 		t.Fatalf("accepted %d, repeated %d", accepted, repeated)
 	}
-	if anchor, ok := o.Anchor(f.token); !ok || anchor.Anchor != heads["A3"] {
+	if anchor, ok := o.Anchor(f.token); !ok || anchorHead(t, anchor) != heads["A3"] {
 		t.Fatalf("anchor %+v %v", anchor, ok)
 	}
 }
