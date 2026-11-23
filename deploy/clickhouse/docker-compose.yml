@@ -20,10 +20,13 @@ services:
 
   nats:
     image: nats:2.10-alpine
-    command: ["-js", "-m", "8222"]
+    # -sd points JetStream at the mounted volume: plain -js stores in
+    # /tmp/nats/jetstream and a restart would drop streams, durables and
+    # every queued event despite the volume mount.
+    command: ["-js", "-sd", "/data", "-m", "8222"]
     ports: ["127.0.0.1:4222:4222"]
     volumes:
-      - nats-data:/data # JetStream must survive a restart
+      - nats-data:/data
     restart: unless-stopped
 
   sink:

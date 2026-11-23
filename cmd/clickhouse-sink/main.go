@@ -795,12 +795,13 @@ func messageKey(m jetstream.Msg) string {
 // keeps them pending on failure. After three consecutive failures with a
 // reachable server, the batch is bisected to isolate deterministic bad
 // rows; those are logged as ROW_EVICTED and terminated, the rest is
-// inserted. Callers hold s.mu.
+// inserted. A batch-level failure (server, schema, connection) aborts the
+// isolation instead: the rows stay pending and unacked. Callers hold s.mu.
 func (s *sink) flushLocked(ctx context.Context) error {
 	if len(s.pending) == 0 {
 		return nil
 	}
-	err := s.insertRows(ctx, s.pending)
+	_, err := s.insertRows(ctx, s.pending)
 	if err == nil {
 		s.ackRows(s.pending)
 		s.pending = s.pending[:0]
@@ -817,54 +818,71 @@ func (s *sink) flushLocked(ctx context.Context) error {
 		return err
 	}
 	log.Printf("FLUSH_BISECT pending=%d", len(s.pending))
-	s.insertWithIsolation(ctx, s.pending)
+	if !s.insertWithIsolation(ctx, s.pending) {
+		// Batch-level abort: rows stay pending; flushFailures stays at or
+		// above three so the next tick retries the isolation once.
+		return fmt.Errorf("isolation aborted on a batch-level failure: %w", err)
+	}
 	s.pending = s.pending[:0]
 	s.flushFailures = 0
 	return nil
 }
 
-// insertRows appends and sends one batch of rows.
-func (s *sink) insertRows(ctx context.Context, rows []pendingEvent) error {
+// insertRows appends and sends one batch of rows. rowShaped reports
+// whether the failure (when err is non-nil) plausibly belongs to specific
+// rows: an append error names one row; prepare and send failures are
+// batch-level (server, schema, connection, quota) and must never evict
+// rows. Parse-time validation already rejects the known row-shaped values,
+// so a send failure is treated as server-side.
+func (s *sink) insertRows(ctx context.Context, rows []pendingEvent) (rowShaped bool, err error) {
 	if len(rows) == 0 {
-		return nil
+		return false, nil
 	}
 	stmt := fmt.Sprintf("INSERT INTO %s.events", quoteIdentLoose(s.cfg.ClickHouseDB))
 	batch, err := s.ch.PrepareBatch(ctx, stmt)
 	if err != nil {
-		return fmt.Errorf("prepare batch: %w", err)
+		return false, fmt.Errorf("prepare batch: %w", err)
 	}
 	for _, p := range rows {
 		if err := batch.AppendStruct(&p.row); err != nil {
-			return fmt.Errorf("append row (subject=%s): %w", p.msg.Subject(), err)
+			return true, fmt.Errorf("append row (subject=%s): %w", p.msg.Subject(), err)
 		}
 	}
 	if err := batch.Send(); err != nil {
-		return fmt.Errorf("send batch: %w", err)
+		return false, fmt.Errorf("send batch: %w", err)
 	}
-	return nil
+	return false, nil
 }
 
 // insertWithIsolation inserts rows, bisecting on failure until single
 // uninsertable rows are isolated: those are logged as ROW_EVICTED and
-// terminated, every inserted sub-batch is acked. Callers hold s.mu.
-func (s *sink) insertWithIsolation(ctx context.Context, rows []pendingEvent) {
+// terminated, every inserted sub-batch is acked. It returns false when a
+// batch-level failure aborts the isolation; the remaining rows then stay
+// pending and unacked. Callers hold s.mu.
+func (s *sink) insertWithIsolation(ctx context.Context, rows []pendingEvent) bool {
 	if len(rows) == 0 {
-		return
+		return true
 	}
-	if err := s.insertRows(ctx, rows); err == nil {
+	rowShaped, err := s.insertRows(ctx, rows)
+	switch {
+	case err == nil:
 		s.ackRows(rows)
-		return
-	} else if len(rows) == 1 {
+		return true
+	case !rowShaped:
+		// Never evict on a batch-level failure (server, schema,
+		// connection): keep the rows pending for the next flush.
+		log.Printf("BISECT_ABORTED rows=%d error=%v", len(rows), err)
+		return false
+	case len(rows) == 1:
 		p := rows[0]
 		log.Printf("ROW_EVICTED subject=%s record_digest=%s tx_hash=%s raw_prefix=%q",
 			p.msg.Subject(), p.row.RecordDigest, p.row.TxHash, truncate(p.row.Raw, 80))
 		_ = p.msg.Term()
 		s.dropKey(p.key)
-		return
+		return true
 	}
 	mid := len(rows) / 2
-	s.insertWithIsolation(ctx, rows[:mid])
-	s.insertWithIsolation(ctx, rows[mid:])
+	return s.insertWithIsolation(ctx, rows[:mid]) && s.insertWithIsolation(ctx, rows[mid:])
 }
 
 // ackRows acks the messages of an inserted batch and advances the
@@ -914,6 +932,14 @@ func (s *sink) parseEvent(subject string, data []byte, now time.Time) (eventRow,
 		return eventRow{}, fmt.Errorf("subject %q does not match the configured filter prefix %s<network>.<type>",
 			subject, s.subjects.prefixDot())
 	}
+	// One spelling in the collapse namespace: `tx` (the evm.v3 family
+	// token) and `transaction` (the extractor subject token) are the same
+	// logical event type, and event_type is part of the ORDER BY key, so
+	// normalizing here keeps re-pointing the filter from splitting rows
+	// into parallel namespaces.
+	if eventType == "tx" {
+		eventType = "transaction"
+	}
 	var p payload
 	if err := json.Unmarshal(data, &p); err != nil {
 		return eventRow{}, fmt.Errorf("decode json body: %w", err)
@@ -943,16 +969,25 @@ func (s *sink) parseEvent(subject string, data []byte, now time.Time) (eventRow,
 	row.BlockNumber = firstU64(p.BlockNumber, p.Number, p.Height)
 
 	switch {
-	case eventType == "block" || (eventType == "" && p.Family == "block"):
+	case eventType == "block":
 		row.BlockHash = firstString(p.Hash, p.BlockHash)
 		row.ParentHash = string(p.ParentHash)
 		row.BlockGasUsed = firstU64(p.GasUsed)
 		row.BlockTxCount = firstU64(p.TxCount)
 		// entity is the dedup/reorg identity of the row: the block hash
 		// for blocks, so a replayed block with a new kind replaces the
-		// old row under the same ORDER BY key.
+		// old row under the same ORDER BY key. A block without a hash
+		// has no identity — reject it instead of keying on the empty
+		// string.
 		row.Entity = row.BlockHash
-		if sec, ok := p.Timestamp.u64(); ok {
+		if row.BlockHash == "" {
+			return eventRow{}, fmt.Errorf("block event without a hash (hash/block_hash both absent)")
+		}
+		if p.Timestamp != "" {
+			sec, ok := p.Timestamp.u64()
+			if !ok {
+				return eventRow{}, fmt.Errorf("block timestamp %q is not an unsigned integer", string(p.Timestamp))
+			}
 			if sec < minBlockTimestamp || sec > maxBlockTimestamp {
 				return eventRow{}, fmt.Errorf("block timestamp %d outside %d..%d (2000-01-01..2100-01-01 UTC)",
 					sec, minBlockTimestamp, maxBlockTimestamp)
@@ -960,7 +995,7 @@ func (s *sink) parseEvent(subject string, data []byte, now time.Time) (eventRow,
 			t := time.Unix(int64(sec), 0).UTC()
 			row.BlockTimestamp = &t
 		}
-	case eventType == "transaction" || eventType == "tx" || p.Family == "tx" || p.Family == "transaction":
+	case eventType == "transaction" || p.Family == "tx" || p.Family == "transaction":
 		row.BlockHash = string(p.BlockHash)
 		row.TxIndex = firstU64(p.TxIndex)
 		row.TxHash = firstString(p.Hash, p.TxHash)

@@ -187,6 +187,13 @@ record digest in `entity`, scoped by `event_type`), so at-least-once
 redeliveries and reorg updates replace the row they describe instead of
 each other.
 
+The schema is not frozen yet: the table is created with
+`CREATE TABLE IF NOT EXISTS` and never migrated in place, so when upgrading
+between pre-freeze versions that changed the schema, drop the table first
+(`DROP TABLE extractor.events`) and let the sink recreate it — inserts into
+a stale layout fail at the batch level, and the sink aborts isolation on
+batch-level failures (rows stay pending) rather than evicting the backlog.
+
 ## Example queries
 
 Latest blocks per network:

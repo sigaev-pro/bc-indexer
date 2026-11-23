@@ -410,7 +410,10 @@ func TestParseEventRejections(t *testing.T) {
 		{"tx without hash", "extractor.eth-sepolia.transaction", `{"block_number":1,"from":"0xf","family":"tx"}`},
 		{"tx without hash (mock aliases only)", "extractor.eth-sepolia.transaction", `{"height":1,"from_addr":"0xf"}`},
 		{"huge block timestamp", "extractor.eth-sepolia.block", `{"number":1,"hash":"0xb","timestamp":99999999999999,"family":"block"}`},
-		{"negative-ish block timestamp", "extractor.eth-sepolia.block", `{"number":1,"hash":"0xb","timestamp":"100","family":"block"}`},
+		{"negative block timestamp", "extractor.eth-sepolia.block", `{"number":1,"hash":"0xb","timestamp":-5,"family":"block"}`},
+		{"non-numeric block timestamp", "extractor.eth-sepolia.block", `{"number":1,"hash":"0xb","timestamp":"soon","family":"block"}`},
+		{"pre-2000 block timestamp", "extractor.eth-sepolia.block", `{"number":1,"hash":"0xb","timestamp":100,"family":"block"}`},
+		{"block without hash", "extractor.eth-sepolia.block", `{"number":1,"timestamp":1732000000,"family":"block"}`},
 	}
 	for _, c := range cases {
 		if _, err := s.parseEvent(c.subject, []byte(c.body), now); err == nil {
@@ -442,9 +445,9 @@ func TestParseEventEvmSubjectAndAliases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseEvent evm tx: %v", err)
 	}
-	if row.EventType != "tx" || row.TxHash != "0xt" || row.TxFrom != "0xf" ||
+	if row.EventType != "transaction" || row.TxHash != "0xt" || row.TxFrom != "0xf" ||
 		row.TxTo != "0x2" || row.BlockNumber != 42 || row.Entity != "0xt" {
-		t.Errorf("evm tx mapping wrong: %+v", row)
+		t.Errorf("evm tx mapping wrong (tx must normalize to transaction): %+v", row)
 	}
 }
 
