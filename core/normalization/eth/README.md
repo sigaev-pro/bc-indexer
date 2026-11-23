@@ -4,9 +4,9 @@ Owner tasks: E04-01.calls, E04-01.receipts, E04-01.authorization,
 E04-01.block_record, E04-03.state_diff, E04-01.selfdestruct,
 E04-03.balance_actions, E04-04.import_pressure and E04-02.optional_scope
 (#41-#49, ETH family). See
-[../../.project/docs/TASK_DECOMPOSITION.md](../../.project/docs/TASK_DECOMPOSITION.md)
+../../.project/docs/TASK_DECOMPOSITION.md
 (the E04 rows) and
-[../../.project/docs/DEVELOPMENT_PLAN.md](../../.project/docs/DEVELOPMENT_PLAN.md).
+../../.project/docs/DEVELOPMENT_PLAN.md.
 
 Stdlib-only Go module (Go 1.25) composing the repository-local E02
 packages: [protocol/balance](../../../protocol/balance),
