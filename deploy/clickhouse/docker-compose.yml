@@ -1,0 +1,33 @@
+# The ClickHouse analytics stack of the extractor: JetStream transport,
+# universal event table, and the sink service that bridges them.
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.11-alpine
+    # The image restricts the passwordless `default` user to the
+    # container loopback; a shared secret opens it to the compose
+    # network (the sink must reach it as clickhouse:9000).
+    environment:
+      - CLICKHOUSE_PASSWORD=clickhouse
+    ports: ["8123:8123", "9000:9000"] # HTTP + native
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile: 262144
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports: ["4222:4222"]
+
+  sink:
+    build: ../../cmd/clickhouse-sink
+    depends_on: [clickhouse, nats]
+    environment:
+      - NATS_URL=nats://nats:4222
+      - CLICKHOUSE_URL=clickhouse:9000
+      - CLICKHOUSE_PASSWORD=clickhouse
+    restart: unless-stopped
+
+volumes:
+  clickhouse-data:
