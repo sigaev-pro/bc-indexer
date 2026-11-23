@@ -229,7 +229,15 @@ func (f *fixture) mirrorIntent(record decision.IntentRecord, corpusBlocks []deci
 // into the registry.
 func (f *fixture) settle(record decision.IntentRecord) {
 	f.t.Helper()
-	if err := f.registry.SettleDecided(dref(record.Sequence)); err != nil {
+	delivery := decision.Batch
+	if record.Kind == decision.Side {
+		delivery = decision.Checkpoint
+	}
+	digest, derr := decision.DecidedDigest(record.Digest, delivery)
+	if derr != nil {
+		panic(derr)
+	}
+	if err := f.registry.SettleDecided(dref(record.Sequence), digest); err != nil {
 		f.t.Fatalf("registry settle %d: %v", record.Sequence, err)
 	}
 }
