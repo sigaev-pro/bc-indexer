@@ -33,4 +33,5 @@ node_modules/
 .DS_Store
 
 # Local build artifacts
+cmd/extractor-rpc/extractor-rpc
 cmd/clickhouse-sink/clickhouse-sink

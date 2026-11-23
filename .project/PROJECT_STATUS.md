@@ -1,5 +1,54 @@
 # Состояние проекта
 
+## Real-network Sepolia demonstration — 2026-11-24
+
+Status: DONE on branch `feature/real-testnet` (owner-directed task, outside
+the numbered backlog). Built `cmd/extractor-rpc`, a standalone Go adapter
+that connects to an unpatched Geth node over JSON-RPC, follows new heads,
+normalizes each block into one block lifecycle event and one transaction
+event per body transaction with `protocol/semantic` descriptors, wraps the
+JSON body with the canonical `protocol/codec` record digest, verifies the
+destination binding through `gateway/destination` (live `Check` with the
+D77 stream metadata, stream auto-provisioned with the identity keys) and
+publishes through the `gateway/publisher` Conn seam with the exact v2
+message id and header bytes. `docker-compose.sepolia.yml` runs the pinned
+upstream `ethereum/client-go:v1.14.12` on Sepolia, the plain pinned NATS
+image of the deployment demo with JetStream, and the adapter.
+
+Checks: `go build`, `go vet`, `gofmt` clean in `cmd/extractor-rpc` (410
+lines); `docker compose -f docker-compose.sepolia.yml config` and a full
+image build pass. Live evidence against a public Sepolia WS RPC and a
+local JetStream server: chain 11155111 identified from the node, target
+VERIFIED, replay of three blocks plus live capture published 315 messages
+on `extractor.eth-sepolia.block` and `extractor.eth-sepolia.transaction`
+with acked sequences; stored messages carry the full normalized fields
+and both NATS headers. Next action: owner review of the demonstration;
+the codec binary transport and a production service remain out of scope.
+
+Review fixes (independent review of the real-network adapter, same day):
+the capture loop now subscribes to new heads BEFORE sampling the head
+number and reconciles every live head against a capture frontier that
+fetches missing heights by number, so every height from start to the
+final head is captured exactly once (the read-back assert grew to
+distinct_blocks == max_blocks); the subscription-drop fatal carries
+sub.Err(); publish errors use the publisher seam's taxonomy (no-stream
+and size errors fail fast instead of retrying forever); a failed
+block-event publish skips that block's transactions and counts the block
+as skipped; sender-recovery failures are logged with the tx hash; the
+envelope contract (pre-envelope digest, the nine added keys, the
+strip-nine verification rule) is documented on the publish function;
+malformed MAX_BLOCKS/FROM_BLOCK fail fast; the verification script
+defaults the NATS port and closes the watchdog TERM race; a pre-existing
+stream with a different retention is logged as RETENTION_MISMATCH and
+never rewritten; short READMEs were added to cmd/extractor-rpc and
+scripts/verify-streams. Live re-check against a scratch JetStream on a
+free port: replay, latest and overlap runs each captured exactly the
+window as distinct consecutive blocks (Sepolia replay 2/2; BSC Chapel
+latest 2/2 and replay+live 5/5, no mismatches). Note: recent Sepolia
+blocks carry a transaction type the pinned go-ethereum v1.14.12 cannot
+decode (RPC_BLOCK_FAILED, logged and skipped); BSC Chapel verifies
+cleanly with the pinned client.
+
 ## Autonomous campaign — 2026-11-19 (D107)
 
 Finalization in progress (03:36 UTC). Authorized window:2026-11-18 22:23:22–2026-11-19 04:23:22 UTC (01:23:22–07:23:22 Europe/Moscow). Accepted implementation checkpoint:`0b518f9527c905bd2501e337b9601ec98df6c300`. All campaign native sessions are idle; final report/recovery checks continue. See [campaign report](evidence/D107.campaign-20261119.md).

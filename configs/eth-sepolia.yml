@@ -1,0 +1,20 @@
+# The public RPC endpoint of the verification run: the Ethereum Foundation
+# Sepolia WebSocket served by PublicNode. No local node is involved; the
+# adapter derives the chain identity from the live endpoint and verifies
+# the chain_id below against it.
+rpc_url: wss://ethereum-sepolia-rpc.publicnode.com
+
+# The demo NATS JetStream of the contour (localhost:4222); the normalized
+# JSON events land here with a 5-minute retention.
+nats_url: nats://localhost:4222
+
+# The contour name and the stream identity of this network: the adapter
+# publishes to extractor.eth-sepolia.> inside EXTRACTOR_ETH_SEPOLIA.
+network: eth-sepolia
+
+# The expected chain identity of the endpoint, checked against eth_chainId.
+chain_id: 11155111
+
+# The size of the verification window: the adapter captures this many
+# blocks and exits, so a test run costs minutes, not the whole chain.
+max_blocks: 20
