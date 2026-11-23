@@ -154,7 +154,8 @@ table for every event of every network:
   | `poly-testnet` | 80002 |
 
 - **Classification**: `event_type` (subject token: `block`,
-  `transaction`/`tx`), envelope `family` (`block`/`tx`) and `kind`
+  `transaction` — a `tx` token is normalized at parse), envelope `family`
+  (`block`/`tx`) and `kind`
   (lifecycle kind, e.g. `applied`), and `entity` — the collapse identity
   of the row: the block hash for blocks, the tx hash for transactions
   (a transaction without a hash is rejected), the record digest for every

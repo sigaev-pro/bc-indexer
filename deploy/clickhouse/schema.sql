@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS extractor.events (
     chain_id UInt64,                                   -- 11155111, 97, 80002
 
     -- Event classification
-    event_type LowCardinality(String),                 -- subject token: 'block', 'transaction', 'tx'
+    event_type LowCardinality(String),                 -- subject token: 'block', 'transaction' (a 'tx' token is normalized)
     family LowCardinality(String) DEFAULT '',           -- payload envelope: 'block', 'tx'
     kind LowCardinality(String) DEFAULT '',             -- payload envelope lifecycle kind, e.g. 'applied'
     entity String DEFAULT '',                           -- collapse identity: block hash / tx hash / record digest

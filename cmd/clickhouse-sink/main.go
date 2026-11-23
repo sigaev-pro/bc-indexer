@@ -818,12 +818,17 @@ func (s *sink) flushLocked(ctx context.Context) error {
 		return err
 	}
 	log.Printf("FLUSH_BISECT pending=%d", len(s.pending))
-	if !s.insertWithIsolation(ctx, s.pending) {
-		// Batch-level abort: rows stay pending; flushFailures stays at or
-		// above three so the next tick retries the isolation once.
+	settled := s.insertWithIsolation(ctx, s.pending)
+	// Settled rows (inserted+acked or evicted+terminated) are always a
+	// prefix: the recursion settles depth-first left to right and stops
+	// at the first batch-level abort, so compaction is a reslice.
+	s.pending = s.pending[settled:]
+	if len(s.pending) > 0 {
+		// Batch-level abort: the unsettled tail stays pending;
+		// flushFailures stays at or above three so the next tick retries
+		// the isolation once.
 		return fmt.Errorf("isolation aborted on a batch-level failure: %w", err)
 	}
-	s.pending = s.pending[:0]
 	s.flushFailures = 0
 	return nil
 }
@@ -856,33 +861,38 @@ func (s *sink) insertRows(ctx context.Context, rows []pendingEvent) (rowShaped b
 
 // insertWithIsolation inserts rows, bisecting on failure until single
 // uninsertable rows are isolated: those are logged as ROW_EVICTED and
-// terminated, every inserted sub-batch is acked. It returns false when a
-// batch-level failure aborts the isolation; the remaining rows then stay
-// pending and unacked. Callers hold s.mu.
-func (s *sink) insertWithIsolation(ctx context.Context, rows []pendingEvent) bool {
+// terminated, every inserted sub-batch is acked. It returns how many rows
+// settled (inserted or evicted); the unsettled remainder is always the
+// tail, because the recursion settles depth-first left to right and stops
+// at the first batch-level abort. Callers hold s.mu.
+func (s *sink) insertWithIsolation(ctx context.Context, rows []pendingEvent) int {
 	if len(rows) == 0 {
-		return true
+		return 0
 	}
 	rowShaped, err := s.insertRows(ctx, rows)
 	switch {
 	case err == nil:
 		s.ackRows(rows)
-		return true
+		return len(rows)
 	case !rowShaped:
 		// Never evict on a batch-level failure (server, schema,
-		// connection): keep the rows pending for the next flush.
+		// connection): the rows stay pending for the next flush.
 		log.Printf("BISECT_ABORTED rows=%d error=%v", len(rows), err)
-		return false
+		return 0
 	case len(rows) == 1:
 		p := rows[0]
 		log.Printf("ROW_EVICTED subject=%s record_digest=%s tx_hash=%s raw_prefix=%q",
 			p.msg.Subject(), p.row.RecordDigest, p.row.TxHash, truncate(p.row.Raw, 80))
 		_ = p.msg.Term()
 		s.dropKey(p.key)
-		return true
+		return 1
 	}
 	mid := len(rows) / 2
-	return s.insertWithIsolation(ctx, rows[:mid]) && s.insertWithIsolation(ctx, rows[mid:])
+	left := s.insertWithIsolation(ctx, rows[:mid])
+	if left < mid { // the left half aborted mid-way
+		return left
+	}
+	return left + s.insertWithIsolation(ctx, rows[mid:])
 }
 
 // ackRows acks the messages of an inserted batch and advances the
