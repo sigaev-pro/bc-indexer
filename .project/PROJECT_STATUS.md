@@ -32,7 +32,7 @@ Queue, in priority order:
 
 ## Maximum throughput mode (2026-11-23)
 
-The owner directed maximum API limit utilization at all times. Current: 6 E05 agents, 2 E06 agents, G.E04 gate review. Slots refill immediately as agents finish. E07 starts as soon as E05 dependencies merge. **Slot 5 (drain+upgrade) COMPLETE**: commit faf26c8 on e05-drain — drain mode barrier (durable DRAIN/Resume, admission closed, seal blocked until obligations resolved), upgrade compatibility matrix with SHA-256 prewrite fingerprint, composed with core/delivery stores. Draft PR #212 opened. Remaining: slots 1-4, 6 (E05), 7-8 (E06), G.E04 review.
+The owner directed maximum API limit utilization at all times. Current: 6 E05 agents, 2 E06 agents, G.E04 gate review. Slots refill immediately as agents finish. E07 starts as soon as E05 dependencies merge. **Slot 5 (drain+upgrade) COMPLETE**: commit faf26c8 on e05-drain — drain mode barrier (durable DRAIN/Resume, admission closed, seal blocked until obligations resolved), upgrade compatibility matrix with SHA-256 prewrite fingerprint, composed with core/delivery stores. Draft PR #212 opened. **G.E04 PASS** (#81 closed with verified test evidence from clean checkout of main a4e0424). **E05 slot 6 (crash+fencing) COMPLETE**: PR #213. **E06 slot 8 (config+logs+maintenance) COMPLETE**: PR #214 (113 tests, 84.2%). **E05 slot 5 (drain+upgrade) COMPLETE**: PR #212. Remaining agents: slots 1-4 (E05 registry, ETH/BSC/POLY finality), slot 7 (E06 deployment). Open PRs pending review: #212, #213, #214.
 
 ## E03 COMPLETE (2026-11-22)
 
