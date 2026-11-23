@@ -126,6 +126,89 @@ class PaginationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "pagination loops"):
                     self.observations().pages(first)
 
+    def metadata(self):
+        return {"id": 15452919, "full_name": "ethereum/go-ethereum", "url": self.repository}
+
+    def test_unfetched_metadata_defers_binding_to_the_caller_and_then_binds(self):
+        third = "https://api.github.com/repositories/15452919/releases?per_page=100&page=3"
+        self.add(third, [{"tag_name": "v1.14.10"}])
+        self.rows[2]["headers"]["link"] = '<' + third + '>; rel="next"'
+        rows = copy.deepcopy(self.rows)
+        rows.pop(0)  # the real-world pass did not pre-fetch repository metadata
+        observations = self.observations(rows)
+        for _ in range(2):  # a replay defers again instead of consuming a source
+            with self.assertRaises(updates.AliasBindingRequired) as pending:
+                observations.pages(self.first)
+            self.assertEqual(pending.exception.named_url, self.first)
+            self.assertEqual(pending.exception.metadata_url, self.repository)
+            self.assertEqual(pending.exception.numeric_url, self.second)
+            self.assertEqual(observations.deferred, {self.second: self.repository})
+            self.assertEqual(observations.used, {self.first})
+        self.assertIs(type(pending.exception), updates.AliasBindingRequired)
+        self.assertIsInstance(pending.exception, ValueError)
+        observations.bindAlias(self.first, self.metadata())
+        self.assertEqual(observations.deferred, {})
+        self.assertEqual(observations.pages(self.first),
+                         [{"tag_name": "v1.14.12"}, {"tag_name": "v1.14.11"}, {"tag_name": "v1.14.10"}])
+        self.assertEqual(observations.used, {self.first, self.second, third})
+
+    def test_caller_binding_rejects_wrong_metadata_and_wrong_numeric_identity_after_binding(self):
+        rows = copy.deepcopy(self.rows)
+        rows.pop(0)
+        for change in ("boolean-id", "zero-id", "string-id", "missing-id", "wrong-name",
+                       "name-case", "wrong-url", "url-case", "non-object"):
+            with self.subTest(change=change):
+                metadata = [15452919] if change == "non-object" else self.metadata()
+                if change != "non-object":
+                    field, value = {"boolean-id": ("id", True), "zero-id": ("id", 0),
+                                    "string-id": ("id", "15452919"), "missing-id": ("id", None),
+                                    "wrong-name": ("full_name", "another/repository"),
+                                    "name-case": ("full_name", "Ethereum/go-ethereum"),
+                                    "wrong-url": ("url", "https://api.github.com/repos/another/repository"),
+                                    "url-case": ("url", self.repository.replace("ethereum/", "Ethereum/"))}[change]
+                    metadata[field] = value
+                observations = self.observations(rows)
+                with self.assertRaisesRegex(ValueError, "invalid or different identity"):
+                    observations.bindAlias(self.first, metadata)
+                with self.assertRaises(updates.AliasBindingRequired):  # nothing was bound
+                    observations.pages(self.first)
+        # A bound identity is exact: a numeric alias carrying another repository
+        # ID is rejected after binding, in both directions of the mismatch.
+        wrong = copy.deepcopy(rows)
+        wrong[0]["headers"]["link"] = '<' + self.second.replace("15452919", "123") + '>; rel="next"'
+        wrong_observations = self.observations(wrong)
+        wrong_observations.bindAlias(self.first, self.metadata())
+        with self.assertRaisesRegex(ValueError, "pagination loops or changes source identity"):
+            wrong_observations.pages(self.first)
+        misbound = self.observations(rows)
+        misbound.bindAlias(self.first, dict(self.metadata(), id=123))
+        with self.assertRaisesRegex(ValueError, "pagination loops or changes source identity"):
+            misbound.pages(self.first)
+        # A correct binding is idempotent and cannot be rebound to another ID.
+        observations = self.observations(rows)
+        self.assertEqual(observations.bindAlias(self.first, self.metadata()), "/repositories/15452919")
+        self.assertEqual(observations.bindAlias(self.first, self.metadata()), "/repositories/15452919")
+        with self.assertRaisesRegex(ValueError, "cannot be rebound"):
+            observations.bindAlias(self.first, dict(self.metadata(), id=15452918))
+        self.assertEqual(observations.pages(self.first), [{"tag_name": "v1.14.12"}, {"tag_name": "v1.14.11"}])
+
+    def test_bind_alias_requires_a_named_official_github_endpoint(self):
+        observations = self.observations()
+        for named_url in (self.second, self.repository,
+                          "http://api.github.com/repos/ethereum/go-ethereum/releases",
+                          "https://raw.githubusercontent.com/ethereum/go-ethereum/releases",
+                          "https://go.dev/releases?per_page=100"):
+            with self.subTest(named_url=named_url), self.assertRaisesRegex(ValueError, "named official GitHub repository endpoint"):
+                observations.bindAlias(named_url, self.metadata())
+
+    def test_caller_binding_cannot_contradict_a_retained_metadata_observation(self):
+        observations = self.observations()
+        with self.assertRaisesRegex(ValueError, "differs from the retained observation"):
+            observations.bindAlias(self.first, dict(self.metadata(), id=123))
+        observations.bindAlias(self.first, self.metadata())
+        self.assertEqual(observations.pages(self.first), [{"tag_name": "v1.14.12"}, {"tag_name": "v1.14.11"}])
+        self.assertEqual(observations.used, {self.repository, self.first, self.second})
+
 
 if __name__ == "__main__":
     unittest.main()
