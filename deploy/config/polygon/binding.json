@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "destination_id": "d423aeabb7e52532f3bfaa7378719996",
+  "generation": "1",
+  "network": {
+    "family": "EVM",
+    "chain_id": "0000000000000000000000000000000000000000000000000000000000000089",
+    "genesis_hash": "a9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507980d6e5fe09cf54f7c44"
+  },
+  "expected_account": "IDX_POLY",
+  "stream": "EXTRACTOR_POLY_V3",
+  "subject_prefix": "evm.v3.poly",
+  "descriptor_digest": "dccfa2e8e12768f98ebd65ab168acb4bdcf4c397215eb908866ca000981ff91e"
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "destination_id": "8461480e652f82e164ba1addf19450d4",
+  "generation": "1",
+  "network": {
+    "family": "EVM",
+    "chain_id": "0000000000000000000000000000000000000000000000000000000000000038",
+    "genesis_hash": "0d21840abff46b96c84b2ac9e10e4f5cdaeb5691cb79a95e9b23a3e76393b4db"
+  },
+  "expected_account": "IDX_BSC",
+  "stream": "EXTRACTOR_BSC_V3",
+  "subject_prefix": "evm.v3.bsc",
+  "descriptor_digest": "b9e9c3c4c17a476d71760ae4fd6852c1e291e15956d6d48771a467dfc438af7e"
+}

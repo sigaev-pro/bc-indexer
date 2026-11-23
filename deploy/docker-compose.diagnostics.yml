@@ -1,0 +1,22 @@
+# The optional diagnostic override of the deployment stack (NETWORK_PORTS,
+# "Docker Compose": the optional diagnostic override binds the selected
+# port to 127.0.0.1). Layered on top of docker-compose.yml it publishes
+# exactly two loopback-bound NATS ports for the host-side bootstrap and
+# verification tooling and the NATS monitoring UI:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d
+#
+# The base file alone publishes nothing. The deploy scripts
+# (bootstrap/up/down/verify/runbook) always layer this override, because
+# the host-side bootstrap tool must reach NATS to create and verify the
+# streams; DEPLOY_NATS_CLIENT_PORT and DEPLOY_NATS_MONITORING_PORT pick
+# the host ports when the defaults collide with another stack (the demo
+# environment of e03/demo holds 4222/8222 on this host, hence 14222 and
+# 18222 here).
+name: extractor-deploy
+
+services:
+  nats:
+    ports:
+      - "${DEPLOY_NATS_CLIENT_PORT:-127.0.0.1:14222}:4222"
+      - "${DEPLOY_NATS_MONITORING_PORT:-127.0.0.1:18222}:8222"

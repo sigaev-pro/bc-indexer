@@ -1,0 +1,19 @@
+# The mock gateway service image: one binary, one strict config file,
+# one writable journal directory, running as the project runtime user
+# 10001:10001 (DEPLOYMENT_BOOTSTRAP_CONTRACT, "Пути, права и volume
+# ownership").
+FROM golang:1.27-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd cmd
+COPY internal internal
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mock-gateway ./cmd/mock-gateway
+
+FROM alpine:3.23
+RUN addgroup -g 10001 gateway 2>/dev/null; adduser -D -u 10001 -G gateway gateway || true
+COPY --from=build /out/mock-gateway /usr/local/bin/mock-gateway
+RUN mkdir -p /data/journal && chown -R 10001:10001 /data/journal
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/mock-gateway"]
+CMD ["--config", "/config/gateway.yml"]

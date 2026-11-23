@@ -1,0 +1,19 @@
+# The mock adapter service image: one binary, one strict config file,
+# one writable WAL directory, running as the project runtime user
+# 10001:10001 (DEPLOYMENT_BOOTSTRAP_CONTRACT, "Пути, права и volume
+# ownership").
+FROM golang:1.27-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd cmd
+COPY internal internal
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mock-adapter ./cmd/mock-adapter
+
+FROM alpine:3.23
+RUN addgroup -g 10001 adapter 2>/dev/null; adduser -D -u 10001 -G adapter adapter || true
+COPY --from=build /out/mock-adapter /usr/local/bin/mock-adapter
+RUN mkdir -p /data/wal && chown -R 10001:10001 /data/wal
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/mock-adapter"]
+CMD ["--config", "/config/live.yml"]

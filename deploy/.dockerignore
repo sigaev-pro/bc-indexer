@@ -1,0 +1,13 @@
+# Keep the image contexts minimal: only the module sources enter the
+# build; generated secrets, the host-only bootstrap tool, scripts and
+# local build output never do.
+secrets/
+bootstrap/
+.build/
+scripts/
+config/
+README.md
+.dockerignore
+Dockerfile.mock-adapter
+Dockerfile.mock-gateway
+docker-compose.yml

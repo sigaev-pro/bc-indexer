@@ -1,0 +1,299 @@
+# The full deployment stack of the three baseline mainnet circuits
+# (NODE_DEPLOYMENT_SPEC): one NATS JetStream instance on the shared
+# transport network, one gateway per network, one mock extractor adapter
+# per network standing in for the native client with the embedded
+# adapter until the real builds land (E01/E06 gates).
+#
+# Topology rules held here (NETWORK_PORTS, "Docker Compose"):
+#   - a separate bridge network per blockchain circuit; the gateways are
+#     additionally attached to the NATS transport network;
+#   - no host port mappings at all by default. The optional diagnostic
+#     override of docker-compose.diagnostics.yml publishes exactly two
+#     loopback-bound ports (the NATS client port and the NATS monitoring
+#     port); the ingest listeners always stay internal;
+#   - one named writable volume per owner: three adapter WAL volumes,
+#     three gateway journal volumes, one JetStream store. No writable
+#     path is shared between owners.
+#
+# The stack starts only after scripts/bootstrap.sh has generated
+# deploy/secrets: the compose secrets below reference those files.
+name: extractor-deploy
+
+networks:
+  eth-circuit:
+    name: extractor-eth-circuit
+  bsc-circuit:
+    name: extractor-bsc-circuit
+  polygon-circuit:
+    name: extractor-polygon-circuit
+  transport:
+    name: extractor-transport
+
+volumes:
+  nats-jetstream:
+    name: extractor-nats-jetstream
+  eth-wal:
+    name: extractor-eth-wal
+  bsc-wal:
+    name: extractor-bsc-wal
+  polygon-wal:
+    name: extractor-polygon-wal
+  eth-journal:
+    name: extractor-eth-journal
+  bsc-journal:
+    name: extractor-bsc-journal
+  polygon-journal:
+    name: extractor-polygon-journal
+
+secrets:
+  ca:
+    file: ./secrets/ca.crt
+  nats-ca:
+    file: ./secrets/ca.crt
+  eth-gateway-cert:
+    file: ./secrets/eth/gateway.crt
+  eth-gateway-key:
+    file: ./secrets/eth/gateway.key
+  eth-adapter-cert:
+    file: ./secrets/eth/adapter.crt
+  eth-adapter-key:
+    file: ./secrets/eth/adapter.key
+  eth-nats-creds:
+    file: ./secrets/eth/nats.creds
+  bsc-gateway-cert:
+    file: ./secrets/bsc/gateway.crt
+  bsc-gateway-key:
+    file: ./secrets/bsc/gateway.key
+  bsc-adapter-cert:
+    file: ./secrets/bsc/adapter.crt
+  bsc-adapter-key:
+    file: ./secrets/bsc/adapter.key
+  bsc-nats-creds:
+    file: ./secrets/bsc/nats.creds
+  polygon-gateway-cert:
+    file: ./secrets/polygon/gateway.crt
+  polygon-gateway-key:
+    file: ./secrets/polygon/gateway.key
+  polygon-adapter-cert:
+    file: ./secrets/polygon/adapter.crt
+  polygon-adapter-key:
+    file: ./secrets/polygon/adapter.key
+  polygon-nats-creds:
+    file: ./secrets/polygon/nats.creds
+
+services:
+  nats:
+    # The upstream image is pinned by tag and by the multi-arch digest
+    # of the tag, so a rebuilt upstream tag can never slip in.
+    image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
+    command: ["-c", "/etc/nats/nats.conf"]
+    networks:
+      - transport
+    # No host ports by default (NETWORK_PORTS): the diagnostic loopback
+    # bindings live in docker-compose.diagnostics.yml, which the deploy
+    # scripts layer on top of this file.
+    volumes:
+      - ./secrets/nats/nats.conf:/etc/nats/nats.conf:ro
+      - ./secrets/nats/server.crt:/etc/nats/tls/server.crt:ro
+      - ./secrets/nats/server.key:/etc/nats/tls/server.key:ro
+      - nats-jetstream:/data/jetstream
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  # One gateway per network: the publication half of the circuit, on its
+  # circuit network for the adapter and on the transport network for
+  # NATS. A gateway restart never touches another circuit.
+  eth-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-gateway
+    image: bc-indexer/mock-gateway:e06
+    command: ["--config", "/config/gateway.yml"]
+    networks:
+      - eth-circuit
+      - transport
+    volumes:
+      - ./config/eth/gateway.yml:/config/gateway.yml:ro
+      - ./config/eth/binding.json:/config/binding.json:ro
+      - eth-journal:/data/journal
+    secrets:
+      - source: ca
+        target: ca.pem
+      - source: nats-ca
+        target: nats-ca.pem
+      - source: eth-gateway-cert
+        target: gateway.crt
+      - source: eth-gateway-key
+        target: gateway.key
+      - source: eth-nats-creds
+        target: nats.creds
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 50051 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  bsc-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-gateway
+    image: bc-indexer/mock-gateway:e06
+    command: ["--config", "/config/gateway.yml"]
+    networks:
+      - bsc-circuit
+      - transport
+    volumes:
+      - ./config/bsc/gateway.yml:/config/gateway.yml:ro
+      - ./config/bsc/binding.json:/config/binding.json:ro
+      - bsc-journal:/data/journal
+    secrets:
+      - source: ca
+        target: ca.pem
+      - source: nats-ca
+        target: nats-ca.pem
+      - source: bsc-gateway-cert
+        target: gateway.crt
+      - source: bsc-gateway-key
+        target: gateway.key
+      - source: bsc-nats-creds
+        target: nats.creds
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 50051 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  polygon-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-gateway
+    image: bc-indexer/mock-gateway:e06
+    command: ["--config", "/config/gateway.yml"]
+    networks:
+      - polygon-circuit
+      - transport
+    volumes:
+      - ./config/polygon/gateway.yml:/config/gateway.yml:ro
+      - ./config/polygon/binding.json:/config/binding.json:ro
+      - polygon-journal:/data/journal
+    secrets:
+      - source: ca
+        target: ca.pem
+      - source: nats-ca
+        target: nats-ca.pem
+      - source: polygon-gateway-cert
+        target: gateway.crt
+      - source: polygon-gateway-key
+        target: gateway.key
+      - source: polygon-nats-creds
+        target: nats.creds
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 50051 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  # One mock extractor adapter per network: the capture half of the
+  # circuit. It deliberately has no depends_on entry: a gateway or NATS
+  # outage must not prevent safe local capture (D28/D57), so the adapter
+  # starts, captures into its WAL and retries the delivery itself.
+  eth-adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-adapter
+    image: bc-indexer/mock-adapter:e06
+    command: ["--config", "/config/live.yml"]
+    networks:
+      - eth-circuit
+    volumes:
+      - ./config/eth/live.yml:/config/live.yml:ro
+      - ./config/eth/binding.json:/config/binding.json:ro
+      - eth-wal:/data/wal
+    secrets:
+      - source: ca
+        target: ca.pem
+      - source: eth-adapter-cert
+        target: adapter.crt
+      - source: eth-adapter-key
+        target: adapter.key
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 5s
+    restart: unless-stopped
+
+  bsc-adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-adapter
+    image: bc-indexer/mock-adapter:e06
+    command: ["--config", "/config/live.yml"]
+    networks:
+      - bsc-circuit
+    volumes:
+      - ./config/bsc/live.yml:/config/live.yml:ro
+      - ./config/bsc/binding.json:/config/binding.json:ro
+      - bsc-wal:/data/wal
+    secrets:
+      - source: ca
+        target: ca.pem
+      - source: bsc-adapter-cert
+        target: adapter.crt
+      - source: bsc-adapter-key
+        target: adapter.key
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 5s
+    restart: unless-stopped
+
+  polygon-adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-adapter
+    image: bc-indexer/mock-adapter:e06
+    command: ["--config", "/config/live.yml"]
+    networks:
+      - polygon-circuit
+    volumes:
+      - ./config/polygon/live.yml:/config/live.yml:ro
+      - ./config/polygon/binding.json:/config/binding.json:ro
+      - polygon-wal:/data/wal
+    secrets:
+      - source: ca
+        target: ca.pem
+      - source: polygon-adapter-cert
+        target: adapter.crt
+      - source: polygon-adapter-key
+        target: adapter.key
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 5s
+    restart: unless-stopped
