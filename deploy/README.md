@@ -33,17 +33,25 @@ Polygon L1 pair) with its embedded adapter and native datadir volume.
 Network topology per NETWORK_PORTS: one bridge network per circuit
 (`extractor-eth-circuit`, `extractor-bsc-circuit`,
 `extractor-polygon-circuit`), one transport network
-(`extractor-transport`) shared by the gateways and NATS. Only two
-loopback-bound diagnostic ports are published: the NATS client port on
-`127.0.0.1:14222` and the NATS monitoring UI on `127.0.0.1:18222`
-(override with `DEPLOY_NATS_CLIENT_PORT` / `DEPLOY_NATS_MONITORING_PORT`).
-Those defaults coexist with the demo environment, which holds 4222/8222.
+(`extractor-transport`) shared by the gateways and NATS. No service
+publishes a host port by default: `docker-compose.yml` alone exposes
+nothing outside the compose networks. The optional diagnostic override
+`docker-compose.diagnostics.yml` publishes exactly two loopback-bound
+ports — the NATS client port on `127.0.0.1:14222` and the NATS
+monitoring UI on `127.0.0.1:18222` (override with
+`DEPLOY_NATS_CLIENT_PORT` / `DEPLOY_NATS_MONITORING_PORT`). The deploy
+scripts layer that override in, because the host-side bootstrap and
+verification tooling must reach NATS; a plain
+`docker compose -f docker-compose.yml up` starts the same stack with
+no host ports at all. Those defaults coexist with the demo
+environment, which holds 4222/8222.
 
 ## Layout
 
 ```
 deploy/
-  docker-compose.yml        the full stack
+  docker-compose.yml        the full stack (no host ports by default)
+  docker-compose.diagnostics.yml  optional loopback NATS ports for the host-side tooling
   config/<net>/live.yml     strict collector YAML of one network (LIVE_CONFIG_SPEC)
   config/<net>/gateway.yml  strict gateway YAML of one network (LIVE_CONFIG_SPEC)
   config/<net>/binding.json immutable DestinationBinding (CONTROL_WIRE_CONTRACT)
@@ -113,8 +121,9 @@ Watch the live pipeline:
 ./scripts/runbook.sh tail bsc       # last message of every bsc subject
 ```
 
-The NATS monitoring UI answers on http://127.0.0.1:18222 (streams,
-consumers, message counts).
+The NATS monitoring UI answers on http://127.0.0.1:18222 while the
+diagnostics override is layered in (the deploy scripts do this;
+streams, consumers, message counts).
 
 ## Runbook drills
 
@@ -123,14 +132,15 @@ Readiness and recovery are observed in the control logs (D52): every
 process writes JSON lines with `CONFIG_VALIDATED`, `STORE_OPENED`,
 `RECOVERY_STARTED/COMPLETED`, `LIVE_BOUNDARY`, `CAPTURE_STARTED`,
 `WAL_SAVED`, `TRANSPORT_RETRY`, `DESTINATION_VERIFIED`,
-`CONFIG_BLOCKED`, `DELIVERY_CONFIRMED`, `DRAIN_STARTED/COMPLETED` and
+`CONFIG_BLOCKED`, `DELIVERY_CONFIRMED`, `DRAIN_STARTED/COMPLETED`
+(and `DRAIN_INCOMPLETE` when the drain stops undrained) and
 `STOPPED`.
 
 | Drill | What it proves |
 |---|---|
 | `runbook.sh restart-network bsc` | Restarting one circuit replays its pending WAL and resumes at H+1; the other circuits never restart and keep confirming deliveries. |
 | `runbook.sh stop-nats` then `start-nats` | A NATS outage never stops capture: every adapter keeps writing `WAL_SAVED`; after NATS returns, each gateway re-runs the online destination check (`DESTINATION_VERIFIED` with `after: reconnect`) and the backlog drains with identical message ids (dedup, no loss, no duplicates). |
-| `runbook.sh drain bsc` | Pending recovery works independently of live capture: with the gateway down the adapter keeps capturing; the drain run then delivers exactly the pending suffix and exits after durable `DRAIN_COMPLETED`. |
+| `runbook.sh drain bsc` | Pending recovery works independently of live capture: with the gateway down the adapter keeps capturing; the drain run then delivers exactly the pending suffix and exits after durable `DRAIN_COMPLETED`. A drain that cannot reach DRAINED never fakes success: it logs `DRAIN_INCOMPLETE` with the pending count and exits nonzero, leaving the WAL untouched. |
 
 ## Tear it down
 
@@ -152,7 +162,8 @@ dashboard. This stack is its production version: the same three
 networks, but with bootstrap-issued bindings and streams, per-network
 accounts and credentials, TLS everywhere, D77 metadata, durable WALs and
 the control event log. The two coexist on one host (the demo holds
-4222/8222/9080/9081, the deployment holds 14222/18222 on loopback).
+4222/8222/9080/9081, the deployment holds 14222/18222 on loopback when
+its diagnostics override is enabled).
 The demo's sink and dashboard consume demo-shaped subjects directly and
 are not wired into this stack; observing the deployment's traffic is the
 runbook's `status`, `tail` and the NATS monitoring UI.

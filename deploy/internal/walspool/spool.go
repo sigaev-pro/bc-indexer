@@ -9,6 +9,7 @@ package walspool
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -86,7 +87,8 @@ func (s *Spool) syncDir() error {
 	return d.Sync()
 }
 
-// loadMeta reads or initializes the store identity. Identities are
+// loadMeta reads or initializes the store identity, then repairs the
+// sequence and height watermarks from the durable events. Identities are
 // generated only for a genuinely new store and are never regenerated on
 // retry (DEPLOYMENT_BOOTSTRAP_CONTRACT, "Environment init").
 func (s *Spool) loadMeta() error {
@@ -97,24 +99,59 @@ func (s *Spool) loadMeta() error {
 			ProducerID: newID16Hex(),
 			RunID:      newID16Hex(),
 		}
-		return s.saveMeta()
+		if err := s.saveMeta(); err != nil {
+			return err
+		}
 	case err != nil:
 		return fmt.Errorf("wal meta: %w", err)
+	default:
+		if err := json.Unmarshal(data, &s.m); err != nil {
+			return fmt.Errorf("wal meta: %w", err)
+		}
+		if s.m.ProducerID == "" || s.m.RunID == "" {
+			return fmt.Errorf("wal meta: store identity is incomplete")
+		}
 	}
-	if err := json.Unmarshal(data, &s.m); err != nil {
-		return fmt.Errorf("wal meta: %w", err)
+	// Append persists the identity change before the event bytes, so an
+	// event beyond the persisted watermark means a store written before
+	// that ordering (or a crash between the event fsync and an older
+	// meta). Both converge to the maximum: an event id is never reused,
+	// and a reserved id without its event stays a gap, never a loss.
+	// A fresh identity runs the same repair: an orphan spool file without
+	// its meta must not hand out its ids a second time.
+	events, err := s.readAll()
+	if err != nil {
+		return err
 	}
-	if s.m.ProducerID == "" || s.m.RunID == "" {
-		return fmt.Errorf("wal meta: store identity is incomplete")
+	repaired := false
+	for _, e := range events {
+		if e.ID > s.m.NextID {
+			s.m.NextID = e.ID
+			repaired = true
+		}
+		if e.Height > s.m.Height {
+			s.m.Height = e.Height
+			repaired = true
+		}
+	}
+	if repaired {
+		return s.saveMeta()
 	}
 	return nil
 }
 
-// saveMeta persists the watermark atomically: write a temp file in the
-// same directory, fsync it, rename over the target, then fsync the
-// directory.
+// saveMeta persists the current watermark atomically: write a temp file
+// in the same directory, fsync it, rename over the target, then fsync
+// the directory.
 func (s *Spool) saveMeta() error {
-	data, err := json.Marshal(s.m)
+	return s.saveMetaState(s.m)
+}
+
+// saveMetaState persists one watermark state atomically: write a temp
+// file in the same directory, fsync it, rename over the target, then
+// fsync the directory.
+func (s *Spool) saveMetaState(m meta) error {
+	data, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
@@ -183,31 +220,46 @@ func (s *Spool) compact() error {
 	return s.syncDir()
 }
 
-// readAll reads every event line of the spool file.
+// readAll reads every committed event line of the spool file. Only the
+// last append can be torn by a crash: a trailing fragment without its
+// newline, or an unreadable final complete line, never reached its
+// fsync, was never acknowledged and is skipped; compact rewrites the
+// file without it (LIVE_CONFIG_SPEC: WAL_SAVED is never declared without
+// a durable write). A corrupt line before the final one is real damage
+// and stays an explicit error.
 func (s *Spool) readAll() ([]Event, error) {
-	f, err := os.Open(s.spoolPath())
+	data, err := os.ReadFile(s.spoolPath())
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 	var out []Event
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
-	for scanner.Scan() {
-		line := scanner.Bytes()
+	for offset := 0; offset < len(data); {
+		nl := bytes.IndexByte(data[offset:], '\n')
+		if nl < 0 {
+			// Torn trailing write of the last append: not committed.
+			break
+		}
+		line := data[offset : offset+nl]
+		next := offset + nl + 1
 		if len(line) == 0 {
+			offset = next
 			continue
 		}
 		var e Event
 		if err := json.Unmarshal(line, &e); err != nil {
+			if next == len(data) {
+				// Torn final complete line of the last append.
+				break
+			}
 			return nil, fmt.Errorf("wal spool line: %w", err)
 		}
 		out = append(out, e)
+		offset = next
 	}
-	return out, scanner.Err()
+	return out, nil
 }
 
 // Pending returns the unacknowledged events in sequence order.
@@ -225,12 +277,27 @@ func (s *Spool) Pending() ([]Event, error) {
 	return out, nil
 }
 
-// Append durably appends one event and returns its id. The event is
-// fsynced before the call returns: WAL_SAVED is only declared after
-// this succeeds.
+// Append durably appends one event and returns its id. The identity
+// change (the reserved id and the height watermark) is persisted before
+// the event bytes, and the event is fsynced before the call returns:
+// WAL_SAVED is only declared after this succeeds. A crash at any point
+// leaves either a reserved-but-unused id (a gap: ids are never reused,
+// nothing is delivered twice under one id) or a fully durable event; a
+// torn event line without its fsync is skipped at the next open.
 func (s *Spool) Append(height uint64, route string, payload []byte) (uint64, error) {
-	s.m.NextID++
-	e := Event{ID: s.m.NextID, Height: height, Route: route, Payload: payload}
+	next := s.m
+	next.NextID++
+	if height > next.Height {
+		next.Height = height
+	}
+	if err := s.saveMetaState(next); err != nil {
+		return 0, fmt.Errorf("wal meta: %w", err)
+	}
+	// From here the id is reserved durably: even if the event write
+	// fails, the in-memory state adopts it so the id is never handed out
+	// twice.
+	s.m = next
+	e := Event{ID: next.NextID, Height: height, Route: route, Payload: payload}
 	line, err := json.Marshal(e)
 	if err != nil {
 		return 0, err
@@ -240,12 +307,6 @@ func (s *Spool) Append(height uint64, route string, payload []byte) (uint64, err
 	}
 	if err := s.spoolFile.Sync(); err != nil {
 		return 0, fmt.Errorf("wal fsync: %w", err)
-	}
-	if height > s.m.Height {
-		s.m.Height = height
-	}
-	if err := s.saveMeta(); err != nil {
-		return 0, fmt.Errorf("wal meta: %w", err)
 	}
 	return e.ID, nil
 }

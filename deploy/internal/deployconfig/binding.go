@@ -165,6 +165,7 @@ func ParseBinding(data []byte) (Binding, error) {
 	if family != "EVM" {
 		return Binding{}, fmt.Errorf("binding: network family %q, want \"EVM\"", family)
 	}
+	b.Family = family
 	chainID, ok := (*raw.Network)["chain_id"]
 	if !ok {
 		return Binding{}, fmt.Errorf("binding: network holds a missing chain_id key")

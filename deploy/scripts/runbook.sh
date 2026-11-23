@@ -18,11 +18,14 @@
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 BOOTSTRAP="${DEPLOY_DIR}/.build/bootstrap"
 SERVER="tls://127.0.0.1:14222"
 
-compose() { docker compose -f "${COMPOSE_FILE}" "$@"; }
+# The base stack publishes no host ports; the diagnostics override
+# carries the loopback NATS ports the runbook observes.
+compose() {
+    docker compose -f "${DEPLOY_DIR}/docker-compose.yml" -f "${DEPLOY_DIR}/docker-compose.diagnostics.yml" "$@"
+}
 
 usage() { grep '^#   ' "${BASH_SOURCE[0]}" | sed 's/^#   //'; exit 2; }
 

@@ -221,6 +221,9 @@ func LoadGatewayConfig(path string) (GatewayConfig, error) {
 	if err := c.Gateway.NATS.TLS.Validate(); err != nil {
 		return c, fmt.Errorf("gateway config %s: gateway.nats.tls: %w", path, err)
 	}
+	if c.Gateway.NATS.CredentialsFile == "" {
+		return c, fmt.Errorf("gateway config %s: gateway.nats.credentials_file is required", path)
+	}
 	if c.Gateway.NATS.Stream == "" {
 		return c, fmt.Errorf("gateway config %s: gateway.nats.stream is required", path)
 	}

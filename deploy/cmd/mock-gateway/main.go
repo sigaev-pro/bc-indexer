@@ -59,13 +59,22 @@ func main() {
 	}
 	log.Event("STORE_OPENED", map[string]any{"gateway_dir": cfg.Storage.GatewayDir})
 
+	var wg sync.WaitGroup
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	// NATS connection and the online destination check run in the
 	// background: the ingest listener opens regardless, because a NATS
 	// outage must not stop safe capture on the adapter side, and the
 	// gateway keeps answering TRANSIENT refusals until the destination
-	// verifies (publication alone stays blocked).
+	// verifies (publication alone stays blocked). The loop is bound to
+	// the process context so shutdown stops it too.
 	pub := newPublisher(cfg, network, binding, log)
-	go pub.connectLoop(context.Background())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		pub.connectLoop(ctx)
+	}()
 
 	// The mTLS ingest listener.
 	ln, err := listenIngest(cfg, network, log)
@@ -73,10 +82,6 @@ func main() {
 		log.Fatal("INIT_READY", 2, eventlog.Errorf(err))
 	}
 	log.Event("INIT_READY", map[string]any{"listen": cfg.Gateway.Listen})
-
-	var wg sync.WaitGroup
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	wg.Add(1)
 	go func() {
@@ -86,10 +91,15 @@ func main() {
 
 	<-ctx.Done()
 	log.Event("STOPPED", map[string]any{"reason": "signal"})
+	// Shutdown order: stop accepting, wait for every session goroutine
+	// (serveIngest closes the open connections so blocked reads wake
+	// up), only then close the NATS connection and the journal — no
+	// journal record can race the close and turn a clean stop into a
+	// FATAL.
 	ln.Close()
+	wg.Wait()
 	pub.close()
 	journal.close()
-	wg.Wait()
 }
 
 // mustSetup loads and cross-validates the gateway file, the network
@@ -570,12 +580,24 @@ func listenIngest(cfg deployconfig.GatewayConfig, network deployconfig.NetworkDe
 	return ln, nil
 }
 
-// serveIngest accepts adapter sessions until the context stops.
+// serveIngest accepts adapter sessions until the context stops. On
+// shutdown it closes the open sessions too: a session blocked in a
+// read would otherwise hold the shutdown past the operator's stop.
 func serveIngest(ctx context.Context, ln net.Listener, pub *publisher, journal *journal, network deployconfig.NetworkDefinition, binding deployconfig.Binding, log *eventlog.Logger) {
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	conns := make(map[net.Conn]struct{})
+	closeAll := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		for c := range conns {
+			c.Close()
+		}
+	}
 	go func() {
 		<-ctx.Done()
 		ln.Close()
+		closeAll()
 	}()
 	for {
 		conn, err := ln.Accept()
@@ -586,9 +608,17 @@ func serveIngest(ctx context.Context, ln net.Listener, pub *publisher, journal *
 			log.Event("TRANSPORT_RETRY", map[string]any{"class": "TRANSIENT", "error": err.Error()})
 			continue
 		}
+		mu.Lock()
+		conns[conn] = struct{}{}
+		mu.Unlock()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				mu.Lock()
+				delete(conns, conn)
+				mu.Unlock()
+			}()
 			serveConn(ctx, conn, pub, journal, network, binding, log)
 		}()
 	}

@@ -7,9 +7,10 @@
 # Topology rules held here (NETWORK_PORTS, "Docker Compose"):
 #   - a separate bridge network per blockchain circuit; the gateways are
 #     additionally attached to the NATS transport network;
-#   - only the documented 127.0.0.1 diagnostic overrides are published
-#     to the host: the NATS client port and the NATS monitoring port;
-#     the ingest listeners stay internal;
+#   - no host port mappings at all by default. The optional diagnostic
+#     override of docker-compose.diagnostics.yml publishes exactly two
+#     loopback-bound ports (the NATS client port and the NATS monitoring
+#     port); the ingest listeners always stay internal;
 #   - one named writable volume per owner: three adapter WAL volumes,
 #     three gateway journal volumes, one JetStream store. No writable
 #     path is shared between owners.
@@ -82,18 +83,15 @@ secrets:
 
 services:
   nats:
-    image: nats:2.15.1-alpine
+    # The upstream image is pinned by tag and by the multi-arch digest
+    # of the tag, so a rebuilt upstream tag can never slip in.
+    image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
     command: ["-c", "/etc/nats/nats.conf"]
     networks:
       - transport
-    ports:
-      # Documented diagnostic overrides bound to the loopback only: the
-      # host-side bootstrap and verification connect here, and the NATS
-      # monitoring UI answers on the monitoring port. The defaults
-      # coexist with the demo environment of e03/demo, which holds
-      # 4222/8222 on this host. No other service publishes ports.
-      - "${DEPLOY_NATS_CLIENT_PORT:-127.0.0.1:14222}:4222"
-      - "${DEPLOY_NATS_MONITORING_PORT:-127.0.0.1:18222}:8222"
+    # No host ports by default (NETWORK_PORTS): the diagnostic loopback
+    # bindings live in docker-compose.diagnostics.yml, which the deploy
+    # scripts layer on top of this file.
     volumes:
       - ./secrets/nats/nats.conf:/etc/nats/nats.conf:ro
       - ./secrets/nats/server.crt:/etc/nats/tls/server.crt:ro

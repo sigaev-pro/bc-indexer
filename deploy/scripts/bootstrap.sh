@@ -14,6 +14,13 @@ SECRETS_DIR="${DEPLOY_DIR}/secrets"
 BUILD_DIR="${DEPLOY_DIR}/.build"
 SERVER="tls://127.0.0.1:14222"
 
+# The base stack publishes no host ports (NETWORK_PORTS); the
+# diagnostic override carries the loopback NATS ports this host-side
+# bootstrap connects to.
+compose() {
+    docker compose -f "${DEPLOY_DIR}/docker-compose.yml" -f "${DEPLOY_DIR}/docker-compose.diagnostics.yml" "$@"
+}
+
 log() { printf 'bootstrap: %s\n' "$*"; }
 
 command -v docker >/dev/null 2>&1 || { log "docker is required"; exit 1; }
@@ -35,7 +42,7 @@ else
 fi
 
 log "starting NATS"
-docker compose -f "${DEPLOY_DIR}/docker-compose.yml" up -d --wait nats
+compose up -d --wait nats
 
 log "creating or verifying the per-network streams with the D77 metadata"
 "${BOOTSTRAP}" -secrets-dir "${SECRETS_DIR}" -server "${SERVER}" streams

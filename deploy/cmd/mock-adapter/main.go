@@ -1,11 +1,12 @@
 // The mock adapter of the deployment stack: the production-shaped
 // capture half of one network circuit. It loads the strict live YAML
 // and the immutable DestinationBinding, opens the durable WAL spool,
-// replays pending events before any new capture, fixes the live
-// boundary H and captures from H+1, and keeps capturing durably while
-// the gateway or NATS is down: WAL_SAVED is declared only after the
-// fsync, DELIVERY_CONFIRMED only after the ack (LIVE_CONFIG_SPEC,
-// "Состояние и запуск"; D28/D57).
+// fixes the live boundary H and captures from H+1 without waiting for
+// delivery recovery — the pending suffix of a previous run replays
+// independently while capture continues — and keeps capturing durably
+// while the gateway or NATS is down: WAL_SAVED is declared only after
+// the fsync, DELIVERY_CONFIRMED only after the ack (LIVE_CONFIG_SPEC,
+// "Состояние и запуск" 4-5; D28/D57).
 //
 // This binary is the pre-build stand-in for the native client with the
 // embedded extractor adapter of E06: the mock produces small JSON
@@ -210,8 +211,10 @@ func (d *driver) withGateway(ctx context.Context, fn func(ctx context.Context, c
 // sendPending delivers the pending suffix of the WAL to the gateway,
 // oldest event first, and persists the acknowledged watermark. A
 // transient refusal keeps the event pending and lets the caller retry;
-// the return value reports whether the suffix fully drained.
-func (d *driver) sendPending(ctx context.Context, conn net.Conn) (bool, string) {
+// the return value reports whether the suffix fully drained. Events up
+// to replayUpTo were captured by a previous run: their confirmations
+// are replays, later ones are fresh captures.
+func (d *driver) sendPending(ctx context.Context, conn net.Conn, replayUpTo uint64) (bool, string) {
 	pending, err := d.spool.Pending()
 	if err != nil {
 		d.log.Fatal("RECOVERY_STARTED", 5, eventlog.Errorf(err))
@@ -228,11 +231,13 @@ func (d *driver) sendPending(ctx context.Context, conn net.Conn) (bool, string) 
 			return false, "TRANSIENT"
 		}
 		var answer struct {
-			Type     string `json:"type"`
-			EventSeq uint64 `json:"event_seq"`
-			Stream   string `json:"stream"`
-			Code     string `json:"code"`
-			Detail   string `json:"detail"`
+			Type      string `json:"type"`
+			EventSeq  uint64 `json:"event_seq"`
+			Stream    string `json:"stream"`
+			Sequence  uint64 `json:"sequence"`
+			Duplicate bool   `json:"duplicate"`
+			Code      string `json:"code"`
+			Detail    string `json:"detail"`
 		}
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		if err := wire.Read(conn, &answer); err != nil {
@@ -246,7 +251,7 @@ func (d *driver) sendPending(ctx context.Context, conn net.Conn) (bool, string) 
 			}
 			d.log.Event("DELIVERY_CONFIRMED", map[string]any{
 				"event_seq": answer.EventSeq, "stream": answer.Stream,
-				"replayed": true, "duplicate": false,
+				"replayed": ev.ID <= replayUpTo, "duplicate": answer.Duplicate,
 			})
 		case "nak":
 			if answer.Code == "TRANSIENT" {
@@ -265,6 +270,22 @@ func (d *driver) sendPending(ctx context.Context, conn net.Conn) (bool, string) 
 	return true, ""
 }
 
+// replayWatermark returns the highest event id of the pending suffix:
+// the boundary between replayed recovery deliveries and fresh captures.
+func (d *driver) replayWatermark() uint64 {
+	pending, err := d.spool.Pending()
+	if err != nil {
+		d.log.Fatal("RECOVERY_STARTED", 5, eventlog.Errorf(err))
+	}
+	var max uint64
+	for _, ev := range pending {
+		if ev.ID > max {
+			max = ev.ID
+		}
+	}
+	return max
+}
+
 // drain implements --extractor-mode=drain: replay the pending suffix,
 // then exit after the durable DRAINED state (D57).
 func (d *driver) drain(ctx context.Context) {
@@ -273,8 +294,9 @@ func (d *driver) drain(ctx context.Context) {
 		d.log.Fatal("DRAIN_STARTED", 5, eventlog.Errorf(err))
 	}
 	d.log.Event("DRAIN_STARTED", map[string]any{"pending": len(pending)})
+	replayUpTo := d.replayWatermark()
 	d.withGateway(ctx, func(ctx context.Context, conn net.Conn) bool {
-		done, class := d.sendPending(ctx, conn)
+		done, class := d.sendPending(ctx, conn, replayUpTo)
 		if done {
 			return true
 		}
@@ -286,29 +308,42 @@ func (d *driver) drain(ctx context.Context) {
 		return true
 	})
 	left, _ := d.spool.Pending()
-	d.log.Event("DRAIN_COMPLETED", map[string]any{"pending": len(left)})
+	if len(left) > 0 {
+		// DRAIN_COMPLETED is the durable DRAINED state of D57: it is
+		// never declared while events remain pending. An unavailable
+		// gateway or NATS is a retry, not a successful completion
+		// (LIVE_CONFIG_SPEC, "Валидация и остановка"); the pending bytes
+		// stay in the WAL and the next drain resumes from them.
+		d.log.Event("DRAIN_INCOMPLETE", map[string]any{"pending": len(left)})
+		d.log.Event("STOPPED", map[string]any{"mode": "drain"})
+		os.Exit(3)
+	}
+	d.log.Event("DRAIN_COMPLETED", map[string]any{"pending": 0})
 	d.log.Event("STOPPED", map[string]any{"mode": "drain"})
 }
 
-// live implements the native automaton of the mock: recovery first,
-// then the boundary fix and capture from H+1.
+// live implements the native automaton of the mock. New capture and the
+// recovery of the pending suffix are independent (LIVE_CONFIG_SPEC,
+// "Состояние и запуск" 4-5): the boundary H is fixed and capture from
+// H+1 starts immediately — a gateway or NATS outage at startup never
+// blocks new capture — while the pending suffix of the previous run is
+// delivered through the delivery pass of the capture loop below.
 func (d *driver) live(ctx context.Context) {
 	pending, err := d.spool.Pending()
 	if err != nil {
 		d.log.Fatal("RECOVERY_STARTED", 5, eventlog.Errorf(err))
 	}
 	d.log.Event("RECOVERY_STARTED", map[string]any{"pending": len(pending)})
-	// Pending delivery never waits for a new live sync: if the gateway
-	// is reachable the suffix drains before capture starts.
-	d.withGateway(ctx, func(ctx context.Context, conn net.Conn) bool {
-		done, class := d.sendPending(ctx, conn)
-		return done || class != "TRANSIENT" && class != "canceled"
-	})
-	left, _ := d.spool.Pending()
-	d.log.Event("RECOVERY_COMPLETED", map[string]any{"pending": len(left)})
+	replayUpTo := d.replayWatermark()
+	recovered := len(pending) == 0
+	if recovered {
+		d.log.Event("RECOVERY_COMPLETED", map[string]any{"pending": 0})
+	}
 
 	// The live boundary: a new observation run fixes the current head H
 	// and captures from H+1 (D39). The mock head is the persisted height.
+	// Nothing below waits for delivery recovery: LIVE_BOUNDARY and the
+	// first WAL_SAVED happen whether or not the gateway answers.
 	H := d.spool.Height()
 	d.log.Event("LIVE_BOUNDARY", map[string]any{"H": H})
 	d.log.Event("CAPTURE_STARTED", map[string]any{"from": H + 1})
@@ -320,7 +355,7 @@ func (d *driver) live(ctx context.Context) {
 	generate := newGenerator(d.network)
 
 	var mu sync.Mutex
-	conn := d.connect(ctx)
+	var conn net.Conn
 	defer func() {
 		mu.Lock()
 		if conn != nil {
@@ -374,15 +409,22 @@ func (d *driver) live(ctx context.Context) {
 				continue
 			}
 		}
-		// Deliver the unacknowledged suffix over the current session.
+		// Deliver the unacknowledged suffix over the current session:
+		// the recovered events of the previous run first, then the fresh
+		// captures of this run.
 		mu.Lock()
-		done, class := d.sendPending(ctx, conn)
+		done, class := d.sendPending(ctx, conn, replayUpTo)
 		if !done && class == "TRANSIENT" {
 			conn.Close()
 			conn = nil
 		}
 		mu.Unlock()
 		if done {
+			if !recovered {
+				left, _ := d.spool.Pending()
+				d.log.Event("RECOVERY_COMPLETED", map[string]any{"pending": len(left)})
+				recovered = true
+			}
 			d.log.Event("DELIVERY_CONFIRMED", map[string]any{"H": H, "events": len(events)})
 			backoff = 0
 		}
