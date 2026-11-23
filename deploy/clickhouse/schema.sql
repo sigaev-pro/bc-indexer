@@ -10,14 +10,23 @@
 -- ("block" | "tx"), `kind` (lifecycle kind, e.g. "applied"),
 -- `source_sequence`, `entity_ordinal`, `descriptor_digest`,
 -- `record_digest`. `network` and `event_type` are derived from the
--- NATS subject `extractor.<network>.<type>`.
+-- NATS subject by stripping the sink filter's literal prefix (default
+-- `extractor.>` -> extractor.<network>.<type>; `evm.v3.>` ->
+-- evm.v3.<network>.<family>.<kind>).
 --
 -- Delivery is at-least-once: the sink acks a NATS message only after
 -- the batch that contains it was inserted, so a crash between insert
--- and ack replays a row. ReplacingMergeTree collapses those duplicates
--- on merge, keeping the row with the highest `ingested_at` — the same
--- mechanism later serves reorg updates (an event replayed with a new
--- `kind` replaces the old row once merges catch up).
+-- and ack replays a row. The ORDER BY key is the collapse identity:
+--   blocks           (network, 'block',    block_number, block_hash)
+--   transactions     (network, 'transaction', block_number, tx_hash)
+--   other families   (network, <type>,     block_number, record_digest)
+-- `entity` carries the last component, so families without block
+-- context never collide on the empty string and a transaction without
+-- a hash is rejected at the sink instead of overwriting a block row.
+-- ReplacingMergeTree collapses rows that share the key, keeping the
+-- one with the highest `ingested_at` — the same mechanism later
+-- serves reorg updates (an event replayed with a new `kind` replaces
+-- the old row once merges catch up).
 CREATE DATABASE IF NOT EXISTS extractor;
 
 CREATE TABLE IF NOT EXISTS extractor.events (
@@ -27,9 +36,10 @@ CREATE TABLE IF NOT EXISTS extractor.events (
     chain_id UInt64,                                   -- 11155111, 97, 80002
 
     -- Event classification
-    event_type LowCardinality(String),                 -- subject token: 'block', 'transaction'
+    event_type LowCardinality(String),                 -- subject token: 'block', 'transaction', 'tx'
     family LowCardinality(String) DEFAULT '',           -- payload envelope: 'block', 'tx'
     kind LowCardinality(String) DEFAULT '',             -- payload envelope lifecycle kind, e.g. 'applied'
+    entity String DEFAULT '',                           -- collapse identity: block hash / tx hash / record digest
 
     -- Block context (blocks fill it directly; transactions carry
     -- block_number/block_hash, block_timestamp stays NULL until the
@@ -38,6 +48,8 @@ CREATE TABLE IF NOT EXISTS extractor.events (
     block_hash String,
     parent_hash String,
     block_timestamp Nullable(DateTime('UTC')),
+    block_gas_used UInt64 DEFAULT 0,
+    block_tx_count UInt64 DEFAULT 0,
 
     -- Transaction fields (default for non-tx events)
     tx_index UInt64 DEFAULT 0,
@@ -68,5 +80,5 @@ CREATE TABLE IF NOT EXISTS extractor.events (
     raw String
 ) ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(ifNull(block_timestamp, toDateTime(captured_at, 'UTC')))
-ORDER BY (network, block_number, tx_hash)
+ORDER BY (network, event_type, block_number, entity)
 TTL ifNull(block_timestamp, toDateTime(captured_at, 'UTC')) + INTERVAL 365 DAY;

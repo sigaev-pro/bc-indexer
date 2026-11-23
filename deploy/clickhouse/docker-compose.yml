@@ -1,5 +1,7 @@
 # The ClickHouse analytics stack of the extractor: JetStream transport,
-# universal event table, and the sink service that bridges them.
+# universal event table, and the sink service that bridges them. Host
+# ports are loopback-bound so the stack never collides with other local
+# NATS/ClickHouse installations.
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.11-alpine
@@ -8,17 +10,21 @@ services:
     # network (the sink must reach it as clickhouse:9000).
     environment:
       - CLICKHOUSE_PASSWORD=clickhouse
-    ports: ["8123:8123", "9000:9000"] # HTTP + native
+    ports: ["127.0.0.1:8123:8123", "127.0.0.1:9000:9000"] # HTTP + native
     volumes:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
       - clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile: 262144
+    restart: unless-stopped
 
   nats:
     image: nats:2.10-alpine
     command: ["-js", "-m", "8222"]
-    ports: ["4222:4222"]
+    ports: ["127.0.0.1:4222:4222"]
+    volumes:
+      - nats-data:/data # JetStream must survive a restart
+    restart: unless-stopped
 
   sink:
     build: ../../cmd/clickhouse-sink
@@ -31,3 +37,4 @@ services:
 
 volumes:
   clickhouse-data:
+  nats-data:

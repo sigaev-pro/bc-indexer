@@ -22,7 +22,10 @@
 // block_number/block_hash/tx_index/hash/from/to/value/gas/status, and both
 // carry family/kind/source_sequence/entity_ordinal/descriptor_digest/
 // record_digest. The network and the event type are derived from the NATS
-// subject `extractor.<network>.<type>`. The full original JSON is kept in
+// subject by stripping the literal prefix of the configured filter: the
+// default `extractor.>` yields network/type from
+// `extractor.<network>.<type>`, while `evm.v3.>` yields them from
+// `evm.v3.<network>.<family>.<kind>`. The full original JSON is kept in
 // the raw column, so a mapping gap never loses data.
 package main
 
@@ -137,10 +140,13 @@ const tableDDL = `CREATE TABLE IF NOT EXISTS %s.events (
     event_type LowCardinality(String),
     family LowCardinality(String) DEFAULT '',
     kind LowCardinality(String) DEFAULT '',
+    entity String DEFAULT '',
     block_number UInt64,
     block_hash String,
     parent_hash String,
     block_timestamp Nullable(DateTime('UTC')),
+    block_gas_used UInt64 DEFAULT 0,
+    block_tx_count UInt64 DEFAULT 0,
     tx_index UInt64 DEFAULT 0,
     tx_hash String DEFAULT '',
     tx_from String DEFAULT '',
@@ -161,7 +167,7 @@ const tableDDL = `CREATE TABLE IF NOT EXISTS %s.events (
     raw String
 ) ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(ifNull(block_timestamp, toDateTime(captured_at, 'UTC')))
-ORDER BY (network, block_number, tx_hash)
+ORDER BY (network, event_type, block_number, entity)
 TTL ifNull(block_timestamp, toDateTime(captured_at, 'UTC')) + INTERVAL 365 DAY`
 
 // eventRow is one row of extractor.events, matched to the table columns by
@@ -174,10 +180,13 @@ type eventRow struct {
 	EventType        string     `ch:"event_type"`
 	Family           string     `ch:"family"`
 	Kind             string     `ch:"kind"`
+	Entity           string     `ch:"entity"`
 	BlockNumber      uint64     `ch:"block_number"`
 	BlockHash        string     `ch:"block_hash"`
 	ParentHash       string     `ch:"parent_hash"`
 	BlockTimestamp   *time.Time `ch:"block_timestamp"`
+	BlockGasUsed     uint64     `ch:"block_gas_used"`
+	BlockTxCount     uint64     `ch:"block_tx_count"`
 	TxIndex          uint64     `ch:"tx_index"`
 	TxHash           string     `ch:"tx_hash"`
 	TxFrom           string     `ch:"tx_from"`
@@ -199,22 +208,28 @@ type eventRow struct {
 }
 
 // pendingEvent couples a parsed row with the NATS message it came from: the
-// message is acked only after the row is inserted.
+// message is acked only after the row is inserted. key identifies the
+// stream message for redelivery-duplicate detection.
 type pendingEvent struct {
 	row eventRow
 	msg jetstream.Msg
+	key string
 }
 
-// sink owns the consumer, the pending batch and the insert counters.
+// sink owns the consumers' shared batch and the insert counters.
 type sink struct {
-	cfg config
-	ch  driver.Conn
+	cfg      config
+	ch       driver.Conn
+	subjects subjectParser
 
-	mu          sync.Mutex
-	pending     []pendingEvent
-	inserted    uint64
-	lastLogged  uint64
-	lastNetwork string
+	mu            sync.Mutex
+	pending       []pendingEvent
+	pendingKeys   map[string]struct{}
+	inserted      uint64
+	lastLogged    uint64
+	lastNetwork   string
+	flushFailures int
+	duplicates    uint64
 }
 
 // flexNumber accepts a JSON number or a numeric string ("1732000000",
@@ -283,7 +298,9 @@ func (f *flexString) UnmarshalJSON(b []byte) error {
 }
 
 // payload is the union of the block-shaped and transaction-shaped event
-// bodies plus the adapter envelope present on every event.
+// bodies plus the adapter envelope present on every event. The evm.v3
+// mock stack of the deploy service uses its own key spellings (height,
+// tx_hash, from_addr, to_addr); they are accepted as aliases.
 type payload struct {
 	// Block shape: {"number":123,"hash":"0x...","parent_hash":"0x...",
 	// "timestamp":1732000000,"gas_used":100000,"tx_count":5}
@@ -308,13 +325,17 @@ type payload struct {
 	Status      flexNumber `json:"status"`
 	TxType      flexString `json:"type"`
 
-	// Envelope on every event.
-	SchemaName       flexString `json:"schema"`
-	Network          flexString `json:"network"`
+	// evm.v3 mock aliases: {"height":N,"tx_hash":"0x...","from_addr":...}
+	Height   flexNumber `json:"height"`
+	TxHash   flexString `json:"tx_hash"`
+	FromAddr flexString `json:"from_addr"`
+	ToAddr   flexString `json:"to_addr"`
+
+	// Envelope on every event (network and decision_sequence live only in
+	// raw: the network comes from the subject).
 	Family           flexString `json:"family"`
 	Kind             flexString `json:"kind"`
 	ChainID          flexNumber `json:"chain_id"`
-	DecisionSequence flexNumber `json:"decision_sequence"`
 	EntityOrdinal    flexNumber `json:"entity_ordinal"`
 	SourceSequence   flexNumber `json:"source_sequence"`
 	DescriptorDigest flexString `json:"descriptor_digest"`
@@ -352,8 +373,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("CONFIG_INVALID SINK_DELIVER_POLICY=%s error=%v", cfg.DeliverPolicy, err)
 	}
+	subjects, err := newSubjectParser(cfg.NatsSubject)
+	if err != nil {
+		log.Fatalf("CONFIG_INVALID NATS_SUBJECT=%s error=%v", cfg.NatsSubject, err)
+	}
 
-	s := &sink{cfg: cfg, ch: conn}
+	s := &sink{cfg: cfg, ch: conn, subjects: subjects, pendingKeys: make(map[string]struct{})}
 	streams := newConsumerSet(cfg, js, s, deliver)
 	if err := streams.initialScan(ctx); err != nil {
 		log.Fatalf("NATS_STREAM_ERROR error=%v", err)
@@ -603,8 +628,10 @@ func (cs *consumerSet) reconcile(ctx context.Context) error {
 		// resumes exactly where this one stopped instead of replaying
 		// the whole stream. (A consumer created implicitly by a
 		// subscribe call is deleted on unsubscribe/drain — that is the
-		// trap this avoids.)
-		cons, err := cs.js.CreateOrUpdateConsumer(ctx, name, jetstream.ConsumerConfig{
+		// trap this avoids.) A short API timeout keeps a hung server
+		// from stalling the scan loop.
+		apiCtx, cancelAPI := context.WithTimeout(ctx, 5*time.Second)
+		cons, err := cs.js.CreateOrUpdateConsumer(apiCtx, name, jetstream.ConsumerConfig{
 			Durable:       cs.durableName(name),
 			FilterSubject: cs.cfg.NatsSubject,
 			DeliverPolicy: cs.deliver,
@@ -612,6 +639,7 @@ func (cs *consumerSet) reconcile(ctx context.Context) error {
 			AckWait:       cs.cfg.AckWait,
 			MaxAckPending: cs.cfg.MaxAckPending,
 		})
+		cancelAPI()
 		if err != nil {
 			log.Printf("CONSUMER_ERROR stream=%s durable=%s error=%v (an existing durable keeps its stored deliver policy; delete it to apply SINK_DELIVER_POLICY)",
 				name, cs.durableName(name), err)
@@ -642,8 +670,11 @@ func (cs *consumerSet) drainAll() {
 }
 
 // matchingStreams lists the names of all streams whose subjects intersect
-// the sink subject filter.
+// the sink subject filter. The listing runs on its own short timeout so a
+// hung server API cannot stall the scan loop.
 func matchingStreams(ctx context.Context, js jetstream.JetStream, filter string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	filterTokens := strings.Split(filter, ".")
 	var names []string
 	it := js.ListStreams(ctx)
@@ -710,16 +741,31 @@ func deliverPolicy(v string) (jetstream.DeliverPolicy, error) {
 // pending batch, flushing synchronously when the batch is full. A message
 // whose subject or body cannot be understood is terminated (no redelivery
 // for this consumer): the body stays in the stream and in the logs.
+// Redelivered copies of messages that are still pending (an insert outage
+// longer than the ack wait) are dropped — the original copy is already in
+// the batch and will be acked with it.
 func (s *sink) handleMessage(m jetstream.Msg) {
 	now := time.Now().UTC()
-	row, err := parseEvent(m.Subject(), m.Data(), now)
+	row, err := s.parseEvent(m.Subject(), m.Data(), now)
 	if err != nil {
 		log.Printf("EVENT_REJECTED subject=%s error=%v", m.Subject(), err)
 		_ = m.Term()
 		return
 	}
+	key := messageKey(m)
 	s.mu.Lock()
-	s.pending = append(s.pending, pendingEvent{row: row, msg: m})
+	if key != "" {
+		if _, dup := s.pendingKeys[key]; dup {
+			s.duplicates++
+			if s.duplicates == 1 || s.duplicates%100 == 0 {
+				log.Printf("DUPLICATE_DROPPED subject=%s total=%d", m.Subject(), s.duplicates)
+			}
+			s.mu.Unlock()
+			return
+		}
+		s.pendingKeys[key] = struct{}{}
+	}
+	s.pending = append(s.pending, pendingEvent{row: row, msg: m, key: key})
 	s.lastNetwork = row.Network
 	var flushErr error
 	remaining := len(s.pending)
@@ -735,10 +781,51 @@ func (s *sink) handleMessage(m jetstream.Msg) {
 	}
 }
 
+// messageKey identifies a stream message for duplicate detection; "" when
+// no JetStream metadata is available.
+func messageKey(m jetstream.Msg) string {
+	meta, err := m.Metadata()
+	if err != nil {
+		return ""
+	}
+	return meta.Stream + "/" + strconv.FormatUint(meta.Sequence.Stream, 10)
+}
+
 // flushLocked inserts the pending batch, acks its messages on success and
-// keeps them pending on failure. Callers hold s.mu.
+// keeps them pending on failure. After three consecutive failures with a
+// reachable server, the batch is bisected to isolate deterministic bad
+// rows; those are logged as ROW_EVICTED and terminated, the rest is
+// inserted. Callers hold s.mu.
 func (s *sink) flushLocked(ctx context.Context) error {
 	if len(s.pending) == 0 {
+		return nil
+	}
+	err := s.insertRows(ctx, s.pending)
+	if err == nil {
+		s.ackRows(s.pending)
+		s.pending = s.pending[:0]
+		s.flushFailures = 0
+		return nil
+	}
+	s.flushFailures++
+	if s.flushFailures < 3 {
+		return err
+	}
+	// A ClickHouse outage must not turn into mass eviction: only bisect
+	// when the server itself answers, so the failure is data-shaped.
+	if pingErr := s.ch.Ping(ctx); pingErr != nil {
+		return err
+	}
+	log.Printf("FLUSH_BISECT pending=%d", len(s.pending))
+	s.insertWithIsolation(ctx, s.pending)
+	s.pending = s.pending[:0]
+	s.flushFailures = 0
+	return nil
+}
+
+// insertRows appends and sends one batch of rows.
+func (s *sink) insertRows(ctx context.Context, rows []pendingEvent) error {
+	if len(rows) == 0 {
 		return nil
 	}
 	stmt := fmt.Sprintf("INSERT INTO %s.events", quoteIdentLoose(s.cfg.ClickHouseDB))
@@ -746,7 +833,7 @@ func (s *sink) flushLocked(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("prepare batch: %w", err)
 	}
-	for _, p := range s.pending {
+	for _, p := range rows {
 		if err := batch.AppendStruct(&p.row); err != nil {
 			return fmt.Errorf("append row (subject=%s): %w", p.msg.Subject(), err)
 		}
@@ -754,32 +841,78 @@ func (s *sink) flushLocked(ctx context.Context) error {
 	if err := batch.Send(); err != nil {
 		return fmt.Errorf("send batch: %w", err)
 	}
-	// The rows are durable: ack the messages so JetStream stops offering
-	// them. A crash before an ack replays the row, which
-	// ReplacingMergeTree collapses later.
-	for _, p := range s.pending {
+	return nil
+}
+
+// insertWithIsolation inserts rows, bisecting on failure until single
+// uninsertable rows are isolated: those are logged as ROW_EVICTED and
+// terminated, every inserted sub-batch is acked. Callers hold s.mu.
+func (s *sink) insertWithIsolation(ctx context.Context, rows []pendingEvent) {
+	if len(rows) == 0 {
+		return
+	}
+	if err := s.insertRows(ctx, rows); err == nil {
+		s.ackRows(rows)
+		return
+	} else if len(rows) == 1 {
+		p := rows[0]
+		log.Printf("ROW_EVICTED subject=%s record_digest=%s tx_hash=%s raw_prefix=%q",
+			p.msg.Subject(), p.row.RecordDigest, p.row.TxHash, truncate(p.row.Raw, 80))
+		_ = p.msg.Term()
+		s.dropKey(p.key)
+		return
+	}
+	mid := len(rows) / 2
+	s.insertWithIsolation(ctx, rows[:mid])
+	s.insertWithIsolation(ctx, rows[mid:])
+}
+
+// ackRows acks the messages of an inserted batch and advances the
+// counters. The rows are durable: acking stops JetStream from offering
+// them again, and a crash before an ack replays the row, which
+// ReplacingMergeTree collapses later. Callers hold s.mu.
+func (s *sink) ackRows(rows []pendingEvent) {
+	for _, p := range rows {
 		if err := p.msg.Ack(); err != nil {
 			log.Printf("ACK_FAILED subject=%s error=%v", p.msg.Subject(), err)
 		}
+		s.dropKey(p.key)
 	}
-	s.inserted += uint64(len(s.pending))
+	s.inserted += uint64(len(rows))
 	if s.inserted-s.lastLogged >= 1000 {
 		s.lastLogged = s.inserted
 		log.Printf("INSERTED network=%s total=%d", s.lastNetwork, s.inserted)
 	}
-	s.pending = s.pending[:0]
-	return nil
+}
+
+// dropKey forgets a pending message identity; callers hold s.mu.
+func (s *sink) dropKey(key string) {
+	if key != "" {
+		delete(s.pendingKeys, key)
+	}
+}
+
+// truncate clips s to at most n bytes for log lines.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 // parseEvent maps one NATS message onto a row. The network and the event
-// type come from the subject `extractor.<network>.<type>`; the body is the
-// adapter envelope of the coordinator contract (family/kind/... on every
-// event; block events shaped number/hash/timestamp, transaction events
-// shaped block_number/block_hash/hash/from/to/value/gas/status).
-func parseEvent(subject string, data []byte, now time.Time) (eventRow, error) {
-	network, eventType, ok := splitSubject(subject)
+// type come from the subject by stripping the literal prefix of the
+// configured filter (default `extractor.>` gives
+// `extractor.<network>.<type>`, `evm.v3.>` gives
+// `evm.v3.<network>.<family>.<kind>`); the body is the adapter envelope
+// (family/kind/... on every event; block events shaped
+// number/hash/timestamp, transaction events shaped
+// block_number/block_hash/hash/from/to/value/gas/status).
+func (s *sink) parseEvent(subject string, data []byte, now time.Time) (eventRow, error) {
+	network, eventType, ok := s.subjects.splitSubject(subject)
 	if !ok {
-		return eventRow{}, fmt.Errorf("subject %q is not extractor.<network>.<type>", subject)
+		return eventRow{}, fmt.Errorf("subject %q does not match the configured filter prefix %s<network>.<type>",
+			subject, s.subjects.prefixDot())
 	}
 	var p payload
 	if err := json.Unmarshal(data, &p); err != nil {
@@ -806,41 +939,116 @@ func parseEvent(subject string, data []byte, now time.Time) (eventRow, error) {
 	// Block events use number/hash; transaction events use
 	// block_number/block_hash and hash is the tx hash. Both shapes are
 	// accepted for block_number, the hash columns are filled per type.
-	row.BlockNumber = firstU64(p.BlockNumber, p.Number)
+	// The evm.v3 mock stack spells them height/tx_hash/from_addr/to_addr.
+	row.BlockNumber = firstU64(p.BlockNumber, p.Number, p.Height)
 
 	switch {
 	case eventType == "block" || (eventType == "" && p.Family == "block"):
 		row.BlockHash = firstString(p.Hash, p.BlockHash)
 		row.ParentHash = string(p.ParentHash)
+		row.BlockGasUsed = firstU64(p.GasUsed)
+		row.BlockTxCount = firstU64(p.TxCount)
+		// entity is the dedup/reorg identity of the row: the block hash
+		// for blocks, so a replayed block with a new kind replaces the
+		// old row under the same ORDER BY key.
+		row.Entity = row.BlockHash
 		if sec, ok := p.Timestamp.u64(); ok {
+			if sec < minBlockTimestamp || sec > maxBlockTimestamp {
+				return eventRow{}, fmt.Errorf("block timestamp %d outside %d..%d (2000-01-01..2100-01-01 UTC)",
+					sec, minBlockTimestamp, maxBlockTimestamp)
+			}
 			t := time.Unix(int64(sec), 0).UTC()
 			row.BlockTimestamp = &t
 		}
-	case eventType == "transaction" || p.Family == "tx" || p.Family == "transaction":
+	case eventType == "transaction" || eventType == "tx" || p.Family == "tx" || p.Family == "transaction":
 		row.BlockHash = string(p.BlockHash)
 		row.TxIndex = firstU64(p.TxIndex)
-		row.TxHash = string(p.Hash)
-		row.TxFrom = string(p.From)
-		row.TxTo = string(p.To) // null on contract creation decodes to ''
+		row.TxHash = firstString(p.Hash, p.TxHash)
+		row.TxFrom = firstString(p.From, p.FromAddr)
+		row.TxTo = firstString(p.To, p.ToAddr) // null on contract creation decodes to ''
 		row.TxValue = string(p.Value)
 		row.TxGas = firstU64(p.Gas)
 		row.TxGasPrice = string(p.GasPrice)
 		row.TxStatus = txStatus(p.Status)
 		row.TxType = string(p.TxType)
+		if row.TxHash == "" {
+			// Without a tx hash the row would key on the empty entity and
+			// could collide with (and replace) unrelated rows: reject it
+			// loudly instead of corrupting the block/tx namespaces.
+			return eventRow{}, fmt.Errorf("transaction event without a hash (hash/tx_hash both absent)")
+		}
+		row.Entity = row.TxHash
 		// block_timestamp stays NULL until the event is joined with its
 		// block; the partition expression falls back to captured_at.
+	default:
+		// Families without block context (balance and friends): the
+		// record digest is stable per event, so two distinct events never
+		// share an ORDER BY key.
+		row.Entity = row.RecordDigest
 	}
 	return row, nil
 }
 
-// splitSubject derives the network and the event type from
-// extractor.<network>.<type>... (extra tokens are tolerated and ignored).
-func splitSubject(subject string) (network, eventType string, ok bool) {
-	parts := strings.Split(subject, ".")
-	if len(parts) < 3 || parts[0] != "extractor" || parts[1] == "" || parts[2] == "" {
+// Timestamp bounds for parsed block timestamps: everything outside is a
+// broken source value (a wrapped or negative unix seconds would make
+// Nullable(DateTime) reject the insert), so it is refused at parse time.
+const (
+	minBlockTimestamp = 946684800  // 2000-01-01T00:00:00Z
+	maxBlockTimestamp = 4102444800 // 2100-01-01T00:00:00Z
+)
+
+// subjectParser derives the network and event type tokens of a delivered
+// subject by stripping the literal prefix of the configured filter: for
+// `extractor.>` the prefix is [extractor], for `evm.v3.>` it is
+// [evm, v3]. The filter itself must be literal tokens plus the `>` tail.
+type subjectParser struct {
+	prefix []string
+}
+
+// newSubjectParser validates the subject filter and precomputes its
+// literal prefix tokens.
+func newSubjectParser(filter string) (subjectParser, error) {
+	tokens := strings.Split(strings.TrimSpace(filter), ".")
+	if len(tokens) < 2 || tokens[len(tokens)-1] != ">" {
+		return subjectParser{}, fmt.Errorf("filter %q must be literal tokens ending in the > wildcard", filter)
+	}
+	prefix := tokens[:len(tokens)-1]
+	for _, t := range prefix {
+		if t == "" || t == "*" || t == ">" {
+			return subjectParser{}, fmt.Errorf("filter %q must hold only literal tokens before the > wildcard", filter)
+		}
+	}
+	return subjectParser{prefix: prefix}, nil
+}
+
+// splitSubject strips the filter prefix and returns the network and event
+// type tokens. Extra trailing tokens (the kind of
+// evm.v3.<net>.<family>.<kind>) are tolerated and ignored; a subject
+// without the prefix or with fewer than two tokens after it is a
+// structural mismatch against the configured filter.
+func (p subjectParser) splitSubject(subject string) (network, eventType string, ok bool) {
+	tokens := strings.Split(subject, ".")
+	if len(tokens) < len(p.prefix)+2 {
 		return "", "", false
 	}
-	return parts[1], parts[2], true
+	for i, want := range p.prefix {
+		if tokens[i] != want {
+			return "", "", false
+		}
+	}
+	network, eventType = tokens[len(p.prefix)], tokens[len(p.prefix)+1]
+	if network == "" || eventType == "" {
+		return "", "", false
+	}
+	return network, eventType, true
+}
+
+// prefixDot renders the prefix for log lines ("evm.v3.").
+func (p subjectParser) prefixDot() string {
+	if len(p.prefix) == 0 {
+		return ""
+	}
+	return strings.Join(p.prefix, ".") + "."
 }
 
 // chainID prefers an explicit payload value, then the known table.
