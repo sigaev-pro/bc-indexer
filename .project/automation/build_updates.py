@@ -66,9 +66,26 @@ def debian_compare(left, right):
     return (1 if le > re_ else -1) if le != re_ else part(lu, ru) or part(lr, rr)
 
 
+class AliasBindingRequired(ValueError):
+    """A numeric pagination alias met no repository metadata it could bind to.
+
+    The observation pass did not retain the repository metadata endpoint, so
+    the numeric identity check is deferred to the caller: it binds metadata
+    fetched from the exact configured official endpoint with
+    Observations.bindAlias and repeats the pagination. The numeric path stays
+    rejected until that binding exists; nothing is accepted unverified.
+    """
+
+    def __init__(self, named_url, metadata_url, numeric_url):
+        super().__init__("official numeric pagination needs a caller-bound repository metadata alias: "
+                         + metadata_url + " for " + numeric_url)
+        self.named_url, self.metadata_url, self.numeric_url = named_url, metadata_url, numeric_url
+
+
 class Observations:
     def __init__(self, root, rows, now, synthetic):
         self.root, self.rows, self.used = Path(root), {}, set()
+        self.bound, self.deferred = {}, {}
         contract.require(type(rows) is list and 1 <= len(rows) <= 4096, "updater observation set is missing or unbounded")
         for row in rows:
             contract.require(type(row) is dict and set(row) == OBSERVATION_KEYS and isinstance(row["url"], str)
@@ -99,8 +116,38 @@ class Observations:
     def json(self, url):
         return contract.parse_json(self.data(url))
 
+    def bindAlias(self, named_url, metadata):
+        """Bind a named endpoint's numeric pagination alias to repository metadata.
+
+        The caller invokes this before pages() when the observation pass did not
+        retain the repository metadata endpoint; metadata must come from a fetch
+        of the exact configured official repository endpoint that named_url
+        belongs to. Binding is idempotent for the same identity and rejects a
+        different one, including one that contradicts a retained observation.
+        """
+        parsed = urllib.parse.urlsplit(named_url)
+        named = re.fullmatch(r"/repos/([^/]+/[^/]+)(/.*)", parsed.path) if parsed.netloc == "api.github.com" else None
+        contract.require(named is not None and parsed.scheme == "https",
+                         "alias binding requires a named official GitHub repository endpoint")
+        metadata_url = "https://api.github.com/repos/" + named[1]
+        contract.require(type(metadata) is dict and type(metadata.get("id")) is int and metadata["id"] > 0
+                         and metadata.get("full_name") == named[1] and metadata.get("url") == metadata_url,
+                         "official repository metadata has an invalid or different identity")
+        if metadata_url in self.rows:
+            retained = self.json(metadata_url)
+            contract.require(type(retained) is dict and retained.get("id") == metadata["id"],
+                             "caller-bound repository metadata differs from the retained observation")
+        contract.require(self.bound.get(named[1]) in (None, metadata["id"]),
+                         "repository identity cannot be rebound to another numeric alias")
+        self.bound[named[1]] = metadata["id"]
+        for numeric, pending in list(self.deferred.items()):
+            if pending == metadata_url:
+                self.deferred.pop(numeric)
+        return "/repositories/" + str(metadata["id"])
+
     def pages(self, url):
         initial, seen, result = urllib.parse.urlsplit(url), set(), []
+        named_url = url
         named = re.fullmatch(r"/repos/([^/]+/[^/]+)(/.*)", initial.path) if initial.netloc == "api.github.com" else None
         metadata_url = "https://api.github.com/repos/" + named[1] if named else None
         alias = None
@@ -110,17 +157,35 @@ class Observations:
             contract.require(type(metadata) is dict and type(metadata.get("id")) is int and metadata["id"] > 0
                              and metadata.get("full_name") == named[1] and metadata.get("url") == metadata_url,
                              "official repository metadata has an invalid or different identity")
+            self.deferred.pop(metadata_url, None)
             return "/repositories/" + str(metadata["id"]) + named[2]
+
+        def caller_alias():
+            # The caller bound repository metadata it fetched from the exact
+            # configured official endpoint when no observation retained it.
+            self.deferred.pop(metadata_url, None)
+            return "/repositories/" + str(self.bound[named[1]]) + named[2]
 
         if metadata_url in self.rows:
             alias = repository_alias()
+        elif named and named[1] in self.bound:
+            alias = caller_alias()
         while url:
             parsed = urllib.parse.urlsplit(url)
             contract.require(len(seen) < 64 and parsed.scheme == initial.scheme
                              and parsed.netloc == initial.netloc,
                              "official pagination loops or changes source identity")
             if parsed.path != initial.path and named and alias is None:
-                alias = repository_alias()
+                if metadata_url in self.rows:
+                    alias = repository_alias()
+                elif named[1] in self.bound:
+                    alias = caller_alias()
+                else:
+                    # The metadata endpoint was not pre-fetched: mark the numeric
+                    # path as needing the metadata and defer the identity check
+                    # to the caller instead of consuming an unavailable source.
+                    self.deferred[url] = metadata_url
+                    raise AliasBindingRequired(named_url, metadata_url, url)
             contract.require(parsed.path == initial.path or (alias is not None and parsed.path == alias),
                              "official pagination loops or changes source identity")
             identity = (initial.path, tuple(sorted(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)))) if named else url
