@@ -11,6 +11,9 @@ credentials.json
 secrets/
 .aws/
 
+# Local build output of the deployment stack
+.build/
+
 # Local agent state, worktrees, and generated evidence
 .project/automation/state/
 .project/automation/runs/

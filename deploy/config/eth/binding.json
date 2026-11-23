@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "destination_id": "f13547dc9857ec1b9b0e0da8fd558261",
+  "generation": "1",
+  "network": {
+    "family": "EVM",
+    "chain_id": "0000000000000000000000000000000000000000000000000000000000000001",
+    "genesis_hash": "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+  },
+  "expected_account": "IDX_ETH",
+  "stream": "EXTRACTOR_ETH_V3",
+  "subject_prefix": "evm.v3.eth",
+  "descriptor_digest": "b037581012f3b0cd171c4a6a6185cbff581fea39d7c746c365bc6c77468905eb"
+}

@@ -1,0 +1,26 @@
+schema_version: 1
+network:
+  profile: ethereum-mainnet
+destination:
+  binding_file: /config/binding.json
+gateway:
+  listen: https://0.0.0.0:50051
+  tls:
+    mode: mutual
+    ca_file: /run/secrets/ca.pem
+    cert_file: /run/secrets/gateway.crt
+    key_file: /run/secrets/gateway.key
+  nats:
+    server: tls://nats:4222
+    tls:
+      mode: server
+      ca_file: /run/secrets/nats-ca.pem
+    credentials_file: /run/secrets/nats.creds
+    stream: EXTRACTOR_ETH_V3
+    subject_prefix: evm.v3.eth
+storage:
+  gateway_dir: /data/journal
+transport:
+  max_frame_bytes: 2097152
+runtime:
+  log_level: info
