@@ -2,8 +2,9 @@
 
 A standalone service that drains the extractor NATS JetStream subjects into
 the universal ClickHouse event table. It is deliberately separate from the
-extractor binaries: it only reads the stream, never writes to NATS, and its
-only dependencies are the pinned NATS and ClickHouse Go clients.
+extractor binaries: it only reads the extractor streams (it creates a
+stream only on a bare NATS where none exists) and its only dependencies are
+the pinned NATS and ClickHouse Go clients.
 
 ```
 extractor adapter ──▶ NATS JetStream ──▶ clickhouse-sink ──▶ ClickHouse
@@ -16,23 +17,33 @@ extractor adapter ──▶ NATS JetStream ──▶ clickhouse-sink ──▶ C
    database and the `events` table if they do not exist — the same DDL as
    `deploy/clickhouse/schema.sql`, so a bare ClickHouse converges on the
    right schema.
-2. Connects to NATS and creates the `EXTRACTOR` stream (subjects
-   `extractor.>`) if it is missing; an existing stream is never
-   reconfigured.
-3. Subscribes with a **durable** consumer (`clickhouse-sink`), so the
-   position survives restarts.
-4. Parses each event body (the adapter envelope) and maps it onto the
+2. Connects to NATS and lists all streams, picking every stream whose
+   subjects intersect the sink filter `extractor.>` (token-wildcard
+   intersection: `extractor.>` matches `extractor.eth-sepolia.>`,
+   `extractor.eth.transaction`, …). The live topology is multi-stream —
+   the real adapter provisions one stream per network
+   (`EXTRACTOR_<NETWORK>`) — so the sink runs one durable consumer per
+   stream (`<SINK_DURABLE>-<STREAM>`, e.g. `clickhouse-sink-EXTRACTOR_ETH_SEPOLIA`)
+   and consumes them all concurrently.
+3. On a bare NATS where no stream matches, it creates the configured
+   `NATS_STREAM` with subject `NATS_SUBJECT` instead; an existing stream
+   is never reconfigured.
+4. A background rescan (every `SINK_RESCAN_INTERVAL`, default 30s) re-lists
+   the streams: a stream provisioned by an adapter that just started gets a
+   consumer without a restart, and a deleted stream has its consumer
+   stopped.
+5. Parses each event body (the adapter envelope) and maps it onto the
    universal columns. `network` and `event_type` come from the subject
    `extractor.<network>.<type>`; the body supplies the rest; the full
    original JSON is kept in `raw`.
-5. Buffers rows and inserts them in batches: every **100 messages** or
+6. Buffers rows and inserts them in batches: every **100 messages** or
    **1 second**, whichever comes first.
-6. Acks a NATS message only **after** the batch containing it was inserted
+7. Acks a NATS message only **after** the batch containing it was inserted
    (at-least-once). Replayed duplicates and later reorg updates are
    collapsed by `ReplacingMergeTree`, which keeps the row with the highest
    `ingested_at`.
-7. On SIGTERM/SIGINT it stops consuming and flushes the pending batch
-   before exiting.
+8. On SIGTERM/SIGINT it drains every consume handle and flushes the
+   pending batch before exiting.
 
 Log lines are plain key=value records on stdout. A progress line appears
 per 1000 inserted messages:
@@ -50,13 +61,15 @@ INSERTED network=eth-sepolia total=5000
 | `CLICKHOUSE_DB` | `extractor` | database (and table `events` inside it) |
 | `CLICKHOUSE_USER` | `default` | ClickHouse user |
 | `CLICKHOUSE_PASSWORD` | *(empty)* | ClickHouse password |
-| `NATS_STREAM` | `EXTRACTOR` | stream created if missing |
-| `NATS_SUBJECT` | `extractor.>` | subscription subject filter |
-| `SINK_DURABLE` | `clickhouse-sink` | durable consumer name |
+| `NATS_STREAM` | `EXTRACTOR` | stream created when no matching stream exists |
+| `NATS_SUBJECT` | `extractor.>` | subject filter matched against every stream |
+| `SINK_DURABLE` | `clickhouse-sink` | durable consumer prefix (per stream: `<prefix>-<stream>`) |
+| `SINK_DELIVER_POLICY` | `all` | first-connect delivery: `all`, `last` (only the last message per stream) or `new` (skip the backlog) — use `last`/`new` to skip a large existing backlog; an existing durable keeps its stored policy (delete it to apply a change) |
+| `SINK_RESCAN_INTERVAL` | `30s` | how often new/deleted streams are re-scanned |
 | `SINK_BATCH_SIZE` | `100` | max rows per insert |
 | `SINK_FLUSH_INTERVAL` | `1s` | max delay before an insert |
 | `SINK_ACK_WAIT` | `60s` | consumer ack wait |
-| `SINK_MAX_ACK_PENDING` | `512` | consumer in-flight cap |
+| `SINK_MAX_ACK_PENDING` | `512` | consumer in-flight cap (per stream) |
 
 ## Running
 

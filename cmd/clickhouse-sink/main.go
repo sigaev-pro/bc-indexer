@@ -1,13 +1,21 @@
 // Command clickhouse-sink drains the extractor NATS JetStream subjects
 // into the universal ClickHouse event table (deploy/clickhouse/schema.sql).
 //
-// The service subscribes to `extractor.>` with a durable consumer, so it
-// survives restarts without losing events: a NATS message is acked only
-// after the batch that contains it was inserted into ClickHouse. Rows are
-// buffered and flushed every SINK_BATCH_SIZE events or SINK_FLUSH_INTERVAL,
-// whichever comes first. Replayed rows (a crash between insert and ack, or a
-// later reorg update) are collapsed by ReplacingMergeTree, which keeps the
-// row with the highest ingested_at.
+// The live topology is not a single stream: the adapter provisions one
+// stream per network (EXTRACTOR_<NET>) and older stacks run per-family
+// demo streams. The sink therefore discovers every stream whose subjects
+// intersect the sink filter (`extractor.>`) and runs one durable consumer
+// per stream, consuming them all concurrently. Streams provisioned or
+// deleted at runtime are followed by a periodic rescan. A bare NATS with
+// no matching stream gets the configured NATS_STREAM created instead.
+//
+// Every consumer is durable, so the service survives restarts without
+// losing events: a NATS message is acked only after the batch that
+// contains it was inserted into ClickHouse. Rows are buffered and flushed
+// every SINK_BATCH_SIZE events or SINK_FLUSH_INTERVAL, whichever comes
+// first. Replayed rows (a crash between insert and ack, or a later reorg
+// update) are collapsed by ReplacingMergeTree, which keeps the row with
+// the highest ingested_at.
 //
 // Every event body is the adapter envelope: block events carry
 // number/hash/parent_hash/timestamp, transaction events carry
@@ -28,6 +36,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,34 +51,38 @@ import (
 
 // config is the environment contract of the service.
 type config struct {
-	NatsURL       string        // NATS_URL
-	NatsStream    string        // NATS_STREAM
-	NatsSubject   string        // NATS_SUBJECT
-	Durable       string        // SINK_DURABLE
-	ClickHouseURL string        // CLICKHOUSE_URL
-	ClickHouseDB  string        // CLICKHOUSE_DB
-	CHUser        string        // CLICKHOUSE_USER
-	CHPassword    string        // CLICKHOUSE_PASSWORD
-	BatchSize     int           // SINK_BATCH_SIZE
-	FlushInterval time.Duration // SINK_FLUSH_INTERVAL
-	AckWait       time.Duration // SINK_ACK_WAIT
-	MaxAckPending int           // SINK_MAX_ACK_PENDING
+	NatsURL        string        // NATS_URL
+	NatsStream     string        // NATS_STREAM
+	NatsSubject    string        // NATS_SUBJECT
+	Durable        string        // SINK_DURABLE
+	ClickHouseURL  string        // CLICKHOUSE_URL
+	ClickHouseDB   string        // CLICKHOUSE_DB
+	CHUser         string        // CLICKHOUSE_USER
+	CHPassword     string        // CLICKHOUSE_PASSWORD
+	BatchSize      int           // SINK_BATCH_SIZE
+	FlushInterval  time.Duration // SINK_FLUSH_INTERVAL
+	AckWait        time.Duration // SINK_ACK_WAIT
+	MaxAckPending  int           // SINK_MAX_ACK_PENDING
+	DeliverPolicy  string        // SINK_DELIVER_POLICY
+	RescanInterval time.Duration // SINK_RESCAN_INTERVAL
 }
 
 func loadConfig() config {
 	return config{
-		NatsURL:       envString("NATS_URL", "nats://localhost:4222"),
-		NatsStream:    envString("NATS_STREAM", "EXTRACTOR"),
-		NatsSubject:   envString("NATS_SUBJECT", "extractor.>"),
-		Durable:       envString("SINK_DURABLE", "clickhouse-sink"),
-		ClickHouseURL: envString("CLICKHOUSE_URL", "localhost:9000"),
-		ClickHouseDB:  envString("CLICKHOUSE_DB", "extractor"),
-		CHUser:        envString("CLICKHOUSE_USER", "default"),
-		CHPassword:    envString("CLICKHOUSE_PASSWORD", ""),
-		BatchSize:     envInt("SINK_BATCH_SIZE", 100),
-		FlushInterval: envDuration("SINK_FLUSH_INTERVAL", time.Second),
-		AckWait:       envDuration("SINK_ACK_WAIT", 60*time.Second),
-		MaxAckPending: envInt("SINK_MAX_ACK_PENDING", 512),
+		NatsURL:        envString("NATS_URL", "nats://localhost:4222"),
+		NatsStream:     envString("NATS_STREAM", "EXTRACTOR"),
+		NatsSubject:    envString("NATS_SUBJECT", "extractor.>"),
+		Durable:        envString("SINK_DURABLE", "clickhouse-sink"),
+		ClickHouseURL:  envString("CLICKHOUSE_URL", "localhost:9000"),
+		ClickHouseDB:   envString("CLICKHOUSE_DB", "extractor"),
+		CHUser:         envString("CLICKHOUSE_USER", "default"),
+		CHPassword:     envString("CLICKHOUSE_PASSWORD", ""),
+		BatchSize:      envInt("SINK_BATCH_SIZE", 100),
+		FlushInterval:  envDuration("SINK_FLUSH_INTERVAL", time.Second),
+		AckWait:        envDuration("SINK_ACK_WAIT", 60*time.Second),
+		MaxAckPending:  envInt("SINK_MAX_ACK_PENDING", 512),
+		DeliverPolicy:  envString("SINK_DELIVER_POLICY", "all"),
+		RescanInterval: envDuration("SINK_RESCAN_INTERVAL", 30*time.Second),
 	}
 }
 
@@ -311,9 +324,9 @@ type payload struct {
 func main() {
 	log.SetFlags(log.LstdFlags | log.LUTC)
 	cfg := loadConfig()
-	log.Printf("STARTING nats=%s stream=%s subject=%s durable=%s clickhouse=%s db=%s batch_size=%d flush_interval=%s",
-		cfg.NatsURL, cfg.NatsStream, cfg.NatsSubject, cfg.Durable, cfg.ClickHouseURL,
-		cfg.ClickHouseDB, cfg.BatchSize, cfg.FlushInterval)
+	log.Printf("STARTING nats=%s subject=%s durable=%s clickhouse=%s db=%s batch_size=%d flush_interval=%s deliver_policy=%s rescan_interval=%s",
+		cfg.NatsURL, cfg.NatsSubject, cfg.Durable, cfg.ClickHouseURL,
+		cfg.ClickHouseDB, cfg.BatchSize, cfg.FlushInterval, cfg.DeliverPolicy, cfg.RescanInterval)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -335,33 +348,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("NATS_JETSTREAM_ERROR error=%v", err)
 	}
-	if err := ensureStream(ctx, js, cfg); err != nil {
-		log.Fatalf("NATS_STREAM_ERROR error=%v", err)
+	deliver, err := deliverPolicy(cfg.DeliverPolicy)
+	if err != nil {
+		log.Fatalf("CONFIG_INVALID SINK_DELIVER_POLICY=%s error=%v", cfg.DeliverPolicy, err)
 	}
 
-	// The durable consumer is created (or updated) explicitly, so the
-	// client never owns its lifetime: stopping the sink leaves it on the
-	// server with its ack floor, and the next start resumes exactly
-	// where this one stopped instead of replaying the whole stream.
-	// (A consumer created implicitly by a subscribe call is deleted on
-	// unsubscribe/drain — that is the trap this avoids.)
-	cons, err := js.CreateOrUpdateConsumer(ctx, cfg.NatsStream, jetstream.ConsumerConfig{
-		Durable:       cfg.Durable,
-		FilterSubject: cfg.NatsSubject,
-		DeliverPolicy: jetstream.DeliverAllPolicy,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		AckWait:       cfg.AckWait,
-		MaxAckPending: cfg.MaxAckPending,
-	})
-	if err != nil {
-		log.Fatalf("NATS_CONSUMER_ERROR durable=%s error=%v", cfg.Durable, err)
-	}
 	s := &sink{cfg: cfg, ch: conn}
-	cc, err := cons.Consume(s.handleMessage)
-	if err != nil {
-		log.Fatalf("NATS_CONSUME_ERROR durable=%s error=%v", cfg.Durable, err)
+	streams := newConsumerSet(cfg, js, s, deliver)
+	if err := streams.initialScan(ctx); err != nil {
+		log.Fatalf("NATS_STREAM_ERROR error=%v", err)
 	}
-	log.Printf("NATS_READY stream=%s subject=%s durable=%s", cfg.NatsStream, cfg.NatsSubject, cfg.Durable)
+	go streams.runScanLoop(ctx)
 
 	// The time-based half of the batching policy: flush whatever is
 	// pending every FlushInterval.
@@ -389,12 +386,12 @@ func main() {
 	<-ctx.Done()
 	log.Printf("STOPPING reason=signal")
 
-	// Stop fetching, then give the consume loop a short grace period to
-	// push the messages it already buffered through the handler (Drain
+	// Stop fetching, then give the consume loops a short grace period to
+	// push the messages they already buffered through the handler (Drain
 	// processes the buffer instead of discarding it). Anything that does
-	// not make it into a batch stays unacked and the durable consumer
-	// replays it after the restart — a redelivery, never a loss.
-	cc.Drain()
+	// not make it into a batch stays unacked and the durable consumers
+	// replay it after the restart — a redelivery, never a loss.
+	streams.drainAll()
 	time.Sleep(2 * time.Second)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -505,6 +502,208 @@ func ensureStream(ctx context.Context, js jetstream.JetStream, cfg config) error
 	}
 	log.Printf("STREAM_CREATED stream=%s subjects=%s", cfg.NatsStream, cfg.NatsSubject)
 	return nil
+}
+
+// consumerSet runs one durable consumer per extractor stream. The sink
+// filter (`extractor.>`) is matched against every stream's subjects, so
+// the per-network adapter streams (EXTRACTOR_<NET>) and the per-family
+// demo streams are all consumed concurrently; handleMessage is
+// mutex-guarded, so sharing it across streams is safe.
+type consumerSet struct {
+	cfg     config
+	js      jetstream.JetStream
+	sink    *sink
+	deliver jetstream.DeliverPolicy
+
+	mu     sync.Mutex
+	active map[string]jetstream.ConsumeContext
+}
+
+func newConsumerSet(cfg config, js jetstream.JetStream, s *sink, deliver jetstream.DeliverPolicy) *consumerSet {
+	return &consumerSet{
+		cfg:     cfg,
+		js:      js,
+		sink:    s,
+		deliver: deliver,
+		active:  make(map[string]jetstream.ConsumeContext),
+	}
+}
+
+// durableName derives the per-stream durable name (stream names and
+// durable names share the [a-zA-Z0-9-_.] alphabet).
+func (cs *consumerSet) durableName(stream string) string {
+	return cs.cfg.Durable + "-" + stream
+}
+
+// initialScan discovers the extractor streams and, on a bare NATS where
+// none exists, falls back to creating the configured NATS_STREAM with the
+// configured subject.
+func (cs *consumerSet) initialScan(ctx context.Context) error {
+	names, err := matchingStreams(ctx, cs.js, cs.cfg.NatsSubject)
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		if err := ensureStream(ctx, cs.js, cs.cfg); err != nil {
+			return err
+		}
+	}
+	return cs.reconcile(ctx)
+}
+
+// runScanLoop re-lists the streams periodically, so a stream provisioned
+// by an adapter that just started (or deleted at runtime) is followed
+// without a restart.
+func (cs *consumerSet) runScanLoop(ctx context.Context) {
+	ticker := time.NewTicker(cs.cfg.RescanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := cs.reconcile(ctx); err != nil {
+				log.Printf("SCAN_FAILED error=%v", err)
+			}
+		}
+	}
+}
+
+// reconcile starts consumers for matching streams that have none yet and
+// stops the consume handles of streams that disappeared. Per-stream
+// failures are logged and retried on the next scan instead of aborting
+// the whole set.
+func (cs *consumerSet) reconcile(ctx context.Context) error {
+	names, err := matchingStreams(ctx, cs.js, cs.cfg.NatsSubject)
+	if err != nil {
+		return err
+	}
+	want := make(map[string]bool, len(names))
+	for _, name := range names {
+		want[name] = true
+	}
+
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	for name, cc := range cs.active {
+		if want[name] {
+			continue
+		}
+		cc.Stop()
+		delete(cs.active, name)
+		log.Printf("CONSUMER_STOPPED stream=%s durable=%s", name, cs.durableName(name))
+	}
+	for _, name := range names {
+		if _, ok := cs.active[name]; ok {
+			continue
+		}
+		// The durable consumer is created (or updated) explicitly, so
+		// the client never owns its lifetime: stopping the sink leaves
+		// it on the server with its ack floor, and the next start
+		// resumes exactly where this one stopped instead of replaying
+		// the whole stream. (A consumer created implicitly by a
+		// subscribe call is deleted on unsubscribe/drain — that is the
+		// trap this avoids.)
+		cons, err := cs.js.CreateOrUpdateConsumer(ctx, name, jetstream.ConsumerConfig{
+			Durable:       cs.durableName(name),
+			FilterSubject: cs.cfg.NatsSubject,
+			DeliverPolicy: cs.deliver,
+			AckPolicy:     jetstream.AckExplicitPolicy,
+			AckWait:       cs.cfg.AckWait,
+			MaxAckPending: cs.cfg.MaxAckPending,
+		})
+		if err != nil {
+			log.Printf("CONSUMER_ERROR stream=%s durable=%s error=%v (an existing durable keeps its stored deliver policy; delete it to apply SINK_DELIVER_POLICY)",
+				name, cs.durableName(name), err)
+			continue
+		}
+		cc, err := cons.Consume(cs.sink.handleMessage)
+		if err != nil {
+			log.Printf("CONSUME_ERROR stream=%s durable=%s error=%v", name, cs.durableName(name), err)
+			continue
+		}
+		cs.active[name] = cc
+		log.Printf("CONSUMER_STARTED stream=%s durable=%s filter=%s deliver_policy=%s",
+			name, cs.durableName(name), cs.cfg.NatsSubject, cs.cfg.DeliverPolicy)
+	}
+	return nil
+}
+
+// drainAll gracefully drains every active consume handle: the messages
+// already buffered are still processed by the handler instead of being
+// discarded.
+func (cs *consumerSet) drainAll() {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	for name, cc := range cs.active {
+		cc.Drain()
+		log.Printf("CONSUMER_DRAINED stream=%s durable=%s", name, cs.durableName(name))
+	}
+}
+
+// matchingStreams lists the names of all streams whose subjects intersect
+// the sink subject filter.
+func matchingStreams(ctx context.Context, js jetstream.JetStream, filter string) ([]string, error) {
+	filterTokens := strings.Split(filter, ".")
+	var names []string
+	it := js.ListStreams(ctx)
+	for info := range it.Info() {
+		for _, subject := range info.Config.Subjects {
+			if subjectsIntersect(filterTokens, strings.Split(subject, ".")) {
+				names = append(names, info.Config.Name)
+				break
+			}
+		}
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// subjectsIntersect reports whether two NATS subject filters can match at
+// least one common subject, honoring the token wildcards ("*" exactly one
+// token, ">" the non-empty tail).
+func subjectsIntersect(a, b []string) bool {
+	n := len(a)
+	if len(b) > n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		aEnd, bEnd := i >= len(a), i >= len(b)
+		switch {
+		case aEnd && bEnd:
+			return true
+		case aEnd || bEnd:
+			// One filter is exhausted, so it matches only subjects of
+			// exactly its own length while the other still has tokens.
+			return false
+		}
+		switch ta, tb := a[i], b[i]; {
+		case ta == ">" || tb == ">":
+			return true
+		case ta == "*" || tb == "*" || ta == tb:
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// deliverPolicy maps SINK_DELIVER_POLICY onto the consumer deliver policy.
+func deliverPolicy(v string) (jetstream.DeliverPolicy, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "all":
+		return jetstream.DeliverAllPolicy, nil
+	case "last":
+		return jetstream.DeliverLastPolicy, nil
+	case "new":
+		return jetstream.DeliverNewPolicy, nil
+	default:
+		return jetstream.DeliverAllPolicy, fmt.Errorf("unknown deliver policy %q (want all, last or new)", v)
+	}
 }
 
 // handleMessage parses one delivered message into a row and adds it to the
