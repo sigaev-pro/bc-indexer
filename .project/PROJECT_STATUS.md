@@ -32,7 +32,7 @@ Queue, in priority order:
 
 ## Maximum throughput mode (2026-11-23)
 
-The owner directed maximum API limit utilization at all times. Current: 6 E05 agents, 2 E06 agents, G.E04 gate review. Slots refill immediately as agents finish. E07 starts as soon as E05 dependencies merge.
+The owner directed maximum API limit utilization at all times. Current: 6 E05 agents, 2 E06 agents, G.E04 gate review. Slots refill immediately as agents finish. E07 starts as soon as E05 dependencies merge. **Slot 5 (drain+upgrade) COMPLETE**: commit faf26c8 on e05-drain — drain mode barrier (durable DRAIN/Resume, admission closed, seal blocked until obligations resolved), upgrade compatibility matrix with SHA-256 prewrite fingerprint, composed with core/delivery stores. Draft PR #212 opened. Remaining: slots 1-4, 6 (E05), 7-8 (E06), G.E04 review.
 
 ## E03 COMPLETE (2026-11-22)
 
