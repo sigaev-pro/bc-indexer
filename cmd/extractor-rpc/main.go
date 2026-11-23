@@ -9,8 +9,9 @@
 // gateway/destination and gateway/publisher. The mock wire and mock
 // gateway of deploy/ are never used. A --config YAML file selects the
 // network, pins the expected chain_id against the one the live endpoint
-// serves, and bounds the run with max_blocks; the streams keep their
-// messages for five minutes so no chain data accumulates on disk.
+// serves, and bounds the run with max_blocks; the streams the adapter
+// creates keep their messages for five minutes so no chain data
+// accumulates on disk, and a pre-existing stream is never rewritten.
 package main
 
 import (
@@ -146,50 +147,84 @@ func main() {
 	}
 	a.producer, a.run, a.epoch = identities[0], identities[1], identities[2]
 
+	// The subscription is established BEFORE the head is sampled: the
+	// go-ethereum client retains up to 20000 notifications per
+	// subscription after the subscribe call confirms, so every head from
+	// the moment the subscription exists is held even while the replay
+	// loop below runs. Sampling the head first, as the natural order
+	// suggests, would leave any block that lands between the sample and
+	// the subscription permanently uncaptured — with "latest" that gap is
+	// never healed. The channel mirrors the client's own buffer size.
+	headers := make(chan *types.Header, 20000)
+	sub, err := ec.SubscribeNewHead(ctx, headers)
+	if err != nil {
+		fatal("RPC_SUBSCRIBE_FAILED", fmt.Errorf("new-head subscription needs a ws:// endpoint: %w", err))
+	}
+	defer sub.Unsubscribe()
 	head, err := ec.BlockNumber(ctx)
 	must("RPC_HEAD_FAILED", err)
-	headers := make(chan *types.Header, 64)
-	if sub, err := ec.SubscribeNewHead(ctx, headers); err != nil {
-		fatal("RPC_SUBSCRIBE_FAILED", fmt.Errorf("new-head subscription needs a ws:// endpoint: %w", err))
-	} else {
-		defer sub.Unsubscribe()
-	}
 
-	// A numeric FROM_BLOCK replays that history first; "latest" waits for
-	// the blocks that arrive after startup.
+	// A numeric FROM_BLOCK replays that history first; "latest" captures
+	// the blocks that arrive after startup, beginning at head+1. Only a
+	// plain non-negative decimal is accepted: a negative or overflowing
+	// value must fail fast, not idle forever on a wrapped height.
 	start := head + 1
 	if s.fromBlock != "latest" {
-		n, ok := new(big.Int).SetString(s.fromBlock, 0)
-		if !ok {
-			fatal("CONFIG_INVALID", fmt.Errorf("FROM_BLOCK %q is not a number or \"latest\"", s.fromBlock))
+		n, ok := new(big.Int).SetString(s.fromBlock, 10)
+		if !ok || n.Sign() < 0 || !n.IsUint64() {
+			fatal("CONFIG_INVALID", fmt.Errorf(
+				"FROM_BLOCK %q is not a non-negative decimal block number or \"latest\"", s.fromBlock))
 		}
 		start = n.Uint64()
 	}
-	// captureDone reports whether the run has its bounded window: with
-	// max_blocks set, the adapter captures exactly that many blocks and
-	// exits, so a verification run costs minutes instead of forever.
-	captureDone := func() bool { return a.maxBlocks != 0 && a.captured >= a.maxBlocks }
+	a.next = start
 	for i := start; i <= head && ctx.Err() == nil; i++ {
-		if captureDone() {
+		if a.captureDone() {
 			break
 		}
 		a.processBlock(ctx, new(big.Int).SetUint64(i))
 	}
-	for ctx.Err() == nil && !captureDone() {
+	// The replay covered start..head, so the capture frontier begins at
+	// the height after it — never below the configured start, which a
+	// FROM_BLOCK above the current head leaves waiting for the chain.
+	if head+1 > start {
+		a.next = head + 1
+	}
+	// No-gap invariant: every block height from start to the final head
+	// the run processes is captured exactly once. The replay loop covers
+	// start..head by number; the head loop below reconciles every live
+	// head against the frontier — a head at or below the frontier is an
+	// already-captured duplicate and is dropped, and a head above
+	// frontier+1 pulls the missing heights in by number (a public RPC
+	// serves BlockByNumber of any height), so out-of-order or even lost
+	// head notifications cannot open a hole. The one sanctioned hole is a
+	// block fetch that still fails after processBlock's bounded retry,
+	// logged as RPC_BLOCK_FAILED.
+	for ctx.Err() == nil && !a.captureDone() {
 		select {
 		case <-ctx.Done():
 		case h, ok := <-headers:
 			if !ok { // the RPC connection dropped the subscription
-				fatal("RPC_SUBSCRIPTION_CLOSED", errors.New("new-head subscription ended"))
+				reason := errors.New("new-head subscription ended without a cause")
+				select {
+				case err, ok := <-sub.Err():
+					if ok && err != nil {
+						reason = err
+					}
+				default:
+				}
+				// sub.Err() distinguishes the drop causes: a queue
+				// overflow means this reader was too slow, anything else
+				// means the WebSocket itself went down.
+				fatal("RPC_SUBSCRIPTION_CLOSED", reason)
 			}
-			if h.Number.Uint64() >= start && h.Number.Uint64() > a.processed {
-				a.processBlock(ctx, h.Number)
-			}
+			a.processHead(ctx, h.Number.Uint64())
 		}
 	}
-	if captureDone() {
+	if a.captureDone() {
 		logf("CAPTURE_COMPLETE", map[string]any{"network": a.network,
-			"blocks": a.captured, "events": a.eventSeq, "head_processed": a.processed})
+			"blocks": a.captured, "skipped": a.skipped, "events": a.eventSeq,
+			"head_processed": a.processed})
 	}
 }
 
@@ -206,7 +241,33 @@ type adapter struct {
 	producer, run, epoch             [16]byte
 	sourceSeq, eventSeq, processed   uint64
 	maxBlocks                        uint64 // 0 means follow the chain without a limit
-	captured                         uint64 // blocks normalized by this run
+	captured                         uint64 // blocks normalized and published by this run
+	skipped                          uint64 // blocks whose block event failed to publish
+	next                             uint64 // the capture frontier: the next height to process
+}
+
+// captureDone reports whether the run has its bounded window: with
+// max_blocks set, the adapter captures exactly that many blocks and exits,
+// so a verification run costs minutes instead of forever.
+func (a *adapter) captureDone() bool { return a.maxBlocks != 0 && a.captured >= a.maxBlocks }
+
+// processHead reconciles one live head against the capture frontier. A
+// head at or below next-1 is an already-captured duplicate and is dropped;
+// the frontier never regresses. A head above next means heads were missed
+// or arrived out of order, so the missing heights are fetched by number
+// too — a public RPC serves BlockByNumber of any height — which is what
+// keeps the no-gap invariant of the capture loop in main.
+func (a *adapter) processHead(ctx context.Context, height uint64) {
+	if height < a.next {
+		return // an already-captured height: a duplicate, not a regression
+	}
+	for i := a.next; i <= height; i++ {
+		if a.captureDone() || ctx.Err() != nil {
+			return
+		}
+		a.processBlock(ctx, new(big.Int).SetUint64(i))
+	}
+	a.next = height + 1
 }
 
 // processBlock normalizes one full block: one block lifecycle event plus
@@ -214,6 +275,16 @@ type adapter struct {
 // semantic descriptor, and publishes them through the seam.
 func (a *adapter) processBlock(ctx context.Context, number *big.Int) {
 	blk, err := a.ec.BlockByNumber(ctx, number)
+	if err != nil {
+		// A head notification can beat its block becoming queryable by
+		// number on a public endpoint, so one bounded retry after a short
+		// wait closes that race without an unbounded retry loop.
+		select {
+		case <-ctx.Done():
+		case <-time.After(2 * time.Second):
+			blk, err = a.ec.BlockByNumber(ctx, number)
+		}
+	}
 	if err != nil {
 		logf("RPC_BLOCK_FAILED", map[string]any{"number": number.Uint64(), "error": err.Error()})
 		return
@@ -237,9 +308,22 @@ func (a *adapter) processBlock(ctx context.Context, number *big.Int) {
 		logf("DESCRIPTOR_INVALID", map[string]any{"error": err.Error()})
 		return
 	}
-	a.publish(ctx, a.blockSubject, block, digest, map[string]any{
+	if !a.publish(ctx, a.blockSubject, block, digest, map[string]any{
 		"number": height, "hash": blk.Hash().Hex(), "parent_hash": blk.ParentHash().Hex(),
-		"timestamp": blk.Time(), "gas_used": blk.GasUsed(), "tx_count": blk.Transactions().Len()})
+		"timestamp": blk.Time(), "gas_used": blk.GasUsed(), "tx_count": blk.Transactions().Len()}) {
+		// The block event is the parent of every transaction event of this
+		// block: publishing the transactions would leave orphaned tx
+		// events in the stream without their block. The tx loop is
+		// skipped, the height counts as skipped — not captured, so
+		// max_blocks still demands its block from a later height — and
+		// the frontier advances past it rather than retrying a publish
+		// that already exhausted its transient retries.
+		a.skipped++
+		a.processed = height
+		logf("BLOCK_SKIPPED", map[string]any{"number": height, "hash": blk.Hash().Hex(),
+			"skipped": a.skipped, "reason": "block event publish failed"})
+		return
+	}
 
 	// The transaction entities: family tx, ordinal the body position plus
 	// one, with the receipt status of the inclusion. The receipts come
@@ -261,7 +345,15 @@ func (a *adapter) processBlock(ctx context.Context, number *big.Int) {
 			logf("DESCRIPTOR_INVALID", map[string]any{"error": err.Error()})
 			continue
 		}
-		from, _ := types.Sender(signer, tx)
+		from, err := types.Sender(signer, tx)
+		if err != nil {
+			// The event still publishes — with the zero address as
+			// "from", because the field must exist — and the failure is
+			// logged with the tx hash so the suspect transaction is
+			// identifiable off-line.
+			logf("SENDER_RECOVER_FAILED", map[string]any{"hash": tx.Hash().Hex(),
+				"error": err.Error(), "note": "from stays the zero address"})
+		}
 		a.publish(ctx, a.txSubject, transaction, txDigest, map[string]any{
 			"block_number": height, "block_hash": blk.Hash().Hex(), "tx_index": i,
 			"hash": tx.Hash().Hex(), "from": from.Hex(), "to": nullableAddr(tx.To()),
@@ -304,13 +396,33 @@ func (a *adapter) receiptStatuses(ctx context.Context, txs types.Transactions) [
 	return statuses
 }
 
+// The envelope contract, stated here because nothing else names it:
+// record_digest is the canonical D73 record digest of the PRE-envelope
+// body — the JSON event exactly as it is marshaled before any envelope
+// key exists. After the digest is taken, publish adds exactly nine keys
+// to the same object:
+//
+//	schema, network, family, kind, decision_sequence, entity_ordinal,
+//	source_sequence, descriptor_digest, record_digest
+//
+// The verification rule follows: strip exactly those nine keys from the
+// published envelope, re-marshal the remainder and recompute the record
+// digest over that body; it equals record_digest. A native event field
+// whose name collides with one of the nine envelope keys is overwritten
+// by the envelope value and the native value is lost — accepted and
+// documented here because the native field names of this adapter
+// (number, hash, parent_hash, from, to, ...) never collide with the
+// envelope set.
+//
 // publish frames one normalized event — the semantic identity in the JSON
 // envelope, the canonical record digest of the D73 encoding, the exact v2
 // message id and header bytes — and drives it to a durable JetStream
 // publish, retrying transient failures under the immutable id so the
-// stream dedups the retries.
+// stream dedups the retries. It reports whether the event is durably
+// published: false means encode failure, a permanent publish error, or a
+// shutdown mid-retry.
 func (a *adapter) publish(ctx context.Context, subject string,
-	d semantic.SemanticDescriptor, digest semantic.Hash32, event map[string]any) {
+	d semantic.SemanticDescriptor, digest semantic.Hash32, event map[string]any) bool {
 	a.eventSeq++
 	eventID := proto.NewEventID(proto.ID16(a.producer), proto.ID16(a.run), a.eventSeq)
 	body, err := json.Marshal(event)
@@ -330,31 +442,34 @@ func (a *adapter) publish(ctx context.Context, subject string,
 	}
 	if err != nil {
 		logf("RECORD_ENCODE_FAILED", map[string]any{"error": err.Error()})
-		return
+		return false
 	}
 	msgID, err := proto.NatsMsgID(a.networkDigest, eventID, 0, proto.FormComplete, 0)
 	must("MSG_ID_FAILED", err)
 	header, err := proto.NatsHeader(msgID, a.binding.Stream)
 	must("NATS_HEADER_FAILED", err)
+	// The backoff doubles from 1s and caps at exactly 15s (1, 2, 4, 8,
+	// 15, 15, ...); transient failures retry forever under the same
+	// Nats-Msg-Id, so the stream dedups any double-stored copy.
 	for backoff := time.Second; ; {
 		ack, err := jetstreamAPI{a.js}.Publish(subject, header, body)
 		if err == nil {
 			logf("RECORD_PUBLISHED", map[string]any{"subject": subject, "msg_id": msgID,
 				"stream": ack.Stream, "sequence": ack.Sequence, "bytes": len(body)})
-			return
+			return true
 		}
 		if !errors.Is(err, publisher.ErrTransient) {
 			logf("PUBLISH_FAILED", map[string]any{"subject": subject, "error": err.Error()})
-			return
+			return false
 		}
 		logf("PUBLISH_RETRY", map[string]any{"subject": subject, "error": err.Error(), "in": backoff.String()})
 		select {
 		case <-ctx.Done():
-			return
+			logf("PUBLISH_DROPPED", map[string]any{"subject": subject, "msg_id": msgID,
+				"reason": "context canceled mid-retry"})
+			return false
 		case <-time.After(backoff):
-			if backoff < 15*time.Second {
-				backoff *= 2
-			}
+			backoff = min(backoff*2, 15*time.Second)
 		}
 	}
 }
@@ -379,7 +494,21 @@ func (j jetstreamAPI) Publish(subject string, header, payload []byte) (publisher
 	stream := strings.TrimPrefix(lines[2], streamPrefix)
 	msg.Header.Set("Nats-Expected-Stream", stream)
 	ack, err := j.js.PublishMsg(msg)
-	if err != nil {
+	switch {
+	case err == nil:
+	case errors.Is(err, nats.ErrNoResponders):
+		// No stream admits the subject: a routing or stream-configuration
+		// error that no retry heals, so it carries the seam's permanent
+		// class and the publish loop fails fast instead of retrying
+		// forever.
+		return publisher.PubAck{}, fmt.Errorf("%w: %v", publisher.ErrNoStream, err)
+	case errors.Is(err, nats.ErrMaxPayload):
+		// The frame exceeds the server's payload ceiling: permanent for
+		// this message, classified with the seam's size sentinel.
+		return publisher.PubAck{}, fmt.Errorf("%w: %v", publisher.ErrMsgTooLarge, err)
+	default:
+		// Timeouts, disconnects, reconnect-buffer overflow and JetStream
+		// API errors: retryable, nothing was confirmed or lost.
 		return publisher.PubAck{}, fmt.Errorf("%w: %v", publisher.ErrTransient, err)
 	}
 	if ack == nil || ack.Stream != stream {
@@ -414,20 +543,21 @@ func (j jetstreamAPI) StreamInfo(ctx context.Context, stream string) (destinatio
 }
 
 // ensureStream creates the demo stream with its D77 identity metadata and
-// the 5-minute retention when it is missing; an existing stream is left
-// as-is except for the retention, which is enforced so earlier runs still
-// expire and no disk accumulates chain data.
+// the 5-minute retention when — and only when — it is missing. A
+// pre-existing stream is never rewritten: if its retention differs from
+// the demo retention, the mismatch is logged (RETENTION_MISMATCH, current
+// versus wanted) and the stream is left exactly as its creator made it;
+// changing another actor's stream configuration is not this adapter's
+// call, and the destination check that follows still reports what the
+// stream actually is.
 func ensureStream(ctx context.Context, js nats.JetStreamContext, b destination.Binding) error {
 	info, err := js.StreamInfo(b.Stream, nats.Context(ctx))
 	if err == nil {
 		if info.Config.MaxAge != streamRetention {
-			cfg := info.Config
-			cfg.MaxAge = streamRetention
-			if _, err := js.UpdateStream(&cfg, nats.Context(ctx)); err != nil {
-				return fmt.Errorf("retention update: %w", err)
-			}
-			logf("RETENTION_ENSURED", map[string]any{"stream": b.Stream,
-				"max_age": streamRetention.String()})
+			logf("RETENTION_MISMATCH", map[string]any{"stream": b.Stream,
+				"current_max_age": info.Config.MaxAge.String(),
+				"wanted_max_age":  streamRetention.String(),
+				"action":          "kept the existing configuration"})
 		}
 		return nil
 	} else if !errors.Is(err, nats.ErrStreamNotFound) {
@@ -487,15 +617,20 @@ func env(key, def string) string {
 	return def
 }
 
-// envUint reads one numeric configuration variable, or def when unset or
-// not a number.
+// envUint reads one numeric configuration variable. An unset variable
+// yields the default; a set but malformed value fails fast (CONFIG_INVALID,
+// exit 2) instead of silently running with the default — MAX_BLOCKS=abc
+// must not quietly mean 20.
 func envUint(key string, def uint64) uint64 {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.ParseUint(v, 10, 64); err == nil {
-			return n
-		}
+	v := os.Getenv(key)
+	if v == "" {
+		return def
 	}
-	return def
+	n, err := strconv.ParseUint(v, 10, 64)
+	if err != nil {
+		fatal("CONFIG_INVALID", fmt.Errorf("%s=%q is not a decimal number: %v", key, v, err))
+	}
+	return n
 }
 
 // applyConfig loads a YAML config over the resolved settings: the YAML

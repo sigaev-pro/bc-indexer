@@ -45,13 +45,16 @@ config_value() {
 	sed -n "s/^$2:[[:space:]]*//p" "$1" | head -1 | sed 's/[[:space:]]*#.*//; s/^"//; s/"$//'
 }
 
-# nats_alive reports whether the demo NATS accepts connections.
+# nats_alive reports whether the demo NATS accepts connections. A URL
+# without an explicit port names the default client port, 4222.
 nats_alive() {
-	local host="${NATS_URL#nats://}" port
-	host="${host%%/*}"
-	port="${host##*:}"
-	host="${host%%:*}"
-	port="${port:-4222}"
+	local hostport="${NATS_URL#nats://}"
+	hostport="${hostport%%/*}"
+	local host="${hostport%%:*}"
+	local port="${hostport##*:}"
+	if [ "$port" = "$hostport" ]; then
+		port=4222 # no colon in host:port: the URL named no port
+	fi
 	(exec 3<>"/dev/tcp/$host/$port") 2>/dev/null
 }
 
@@ -116,11 +119,23 @@ for network in "${NETWORKS[@]}"; do
 	fi
 	(
 		# The deadline watchdog stops the wrapper; the trap relays the
-		# stop to the adapter, whose signal handler exits cleanly.
-		trap 'kill "$adapter_pid" 2>/dev/null' TERM
+		# stop to the adapter, whose signal handler exits cleanly. A TERM
+		# that lands in the window before the adapter exists is
+		# remembered in term_received and relayed right after the launch,
+		# so no early watchdog kill can leave the adapter running.
+		adapter_pid=""
+		term_received=0
+		relay_term() {
+			term_received=1
+			[ -n "$adapter_pid" ] && kill "$adapter_pid" 2>/dev/null
+		}
+		trap relay_term TERM
 		FROM_BLOCK="$from_block" "$WORK/extractor-rpc" --config "$config" \
 			>"$WORK/$network.log" 2>&1 &
 		adapter_pid=$!
+		if [ "$term_received" = "1" ]; then
+			kill "$adapter_pid" 2>/dev/null
+		fi
 		wait "$adapter_pid"
 		printf '%s\n' "$?" >"$WORK/$network.exit"
 		# The read-back starts the moment this capture ends: the stream
@@ -170,6 +185,7 @@ for network in "${NETWORKS[@]}"; do
 	verify_json="$(cat "$WORK/$network.verify.json" 2>/dev/null)"
 	messages="$(jq -r '.stream_messages // 0' <<<"$verify_json" 2>/dev/null)"
 	blocks="$(jq -r '.blocks // 0' <<<"$verify_json" 2>/dev/null)"
+	distinct="$(jq -r '.distinct_blocks // 0' <<<"$verify_json" 2>/dev/null)"
 	mismatches="$(jq -r '.network_mismatches // "?"' <<<"$verify_json" 2>/dev/null)"
 	max_age="$(jq -r '.max_age_seconds // 0' <<<"$verify_json" 2>/dev/null)"
 
@@ -179,9 +195,13 @@ for network in "${NETWORKS[@]}"; do
 	[ "$blocks" != "0" ] || { status="FAIL"; reason="$reason no block events in the stream"; }
 	[ "$mismatches" = "0" ] || { status="FAIL"; reason="$reason $mismatches messages claim a wrong network"; }
 	[ "$blocks" = "$max_blocks" ] || { status="FAIL"; reason="$reason captured $blocks of $max_blocks blocks"; }
+	# The no-gap property of the adapter: max_blocks distinct block
+	# numbers means every height of the window landed exactly once, with
+	# neither a hole nor a duplicate.
+	[ "$distinct" = "$max_blocks" ] || { status="FAIL"; reason="$reason $distinct distinct of $max_blocks block numbers"; }
 	[ "$max_age" = "300" ] || { status="FAIL"; reason="$reason stream retention is ${max_age}s, not 300s"; }
 
-	table+=("$network|$chain_id|$blocks/$max_blocks|$messages|$status")
+	table+=("$network|$chain_id|$blocks/$max_blocks|$distinct|$messages|$status")
 	if [ "$status" = "FAIL" ]; then
 		overall=1
 		failed_networks+=("$network")
@@ -190,10 +210,10 @@ done
 
 # 6. The summary table.
 say "Verification results:"
-printf '%-14s %-9s %-15s %-10s %s\n' NETWORK CHAIN_ID BLOCKS MESSAGES STATUS
+printf '%-14s %-9s %-15s %-10s %-10s %s\n' NETWORK CHAIN_ID BLOCKS DISTINCT MESSAGES STATUS
 for row in "${table[@]}"; do
-	IFS='|' read -r network chain_id blocks messages status <<<"$row"
-	printf '%-14s %-9s %-15s %-10s %s\n' "$network" "$chain_id" "$blocks" "$messages" "$status"
+	IFS='|' read -r network chain_id blocks distinct messages status <<<"$row"
+	printf '%-14s %-9s %-15s %-10s %-10s %s\n' "$network" "$chain_id" "$blocks" "$distinct" "$messages" "$status"
 done
 
 # The failure details: the last log lines of every failing run.
