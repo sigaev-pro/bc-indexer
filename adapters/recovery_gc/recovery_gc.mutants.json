@@ -1,0 +1,80 @@
+{
+ "schema_version": 1,
+ "description": "Single-check mutants of the E05-01.activation_gc anchor acceptance, fatal regression halt, evaluation and two-phase release rules. The copy assembles the sources of the standalone module, the lifecycle_registry module its composition test imports and the repository-local imports under one go.mod (go_module), because the modules' own replace directives point outside their directories; every package keeps its repository-relative import path.",
+ "language": "go",
+ "root": "../..",
+ "copy": [
+  "adapters/lifecycle_registry/*.go",
+  "protocol/semantic/*.go",
+  "protocol/balance/*.go",
+  "protocol/block/*.go",
+  "protocol/profiles/*.go",
+  "protocol/proto/*.go",
+  "test/lifecycle_validator/*.go",
+  "adapters/recovery_gc/*.go"
+ ],
+ "go_module": "github.com/sigaev-pro/bc-indexer",
+ "test": [
+  "go",
+  "test",
+  "-count=1",
+  "./adapters/recovery_gc/"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "no anchor releases everything",
+   "file": "adapters/recovery_gc/gc.go",
+   "original": "if !has {\n\t\treturn Decision{Entity: entity.ID, Reason: ReasonRetainNoAnchor}, nil\n\t}",
+   "replacement": "if !has {\n\t\treturn Decision{Entity: entity.ID, Release: true, Reason: ReasonReleaseCovered}, nil\n\t}"
+  },
+  {
+   "name": "pending work ignored",
+   "file": "adapters/recovery_gc/gc.go",
+   "original": "if pending.Any() {",
+   "replacement": "if !pending.Any() {"
+  },
+  {
+   "name": "divergent head treated as contained",
+   "file": "adapters/recovery_gc/gc.go",
+   "original": "switch e.oracle.Contains(accepted.Anchor, d.Head) {",
+   "replacement": "switch VerdictContains {"
+  },
+  {
+   "name": "engine never halts",
+   "file": "adapters/recovery_gc/gc.go",
+   "original": "if e.stopped != nil {",
+   "replacement": "if false {"
+  },
+  {
+   "name": "halted store reopens",
+   "file": "adapters/recovery_gc/gc.go",
+   "original": "case bytes.HasPrefix(key, []byte(keyPrefix+\"fatal/\")):",
+   "replacement": "case bytes.HasPrefix(key, []byte(keyPrefix+\"fatal-disabled/\")):"
+  },
+  {
+   "name": "stale observation becomes candidate",
+   "file": "adapters/recovery_gc/gc.go",
+   "original": "case VerdictDivergent:\n\t\t\treturn ObservationStale, nil",
+   "replacement": "case VerdictDivergent:\n\t\t\treturn ObservationCandidate, nil"
+  },
+  {
+   "name": "first anchor skips the accepted chain",
+   "file": "adapters/recovery_gc/gc.go",
+   "original": "if e.oracle.Contains(candidate.Anchor, frontier.Head) != VerdictContains {",
+   "replacement": "if e.oracle.Contains(candidate.Anchor, frontier.Head) == VerdictContains {"
+  },
+  {
+   "name": "shared pin released",
+   "file": "adapters/recovery_gc/release.go",
+   "original": "if retained[pin] || released[pin] {",
+   "replacement": "if released[pin] {"
+  },
+  {
+   "name": "tombstone loses its anchor",
+   "file": "adapters/recovery_gc/release.go",
+   "original": "Anchor: e.anchors[entity.ID.Network].Anchor",
+   "replacement": "Anchor: entity.Block"
+  }
+ ]
+}

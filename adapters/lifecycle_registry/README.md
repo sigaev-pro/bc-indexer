@@ -20,13 +20,23 @@ the activation records their applications create. Identities are the public
 
 ### Decision mirror
 
-`Intend` records the transition intent (INTENDED); `SettleDecided` and
-`SettleRejected` mirror the settled native markers. NATIVE_REJECTED and the
-applied-decision frontier (APPLIED) are terminal. Intents are idempotent per
-decision sequence; a different intent, a sequence out of order or a second
-network of one producer run is refused. A SIDE decision carries no public
-events: settling it closes its checkpoint (the D79 decision checkpoint
-without a batch), so it never blocks later decisions of the run.
+`Intend` records the transition intent (INTENDED); `SettleDecided` mirrors
+the settled NATIVE_DECIDED marker together with the decided digest the
+decision bridge computes over the intent and its delivery, and
+`SettleRejected` mirrors the settled NATIVE_REJECTED marker. NATIVE_REJECTED
+and the applied-decision frontier (APPLIED) are terminal. Intents are
+idempotent per decision sequence; a different intent, a settled marker with
+another digest, a sequence out of order or a second network of one producer
+run is refused. A SIDE decision carries no public events: settling it closes
+its checkpoint (the D79 decision checkpoint without a batch), so it never
+blocks later decisions of the run.
+
+`Registry.Mirror(producer, run)` is the seam the accepted decision bridge of
+E01-02 consumes: `Applied(sequence, decidedDigest)` reports whether that
+decision of the run is past the applied-decision frontier under exactly this
+decided digest, matching the bridge's `Mirror` interface, so the bridge holds
+the native marker cleanup and the delivery obligation of every decision the
+registry has not applied yet.
 
 ### Application
 
@@ -52,7 +62,12 @@ order, idempotently. A partially applied decision is never visible:
 (AC-CAP-07-04), and the applied-decision frontier suppresses a second
 application — a repeated marker replays `Intend`, `SettleDecided` and
 `Apply` as no-ops, and a different plan of an applied decision is
-`ErrAlreadyApplied` (AC-CAP-07-05).
+`ErrAlreadyApplied` (AC-CAP-07-05). Event idempotence keys on the owning
+decision, not on the event content alone: the activation record names the
+decision that wrote its newest status and its removal, so a different
+decision re-submitting a recorded status or removal event is refused by the
+revision and terminal rules instead of being folded in as a no-op — the
+published stream never carries one event under two decisions.
 
 ### Speculative corpus and targeted replay
 
@@ -90,7 +105,10 @@ transitions, kind rules, speculative and rejected corpora, deferred
 application with targeted replay, every crash point of one application with
 every subset of unsynced writes kept (converging to the golden state or to
 nothing), marker repeat after restart, cancellability before and after
-READY, revision frontier rules, record corruption, concurrent producer
+READY, revision frontier rules, foreign-decision event re-submission, the
+bridge mirror seam, record corruption, concurrent producer
 runs, and a convergence check of the published events through the E02-03
 test oracle (test/lifecycle_validator) in 100 shuffled delivery orders.
-`gofmt -l` and `go vet` are clean.
+`gofmt -l` and `go vet` are clean. [lifecycle_registry.mutants.json](lifecycle_registry.mutants.json)
+holds single-check mutants of the mirror, application, replay and seam
+rules, run with `test/mutate.py`.
