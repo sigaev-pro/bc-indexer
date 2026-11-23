@@ -3,14 +3,15 @@
 // observations with provenance (NATIVE_LIVE, NATIVE_RESTART or
 // RETAINED_DURABLE), drives one FINALITY decision per native setter call,
 // restart or clear through the lifecycle gate and the decision bridge,
-// refreshes the evidence at startup without a new head event, and owns the
-// durable GC anchor: an accepted anchor derives only from an authoritative
-// finalized observation on the canonical execution ancestry, never from
-// safe, and a new authoritative SetFinalized below the accepted anchor or
-// with an incompatible hash stops the native owner before any READY,
-// publication or GC of the conflicting decision. The design is in
-// README.md. The package imports only the standard library and the shared
-// admission, decision and lifecycle packages.
+// refreshes the evidence at startup without a new head event, and observes
+// the GC anchor for the recovery GC engine of E05-01.activation_gc: an
+// accepted anchor derives only from an authoritative finalized observation
+// on the canonical execution ancestry, never from safe, and a new
+// authoritative SetFinalized below the accepted anchor or with an
+// incompatible hash stops the native owner before any READY, publication or
+// GC of the conflicting decision. The design is in README.md. The package
+// imports the shared admission, decision and lifecycle packages, the
+// recovery_gc anchor owner and the protocol/semantic identity model.
 package finality
 
 import (
@@ -25,6 +26,9 @@ import (
 	"regexp"
 	"strings"
 
+	recoverygc "github.com/sigaev-pro/bc-indexer/adapters/recovery_gc"
+	"github.com/sigaev-pro/bc-indexer/protocol/semantic"
+
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/decision"
 	"github.com/ethereum/go-ethereum/extractor/lifecycle"
@@ -38,7 +42,6 @@ const keyPrefix = "extractor-finality-v1/"
 const (
 	tagObservation = "extractor-finality-observation-v1"
 	tagRestart     = "extractor-finality-restart-v1"
-	tagAnchor      = "extractor-finality-anchor-v1"
 )
 
 // fields are the native finality fields, in the fixed order the tracker
@@ -227,14 +230,45 @@ type DecisionRef struct {
 	Sequence uint64 `json:"sequence"`
 }
 
-// Anchor is the accepted GC anchor: an irreversible finalized block, the
-// digest of the finalized observation record it derives from, and the
-// authoritative FINALITY decision that produced that observation.
-type Anchor struct {
-	Block          Ref         `json:"block"`
-	EvidenceDigest string      `json:"evidence_digest"`
-	Decision       DecisionRef `json:"decision"`
-	Digest         string      `json:"digest"`
+// RunIdentity is the public semantic identity of the producer run that owns
+// the finality evidence: the network it observes and the node instance,
+// producer and run identities of the NativeDecisionRef of
+// CURRENT_SEMANTICS. The tracker addresses the GC anchor owner and its
+// finality observations through it.
+type RunIdentity struct {
+	Network  semantic.Network
+	Node     semantic.ID16
+	Producer semantic.ID16
+	Run      semantic.ID16
+}
+
+// Validate checks the identity: every part must be set.
+func (id RunIdentity) Validate() error {
+	if id.Network.GenesisHash == (semantic.Hash32{}) {
+		return fmt.Errorf("%w: unset network genesis of the run identity", ErrInvalid)
+	}
+	if id.Node.IsZero() || id.Producer.IsZero() || id.Run.IsZero() {
+		return fmt.Errorf("%w: unset node, producer or run of the run identity", ErrInvalid)
+	}
+	return nil
+}
+
+// AnchorProfile is the profile reference the tracker vouches for the GC
+// anchor evidence it observes: the finalized observation record of this
+// package at its current digest domain.
+const AnchorProfile = "adapters/geth/finality-v1"
+
+// Anchorer owns the durable GC anchor of the network: the recovery GC
+// engine of E05-01.activation_gc, whose AcceptedGcAnchor is the shared
+// anchor contract. Acceptance is the engine's own sync decision over
+// covering candidates.
+type Anchorer interface {
+	// Anchor returns the accepted anchor of the network.
+	Anchor(net semantic.Network) (recoverygc.AcceptedGcAnchor, bool)
+	// ObserveFinality records one finality observation of the network.
+	ObserveFinality(recoverygc.FinalityObservation) (recoverygc.ObservationResult, error)
+	// CommitAnchor accepts the observed candidate of the network.
+	CommitAnchor(net semantic.Network) (recoverygc.AcceptedGcAnchor, error)
 }
 
 // observationRecord is the durable typed observation of one field.
@@ -249,16 +283,6 @@ type observationRecord struct {
 	Reason        Reason          `json:"reason"`
 	Decision      *DecisionRef    `json:"decision,omitempty"`
 	Digest        string          `json:"digest"`
-}
-
-// anchorRecord is the durable accepted anchor with its store identity.
-type anchorRecord struct {
-	NativeStoreID  string      `json:"native_store_id"`
-	Producer       string      `json:"producer"`
-	Block          Ref         `json:"block"`
-	EvidenceDigest string      `json:"evidence_digest"`
-	Decision       DecisionRef `json:"decision"`
-	Digest         string      `json:"digest"`
 }
 
 func u64(value uint64) []byte { return binary.BigEndian.AppendUint64(nil, value) }
@@ -329,23 +353,28 @@ func ObservationDigest(r observationRecord) (string, error) {
 	return digestOf(tagObservation, parts...), nil
 }
 
-// AnchorDigest returns the digest of an accepted anchor record.
-func AnchorDigest(storeID string, a anchorRecord) (string, error) {
-	block, err := refBytes(a.Block)
+// hashOf decodes the hash of one reference into the shared Hash32 model of
+// the semantic identity packages.
+func hashOf(r Ref) (semantic.Hash32, error) {
+	var out semantic.Hash32
+	raw, err := rawHash(r.Hash)
 	if err != nil {
-		return "", err
+		return out, err
 	}
-	evidence, err := rawHash(a.EvidenceDigest)
-	if err != nil {
-		return "", err
-	}
-	return digestOf(tagAnchor, str(storeID), str(a.Producer), block, evidence,
-		decisionBytes(&a.Decision)), nil
+	copy(out[:], raw)
+	return out, nil
+}
+
+// refOfAnchor converts an accepted anchor block of the shared GC contract
+// into the reference model of this package.
+func refOfAnchor(a recoverygc.AnchorRef) Ref {
+	return Ref{Height: a.Height, Hash: a.Hash.String()}
 }
 
 // RestartDigest is the evidence digest of one startup reconcile decision:
 // the field, the startup-observed block and the unchanged head read under
-// the guard.
+// the guard. The zero block encodes the unset reference of a startup that
+// found none.
 func RestartDigest(field lifecycle.Field, block, head decision.Head) (string, error) {
 	if field != lifecycle.Safe && field != lifecycle.Finalized {
 		return "", fmt.Errorf("%w: finality field %q", ErrInvalid, field)
@@ -433,22 +462,23 @@ func retainedFrom(prev, next *observationRecord) *observationRecord {
 	return &kept
 }
 
-// Tracker owns the typed Ethereum finality evidence and the GC anchor of
-// one producer run. Its calls need the held observation guard token; the
-// native patches call Set inside the pass of the mapped finality caller
-// before the native setter mutates state, and Commit in the final
-// authoritative batch of the change. A Tracker is not safe for concurrent
-// use.
+// Tracker owns the typed Ethereum finality evidence of one producer run
+// and observes the GC anchor of its network for the anchor owner. Its calls
+// need the held observation guard token; the native patches call Set inside
+// the pass of the mapped finality caller before the native setter mutates
+// state, and Commit in the final authoritative batch of the change. A
+// Tracker is not safe for concurrent use.
 type Tracker struct {
 	db       admission.DeleteStore
 	adm      lifecycle.Checker
 	producer admission.Producer
 	owner    string
 	storeID  string
+	id       RunIdentity
+	gc       Anchorer
 	anc      Ancestry
 	head     decision.Head
 	fields   map[lifecycle.Field]*fieldState
-	anchor   *anchorRecord
 	err      error
 }
 
@@ -527,12 +557,14 @@ func (tr *Tracker) checkObservation(r *observationRecord, retained bool) error {
 }
 
 // Open syncs the store and opens the tracker of the producer run of adm.
-// It loads the durable observation and anchor records; until a startup
-// refresh or a live observation re-establishes them, the loaded records
-// are retained evidence, never a fresh native read. anc resolves ancestry
-// for the anchor rules and the projection.
+// It loads the durable observation records; until a startup refresh or a
+// live observation re-establishes them, the loaded records are retained
+// evidence, never a fresh native read. id addresses the network and the
+// native decision references of the run, anc resolves ancestry for the
+// anchor rules and the projection, and gc owns the durable GC anchor of the
+// network (the recovery GC engine).
 func Open(t *admission.Token, db admission.DeleteStore, adm lifecycle.Checker, storeID string,
-	anc Ancestry) (*Tracker, error) {
+	id RunIdentity, anc Ancestry, gc Anchorer) (*Tracker, error) {
 	if adm == nil || db == nil {
 		return nil, fmt.Errorf("%w: missing admission or store", ErrInvalid)
 	}
@@ -542,15 +574,21 @@ func Open(t *admission.Token, db admission.DeleteStore, adm lifecycle.Checker, s
 	if !storeIDPattern.MatchString(storeID) {
 		return nil, fmt.Errorf("%w: native store ID %q", ErrInvalid, storeID)
 	}
+	if err := id.Validate(); err != nil {
+		return nil, err
+	}
 	if anc == nil {
 		return nil, fmt.Errorf("%w: missing ancestry oracle", ErrInvalid)
+	}
+	if gc == nil {
+		return nil, fmt.Errorf("%w: missing GC anchor owner", ErrInvalid)
 	}
 	if err := db.SyncKeyValue(); err != nil {
 		return nil, err
 	}
 	p := adm.Producer()
 	tr := &Tracker{db: db, adm: adm, producer: p, owner: p.ProducerID + "." + p.RunID, storeID: storeID,
-		anc: anc, fields: map[lifecycle.Field]*fieldState{}}
+		id: id, gc: gc, anc: anc, fields: map[lifecycle.Field]*fieldState{}}
 	for _, field := range fields {
 		state := &fieldState{}
 		var record observationRecord
@@ -583,23 +621,6 @@ func Open(t *admission.Token, db admission.DeleteStore, adm lifecycle.Checker, s
 		}
 		tr.fields[field] = state
 	}
-	var anchor anchorRecord
-	found, err := tr.loadRecord(tr.key("anchor"), &anchor)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		if anchor.NativeStoreID != tr.storeID || anchor.Producer != tr.owner {
-			return nil, fmt.Errorf("%w: anchor of %s %s, not %s %s", ErrInvariant, anchor.NativeStoreID,
-				anchor.Producer, tr.storeID, tr.owner)
-		}
-		digest, err := AnchorDigest(tr.storeID, anchor)
-		if err != nil || digest != anchor.Digest || validRef(anchor.Block, false) != nil ||
-			!digestPattern.MatchString(anchor.EvidenceDigest) {
-			return nil, fmt.Errorf("%w: anchor record", ErrCorrupt)
-		}
-		tr.anchor = &anchor
-	}
 	return tr, nil
 }
 
@@ -610,29 +631,41 @@ func fieldKey(field lifecycle.Field) string { return strings.ToLower(string(fiel
 // anchor: it is neither the anchor block nor its descendant. A lookup error
 // is ErrSource and stops nothing.
 func (tr *Tracker) fatalBelowAnchor(block Ref) (bool, error) {
-	if tr.anchor == nil {
+	accepted, ok := tr.gc.Anchor(tr.id.Network)
+	if !ok {
 		return false, nil
 	}
-	if tr.anchor.Block == block {
+	anchor := refOfAnchor(accepted.Anchor)
+	if anchor == block {
 		return false, nil
 	}
-	descendant, err := tr.anc(tr.anchor.Block, block)
+	descendant, err := tr.anc(anchor, block)
 	if err != nil {
 		return false, fmt.Errorf("%w: ancestry of %s against anchor %s: %w", ErrSource, block.Hash,
-			tr.anchor.Block.Hash, err)
+			anchor.Hash, err)
 	}
 	return !descendant, nil
 }
 
+// anchorConflict names the fatal conflict of an authoritative change with
+// the accepted anchor of the anchor owner.
+func (tr *Tracker) anchorConflict(kind string, block Ref) error {
+	accepted, _ := tr.gc.Anchor(tr.id.Network)
+	anchor := refOfAnchor(accepted.Anchor)
+	return tr.stop(fmt.Errorf("%w: authoritative %s %d %s conflicts with anchor %d %s", ErrFatal, kind,
+		block.Height, block.Hash, anchor.Height, anchor.Hash))
+}
+
 // Set plans the typed observation of one live native finality setter call:
-// it records one FINALITY decision through the pass of the mapped caller,
-// before the native setter mutates state. A zero new hash or an unchanged
-// reference is a no-op: no decision runs, nothing is declared final, and
-// the old native reference stays. A FINALIZED change below the accepted
-// anchor, or with an incompatible hash, is a proven fatal regression: the
-// tracker stops before any evidence record, marker or GC of the conflicting
-// decision. head is the unchanged native head; the change may arrive
-// without a new block.
+// it records one FINALITY decision with public events through the pass of
+// the mapped caller, before the native setter mutates state — the finality
+// coverage change it plans is the StatusChanged evidence of the covered
+// activations. A zero new hash or an unchanged reference is a no-op: no
+// decision runs, nothing is declared final, and the old native reference
+// stays. A FINALIZED change below the accepted anchor, or with an
+// incompatible hash, is a proven fatal regression: the tracker stops before
+// any evidence record, marker or GC of the conflicting decision. head is
+// the unchanged native head; the change may arrive without a new block.
 func (tr *Tracker) Set(t *admission.Token, pass *lifecycle.Pass, bridge lifecycle.Intender,
 	head decision.Head, c lifecycle.FinalityChange) (Planned, error) {
 	if err := tr.enter(t); err != nil {
@@ -653,11 +686,10 @@ func (tr *Tracker) Set(t *admission.Token, pass *lifecycle.Pass, bridge lifecycl
 			return Planned{}, err
 		}
 		if conflict {
-			return Planned{}, tr.stop(fmt.Errorf("%w: authoritative SetFinalized %d %s conflicts with anchor %d %s",
-				ErrFatal, c.New.Number, c.New.Hash, tr.anchor.Block.Height, tr.anchor.Block.Hash))
+			return Planned{}, tr.anchorConflict("SetFinalized", Ref{Height: c.New.Number, Hash: c.New.Hash})
 		}
 	}
-	record, err := pass.Finality(bridge, head, c, false)
+	record, err := pass.Finality(bridge, head, c, true)
 	if err != nil {
 		if errors.Is(err, lifecycle.ErrNoop) {
 			return Planned{Noop: true}, nil
@@ -699,9 +731,11 @@ func (tr *Tracker) Clear(t *admission.Token, pass *lifecycle.Pass, bridge lifecy
 	if !digestPattern.MatchString(evidenceDigest) {
 		return Planned{}, fmt.Errorf("%w: clear evidence digest %q", ErrInvalid, evidenceDigest)
 	}
-	if field == lifecycle.Finalized && tr.anchor != nil {
-		return Planned{}, tr.stop(fmt.Errorf("%w: rewind cleared the anchored finalized reference %d %s",
-			ErrFatal, tr.anchor.Block.Height, tr.anchor.Block.Hash))
+	if field == lifecycle.Finalized {
+		if anchor, ok := tr.gc.Anchor(tr.id.Network); ok {
+			return Planned{}, tr.stop(fmt.Errorf("%w: rewind cleared the anchored finalized reference %d %s",
+				ErrFatal, anchor.Anchor.Height, anchor.Anchor.Hash))
+		}
 	}
 	record, err := pass.Intend(bridge, decision.Intent{Kind: decision.Finality, OldHead: head, NewHead: head,
 		EvidenceDigest: evidenceDigest, Events: false})
@@ -722,12 +756,15 @@ func (tr *Tracker) Clear(t *admission.Token, pass *lifecycle.Pass, bridge lifecy
 // the startup reconcile caller, without a new head event. finalized reads
 // the persisted native finalized reference under the guard: known=false
 // means the native store holds none, an error is a source error and never
-// Unknown evidence. Native startup restores safe from the found finalized
-// header, so the refreshed safe observation carries the
-// STARTUP_FINALIZED_FALLBACK basis with NATIVE_RESTART origin even when it
-// is lower than the previous live safe: that is not fatal and never a GC
-// basis. A reference unchanged by the refresh stays as it is; replaying a
-// saved decision creates no new decision.
+// Unknown evidence — the stale Known records of the previous run are
+// cleared as unset (their evidence survives as retained), because a
+// refreshed Known record would present saved evidence as a fresh native
+// read. Native startup restores safe from the found finalized header, so
+// the refreshed safe observation carries the STARTUP_FINALIZED_FALLBACK
+// basis with NATIVE_RESTART origin even when it is lower than the previous
+// live safe: that is not fatal and never a GC basis. A reference unchanged
+// by the refresh stays as it is; replaying a saved decision creates no new
+// decision.
 //
 // One call plans at most the next change of the refresh, in the order
 // finalized then safe, because the decision bridge refuses a second intent
@@ -735,7 +772,9 @@ func (tr *Tracker) Clear(t *admission.Token, pass *lifecycle.Pass, bridge lifecy
 // each returned plan and calls Startup again; more=false reports that the
 // refresh is complete. A startup-observed finalized that conflicts with the
 // accepted anchor is fatal (an operator rewind or a damaged native store
-// below the irreversible anchor).
+// below the irreversible anchor), and so is a startup that finds no
+// finalized reference while one is accepted: the rewind deleted the
+// anchored finalized ancestry.
 func (tr *Tracker) Startup(t *admission.Token, pass *lifecycle.Pass, bridge lifecycle.Intender,
 	head decision.Head, finalized func() (decision.Head, bool, error)) (Planned, bool, error) {
 	if err := tr.enter(t); err != nil {
@@ -753,15 +792,15 @@ func (tr *Tracker) Startup(t *admission.Token, pass *lifecycle.Pass, bridge life
 	}
 	tr.head = head
 	if !known {
-		return Planned{}, false, nil
+		return tr.startupUnset(pass, bridge, head)
 	}
 	conflict, err := tr.fatalBelowAnchor(Ref{Height: block.Number, Hash: block.Hash})
 	if err != nil {
 		return Planned{}, false, err
 	}
 	if conflict {
-		return Planned{}, false, tr.stop(fmt.Errorf("%w: startup finalized %d %s conflicts with anchor %d %s",
-			ErrFatal, block.Number, block.Hash, tr.anchor.Block.Height, tr.anchor.Block.Hash))
+		return Planned{}, false, tr.anchorConflict("startup finalized", Ref{Height: block.Number,
+			Hash: block.Hash})
 	}
 	// Finalized: a refresh that found the same reference replays the saved
 	// decision; only a changed reference makes a new decision.
@@ -771,7 +810,7 @@ func (tr *Tracker) Startup(t *admission.Token, pass *lifecycle.Pass, bridge life
 		next := observationRecord{NativeStoreID: tr.storeID, Producer: tr.owner, Field: lifecycle.Finalized,
 			Known: true, Block: Ref{Height: block.Number, Hash: block.Hash}, Origin: OriginRestart,
 			Basis: UnsetBasis}
-		return tr.startupPlan(pass, bridge, head, block, next)
+		return tr.startupPlan(pass, bridge, head, block, next, true)
 	}
 	// Safe: startup restored it from the finalized header. A safe record
 	// that already is that fallback replays the saved decision; a live or
@@ -782,21 +821,52 @@ func (tr *Tracker) Startup(t *admission.Token, pass *lifecycle.Pass, bridge life
 		safeState.current.Block != fallback {
 		next := observationRecord{NativeStoreID: tr.storeID, Producer: tr.owner, Field: lifecycle.Safe,
 			Known: true, Block: fallback, Origin: OriginRestart, Basis: StartupFinalizedFallback}
-		return tr.startupPlan(pass, bridge, head, block, next)
+		return tr.startupPlan(pass, bridge, head, block, next, true)
+	}
+	return Planned{}, false, nil
+}
+
+// startupUnset plans the clearing of the stale Known records of a startup
+// that found no persisted finalized reference, one field per call in the
+// fixed order finalized then safe. A record that is already Unknown stays;
+// the previous evidence survives as retained in Commit. Losing the anchored
+// finalized reference is fatal.
+func (tr *Tracker) startupUnset(pass *lifecycle.Pass, bridge lifecycle.Intender,
+	head decision.Head) (Planned, bool, error) {
+	for _, field := range []lifecycle.Field{lifecycle.Finalized, lifecycle.Safe} {
+		state := tr.fields[field]
+		if state.current == nil || !state.current.Known {
+			continue
+		}
+		if field == lifecycle.Finalized {
+			if anchor, ok := tr.gc.Anchor(tr.id.Network); ok {
+				return Planned{}, false, tr.stop(fmt.Errorf("%w: startup found no finalized reference under the accepted anchor %d %s",
+					ErrFatal, anchor.Anchor.Height, anchor.Anchor.Hash))
+			}
+		}
+		next := observationRecord{NativeStoreID: tr.storeID, Producer: tr.owner, Field: field,
+			Reason: ReferenceUnset, Basis: UnsetBasis}
+		// The all-zero hash encodes the unset reference of the refresh; an
+		// unset reference establishes no coverage, so the decision carries
+		// no public events.
+		return tr.startupPlan(pass, bridge, head,
+			decision.Head{Hash: lifecycle.ZeroHash}, next, false)
 	}
 	return Planned{}, false, nil
 }
 
 // startupPlan records the FINALITY intent of one startup reconcile change
-// with its restart evidence digest.
+// with its restart evidence digest. A change that re-establishes a known
+// reference carries public events: it is the StatusChanged evidence of the
+// coverage it restores.
 func (tr *Tracker) startupPlan(pass *lifecycle.Pass, bridge lifecycle.Intender, head decision.Head,
-	block decision.Head, next observationRecord) (Planned, bool, error) {
+	block decision.Head, next observationRecord, events bool) (Planned, bool, error) {
 	digest, err := RestartDigest(next.Field, block, head)
 	if err != nil {
 		return Planned{}, false, err
 	}
 	record, err := pass.Intend(bridge, decision.Intent{Kind: decision.Finality, OldHead: head, NewHead: head,
-		EvidenceDigest: digest, Events: false})
+		EvidenceDigest: digest, Events: events})
 	if err != nil {
 		return Planned{}, false, err
 	}
@@ -976,88 +1046,87 @@ func (tr *Tracker) StatusOf(activation Ref) (Status, error) {
 	return StatusOf(activation, ev, tr.anc)
 }
 
-// Anchor returns the accepted GC anchor.
-func (tr *Tracker) Anchor() (Anchor, bool) {
-	if tr.anchor == nil {
-		return Anchor{}, false
-	}
-	return anchorOf(*tr.anchor), true
-}
-
-func anchorOf(r anchorRecord) Anchor {
-	return Anchor{Block: r.Block, EvidenceDigest: r.EvidenceDigest, Decision: r.Decision, Digest: r.Digest}
+// Anchor returns the accepted GC anchor of the network from the anchor
+// owner.
+func (tr *Tracker) Anchor() (recoverygc.AcceptedGcAnchor, bool) {
+	return tr.gc.Anchor(tr.id.Network)
 }
 
 // Accept accepts the GC anchor from the current durable finalized
-// observation. The candidate is always the finalized reference itself:
-// safe is never an anchor source. Acceptance requires the finalized block
-// on the canonical execution ancestry of the observed head, the native
-// decision marker of its FINALITY decision still durable (the
-// authoritative evidence), and ancestry monotonicity: the candidate must
-// be the accepted anchor or its descendant. Accepting the same anchor
-// again is idempotent. Acceptance and the later release of refs and pins
-// are separate sync decisions; a payload ACK is not GC.
-func (tr *Tracker) Accept(t *admission.Token) (Anchor, error) {
+// observation and returns the accepted recovery_gc anchor record of the
+// network. The candidate is always the finalized reference itself: safe is
+// never an anchor source. Acceptance requires the finalized block on the
+// canonical execution ancestry of the observed head; the anchor owner holds
+// the monotonic acceptance as its own sync decision: a candidate that does
+// not cover the accepted anchor is refused without demoting it, and
+// accepting the same anchor again is idempotent. The durable finalized
+// observation record is the authoritative evidence — its verified digest
+// binds the FINALITY decision it names — so acceptance never depends on the
+// native decision marker, which the bridge cleanup deletes once a decision
+// without public events, or one the mirror applied, needs it no longer.
+// Acceptance and the later release of refs and pins are separate sync
+// decisions; a payload ACK is not GC.
+func (tr *Tracker) Accept(t *admission.Token) (recoverygc.AcceptedGcAnchor, error) {
 	if err := tr.enter(t); err != nil {
-		return Anchor{}, err
+		return recoverygc.AcceptedGcAnchor{}, err
 	}
 	state := tr.fields[lifecycle.Finalized]
 	if state.current == nil || !state.current.Known {
-		return Anchor{}, fmt.Errorf("%w: finalized reference is unknown", ErrState)
+		return recoverygc.AcceptedGcAnchor{}, fmt.Errorf("%w: finalized reference is unknown", ErrState)
 	}
 	fin := *state.current
 	if fin.Decision == nil {
-		return Anchor{}, fmt.Errorf("%w: finalized observation has no decision", ErrState)
+		return recoverygc.AcceptedGcAnchor{}, fmt.Errorf("%w: finalized observation has no decision", ErrState)
 	}
-	// The record-level monotonicity needs no observed head: the candidate
-	// must be the accepted anchor or its descendant.
-	if tr.anchor != nil {
-		if tr.anchor.Block == fin.Block {
-			return anchorOf(*tr.anchor), nil
-		}
-		descendant, err := tr.anc(tr.anchor.Block, fin.Block)
-		if err != nil {
-			return Anchor{}, fmt.Errorf("%w: ancestry of candidate %s: %w", ErrSource, fin.Block.Hash, err)
-		}
-		if !descendant {
-			return Anchor{}, fmt.Errorf("%w: candidate %d %s is below the accepted anchor %d %s", ErrRegression,
-				fin.Block.Height, fin.Block.Hash, tr.anchor.Block.Height, tr.anchor.Block.Hash)
+	hash, err := hashOf(fin.Block)
+	if err != nil {
+		return recoverygc.AcceptedGcAnchor{}, err
+	}
+	observation := recoverygc.FinalityObservation{Network: tr.id.Network,
+		Decision: recoverygc.NativeDecisionRef{NodeInstanceID: tr.id.Node, ProducerID: tr.id.Producer,
+			RunID: tr.id.Run, DecisionSequence: fin.Decision.Sequence},
+		Anchor:         recoverygc.AnchorRef{Height: fin.Block.Height, Hash: hash},
+		EvidenceDigest: fin.Digest, ProfileRef: AnchorProfile}
+	// The record-level monotonicity of the anchor owner needs no observed
+	// head: an accepted candidate is returned and a non-covering one is
+	// refused without demoting the anchor.
+	result, err := tr.gc.ObserveFinality(observation)
+	if err != nil {
+		return recoverygc.AcceptedGcAnchor{}, err
+	}
+	if anchor, ok := tr.gc.Anchor(tr.id.Network); ok {
+		switch result {
+		case recoverygc.ObservationSame:
+			return anchor, nil
+		case recoverygc.ObservationStale:
+			accepted := refOfAnchor(anchor.Anchor)
+			return anchor, fmt.Errorf("%w: candidate %d %s is below the accepted anchor %d %s", ErrRegression,
+				fin.Block.Height, fin.Block.Hash, accepted.Height, accepted.Hash)
+		case recoverygc.ObservationUnavailable:
+			return recoverygc.AcceptedGcAnchor{}, fmt.Errorf("%w: ancestry of candidate %s against the accepted anchor: %w",
+				ErrSource, fin.Block.Hash, recoverygc.ErrAncestryUnknown)
 		}
 	}
 	if tr.head == (decision.Head{}) {
-		return Anchor{}, fmt.Errorf("%w: no observed head", ErrState)
+		return recoverygc.AcceptedGcAnchor{}, fmt.Errorf("%w: no observed head", ErrState)
 	}
 	onCanonical, err := tr.anc(fin.Block, Ref{Height: tr.head.Number, Hash: tr.head.Hash})
 	if err != nil {
-		return Anchor{}, fmt.Errorf("%w: ancestry of finalized %s: %w", ErrSource, fin.Block.Hash, err)
+		return recoverygc.AcceptedGcAnchor{}, fmt.Errorf("%w: ancestry of finalized %s: %w", ErrSource,
+			fin.Block.Hash, err)
 	}
 	if !onCanonical {
-		return Anchor{}, fmt.Errorf("%w: finalized %d %s is not on the canonical execution ancestry", ErrState,
-			fin.Block.Height, fin.Block.Hash)
+		return recoverygc.AcceptedGcAnchor{}, fmt.Errorf("%w: finalized %d %s is not on the canonical execution ancestry",
+			ErrState, fin.Block.Height, fin.Block.Hash)
 	}
-	marker, err := tr.db.Has(decision.MarkerKey(tr.producer, fin.Decision.Sequence))
+	anchor, err := tr.gc.CommitAnchor(tr.id.Network)
 	if err != nil {
-		return Anchor{}, err
+		if errors.Is(err, recoverygc.ErrCandidateNotCovering) {
+			return recoverygc.AcceptedGcAnchor{}, fmt.Errorf("%w: %w", ErrRegression, err)
+		}
+		return recoverygc.AcceptedGcAnchor{}, err
 	}
-	if !marker {
-		return Anchor{}, fmt.Errorf("%w: finalized decision %d has no durable marker", ErrState,
-			fin.Decision.Sequence)
-	}
-	record := anchorRecord{NativeStoreID: tr.storeID, Producer: tr.owner, Block: fin.Block,
-		EvidenceDigest: fin.Digest, Decision: *fin.Decision}
-	digest, err := AnchorDigest(tr.storeID, record)
-	if err != nil {
-		return Anchor{}, err
-	}
-	record.Digest = digest
-	if err := tr.db.Put(tr.key("anchor"), mustJSON(record)); err != nil {
-		return Anchor{}, err
-	}
-	if err := tr.db.SyncKeyValue(); err != nil {
-		return Anchor{}, err
-	}
-	tr.anchor = &record
-	return anchorOf(record), nil
+	return anchor, nil
 }
 
 // Stopped reports whether the tracker stopped after an error, and the error

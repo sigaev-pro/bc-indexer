@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 	"strings"
 	"testing"
+
+	recoverygc "github.com/sigaev-pro/bc-indexer/adapters/recovery_gc"
+	"github.com/sigaev-pro/bc-indexer/protocol/semantic"
 
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	"github.com/ethereum/go-ethereum/extractor/decision"
@@ -37,7 +41,6 @@ type vectorFile struct {
 	RetainedSafeDigest     string        `json:"retained_safe_digest"`
 	RestartEvidenceDigest  string        `json:"restart_evidence_digest"`
 	ClearEvidenceDigest    string        `json:"clear_evidence_digest"`
-	AnchorDigest           string        `json:"anchor_digest"`
 }
 
 func loadVectors(t *testing.T) vectorFile {
@@ -142,6 +145,34 @@ func (s *memStore) SyncKeyValue() error {
 	return nil
 }
 
+// Range visits every visible key that starts with prefix, in ascending
+// byte order, with the value visible through unsynced writes; a pending
+// delete hides the key.
+func (s *memStore) Range(prefix []byte, visit func(key, value []byte) error) error {
+	view := map[string][]byte{}
+	for key, value := range s.durable {
+		if strings.HasPrefix(key, string(prefix)) {
+			view[key] = value
+		}
+	}
+	for _, w := range s.pending {
+		if !strings.HasPrefix(w.key, string(prefix)) {
+			continue
+		}
+		if w.deleted {
+			delete(view, w.key)
+		} else {
+			view[w.key] = w.value
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(view)) {
+		if err := visit([]byte(key), view[key]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func applyWrite(durable map[string][]byte, w write) {
 	if w.deleted {
 		delete(durable, w.key)
@@ -183,6 +214,75 @@ func (allRoots) Durable(string) (bool, error) { return true, nil }
 type noMirror struct{}
 
 func (noMirror) Applied(uint64, string) (bool, error) { return false, nil }
+
+// appliedMirror reports the recorded decisions as applied, as the lifecycle
+// registry mirror does once a decision published its events: the bridge
+// cleanup then deletes the native markers of those decisions.
+type appliedMirror struct {
+	applied map[uint64]string
+}
+
+func (m appliedMirror) Applied(sequence uint64, digest string) (bool, error) {
+	return m.applied[sequence] == digest, nil
+}
+
+// The GC anchor owner seams of the fixture: the recovery GC engine over
+// the same store, with the fixture chain as its ancestry oracle and
+// nothing pending, released or pinned.
+type gcOracle struct{ chain *chain }
+
+func (o gcOracle) Contains(ancestor, descendant recoverygc.AnchorRef) recoverygc.Verdict {
+	ok, err := o.chain.isAncestorOrSelf(Ref{Height: ancestor.Height, Hash: ancestor.Hash.String()},
+		Ref{Height: descendant.Height, Hash: descendant.Hash.String()})
+	if err != nil {
+		return recoverygc.VerdictUnknown
+	}
+	if ok {
+		return recoverygc.VerdictContains
+	}
+	return recoverygc.VerdictDivergent
+}
+
+type gcNothingPending struct{}
+
+func (gcNothingPending) Pending(recoverygc.EntityID) (recoverygc.PendingReport, error) {
+	return recoverygc.PendingReport{}, nil
+}
+
+type gcReleaser struct{}
+
+func (gcReleaser) ReleaseEntity(recoverygc.EntityID) error { return nil }
+
+type gcPins struct{}
+
+func (gcPins) Release(string) error { return nil }
+
+// The semantic identity of the fixture run: the network and the ID16
+// identities of the GC anchor contract.
+var (
+	gcNetwork  = semantic.Network{ChainID: semantic.UInt256{1}, GenesisHash: seedHash32("gc-genesis")}
+	gcNode     = semantic.ID16{0x11}
+	gcProducer = semantic.ID16{0x22}
+	gcRun      = semantic.ID16{0x33}
+)
+
+// seedHash32 derives a fixed Hash32 of a seed: the seed bytes in a 32-byte
+// value.
+func seedHash32(seed string) semantic.Hash32 {
+	var out semantic.Hash32
+	copy(out[:], []byte(seed))
+	return out
+}
+
+// openEngine opens the recovery GC engine of the fixture over db.
+func openEngine(t *testing.T, db *memStore, chain *chain) *recoverygc.Engine {
+	t.Helper()
+	engine, _, err := recoverygc.Open(db, gcOracle{chain: chain}, gcNothingPending{}, gcReleaser{}, gcPins{})
+	if err != nil {
+		t.Fatalf("recoverygc.Open: %v", err)
+	}
+	return engine
+}
 
 // chain is a block tree: the parent of every block. It answers the
 // ancestry oracle of the tracker.
@@ -282,7 +382,8 @@ func testMap() lifecycle.Map {
 }
 
 // fixture is one opened producer run: the admission, the decision bridge,
-// the lifecycle gate and the finality tracker on one store.
+// the lifecycle gate, the recovery GC engine and the finality tracker on
+// one store.
 type fixture struct {
 	t      *testing.T
 	v      vectorFile
@@ -290,16 +391,18 @@ type fixture struct {
 	token  *admission.Token
 	db     *memStore
 	chain  *chain
+	mirror decision.Mirror
 	adm    *admission.Admission
 	bridge *decision.Bridge
 	gate   *lifecycle.Gate
+	gc     *recoverygc.Engine
 	tr     *Tracker
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{t: t, v: loadVectors(t), guard: admission.NewGuard(), db: newStore(),
-		chain: newChain()}
+		chain: newChain(), mirror: noMirror{}}
 	f.token = f.guard.Acquire()
 	f.buildChain()
 	f.open(f.db)
@@ -309,7 +412,7 @@ func newFixture(t *testing.T) *fixture {
 // restart opens a second fixture over the reopened store of f.
 func (f *fixture) restart(t *testing.T, keep uint) *fixture {
 	t.Helper()
-	g := &fixture{t: t, v: f.v, guard: f.guard, token: f.token, chain: newChain()}
+	g := &fixture{t: t, v: f.v, guard: f.guard, token: f.token, chain: newChain(), mirror: f.mirror}
 	g.buildChain()
 	g.open(f.db.powerLoss(keep))
 	return g
@@ -335,7 +438,7 @@ func (f *fixture) open(db *memStore) {
 	if err != nil {
 		f.t.Fatalf("admission.Open: %v", err)
 	}
-	bridge, err := decision.Open(f.token, db, adm, f.v.StoreID, allRoots{}, noMirror{})
+	bridge, err := decision.Open(f.token, db, adm, f.v.StoreID, allRoots{}, f.mirror)
 	if err != nil {
 		f.t.Fatalf("decision.Open: %v", err)
 	}
@@ -343,11 +446,14 @@ func (f *fixture) open(db *memStore) {
 	if err != nil {
 		f.t.Fatalf("lifecycle.OpenMap: %v", err)
 	}
-	tr, err := Open(f.token, db, adm, f.v.StoreID, f.chain.isAncestorOrSelf)
+	gc := openEngine(f.t, db, f.chain)
+	tr, err := Open(f.token, db, adm, f.v.StoreID,
+		RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+		f.chain.isAncestorOrSelf, gc)
 	if err != nil {
 		f.t.Fatalf("finality.Open: %v", err)
 	}
-	f.adm, f.bridge, f.gate, f.tr = adm, bridge, gate, tr
+	f.adm, f.bridge, f.gate, f.gc, f.tr = adm, bridge, gate, gc, tr
 }
 
 // goLive records the live boundary and switches the gate and the admission
@@ -546,13 +652,6 @@ func TestVectors(t *testing.T) {
 	if err != nil || restart != v.RestartEvidenceDigest {
 		t.Fatalf("restart evidence digest %s %v, want %s", restart, err, v.RestartEvidenceDigest)
 	}
-	anchor := anchorRecord{Block: refOf(v.Block5), EvidenceDigest: v.LiveFinalizedDigest,
-		Producer: producer.Producer,
-		Decision: DecisionRef{Producer: producer.Producer, Sequence: 0}}
-	anchor.Digest = mustAnchorDigest(t, v.StoreID, anchor)
-	if anchor.Digest != v.AnchorDigest {
-		t.Fatalf("anchor digest %s, want %s", anchor.Digest, v.AnchorDigest)
-	}
 }
 
 func mustDigest(t *testing.T, r observationRecord) string {
@@ -560,15 +659,6 @@ func mustDigest(t *testing.T, r observationRecord) string {
 	digest, err := ObservationDigest(r)
 	if err != nil {
 		t.Fatalf("observation digest of %s: %v", r.Field, err)
-	}
-	return digest
-}
-
-func mustAnchorDigest(t *testing.T, storeID string, a anchorRecord) string {
-	t.Helper()
-	digest, err := AnchorDigest(storeID, a)
-	if err != nil {
-		t.Fatalf("anchor digest: %v", err)
 	}
 	return digest
 }
@@ -622,8 +712,8 @@ func TestLiveSetterObservations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	if anchor.Block != refOf(f.v.Block5) {
-		t.Fatalf("anchor %v, want the finalized block", anchor.Block)
+	if refOfAnchor(anchor.Anchor) != refOf(f.v.Block5) {
+		t.Fatalf("anchor %v, want the finalized block", anchor.Anchor)
 	}
 }
 
@@ -709,7 +799,8 @@ func TestCommitCrashAndRecovery(t *testing.T) {
 			if safeDurable != (name == "crash") {
 				t.Fatalf("safe record durable=%v after a %s", safeDurable, name)
 			}
-			g := &fixture{t: t, v: f.v, guard: f.guard, token: f.token, chain: newChain()}
+			g := &fixture{t: t, v: f.v, guard: f.guard, token: f.token, chain: newChain(),
+				mirror: noMirror{}}
 			g.buildChain()
 			g.open(reopened)
 			// Native recovery finishes the interrupted transition: the
@@ -777,8 +868,8 @@ func TestStartupFallbackLowerSafe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept after restart: %v", err)
 	}
-	if again.Block != anchor.Block {
-		t.Fatalf("the anchor moved to %v, want %v", again.Block, anchor.Block)
+	if again.Anchor != anchor.Anchor {
+		t.Fatalf("the anchor moved to %v, want %v", again.Anchor, anchor.Anchor)
 	}
 	// A higher live safe replaces the retained evidence.
 	g.goLive()
@@ -921,8 +1012,8 @@ func assertStoppedByRegression(t *testing.T, f *fixture, want decision.Head) {
 	// The accepted anchor record is untouched: already accepted
 	// irreversibility is not revoked by the stop.
 	anchor, ok := f.tr.Anchor()
-	if !ok || anchor.Block != refOf(want) {
-		t.Fatalf("anchor after the fatal stop: %v %v", anchor, ok)
+	if !ok || refOfAnchor(anchor.Anchor) != refOf(want) {
+		t.Fatalf("anchor after the fatal stop: %v %v", anchor.Anchor, ok)
 	}
 	g := f.restart(t, ^uint(0))
 	g.startup(want, true)
@@ -930,8 +1021,8 @@ func assertStoppedByRegression(t *testing.T, f *fixture, want decision.Head) {
 		t.Fatalf("accept after restart: %v", err)
 	}
 	anchor, ok = g.tr.Anchor()
-	if !ok || anchor.Block != refOf(want) {
-		t.Fatalf("anchor after restart: %v %v", anchor, ok)
+	if !ok || refOfAnchor(anchor.Anchor) != refOf(want) {
+		t.Fatalf("anchor after restart: %v %v", anchor.Anchor, ok)
 	}
 }
 
@@ -964,7 +1055,7 @@ func TestAncestryLookupErrorIsNotFatal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept forward: %v", err)
 	}
-	if moved.Block != refOf(f.v.Head) || moved.EvidenceDigest != forward.Next.Digest {
+	if refOfAnchor(moved.Anchor) != refOf(f.v.Head) || moved.EvidenceDigest != forward.Next.Digest {
 		t.Fatalf("forward anchor %+v", moved)
 	}
 }
@@ -1003,8 +1094,8 @@ func TestSafeNeverFatalAndNeverAnAnchor(t *testing.T) {
 	}
 	mustObservation(t, "cleared safe", ev.Safe, UnknownObservation(ReferenceUnset))
 	anchor, _ := f.tr.Anchor()
-	if anchor.Block != refOf(f.v.Block5) {
-		t.Fatalf("anchor %v, want the finalized block", anchor.Block)
+	if refOfAnchor(anchor.Anchor) != refOf(f.v.Block5) {
+		t.Fatalf("anchor %v, want the finalized block", anchor.Anchor)
 	}
 }
 
@@ -1072,7 +1163,7 @@ func TestAnchorAcceptanceRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept forward: %v", err)
 	}
-	if moved.Block != refOf(f.v.Head) || moved.EvidenceDigest != higher.Next.Digest {
+	if refOfAnchor(moved.Anchor) != refOf(f.v.Head) || moved.EvidenceDigest != higher.Next.Digest {
 		t.Fatalf("forward anchor %+v", moved)
 	}
 }
@@ -1114,8 +1205,118 @@ func TestAnchorRefusesRegression(t *testing.T) {
 		t.Fatalf("accept a candidate below the anchor: %v", err)
 	}
 	anchor, ok := g.tr.Anchor()
-	if !ok || anchor.Block != refOf(f.v.Head) {
-		t.Fatalf("anchor %v %v, want the accepted one", anchor, ok)
+	if !ok || refOfAnchor(anchor.Anchor) != refOf(f.v.Head) {
+		t.Fatalf("anchor %v %v, want the accepted one", anchor.Anchor, ok)
+	}
+}
+
+// TestAcceptSurvivesMarkerCleanup is the Accept/CHECKPOINT rule: a FINALITY
+// decision carries public StatusChanged events, so its native marker lives
+// until the mirror applied it — and the bridge cleanup then deletes the
+// marker. Acceptance is driven by the durable finalized observation record,
+// never by the marker, so it survives the cleanup.
+func TestAcceptSurvivesMarkerCleanup(t *testing.T) {
+	f := &fixture{t: t, v: loadVectors(t), guard: admission.NewGuard(), db: newStore(), chain: newChain(),
+		mirror: appliedMirror{applied: map[uint64]string{}}}
+	f.token = f.guard.Acquire()
+	f.buildChain()
+	f.open(f.db)
+	f.goLive()
+	plan := f.set(f.v.SetFinalizedCaller, lifecycle.Finalized, none, f.v.Block5)
+	if !plan.Intent.Events {
+		t.Fatal("the FINALITY decision carries no public StatusChanged events")
+	}
+	decided, err := f.bridge.Resolve(f.token, plan.Intent.Sequence)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	f.mirror.(appliedMirror).applied[plan.Intent.Sequence] = decided.Digest
+	if err := f.bridge.Cleanup(f.token); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	marker, err := f.db.Has(decision.MarkerKey(admission.Producer{ProducerID: f.v.Producer, RunID: f.v.Run},
+		plan.Intent.Sequence))
+	if err != nil {
+		t.Fatalf("marker read: %v", err)
+	}
+	if marker {
+		t.Fatal("the cleanup kept the marker of the applied decision")
+	}
+	anchor, err := f.tr.Accept(f.token)
+	if err != nil {
+		t.Fatalf("accept after the cleanup deleted the marker: %v", err)
+	}
+	if refOfAnchor(anchor.Anchor) != refOf(f.v.Block5) || anchor.EvidenceDigest != plan.Next.Digest {
+		t.Fatalf("anchor %+v, want the finalized observation of %s", anchor, f.v.Block5.Hash)
+	}
+}
+
+// TestStartupWithoutFinalizedReferenceClearsStaleRecords: known=false of
+// the startup reader means the native store holds no finalized reference,
+// so the stale Known records of the previous run are cleared as unset, one
+// planned change per field in the fixed order; the saved evidence survives
+// as retained and is never presented as a fresh native read.
+func TestStartupWithoutFinalizedReferenceClearsStaleRecords(t *testing.T) {
+	f := newFixture(t)
+	f.goLive()
+	f.set(f.v.SetFinalizedCaller, lifecycle.Finalized, none, f.v.Block5)
+	f.set(f.v.SetSafeCaller, lifecycle.Safe, none, safeBlock)
+	g := f.restart(t, ^uint(0))
+	plans := g.startup(decision.Head{}, false)
+	if len(plans) != 2 {
+		t.Fatalf("the unset startup planned %d changes, want finalized then safe", len(plans))
+	}
+	if plans[0].Next.Field != lifecycle.Finalized || plans[1].Next.Field != lifecycle.Safe {
+		t.Fatalf("the unset startup planned %s then %s", plans[0].Next.Field, plans[1].Next.Field)
+	}
+	ev, err := g.tr.Evidence()
+	if err != nil {
+		t.Fatalf("evidence: %v", err)
+	}
+	mustObservation(t, "cleared finalized", ev.Finalized, UnknownObservation(ReferenceUnset))
+	mustObservation(t, "cleared safe", ev.Safe, UnknownObservation(ReferenceUnset))
+	retained, ok := g.tr.Retained(lifecycle.Finalized)
+	if !ok || retained.Block != refOf(f.v.Block5) || retained.Origin != OriginRetained {
+		t.Fatalf("retained finalized %v %v, want the saved block as retained", retained, ok)
+	}
+	retainedSafe, ok := g.tr.Retained(lifecycle.Safe)
+	if !ok || retainedSafe.Block != refOf(safeBlock) || retainedSafe.Origin != OriginRetained {
+		t.Fatalf("retained safe %v %v, want the saved block as retained", retainedSafe, ok)
+	}
+	if plans := g.startup(decision.Head{}, false); len(plans) != 0 {
+		t.Fatalf("the repeated unset startup planned %d changes", len(plans))
+	}
+}
+
+// TestStartupWithoutFinalizedUnderAnchorIsFatal: a startup that finds no
+// finalized reference while an anchor is accepted lost the anchored
+// finalized ancestry — the same fatal rewind as a live clear.
+func TestStartupWithoutFinalizedUnderAnchorIsFatal(t *testing.T) {
+	f := newFixture(t)
+	f.goLive()
+	f.set(f.v.SetFinalizedCaller, lifecycle.Finalized, none, f.v.Block5)
+	if _, err := f.tr.Accept(f.token); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	g := f.restart(t, ^uint(0))
+	pass, err := g.gate.Enter(g.token, g.v.StartupCaller)
+	if err != nil {
+		g.t.Fatalf("enter: %v", err)
+	}
+	_, _, err = g.tr.Startup(g.token, pass, g.bridge, g.v.Head, func() (decision.Head, bool, error) {
+		return decision.Head{}, false, nil
+	})
+	if err := pass.Exit(); err != nil {
+		g.t.Fatalf("exit: %v", err)
+	}
+	mustErr(t, err, ErrFatal)
+	stopped, stopErr := g.tr.Stopped()
+	if !stopped || !errors.Is(stopErr, ErrFatal) {
+		t.Fatalf("stopped=%v with %v, want the fatal stop", stopped, stopErr)
+	}
+	anchor, ok := g.tr.Anchor()
+	if !ok || refOfAnchor(anchor.Anchor) != refOf(f.v.Block5) {
+		t.Fatalf("anchor %v %v, want the accepted one", anchor.Anchor, ok)
 	}
 }
 
@@ -1187,9 +1388,12 @@ func TestOpenRejectsDamagedRecords(t *testing.T) {
 			if err != nil {
 				t.Fatalf("admission.Open: %v", err)
 			}
-			g := &fixture{t: t, v: f.v, guard: f.guard, token: f.token, chain: newChain()}
+			g := &fixture{t: t, v: f.v, guard: f.guard, token: f.token, chain: newChain(), mirror: noMirror{}}
 			g.buildChain()
-			if _, err := Open(f.token, reopened, adm, f.v.StoreID, g.chain.isAncestorOrSelf); !errors.Is(err, want) {
+			gc := openEngine(t, reopened, g.chain)
+			if _, err := Open(f.token, reopened, adm, f.v.StoreID,
+				RunIdentity{Network: gcNetwork, Node: gcNode, Producer: gcProducer, Run: gcRun},
+				g.chain.isAncestorOrSelf, gc); !errors.Is(err, want) {
 				t.Fatalf("open damaged store: %v, want %v", err, want)
 			}
 		})

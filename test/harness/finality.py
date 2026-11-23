@@ -80,11 +80,6 @@ def observation_digest(field, known, block=None, origin="", basis="", reason="",
     return digest_of("extractor-finality-observation-v1", *parts)
 
 
-def anchor_digest(store_id, producer, block, evidence, decision_producer, decision_sequence):
-    return digest_of("extractor-finality-anchor-v1", text(store_id), text(producer), head(block),
-                     raw(evidence), decision_bytes(decision_producer, decision_sequence))
-
-
 # Fixed vector inputs.
 STORE_ID = decision.STORE_ID
 PRODUCER, RUN = admission.PRODUCER, admission.RUN
@@ -117,7 +112,6 @@ def vectors():
         "restart_evidence_digest": digest_of("extractor-finality-restart-v1", text("FINALIZED"), head(BLOCK5),
                                              head(HEAD)),
         "clear_evidence_digest": CLEAR_EVIDENCE,
-        "anchor_digest": anchor_digest(STORE_ID, OWNER, BLOCK5, live_finalized, OWNER, 0),
     }
 
 
@@ -130,6 +124,16 @@ def check_vectors():
     return sorted(stored)
 
 
+# The repository-local modules the finality package composes at its native
+# paths: the recovery GC anchor owner and the protocol/semantic identity
+# model. Each is bound with a resolved local replace, so an assembly under
+# a symlinked temporary directory resolves the same worktree files.
+LOCAL_MODULES = {
+    "github.com/sigaev-pro/bc-indexer/adapters/recovery_gc": "adapters/recovery_gc",
+    "github.com/sigaev-pro/bc-indexer/protocol/semantic": "protocol/semantic",
+}
+
+
 def assemble(target, root=ROOT):
     """Extend the assembled lifecycle module with the finality package and return its directories."""
     target = Path(target)
@@ -138,6 +142,20 @@ def assemble(target, root=ROOT):
     (target / "extractor/finality").mkdir(parents=True)
     for name in PACKAGE_FILES:
         shutil.copyfile(root / "adapters" / "geth" / "finality" / name, target / "extractor/finality" / name)
+    # The replaces of a dependency module are ignored, so the assembled
+    # main module binds every module of the graph itself.
+    module = ["", "// The repository-local modules the finality package composes",
+              "// at its native paths: the recovery GC anchor owner and the",
+              "// protocol/semantic identity model.",
+              "require (",
+              "\tgithub.com/sigaev-pro/bc-indexer/adapters/recovery_gc v0.0.0",
+              "\tgithub.com/sigaev-pro/bc-indexer/protocol/semantic v0.0.0",
+              ")",
+              ""]
+    for module_path, relative in sorted(LOCAL_MODULES.items()):
+        local = (root / relative).resolve()
+        module.append(f"replace {module_path} => {local}")
+    (target / "go.mod").write_text((target / "go.mod").read_text() + "\n".join(module) + "\n")
     return sorted(packages + ["extractor/finality"])
 
 

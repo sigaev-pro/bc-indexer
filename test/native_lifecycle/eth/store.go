@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/extractor/admission"
 )
@@ -90,6 +92,35 @@ func (s *memStore) SyncKeyValue() error {
 		}
 	}
 	s.pending = nil
+	return nil
+}
+
+// Range visits every visible key that starts with prefix, in ascending
+// byte order, with the value visible through unsynced writes; a pending
+// delete hides the key. The lifecycle registry and the recovery GC engine
+// read their records through it.
+func (s *memStore) Range(prefix []byte, visit func(key, value []byte) error) error {
+	view := map[string][]byte{}
+	for key, value := range s.durable {
+		if strings.HasPrefix(key, string(prefix)) {
+			view[key] = value
+		}
+	}
+	for _, w := range s.pending {
+		if !strings.HasPrefix(w.key, string(prefix)) {
+			continue
+		}
+		if w.deleted {
+			delete(view, w.key)
+		} else {
+			view[w.key] = w.value
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(view)) {
+		if err := visit([]byte(key), view[key]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

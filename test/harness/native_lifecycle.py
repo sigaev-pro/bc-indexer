@@ -4,11 +4,12 @@
 `assemble DIR` extends the assembled finality module (source_inputs,
 admission, decision, lifecycle, finality) with the ETH scenario model of
 `test/native_lifecycle/eth` at `extractor/native_lifecycle_eth`, and binds
-the repository-local modules it composes — protocol/semantic for the
-semantic descriptors and batch allocation, test/lifecycle_validator for the
-E02-03 oracle — through local replaces. The Go tests of the ETH block run
-only there, because the model imports the extractor packages at their
-native paths. `check` verifies that the source files of the block are
+the repository-local modules it composes — adapters/lifecycle_registry for
+the real activation and revision registry, test/lifecycle_validator for the
+E02-03 oracle (adapters/recovery_gc and protocol/semantic are already bound
+by the finality assembly) — through local replaces. The Go tests of the ETH
+block run only there, because the model imports the extractor packages at
+their native paths. `check` verifies that the source files of the block are
 present and that the assembled layout carries them unchanged.
 """
 
@@ -26,15 +27,16 @@ ROOT = finality.ROOT
 BLOCK = ROOT / "test" / "native_lifecycle" / "eth"
 BLOCK_FILES = ("lifecycle_eth.go", "store.go", "lifecycle_eth_test.go")
 
-# The repository-local modules the ETH block composes. The replaces of a
-# dependency module are ignored, so the assembled main module binds every
-# module of the graph itself.
+# The repository-local modules the ETH block composes beyond the finality
+# assembly (which binds adapters/recovery_gc and protocol/semantic). The
+# replaces of a dependency module are ignored, so the assembled main module
+# binds every module of the graph itself.
 LOCAL_MODULES = {
+    "github.com/sigaev-pro/bc-indexer/adapters/lifecycle_registry": "adapters/lifecycle_registry",
     "github.com/sigaev-pro/bc-indexer/protocol/balance": "protocol/balance",
     "github.com/sigaev-pro/bc-indexer/protocol/block": "protocol/block",
     "github.com/sigaev-pro/bc-indexer/protocol/profiles": "protocol/profiles",
     "github.com/sigaev-pro/bc-indexer/protocol/proto": "protocol/proto",
-    "github.com/sigaev-pro/bc-indexer/protocol/semantic": "protocol/semantic",
     "github.com/sigaev-pro/bc-indexer/test/lifecycle_validator": "test/lifecycle_validator",
 }
 
@@ -61,11 +63,12 @@ def assemble(target, root=ROOT):
     for name in BLOCK_FILES:
         shutil.copyfile(root / "test" / "native_lifecycle" / "eth" / name,
                         target / "extractor/native_lifecycle_eth" / name)
-    module = ["", "// The repository-local modules the native lifecycle ETH block composes.",
-              "// The replaces of a dependency module are ignored, so this main",
-              "// module binds every module of the graph itself.",
+    module = ["", "// The repository-local modules the native lifecycle ETH block composes",
+              "// beyond the finality assembly. The replaces of a dependency module",
+              "// are ignored, so this main module binds every module of the graph",
+              "// itself.",
               "require (",
-              "\tgithub.com/sigaev-pro/bc-indexer/protocol/semantic v0.0.0",
+              "\tgithub.com/sigaev-pro/bc-indexer/adapters/lifecycle_registry v0.0.0",
               "\tgithub.com/sigaev-pro/bc-indexer/test/lifecycle_validator v0.0.0",
               ")",
               "",

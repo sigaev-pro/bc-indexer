@@ -1,15 +1,19 @@
 // Package eth is the ETH scenario model of E05-02.reorg
 // (test/native_lifecycle): it drives the real admission, decision bridge,
 // lifecycle gate and finality owner of the assembled extractor module over
-// an in-memory native store, derives the semantic descriptors of each
-// native decision (Applied of the new entities, Removed of the replaced
-// activations, StatusChanged of the finality-covered ones), builds the
-// decision manifest in durable chunks with exactly one batch allocation per
-// decision, and folds the delivered descriptors through the E02-03
-// lifecycle oracle. It proves the reorg, reapply, known-branch, reordered
-// and removed-before-PubAck evidence of REQ-CAP-08 (AC-CAP-08-02) and
-// REQ-LIF-02 (AC-LIF-02-01) for ETH. It is a test model, not a production
-// consumer; the design is in ../README.md.
+// an in-memory native store, mirrors every native decision into the real
+// lifecycle registry of E05-01.registry (the activation and revision
+// records, the corpus retention and the speculative rules), and observes
+// the GC anchor on the real recovery GC engine of E05-01.activation_gc.
+// The semantic descriptors of each decision (Applied of the new entities,
+// Removed of the replaced activations, StatusChanged of the finality-
+// covered ones) are committed as the registry application plans, so the
+// published event set the registry exposes is the evidence, and it folds
+// through the E02-03 lifecycle oracle. The manifest ledger keeps one batch
+// allocation per decision in durable chunks. It proves the reorg, reapply,
+// known-branch, reordered and removed-before-PubAck evidence of REQ-CAP-08
+// (AC-CAP-08-02) and REQ-LIF-02 (AC-LIF-02-01) for ETH. It is a test
+// model, not a production consumer; the design is in ../README.md.
 package eth
 
 import (
@@ -24,6 +28,8 @@ import (
 	"github.com/ethereum/go-ethereum/extractor/decision"
 	"github.com/ethereum/go-ethereum/extractor/finality"
 	"github.com/ethereum/go-ethereum/extractor/lifecycle"
+	registry "github.com/sigaev-pro/bc-indexer/adapters/lifecycle_registry"
+	recoverygc "github.com/sigaev-pro/bc-indexer/adapters/recovery_gc"
 	"github.com/sigaev-pro/bc-indexer/protocol/semantic"
 )
 
@@ -123,96 +129,93 @@ func (c *chain) branch(fork []string, head string) []string {
 	return path
 }
 
-// activation is one applied activation of the model registry: the entity
-// identity, its block and its lifecycle revision counter.
-type activation struct {
-	id           semantic.ActivationID
-	block        string
-	nextRevision uint64
-	removed      bool
-	// removal is the Removed revision the activation received, with the
-	// decision that allocated it; a manifest rebuild from the same native
-	// marker derives the same revision instead of a second one.
-	removal *removal
-}
-
-// removal is one allocated Removed revision of an activation.
-type removal struct {
-	decision uint64
-	revision uint64
-}
-
-// registry maps the applied activations by block hash and by identity.
-type registry struct {
-	byBlock map[string]*activation
-	byID    map[semantic.ActivationID]*activation
-	source  uint64
-}
-
-func newRegistry() *registry {
-	return &registry{byBlock: map[string]*activation{}, byID: map[semantic.ActivationID]*activation{}}
-}
-
-// apply records the Applied activation of the block entity of a decision.
-// The same decision replaying the same block is the same activation: a
-// manifest rebuild creates no second activation and resets no revision.
-func (r *registry) apply(decisionSequence uint64, block string) *activation {
-	id := semantic.ActivationID{DecisionSequence: decisionSequence, EntityOrdinal: 0}
-	if a, ok := r.byID[id]; ok {
-		return a
-	}
-	a := &activation{id: id, block: block, nextRevision: 1}
-	r.byBlock[block] = a
-	r.byID[id] = a
-	return a
-}
-
-// remove allocates the Removed revision of a still-applied activation, or
-// replays the one the same decision already allocated.
-func (r *registry) remove(a *activation, decisionSequence uint64) (uint64, bool) {
-	if a.removal != nil {
-		if a.removal.decision == decisionSequence {
-			return a.removal.revision, true
+// blockOf returns the chain block string whose model hash is hash: every
+// block identity of the model is the fixed hash of its string form.
+func (c *chain) blockOf(hash semantic.Hash32) string {
+	for block := range c.parent {
+		if blockHash(block) == hash {
+			return block
 		}
-		return 0, false
 	}
-	rev := a.nextRevision
-	a.nextRevision++
-	a.removed = true
-	a.removal = &removal{decision: decisionSequence, revision: rev}
-	return rev, true
+	return hash.String()
 }
 
-// status allocates the next StatusChanged revision of an activation.
-func (r *registry) status(a *activation) uint64 {
-	rev := a.nextRevision
-	a.nextRevision++
-	return rev
+// dref returns the native decision reference of one bridge decision
+// sequence on the semantic identity model.
+func dref(sequence uint64) registry.NativeDecisionRef {
+	return registry.NativeDecisionRef{NodeInstanceID: nodeID, ProducerID: producerID, RunID: runID,
+		DecisionSequence: sequence}
 }
 
-func (r *registry) sourceRef() semantic.SourceRef {
-	r.source++
-	return semantic.SourceRef{NodeInstanceID: nodeID, WriterEpoch: writerID, SourceSequence: r.source}
+// activationKey returns the activation key of one decision entity of the
+// model: one block entity, ordinal 0.
+func activationKey(sequence uint64) registry.ActivationKey {
+	return registry.ActivationKey{Network: network, ProducerID: producerID, RunID: runID,
+		Activation: semantic.ActivationID{DecisionSequence: sequence, EntityOrdinal: 0}}
 }
 
-// sorted returns the applied activations in a deterministic order.
-func (r *registry) sorted() []*activation {
-	out := make([]*activation, 0, len(r.byID))
-	for _, a := range r.byID {
-		out = append(out, a)
+// gcOracle adapts the model chain into the ancestry oracle of the recovery
+// GC engine: a lookup failure is unknown evidence, never a guess.
+type gcOracle struct{ chain *chain }
+
+func (o gcOracle) Contains(ancestor, descendant recoverygc.AnchorRef) recoverygc.Verdict {
+	ok, err := o.chain.isAncestorOrSelf(finality.Ref{Height: ancestor.Height, Hash: ancestor.Hash.String()},
+		finality.Ref{Height: descendant.Height, Hash: descendant.Hash.String()})
+	if err != nil {
+		return recoverygc.VerdictUnknown
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].id.DecisionSequence != out[j].id.DecisionSequence {
-			return out[i].id.DecisionSequence < out[j].id.DecisionSequence
-		}
-		return out[i].id.EntityOrdinal < out[j].id.EntityOrdinal
-	})
-	return out
+	if ok {
+		return recoverygc.VerdictContains
+	}
+	return recoverygc.VerdictDivergent
+}
+
+// gcNothingPending, gcReleaser and gcPins are the inert GC seams of the
+// model: the reorg evidence releases nothing here.
+type gcNothingPending struct{}
+
+func (gcNothingPending) Pending(recoverygc.EntityID) (recoverygc.PendingReport, error) {
+	return recoverygc.PendingReport{}, nil
+}
+
+type gcReleaser struct{}
+
+func (gcReleaser) ReleaseEntity(recoverygc.EntityID) error { return nil }
+
+type gcPins struct{}
+
+func (gcPins) Release(string) error { return nil }
+
+// registryMirror answers the applied-decision frontier of the bridge from
+// the lifecycle registry: a decision the registry applied needs its native
+// marker no longer, so the bridge cleanup deletes it.
+type registryMirror struct {
+	registry *registry.Registry
+}
+
+func (m registryMirror) Applied(sequence uint64, digest string) (bool, error) {
+	d, ok, err := m.registry.Decision(dref(sequence))
+	if err != nil || !ok {
+		return false, err
+	}
+	if d.State != registry.StateApplied {
+		return false, nil
+	}
+	delivery := decision.Batch
+	if d.Kind == registry.KindSide {
+		delivery = decision.Checkpoint
+	}
+	want, err := decision.DecidedDigest(d.IntentDigest, delivery)
+	if err != nil {
+		return false, err
+	}
+	return want == digest, nil
 }
 
 // node is one live producer run of the model: the real admission, decision
-// bridge, lifecycle gate and finality owner, plus the manifest ledger, the
-// activation registry and the block tree.
+// bridge, lifecycle gate and finality owner, the real lifecycle registry
+// and recovery GC engine, plus the manifest ledger, the block tree and the
+// applied-activation index of the scenarios.
 type node struct {
 	token    *admission.Token
 	db       *memStore
@@ -224,10 +227,17 @@ type node struct {
 	bridge   *decision.Bridge
 	gate     *lifecycle.Gate
 	finality *finality.Tracker
+	gc       *recoverygc.Engine
+	registry *registry.Registry
 	alloc    *semantic.Allocator
-	registry *registry
-	// replayed blocks: their corpus was rebuilt by targeted replay
-	// without a new execution callback.
+	// appliedBy maps each applied block to the decision sequence whose
+	// application created its activation; it is scenario bookkeeping over
+	// the registry records, not a lifecycle rule.
+	appliedBy map[string]uint64
+	// source sequences the descriptor source refs of the model.
+	source uint64
+	// replayed blocks: their corpus was rebuilt by a native targeted
+	// replay without a new execution callback.
 	replayed map[string]bool
 	// fault names the manifest ledger part whose write crashes: a model
 	// fault point of AC-CAP-08-02. nil disables it.
@@ -243,7 +253,7 @@ func newNode() *node {
 		pins:   &fakePins{roots: map[string]string{}, digests: map[string]string{}},
 		inputs: &fakeInputs{capsules: map[string]string{}, consumed: map[string]admission.Consumed{}},
 		roots:  &fakeRoots{durable: map[string]bool{}},
-		chain:  newChain(genesisHash), registry: newRegistry(), replayed: map[string]bool{}}
+		chain:  newChain(genesisHash), appliedBy: map[string]uint64{}, replayed: map[string]bool{}}
 	n.roots.durable[childRoot] = true
 	n.open(db)
 	if _, err := n.gate.GoLive(token, decision.Head{Hash: genesisHash}, childRoot, n.roots, n.bridge); err != nil {
@@ -264,7 +274,11 @@ func (n *node) open(db *memStore) {
 	if err != nil {
 		panic(err)
 	}
-	bridge, err := decision.Open(n.token, db, adm, storeID, n.roots, noMirror{})
+	reg, _, err := registry.Open(db)
+	if err != nil {
+		panic(err)
+	}
+	bridge, err := decision.Open(n.token, db, adm, storeID, n.roots, registryMirror{registry: reg})
 	if err != nil {
 		panic(err)
 	}
@@ -272,7 +286,13 @@ func (n *node) open(db *memStore) {
 	if err != nil {
 		panic(err)
 	}
-	tracker, err := finality.Open(n.token, db, adm, storeID, n.chain.isAncestorOrSelf)
+	gc, _, err := recoverygc.Open(db, gcOracle{chain: n.chain}, gcNothingPending{}, gcReleaser{}, gcPins{})
+	if err != nil {
+		panic(err)
+	}
+	tracker, err := finality.Open(n.token, db, adm, storeID,
+		finality.RunIdentity{Network: network, Node: nodeID, Producer: producerID, Run: runID},
+		n.chain.isAncestorOrSelf, gc)
 	if err != nil {
 		panic(err)
 	}
@@ -302,7 +322,30 @@ func (n *node) open(db *memStore) {
 			panic(err)
 		}
 	}
-	n.adm, n.bridge, n.gate, n.finality, n.alloc = adm, bridge, gate, tracker, alloc
+	n.adm, n.bridge, n.gate, n.finality, n.gc, n.registry, n.alloc = adm, bridge, gate, tracker, gc, reg, alloc
+	// The applied-activation index is rebuilt from the stored applications
+	// of the registry: every Applied event names the block and the decision
+	// entity its activation fixed.
+	n.appliedBy = map[string]uint64{}
+	for sequence := uint64(0); ; sequence++ {
+		d, ok, err := reg.Decision(dref(sequence))
+		if err != nil {
+			panic(err)
+		}
+		if !ok {
+			break
+		}
+		if d.Application == nil {
+			continue
+		}
+		for _, event := range d.Application.Events {
+			if event.Descriptor.Kind != semantic.KindApplied {
+				continue
+			}
+			n.appliedBy[n.chain.blockOf(event.Descriptor.Activation.BlockHash)] =
+				event.Descriptor.Activation.ActivationID.DecisionSequence
+		}
+	}
 }
 
 // callerMap is the lifecycle map of the model: the geth rows the scenarios
@@ -418,6 +461,143 @@ func (n *node) head() decision.Head {
 	return decision.Head{Number: n.chain.number[h], Hash: h}
 }
 
+// registryKind maps the bridge decision kind to the registry kind of the
+// same native decision.
+func registryKind(kind decision.Kind) registry.DecisionKind {
+	switch kind {
+	case decision.Import:
+		return registry.KindImport
+	case decision.Side:
+		return registry.KindSide
+	case decision.Canonical:
+		return registry.KindCanonical
+	case decision.Finality:
+		return registry.KindFinality
+	}
+	panic(fmt.Sprintf("%v: bridge kind %s", ErrModel, kind))
+}
+
+// mirrorIntent mirrors one intended bridge decision into the registry
+// before native settles it, and captures the corpus of every member block
+// under it: the durable evidence of a completed execution, speculative
+// until a canonical decision applies the block.
+func (n *node) mirrorIntent(record decision.IntentRecord, corpusDigests map[string]string) {
+	ref := dref(record.Sequence)
+	if err := n.registry.Intend(ref, network, registryKind(record.Kind), record.Digest); err != nil {
+		panic(err)
+	}
+	for block, digest := range corpusDigests {
+		if err := n.registry.CaptureCorpus(ref, blockHash(block), digest); err != nil {
+			panic(err)
+		}
+	}
+}
+
+// settle mirrors the settled NATIVE_DECIDED marker of a bridge decision
+// into the registry.
+func (n *node) settle(record decision.IntentRecord) {
+	if err := n.registry.SettleDecided(dref(record.Sequence)); err != nil {
+		panic(err)
+	}
+}
+
+// sourceRef returns the next source provenance of the model descriptors.
+func (n *node) sourceRef() semantic.SourceRef {
+	n.source++
+	return semantic.SourceRef{NodeInstanceID: nodeID, WriterEpoch: writerID, SourceSequence: n.source}
+}
+
+// planOf derives the application plan of a decided canonical decision from
+// the registry records: the Removed events of the replaced activations
+// with revisions from the activation frontier, then the Applied events of
+// the new entities. A rebuild of the same decision reuses the application
+// the registry already stored, so a repeated marker derives the same
+// events, revisions and batch bindings.
+func (n *node) planOf(record decision.IntentRecord, replaced []string) registry.ApplicationPlan {
+	if d, ok, err := n.registry.Decision(dref(record.Sequence)); err != nil {
+		panic(err)
+	} else if ok && d.Application != nil && (d.State == registry.StateDecided ||
+		d.State == registry.StateApplied) && len(d.Application.Events) != 0 {
+		return *d.Application
+	}
+	var events []registry.EventPlan
+	if record.Kind == decision.Canonical {
+		var blocks []string
+		for _, block := range replaced {
+			if _, ok := n.appliedBy[block]; ok {
+				blocks = append(blocks, block)
+			}
+		}
+		sort.Slice(blocks, func(i, j int) bool {
+			return n.appliedBy[blocks[i]] < n.appliedBy[blocks[j]]
+		})
+		for _, block := range blocks {
+			key := activationKey(n.appliedBy[block])
+			revision, err := n.registry.NextRevision(key)
+			if err != nil {
+				panic(err)
+			}
+			events = append(events, n.event(semantic.KindRemoved, key.Activation.DecisionSequence,
+				blockHash(block), revision))
+		}
+	}
+	for _, member := range record.Members {
+		block := blockHash(member.Block)
+		// The block entity, ordinal 0, then its one body transaction,
+		// ordinal 1: both Applied at revision 0 under this decision.
+		events = append(events, n.event(semantic.KindApplied, record.Sequence, block, 0))
+		tx, err := semantic.NewTransactionDescriptor(semantic.KindApplied, network, producerID, runID,
+			record.Sequence, block, blockHash(n.chain.tx[member.Block]), 0, 0, n.sourceRef())
+		if err != nil {
+			panic(err)
+		}
+		txBlock, err := tx.Digest()
+		if err != nil {
+			panic(err)
+		}
+		events = append(events, registry.EventPlan{Descriptor: tx, Content: txBlock.String()})
+	}
+	return registry.ApplicationPlan{Events: events}
+}
+
+// event derives one public block-entity event of the model: the semantic
+// descriptor and the content digest the manifest ledger pins for its
+// bytes.
+func (n *node) event(kind semantic.Kind, sequence uint64, block semantic.Hash32,
+	revision uint64) registry.EventPlan {
+	descriptor, err := semantic.NewBlockDescriptor(kind, network, producerID, runID, sequence, block,
+		revision, n.sourceRef())
+	if err != nil {
+		panic(err)
+	}
+	digest, err := descriptor.Digest()
+	if err != nil {
+		panic(err)
+	}
+	return registry.EventPlan{Descriptor: descriptor, Content: digest.String()}
+}
+
+// apply commits the application plan of a decided decision to the registry
+// and records the applied-activation index of its member blocks.
+func (n *node) apply(record decision.IntentRecord, plan registry.ApplicationPlan) registry.ApplyResult {
+	result, err := n.registry.Apply(dref(record.Sequence), plan)
+	if err != nil {
+		panic(err)
+	}
+	for _, member := range record.Members {
+		n.appliedBy[member.Block] = record.Sequence
+	}
+	return result
+}
+
+// cleanup runs the bridge cleanup: the native markers of the decisions the
+// registry applied are deleted, as they are needed no longer.
+func (n *node) cleanup() {
+	if err := n.bridge.Cleanup(n.token); err != nil {
+		panic(err)
+	}
+}
+
 // importBlocks runs the canonical import of a chain of new blocks: one
 // IMPORT decision per block, each with its manifest.
 func (n *node) importBlocks(blocks ...Block) []*Manifest {
@@ -432,15 +612,17 @@ func (n *node) importBlocks(blocks ...Block) []*Manifest {
 		}
 		record, err := pass.Intend(n.bridge, decision.Intent{Kind: decision.Import, OldHead: oldHead,
 			NewHead:        decision.Head{Number: b.Number, Hash: b.Hash},
-			Members:        []decision.Member{{Observation: ready.Observation, ExecReadyDigest: ready.Digest, ChildRoot: childRoot}},
+			Members:        []decision.Member{{Observation: ready.Observation, Block: b.Hash, ExecReadyDigest: ready.Digest, ChildRoot: childRoot}},
 			EvidenceDigest: intentEvidence(decision.Import, b.Hash), Events: true})
 		if err != nil {
 			panic(err)
 		}
 		n.marker(record)
+		n.mirrorIntent(record, map[string]string{b.Hash: ready.Digest})
 		if _, err := n.bridge.Resolve(n.token, record.Sequence); err != nil {
 			panic(err)
 		}
+		n.settle(record)
 		if err := pass.Exit(); err != nil {
 			panic(err)
 		}
@@ -451,12 +633,14 @@ func (n *node) importBlocks(blocks ...Block) []*Manifest {
 		}
 		manifests = append(manifests, manifest)
 	}
+	n.cleanup()
 	return manifests
 }
 
 // sideImport stores a known side block without a head change: one SIDE
 // decision retains its corpus and observation for a later known-branch
-// switch; it allocates no batch and has no public events.
+// switch; it allocates no batch, publishes no event and closes as a
+// checkpoint in the registry.
 func (n *node) sideImport(b Block) decision.IntentRecord {
 	n.chain.add(b)
 	ready := n.corpus(b, false)
@@ -466,28 +650,32 @@ func (n *node) sideImport(b Block) decision.IntentRecord {
 		panic(err)
 	}
 	record, err := pass.Intend(n.bridge, decision.Intent{Kind: decision.Side, OldHead: head, NewHead: head,
-		Members:        []decision.Member{{Observation: ready.Observation, ExecReadyDigest: ready.Digest, ChildRoot: childRoot}},
+		Members:        []decision.Member{{Observation: ready.Observation, Block: b.Hash, ExecReadyDigest: ready.Digest, ChildRoot: childRoot}},
 		EvidenceDigest: intentEvidence(decision.Side, b.Hash), Events: false})
 	if err != nil {
 		panic(err)
 	}
 	n.marker(record)
+	n.mirrorIntent(record, map[string]string{b.Hash: ready.Digest})
 	if _, err := n.bridge.Resolve(n.token, record.Sequence); err != nil {
 		panic(err)
 	}
+	n.settle(record)
 	if err := pass.Exit(); err != nil {
 		panic(err)
 	}
+	n.cleanup()
 	return record
 }
 
 // switchCanonical reorganizes onto a known branch without new execution.
 // The corpus of every branch block that has no open observation is rebuilt
-// by targeted replay of its retained inputs. Each block application is one
-// CANONICAL decision of its own (the contract gives one block entity,
-// ordinal 0, to a decision); the first decision that leaves the old
-// canonical path is the reorg decision: one native decision whose manifest
-// replaces several blocks, with the complete Removed set of the replaced
+// by a native targeted replay of its retained inputs; the registry corpus
+// record the earlier decision captured is reused, so the application marks
+// the activation speculative. Each block application is one CANONICAL
+// decision of its own; the first decision that leaves the old canonical
+// path is the reorg decision: one native decision whose manifest replaces
+// several blocks, with the complete Removed set of the replaced
 // activations in its one batch. It returns the manifests of the walk in
 // order.
 func (n *node) switchCanonical(newHead string) []*Manifest {
@@ -498,13 +686,13 @@ func (n *node) switchCanonical(newHead string) []*Manifest {
 	for index, block := range branch {
 		var member decision.Member
 		if obs, ok := n.observationOf(block); ok {
-			member = decision.Member{Observation: obs.Key, ExecReadyDigest: obs.ExecReady.Digest,
+			member = decision.Member{Observation: obs.Key, Block: block, ExecReadyDigest: obs.ExecReady.Digest,
 				ChildRoot: childRoot}
 		} else {
 			ready := n.corpus(Block{Number: n.chain.number[block], Hash: block,
 				Parent: n.chain.parent[block], Tx: n.chain.tx[block]}, true)
-			member = decision.Member{Observation: ready.Observation, ExecReadyDigest: ready.Digest,
-				ChildRoot: childRoot}
+			member = decision.Member{Observation: ready.Observation, Block: block,
+				ExecReadyDigest: ready.Digest, ChildRoot: childRoot}
 		}
 		oldHead := n.head()
 		pass, err := n.gate.Enter(n.token, "geth.set-canonical")
@@ -519,9 +707,11 @@ func (n *node) switchCanonical(newHead string) []*Manifest {
 			panic(err)
 		}
 		n.marker(record)
+		n.mirrorIntent(record, nil)
 		if _, err := n.bridge.Resolve(n.token, record.Sequence); err != nil {
 			panic(err)
 		}
+		n.settle(record)
 		if err := pass.Exit(); err != nil {
 			panic(err)
 		}
@@ -537,6 +727,7 @@ func (n *node) switchCanonical(newHead string) []*Manifest {
 		n.chain.canonical = append(append([]string{}, fork...), branch[:index+1]...)
 		manifests = append(manifests, manifest)
 	}
+	n.cleanup()
 	return manifests
 }
 
@@ -581,13 +772,15 @@ type headerRecord struct {
 	Count    int    `json:"count"`
 }
 
-// buildManifest builds the manifest of a decided intent in durable chunks:
-// the batch allocation first (exactly one per decision, restored by
-// AdoptBatch on a rebuild), then one chunk per descriptor group, then the
-// READY header. A rebuild from the same native marker restores the same
-// batch and the same full ordered set; a manifest without its header is
-// not READY. replaced names the blocks whose applied activations the
-// canonical change replaces.
+// buildManifest builds the manifest of a decided intent in durable chunks
+// and commits its application to the registry: the batch allocation first
+// (exactly one per decision, restored by AdoptBatch on a rebuild), then
+// one chunk per descriptor group, then the READY header. The events are
+// the registry application plan of the decision, so the manifest and the
+// registry commit the same full ordered set. A rebuild from the same
+// native marker restores the same batch and the same set; a manifest
+// without its header is not READY. replaced names the blocks whose applied
+// activations the canonical change replaces.
 func (n *node) buildManifest(record decision.IntentRecord, replaced []string) (*Manifest, error) {
 	crash := func(part string) error {
 		if n.fault != "" && n.fault == part {
@@ -626,12 +819,15 @@ func (n *node) buildManifest(record decision.IntentRecord, replaced []string) (*
 			return nil, err
 		}
 	}
-	groups := n.descriptorGroups(record, replaced)
+	plan := n.planOf(record, replaced)
+	for _, event := range plan.Events {
+		manifest.Descriptors = append(manifest.Descriptors, event.Descriptor)
+	}
+	groups := descriptorGroups(plan.Events)
 	position := 0
 	for _, group := range groups {
 		encoded := make([]string, len(group))
 		for i, descriptor := range group {
-			manifest.Descriptors = append(manifest.Descriptors, descriptor)
 			digest, err := descriptor.Digest()
 			if err != nil {
 				return nil, err
@@ -650,7 +846,9 @@ func (n *node) buildManifest(record decision.IntentRecord, replaced []string) (*
 	if err := n.db.SyncKeyValue(); err != nil {
 		return nil, err
 	}
-	// The READY header, written last: a partial manifest is not READY.
+	// The READY header, written last: a partial manifest is not READY. The
+	// registry application follows it, so a partial manifest applied
+	// nothing.
 	if err := crash("header"); err != nil {
 		return nil, err
 	}
@@ -660,8 +858,37 @@ func (n *node) buildManifest(record decision.IntentRecord, replaced []string) (*
 	if err := n.db.SyncKeyValue(); err != nil {
 		return nil, err
 	}
+	n.apply(record, plan)
 	manifest.Ready = true
 	return manifest, nil
+}
+
+// descriptorGroups splits the ordered event set of an application into the
+// descriptor groups of the manifest chunks: one Removed group, then one
+// Applied group per new entity in native order (the block entity and its
+// body transactions).
+func descriptorGroups(events []registry.EventPlan) [][]semantic.SemanticDescriptor {
+	var groups [][]semantic.SemanticDescriptor
+	var removed, applied []semantic.SemanticDescriptor
+	for _, event := range events {
+		switch event.Descriptor.Kind {
+		case semantic.KindRemoved:
+			removed = append(removed, event.Descriptor)
+		case semantic.KindApplied, semantic.KindStatus:
+			applied = append(applied, event.Descriptor)
+		}
+	}
+	if len(removed) != 0 {
+		groups = append(groups, removed)
+	}
+	for i := 0; i < len(applied); i += 2 {
+		group := applied[i:]
+		if len(group) > 2 {
+			group = group[:2]
+		}
+		groups = append(groups, append([]semantic.SemanticDescriptor{}, group...))
+	}
+	return groups
 }
 
 // isReady reports whether the durable manifest of a decision holds its
@@ -671,77 +898,10 @@ func (n *node) isReady(sequence uint64) bool {
 	return ok
 }
 
-// descriptorGroups derives the full ordered descriptor set of a decision:
-// one Removed group for the activations its canonical change replaces,
-// then one Applied group per new entity in native order (the block entity,
-// then its body transactions).
-func (n *node) descriptorGroups(record decision.IntentRecord, replaced []string) [][]semantic.SemanticDescriptor {
-	var groups [][]semantic.SemanticDescriptor
-	if record.Kind == decision.Canonical {
-		var removed []semantic.SemanticDescriptor
-		for _, block := range replaced {
-			a, ok := n.registry.byBlock[block]
-			if !ok {
-				continue
-			}
-			revision, mine := n.registry.remove(a, record.Sequence)
-			if !mine {
-				continue
-			}
-			d, err := semantic.NewBlockDescriptor(semantic.KindRemoved, network, producerID, runID,
-				a.id.DecisionSequence, blockHash(block), revision, n.registry.sourceRef())
-			if err != nil {
-				panic(err)
-			}
-			removed = append(removed, d)
-		}
-		if len(removed) != 0 {
-			groups = append(groups, removed)
-		}
-	}
-	for _, member := range record.Members {
-		block := member.Block
-		n.registry.apply(record.Sequence, block)
-		blockDescriptor, err := semantic.NewBlockDescriptor(semantic.KindApplied, network, producerID,
-			runID, record.Sequence, blockHash(block), 0, n.registry.sourceRef())
-		if err != nil {
-			panic(err)
-		}
-		tx, err := semantic.NewTransactionDescriptor(semantic.KindApplied, network, producerID, runID,
-			record.Sequence, blockHash(block), blockHash(n.chain.tx[block]), 0, 0, n.registry.sourceRef())
-		if err != nil {
-			panic(err)
-		}
-		groups = append(groups, []semantic.SemanticDescriptor{blockDescriptor, tx})
-	}
-	return groups
-}
-
-// statusDescriptors derives the StatusChanged descriptors of the applied
-// activations that the current finality evidence covers: one revision from
-// the same activation counter, no new activation.
-func (n *node) statusDescriptors() []semantic.SemanticDescriptor {
-	var out []semantic.SemanticDescriptor
-	for _, a := range n.registry.sorted() {
-		if a.removed {
-			continue
-		}
-		status, err := n.finality.StatusOf(finality.Ref{Hash: a.block})
-		if err != nil || status != finality.StatusFinalized {
-			continue
-		}
-		d, err := semantic.NewBlockDescriptor(semantic.KindStatus, network, producerID, runID,
-			a.id.DecisionSequence, blockHash(a.block), n.registry.status(a), n.registry.sourceRef())
-		if err != nil {
-			panic(err)
-		}
-		out = append(out, d)
-	}
-	return out
-}
-
 // setFinalized drives one live finalized setter call through the finality
-// owner.
+// owner, mirrors the FINALITY decision into the registry and applies its
+// StatusChanged events: one revision from the same activation counter for
+// every active activation the new evidence covers, no new activation.
 func (n *node) setFinalized(block string) {
 	head := n.head()
 	pass, err := n.gate.Enter(n.token, "geth.set-finalized")
@@ -765,6 +925,70 @@ func (n *node) setFinalized(block string) {
 	if err := pass.Exit(); err != nil {
 		panic(err)
 	}
+	if plan.Noop {
+		return
+	}
+	n.mirrorIntent(plan.Intent, nil)
+	n.settle(plan.Intent)
+	// The StatusChanged events of the coverage the new evidence
+	// establishes, committed through the registry under the same FINALITY
+	// decision: the applied activations are visited by decision sequence,
+	// so the derived events are deterministic.
+	var covered []uint64
+	for _, sequence := range n.appliedSequences() {
+		key := activationKey(sequence)
+		record, ok, err := n.registry.Activation(key)
+		if err != nil || !ok || record.State != registry.ActivationActive {
+			continue
+		}
+		status, err := n.finality.StatusOf(finality.Ref{Hash: n.chain.blockOf(record.BlockHash)})
+		if err != nil || status != finality.StatusFinalized {
+			continue
+		}
+		covered = append(covered, sequence)
+	}
+	var events []registry.EventPlan
+	for _, sequence := range covered {
+		key := activationKey(sequence)
+		record, _, err := n.registry.Activation(key)
+		if err != nil {
+			panic(err)
+		}
+		revision, err := n.registry.NextRevision(key)
+		if err != nil {
+			panic(err)
+		}
+		events = append(events, n.event(semantic.KindStatus, sequence, record.BlockHash, revision))
+	}
+	n.apply(plan.Intent, registry.ApplicationPlan{Events: events})
+	n.cleanup()
+}
+
+// appliedSequences lists the decision sequences of the applied block
+// activations of the model in a deterministic order.
+func (n *node) appliedSequences() []uint64 {
+	out := make([]uint64, 0, len(n.appliedBy))
+	for _, sequence := range n.appliedBy {
+		out = append(out, sequence)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// acceptAnchor accepts the GC anchor from the current finalized evidence
+// on the recovery GC engine.
+func (n *node) acceptAnchor() (recoverygc.AcceptedGcAnchor, error) {
+	return n.finality.Accept(n.token)
+}
+
+// published returns the published event set of the registry: the evidence
+// the E02-03 oracle folds.
+func (n *node) published() []registry.PublishedEvent {
+	events, err := n.registry.Events(&network)
+	if err != nil {
+		panic(err)
+	}
+	return events
 }
 
 func mustJSON(value any) []byte {

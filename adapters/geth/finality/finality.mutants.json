@@ -24,12 +24,6 @@
       "replacement": "tagObservation = \"extractor-finality-observation-v0\""
     },
     {
-      "name": "anchor tag",
-      "file": "extractor/finality/finality.go",
-      "original": "\ttagAnchor      = \"extractor-finality-anchor-v1\"",
-      "replacement": "\ttagAnchor      = \"extractor-finality-anchor-v0\""
-    },
-    {
       "name": "restart tag",
       "file": "extractor/finality/finality.go",
       "original": "\ttagRestart     = \"extractor-finality-restart-v1\"",
@@ -68,8 +62,8 @@
     {
       "name": "anchor source field",
       "file": "extractor/finality/finality.go",
-      "original": "state := tr.fields[lifecycle.Finalized]\n\tif state.current == nil || !state.current.Known {\n\t\treturn Anchor{}, fmt.Errorf(\"%w: finalized reference is unknown\", ErrState)",
-      "replacement": "state := tr.fields[lifecycle.Safe]\n\tif state.current == nil || !state.current.Known {\n\t\treturn Anchor{}, fmt.Errorf(\"%w: finalized reference is unknown\", ErrState)"
+      "original": "state := tr.fields[lifecycle.Finalized]\n\tif state.current == nil || !state.current.Known {\n\t\treturn recoverygc.AcceptedGcAnchor{}, fmt.Errorf(\"%w: finalized reference is unknown\", ErrState)",
+      "replacement": "state := tr.fields[lifecycle.Safe]\n\tif state.current == nil || !state.current.Known {\n\t\treturn recoverygc.AcceptedGcAnchor{}, fmt.Errorf(\"%w: finalized reference is unknown\", ErrState)"
     },
     {
       "name": "startup safe replay",
@@ -80,8 +74,8 @@
     {
       "name": "conflict inversion",
       "file": "extractor/finality/finality.go",
-      "original": "return !descendant, nil\n}\n\n// Set plans",
-      "replacement": "return descendant, nil\n}\n\n// Set plans"
+      "original": "return !descendant, nil\n}\n\n// anchorConflict names",
+      "replacement": "return descendant, nil\n}\n\n// anchorConflict names"
     }
   ]
 }
