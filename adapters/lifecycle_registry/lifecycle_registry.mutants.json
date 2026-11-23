@@ -1,0 +1,91 @@
+{
+ "schema_version": 1,
+ "description": "Single-check mutants of the E05-01.registry decision mirror, application frontier, targeted replay and bridge Mirror seam. The copy assembles the sources of the standalone module and its repository-local imports under one go.mod (go_module), because the module's own replace directives point outside its directory; every package keeps its repository-relative import path.",
+ "language": "go",
+ "root": "../..",
+ "copy": [
+  "adapters/lifecycle_registry/*.go",
+  "protocol/semantic/*.go",
+  "protocol/balance/*.go",
+  "protocol/block/*.go",
+  "protocol/profiles/*.go",
+  "protocol/proto/*.go",
+  "test/lifecycle_validator/*.go"
+ ],
+ "go_module": "github.com/sigaev-pro/bc-indexer",
+ "test": [
+  "go",
+  "test",
+  "-count=1",
+  "./adapters/lifecycle_registry/"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "speculative flag inverted",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "Speculative: corpus.CapturedBy != d.Ref",
+   "replacement": "Speculative: corpus.CapturedBy == d.Ref"
+  },
+  {
+   "name": "status revision frontier ignored",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "if ev.Descriptor.Revision != rec.MaxRevision+1 {\n\t\t\t\treturn nil, fmt.Errorf(\"%w: status revision %d, frontier %d\", ErrRevision,",
+   "replacement": "if ev.Descriptor.Revision != rec.MaxRevision {\n\t\t\t\treturn nil, fmt.Errorf(\"%w: status revision %d, frontier %d\", ErrRevision,"
+  },
+  {
+   "name": "deferred decision published",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "if d.State != StateApplied || d.Application == nil {",
+   "replacement": "if d.State != StateDecided || d.Application == nil {"
+  },
+  {
+   "name": "side settle leaves the run blocked",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "if d.Kind == KindSide {",
+   "replacement": "if d.Kind != KindSide {"
+  },
+  {
+   "name": "removal keeps the activation active",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "next.State = ActivationRemoved",
+   "replacement": "next.State = ActivationActive"
+  },
+  {
+   "name": "applied repeat not idempotent",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "if d.Application != nil && d.Application.equal(plan) {",
+   "replacement": "if false {"
+  },
+  {
+   "name": "status owner unchecked",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "return a.StatusDecision != nil && *a.StatusDecision == ref",
+   "replacement": "return a.StatusDecision != nil && *a.StatusDecision != ref"
+  },
+  {
+   "name": "decided digest conflict ignored",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "case target:\n\t\tif d.DecidedDigest != decidedDigest {",
+   "replacement": "case target:\n\t\tif false {"
+  },
+  {
+   "name": "mirror digest unchecked",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "return d.State == StateApplied && d.DecidedDigest == decidedDigest, nil",
+   "replacement": "return d.State == StateApplied, nil"
+  },
+  {
+   "name": "replay target unchecked",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "needed = true",
+   "replacement": "needed = false"
+  },
+  {
+   "name": "next revision off by one",
+   "file": "adapters/lifecycle_registry/registry.go",
+   "original": "return rec.MaxRevision + 1, nil",
+   "replacement": "return rec.MaxRevision, nil"
+  }
+ ]
+}
