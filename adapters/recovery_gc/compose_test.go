@@ -1,7 +1,6 @@
 package recoverygc
 
 import (
-	"errors"
 	"testing"
 
 	reg "github.com/sigaev-pro/bc-indexer/adapters/lifecycle_registry"
@@ -35,6 +34,7 @@ func TestCompositionWithLifecycleRegistry(t *testing.T) {
 			DecisionSequence: sequence}
 	}
 	intent := func(sequence byte) string { return gcH32(sequence).String() }
+	decided := func(sequence byte) string { return gcH32(sequence ^ 0xC3).String() }
 	corpus := func(block AnchorRef) string { return gcH32(block.Hash[0] ^ 0x5A).String() }
 	source := func(sequence uint64) semantic.SourceRef {
 		return semantic.SourceRef{NodeInstanceID: node, WriterEpoch: epoch, SourceSequence: sequence}
@@ -57,7 +57,7 @@ func TestCompositionWithLifecycleRegistry(t *testing.T) {
 		if err := registry.Intend(ref, net, kind, intent(byte(sequence))); err != nil {
 			t.Fatalf("intend %d: %v", sequence, err)
 		}
-		if err := registry.SettleDecided(ref); err != nil {
+		if err := registry.SettleDecided(ref, decided(byte(sequence))); err != nil {
 			t.Fatalf("settle %d: %v", sequence, err)
 		}
 		return ref
@@ -164,8 +164,7 @@ func TestCompositionWithLifecycleRegistry(t *testing.T) {
 		t.Fatalf("registry record gone: %v %v", ok, err)
 	}
 	if err := registry.MarkAcked(reg.ActivationKey{Network: net, ProducerID: producer, RunID: run,
-		Activation: semantic.ActivationID{DecisionSequence: 2, EntityOrdinal: 0}}); !errors.Is(err, nil) &&
-		err != nil {
+		Activation: semantic.ActivationID{DecisionSequence: 2, EntityOrdinal: 0}}); err != nil {
 		t.Fatalf("registry write after release: %v", err)
 	}
 }

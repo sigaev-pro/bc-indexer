@@ -63,8 +63,11 @@ without stopping the engine; only proven regression is fatal.
 ### Release
 
 `Release` re-evaluates every entity under the current anchor and pending
-state — a stale plan authorizes nothing — then commits in phases: the
-durable release intent (its own sync decision), the entity drops through
+state — a stale plan authorizes nothing — and the evaluation and the commit
+hold one engine lock section, so an anchor acceptance, an observation or an
+authoritative decision that lands concurrently cannot change what the
+evaluated plan releases. The release then commits in phases: the durable
+release intent (its own sync decision), the entity drops through
 the Releaser seam with a compact tombstone left behind, the pin releases
 for pins no retained entity shares (the caller's retained list protects
 shared pins), and the completion marker. Every step is idempotent, so a
@@ -83,3 +86,6 @@ the halt and the refused reopen, unknown-ancestry hold, anchor monotonicity
 and first-anchor chain check, record corruption, concurrent evaluation, and
 a composition test where adapters/lifecycle_registry drives the entity
 states over one shared store. `gofmt -l` and `go vet` are clean.
+[recovery_gc.mutants.json](recovery_gc.mutants.json) holds single-check
+mutants of the anchor, evaluation, halt and release rules, run with
+`test/mutate.py`.

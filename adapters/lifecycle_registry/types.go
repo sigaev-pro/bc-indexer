@@ -28,7 +28,7 @@ var (
 	// ErrCorrupt reports a damaged, missing or contradictory record.
 	ErrCorrupt = errors.New("corrupt registry record")
 	// ErrDecisionConflict reports a repeated decision reference with a
-	// different intent.
+	// different intent or a different settled digest.
 	ErrDecisionConflict = errors.New("decision already has another intent")
 	// ErrDecisionOrder reports a decision sequence that does not follow the
 	// sequences the mirror already holds for the producer run.
@@ -258,6 +258,11 @@ type DecisionRecord struct {
 	State   DecisionState     `json:"state"`
 	// IntentDigest is the evidence digest of the native transition intent.
 	IntentDigest string `json:"intent_digest"`
+	// DecidedDigest is the digest of the settled NATIVE_DECIDED marker, as
+	// the decision bridge computes it over the intent and its delivery. The
+	// Mirror seam answers Applied by it, and a repeated settled marker with
+	// another digest is a conflict.
+	DecidedDigest string `json:"decided_digest,omitempty"`
 	// Application is the durable application plan. It is present once an
 	// Apply call stored it, including while the application is deferred for
 	// a targeted corpus replay.
@@ -289,6 +294,12 @@ type ActivationRecord struct {
 	MaxRevision uint64 `json:"max_revision"`
 	// StatusDigest is the content digest of the newest StatusChanged event.
 	StatusDigest string `json:"status_digest"`
+	// StatusDecision is the decision that wrote the newest StatusChanged
+	// event. Event idempotence keys on the owning decision: a different
+	// decision may not re-submit the recorded status as idempotent, so the
+	// shortcut over an interrupted derivation of the same decision is the
+	// only one.
+	StatusDecision *NativeDecisionRef `json:"status_decision,omitempty"`
 	// RemovedRevision is the lifecycle revision of the Removing event; it is
 	// meaningful only in ActivationRemoved.
 	RemovedRevision uint64             `json:"removed_revision"`

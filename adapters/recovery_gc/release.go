@@ -109,13 +109,16 @@ func planID(entities []Entity, retainedPins []string) string {
 
 // Release releases the eligible entities of one plan. Every entity is
 // re-evaluated under the current anchor and pending state first: a stale
-// plan authorizes nothing. The release intent is durable before any state
-// changes; then each entity's retained state is dropped and a compact
-// record is left; then the pins the plan owns and no retained entity shares
-// are released; then the completion marker is synced. A power loss at any
-// step is completed by the next Open or Reconcile, idempotently
-// (AC-LIF-08-02). A payload acknowledgement is not a release input: it
-// authorizes nothing (AC-LIF-08-01).
+// plan authorizes nothing. The evaluation and the commit hold one lock
+// section, so an anchor acceptance, an observation or an authoritative
+// decision that lands concurrently cannot change what the evaluated plan
+// releases. The release intent is durable before any state changes; then
+// each entity's retained state is dropped and a compact record is left;
+// then the pins the plan owns and no retained entity shares are released;
+// then the completion marker is synced. A power loss at any step is
+// completed by the next Open or Reconcile, idempotently (AC-LIF-08-02). A
+// payload acknowledgement is not a release input: it authorizes nothing
+// (AC-LIF-08-01).
 func (e *Engine) Release(entities []Entity, retainedPins []string) (ReleaseResult, error) {
 	for _, entity := range entities {
 		if err := entity.Validate(); err != nil {
@@ -129,24 +132,23 @@ func (e *Engine) Release(entities []Entity, retainedPins []string) (ReleaseResul
 		}
 		seen[entity.ID] = true
 	}
-	decisions, err := e.Evaluate(entities)
-	if err != nil {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := e.live(); err != nil {
 		return ReleaseResult{}, err
 	}
 	retainedLines := []string{}
-	for _, decision := range decisions {
+	for _, entity := range entities {
+		decision, err := e.evaluate(entity)
+		if err != nil {
+			return ReleaseResult{}, err
+		}
 		if !decision.Release {
 			retainedLines = append(retainedLines, decision.String())
 		}
 	}
 	if len(retainedLines) > 0 {
 		return ReleaseResult{}, fmt.Errorf("%w: %v", ErrNotEligible, retainedLines)
-	}
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if err := e.live(); err != nil {
-		return ReleaseResult{}, err
 	}
 	record := releaseRecord{PlanID: planID(entities, retainedPins), Entities: entities,
 		RetainedPins: retainedPins}

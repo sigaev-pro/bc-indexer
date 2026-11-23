@@ -98,6 +98,8 @@ func corpusDigestOf(block semantic.Hash32) string { return h32(block[0] ^ 0x5A).
 
 func intentDigestOf(sequence uint64) string { return h32(byte(sequence) ^ 0xA5).String() }
 
+func decidedDigestOf(sequence uint64) string { return h32(byte(sequence) ^ 0xC3).String() }
+
 func blockKeyOf(run semantic.ID16, sequence uint64) ActivationKey {
 	return ActivationKey{Network: net1, ProducerID: producer1, RunID: run,
 		Activation: semantic.ActivationID{DecisionSequence: sequence, EntityOrdinal: 0}}
@@ -135,7 +137,7 @@ func settleCanonical(t *testing.T, r *Registry, run semantic.ID16, sequence uint
 	if err := r.Intend(ref, net1, kind, intentDigestOf(sequence)); err != nil {
 		t.Fatalf("intend %s: %v", ref, err)
 	}
-	if err := r.SettleDecided(ref); err != nil {
+	if err := r.SettleDecided(ref, decidedDigestOf(sequence)); err != nil {
 		t.Fatalf("settle %s: %v", ref, err)
 	}
 	return ref
@@ -199,16 +201,19 @@ func TestDecisionMirrorTransitions(t *testing.T) {
 	if err := r.Intend(dref(run1, 0), net1, KindFinality, intentDigestOf(7)); err == nil {
 		t.Fatal("sequence out of order accepted")
 	}
-	if err := r.SettleDecided(ref); err != nil {
+	if err := r.SettleDecided(ref, decidedDigestOf(0)); err != nil {
 		t.Fatalf("settle decided: %v", err)
 	}
-	if err := r.SettleDecided(ref); err != nil {
+	if err := r.SettleDecided(ref, decidedDigestOf(0)); err != nil {
 		t.Fatalf("repeat settle decided: %v", err)
+	}
+	if err := r.SettleDecided(ref, decidedDigestOf(8)); !errors.Is(err, ErrDecisionConflict) {
+		t.Fatalf("repeat settle with another decided digest: %v", err)
 	}
 	if err := r.SettleRejected(ref); err == nil {
 		t.Fatal("rejected a decided decision")
 	}
-	if err := r.SettleDecided(dref(run1, 9)); err == nil {
+	if err := r.SettleDecided(dref(run1, 9), decidedDigestOf(9)); err == nil {
 		t.Fatal("settled an unknown decision")
 	}
 	if _, ok, err := r.Decision(dref(run1, 9)); err != nil || ok {
@@ -390,7 +395,7 @@ func buildForCrash(db *memStore) error {
 	if err := r.Intend(ref, net1, KindImport, intentDigestOf(0)); err != nil {
 		return err
 	}
-	if err := r.SettleDecided(ref); err != nil {
+	if err := r.SettleDecided(ref, decidedDigestOf(0)); err != nil {
 		return err
 	}
 	if err := r.CaptureCorpus(ref, blockA, corpusDigestOf(blockA)); err != nil {
@@ -458,7 +463,7 @@ func TestMarkerRepeatAfterRestartSuppressesSecondApplication(t *testing.T) {
 	if err := restarted.Intend(ref, net1, KindImport, intentDigestOf(0)); err != nil {
 		t.Fatalf("repeat intend: %v", err)
 	}
-	if err := restarted.SettleDecided(ref); err != nil {
+	if err := restarted.SettleDecided(ref, decidedDigestOf(0)); err != nil {
 		t.Fatalf("repeat settle: %v", err)
 	}
 	result, err := restarted.Apply(ref, importPlan(run1, 0, blockA))
@@ -609,6 +614,127 @@ func TestRevisionFrontier(t *testing.T) {
 	}
 }
 
+func TestForeignDecisionMayNotResubmitSettledEvents(t *testing.T) {
+	r := open(t, newStore())
+	applyBlock(t, r, run1, 0, blockA)
+	key := blockKeyOf(run1, 0)
+
+	// Decision 1 writes the frontier status of the activation.
+	first := settleCanonical(t, r, run1, 1, KindFinality)
+	status := ApplicationPlan{Events: []EventPlan{
+		entityEvent(run1, semantic.KindStatus, blockA, 0, 1, 32)}}
+	if _, err := r.Apply(first, status); err != nil {
+		t.Fatalf("frontier status: %v", err)
+	}
+
+	// A different decision re-submits the very same event. Idempotence keys
+	// on the owning decision, so this is a revision conflict, not a no-op:
+	// accepting it would publish the same status event twice.
+	second := settleCanonical(t, r, run1, 2, KindFinality)
+	if _, err := r.Apply(second, status); !errors.Is(err, ErrRevision) {
+		t.Fatalf("foreign status re-submission: %v", err)
+	}
+	// A fresh status of the foreign decision at the next revision is fine,
+	// and it owns what it wrote.
+	fresh := ApplicationPlan{Events: []EventPlan{
+		entityEvent(run1, semantic.KindStatus, blockA, 0, 2, 33)}}
+	if _, err := r.Apply(second, fresh); err != nil {
+		t.Fatalf("fresh status of the second decision: %v", err)
+	}
+	rec, ok, err := r.Activation(key)
+	if err != nil || !ok {
+		t.Fatalf("activation: %v %v", ok, err)
+	}
+	if rec.StatusDecision == nil || *rec.StatusDecision != second {
+		t.Fatalf("status owner is %+v", rec.StatusDecision)
+	}
+
+	// The same rule holds for a removal: only the decision that removed the
+	// activation may re-submit the Removing event.
+	removing := settleCanonical(t, r, run1, 3, KindCanonical)
+	removal := ApplicationPlan{Events: []EventPlan{
+		entityEvent(run1, semantic.KindRemoved, blockA, 0, 3, 34)}}
+	if _, err := r.Apply(removing, removal); err != nil {
+		t.Fatalf("removal: %v", err)
+	}
+	foreign := settleCanonical(t, r, run1, 4, KindCanonical)
+	if _, err := r.Apply(foreign, removal); !errors.Is(err, ErrTerminalActivation) {
+		t.Fatalf("foreign removal re-submission: %v", err)
+	}
+	removed, _, _ := r.Activation(key)
+	if removed.RemovedDecision == nil || *removed.RemovedDecision != removing {
+		t.Fatalf("removal owner is %+v", removed.RemovedDecision)
+	}
+
+	// The published stream carries the five applications exactly once: two
+	// Applied entities of the import (the block and the transaction entity
+	// share the block line), two statuses and one removal — no event of
+	// another decision appears twice.
+	events := eventLines(t, r)
+	want := []string{
+		"applied " + blockA.String() + " 0",
+		"applied " + blockA.String() + " 0",
+		"status " + blockA.String() + " 1",
+		"status " + blockA.String() + " 2",
+		"removed " + blockA.String() + " 3",
+	}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events %v, want %v", events, want)
+	}
+}
+
+// bridgeMirror is the exact Mirror interface shape of the E01-02 decision
+// bridge; the seam the registry exposes must satisfy it.
+type bridgeMirror interface {
+	Applied(sequence uint64, decidedDigest string) (bool, error)
+}
+
+var _ bridgeMirror = Mirror(nil)
+
+func TestMirrorSeamOfDecisionBridge(t *testing.T) {
+	r := open(t, newStore())
+	m := r.Mirror(producer1, run1)
+
+	// A decision the mirror never saw is not applied.
+	if applied, err := m.Applied(0, decidedDigestOf(0)); err != nil || applied {
+		t.Fatalf("unknown decision applied: %v %v", applied, err)
+	}
+
+	// A settled decision deferred for its targeted corpus replay is not past
+	// the frontier; the applied one is, under exactly its decided digest.
+	ref := settleCanonical(t, r, run1, 0, KindCanonical)
+	plan := ApplicationPlan{Events: []EventPlan{
+		entityEvent(run1, semantic.KindApplied, blockB, 0, 0, 1)}}
+	if _, err := r.Apply(ref, plan); !IsCorpusReplay(err) {
+		t.Fatalf("deferred: %v", err)
+	}
+	if applied, err := m.Applied(0, decidedDigestOf(0)); err != nil || applied {
+		t.Fatalf("deferred decision applied: %v %v", applied, err)
+	}
+	if err := r.ReplayCorpus(ref, blockB, corpusDigestOf(blockB)); err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if _, err := r.Apply(ref, plan); err != nil {
+		t.Fatalf("apply after replay: %v", err)
+	}
+	if applied, err := m.Applied(0, decidedDigestOf(0)); err != nil || !applied {
+		t.Fatalf("applied decision: %v %v", applied, err)
+	}
+	if applied, err := m.Applied(0, decidedDigestOf(7)); err != nil || applied {
+		t.Fatalf("another decided digest applied: %v %v", applied, err)
+	}
+
+	// The view of another producer run does not see the decision, and a
+	// malformed digest is refused.
+	other := r.Mirror(producer1, id16(0x77))
+	if applied, err := other.Applied(0, decidedDigestOf(0)); err != nil || applied {
+		t.Fatalf("another run sees the decision: %v %v", applied, err)
+	}
+	if _, err := m.Applied(0, "not-a-digest"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("malformed digest: %v", err)
+	}
+}
+
 func TestCorruptRecordRejected(t *testing.T) {
 	db := newStore()
 	applyBlock(t, open(t, db), run1, 0, blockA)
@@ -657,7 +783,7 @@ func TestConcurrentRuns(t *testing.T) {
 				t.Errorf("intend %s: %v", ref, err)
 				return
 			}
-			if err := r.SettleDecided(ref); err != nil {
+			if err := r.SettleDecided(ref, decidedDigestOf(0)); err != nil {
 				t.Errorf("settle %s: %v", ref, err)
 				return
 			}
