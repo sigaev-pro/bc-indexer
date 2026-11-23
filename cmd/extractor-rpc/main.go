@@ -1,12 +1,16 @@
 // The real-network extractor adapter: a demonstration that the merged
 // delivery pipeline carries live blockchain data, not a production
-// service. It connects to an unpatched Geth node over JSON-RPC, follows
-// new block headers, normalizes every block into one block lifecycle
-// event and one transaction event per body transaction, and publishes
-// JSON envelopes to NATS JetStream through the repository seams:
-// protocol/semantic, protocol/codec, gateway/destination and
-// gateway/publisher. The mock wire and mock gateway of deploy/ are
-// never used.
+// service. It connects to an unpatched blockchain node — a local Geth
+// or a public RPC endpoint such as the Sepolia, BSC Chapel and Polygon
+// Amoy testnets — over JSON-RPC, follows new block headers, normalizes
+// every block into one block lifecycle event and one transaction event
+// per body transaction, and publishes JSON envelopes to NATS JetStream
+// through the repository seams: protocol/semantic, protocol/codec,
+// gateway/destination and gateway/publisher. The mock wire and mock
+// gateway of deploy/ are never used. A --config YAML file selects the
+// network, pins the expected chain_id against the one the live endpoint
+// serves, and bounds the run with max_blocks; the streams keep their
+// messages for five minutes so no chain data accumulates on disk.
 package main
 
 import (
@@ -15,11 +19,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"math/big"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -43,18 +50,47 @@ const jsonRootType uint32 = 9001
 var demoDestinationID = proto.ID16{0x7e, 0x0a, 0x5c, 0x93, 0xd1, 0xb4,
 	0xf8, 0xa2, 0xc6, 0xe0, 0x9d, 0x43, 0xb5, 0x17, 0x2f, 0xa8}
 
+// streamRetention bounds the demo footprint: every capture run expires
+// from the JetStream file store five minutes after it landed, so repeated
+// verification runs never accumulate chain data on disk.
+const streamRetention = 5 * time.Minute
+
+// settings is the resolved configuration of one adapter run. Values come
+// from --config YAML when given, else from the environment, else from the
+// defaults; the YAML wins over the environment key by key.
+type settings struct {
+	rpcURL, natsURL, network, fromBlock string
+	chainID, maxBlocks                  uint64 // 0 disables the check / the limit
+}
+
 func main() {
-	rpcURL := env("RPC_URL", "ws://localhost:8546")
-	natsURL := env("NATS_URL", "nats://localhost:4222")
-	network := env("NETWORK", "eth-sepolia")
-	fromBlock := env("FROM_BLOCK", "latest")
+	configPath := flag.String("config", "",
+		"path to a YAML config (rpc_url, nats_url, network, chain_id, max_blocks)")
+	flag.Parse()
+
+	s := settings{
+		rpcURL:    env("RPC_URL", "ws://localhost:8546"),
+		natsURL:   env("NATS_URL", "nats://localhost:4222"),
+		network:   env("NETWORK", "eth-sepolia"),
+		fromBlock: env("FROM_BLOCK", "latest"),
+		chainID:   envUint("CHAIN_ID", 0),
+		// The default test window keeps a run bounded even without a
+		// config file; 0 would mean "follow the chain forever".
+		maxBlocks: envUint("MAX_BLOCKS", 20),
+	}
+	if *configPath != "" {
+		if err := applyConfig(*configPath, &s); err != nil {
+			fatal("CONFIG_INVALID", err)
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	logf("ADAPTER_STARTED", map[string]any{"rpc": rpcURL, "nats": natsURL,
-		"network": network, "from_block": fromBlock})
+	logf("ADAPTER_STARTED", map[string]any{"rpc": s.rpcURL, "nats": s.natsURL,
+		"network": s.network, "from_block": s.fromBlock,
+		"chain_id": s.chainID, "max_blocks": s.maxBlocks, "config": *configPath})
 
 	// The chain identity comes from the live node, never from config.
-	ec, err := ethclient.Dial(rpcURL)
+	ec, err := ethclient.Dial(s.rpcURL)
 	must("RPC_CONNECT_FAILED", err)
 	chainID, err := ec.ChainID(ctx)
 	must("RPC_CHAIN_ID_FAILED", err)
@@ -65,8 +101,15 @@ func main() {
 	copy(semNet.GenesisHash[:], genesis.Hash().Bytes())
 	logf("NETWORK_IDENTIFIED", map[string]any{"chain_id": chainID.Uint64(),
 		"genesis_hash": genesis.Hash().Hex()})
+	// The config claims a network identity; the live endpoint just proved
+	// one. A mismatch means the config points at the wrong RPC, so the run
+	// must not publish under the wrong name.
+	if s.chainID != 0 && s.chainID != chainID.Uint64() {
+		fatal("CONFIG_CHAIN_ID_MISMATCH", fmt.Errorf(
+			"config expects chain %d, the RPC serves chain %d", s.chainID, chainID.Uint64()))
+	}
 
-	nc, err := nats.Connect(natsURL, nats.MaxReconnects(-1), nats.ReconnectWait(2*time.Second))
+	nc, err := nats.Connect(s.natsURL, nats.MaxReconnects(-1), nats.ReconnectWait(2*time.Second))
 	must("NATS_CONNECT_FAILED", err)
 	defer nc.Close()
 	js, err := nc.JetStream(nats.Context(ctx))
@@ -74,11 +117,11 @@ func main() {
 
 	// The binding of the demo contour, derived from the live chain
 	// identity and verified against the live server below.
-	prefix := "extractor." + network
+	prefix := "extractor." + s.network
 	binding := destination.Binding{
 		DestinationID: demoDestinationID, Generation: 1, Network: protoNet(semNet),
 		ExpectedAccount: "$G", // the demo NATS runs one plain default account
-		Stream:          "EXTRACTOR_" + strings.ToUpper(strings.ReplaceAll(network, "-", "_")),
+		Stream:          "EXTRACTOR_" + strings.ToUpper(strings.ReplaceAll(s.network, "-", "_")),
 		SubjectPrefix:   prefix,
 	}
 	binding.DescriptorDigest, err = binding.DescriptorDigestComputed()
@@ -94,8 +137,8 @@ func main() {
 	logf("DESTINATION_VERIFIED", map[string]any{"stream": binding.Stream, "subjects": subjects})
 
 	a := &adapter{ec: ec, js: js, binding: binding, semNet: semNet,
-		protoNet: protoNet(semNet), networkDigest: networkDigest, network: network,
-		blockSubject: subjects[0], txSubject: subjects[1]}
+		protoNet: protoNet(semNet), networkDigest: networkDigest, network: s.network,
+		blockSubject: subjects[0], txSubject: subjects[1], maxBlocks: s.maxBlocks}
 	var identities [3][16]byte // producer, run, writer epoch of this run
 	for i := range identities {
 		_, err = rand.Read(identities[i][:])
@@ -115,17 +158,24 @@ func main() {
 	// A numeric FROM_BLOCK replays that history first; "latest" waits for
 	// the blocks that arrive after startup.
 	start := head + 1
-	if fromBlock != "latest" {
-		n, ok := new(big.Int).SetString(fromBlock, 0)
+	if s.fromBlock != "latest" {
+		n, ok := new(big.Int).SetString(s.fromBlock, 0)
 		if !ok {
-			fatal("CONFIG_INVALID", fmt.Errorf("FROM_BLOCK %q is not a number or \"latest\"", fromBlock))
+			fatal("CONFIG_INVALID", fmt.Errorf("FROM_BLOCK %q is not a number or \"latest\"", s.fromBlock))
 		}
 		start = n.Uint64()
 	}
+	// captureDone reports whether the run has its bounded window: with
+	// max_blocks set, the adapter captures exactly that many blocks and
+	// exits, so a verification run costs minutes instead of forever.
+	captureDone := func() bool { return a.maxBlocks != 0 && a.captured >= a.maxBlocks }
 	for i := start; i <= head && ctx.Err() == nil; i++ {
+		if captureDone() {
+			break
+		}
 		a.processBlock(ctx, new(big.Int).SetUint64(i))
 	}
-	for ctx.Err() == nil {
+	for ctx.Err() == nil && !captureDone() {
 		select {
 		case <-ctx.Done():
 		case h, ok := <-headers:
@@ -136,6 +186,10 @@ func main() {
 				a.processBlock(ctx, h.Number)
 			}
 		}
+	}
+	if captureDone() {
+		logf("CAPTURE_COMPLETE", map[string]any{"network": a.network,
+			"blocks": a.captured, "events": a.eventSeq, "head_processed": a.processed})
 	}
 }
 
@@ -151,6 +205,8 @@ type adapter struct {
 	network, blockSubject, txSubject string
 	producer, run, epoch             [16]byte
 	sourceSeq, eventSeq, processed   uint64
+	maxBlocks                        uint64 // 0 means follow the chain without a limit
+	captured                         uint64 // blocks normalized by this run
 }
 
 // processBlock normalizes one full block: one block lifecycle event plus
@@ -186,7 +242,11 @@ func (a *adapter) processBlock(ctx context.Context, number *big.Int) {
 		"timestamp": blk.Time(), "gas_used": blk.GasUsed(), "tx_count": blk.Transactions().Len()})
 
 	// The transaction entities: family tx, ordinal the body position plus
-	// one, with the receipt status of the inclusion.
+	// one, with the receipt status of the inclusion. The receipts come
+	// from one RPC call each, and a public endpoint answers slowly, so
+	// they are fetched concurrently before any event is published; the
+	// publish order stays the body order.
+	statuses := a.receiptStatuses(ctx, blk.Transactions())
 	signer := types.LatestSignerForChainID(new(big.Int).SetBytes(a.semNet.ChainID[:]))
 	for i, tx := range blk.Transactions() {
 		transaction, err := semantic.NewTransactionDescriptor(semantic.KindApplied,
@@ -202,19 +262,46 @@ func (a *adapter) processBlock(ctx context.Context, number *big.Int) {
 			continue
 		}
 		from, _ := types.Sender(signer, tx)
-		var status any
-		if receipt, err := a.ec.TransactionReceipt(ctx, tx.Hash()); err == nil {
-			status = receipt.Status
-		} else {
-			logf("RPC_RECEIPT_FAILED", map[string]any{"hash": tx.Hash().Hex(), "error": err.Error()})
-		}
 		a.publish(ctx, a.txSubject, transaction, txDigest, map[string]any{
 			"block_number": height, "block_hash": blk.Hash().Hex(), "tx_index": i,
 			"hash": tx.Hash().Hex(), "from": from.Hex(), "to": nullableAddr(tx.To()),
-			"value": tx.Value().String(), "gas": tx.Gas(), "status": status})
+			"value": tx.Value().String(), "gas": tx.Gas(), "status": statuses[i]})
 	}
 	a.processed = height
-	logf("BLOCK_PUBLISHED", map[string]any{"number": height, "transactions": blk.Transactions().Len()})
+	a.captured++
+	logf("BLOCK_PUBLISHED", map[string]any{"number": height,
+		"transactions": blk.Transactions().Len(), "captured": a.captured})
+}
+
+// receiptStatuses fetches the inclusion status of one block's
+// transactions with a small worker pool: a public endpoint answers one
+// receipt call at a time slowly enough that a Sepolia block of two
+// hundred transactions would blow the capture window sequentially. The
+// statuses keep the body order; a failed fetch leaves a nil status and
+// the event publishes without one.
+func (a *adapter) receiptStatuses(ctx context.Context, txs types.Transactions) []any {
+	statuses := make([]any, len(txs))
+	if len(txs) == 0 {
+		return statuses
+	}
+	const workers = 8
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, workers)
+	for i, tx := range txs {
+		wg.Add(1)
+		go func(i int, hash common.Hash) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if receipt, err := a.ec.TransactionReceipt(ctx, hash); err == nil {
+				statuses[i] = receipt.Status
+			} else {
+				logf("RPC_RECEIPT_FAILED", map[string]any{"hash": hash.Hex(), "error": err.Error()})
+			}
+		}(i, tx.Hash())
+	}
+	wg.Wait()
+	return statuses
 }
 
 // publish frames one normalized event — the semantic identity in the JSON
@@ -326,10 +413,22 @@ func (j jetstreamAPI) StreamInfo(ctx context.Context, stream string) (destinatio
 		MaxMsgSize: uint64(max(info.Config.MaxMsgSize, int32(0)))}, nil
 }
 
-// ensureStream creates the demo stream with its D77 identity metadata when
-// it is missing; an existing stream is left untouched for the check.
+// ensureStream creates the demo stream with its D77 identity metadata and
+// the 5-minute retention when it is missing; an existing stream is left
+// as-is except for the retention, which is enforced so earlier runs still
+// expire and no disk accumulates chain data.
 func ensureStream(ctx context.Context, js nats.JetStreamContext, b destination.Binding) error {
-	if _, err := js.StreamInfo(b.Stream, nats.Context(ctx)); err == nil {
+	info, err := js.StreamInfo(b.Stream, nats.Context(ctx))
+	if err == nil {
+		if info.Config.MaxAge != streamRetention {
+			cfg := info.Config
+			cfg.MaxAge = streamRetention
+			if _, err := js.UpdateStream(&cfg, nats.Context(ctx)); err != nil {
+				return fmt.Errorf("retention update: %w", err)
+			}
+			logf("RETENTION_ENSURED", map[string]any{"stream": b.Stream,
+				"max_age": streamRetention.String()})
+		}
 		return nil
 	} else if !errors.Is(err, nats.ErrStreamNotFound) {
 		return err
@@ -338,6 +437,7 @@ func ensureStream(ctx context.Context, js nats.JetStreamContext, b destination.B
 	if err == nil {
 		_, err = js.AddStream(&nats.StreamConfig{Name: b.Stream,
 			Subjects: []string{b.SubjectPrefix + ".>"},
+			MaxAge:   streamRetention,
 			Metadata: map[string]string{
 				destination.MetadataNetworkDigest: hex.EncodeToString(networkDigest[:]),
 				destination.MetadataDestinationID: hex.EncodeToString(b.DestinationID[:]),
@@ -385,6 +485,84 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// envUint reads one numeric configuration variable, or def when unset or
+// not a number.
+func envUint(key string, def uint64) uint64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 64); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+// applyConfig loads a YAML config over the resolved settings: the YAML
+// wins over the environment key by key; keys the file does not set keep
+// their environment or default value.
+func applyConfig(path string, s *settings) error {
+	file, err := parseConfig(path)
+	if err != nil {
+		return err
+	}
+	if v := file["rpc_url"]; v != "" {
+		s.rpcURL = v
+	}
+	if v := file["nats_url"]; v != "" {
+		s.natsURL = v
+	}
+	if v := file["network"]; v != "" {
+		s.network = v
+	}
+	if v := file["chain_id"]; v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return fmt.Errorf("chain_id %q is not a number: %w", v, err)
+		}
+		s.chainID = n
+	}
+	if v := file["max_blocks"]; v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return fmt.Errorf("max_blocks %q is not a number: %w", v, err)
+		}
+		s.maxBlocks = n
+	}
+	return nil
+}
+
+// parseConfig reads a flat "key: value" YAML file into a map. The configs
+// of this contour are flat scalars, so no YAML library is pulled in:
+// blank and comment lines are skipped, values may be quoted, and trailing
+// comments are stripped.
+func parseConfig(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string)
+	for i, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, ":")
+		if !found || strings.TrimSpace(key) == "" {
+			return nil, fmt.Errorf("%s:%d: not a key: value line: %q", path, i+1, line)
+		}
+		key = strings.TrimSpace(key)
+		if cut := strings.Index(value, " #"); cut >= 0 {
+			value = value[:cut]
+		}
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s: no settings found", path)
+	}
+	return out, nil
 }
 
 // logf writes one JSON event line to stdout.
