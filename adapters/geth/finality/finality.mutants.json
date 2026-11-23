@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "description": "Single-check mutants of the E05-01.eth_finality core. The table runs in the module from `python3 test/harness/finality.py assemble DIR`, at extractor/finality, because the package imports admission, decision and lifecycle at their native paths.",
+  "language": "go",
+  "root": "../..",
+  "copy": [
+    "go.mod",
+    "extractor/*.go",
+    "extractor/*/vectors.json",
+    "extractor/lifecycle/callers.json"
+  ],
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "./extractor/finality/"
+  ],
+  "timeout_seconds": 300,
+  "mutants": [
+    {
+      "name": "observation tag",
+      "file": "extractor/finality/finality.go",
+      "original": "tagObservation = \"extractor-finality-observation-v1\"",
+      "replacement": "tagObservation = \"extractor-finality-observation-v0\""
+    },
+    {
+      "name": "anchor tag",
+      "file": "extractor/finality/finality.go",
+      "original": "\ttagAnchor      = \"extractor-finality-anchor-v1\"",
+      "replacement": "\ttagAnchor      = \"extractor-finality-anchor-v0\""
+    },
+    {
+      "name": "restart tag",
+      "file": "extractor/finality/finality.go",
+      "original": "\ttagRestart     = \"extractor-finality-restart-v1\"",
+      "replacement": "\ttagRestart     = \"extractor-finality-restart-v0\""
+    },
+    {
+      "name": "known references without coverage stay unfinalized",
+      "file": "extractor/finality/finality.go",
+      "original": "if ev.Finalized.Known || ev.Safe.Known {",
+      "replacement": "if false {"
+    },
+    {
+      "name": "finalized coverage direction",
+      "file": "extractor/finality/finality.go",
+      "original": "covers, err := anc(activation, ev.Finalized.Block)",
+      "replacement": "covers, err := anc(ev.Finalized.Block, activation)"
+    },
+    {
+      "name": "retained provenance rewrite",
+      "file": "extractor/finality/finality.go",
+      "original": "kept.Origin = OriginRetained",
+      "replacement": "kept.Origin = OriginLive"
+    },
+    {
+      "name": "set regression check",
+      "file": "extractor/finality/finality.go",
+      "original": "if c.Field == lifecycle.Finalized && c.New.Hash != lifecycle.ZeroHash {",
+      "replacement": "if false && c.Field == lifecycle.Finalized {"
+    },
+    {
+      "name": "startup safe fallback basis",
+      "file": "extractor/finality/finality.go",
+      "original": "Known: true, Block: fallback, Origin: OriginRestart, Basis: StartupFinalizedFallback}",
+      "replacement": "Known: true, Block: fallback, Origin: OriginRestart, Basis: ConsensusSetter}"
+    },
+    {
+      "name": "anchor source field",
+      "file": "extractor/finality/finality.go",
+      "original": "state := tr.fields[lifecycle.Finalized]\n\tif state.current == nil || !state.current.Known {\n\t\treturn Anchor{}, fmt.Errorf(\"%w: finalized reference is unknown\", ErrState)",
+      "replacement": "state := tr.fields[lifecycle.Safe]\n\tif state.current == nil || !state.current.Known {\n\t\treturn Anchor{}, fmt.Errorf(\"%w: finalized reference is unknown\", ErrState)"
+    },
+    {
+      "name": "startup safe replay",
+      "file": "extractor/finality/finality.go",
+      "original": "if safeState.current == nil || !safeState.current.Known || safeState.current.Basis != StartupFinalizedFallback ||",
+      "replacement": "if safeState.current == nil || !safeState.current.Known || false ||"
+    },
+    {
+      "name": "conflict inversion",
+      "file": "extractor/finality/finality.go",
+      "original": "return !descendant, nil\n}\n\n// Set plans",
+      "replacement": "return descendant, nil\n}\n\n// Set plans"
+    }
+  ]
+}

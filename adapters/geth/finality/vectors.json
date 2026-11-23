@@ -1,0 +1,29 @@
+{
+  "store_id": "native-store-1",
+  "producer": "producer-1",
+  "run": "run-1",
+  "head": {
+    "number": 7,
+    "hash": "3972906ec6261de2ed2258dc9d8e0a30ee4839d88279f222d207a1062e7d140e"
+  },
+  "set_finalized_caller": "geth.set-finalized",
+  "set_safe_caller": "geth.set-safe",
+  "startup_caller": "geth.startup-reconcile",
+  "block_3": {
+    "number": 3,
+    "hash": "0a4f88e04b578e42ff125845c9b27ba749498ed4b68a20c94cf0e195aae9cbc4"
+  },
+  "block_5": {
+    "number": 5,
+    "hash": "473ae6f80e73bd717a6c1afa74ede04c86236d6c1c8a6faaf5f33b80ca640d55"
+  },
+  "live_safe_digest": "be3123ba2dfd332e024eff5e2714e594aa4ecb88f704a3d815840fbb293cc90f",
+  "live_finalized_digest": "f2c51f144ba6f0f49a3df47bc7cddbaa84b24a523de7105a163db07c16beff98",
+  "restart_safe_digest": "21c31dabb9f3c27231fcd67787c6d8152c2375c050281537e6ef77ec13a5f38f",
+  "restart_finalized_digest": "9b5f46d304881f2a3a72f0e059dd759ee688548a50cf913b1ee3344ce6f73367",
+  "unset_safe_digest": "ab2468ff6f84f3289deb26c77e601b98921a4cd279a93cb89f44022f28ead2e7",
+  "retained_safe_digest": "071dec52f6d109daa9cfee79a65ce86acbbb1f489a7e2f16a483492701121626",
+  "restart_evidence_digest": "5cda8f3a257c4b775e54265d42afa97e7ea302746da2e4dc9bba984c4bc31db3",
+  "clear_evidence_digest": "89f7cfeff335dc9fb926fc1d7cdf4b74cf75c82764a20a290d2565e1e68b4ecd",
+  "anchor_digest": "e0a00c39313821657e20164be5c816d4303a42130a8600da84c426ec2e79ffee"
+}
