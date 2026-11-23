@@ -30,6 +30,10 @@ Queue, in priority order:
 4. Geth P3 gofmt — DONE: branch chore/geth-probe-gofmt (one blank line at probe.go:713 collapsed; the 27-test offline suite passes; pushed; PR left to the owner).
 5. Preliminary read-only G.E01 pre-check — DONE: base confirmed (merged state, PR194 composition at 76a2a15, CI PASS, run15 SHA chain 4/4, audits 06/07/11 PASS); the applicability matrix is reconciled to the 2026-11-21 state and the brief date nit fixed; record in evidence/E01-gate-precheck-20261121.md. For the gate itself: confirm audit-12 PASS on the merged tree and re-read in-flight states.
 
+## E05/E06 near-complete (2026-11-23)
+
+**PRs #212-#215 MERGED**: drain+upgrade (7387a449), crash+fencing (a7aaab0a), E06 config (1a40b48e), POLY observer (189f0cc3). Issues #50-#59, #60, #68, #70 closed. **All 9 agents completed.** Four more PRs pending review: #216 (registry+GC), #217 (ETH finality+reorg), #218 (BSC finality+reorg), #219 (E06 deployment). Review agent running. After these merge: G.E05, G.E06, then E07 (#72-#77) — the FINAL stage before project completion.
+
 ## Maximum throughput mode (2026-11-23)
 
 The owner directed maximum API limit utilization at all times. Current: 6 E05 agents, 2 E06 agents, G.E04 gate review. Slots refill immediately as agents finish. E07 starts as soon as E05 dependencies merge. **Slot 5 (drain+upgrade) COMPLETE**: commit faf26c8 on e05-drain — drain mode barrier (durable DRAIN/Resume, admission closed, seal blocked until obligations resolved), upgrade compatibility matrix with SHA-256 prewrite fingerprint, composed with core/delivery stores. Draft PR #212 opened. **G.E04 PASS** (#81 closed with verified test evidence from clean checkout of main a4e0424). **E05 slot 6 (crash+fencing) COMPLETE**: PR #213. **E06 slot 8 (config+logs+maintenance) COMPLETE**: PR #214 (113 tests, 84.2%). **E05 slot 5 (drain+upgrade) COMPLETE**: PR #212. Remaining agents: slots 2-3 (ETH/BSC finality), slot 7 (E06 deployment). **Slot 1 (registry+GC) COMPLETE**: PR #216 (25 tests, 74-75%). **Slot 4 (POLY observer+reorg) COMPLETE**: PR #215 (100 tests, 82-83%). Open PRs pending review: #212, #213, #214.
