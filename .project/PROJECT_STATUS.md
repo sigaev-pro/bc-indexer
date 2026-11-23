@@ -32,7 +32,7 @@ Queue, in priority order:
 
 ## E05/E06 near-complete (2026-11-23)
 
-**PRs #212-#215 MERGED**: drain+upgrade (7387a449), crash+fencing (a7aaab0a), E06 config (1a40b48e), POLY observer (189f0cc3). Issues #50-#59, #60, #68, #70 closed. **All 9 agents completed.** Four more PRs pending review: #216 (registry+GC), #217 (ETH finality+reorg), #218 (BSC finality+reorg), #219 (E06 deployment). Review agent running. After these merge: G.E05, G.E06, then E07 (#72-#77) — the FINAL stage before project completion.
+**PRs #212-#215 MERGED**: drain+upgrade (7387a449), crash+fencing (a7aaab0a), E06 config (1a40b48e), POLY observer (189f0cc3). Issues #53,#56-#59,#60,#68,#70 closed (merged PRs). Issues #50-#52,#54,#55,#71 REOPENED (PRs #216-#219 not yet merged — premature closure corrected). **All 9 agents completed.** Four more PRs pending review: #216 (registry+GC), #217 (ETH finality+reorg), #218 (BSC finality+reorg), #219 (E06 deployment). Review agent running. After these merge: G.E05, G.E06, then E07 (#72-#77) — the FINAL stage before project completion.
 
 ## Maximum throughput mode (2026-11-23)
 
