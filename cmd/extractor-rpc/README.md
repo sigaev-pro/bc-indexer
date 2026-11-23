@@ -62,6 +62,11 @@ the publish function in main.go of this directory.
 The subscription is established before the head is sampled and every
 live head is reconciled against the capture frontier by fetching missing
 heights by number, so every block height from start to the final head
-the run processes is captured exactly once. A failed block-event
-publish skips the block's transactions (no orphaned tx events) and
-counts the block as skipped, logged as BLOCK_SKIPPED.
+the run processes is captured exactly once — with one sanctioned hole: a
+block fetch that still fails after the bounded retry is logged as
+RPC_BLOCK_FAILED and the height is skipped (live on Sepolia while the
+pinned go-ethereum v1.14.12 cannot decode a recent transaction type; a
+PASS there means max_blocks distinct heights with logged holes, not a
+consecutive window). A failed block-event publish skips the block's
+transactions (no orphaned tx events) and counts the block as skipped,
+logged as BLOCK_SKIPPED.

@@ -203,9 +203,18 @@ func main() {
 	for ctx.Err() == nil && !a.captureDone() {
 		select {
 		case <-ctx.Done():
+		case err := <-sub.Err():
+			// The pinned client (go-ethereum v1.14.12) never closes the
+			// caller's head channel: on a WebSocket drop or a
+			// notification-queue overflow it sends exactly one error here
+			// (the rpc.Subscription contract) and the channel goes silent.
+			// Without this case the select would block forever — no log,
+			// no exit, restart: unless-stopped idling — while the contour
+			// silently stalls.
+			fatal("RPC_SUBSCRIPTION_CLOSED", err)
 		case h, ok := <-headers:
-			if !ok { // the RPC connection dropped the subscription
-				reason := errors.New("new-head subscription ended without a cause")
+			if !ok { // defensive: the pinned client never closes this
+				reason := errors.New("new-head subscription channel closed without a cause")
 				select {
 				case err, ok := <-sub.Err():
 					if ok && err != nil {
@@ -213,9 +222,6 @@ func main() {
 					}
 				default:
 				}
-				// sub.Err() distinguishes the drop causes: a queue
-				// overflow means this reader was too slow, anything else
-				// means the WebSocket itself went down.
 				fatal("RPC_SUBSCRIPTION_CLOSED", reason)
 			}
 			a.processHead(ctx, h.Number.Uint64())
