@@ -1,0 +1,92 @@
+# The Sepolia demonstration stack: one unpatched Geth node following the
+# public Sepolia testnet, the real-network extractor adapter of
+# cmd/extractor-rpc, and one NATS JetStream server.
+#
+# The NATS service uses the image pinned by the deployment demo
+# (deploy/docker-compose.yml) but runs plain — no TLS, no accounts, no
+# bootstrap secrets — because this contour demonstrates the real blockchain
+# data path, not the production transport security of the main stack.
+#
+# Host ports follow the topology rule of the main stack: only loopback
+# bindings for inspection (the Geth RPC and WS ports, the NATS client and
+# monitoring ports); the services talk to each other on the internal
+# network. Note that Geth's default --http.vhosts allows only "localhost",
+# so host-side RPC calls must use http://localhost:8545, never the
+# 127.0.0.1 address.
+name: extractor-sepolia
+
+networks:
+  sepolia:
+    name: extractor-sepolia
+
+volumes:
+  geth-sepolia:
+    name: extractor-geth-sepolia
+  nats-sepolia-store:
+    name: extractor-nats-sepolia-store
+
+services:
+  # The unpatched upstream Geth node on Sepolia: snap sync, HTTP RPC and
+  # WebSocket on all interfaces. The adapter subscribes over WebSocket;
+  # nothing is patched or injected into the node.
+  geth:
+    image: ethereum/client-go:v1.14.12
+    command: --sepolia --syncmode snap --http --http.addr 0.0.0.0 --ws --ws.addr 0.0.0.0
+    ports:
+      - "127.0.0.1:8545:8545"
+      - "127.0.0.1:8546:8546"
+    volumes:
+      - geth-sepolia:/root/.ethereum
+    networks:
+      - sepolia
+    healthcheck:
+      test: ["CMD-SHELL", "geth attach --exec eth.blockNumber http://localhost:8545 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    restart: unless-stopped
+
+  # The JetStream server of the contour: the pinned image of the
+  # deployment demo with file storage and the monitoring port open.
+  nats:
+    image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
+    command: ["-js", "-sd", "/data/jetstream", "-m", "8222"]
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    volumes:
+      - nats-sepolia-store:/data/jetstream
+    networks:
+      - sepolia
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  # The real-network adapter: it identifies the chain from the live node,
+  # builds and verifies the destination binding, provisions the stream
+  # with its D77 identity metadata, then follows new heads and publishes
+  # the normalized events. FROM_BLOCK overrides the "latest" start (for
+  # example to 8000000 to replay a window of Sepolia history).
+  extractor-rpc:
+    build:
+      context: .
+      dockerfile: cmd/extractor-rpc/Dockerfile
+    image: bc-indexer/extractor-rpc:sepolia
+    environment:
+      RPC_URL: ws://geth:8546
+      NATS_URL: nats://nats:4222
+      NETWORK: eth-sepolia
+      FROM_BLOCK: latest
+    networks:
+      - sepolia
+    depends_on:
+      geth:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
