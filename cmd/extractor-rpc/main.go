@@ -204,7 +204,7 @@ func main() {
 		select {
 		case <-ctx.Done():
 		case err := <-sub.Err():
-			// The pinned client (go-ethereum v1.14.12) never closes the
+			// The pinned client (go-ethereum v1.17.10) never closes the
 			// caller's head channel: on a WebSocket drop or a
 			// notification-queue overflow it sends exactly one error here
 			// (the rpc.Subscription contract) and the channel goes silent.

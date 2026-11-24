@@ -12,7 +12,9 @@ destination binding through `gateway/destination` (live `Check` with the
 D77 stream metadata, stream auto-provisioned with the identity keys) and
 publishes through the `gateway/publisher` Conn seam with the exact v2
 message id and header bytes. `docker-compose.sepolia.yml` runs the pinned
-upstream `ethereum/client-go:v1.14.12` on Sepolia, the plain pinned NATS
+upstream `ethereum/client-go:v1.17.10` on Sepolia (bumped from v1.14.12:
+current Sepolia blocks carry type-4 transactions the old client cannot
+decode), the plain pinned NATS
 image of the deployment demo with JetStream, and the adapter.
 
 Checks: `go build`, `go vet`, `gofmt` clean in `cmd/extractor-rpc` (410
@@ -44,10 +46,11 @@ never rewritten; short READMEs were added to cmd/extractor-rpc and
 scripts/verify-streams. Live re-check against a scratch JetStream on a
 free port: replay, latest and overlap runs each captured exactly the
 window as distinct consecutive blocks (Sepolia replay 2/2; BSC Chapel
-latest 2/2 and replay+live 5/5, no mismatches). Note: recent Sepolia
-blocks carry a transaction type the pinned go-ethereum v1.14.12 cannot
-decode (RPC_BLOCK_FAILED, logged and skipped); BSC Chapel verifies
-cleanly with the pinned client.
+latest 2/2 and replay+live 5/5, no mismatches). Note (resolved by the v1.17.10 bump): recent
+Sepolia blocks carried a transaction type the pinned go-ethereum v1.14.12
+could not decode (RPC_BLOCK_FAILED, logged and skipped); BSC Chapel
+verified cleanly with the pinned client. On v1.17.10 Sepolia captures
+5/5 blocks with 0 skipped.
 
 ## Autonomous campaign — 2026-11-19 (D107)
 
