@@ -96,6 +96,10 @@ subscriptions:
     secret: whsec_...          # HMAC-SHA256 key; empty omits the signature header
 ```
 
+`confirmations` must be smaller than the 2000-height state window: the
+matcher only scans events inside the window, so an N of 2000 or more could
+never fire and is rejected at load time with a clear error.
+
 The parser understands exactly this subset of YAML (a top-level
 `subscriptions:` list of flat scalar maps, quoted or bare values, blank
 lines and full-line or trailing comments); no YAML library is pulled in.

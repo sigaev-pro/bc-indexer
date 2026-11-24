@@ -23,7 +23,7 @@ type subscription struct {
 	EventType     string // block | transaction | "*"
 	TxTo          string // optional exact-address filter on the tx "to"
 	Confirmations int64  // deliver when head >= event height + N; 0 = immediate
-	URL           string // HTTPS POST target
+	URL           string // HTTP(S) POST target
 	Secret        string // HMAC-SHA256 key for X-Webhook-Signature
 }
 
@@ -144,6 +144,15 @@ func parseSubscriptions(text string) ([]subscription, error) {
 			if err != nil || n < 0 {
 				return fail(line, fmt.Sprintf("confirmations %q must be a non-negative integer", value))
 			}
+			// An event becomes deliverable at head >= height + N, but the
+			// matcher only scans the state window (the last `window`
+			// heights): N >= window can never fire and would silently
+			// swallow every event, so it is rejected at load time.
+			if n >= defaultWindow {
+				return fail(line, fmt.Sprintf(
+					"confirmations %d must be smaller than the %d-height state window (events leave the window before they could ever confirm)",
+					n, defaultWindow))
+			}
 			s.Confirmations = n
 		case "url":
 			if !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
@@ -244,12 +253,27 @@ func cutKV(line string) (key, value string, ok bool) {
 }
 
 // scalarValue strips a trailing comment and one layer of quotes from a
-// raw value.
+// raw value. Comment stripping is quote-aware: inside a quoted value a
+// " #" sequence is data ("a # b" stays "a # b"), and a comment may only
+// follow the closing quote.
 func scalarValue(raw string) (string, error) {
-	v := raw
-	// A trailing comment must be preceded by whitespace to avoid cutting
-	// URLs at a "#fragment".
-	if cut := strings.Index(v, " #"); cut >= 0 {
+	v := strings.TrimLeft(raw, " \t") // real values arrive with leading whitespace
+	if len(v) > 0 && (v[0] == '"' || v[0] == '\'') {
+		quote := v[0]
+		end := -1
+		for i := 1; i < len(v); i++ {
+			if v[i] == quote {
+				end = i
+				break
+			}
+		}
+		if end < 0 {
+			return "", fmt.Errorf("value %q has an unterminated quote", strings.TrimSpace(raw))
+		}
+		v = v[:end+1] // drop whatever follows the closing quote
+	} else if cut := strings.Index(v, " #"); cut >= 0 {
+		// A trailing comment must be preceded by whitespace to avoid
+		// cutting URLs at a "#fragment".
 		v = v[:cut]
 	}
 	v = strings.TrimSpace(v)

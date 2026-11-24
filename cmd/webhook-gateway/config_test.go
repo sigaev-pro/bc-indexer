@@ -78,6 +78,9 @@ func TestParseSubscriptionsErrors(t *testing.T) {
 		"subscriptions:\n  - id: a\n    url: http://x/\n    event_type: tx\n", // bad event_type
 		"subscriptions:\n  - id: a\n    url: http://x/\n    confirmations: -1\n",
 		"subscriptions:\n  - id: a\n    url: http://x/\n    confirmations: abc\n",
+		// N >= the state window can never fire and is rejected at load.
+		"subscriptions:\n  - id: a\n    url: http://x/\n    confirmations: 2000\n",
+		"subscriptions:\n  - id: a\n    url: http://x/\n    confirmations: 9999999\n",
 		"subscriptions:\n  - id: a\n    url: http://x/\n    tx_to: 0x1\n    event_type: block\n", // tx_to needs transaction
 		"subscriptions:\n  - id: a\n    url: http://x/\n    unknown_key: 1\n",
 		"subscriptions:\n    id: a\n", // item content before list dash
@@ -86,6 +89,58 @@ func TestParseSubscriptionsErrors(t *testing.T) {
 		if _, err := parseSubscriptions(text); err == nil {
 			t.Errorf("case %d accepted: %q", i, text)
 		}
+	}
+}
+
+func TestConfirmationsJustBelowWindow(t *testing.T) {
+	subs, err := parseSubscriptions("subscriptions:\n  - id: a\n    url: http://x/\n    confirmations: 1999\n")
+	if err != nil {
+		t.Fatalf("confirmations just below the window rejected: %v", err)
+	}
+	if subs[0].Confirmations != 1999 {
+		t.Fatalf("confirmations = %d want 1999", subs[0].Confirmations)
+	}
+}
+
+func TestScalarValueQuoteAware(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+		err  bool
+	}{
+		{`"a # b"`, "a # b", false},                     // " #" inside quotes is data
+		{`"a # b"  # trailing comment`, "a # b", false}, // comment only after the closing quote
+		{`'single # quoted'`, "single # quoted", false},
+		{`plain value # comment`, "plain value", false},
+		{`plain`, "plain", false},
+		{`"quoted"`, "quoted", false},
+		{`http://x/#frag`, "http://x/#frag", false}, // # without leading space is not a comment
+		{`"unterminated`, "", true},
+		{`  "  "  `, "  ", false}, // quoted spaces survive
+	}
+	for _, c := range cases {
+		got, err := scalarValue(c.raw)
+		if c.err {
+			if err == nil {
+				t.Errorf("scalarValue(%q) accepted an unterminated quote", c.raw)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("scalarValue(%q): %v", c.raw, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("scalarValue(%q) = %q want %q", c.raw, got, c.want)
+		}
+	}
+	// End-to-end: a quoted address containing " #" parses intact.
+	subs, err := parseSubscriptions("subscriptions:\n  - id: a\n    url: http://x/\n    tx_to: \"0xabc # not a comment\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subs[0].TxTo != "0xabc # not a comment" {
+		t.Fatalf("tx_to = %q", subs[0].TxTo)
 	}
 }
 

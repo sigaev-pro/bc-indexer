@@ -27,7 +27,7 @@ var subjectPrefix = []string{"extractor"}
 
 // splitSubject derives the network and event type tokens from
 // extractor.<network>.<type>. Extra trailing tokens are tolerated and
-// ignored; "" , false means the subject is not in the namespace.
+// ignored; a subject outside the namespace yields ok=false.
 func splitSubject(subject string) (network, eventType string, ok bool) {
 	tokens := strings.Split(subject, ".")
 	if len(tokens) < len(subjectPrefix)+2 {

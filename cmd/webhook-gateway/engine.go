@@ -85,8 +85,31 @@ func (e *engine) ApplyEvent(ctx context.Context, ev *parsedEvent) (bool, error) 
 
 // applyTx stores the event and (when a head exists, so confirmations can
 // be judged) runs the matcher. Redelivered duplicates collapse on the
-// events primary key.
+// events primary key. A redelivered copy of a transaction from an already
+// replaced chain (an ack lost mid-processing, then the reorg landed, then
+// JetStream offered the message again) is dropped against the canonical
+// block hash at its height: recording it would resurrect a retired
+// notification and tell the client a reorged-out transaction is good
+// again.
 func (e *engine) applyTx(ctx context.Context, tx *sql.Tx, ev *parsedEvent) (bool, error) {
+	if h, err := getHead(ctx, tx, ev.network); err != nil {
+		return false, err
+	} else if h != nil && int64(ev.blockNumber) > h.number {
+		// The publisher emits a block before its transactions, so a
+		// transaction ahead of the canonical head is out-of-band — in
+		// practice an old-chain redelivery arriving while the replaced
+		// heights are not rebuilt yet (no stored hash to compare yet).
+		log.Printf("DROPPED_STALE_CHAIN network=%s height=%d tx=%s block_hash=%s head=%d reason=transaction ahead of the canonical head",
+			ev.network, ev.blockNumber, ev.txHash, ev.blockHash, h.number)
+		return false, nil
+	}
+	if stored, err := blockHashAt(ctx, tx, ev.network, int64(ev.blockNumber)); err != nil {
+		return false, err
+	} else if stored != "" && stored != ev.blockHash {
+		log.Printf("DROPPED_STALE_CHAIN network=%s height=%d tx=%s block_hash=%s canonical=%s reason=block hash differs from the canonical chain",
+			ev.network, ev.blockNumber, ev.txHash, ev.blockHash, stored)
+		return false, nil
+	}
 	if _, err := tx.ExecContext(ctx, `REPLACE INTO events
 			(network, block_number, event_type, entity, payload, captured_at)
 			VALUES (?,?,?,?,?,?)`,
@@ -220,6 +243,11 @@ func (e *engine) handleReorg(ctx context.Context, tx *sql.Tx, ev *parsedEvent, d
 	common := divergence - 1
 	log.Printf("REORG_DETECTED network=%s range=%d..%d replaced_common_height=%d new_block=%s",
 		ev.network, divergence, oldHead, common, ev.blockHash)
+	// disc identifies this reorg occurrence (range plus the replacement
+	// block hash): the same event can be invalidated by one reorg,
+	// resurrect and be invalidated again by another, and each occurrence
+	// is a distinct logical notification with its own queue identity.
+	disc := fmt.Sprintf("%d:%d:%s", divergence, oldHead, ev.blockHash)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM blocks
 			WHERE network=? AND block_number BETWEEN ? AND ?`,
 		ev.network, divergence, oldHead); err != nil {
@@ -261,8 +289,14 @@ func (e *engine) handleReorg(ctx context.Context, tx *sql.Tx, ev *parsedEvent, d
 			return false, err
 		}
 		if (k.kind == kindTransaction || k.kind == kindBlock) && k.entity != "" {
+			// A repeat supersession of the same entity (reappeared after
+			// reorg #1, superseded again by reorg #2 before the head
+			// passed the first horizon) must reset the ledger: leaving
+			// reappeared=1 would settle the second occurrence silently
+			// and the promised event_removed would never fire.
 			if _, err := tx.ExecContext(ctx, `INSERT INTO replaced (network, entity, horizon, reappeared)
-					VALUES (?,?,?,0) ON CONFLICT(network, entity) DO NOTHING`,
+					VALUES (?,?,?,0)
+					ON CONFLICT(network, entity) DO UPDATE SET reappeared=0, horizon=excluded.horizon`,
 				ev.network, k.entity, oldHead); err != nil {
 				return false, err
 			}
@@ -310,7 +344,7 @@ func (e *engine) handleReorg(ctx context.Context, tx *sql.Tx, ev *parsedEvent, d
 				 payload, state, attempts, next_attempt_at, last_response)
 				VALUES (?,?,?,?,?,?,?,?,?,0,0,'')
 				ON CONFLICT(subscription_id, event_key, event_kind) DO NOTHING`,
-			d.sub, d.key, kindEventInvalidated, ev.network, d.blockNumber, d.entity,
+			d.sub, d.key+"@"+disc, kindEventInvalidated, ev.network, d.blockNumber, d.entity,
 			newWebhookID(), string(body), statePending); err != nil {
 			return false, err
 		}
@@ -323,7 +357,7 @@ func (e *engine) handleReorg(ctx context.Context, tx *sql.Tx, ev *parsedEvent, d
 	if err != nil {
 		return false, err
 	}
-	reorgKey := fmt.Sprintf("reorg:%d:%d:%s", divergence, oldHead, ev.blockHash)
+	reorgKey := "reorg:" + disc
 	for _, sub := range e.reg.Snapshot() {
 		if !sub.MatchesNetwork(ev.network) {
 			continue
@@ -373,16 +407,6 @@ func (e *engine) sweepSuperseded(ctx context.Context, tx *sql.Tx, network string
 	if err := rows.Err(); err != nil {
 		return false, err
 	}
-	anySweepable := false
-	for _, ent := range entries {
-		if ent.horizon < headNumber {
-			anySweepable = true
-			break
-		}
-	}
-	if !anySweepable {
-		return false, nil
-	}
 
 	rows, err = tx.QueryContext(ctx, `SELECT subscription_id, event_key, event_kind, entity, payload, block_number
 			FROM deliveries WHERE network=? AND state=?`, network, stateSuperseded)
@@ -409,11 +433,31 @@ func (e *engine) sweepSuperseded(ctx context.Context, tx *sql.Tx, network string
 
 	queued := false
 	for _, s := range superseded {
-		if ent, ok := entries[s.entity]; ok && ent.horizon >= headNumber {
-			continue // this range is still being rebuilt
+		eventKind := s.kind == kindTransaction || s.kind == kindBlock
+		ent, known := entries[s.entity]
+		horizon := int64(-1)
+		if known {
+			horizon = ent.horizon
 		}
-		if (s.kind == kindTransaction || s.kind == kindBlock) &&
-			!(entries[s.entity].reappeared) {
+		if eventKind {
+			// Event-kind notifications wait for the rebuild to pass the
+			// horizon: the replaced entity may still re-appear in it.
+			if known && ent.horizon >= headNumber {
+				continue // this range is still being rebuilt
+			}
+		} else if s.blockNumber >= headNumber {
+			// Synthetic kinds (a pending reorg or event_invalidated
+			// notification caught by a later, overlapping reorg) carry
+			// final content: no reappearance window, they settle once the
+			// head moved past their stamped height.
+			continue
+		}
+		// The horizon doubles as the occurrence discriminator of the
+		// event_removed key: a second supersession of the same event
+		// (after a resurrect cycle) always carries a strictly larger
+		// horizon than one whose event_removed was already emitted,
+		// because emitting it required the head to pass that horizon.
+		if eventKind && !(known && ent.reappeared) {
 			body, err := json.Marshal(notificationRemoved(network, json.RawMessage(s.payload)))
 			if err != nil {
 				return false, err
@@ -423,7 +467,7 @@ func (e *engine) sweepSuperseded(ctx context.Context, tx *sql.Tx, network string
 					 payload, state, attempts, next_attempt_at, last_response)
 					VALUES (?,?,?,?,?,?,?,?,?,0,0,'')
 					ON CONFLICT(subscription_id, event_key, event_kind) DO NOTHING`,
-				s.sub, s.key, kindEventRemoved, network, s.blockNumber, s.entity,
+				s.sub, fmt.Sprintf("%s@%d", s.key, horizon), kindEventRemoved, network, s.blockNumber, s.entity,
 				newWebhookID(), string(body), statePending); err != nil {
 				return false, err
 			}

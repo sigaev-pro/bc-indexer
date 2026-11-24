@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
 );
 CREATE INDEX IF NOT EXISTS deliveries_due ON deliveries (state, next_attempt_at);
 CREATE INDEX IF NOT EXISTS deliveries_range ON deliveries (network, state, block_number);
+CREATE INDEX IF NOT EXISTS deliveries_key ON deliveries (event_key);
 
 CREATE TABLE IF NOT EXISTS replaced (
     network    TEXT NOT NULL,

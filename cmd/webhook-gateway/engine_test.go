@@ -67,14 +67,38 @@ func (e *testEnv) delivery(sub, key, kind string) *deliveryRow {
 }
 
 func (e *testEnv) deliveryState(sub, key, kind string) string {
-	r := e.delivery(sub, key, kind)
-	if r == nil {
+	var state string
+	err := e.db.QueryRow(`SELECT state FROM deliveries WHERE subscription_id=? AND event_key=? AND event_kind=?`,
+		sub, key, kind).Scan(&state)
+	if err != nil {
 		return ""
 	}
-	var state string
-	e.db.QueryRow(`SELECT state FROM deliveries WHERE subscription_id=? AND event_key=? AND event_kind=?`,
-		sub, key, kind).Scan(&state)
 	return state
+}
+
+// kindRows returns every delivery row of one subscription and one kind.
+// The synthetic kinds (reorg, event_invalidated, event_removed) carry a
+// per-occurrence discriminator in event_key, so tests look them up by
+// kind instead of by key.
+func (e *testEnv) kindRows(sub, kind string) []deliveryRow {
+	rows, err := e.db.Query(`SELECT subscription_id, event_key, event_kind, network,
+			block_number, entity, webhook_id, payload, attempts
+			FROM deliveries WHERE subscription_id=? AND event_kind=? ORDER BY event_key`,
+		sub, kind)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []deliveryRow
+	for rows.Next() {
+		var r deliveryRow
+		if err := rows.Scan(&r.SubscriptionID, &r.EventKey, &r.EventKind, &r.Network,
+			&r.BlockNumber, &r.Entity, &r.WebhookID, &r.Payload, &r.Attempts); err != nil {
+			return nil
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // markDelivered simulates a successful webhook POST for the row.
@@ -227,12 +251,12 @@ func TestReorgHashMismatch(t *testing.T) {
 	if got := e.deliveryState("star", "eth-sepolia:102:0xtxX:0", kindTransaction); got != stateInvalidated {
 		t.Fatalf("txX state = %q want invalidated", got)
 	}
-	inv := e.delivery("star", "eth-sepolia:101:0xtxR:0", kindEventInvalidated)
-	if inv == nil {
-		t.Fatal("event_invalidated for txR missing")
+	invRows := e.kindRows("star", kindEventInvalidated)
+	if len(invRows) != 2 { // txR and txX
+		t.Fatalf("event_invalidated rows = %d want 2", len(invRows))
 	}
 	var invBody map[string]any
-	if err := json.Unmarshal([]byte(inv.Payload), &invBody); err != nil {
+	if err := json.Unmarshal([]byte(invRows[0].Payload), &invBody); err != nil {
 		t.Fatal(err)
 	}
 	if invBody["type"] != "event_invalidated" || invBody["reason"] != "reorg" ||
@@ -340,10 +364,11 @@ func TestReorgSupersessionAndRemoval(t *testing.T) {
 	if got := e.deliveryState("slow", "eth-sepolia:102:0xtxC:0", kindTransaction); got != stateRemoved {
 		t.Fatalf("txC state after sweep = %q want removed", got)
 	}
-	rem := e.delivery("slow", "eth-sepolia:102:0xtxC:0", kindEventRemoved)
-	if rem == nil {
-		t.Fatal("event_removed for txC missing")
+	remRows := e.kindRows("slow", kindEventRemoved)
+	if len(remRows) != 1 {
+		t.Fatalf("event_removed rows for slow = %d want 1", len(remRows))
 	}
+	rem := remRows[0]
 	var remBody map[string]any
 	if err := json.Unmarshal([]byte(rem.Payload), &remBody); err != nil {
 		t.Fatal(err)
@@ -395,8 +420,8 @@ func TestReorgSupersededBlockNotifications(t *testing.T) {
 	if got := e.deliveryState("blocks", "eth-sepolia:102:0xh102", kindBlock); got != stateRemoved {
 		t.Fatalf("swept block = %q", got)
 	}
-	if r := e.delivery("blocks", "eth-sepolia:102:0xh102", kindEventRemoved); r == nil {
-		t.Fatal("event_removed for the old 102 block notification missing")
+	if rows := e.kindRows("blocks", kindEventRemoved); len(rows) != 1 {
+		t.Fatalf("event_removed for the old 102 block notification missing: %d rows", len(rows))
 	}
 	// The replacement 102' notification exists and is distinct.
 	if r := e.delivery("blocks", "eth-sepolia:102:0xh102p", kindBlock); r == nil {
@@ -503,5 +528,224 @@ func TestRematchAfterConfigReload(t *testing.T) {
 	e.db.QueryRow(`SELECT count(*) FROM deliveries WHERE subscription_id='late'`).Scan(&n)
 	if n != 0 {
 		t.Fatalf("rows of removed subscription survive: %d", n)
+	}
+}
+
+func TestDoubleReorgRepeatCycle(t *testing.T) {
+	e := newEnv(t, sub("s0", 0, "transaction"))
+	buildChain(t, e, "eth-sepolia", 100, 102)
+	// txD rides the delivered cycle, txE the pending one; both sit at 101.
+	e.tx(t, "eth-sepolia", 101, "0xh101", 0, "0xtxD", "0xf", "0xA", "1", 1)
+	e.tx(t, "eth-sepolia", 101, "0xh101", 1, "0xtxE", "0xf", "0xA", "1", 1)
+	e.markDelivered("s0", "eth-sepolia:101:0xtxD:0", kindTransaction)
+
+	// Reorg #1 at 101.
+	e.block(t, "eth-sepolia", 101, "0xh101a", "0xh100")
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxD:0", kindTransaction); got != stateInvalidated {
+		t.Fatalf("txD after reorg #1 = %q want invalidated", got)
+	}
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxE:1", kindTransaction); got != stateSuperseded {
+		t.Fatalf("txE after reorg #1 = %q want superseded", got)
+	}
+	// Both re-appear in the 101a rebuild (same hashes and indexes).
+	e.tx(t, "eth-sepolia", 101, "0xh101a", 0, "0xtxD", "0xf", "0xA", "1", 1)
+	e.tx(t, "eth-sepolia", 101, "0xh101a", 1, "0xtxE", "0xf", "0xA", "1", 1)
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxD:0", kindTransaction); got != statePending {
+		t.Fatalf("txD after reappearance = %q want pending (fresh)", got)
+	}
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxE:1", kindTransaction); got != statePending {
+		t.Fatalf("txE after reappearance = %q want pending (fresh)", got)
+	}
+	e.markDelivered("s0", "eth-sepolia:101:0xtxD:0", kindTransaction)
+
+	// Reorg #2 at 101, before the head passed the first horizon (102).
+	e.block(t, "eth-sepolia", 101, "0xh101b", "0xh100")
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxD:0", kindTransaction); got != stateInvalidated {
+		t.Fatalf("txD after reorg #2 = %q want invalidated", got)
+	}
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxE:1", kindTransaction); got != stateSuperseded {
+		t.Fatalf("txE after reorg #2 = %q want superseded", got)
+	}
+	// P2-2: the second invalidation must not collide with the first.
+	inv := e.kindRows("s0", kindEventInvalidated)
+	if len(inv) != 2 {
+		t.Fatalf("event_invalidated rows = %d want 2 (one per reorg occurrence)", len(inv))
+	}
+	if inv[0].EventKey == inv[1].EventKey {
+		t.Fatalf("both invalidations share the key %q", inv[0].EventKey)
+	}
+	var anyPending bool
+	for _, r := range inv {
+		if e.deliveryState("s0", r.EventKey, kindEventInvalidated) == statePending {
+			anyPending = true
+		}
+	}
+	if !anyPending {
+		t.Fatal("no pending event_invalidated for the second occurrence")
+	}
+
+	// Rebuild #2 without either tx: the sweep past the second horizon
+	// must settle txE with event_removed (the stale-reappeared bug would
+	// have swallowed it silently).
+	e.block(t, "eth-sepolia", 102, "0xh102b", "0xh101b")
+	e.block(t, "eth-sepolia", 103, "0xh103b", "0xh102b")
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxE:1", kindTransaction); got != stateRemoved {
+		t.Fatalf("txE after sweep = %q want removed", got)
+	}
+	rem := e.kindRows("s0", kindEventRemoved)
+	if len(rem) != 1 {
+		t.Fatalf("event_removed rows = %d want 1 (for txE)", len(rem))
+	}
+	var remBody map[string]any
+	if err := json.Unmarshal([]byte(rem[0].Payload), &remBody); err != nil {
+		t.Fatal(err)
+	}
+	if ev, _ := remBody["event"].(map[string]any); ev == nil || ev["tx_hash"] != "0xtxE" {
+		t.Fatalf("event_removed embeds wrong event: %v", remBody["event"])
+	}
+	// Nothing resurrected: the old events left the window with the reorg.
+	var n int
+	e.db.QueryRow(`SELECT count(*) FROM events WHERE entity IN ('0xtxD:0','0xtxE:1')`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("stale events recorded: %d", n)
+	}
+}
+
+func TestRedeliveredOldChainTxDropped(t *testing.T) {
+	e := newEnv(t, sub("s0", 0, "transaction"))
+	buildChain(t, e, "eth-sepolia", 100, 102)
+	e.tx(t, "eth-sepolia", 101, "0xh101", 0, "0xtxT", "0xf", "0xA", "1", 1)
+	e.tx(t, "eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)
+	e.markDelivered("s0", "eth-sepolia:101:0xtxT:0", kindTransaction)
+	e.markDelivered("s0", "eth-sepolia:102:0xtxU:0", kindTransaction)
+
+	// Reorg at 101 replaces [101..102]; the canonical hash at 101 and the
+	// (not yet rebuilt) height 102 are the two redelivery traps.
+	e.block(t, "eth-sepolia", 101, "0xh101a", "0xh100")
+
+	// Redelivered old-chain tx whose height now holds a different
+	// canonical block.
+	e.tx(t, "eth-sepolia", 101, "0xh101", 0, "0xtxT", "0xf", "0xA", "1", 1)
+	// Redelivered old-chain tx from a height the rebuild has not reached
+	// (ahead of the canonical head, no stored hash to compare).
+	e.tx(t, "eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)
+
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxT:0", kindTransaction); got != stateInvalidated {
+		t.Fatalf("txT resurrected by the redelivery: %q", got)
+	}
+	if got := e.deliveryState("s0", "eth-sepolia:102:0xtxU:0", kindTransaction); got != stateInvalidated {
+		t.Fatalf("txU resurrected by the redelivery: %q", got)
+	}
+	var n int
+	e.db.QueryRow(`SELECT count(*) FROM events WHERE entity IN ('0xtxT:0','0xtxU:0')`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("redelivered old-chain events recorded: %d", n)
+	}
+
+	// The rebuild proceeds untouched: no fresh transaction deliveries.
+	e.block(t, "eth-sepolia", 102, "0xh102a", "0xh101a")
+	e.block(t, "eth-sepolia", 103, "0xh103a", "0xh102a")
+	e.db.QueryRow(`SELECT count(*) FROM deliveries WHERE subscription_id='s0'
+		AND event_kind='transaction' AND state='pending'`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("pending transaction deliveries after the rebuild: %d", n)
+	}
+}
+
+func TestReorgDivergenceAtWindowFloor(t *testing.T) {
+	newFloorEnv := func() (*engine, *sql.DB) {
+		db, err := openState(filepath.Join(t.TempDir(), "floor.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { db.Close() })
+		eng := newEngine(db, newRegistry([]subscription{sub("s", 0, "transaction")}), 5)
+		for n := uint64(10); n <= 14; n++ {
+			hash, parent := blockHashes(n)
+			ev := mustParse(t, "extractor.eth-sepolia.block", blockEnvelope("eth-sepolia", n, hash, parent))
+			if _, err := eng.ApplyEvent(context.Background(), ev); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := eng.Prune(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		return eng, db
+	}
+	apply := func(eng *engine, n uint64, hash, parent string) {
+		ev := mustParse(t, "extractor.eth-sepolia.block", blockEnvelope("eth-sepolia", n, hash, parent))
+		if _, err := eng.ApplyEvent(context.Background(), ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Divergence exactly at the window floor: the stored hash at the
+	// lowest kept height differs, so the reorg still fires.
+	eng, db := newFloorEnv()
+	apply(eng, 10, "0xalt10", "0xh9")
+	var n int
+	db.QueryRow(`SELECT count(*) FROM deliveries WHERE event_kind='reorg'`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("reorg at the window floor not detected: %d notifications", n)
+	}
+	var head int64
+	db.QueryRow(`SELECT block_number FROM heads WHERE network='eth-sepolia'`).Scan(&head)
+	if head != 10 {
+		t.Fatalf("head = %d want 10", head)
+	}
+
+	// Divergence one below the floor is invisible: no stored hash, so the
+	// block is stale-dropped instead of regressing the head.
+	eng2, db2 := newFloorEnv()
+	apply(eng2, 9, "0xalt9", "0xh8")
+	db2.QueryRow(`SELECT count(*) FROM deliveries WHERE event_kind='reorg'`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("reorg below the window fabricated: %d notifications", n)
+	}
+	db2.QueryRow(`SELECT block_number FROM heads WHERE network='eth-sepolia'`).Scan(&head)
+	if head != 14 {
+		t.Fatalf("head regressed below the window: %d", head)
+	}
+}
+
+func TestSupersededReorgNotificationSweptSilently(t *testing.T) {
+	e := newEnv(t, sub("s0", 0, "transaction"))
+	buildChain(t, e, "eth-sepolia", 100, 102)
+
+	// Reorg #1 queues a pending reorg notification stamped at height 101.
+	e.block(t, "eth-sepolia", 101, "0xh101a", "0xh100")
+	first := e.kindRows("s0", kindReorg)
+	if len(first) != 1 {
+		t.Fatalf("reorg notifications after #1 = %d want 1", len(first))
+	}
+
+	// Reorg #2 at the same height: its replaced range covers the stamped
+	// divergence height, so the still-pending first notification is
+	// superseded and the second is queued.
+	e.block(t, "eth-sepolia", 101, "0xh101b", "0xh100")
+	second := e.kindRows("s0", kindReorg)
+	if len(second) != 2 {
+		t.Fatalf("reorg notifications after #2 = %d want 2", len(second))
+	}
+
+	// Rebuild past the second horizon: the superseded reorg-kind row is
+	// settled silently — an event_removed for a reorg notification would
+	// be noise — while the newest one stays pending.
+	e.block(t, "eth-sepolia", 102, "0xh102b", "0xh101b")
+	e.block(t, "eth-sepolia", 103, "0xh103b", "0xh102b")
+	if rows := e.kindRows("s0", kindEventRemoved); len(rows) != 0 {
+		t.Fatalf("event_removed emitted for a reorg-kind notification: %d rows", len(rows))
+	}
+	states := map[string]string{}
+	for _, r := range second {
+		states[r.EventKey] = e.deliveryState("s0", r.EventKey, kindReorg)
+	}
+	if states[first[0].EventKey] != stateRemoved {
+		t.Fatalf("superseded reorg notification state = %q want removed", states[first[0].EventKey])
+	}
+	for key, state := range states {
+		if key != first[0].EventKey && state != statePending {
+			t.Fatalf("newest reorg notification state = %q want pending", state)
+		}
 	}
 }
