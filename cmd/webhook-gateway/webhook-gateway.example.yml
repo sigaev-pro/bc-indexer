@@ -1,0 +1,24 @@
+# Example subscriptions for the Bonpay webhook gateway.
+# Copy to webhook-gateway.yml and adapt. Reload with: kill -HUP <pid>
+subscriptions:
+  - id: payin-watcher          # stable string id
+    network: eth-sepolia       # network subject token, or "*" for all
+    event_type: transaction    # block | transaction | "*"
+    tx_to: "0x42eD89C15BfF1Ec17d5cB5E6D2aA0bBc93A0fF11"  # optional exact-address filter
+    confirmations: 12          # deliver when head >= height + N; 0 = immediate
+    url: https://client.example/hooks/payin
+    secret: whsec_payin        # HMAC-SHA256 key for X-Webhook-Signature
+
+  - id: bsc-observer
+    network: bsc-testnet
+    event_type: transaction
+    confirmations: 6
+    url: https://client.example/hooks/bsc
+    secret: whsec_bsc
+
+  - id: all-blocks
+    network: "*"
+    event_type: block
+    confirmations: 0
+    url: http://127.0.0.1:9000/hooks/blocks
+    secret: whsec_blocks

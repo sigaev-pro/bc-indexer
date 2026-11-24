@@ -35,3 +35,4 @@ node_modules/
 # Local build artifacts
 cmd/extractor-rpc/extractor-rpc
 cmd/clickhouse-sink/clickhouse-sink
+cmd/webhook-gateway/webhook-gateway
