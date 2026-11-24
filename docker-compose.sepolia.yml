@@ -28,9 +28,12 @@ volumes:
 services:
   # The unpatched upstream Geth node on Sepolia: snap sync, HTTP RPC and
   # WebSocket on all interfaces. The adapter subscribes over WebSocket;
-  # nothing is patched or injected into the node.
+  # nothing is patched or injected into the node. The image must be new
+  # enough to follow current Sepolia (Pectra transaction types): v1.14.x
+  # rejects type-4 transactions with "transaction type not supported" and
+  # cannot follow blocks containing them.
   geth:
-    image: ethereum/client-go:v1.14.12
+    image: ethereum/client-go:v1.17.10
     command: --sepolia --syncmode snap --http --http.addr 0.0.0.0 --ws --ws.addr 0.0.0.0
     ports:
       - "127.0.0.1:8545:8545"
@@ -52,9 +55,12 @@ services:
   nats:
     image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
     command: ["-js", "-sd", "/data/jetstream", "-m", "8222"]
+    # Host ports avoid the demo contour's NATS on 4222/8222: this stack
+    # keeps its own JetStream on 14223/18223 (loopback inspection only;
+    # the services still talk on the internal network).
     ports:
-      - "127.0.0.1:4222:4222"
-      - "127.0.0.1:8222:8222"
+      - "127.0.0.1:14223:4222"
+      - "127.0.0.1:18223:8222"
     volumes:
       - nats-sepolia-store:/data/jetstream
     networks:
@@ -82,6 +88,10 @@ services:
       NATS_URL: nats://nats:4222
       NETWORK: eth-sepolia
       FROM_BLOCK: latest
+      # 0 = follow the chain without a block limit: the full production
+      # shape of the contour (bounded windows stay available by setting
+      # MAX_BLOCKS explicitly).
+      MAX_BLOCKS: "0"
     networks:
       - sepolia
     depends_on:
