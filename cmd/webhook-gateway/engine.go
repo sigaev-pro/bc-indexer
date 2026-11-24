@@ -92,23 +92,44 @@ func (e *engine) ApplyEvent(ctx context.Context, ev *parsedEvent) (bool, error) 
 // notification and tell the client a reorged-out transaction is good
 // again.
 func (e *engine) applyTx(ctx context.Context, tx *sql.Tx, ev *parsedEvent) (bool, error) {
-	if h, err := getHead(ctx, tx, ev.network); err != nil {
+	h, err := getHead(ctx, tx, ev.network)
+	if err != nil {
 		return false, err
-	} else if h != nil && int64(ev.blockNumber) > h.number {
-		// The publisher emits a block before its transactions, so a
-		// transaction ahead of the canonical head is out-of-band — in
-		// practice an old-chain redelivery arriving while the replaced
-		// heights are not rebuilt yet (no stored hash to compare yet).
-		log.Printf("DROPPED_STALE_CHAIN network=%s height=%d tx=%s block_hash=%s head=%d reason=transaction ahead of the canonical head",
-			ev.network, ev.blockNumber, ev.txHash, ev.blockHash, h.number)
-		return false, nil
 	}
-	if stored, err := blockHashAt(ctx, tx, ev.network, int64(ev.blockNumber)); err != nil {
+	if h != nil && int64(ev.blockNumber) > h.number {
+		// The transaction is ahead of the canonical head. The publisher
+		// emits a block before its transactions, so in-order delivery
+		// never lands here: either an old-chain redelivery is racing the
+		// rebuild, or the block's own apply failed transiently and its
+		// message is still unacked. Dropping would silently lose a whole
+		// block's notifications in the second case, so the safe move for
+		// both is to return an error: the message stays unacked, and by
+		// redelivery time the block has either landed (the hash guard
+		// below then decides correctly, dropping true old-chain replays)
+		// or the error repeats, bounded and visible.
+		return false, fmt.Errorf("transaction %s at height %d is ahead of the canonical head %d; deferring until its block lands",
+			ev.txHash, ev.blockNumber, h.number)
+	}
+	stored, err := blockHashAt(ctx, tx, ev.network, int64(ev.blockNumber))
+	if err != nil {
 		return false, err
-	} else if stored != "" && stored != ev.blockHash {
+	}
+	switch {
+	case stored != "" && stored != ev.blockHash:
 		log.Printf("DROPPED_STALE_CHAIN network=%s height=%d tx=%s block_hash=%s canonical=%s reason=block hash differs from the canonical chain",
 			ev.network, ev.blockNumber, ev.txHash, ev.blockHash, stored)
 		return false, nil
+	case stored == "" && h != nil && int64(ev.blockNumber) <= h.number:
+		// A hole in the block window at or below the head exists only
+		// mid-rebuild (handleReorg deleted the replaced range, chain C's
+		// block at this height has not landed yet) — including the
+		// divergence height of a parent-mismatch reorg. Without a stored
+		// hash there is no evidence to classify the transaction as old
+		// or new chain, so defer: an in-order new-chain transaction
+		// always follows its block, and by redelivery the hash guard
+		// above decides with evidence.
+		return false, fmt.Errorf("transaction %s at height %d has no canonical block hash (rebuild in progress, head %d); deferring",
+			ev.txHash, ev.blockNumber, h.number)
 	}
 	if _, err := tx.ExecContext(ctx, `REPLACE INTO events
 			(network, block_number, event_type, entity, payload, captured_at)
@@ -122,9 +143,8 @@ func (e *engine) applyTx(ctx context.Context, tx *sql.Tx, ev *parsedEvent) (bool
 		ev.network, ev.txHash); err != nil {
 		return false, err
 	}
-	h, err := getHead(ctx, tx, ev.network)
-	if err != nil || h == nil {
-		return false, err
+	if h == nil {
+		return false, nil // no head yet: confirmations cannot be judged
 	}
 	queued, err := e.matchAll(ctx, tx, ev.network, h.number)
 	return queued, err

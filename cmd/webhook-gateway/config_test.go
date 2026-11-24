@@ -112,6 +112,8 @@ func TestScalarValueQuoteAware(t *testing.T) {
 		{`"a # b"  # trailing comment`, "a # b", false}, // comment only after the closing quote
 		{`'single # quoted'`, "single # quoted", false},
 		{`plain value # comment`, "plain value", false},
+		{`# comment only`, "", false}, // key: # note — the value is empty, not "# note"
+		{`#nospace`, "", false},
 		{`plain`, "plain", false},
 		{`"quoted"`, "quoted", false},
 		{`http://x/#frag`, "http://x/#frag", false}, // # without leading space is not a comment

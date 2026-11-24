@@ -255,7 +255,8 @@ func cutKV(line string) (key, value string, ok bool) {
 // scalarValue strips a trailing comment and one layer of quotes from a
 // raw value. Comment stripping is quote-aware: inside a quoted value a
 // " #" sequence is data ("a # b" stays "a # b"), and a comment may only
-// follow the closing quote.
+// follow the closing quote. A value that is nothing but a comment
+// ("key: # note") is an empty value, not the literal "# note".
 func scalarValue(raw string) (string, error) {
 	v := strings.TrimLeft(raw, " \t") // real values arrive with leading whitespace
 	if len(v) > 0 && (v[0] == '"' || v[0] == '\'') {
@@ -275,6 +276,10 @@ func scalarValue(raw string) (string, error) {
 		// A trailing comment must be preceded by whitespace to avoid
 		// cutting URLs at a "#fragment".
 		v = v[:cut]
+	} else if strings.HasPrefix(v, "#") {
+		// "key:# note" / "key: # note": the raw value starts with the
+		// comment marker, so there is no value at all.
+		v = ""
 	}
 	v = strings.TrimSpace(v)
 	if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {

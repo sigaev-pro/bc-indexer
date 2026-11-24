@@ -271,7 +271,10 @@ deliveries table with its last_response for inspection.
   next_attempt_at, last_response, plus the payload and addressing
   columns): the durable webhook queue. event_key is
   network:block:entity, where entity is tx_hash:tx_index for
-  transactions and the block hash for blocks.
+  transactions and the block hash for blocks. Synthetic reorg
+  notifications (event_invalidated, event_removed) append an
+  @discriminator suffix (the divergence, horizon and replacement hashes)
+  so one occurrence per reorg cycle is delivered, never deduplicated away.
 - replaced(network, entity, horizon, reappeared): the pending
   reappearance ledger while a reorg rebuild is in flight.
 

@@ -36,6 +36,19 @@ func (e *testEnv) apply(t *testing.T, ev *parsedEvent) {
 	}
 }
 
+// applyErr asserts the apply returns an error containing want — the
+// deferral contract for messages that must stay unacked.
+func (e *testEnv) applyErr(t *testing.T, ev *parsedEvent, want string) {
+	t.Helper()
+	_, err := e.eng.ApplyEvent(context.Background(), ev)
+	if err == nil {
+		t.Fatalf("apply %s/%d: expected a deferral error containing %q, got success", ev.eventType, ev.blockNumber, want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("apply %s/%d: error %q does not contain %q", ev.eventType, ev.blockNumber, err.Error(), want)
+	}
+}
+
 func (e *testEnv) block(t *testing.T, network string, n uint64, hash, parent string) {
 	t.Helper()
 	e.apply(t, mustParse(t, "extractor."+network+".block", blockEnvelope(network, n, hash, parent)))
@@ -624,17 +637,19 @@ func TestRedeliveredOldChainTxDropped(t *testing.T) {
 	e.block(t, "eth-sepolia", 101, "0xh101a", "0xh100")
 
 	// Redelivered old-chain tx whose height now holds a different
-	// canonical block.
+	// canonical block: dropped with evidence.
 	e.tx(t, "eth-sepolia", 101, "0xh101", 0, "0xtxT", "0xf", "0xA", "1", 1)
 	// Redelivered old-chain tx from a height the rebuild has not reached
-	// (ahead of the canonical head, no stored hash to compare).
-	e.tx(t, "eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)
+	// (ahead of the canonical head, no stored hash to compare): deferred
+	// with an error — the message stays unacked, never dropped.
+	e.applyErr(t, mustParse(t, "extractor.eth-sepolia.transaction",
+		txEnvelope("eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)), "ahead of the canonical head")
 
 	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxT:0", kindTransaction); got != stateInvalidated {
 		t.Fatalf("txT resurrected by the redelivery: %q", got)
 	}
 	if got := e.deliveryState("s0", "eth-sepolia:102:0xtxU:0", kindTransaction); got != stateInvalidated {
-		t.Fatalf("txU resurrected by the redelivery: %q", got)
+		t.Fatalf("txU resurrected by the deferral: %q", got)
 	}
 	var n int
 	e.db.QueryRow(`SELECT count(*) FROM events WHERE entity IN ('0xtxT:0','0xtxU:0')`).Scan(&n)
@@ -642,13 +657,64 @@ func TestRedeliveredOldChainTxDropped(t *testing.T) {
 		t.Fatalf("redelivered old-chain events recorded: %d", n)
 	}
 
-	// The rebuild proceeds untouched: no fresh transaction deliveries.
+	// The rebuild proceeds; once chain C's block lands at 102, the same
+	// old-chain redelivery is decided with evidence (hash guard drops it).
 	e.block(t, "eth-sepolia", 102, "0xh102a", "0xh101a")
+	e.tx(t, "eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)
 	e.block(t, "eth-sepolia", 103, "0xh103a", "0xh102a")
 	e.db.QueryRow(`SELECT count(*) FROM deliveries WHERE subscription_id='s0'
 		AND event_kind='transaction' AND state='pending'`).Scan(&n)
 	if n != 0 {
 		t.Fatalf("pending transaction deliveries after the rebuild: %d", n)
+	}
+}
+
+// TestDivergenceHeightHoleDefers closes the reviewer's finding: after a
+// parent-mismatch reorg the divergence height itself has no stored hash
+// until chain C's block lands there, and a redelivered old-chain tx at
+// exactly that height must not be recorded (it would resurrect a retired
+// notification) — it defers until the hash exists, then the hash guard
+// drops it with evidence.
+func TestDivergenceHeightHoleDefers(t *testing.T) {
+	e := newEnv(t, sub("s0", 0, "transaction"))
+	buildChain(t, e, "eth-sepolia", 100, 102)
+	e.tx(t, "eth-sepolia", 101, "0xh101", 0, "0xtxT", "0xf", "0xA", "1", 1)
+	e.tx(t, "eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)
+	e.markDelivered("s0", "eth-sepolia:101:0xtxT:0", kindTransaction)
+	e.markDelivered("s0", "eth-sepolia:102:0xtxU:0", kindTransaction)
+
+	// Parent-mismatch reorg: the incoming block extends the chain at 103
+	// but its parent hash mismatches the stored 102, so the divergence is
+	// 102; [102..102] is deleted, 103' becomes the head and blocks[102]
+	// is empty until chain C's block lands there.
+	e.block(t, "eth-sepolia", 103, "0xh103a", "0xh102a")
+
+	// Redelivered old-chain tx at exactly the divergence height: no
+	// stored hash, height <= head — must defer, not record. (The message
+	// stays unacked; in-order the hole never exists, so this guard is
+	// pure defense against out-of-band redeliveries.)
+	e.applyErr(t, mustParse(t, "extractor.eth-sepolia.transaction",
+		txEnvelope("eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)), "no canonical block hash")
+	// A second attempt defers again — bounded, never records, never
+	// resurrects.
+	e.applyErr(t, mustParse(t, "extractor.eth-sepolia.transaction",
+		txEnvelope("eth-sepolia", 102, "0xh102", 0, "0xtxU", "0xf", "0xA", "1", 1)), "no canonical block hash")
+
+	if got := e.deliveryState("s0", "eth-sepolia:102:0xtxU:0", kindTransaction); got != stateInvalidated {
+		t.Fatalf("txU resurrected through the divergence hole: %q", got)
+	}
+	// Height 101 keeps its old-chain hash (the reorg diverged at 102): it
+	// is common prefix, txT stays legitimately delivered, and its
+	// redelivery is a benign duplicate (same hash, same key — no new
+	// notification).
+	e.tx(t, "eth-sepolia", 101, "0xh101", 0, "0xtxT", "0xf", "0xA", "1", 1)
+	if got := e.deliveryState("s0", "eth-sepolia:101:0xtxT:0", kindTransaction); got != stateDelivered {
+		t.Fatalf("txT common-prefix delivery disturbed: %q", got)
+	}
+	var n int
+	e.db.QueryRow(`SELECT count(*) FROM events WHERE entity='0xtxU:0'`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("old-chain event recorded through the hole: %d", n)
 	}
 }
 
