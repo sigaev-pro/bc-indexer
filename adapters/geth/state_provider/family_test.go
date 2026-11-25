@@ -106,13 +106,17 @@ func newPathTrieDB(_ ethdb.Database) *triedb.Database {
 func newPathStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Header) {
 	t.Helper()
 	db := rawdb.NewMemoryDatabase()
-	tdb := triedb.NewDatabase(db, &triedb.Config{PathDB: pathdb.Defaults})
+	// A capture node disallows the asynchronous flush of the path store
+	// (D108), so a commit returns when its state is persistent.
+	config := pathdb.Defaults
+	config.NoAsyncFlush = true
+	tdb := triedb.NewDatabase(db, &triedb.Config{PathDB: config})
 	block, err := familyGenesis(t).Commit(db, tdb, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { tdb.Close(); db.Close() })
-	for deadline := time.Now().Add(10 * time.Second); rawdb.ReadStateScheme(db) != rawdb.PathScheme; {
+	for deadline := time.Now().Add(10 * time.Second); rawdb.ReadPersistentStateID(db) == 0 && rawdb.ReadStateScheme(db) != rawdb.PathScheme; {
 		if time.Now().After(deadline) {
 			t.Fatal("the path store did not write its genesis state")
 		}

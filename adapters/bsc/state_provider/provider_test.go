@@ -533,7 +533,7 @@ func TestUnitLedgerPinOfAnotherStoreRejects(t *testing.T) {
 	if err := db.Put(pinKey("foreign"), data); err != nil {
 		t.Fatal(err)
 	}
-	_, err = checkStore(db, identity)
+	_, err = checkStore(db, nil, identity)
 	mustErr(t, err, ErrWrongStore)
 	_, err = New(db, tdb, identity)
 	mustErr(t, err, ErrWrongStore)
@@ -543,7 +543,7 @@ func TestUnitLedgerPinOfAnotherStoreRejects(t *testing.T) {
 	}
 	unbound := identity
 	unbound.StoreID = ""
-	_, err = checkStore(db, unbound)
+	_, err = checkStore(db, nil, unbound)
 	mustErr(t, err, ErrWrongStore)
 }
 
@@ -628,7 +628,7 @@ func TestUnitLedgerKeysAreNotNativeStateKeys(t *testing.T) {
 func TestUnitStoreChecks(t *testing.T) {
 	db, tdb, _ := newMemoryStore(t)
 	unbound := identityOf(t, db, "")
-	if report, err := checkStore(db, unbound); err != nil || report.Bound {
+	if report, err := checkStore(db, nil, unbound); err != nil || report.Bound {
 		t.Fatalf("unbound start %v %v", report, err)
 	}
 	_, err := New(db, tdb, unbound)
@@ -637,9 +637,9 @@ func TestUnitStoreChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = checkStore(db, unbound)
+	_, err = checkStore(db, nil, unbound)
 	mustErr(t, err, ErrWrongStore)
-	if report, err := checkStore(db, identity); err != nil || !report.Bound || len(report.Pins) != 0 {
+	if report, err := checkStore(db, nil, identity); err != nil || !report.Bound || len(report.Pins) != 0 {
 		t.Fatalf("bound start %v %v", report, err)
 	}
 	for _, change := range []func(*StoreIdentity){
@@ -649,7 +649,7 @@ func TestUnitStoreChecks(t *testing.T) {
 	} {
 		wrong := identity
 		change(&wrong)
-		_, err = checkStore(db, wrong)
+		_, err = checkStore(db, nil, wrong)
 		mustErr(t, err, ErrWrongStore)
 		_, err = New(db, tdb, wrong)
 		mustErr(t, err, ErrWrongStore)
@@ -664,7 +664,7 @@ func TestUnitStoreChecks(t *testing.T) {
 	} {
 		wrong := identity
 		bad(&wrong)
-		_, err = checkStore(db, wrong)
+		_, err = checkStore(db, nil, wrong)
 		mustErr(t, err, ErrWrongStore)
 	}
 	_, err = New(db, nil, identity)
@@ -702,11 +702,13 @@ func TestUnitStoreChecks(t *testing.T) {
 	}
 }
 
-// TestUnitPathStoreOpensWithoutPins covers the path scheme of D108 up to the
-// provider: the binding and the provider accept a path store with the path
-// profile. A pin on a path store waits for its recovery proof, so it fails
-// closed and writes nothing.
-func TestUnitPathStoreOpensWithoutPins(t *testing.T) {
+// TestUnitPathPinMakesParentPersistent covers a pin on a path store (D108):
+// the pin is the full commit of the path store, which makes the parent state
+// the persistent layer, the store reads it back as such, and the ledger
+// record follows. Once a later commit moves the persistent layer above it,
+// a reader without the trie database still accepts the recorded state id,
+// and the provider requires the state histories that rebuild it.
+func TestUnitPathPinMakesParentPersistent(t *testing.T) {
 	db, tdb, genesis := newPathStore(t)
 	identity, err := Bind(db, testStore)
 	if err != nil {
@@ -729,9 +731,62 @@ func TestUnitPathStoreOpensWithoutPins(t *testing.T) {
 		t.Fatalf("hash trie database on a path store: %v", err)
 	}
 	side, code := commitSideState(t, db, tdb, genesis, 1)
-	mustErr(t, provider.Pin(pinFor("obs-path", identity, side, code)), ErrUnsupportedBackend)
-	if pins, err := Pins(db); err != nil || len(pins) != 0 {
-		t.Fatalf("a refused pin left records %v %v", pins, err)
+	if PersistentState(db, side.Root) {
+		t.Fatal("side state is persistent before the pin")
+	}
+	pin := pinFor("obs-path", identity, side, code)
+	if err := provider.Pin(pin); err != nil {
+		t.Fatal(err)
+	}
+	if !PersistentState(db, side.Root) {
+		t.Fatal("the pin did not make the parent state persistent")
+	}
+	if pins, err := Pins(db); err != nil || len(pins) != 1 || !samePin(pins[0], pin) {
+		t.Fatalf("ledger %v %v", pins, err)
+	}
+	if err := provider.Pin(pin); err != nil {
+		t.Fatalf("repeated identical pin on the path store: %v", err)
+	}
+	if report, err := checkStore(db, tdb, identity); err != nil || len(report.Pins) != 1 {
+		t.Fatalf("store check with a path pin %v %v", report, err)
+	}
+	if err := provider.Verify(pin); err != nil {
+		t.Fatalf("provider verify of the persistent parent: %v", err)
+	}
+	// A state that already is persistent is not committed again, and a
+	// state the store never recorded is unavailable to every reader.
+	if err := FlushState(db, tdb, genesis.Root); err != nil {
+		t.Fatalf("flush of the persistent genesis state: %v", err)
+	}
+	unknown := pinFor("obs-unknown", identity, side, code)
+	unknown.ParentRoot = common.HexToHash("0x0102")
+	if err := provider.Verify(unknown); !errors.Is(err, ErrPinUnavailable) {
+		t.Fatalf("provider verify of a state never committed %v, want unavailable", err)
+	}
+	if err := Verify(db, unknown); !errors.Is(err, ErrPinUnavailable) {
+		t.Fatalf("verify of a state never committed %v, want unavailable", err)
+	}
+	// A later commit (the barrier of a decided block) moves the persistent
+	// layer above the pinned parent.
+	child, _ := commitSideState(t, db, tdb, side, 2)
+	if err := FlushState(db, tdb, child.Root); err != nil {
+		t.Fatal(err)
+	}
+	if PersistentState(db, side.Root) {
+		t.Fatal("the pinned parent stayed persistent under a later commit")
+	}
+	if err := Verify(db, pin); err != nil {
+		t.Fatalf("reader without the trie database refused the recorded state: %v", err)
+	}
+	// The store holds no state history freezer, so the parent cannot be rebuilt.
+	if err := provider.Verify(pin); !errors.Is(err, ErrPinUnavailable) {
+		t.Fatalf("provider verify without state histories %v, want unavailable", err)
+	}
+	if err := provider.Release(pin.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequireNoLivePins(db); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -771,7 +826,7 @@ func TestUnitRetentionFloor(t *testing.T) {
 		{"a tail at the head", floor + 7, floor + 7, true},
 	} {
 		setHead(item.head)
-		report, err := checkStore(withTail(db, item.tail, nil), identity)
+		report, err := checkStore(withTail(db, item.tail, nil), nil, identity)
 		if item.refused {
 			if !errors.Is(err, ErrForbiddenPruning) || !strings.Contains(err.Error(), "fewer than") {
 				t.Fatalf("%s: error %v, want the retention floor", item.name, err)
@@ -785,7 +840,7 @@ func TestUnitRetentionFloor(t *testing.T) {
 	}
 	// An unreadable tail is an error, never an empty retention.
 	unreadable := errors.New("tail unreadable")
-	if _, err := checkStore(withTail(db, 0, unreadable), identity); !errors.Is(err, unreadable) {
+	if _, err := checkStore(withTail(db, 0, unreadable), nil, identity); !errors.Is(err, unreadable) {
 		t.Fatalf("unreadable tail %v", err)
 	}
 }

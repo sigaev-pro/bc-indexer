@@ -55,7 +55,10 @@ func (p LedgerPins) Verify(id, parentRoot string) (string, error) {
 		if hex.EncodeToString(pin.ParentRoot.Bytes()) != parentRoot {
 			return "", fmt.Errorf("%w: pin %s holds root %s", ErrPinMismatch, id, pin.ParentRoot)
 		}
-		if err := stateprovider.Verify(p.DB, pin); err != nil {
+		// The provider holds the trie database: under the path scheme it
+		// also checks the state histories of a pinned state below the
+		// persistent layer.
+		if err := p.verifier().Verify(pin); err != nil {
 			return "", err
 		}
 		digest := sha256.Sum256(record)
@@ -63,6 +66,24 @@ func (p LedgerPins) Verify(id, parentRoot string) (string, error) {
 	}
 	return "", fmt.Errorf("%w: pin %s is not listed", ErrPinMismatch, id)
 }
+
+// verifier is the provider of the pins, or a reader of the ledger alone.
+func (p LedgerPins) verifier() pinVerifier {
+	if p.Provider != nil {
+		return p.Provider
+	}
+	return ledgerVerifier{p.DB}
+}
+
+// pinVerifier checks the native references of a pin.
+type pinVerifier interface {
+	Verify(pin stateprovider.Pin) error
+}
+
+// ledgerVerifier checks a pin without the trie database of the store.
+type ledgerVerifier struct{ db ethdb.Database }
+
+func (v ledgerVerifier) Verify(pin stateprovider.Pin) error { return stateprovider.Verify(v.db, pin) }
 
 // Release removes the pin. An absent pin is already released.
 func (p LedgerPins) Release(id string) error {

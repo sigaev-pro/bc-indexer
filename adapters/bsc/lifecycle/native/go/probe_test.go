@@ -319,7 +319,7 @@ func openNode(fx *fixture, home string, mutate func(*ethconfig.Config)) (*nodeSt
 	cfg.Genesis = fx.genesis
 	cfg.NetworkId = fx.genesis.Config.ChainID.Uint64()
 	cfg.SyncMode = ethconfig.FullSync
-	cfg.StateScheme = rawdb.HashScheme
+	cfg.StateScheme = probeScheme()
 	cfg.SnapshotCache = 0
 	cfg.LogNoHistory = true
 	if mutate != nil {

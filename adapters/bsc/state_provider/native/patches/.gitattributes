@@ -1,0 +1,3 @@
+# Stored unified diffs: their context lines start with a space by format,
+# so git's whitespace checks do not apply to them.
+*.diff -whitespace

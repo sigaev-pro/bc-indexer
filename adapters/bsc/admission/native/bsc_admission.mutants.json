@@ -139,8 +139,9 @@
     {
       "name": "profile digest",
       "file": "go/seam.go",
-      "original": "\tdigest := sha256.Sum256([]byte(StateProfile))",
-      "replacement": "\tdigest := sha256.Sum256([]byte(NormalizationProfile))"
+      "original": "Profile: stateprovider.ProfileDigest(s.identity.StateScheme),",
+      "replacement": "Profile: stateprovider.ProfileDigest(rawdb.HashScheme),",
+      "equivalent": "UNOBSERVABLE in the measured blocks: under the hash scheme both digests are the same, and the path-scheme probes of D108 (fastnode_bsc.py) check the form of the profile field of a pin, not its value"
     },
     {
       "name": "pin root",
@@ -151,7 +152,7 @@
     {
       "name": "pin verify",
       "file": "go/adapters.go",
-      "original": "\t\tif err := stateprovider.Verify(p.DB, pin); err != nil {\n\t\t\treturn \"\", err\n\t\t}",
+      "original": "\t\tif err := p.verifier().Verify(pin); err != nil {\n\t\t\treturn \"\", err\n\t\t}\n",
       "replacement": ""
     },
     {
@@ -504,6 +505,24 @@
       "file": "go/seam.go",
       "original": "||\n\t\terrors.Is(cause, parlia.ErrExtractorSnapshotResponse) {",
       "replacement": "{"
+    },
+    {
+      "name": "state profile of a scheme without one",
+      "file": "go/static.go",
+      "original": "\tif profile == \"\" {\n\t\treturn \"\", fmt.Errorf(\"%w: state scheme %q has no state profile\", ErrStaticInput, scheme)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "capsule decoded with the hash profile",
+      "file": "go/static.go",
+      "original": "\tprofile, err := stateProfile(scheme)\n\tif err != nil {\n\t\treturn bad(\"state profile: %v\", err)\n\t}\n",
+      "replacement": "\tprofile, err := stateProfile(rawdb.HashScheme)\n\tif err != nil {\n\t\treturn bad(\"state profile: %v\", err)\n\t}\n"
+    },
+    {
+      "name": "capsule built with the hash profile",
+      "file": "go/static.go",
+      "original": "\tprofile, err := stateProfile(scheme)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n",
+      "replacement": "\tprofile, err := stateProfile(rawdb.HashScheme)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n"
     }
   ]
 }

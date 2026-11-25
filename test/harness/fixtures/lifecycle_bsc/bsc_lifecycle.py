@@ -57,7 +57,8 @@ BLOCK_FILES = ("test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
                "adapters/bsc/lifecycle/native/patches/08-core-lifecycle-seams.diff",
                "adapters/bsc/lifecycle/native/go/lifecycle.go", "adapters/bsc/lifecycle/native/go/recover.go",
                "adapters/bsc/lifecycle/native/go/node.go", "adapters/bsc/lifecycle/native/go/attestation.go",
-               "adapters/bsc/lifecycle/native/go/unit_test.go", "adapters/bsc/lifecycle/native/go/probe_test.go")
+               "adapters/bsc/lifecycle/native/go/unit_test.go", "adapters/bsc/lifecycle/native/go/probe_test.go",
+               "adapters/bsc/lifecycle/native/go/fastnode_test.go")
 PREPARATION_SECONDS = 2 * 3600
 RUN_SECONDS = 1200
 PROBE_CAP = 600

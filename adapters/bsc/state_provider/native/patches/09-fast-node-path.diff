@@ -1,0 +1,152 @@
+diff --git a/core/blockchain.go b/core/blockchain.go
+--- a/core/blockchain.go
++++ b/core/blockchain.go
+@@ -560,6 +560,12 @@
+ 	// Make sure the state associated with the block is available, or log out
+ 	// if there is no available state, waiting for state sync.
+ 	head := bc.CurrentBlock()
++	// Extractor patch (D108, path scheme): a crash between the child-root
++	// barrier of a capture node and its head batch leaves the persistent
++	// layer above the head; roll it back before the repair below.
++	if err := bc.extractorRecoverHeadState(head); err != nil {
++		return nil, err
++	}
+ 	if !bc.HasState(head.Root) {
+ 		if head.Number.Uint64() == 0 {
+ 			// The genesis state is missing, which is only possible in the path-based
+diff --git a/core/extractor_decision.go b/core/extractor_decision.go
+--- a/core/extractor_decision.go
++++ b/core/extractor_decision.go
+@@ -15,6 +15,7 @@
+ 	"fmt"
+ 	"math/big"
+ 
++	"github.com/ethereum/go-ethereum/common"
+ 	"github.com/ethereum/go-ethereum/core/rawdb"
+ 	"github.com/ethereum/go-ethereum/core/state"
+ 	"github.com/ethereum/go-ethereum/core/types"
+@@ -161,12 +162,10 @@
+ }
+ 
+ // extractorBarrier is the child-root barrier of an observed block: it
+-// commits the state, flushes the child root through the hash trie database
+-// and syncs the store, so the child state is durable before the intent.
++// commits the state, makes the child root persistent through the trie
++// database of the store's scheme (hash or path, D108) and syncs the store,
++// so the child state is durable before the intent.
+ func (bc *BlockChain) extractorBarrier(block *types.Block, statedb *state.StateDB) error {
+-	if bc.triedb.Scheme() != rawdb.HashScheme {
+-		return fmt.Errorf("%w: the child-root barrier needs the hash scheme", ErrExtractorDecision)
+-	}
+ 	var (
+ 		root     = block.Root()
+ 		isEIP158 = bc.chainConfig.IsEIP158(block.Number())
+@@ -195,8 +194,64 @@
+ 	if root != block.Root() {
+ 		return fmt.Errorf("%w: committed root %x, block root %x", ErrExtractorDecision, root, block.Root())
+ 	}
+-	if err := bc.triedb.Commit(root, false); err != nil {
++	if err := bc.extractorFlushState(root); err != nil {
+ 		return err
+ 	}
+ 	return bc.db.SyncKeyValue()
+ }
++
++// extractorFlushState makes the state of root persistent before the intent
++// of a decision. Under the hash scheme it is the commit of the root from the
++// trie cache. Under the path scheme (D108) it is the full commit of the path
++// store, which a capture node waits for: it disallows the asynchronous
++// flush, so the state is on the key-value store when the commit returns. A
++// root that already is the persistent layer is not committed again, because
++// a block whose state root equals its parent's adds no layer and the commit
++// would fail. The persistent state id must then name the root, or the state
++// is not durable.
++func (bc *BlockChain) extractorFlushState(root common.Hash) error {
++	if bc.triedb.Scheme() != rawdb.PathScheme {
++		return bc.triedb.Commit(root, false)
++	}
++	if id := rawdb.ReadStateID(bc.db, root); id != nil && *id == rawdb.ReadPersistentStateID(bc.db) {
++		return nil
++	}
++	if err := bc.triedb.Commit(root, false); err != nil {
++		return err
++	}
++	if id := rawdb.ReadStateID(bc.db, root); id == nil || *id != rawdb.ReadPersistentStateID(bc.db) {
++		return fmt.Errorf("%w: state %x is not the persistent state after its commit", ErrExtractorDecision, root)
++	}
++	return nil
++}
++
++// extractorRecoverHeadState runs before the native startup repair. The
++// child-root barrier commits the state of the block being decided before
++// that block becomes the head, so a crash between the barrier and the head
++// batch leaves the persistent layer of the path store above the head. The
++// native repair would search the chain below the head for the persistent
++// root, find no block with it and reach genesis. When the store holds the
++// state id of the head below the persistent state id, the persistent layer
++// is rolled back to the state of the head through the state histories, as
++// the native rewind does. The decision recovery of the capture node then
++// replays the undecided block. A head whose state cannot be rebuilt stops
++// the node instead.
++func (bc *BlockChain) extractorRecoverHeadState(head *types.Header) error {
++	if bc.triedb.Scheme() != rawdb.PathScheme || bc.NoTries() || bc.HasState(head.Root) {
++		return nil
++	}
++	id := rawdb.ReadStateID(bc.db, head.Root)
++	if id == nil || *id >= rawdb.ReadPersistentStateID(bc.db) {
++		return nil
++	}
++	if recoverable, err := bc.triedb.Recoverable(head.Root); err != nil || !recoverable {
++		return fmt.Errorf("extractor: the persistent state is above the head %d and the state %x of the head cannot be rebuilt",
++			head.Number, head.Root)
++	}
++	if err := bc.triedb.Recover(head.Root); err != nil {
++		return fmt.Errorf("extractor: rollback of the persistent state to the head %d: %v", head.Number, err)
++	}
++	log.Info("Extractor: rolled the persistent state back to the head", "number", head.Number, "hash", head.Hash(),
++		"root", head.Root)
++	return nil
++}
+diff --git a/eth/backend.go b/eth/backend.go
+--- a/eth/backend.go
++++ b/eth/backend.go
+@@ -192,6 +192,12 @@
+ 		if err := bsclifecycle.CheckProfile(config); err != nil {
+ 			return nil, err
+ 		}
++		// Extractor patch (D108): the stopped store is checked read-only
++		// before it is opened: the state scheme it records, the identity,
++		// every pin and the retention floor N.
++		if err := bsclifecycle.Preflight(stack.InstanceDir(), config, extractorConfig.StoreID); err != nil {
++			return nil, err
++		}
+ 	}
+ 
+ 	chainDb, err := stack.OpenDatabaseWithFreezer(ChainData, config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, ChainDBNamespace, false)
+@@ -416,6 +422,12 @@
+ 		log.Warn("The TxIndexer is disabled. Please note that the next time you re-enable it, it may affect the node performance because of rebuilding the tx index.")
+ 		options.TxLookupLimit = -1
+ 	}
++	// Extractor patch (D108): on a capture node the path store flushes its
++	// buffer synchronously, so that the child-root barrier and a pin are
++	// durable when they return.
++	if extractorConfig != nil {
++		options = options.WithNoAsyncFlush(true)
++	}
+ 
+ 	if config.VMTrace != "" {
+ 		traceConfig := json.RawMessage("{}")
+@@ -439,6 +451,13 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	// Extractor patch (D108): the rules of the capture profile that need the
++	// scheme of the opened store.
++	if extractorConfig != nil {
++		if _, err := stateprovider.CheckStoreProfile(config, eth.blockchain.TrieDB().Scheme()); err != nil {
++			return nil, err
++		}
++	}
+ 	// Extractor patch (E01-02.lifecycle_seams): the admission, decision and
+ 	// lifecycle seams attach after the native DB recovery. A restart goes
+ 	// live at the stored boundary H; a first start goes live after the

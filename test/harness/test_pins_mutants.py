@@ -26,13 +26,17 @@ class TableTests(unittest.TestCase):
     def test_the_table_of_the_repository_is_valid(self):
         table = self.load(json.loads(TABLE.read_text()))
         rows = table["mutants"]
-        self.assertEqual(len(rows), 75)
+        self.assertEqual(len(rows), 86)
         self.assertEqual({row["family"] for row in rows}, set(pins.FAMILIES))
         # Every shared mutant of a family that prunes block data runs there.
         for row in rows:
             if "legacy offset" in row["name"] and row["file"] == "provider.go":
                 self.assertIn(row["family"], pins.PRUNING_CLIENTS)
-        self.assertFalse(any("equivalent" in row for row in rows))
+        # The mutants labeled equivalent before the run, each with its reason.
+        labeled = {row["name"]: row["equivalent"] for row in rows if "equivalent" in row}
+        self.assertEqual(sorted(labeled), sorted(["flush accepts a commit that returned before the flush",
+                                                  "flush does not sync the store"]))
+        self.assertTrue(all(reason.strip() for reason in labeled.values()))
 
     def test_broken_tables_are_refused(self):
         good = json.loads(TABLE.read_text())

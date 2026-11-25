@@ -234,7 +234,7 @@ func importLongChain(t *testing.T, fx fixture, blocks []*types.Block, home strin
 	for _, row := range n.observations() {
 		run.States[row.State]++
 		if row.Candidate.Number == longChainLength {
-			static, err := ReadStatic(n.seam.store, row.Key, n.seam.genesis, fx.commit)
+			static, err := ReadStatic(n.seam.store, row.Key, n.seam.genesis, fx.commit, n.seam.identity.StateScheme)
 			if err != nil {
 				t.Fatal(err)
 			}

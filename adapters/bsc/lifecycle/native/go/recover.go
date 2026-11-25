@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/extractor/bsc"
 	"github.com/ethereum/go-ethereum/extractor/decision"
 	"github.com/ethereum/go-ethereum/extractor/lifecycle"
+	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -210,8 +211,9 @@ func (l *Lifecycle) reconcile() error {
 // ---------------------------------------------------------------- live boundary
 
 // GoLive switches the gate to LIVE. On a first start it reads the native
-// head under the guard, flushes the state root of that head through the
-// hash trie database and syncs it, writes the lifecycle view of H, and lets
+// head under the guard, makes the state of that head durable (the commit of
+// the root through the trie database of the store's scheme, hash or path,
+// then the sync; D108), writes the lifecycle view of H, and lets
 // the gate record the boundary H before the decision bridge goes live. On a
 // restart the gate keeps the stored H.
 func (l *Lifecycle) GoLive() (lifecycle.Boundary, error) {
@@ -224,10 +226,7 @@ func (l *Lifecycle) GoLive() (lifecycle.Boundary, error) {
 	}
 	head := l.chain.CurrentBlock()
 	if l.gate.Phase() == lifecycle.Bootstrap {
-		if err := l.chain.TrieDB().Commit(head.Root, false); err != nil {
-			return lifecycle.Boundary{}, err
-		}
-		if err := l.db.SyncKeyValue(); err != nil {
+		if err := stateprovider.FlushState(l.db, l.chain.TrieDB(), head.Root); err != nil {
 			return lifecycle.Boundary{}, err
 		}
 		l.roots.Synced(head.Root)

@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -106,13 +107,17 @@ func newPathTrieDB(_ ethdb.Database) *triedb.Database {
 func newPathStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Header) {
 	t.Helper()
 	db := rawdb.NewMemoryDatabase()
-	tdb := triedb.NewDatabase(db, &triedb.Config{PathDB: pathdb.Defaults})
+	// A capture node disallows the asynchronous flush of the path store
+	// (D108), so a commit returns when its state is persistent.
+	config := pathdb.Defaults
+	config.NoAsyncFlush = true
+	tdb := triedb.NewDatabase(db, &triedb.Config{PathDB: config})
 	block, err := familyGenesis(t).Commit(db, tdb, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { tdb.Close(); db.Close() })
-	for deadline := time.Now().Add(10 * time.Second); rawdb.ReadStateScheme(db) != rawdb.PathScheme; {
+	for deadline := time.Now().Add(10 * time.Second); rawdb.ReadPersistentStateID(db) == 0 && rawdb.ReadStateScheme(db) != rawdb.PathScheme; {
 		if time.Now().After(deadline) {
 			t.Fatal("the path store did not write its genesis state")
 		}
@@ -248,6 +253,24 @@ func initStore(t testing.TB, instanceDir string, genesis *core.Genesis, path boo
 	if err := tdb.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// openPathNode opens the native chain on disk with the path state scheme and
+// the synchronous flush of a capture node (D108). Native snapshots are off.
+func openPathNode(t testing.TB, instanceDir string) *testNode {
+	t.Helper()
+	db := openDisk(t, instanceDir)
+	config := core.DefaultConfig()
+	config.StateScheme, config.ArchiveMode, config.SnapshotWait = rawdb.PathScheme, false, true
+	config.SnapshotLimit = 0
+	config = config.WithNoAsyncFlush(true)
+	genesis := familyGenesis(t)
+	chain, err := core.NewBlockChain(db, genesis, parlia.New(genesis.Config, db, nil, genesis.ToBlock().Hash()), config)
+	if err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	return &testNode{database: db, chain: chain}
 }
 
 func nativePrune(db ethdb.Database, instanceDir string, root common.Hash) error {
@@ -680,5 +703,164 @@ func TestUnitStateProfiles(t *testing.T) {
 	}
 	if stateProfile("") != "" || stateProfile("bin") != "" {
 		t.Fatal("a scheme without a state profile has one")
+	}
+}
+
+// pathChildEnv names the home of TestNativePathPinChild.
+const pathChildEnv = "EXTRACTOR_PINS_PATH_CHILD"
+
+// persistentIs reports whether the store recorded the state id of root as
+// its persistent state id.
+func persistentIs(db ethdb.Database, root common.Hash) bool {
+	return PersistentState(db, root)
+}
+
+// TestNativePathPinChild is the subprocess half of TestNativePathPinSurvivesKill
+// on a path store: it imports the fixture, optionally pins block 1 and kills
+// itself, so the in-memory layers of the path store are lost without a flush.
+func TestNativePathPinChild(t *testing.T) {
+	dir := os.Getenv(pathChildEnv)
+	if dir == "" {
+		return
+	}
+	node := openPathNode(t, dir)
+	blocks := familyBlocks(t)
+	if err := node.insert(blocks); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := Bind(node.db(), testStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := New(node.db(), node.trieDB(), identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := map[string]any{"head": node.head().Number.Uint64(),
+		"block1_persistent_before": persistentIs(node.db(), blocks[0].Root())}
+	if os.Getenv("EXTRACTOR_PINS_CHILD_PIN") == "1" {
+		if err := provider.Pin(pinFor("obs-volatile", identity, blocks[0].Header())); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state["block1_persistent_after"] = persistentIs(node.db(), blocks[0].Root())
+	state["persistent_state_id"] = rawdb.ReadPersistentStateID(node.db())
+	data, err := json.Marshal(state)
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, "child.json"), data, 0o600)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(os.Getpid(), syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	select {}
+}
+
+func runPathChild(t *testing.T, dir string, pin bool) map[string]any {
+	t.Helper()
+	command := exec.Command(os.Args[0], "-test.run=^TestNativePathPinChild$", "-test.count=1")
+	command.Env = append(os.Environ(), pathChildEnv+"="+dir, fmt.Sprintf("EXTRACTOR_PINS_CHILD_PIN=%d", map[bool]int{false: 0, true: 1}[pin]))
+	output, err := command.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		t.Fatalf("child was not killed: %v\n%s", err, output)
+	}
+	status, ok := exit.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() || status.Signal() != syscall.SIGKILL {
+		t.Fatalf("child did not end by SIGKILL: %v\n%s", err, output)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "child.json"))
+	if err != nil {
+		t.Fatalf("child state: %v\n%s", err, output)
+	}
+	var state map[string]any
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	return state
+}
+
+// TestNativePathPinSurvivesKill covers PIN-01 in path mode (D108, P3): a
+// SIGKILL after the pin loses the in-memory layers of the path store, the
+// pinned parent state survives as the persistent layer and native recovery
+// resumes from it; the unpinned control loses the state and rewinds.
+func TestNativePathPinSurvivesKill(t *testing.T) {
+	blocks := familyBlocks(t)
+	genesis := familyGenesis(t)
+	expected := StoreIdentity{StoreID: testStore, ChainID: genesis.Config.ChainID.String(),
+		GenesisHash: genesis.ToBlock().Hash(), StateScheme: rawdb.PathScheme}
+	for _, pinned := range []bool{true, false} {
+		name := map[bool]string{true: "pinned", false: "control"}[pinned]
+		dir := workDir(t, "path-"+name)
+		child := runPathChild(t, dir, pinned)
+		if child["block1_persistent_before"] != false || child["head"] != float64(2) {
+			t.Fatalf("block 1 state was persistent before the pin: %v", child)
+		}
+		before := inventory(t, dir)
+		report, preflightErr := Preflight(dir, expected)
+		if !sameInventory(before, inventory(t, dir)) {
+			t.Fatal("preflight changed the store")
+		}
+		db, closeDB := openStore(t, dir)
+		persistent := persistentIs(db, blocks[0].Root())
+		closeDB()
+		node := openPathNode(t, dir)
+		head := node.head()
+		resumed := node.chain.HasState(blocks[0].Root())
+		recovered := map[string]any{"pinned": pinned, "child": child, "preflight_pins": report.Pins,
+			"block1_persistent_at_restart": persistent, "recovered_head": head.Number.Uint64(),
+			"recovered_root": head.Root.Hex(), "block1_state_resumed": resumed}
+		if pinned {
+			if child["block1_persistent_after"] != true || preflightErr != nil || len(report.Pins) != 1 ||
+				!persistent || !resumed || head.Root != blocks[0].Root() {
+				t.Fatalf("pinned recovery failed: %v %v", recovered, preflightErr)
+			}
+			want := uint64(1)
+			if blocks[1].Root() == blocks[0].Root() {
+				want = 2
+			}
+			if head.Number.Uint64() != want {
+				t.Fatalf("native recovery head %d, want %d", head.Number.Uint64(), want)
+			}
+			provider, err := New(node.db(), node.trieDB(), expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := provider.Release("obs-volatile"); err != nil {
+				t.Fatal(err)
+			}
+		} else if child["block1_persistent_after"] != false || persistent || resumed || head.Number.Uint64() != 0 ||
+			preflightErr != nil || len(report.Pins) != 0 {
+			t.Fatalf("unpinned control did not lose block 1 state: %v %v", recovered, preflightErr)
+		}
+		node.stop()
+		record(t, name, recovered)
+	}
+}
+
+// TestUnitStoreScheme covers the scheme reader of the read-only preflight
+// (D108): the stopped home names the scheme its store records.
+func TestUnitStoreScheme(t *testing.T) {
+	genesis := familyGenesis(t)
+	for _, item := range []struct {
+		name string
+		path bool
+		want string
+	}{{"hash", false, rawdb.HashScheme}, {"path", true, rawdb.PathScheme}} {
+		dir := workDir(t, "scheme-"+item.name)
+		initStore(t, dir, genesis, item.path)
+		before := inventory(t, dir)
+		scheme, err := StoreScheme(dir)
+		if err != nil || scheme != item.want {
+			t.Fatalf("%s store: %q %v, want %q", item.name, scheme, err, item.want)
+		}
+		if !sameInventory(before, inventory(t, dir)) {
+			t.Fatalf("%s: the scheme reader changed the home", item.name)
+		}
+	}
+	if _, err := StoreScheme(workDir(t, "scheme-empty")); err == nil {
+		t.Fatal("a home without a store has a scheme")
 	}
 }

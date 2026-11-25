@@ -60,14 +60,14 @@
     {
       "name": "roots synced",
       "file": "go/bridge.go",
-      "original": "\treturn synced && rawdb.HasLegacyTrieNode(r.db, hash), nil",
-      "replacement": "\treturn (synced || true) && rawdb.HasLegacyTrieNode(r.db, hash), nil"
+      "original": "\tif !synced {\n\t\treturn false, nil\n\t}\n",
+      "replacement": ""
     },
     {
       "name": "roots on disk",
       "file": "go/bridge.go",
-      "original": "\treturn synced && rawdb.HasLegacyTrieNode(r.db, hash), nil",
-      "replacement": "\treturn synced && (true || rawdb.HasLegacyTrieNode(r.db, hash)), nil"
+      "original": "\treturn rawdb.HasLegacyTrieNode(r.db, hash), nil\n",
+      "replacement": "\treturn true, nil\n"
     },
     {
       "name": "roots length",
@@ -293,6 +293,30 @@
       "file": "native/core/extractor_decision.go",
       "original": "\tif err := bc.db.SyncKeyValue(); err != nil {\n\t\treturn NonStatTy, err\n\t}\n\tif err := decision.Resolve(); err != nil {",
       "replacement": "\tif err := decision.Resolve(); err != nil {"
+    },
+    {
+      "name": "barrier record of a path store trusts any recorded state",
+      "file": "go/bridge.go",
+      "original": "\t\tid := rawdb.ReadStateID(r.db, hash)\n\t\treturn id != nil && *id == rawdb.ReadPersistentStateID(r.db), nil\n",
+      "replacement": "\t\tid := rawdb.ReadStateID(r.db, hash)\n\t\treturn id != nil, nil\n"
+    },
+    {
+      "name": "barrier record of a path store is never durable",
+      "file": "go/bridge.go",
+      "original": "\t\tid := rawdb.ReadStateID(r.db, hash)\n\t\treturn id != nil && *id == rawdb.ReadPersistentStateID(r.db), nil\n",
+      "replacement": "\t\tid := rawdb.ReadStateID(r.db, hash)\n\t\treturn false, nil\n"
+    },
+    {
+      "name": "barrier record uses the hash rule under path",
+      "file": "go/bridge.go",
+      "original": "\tif r.path {\n\t\tid := rawdb.ReadStateID(r.db, hash)\n",
+      "replacement": "\tif false {\n\t\tid := rawdb.ReadStateID(r.db, hash)\n"
+    },
+    {
+      "name": "barrier record takes hash for path",
+      "file": "go/bridge.go",
+      "original": "path: scheme == rawdb.PathScheme, ",
+      "replacement": "path: scheme != rawdb.PathScheme, "
     }
   ]
 }

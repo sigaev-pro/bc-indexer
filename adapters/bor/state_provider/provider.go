@@ -1,6 +1,14 @@
 // Package stateprovider keeps native hash-scheme and path-scheme state and
 // their inputs available from capture admission until an allowed release.
 //
+// The scheme decides how a pin makes a state durable (D108). Under the hash
+// scheme the root is committed from the trie cache. Under the path scheme a
+// pin means that the parent state is the persistent layer of the store: the
+// full commit of the path store makes it so, and it waits for the flush only
+// on a capture node, which disallows the asynchronous flush; the pin then
+// requires the persistent state id, so a store that still flushes in the
+// background is refused instead of pinned.
+//
 // This file is shared: the same bytes compile inside the Geth, BSC and Bor
 // module graphs, which stay separate (E01-01.builds). Family differences live
 // in family.go. A portable test checks that the three copies are identical.
@@ -37,8 +45,7 @@ const (
 
 var (
 	// ErrUnsupportedBackend rejects any state backend other than the native
-	// hash and path schemes on a supported key-value layout, and a path
-	// store where the capture path does not support the scheme yet.
+	// hash and path schemes on a supported key-value layout.
 	ErrUnsupportedBackend = errors.New("unsupported state backend")
 	// ErrWrongStore rejects a datadir whose genesis, chain, binding or
 	// profile differs.
@@ -46,7 +53,8 @@ var (
 	// ErrForbiddenPruning rejects a pruning profile or state that can delete
 	// pinned data, and a store that keeps fewer blocks than the floor N (D108).
 	ErrForbiddenPruning = errors.New("forbidden pruning profile")
-	// ErrPinUnavailable reports a live pin whose referenced data is missing.
+	// ErrPinUnavailable reports a live pin whose referenced data is missing,
+	// and a parent state that a commit did not make persistent.
 	ErrPinUnavailable = errors.New("pinned native data is unavailable")
 	// ErrUnknownPin reports a release or lookup of a pin that is not live.
 	ErrUnknownPin = errors.New("unknown pin")
@@ -227,14 +235,14 @@ func New(db ethdb.Database, tdb *triedb.Database, expected StoreIdentity) (*Prov
 		return nil, fmt.Errorf("%w: trie database is the %s provider of a %s store", ErrUnsupportedBackend,
 			tdb.Scheme(), expected.StateScheme)
 	}
-	if _, err := checkStore(db, expected); err != nil {
+	if _, err := checkStore(db, tdb, expected); err != nil {
 		return nil, err
 	}
 	return &Provider{db: db, triedb: tdb, identity: expected}, nil
 }
 
 // Pin makes the parent root durable and then records the pin. The order is
-// the native-capture protocol: commit the root from the trie cache, sync the
+// the native-capture protocol: make the state persistent (flush), sync the
 // key-value store, write the ledger record, and sync again. A RAM reference
 // alone is never a pin. On error no ledger record is written.
 //
@@ -245,10 +253,6 @@ func New(db ethdb.Database, tdb *triedb.Database, expected StoreIdentity) (*Prov
 func (p *Provider) Pin(pin Pin) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.triedb.Scheme() != rawdb.HashScheme {
-		return fmt.Errorf("%w: pins on a %s store wait for the path recovery proof", ErrUnsupportedBackend,
-			p.triedb.Scheme())
-	}
 	if pin.Codes == nil {
 		pin.Codes = []common.Hash{}
 	}
@@ -265,18 +269,42 @@ func (p *Provider) Pin(pin Pin) error {
 		if !samePin(existing, pin) {
 			return fmt.Errorf("%w: %s", ErrPinConflict, pin.ID)
 		}
-		return Verify(p.db, existing)
+		return p.Verify(existing)
 	}
-	if err := p.triedb.Commit(pin.ParentRoot, false); err != nil {
-		return fmt.Errorf("commit pinned root %s: %w", pin.ParentRoot, err)
+	if err := FlushState(p.db, p.triedb, pin.ParentRoot); err != nil {
+		return fmt.Errorf("%w: pin %s: %w", ErrPinUnavailable, pin.ID, err)
 	}
-	if err := p.db.SyncKeyValue(); err != nil {
-		return fmt.Errorf("sync pinned root %s: %w", pin.ParentRoot, err)
-	}
-	if err := Verify(p.db, pin); err != nil {
+	if err := p.Verify(pin); err != nil {
 		return err
 	}
 	return writeSynced(p.db, pinKey(pin.ID), pin)
+}
+
+// FlushState makes the state of root durable and returns when it is. Under
+// the hash scheme the root is committed from the trie cache. Under the path
+// scheme the state is durable when it is the persistent layer of the store: a
+// state that already is stays untouched, any other is made so by the full
+// commit of the path store. That commit waits for its flush only on a capture
+// node, which disallows the asynchronous flush; the check of the persistent
+// state id fails closed on a store that still flushes in the background. The
+// key-value sync then makes the commit durable.
+func FlushState(db ethdb.Database, tdb *triedb.Database, root common.Hash) error {
+	if tdb.Scheme() != rawdb.PathScheme || !PersistentState(db, root) {
+		if err := tdb.Commit(root, false); err != nil {
+			return fmt.Errorf("commit state root %s: %w", root, err)
+		}
+		if tdb.Scheme() == rawdb.PathScheme && !PersistentState(db, root) {
+			return fmt.Errorf("%w: commit of root %s returned before it is the persistent state", ErrPinUnavailable, root)
+		}
+	}
+	return db.SyncKeyValue()
+}
+
+// PersistentState reports whether root is the persistent layer of a path
+// store: the store recorded its state id and it is the persistent state id.
+func PersistentState(db ethdb.Database, root common.Hash) bool {
+	id := rawdb.ReadStateID(db, root)
+	return id != nil && *id == rawdb.ReadPersistentStateID(db)
 }
 
 // Release durably removes a live pin. After release the native store no
@@ -322,11 +350,22 @@ func Pins(db ethdb.Database) ([]Pin, error) {
 }
 
 // Verify checks that every reference of a pin is readable from the native
-// store: the state root node, each header, the root binding and each code.
-// Like the native pruner, the root node stands for its whole trie; the
-// runtime tests walk the complete trie separately.
-func Verify(db ethdb.Database, pin Pin) error {
-	if !rawdb.HasLegacyTrieNode(db, pin.ParentRoot) {
+// store without a trie database: the state, each header, the root binding
+// and each code. Like the native pruner, the root node stands for its whole
+// trie; the runtime tests walk the complete trie separately. Under the path
+// scheme a state whose id the store recorded is accepted: the open provider
+// checks that the state histories still exist (Provider.Verify).
+func Verify(db ethdb.Database, pin Pin) error { return verify(db, nil, pin) }
+
+// Verify checks a live pin of this provider like Verify, with the trie
+// database of the store. Under the path scheme the pinned state is the
+// persistent layer, or it is below it and the state histories that rebuild it
+// are complete (the native Recoverable); a state that was never committed is
+// unavailable.
+func (p *Provider) Verify(pin Pin) error { return verify(p.db, p.triedb, pin) }
+
+func verify(db ethdb.Database, tdb *triedb.Database, pin Pin) error {
+	if !stateAvailable(db, tdb, pin.ParentRoot) {
 		return fmt.Errorf("%w: pin %s state root %s", ErrPinUnavailable, pin.ID, pin.ParentRoot)
 	}
 	for index, ref := range pin.Headers {
@@ -344,6 +383,32 @@ func Verify(db ethdb.Database, pin Pin) error {
 		}
 	}
 	return nil
+}
+
+// stateAvailable reports whether the state of root can be read. Under the
+// hash scheme its root trie node stands for the trie. Under the path scheme
+// the store must have recorded the state id of the root: the state is then
+// the persistent layer, or below it. A reader with the trie database also
+// requires the state histories that rebuild a state below the persistent
+// layer; a reader without one leaves that to the provider of the open store.
+func stateAvailable(db ethdb.Database, tdb *triedb.Database, root common.Hash) bool {
+	switch {
+	case tdb != nil && tdb.Scheme() == rawdb.PathScheme:
+		id := rawdb.ReadStateID(db, root)
+		if id == nil {
+			return false
+		}
+		if *id == rawdb.ReadPersistentStateID(db) {
+			return true
+		}
+		recoverable, err := tdb.Recoverable(root)
+		return err == nil && recoverable
+	case tdb == nil && rawdb.ReadStateScheme(db) == rawdb.PathScheme:
+		// A store without its state records no scheme and no state id.
+		return rawdb.ReadStateID(db, root) != nil
+	default:
+		return rawdb.HasLegacyTrieNode(db, root)
+	}
 }
 
 // RequireNoLivePins is the ledger check that every native state deletion
@@ -461,7 +526,7 @@ func storeCoverage(db ethdb.Database) (Coverage, error) {
 
 // checkStore validates an opened store against the expected identity. An
 // empty expected StoreID admits only an unbound store without pins.
-func checkStore(db ethdb.Database, expected StoreIdentity) (StoreReport, error) {
+func checkStore(db ethdb.Database, tdb *triedb.Database, expected StoreIdentity) (StoreReport, error) {
 	expected = expected.withProfile()
 	probe := expected
 	if probe.StoreID == "" {
@@ -509,7 +574,7 @@ func checkStore(db ethdb.Database, expected StoreIdentity) (StoreReport, error) 
 		if pin.Store != bound {
 			return StoreReport{}, fmt.Errorf("%w: pin %s names another store", ErrWrongStore, pin.ID)
 		}
-		if err := Verify(db, pin); err != nil {
+		if err := verify(db, tdb, pin); err != nil {
 			return StoreReport{}, err
 		}
 		report.Pins = append(report.Pins, pin.ID)

@@ -69,7 +69,7 @@ func Preflight(instanceDir string, expected StoreIdentity) (StoreReport, error) 
 		return StoreReport{}, err
 	}
 	defer db.Close()
-	report, err := checkStore(db, expected)
+	report, err := checkStore(db, nil, expected)
 	report.Engine = engine
 	return report, err
 }

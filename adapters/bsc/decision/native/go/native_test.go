@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/parlia"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -44,7 +45,10 @@ const (
 	envChildMode  = "EXTRACTOR_DECISION_CHILD_MODE"
 	envChildHome  = "EXTRACTOR_DECISION_CHILD_HOME"
 	envChildTrace = "EXTRACTOR_DECISION_CHILD_TRACE"
-	probeStoreID  = "0123456789abcdef0123456789abcdef"
+	// envScheme names the state scheme of the probe stores (D108): hash, the
+	// default, or path.
+	envScheme    = "EXTRACTOR_DECISION_STATE_SCHEME"
+	probeStoreID = "0123456789abcdef0123456789abcdef"
 	// mirrorPrefix holds the applied decisions of the probe mirror.
 	mirrorPrefix = "extractor-probe-mirror-v1/"
 )
@@ -68,6 +72,39 @@ var crashModes = []string{
 	"head-written",             // AC-CAP-07-03: head batch with the marker written, NATIVE_DECIDED not
 	"decided-unsynced-drop",    // marker durable, NATIVE_DECIDED written and lost
 	"native-rejection",         // AC-CAP-07-06: durable intent, native bad-block record
+}
+
+// probeScheme is the state scheme of the probe stores.
+func probeScheme() string {
+	switch scheme := os.Getenv(envScheme); scheme {
+	case "":
+		return rawdb.HashScheme
+	case rawdb.HashScheme, rawdb.PathScheme:
+		return scheme
+	default:
+		panic("unknown state scheme " + scheme)
+	}
+}
+
+// stateOnDisk reports whether the store holds the state of root: under the
+// hash scheme its root trie node, under the path scheme the state itself as
+// a layer of the path store.
+func stateOnDisk(db ethdb.Database, chain *core.BlockChain, root common.Hash) bool {
+	if chain.TrieDB().Scheme() == rawdb.PathScheme {
+		return chain.HasState(root)
+	}
+	return rawdb.HasLegacyTrieNode(db, root)
+}
+
+// stateIds is the state id of root and the persistent state id of the store,
+// as text. Under the path scheme the first names the persistent layer when
+// both are equal and not "none".
+func stateIds(db ethdb.Database, root common.Hash) (string, string) {
+	id := "none"
+	if value := rawdb.ReadStateID(db, root); value != nil {
+		id = fmt.Sprint(*value)
+	}
+	return id, fmt.Sprint(rawdb.ReadPersistentStateID(db))
 }
 
 func probeEnv(t testing.TB, name string) string {
@@ -359,7 +396,12 @@ func startNode(t testing.TB, fx fixture, home, model string, emit func(bsc.Event
 	n.store = &probeStore{db: n.db, model: model, emit: emit, pending: map[string][]byte{}}
 	n.mirror = probeMirror{db: n.db}
 	config := core.DefaultConfig()
-	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = rawdb.HashScheme, false, 0
+	config.StateScheme, config.ArchiveMode, config.SnapshotLimit = probeScheme(), false, 0
+	if config.StateScheme == rawdb.PathScheme {
+		// A capture node disallows the asynchronous flush of the path store
+		// (the native patch of D108).
+		config = config.WithNoAsyncFlush(true)
+	}
 	api, backend := bsc.NewSystemCallAPI()
 	engine := parlia.New(fx.genesis.Config, n.db, api, fx.genesis.ToBlock().Hash())
 	chain, err := core.NewBlockChain(n.db, fx.genesis, engine, config)
@@ -370,7 +412,7 @@ func startNode(t testing.TB, fx fixture, home, model string, emit func(bsc.Event
 	n.chain = chain
 	backend.Bind(chain, nil)
 	identity := stateprovider.StoreIdentity{StoreID: probeStoreID, ChainID: fx.genesis.Config.ChainID.String(),
-		GenesisHash: chain.Genesis().Hash(), StateScheme: rawdb.HashScheme}
+		GenesisHash: chain.Genesis().Hash(), StateScheme: config.StateScheme}
 	hook, err := Start(admission.NewGuard(), n.db, chain, Config{Seam: bsc.Config{Producer: probeProducer,
 		Identity: identity, GenesisFile: fx.genesisFile, NativeCommit: fx.commit, Store: n.store, Emit: emit},
 		Mirror: n.mirror})
@@ -622,7 +664,14 @@ func TestNativeBSCDecisionChild(t *testing.T) {
 			}
 		}
 	case "barrier-synced":
-		onEvent("barrier", func() { crash(mode) })
+		onEvent("barrier", func() {
+			// The barrier returned: the state of the block is the persistent
+			// state of the store (D108, P1).
+			id, persistent := stateIds(n.db, fx.blocks[0].Root())
+			tr.emit(bsc.Event{"event": "barrier-check", "observation": block1, "block1_state_id": id,
+				"persistent_state_id": persistent})
+			crash(mode)
+		})
 	case "intent-synced":
 		n.store.afterSync = func(scope, owner, kind string) {
 			if scope == "decision" && owner == run && kind == "counter" {
@@ -710,6 +759,13 @@ func TestNativeBSCDecision(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// After the decisions the persistent state of the store is the state
+		// of the head (D108): the barrier of every observed block commits it,
+		// and block 2 has the state root of its parent (P5).
+		sc.Extra["state_scheme"] = n.chain.TrieDB().Scheme()
+		sc.Extra["block2_has_the_root_of_block1"] = fmt.Sprint(fx.blocks[1].Root() == fx.blocks[0].Root())
+		id, persistent := stateIds(n.db, n.chain.CurrentBlock().Root)
+		sc.Extra["head_state_id"], sc.Extra["persistent_state_id"] = id, persistent
 		var decided string
 		n.guarded(func(adm *admission.Admission, token *admission.Token) error {
 			obligations, err := n.hook.Bridge().Obligations(token)
@@ -755,7 +811,12 @@ func TestNativeBSCDecision(t *testing.T) {
 		case "head-written":
 			movedHeadCheck(t, fx, n, sc)
 		}
-		onDisk := rawdb.HasLegacyTrieNode(n.db, fx.blocks[0].Root())
+		// The persistent state before the native startup, which may roll it
+		// back to the head (D108), and after it.
+		sc.Extra["state_ids_before_restart"] = restartIds(t, fx, home)
+		_, after := stateIds(n.db, fx.blocks[0].Root())
+		sc.Extra["persistent_state_id_after_restart"] = after
+		onDisk := stateOnDisk(n.db, n.chain, fx.blocks[0].Root())
 		sc.RootAtRestart = &onDisk
 		headAtRestart := n.chain.CurrentBlock().Number.Uint64()
 		sc.HeadAtRestart = &headAtRestart
@@ -789,6 +850,16 @@ func TestNativeBSCDecision(t *testing.T) {
 // observation is not replayed before the bridge opens (ErrDeferred), and with
 // the bridge open, another block is refused while the intent of block 1 is
 // unresolved (ErrPending). The bridge is then closed again for Recover.
+// restartIds reads the state id of the block 1 root and the persistent state
+// id of the stopped home, before the node opens it.
+func restartIds(t *testing.T, fx fixture, home string) string {
+	t.Helper()
+	db := openDisk(t, home)
+	defer db.Close()
+	id, persistent := stateIds(db, fx.blocks[0].Root())
+	return id + "/" + persistent
+}
+
 func pendingChecks(t *testing.T, fx fixture, n *node, sc *scenario) {
 	_, err := n.chain.InsertChain(fx.blocks[:1])
 	sc.Extra["before_bridge"] = errText(err)

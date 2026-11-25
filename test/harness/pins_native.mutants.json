@@ -67,13 +67,6 @@
       "replacement": "\tif false {\n"
     },
     {
-      "name": "pin on a path store is not refused",
-      "family": "geth",
-      "file": "provider.go",
-      "original": "\tif p.triedb.Scheme() != rawdb.HashScheme {\n",
-      "replacement": "\tif false {\n"
-    },
-    {
       "name": "pin store without a profile is refused",
       "family": "geth",
       "file": "provider.go",
@@ -175,8 +168,8 @@
       "name": "store check expects no profile",
       "family": "geth",
       "file": "provider.go",
-      "original": "func checkStore(db ethdb.Database, expected StoreIdentity) (StoreReport, error) {\n\texpected = expected.withProfile()\n",
-      "replacement": "func checkStore(db ethdb.Database, expected StoreIdentity) (StoreReport, error) {\n"
+      "original": "func checkStore(db ethdb.Database, tdb *triedb.Database, expected StoreIdentity) (StoreReport, error) {\n\texpected = expected.withProfile()\n",
+      "replacement": "func checkStore(db ethdb.Database, tdb *triedb.Database, expected StoreIdentity) (StoreReport, error) {\n"
     },
     {
       "name": "identity without a profile is complete",
@@ -200,6 +193,85 @@
       "replacement": "\t\tfalse {\n"
     },
     {
+      "name": "flush commits a persistent state again",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif tdb.Scheme() != rawdb.PathScheme || !PersistentState(db, root) {\n",
+      "replacement": "\tif true {\n"
+    },
+    {
+      "name": "flush accepts a commit that returned before the flush",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tif tdb.Scheme() == rawdb.PathScheme && !PersistentState(db, root) {\n",
+      "replacement": "\t\tif false {\n",
+      "equivalent": "UNOBSERVABLE in a process: a capture node waits for the flush (NoAsyncFlush), so the commit never returns before it; a store that flushes in the background is refused by the same check and needs a controlled flush timing"
+    },
+    {
+      "name": "flush does not sync the store",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\treturn db.SyncKeyValue()\n}\n\n// PersistentState",
+      "replacement": "\treturn nil\n}\n\n// PersistentState",
+      "equivalent": "UNOBSERVABLE without power loss: the sync of the key-value store (E01-04.early_faults)"
+    },
+    {
+      "name": "any recorded state is the persistent layer",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tid := rawdb.ReadStateID(db, root)\n\treturn id != nil && *id == rawdb.ReadPersistentStateID(db)\n",
+      "replacement": "\tid := rawdb.ReadStateID(db, root)\n\treturn id != nil\n"
+    },
+    {
+      "name": "persistent layer of a state never committed",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tid := rawdb.ReadStateID(db, root)\n\treturn id != nil && *id == rawdb.ReadPersistentStateID(db)\n",
+      "replacement": "\tid := rawdb.ReadStateID(db, root)\n\treturn *id == rawdb.ReadPersistentStateID(db)\n"
+    },
+    {
+      "name": "path reader accepts a state never committed",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tif id == nil {\n\t\t\treturn false\n\t\t}\n\t\tif *id == rawdb.ReadPersistentStateID(db) {",
+      "replacement": "\t\tif *id == rawdb.ReadPersistentStateID(db) {"
+    },
+    {
+      "name": "path reader needs no persistent layer",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tif *id == rawdb.ReadPersistentStateID(db) {\n\t\t\treturn true\n\t\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "path reader trusts a silent history check",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\trecoverable, err := tdb.Recoverable(root)\n\t\treturn err == nil && recoverable\n",
+      "replacement": "\t\t_, err := tdb.Recoverable(root)\n\t\treturn err == nil\n"
+    },
+    {
+      "name": "ledger reader accepts a state never committed",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\treturn rawdb.ReadStateID(db, root) != nil\n",
+      "replacement": "\t\treturn true\n"
+    },
+    {
+      "name": "path rules apply to every trie database",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tcase tdb != nil && tdb.Scheme() == rawdb.PathScheme:\n",
+      "replacement": "\tcase tdb != nil:\n"
+    },
+    {
+      "name": "ledger reader applies the hash rule to a path store",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tcase tdb == nil && rawdb.ReadStateScheme(db) == rawdb.PathScheme:\n",
+      "replacement": "\tcase false:\n"
+    },
+    {
       "name": "floor N of bsc (bsc)",
       "family": "bsc",
       "file": "family.go",
@@ -219,6 +291,13 @@
       "file": "family.go",
       "original": "return \"state.scheme=path;gcmode=full;history.blocks>=600000;history.state>=600000;tries=local\"",
       "replacement": "return \"state.scheme=path;gcmode=full\""
+    },
+    {
+      "name": "store scheme is not read (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\treturn rawdb.ReadStateScheme(db), nil\n",
+      "replacement": "\treturn rawdb.PathScheme, nil\n"
     },
     {
       "name": "legacy offset of BSC is not read (bsc)",

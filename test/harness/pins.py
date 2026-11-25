@@ -46,10 +46,12 @@ COMMON_TESTS = (
     "TestUnitCheckProfileFields", "TestNativeVolatileTrieLost", "TestNativePinnedStatePruning",
     "TestNativeRewindDeletesPinnedHeader", "TestNativeStorePreflight", "TestNativeEffectiveProfile",
     "TestUnitLedgerPinOfAnotherStoreRejects", "TestUnitGuardedPrunerPaths", "TestUnitFreezeLimit",
-    "TestUnitRetentionFloor", "TestUnitPathStoreOpensWithoutPins", "TestUnitStoreProfile", "TestUnitFloorIsNative")
+    "TestUnitRetentionFloor", "TestUnitPathPinMakesParentPersistent", "TestUnitStoreProfile", "TestUnitFloorIsNative")
 # TestNativeRetentionFloor prunes a real ancient store; Geth keeps every block at its commit.
-FAMILY_TESTS = {"geth": (), "bsc": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor"),
-                "bor": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor")}
+# TestNativePathPinSurvivesKill is the path-scheme pin of D108 (P3); its child test passes outside a child.
+FAMILY_TESTS = {"geth": (), "bor": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor"),
+                "bsc": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor", "TestNativePathPinChild",
+                        "TestNativePathPinSurvivesKill", "TestUnitStoreScheme")}
 # Independent copies of the fast-node profile of D108. N is the retention floor of a client;
 # a profile string is the state profile of a scheme, whose SHA-256 binds the profile to a store.
 RETENTION_FLOOR = {"geth": 90000, "bsc": 600000, "bor": 90000}
@@ -466,6 +468,19 @@ def evaluate_report(family, rows, blocks):
     else:
         require("pruned_store_at_floor" not in preflight and "pruned_store_below_floor" not in preflight,
                 f"{family} has no pruned homes to check")
+    if family == "bsc":
+        # The path-scheme pin (D108, P3): the pin is the persistent layer of the path store.
+        path_pin = named[("TestNativePathPinSurvivesKill", "pinned")]
+        path_control = named[("TestNativePathPinSurvivesKill", "control")]
+        require(path_pin["child"]["block1_persistent_before"] is False and
+                path_pin["child"]["block1_persistent_after"] is True and
+                path_pin["block1_persistent_at_restart"] is True and path_pin["block1_state_resumed"] is True and
+                path_pin["preflight_pins"] == ["obs-volatile"] and path_pin["recovered_root"] == root1 and
+                path_pin["recovered_head"] == (2 if root2 == root1 else 1), "Path pin did not survive the kill")
+        require(path_control["child"]["block1_persistent_after"] is False and
+                path_control["block1_persistent_at_restart"] is False and path_control["block1_state_resumed"] is False and
+                path_control["recovered_head"] == 0 and path_control["preflight_pins"] == [],
+                "Unpinned path control did not lose the volatile state")
     profile = named[("TestNativeEffectiveProfile", "profile")]
     expected = PROFILE_EXPECTED[family]
     require(set(profile["cases"]) == set(expected) == set(profile["results"]), "Profile cases differ from the declared set")

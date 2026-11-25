@@ -218,7 +218,7 @@ func (s *Seam) Store() sourceinputs.Store { return s.store }
 
 // Static reads back and checks the static capsule of an observation.
 func (s *Seam) Static(key string) (Static, error) {
-	return ReadStatic(s.store, key, s.genesis, s.commit)
+	return ReadStatic(s.store, key, s.genesis, s.commit, s.identity.StateScheme)
 }
 
 // Genesis returns the genesis header, a static input of every capsule.
@@ -328,11 +328,11 @@ func (s *Seam) Begin(chain *core.BlockChain, block *types.Block) (core.Extractor
 // prepare pins the parent and seals the static capsule (INPUT_PREPARING).
 func (s *Seam) prepare(chain *core.BlockChain, key string, block *types.Block, parent *types.Header) error {
 	items, err := BlockItems(block, func(number uint64) *types.Header { return chain.GetHeaderByNumber(number) },
-		s.genesis, s.commit)
+		s.genesis, s.commit, s.identity.StateScheme)
 	if err != nil {
 		return err
 	}
-	static, err := DecodeStatic(itemMap(items), s.genesis, s.commit)
+	static, err := DecodeStatic(itemMap(items), s.genesis, s.commit, s.identity.StateScheme)
 	if err != nil {
 		return err
 	}
@@ -340,8 +340,9 @@ func (s *Seam) prepare(chain *core.BlockChain, key string, block *types.Block, p
 	for _, header := range static.Ancestors {
 		refs = append(refs, stateprovider.HeaderRef{Hash: header.Hash(), Number: header.Number.Uint64()})
 	}
-	pin := stateprovider.Pin{ID: key, Store: s.identity, Profile: ProfileDigest(), ParentRoot: parent.Root,
-		Headers: refs, Codes: []common.Hash{}}
+	pin := stateprovider.Pin{ID: key, Store: s.identity, Profile: stateprovider.ProfileDigest(s.identity.StateScheme),
+		ParentRoot: parent.Root,
+		Headers:    refs, Codes: []common.Hash{}}
 	if err := s.provider.Pin(pin); err != nil {
 		return err
 	}
@@ -351,13 +352,6 @@ func (s *Seam) prepare(chain *core.BlockChain, key string, block *types.Block, p
 	}
 	s.emit(Event{"event": "sealed", "observation": key})
 	return nil
-}
-
-// ProfileDigest is the profile field of every pin: the SHA-256 of the
-// state-profile item, as 64 lowercase hex digits.
-func ProfileDigest() string {
-	digest := sha256.Sum256([]byte(StateProfile))
-	return hex.EncodeToString(digest[:])
 }
 
 func itemMap(items []sourceinputs.Item) map[string][]byte {
@@ -375,7 +369,7 @@ func (s *Seam) Fetches() int64 { return s.fetches.Load() }
 // capsule headers and the logged snapshots. The candidate, which the caller matched, holds the block hash, and Admit
 // bound the capsule digest, so the capsule holds this block.
 func (s *Seam) resume(chain *core.BlockChain, key string, block *types.Block) (core.ExtractorObservation, error) {
-	static, err := ReadStatic(s.store, key, s.genesis, s.commit)
+	static, err := ReadStatic(s.store, key, s.genesis, s.commit, s.identity.StateScheme)
 	if err != nil {
 		return nil, err
 	}
@@ -649,7 +643,7 @@ func (s *Seam) RecoverObligations(chain *core.BlockChain) (failures []error, err
 			}
 			s.emit(Event{"event": "abandon", "observation": obs.Key})
 		case admission.Admitted:
-			static, err := ReadStatic(s.store, obs.Key, s.genesis, s.commit)
+			static, err := ReadStatic(s.store, obs.Key, s.genesis, s.commit, s.identity.StateScheme)
 			if err != nil {
 				return nil, err
 			}

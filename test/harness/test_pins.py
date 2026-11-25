@@ -67,6 +67,15 @@ def report(family="geth", same_root=False):
              "detail": {"layer": "profile", "error": "native profile violates capture constraints: " + expected[name]}}
             for name in cases}}),
     ]
+    if family == "bsc":
+        rows.append(("TestNativePathPinSurvivesKill", "pinned", {
+            "pinned": True, "child": {"head": 2, "block1_persistent_before": False, "block1_persistent_after": True},
+            "preflight_pins": ["obs-volatile"], "block1_persistent_at_restart": True, "block1_state_resumed": True,
+            "recovered_head": 2 if root2 == ROOT1 else 1, "recovered_root": ROOT1}))
+        rows.append(("TestNativePathPinSurvivesKill", "control", {
+            "pinned": False, "child": {"head": 2, "block1_persistent_before": False, "block1_persistent_after": False},
+            "preflight_pins": [], "block1_persistent_at_restart": False, "block1_state_resumed": False,
+            "recovered_head": 0, "recovered_root": "0x" + "33" * 32}))
     if family in pins.PRUNING_CLIENTS:
         rows += [
             ("TestNativeStorePreflight", "coverage", {"oldest": pins.PRUNED_AT_FLOOR, "head": floor + pins.PRUNED_AT_FLOOR,
@@ -247,6 +256,31 @@ class ReportTests(unittest.TestCase):
             with self.subTest(family=family, label="a client without block pruning has no pruned homes"), \
                     self.assertRaisesRegex(ValueError, "no pruned homes"):
                 pins.evaluate_report(family, rows, blocks())
+
+    def test_path_pin_observations_reject_when_broken(self):
+        mutations = {
+            "pin committed nothing": ("pinned", lambda v: v["child"].update(block1_persistent_after=False)),
+            "pin was not needed": ("pinned", lambda v: v["child"].update(block1_persistent_before=True)),
+            "pin lost at the restart": ("pinned", lambda v: v.update(block1_persistent_at_restart=False)),
+            "state not resumed": ("pinned", lambda v: v.update(block1_state_resumed=False)),
+            "pin not listed": ("pinned", lambda v: v.update(preflight_pins=[])),
+            "resumed from another root": ("pinned", lambda v: v.update(recovered_root=ROOT2)),
+            "resumed at another head": ("pinned", lambda v: v.update(recovered_head=0)),
+            "control kept the state": ("control", lambda v: v.update(block1_persistent_at_restart=True)),
+            "control did not rewind": ("control", lambda v: v.update(recovered_head=2)),
+        }
+        for label, (name, change) in mutations.items():
+            rows = report("bsc", same_root=False)
+            change(find(rows, "TestNativePathPinSurvivesKill", name))
+            with self.subTest(label), self.assertRaises(ValueError):
+                pins.evaluate_report("bsc", rows, blocks())
+        # Only BSC has the path pin test: the other families pass without its rows.
+        pins.evaluate_report("bor", report("bor"), blocks())
+        rows = report("bsc", same_root=False)
+        for row in [row for row in rows if row["test"] == "TestNativePathPinSurvivesKill"]:
+            rows.remove(row)
+        with self.assertRaises(KeyError):
+            pins.evaluate_report("bsc", rows, blocks())
 
     def test_pruned_home_rows_are_required(self):
         for family in pins.PRUNING_CLIENTS:

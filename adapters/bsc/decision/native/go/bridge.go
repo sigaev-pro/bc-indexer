@@ -46,20 +46,24 @@ type Purger struct {
 // Purge deletes the capsule and dependency log of the observation.
 func (p Purger) Purge(observation string) error { return sourceinputs.Purge(p.DB, observation) }
 
-// Roots is the child-root barrier of the hash trie database. A root is
-// durable when the barrier of this process synced it and its node is in the
-// store. A root node that a store holds after a restart does not prove that
-// its subtrie is complete (the trie flush writes several batches), so a
-// restart replays every undecided observation, whose barrier then syncs it.
+// Roots is the child-root barrier record of the native trie database. A root
+// is durable when the barrier of this process synced it and its state is in
+// the store. Under the hash scheme a root node that a store holds after a
+// restart does not prove that its subtrie is complete (the trie flush writes
+// several batches), so a restart replays every undecided observation, whose
+// barrier then syncs it. Under the path scheme (D108) the root must be the
+// persistent layer of the store: the full commit writes it in one batch.
 type Roots struct {
 	db     ethdb.KeyValueReader
+	path   bool
 	mu     sync.Mutex
 	synced map[common.Hash]bool
 }
 
-// NewRoots returns the barrier record of a native store.
-func NewRoots(db ethdb.KeyValueReader) *Roots {
-	return &Roots{db: db, synced: map[common.Hash]bool{}}
+// NewRoots returns the barrier record of a native store of the given state
+// scheme.
+func NewRoots(db ethdb.KeyValueReader, scheme string) *Roots {
+	return &Roots{db: db, path: scheme == rawdb.PathScheme, synced: map[common.Hash]bool{}}
 }
 
 // Synced records a root whose barrier (commit, trie flush, sync) returned.
@@ -79,7 +83,14 @@ func (r *Roots) Durable(root string) (bool, error) {
 	r.mu.Lock()
 	synced := r.synced[hash]
 	r.mu.Unlock()
-	return synced && rawdb.HasLegacyTrieNode(r.db, hash), nil
+	if !synced {
+		return false, nil
+	}
+	if r.path {
+		id := rawdb.ReadStateID(r.db, hash)
+		return id != nil && *id == rawdb.ReadPersistentStateID(r.db), nil
+	}
+	return rawdb.HasLegacyTrieNode(r.db, hash), nil
 }
 
 // Config configures a Hook.
@@ -131,7 +142,7 @@ func Start(guard *admission.Guard, db ethdb.Database, chain *core.BlockChain, cf
 	if emit == nil {
 		emit = func(bsc.Event) {}
 	}
-	return &Hook{seam: seam, db: db, store: store, storeID: cfg.Seam.Identity.StoreID, roots: NewRoots(db),
+	return &Hook{seam: seam, db: db, store: store, storeID: cfg.Seam.Identity.StoreID, roots: NewRoots(db, chain.TrieDB().Scheme()),
 		mirror: cfg.Mirror, emit: emit}, nil
 }
 

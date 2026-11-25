@@ -21,7 +21,7 @@ import (
 
 func TestUnitRoots(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
-	roots := NewRoots(db)
+	roots := NewRoots(db, rawdb.HashScheme)
 	root := common.HexToHash("0x01")
 	other := common.HexToHash("0x02")
 	rawdb.WriteLegacyTrieNode(db, other, []byte{0xc0})
@@ -342,5 +342,38 @@ func TestUnitIntendBeforeTheBridgeOpens(t *testing.T) {
 	o := &observation{hook: &Hook{}}
 	if _, err := o.Intend(nil, nil, nil, true); !errors.Is(err, ErrDeferred) {
 		t.Fatalf("Intend without the bridge: %v", err)
+	}
+}
+
+// TestUnitRootsPathScheme covers the barrier record of a path store (D108): a
+// synced root is durable when it is the persistent layer of the store; a
+// state above it, or one the store never recorded, is not.
+func TestUnitRootsPathScheme(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	roots := NewRoots(db, rawdb.PathScheme)
+	layer, above, unknown := common.HexToHash("0x01"), common.HexToHash("0x02"), common.HexToHash("0x03")
+	rawdb.WriteLegacyTrieNode(db, unknown, []byte{0xc0})
+	rawdb.WriteStateID(db, layer, 1)
+	rawdb.WriteStateID(db, above, 2)
+	rawdb.WritePersistentStateID(db, 1)
+	roots.Synced(layer)
+	roots.Synced(above)
+	if got, _ := roots.Durable(hex.EncodeToString(layer.Bytes())); !got {
+		t.Fatal("the persistent layer of a synced root is not durable")
+	}
+	for _, c := range []struct {
+		name string
+		hash common.Hash
+	}{{"a synced state above the persistent layer", above}, {"a synced state with a trie node but no state id", unknown}} {
+		if got, _ := roots.Durable(hex.EncodeToString(c.hash.Bytes())); got {
+			t.Fatalf("%s is durable", c.name)
+		}
+	}
+	rawdb.WritePersistentStateID(db, 2)
+	if got, _ := roots.Durable(hex.EncodeToString(above.Bytes())); !got {
+		t.Fatal("the persistent layer is not durable after it moved up")
+	}
+	if got, _ := roots.Durable(hex.EncodeToString(layer.Bytes())); got {
+		t.Fatal("a state below the persistent layer is durable")
 	}
 }

@@ -51,7 +51,7 @@ func unitReader(t *testing.T, n int, log *sourceinputs.Log, fetches *int, handof
 	t.Helper()
 	genesis, _ := unitGenesis(t)
 	headers := unitChain(genesis.Block.Header(), n)
-	static, err := DecodeStatic(unitItems(t, genesis, headers, n), genesis, "commit")
+	static, err := DecodeStatic(unitItems(t, genesis, headers, n), genesis, "commit", rawdb.HashScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func unitChain(genesis *types.Header, count int) []*types.Header {
 func unitItems(t *testing.T, genesis *Genesis, headers []*types.Header, n int) map[string][]byte {
 	t.Helper()
 	block := types.NewBlockWithHeader(headers[n])
-	items, err := BlockItems(block, func(number uint64) *types.Header { return headers[number] }, genesis, "commit")
+	items, err := BlockItems(block, func(number uint64) *types.Header { return headers[number] }, genesis, "commit", rawdb.HashScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestUnitStaticValueItems(t *testing.T) {
 	genesis, _ := unitGenesis(t)
 	headers := unitChain(genesis.Block.Header(), 6)
 	items := unitItems(t, genesis, headers, 6)
-	static, err := DecodeStatic(items, genesis, "commit")
+	static, err := DecodeStatic(items, genesis, "commit", rawdb.HashScheme)
 	if err != nil || static.Block.NumberU64() != 6 || len(static.Ancestors) != 5 {
 		t.Fatalf("decode: %v", err)
 	}
@@ -257,11 +257,11 @@ func TestUnitStaticValueItems(t *testing.T) {
 			changed[k] = v
 		}
 		changed[name] = value
-		if _, err := DecodeStatic(changed, genesis, "commit"); !errors.Is(err, ErrStaticInput) {
+		if _, err := DecodeStatic(changed, genesis, "commit", rawdb.HashScheme); !errors.Is(err, ErrStaticInput) {
 			t.Errorf("tampered %s accepted: %v", name, err)
 		}
 	}
-	if _, err := DecodeStatic(items, genesis, "another-commit"); !errors.Is(err, ErrStaticInput) {
+	if _, err := DecodeStatic(items, genesis, "another-commit", rawdb.HashScheme); !errors.Is(err, ErrStaticInput) {
 		t.Errorf("another home commit accepted: %v", err)
 	}
 }
@@ -312,7 +312,7 @@ func unitProvider(t *testing.T) (*Genesis, ethdb.Database, *stateprovider.Provid
 func TestUnitPinAdapter(t *testing.T) {
 	genesis, db, provider, identity := unitProvider(t)
 	root := genesis.Block.Root()
-	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: ProfileDigest(),
+	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: stateprovider.ProfileDigest(rawdb.HashScheme),
 		ParentRoot: root, Headers: []stateprovider.HeaderRef{{Hash: genesis.Block.Hash(), Number: 0}}, Codes: []common.Hash{}}
 	if err := provider.Pin(pin); err != nil {
 		t.Fatal(err)
@@ -429,7 +429,7 @@ func TestUnitRetentionInstall(t *testing.T) {
 	}
 	headers := unitChain(genesis.Block.Header(), 1)
 	rawdb.WriteHeader(db, headers[1])
-	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: ProfileDigest(),
+	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: stateprovider.ProfileDigest(rawdb.HashScheme),
 		ParentRoot: genesis.Block.Root(), Headers: []stateprovider.HeaderRef{{Hash: genesis.Block.Hash(), Number: 0},
 			{Hash: headers[1].Hash(), Number: 1}}}
 	// The second header has no state; the ledger record is written directly.
@@ -519,7 +519,7 @@ func TestRetentionFreezerKeepsAPinnedSideBranch(t *testing.T) {
 	db, _, side = freezerChain(t)
 	identity := stateprovider.StoreIdentity{StoreID: strings.Repeat("d", 32), ChainID: "1337",
 		GenesisHash: rawdb.ReadCanonicalHash(db, 0), StateScheme: rawdb.HashScheme}
-	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: ProfileDigest(),
+	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: stateprovider.ProfileDigest(rawdb.HashScheme),
 		ParentRoot: side[0].Root(), Headers: []stateprovider.HeaderRef{{Hash: side[0].Hash(), Number: 5}}, Codes: []common.Hash{}}
 	record, _ := json.Marshal(pin)
 	db.Put([]byte(PinRecordPrefix+pin.ID), record)
@@ -539,12 +539,12 @@ func TestUnitBlockItemsRefuseBadInputs(t *testing.T) {
 	genesis, _ := unitGenesis(t)
 	headers := unitChain(genesis.Block.Header(), 3)
 	lookup := func(number uint64) *types.Header { return headers[number] }
-	if _, err := BlockItems(types.NewBlockWithHeader(headers[0]), lookup, genesis, "c"); !errors.Is(err, ErrStaticInput) {
+	if _, err := BlockItems(types.NewBlockWithHeader(headers[0]), lookup, genesis, "c", rawdb.HashScheme); !errors.Is(err, ErrStaticInput) {
 		t.Errorf("genesis block: %v", err)
 	}
 	orphan := types.CopyHeader(headers[3])
 	orphan.ParentHash = common.Hash{9}
-	if _, err := BlockItems(types.NewBlockWithHeader(orphan), lookup, genesis, "c"); !errors.Is(err, ErrStaticInput) {
+	if _, err := BlockItems(types.NewBlockWithHeader(orphan), lookup, genesis, "c", rawdb.HashScheme); !errors.Is(err, ErrStaticInput) {
 		t.Errorf("orphan: %v", err)
 	}
 	missing := func(number uint64) *types.Header {
@@ -553,7 +553,7 @@ func TestUnitBlockItemsRefuseBadInputs(t *testing.T) {
 		}
 		return headers[number]
 	}
-	if _, err := BlockItems(types.NewBlockWithHeader(headers[3]), missing, genesis, "c"); !errors.Is(err, ErrStaticInput) {
+	if _, err := BlockItems(types.NewBlockWithHeader(headers[3]), missing, genesis, "c", rawdb.HashScheme); !errors.Is(err, ErrStaticInput) {
 		t.Errorf("missing ancestor: %v", err)
 	}
 	items := unitItems(t, genesis, headers, 3)
@@ -579,11 +579,11 @@ func TestUnitStaticKeepsBlobSidecars(t *testing.T) {
 			BlockNumber: big.NewInt(3), BlockHash: hash, TxIndex: 0, TxHash: common.Hash{4}}
 	}
 	block := plain.WithSidecars(types.BlobSidecars{sidecar(plain.Hash())})
-	items, err := BlockItems(block, lookup, genesis, "c")
+	items, err := BlockItems(block, lookup, genesis, "c", rawdb.HashScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := DecodeStatic(itemMap(items), genesis, "c")
+	decoded, err := DecodeStatic(itemMap(items), genesis, "c", rawdb.HashScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -601,16 +601,16 @@ func TestUnitStaticKeepsBlobSidecars(t *testing.T) {
 	if empty := unitItems(t, genesis, headers, 3)["blob-sidecars"]; !bytes.Equal(empty, []byte{0xc0}) {
 		t.Errorf("no sidecars encoded as %x", empty)
 	}
-	foreign, err := BlockItems(plain.WithSidecars(types.BlobSidecars{sidecar(common.Hash{5})}), lookup, genesis, "c")
+	foreign, err := BlockItems(plain.WithSidecars(types.BlobSidecars{sidecar(common.Hash{5})}), lookup, genesis, "c", rawdb.HashScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeStatic(itemMap(foreign), genesis, "c"); !errors.Is(err, ErrStaticInput) {
+	if _, err := DecodeStatic(itemMap(foreign), genesis, "c", rawdb.HashScheme); !errors.Is(err, ErrStaticInput) {
 		t.Errorf("a sidecar of another block was accepted: %v", err)
 	}
 	broken := itemMap(items)
 	broken["blob-sidecars"] = []byte{0x01}
-	if _, err := DecodeStatic(broken, genesis, "c"); !errors.Is(err, ErrStaticInput) {
+	if _, err := DecodeStatic(broken, genesis, "c", rawdb.HashScheme); !errors.Is(err, ErrStaticInput) {
 		t.Errorf("a malformed sidecar item was accepted: %v", err)
 	}
 }
@@ -696,7 +696,7 @@ func TestUnitSafePointsCountOnlyTheImportTracer(t *testing.T) {
 
 func TestUnitPinVerifyNeedsTheState(t *testing.T) {
 	genesis, db, provider, identity := unitProvider(t)
-	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: ProfileDigest(),
+	pin := stateprovider.Pin{ID: "bsc-node.run-1.0000000000000000", Store: identity, Profile: stateprovider.ProfileDigest(rawdb.HashScheme),
 		ParentRoot: genesis.Block.Root(), Headers: []stateprovider.HeaderRef{{Hash: genesis.Block.Hash(), Number: 0}}}
 	if err := provider.Pin(pin); err != nil {
 		t.Fatal(err)
@@ -711,13 +711,13 @@ func TestUnitStaticWindow(t *testing.T) {
 	genesis, _ := unitGenesis(t)
 	headers := unitChain(genesis.Block.Header(), 1100)
 	for n, want := range map[int]int{2: 1, 100: 99, 257: 255, 1100: 255} {
-		static, err := DecodeStatic(unitItems(t, genesis, headers, n), genesis, "commit")
+		static, err := DecodeStatic(unitItems(t, genesis, headers, n), genesis, "commit", rawdb.HashScheme)
 		if err != nil || len(static.Ancestors) != want {
 			t.Fatalf("window of %d: %d ancestors, %v", n, len(static.Ancestors), err)
 		}
 	}
 	items := unitItems(t, genesis, headers, 1100)
-	static, err := DecodeStatic(items, genesis, "commit")
+	static, err := DecodeStatic(items, genesis, "commit", rawdb.HashScheme)
 	if err != nil || len(static.Ancestors) != 255 || static.Ancestors[254].Number.Uint64() != 1100-256 {
 		t.Fatalf("window of 1100: %d ancestors, %v", len(static.Ancestors), err)
 	}
@@ -727,7 +727,7 @@ func TestUnitStaticWindow(t *testing.T) {
 		changed[k] = v
 	}
 	changed["ancestor-headers-rlp"] = short
-	if _, err := DecodeStatic(changed, genesis, "commit"); err == nil || !strings.Contains(err.Error(), "ancestor headers, want") {
+	if _, err := DecodeStatic(changed, genesis, "commit", rawdb.HashScheme); err == nil || !strings.Contains(err.Error(), "ancestor headers, want") {
 		t.Fatalf("short window accepted: %v", err)
 	}
 	changed = map[string][]byte{}
@@ -735,7 +735,7 @@ func TestUnitStaticWindow(t *testing.T) {
 		changed[k] = v
 	}
 	changed["parlia-snapshots"] = []byte(SnapshotTag + ";all")
-	if _, err := DecodeStatic(changed, genesis, "commit"); err == nil || !strings.Contains(err.Error(), "parlia-snapshots") {
+	if _, err := DecodeStatic(changed, genesis, "commit", rawdb.HashScheme); err == nil || !strings.Contains(err.Error(), "parlia-snapshots") {
 		t.Fatalf("another snapshot declaration accepted: %v", err)
 	}
 }
@@ -795,5 +795,41 @@ func TestUnitDecodeSnapshotChecksTheBlock(t *testing.T) {
 	}
 	if _, err := engine.ExtractorDecodeSnapshot([]byte("{"), 5, hash); err == nil {
 		t.Fatal("malformed snapshot accepted")
+	}
+}
+
+// TestUnitStaticProfilePerScheme covers the state-profile item of D108: each
+// supported scheme has its own profile and digest, a capsule of another
+// scheme is refused, and a scheme without a profile is refused.
+func TestUnitStaticProfilePerScheme(t *testing.T) {
+	genesis, _ := unitGenesis(t)
+	headers := unitChain(genesis.Block.Header(), 3)
+	block := types.NewBlockWithHeader(headers[3])
+	lookup := func(number uint64) *types.Header { return headers[number] }
+	if stateprovider.StateProfile(rawdb.HashScheme) == stateprovider.StateProfile(rawdb.PathScheme) ||
+		stateprovider.ProfileDigest(rawdb.HashScheme) == stateprovider.ProfileDigest(rawdb.PathScheme) {
+		t.Fatal("the two schemes share a state profile")
+	}
+	for _, scheme := range []string{rawdb.HashScheme, rawdb.PathScheme} {
+		items, err := BlockItems(block, lookup, genesis, "commit", scheme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(itemMap(items)["state-profile"]) != stateprovider.StateProfile(scheme) {
+			t.Fatalf("the state profile of %s is not the capsule item", scheme)
+		}
+		if _, err := DecodeStatic(itemMap(items), genesis, "commit", scheme); err != nil {
+			t.Fatalf("%s capsule: %v", scheme, err)
+		}
+		other := rawdb.PathScheme
+		if scheme == other {
+			other = rawdb.HashScheme
+		}
+		if _, err := DecodeStatic(itemMap(items), genesis, "commit", other); !errors.Is(err, ErrStaticInput) {
+			t.Fatalf("a %s capsule decoded as %s: %v", scheme, other, err)
+		}
+	}
+	if _, err := BlockItems(block, lookup, genesis, "commit", "bin"); !errors.Is(err, ErrStaticInput) {
+		t.Fatalf("a scheme without a state profile: %v", err)
 	}
 }

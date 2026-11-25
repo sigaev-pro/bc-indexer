@@ -20,6 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/extractor/admission"
 	sourceinputs "github.com/ethereum/go-ethereum/extractor/source_inputs"
+	stateprovider "github.com/ethereum/go-ethereum/extractor/state_provider"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -30,9 +31,6 @@ var StaticItemNames = []string{"block-rlp", "blob-sidecars", "parent-hash", "par
 	"normalization-profile", "state-profile"}
 
 const (
-	// StateProfile is the static native profile item: the capture profile of
-	// E01-02.pins with native snapshots off.
-	StateProfile = "state.scheme=hash;gcmode=full;snapshots=off"
 	// NormalizationProfile is the test-only normalization profile item; the
 	// product profile belongs to E04-01.block_record (D99 item 4).
 	NormalizationProfile = "test-only-probe-v1"
@@ -98,9 +96,15 @@ func LoadGenesis(file []byte, block *types.Block) (*Genesis, error) {
 
 // BlockItems returns the static capsule items of the observation of block,
 // in their sealed order. header returns the canonical header of a number
-// below the block.
+// below the block. scheme is the state scheme of the store: its state
+// profile is a static item, so capsules of one store never mix two
+// profiles (D108).
 func BlockItems(block *types.Block, header func(uint64) *types.Header, genesis *Genesis,
-	nativeCommit string) ([]sourceinputs.Item, error) {
+	nativeCommit, scheme string) ([]sourceinputs.Item, error) {
+	profile, err := stateProfile(scheme)
+	if err != nil {
+		return nil, err
+	}
 	n := block.NumberU64()
 	if n == 0 {
 		return nil, fmt.Errorf("%w: block 0 has no parent", ErrStaticInput)
@@ -155,7 +159,7 @@ func BlockItems(block *types.Block, header func(uint64) *types.Header, genesis *
 		{Name: "parlia-snapshots", Data: []byte(SnapshotDeclaration)},
 		{Name: "native-commit", Data: []byte(nativeCommit)},
 		{Name: "normalization-profile", Data: []byte(NormalizationProfile)},
-		{Name: "state-profile", Data: []byte(StateProfile)},
+		{Name: "state-profile", Data: []byte(profile)},
 	}, nil
 }
 
@@ -167,9 +171,18 @@ type Static struct {
 	Root      common.Hash
 }
 
+// stateProfile is the state profile item of a store of the given scheme.
+func stateProfile(scheme string) (string, error) {
+	profile := stateprovider.StateProfile(scheme)
+	if profile == "" {
+		return "", fmt.Errorf("%w: state scheme %q has no state profile", ErrStaticInput, scheme)
+	}
+	return profile, nil
+}
+
 // ReadStatic reads and checks the stored capsule of an observation against
-// the home's genesis and native commit.
-func ReadStatic(db sourceinputs.Store, id string, genesis *Genesis, nativeCommit string) (Static, error) {
+// the home's genesis, native commit and state scheme.
+func ReadStatic(db sourceinputs.Store, id string, genesis *Genesis, nativeCommit, scheme string) (Static, error) {
 	capsule, err := sourceinputs.ReadCapsule(db, id)
 	if err != nil {
 		return Static{}, err
@@ -186,16 +199,21 @@ func ReadStatic(db sourceinputs.Store, id string, genesis *Genesis, nativeCommit
 			return Static{}, err
 		}
 	}
-	return DecodeStatic(items, genesis, nativeCommit)
+	return DecodeStatic(items, genesis, nativeCommit, scheme)
 }
 
 // DecodeStatic decodes the items of one block observation and checks that
 // the block, the parent, the parent root and the ancestor window agree with
 // each other, and that the genesis, fork id, snapshot declaration, native
-// commit and profile items equal the home's values.
-func DecodeStatic(items map[string][]byte, genesis *Genesis, nativeCommit string) (Static, error) {
+// commit and profile items equal the home's values. A capsule of another
+// state scheme than the store's is refused.
+func DecodeStatic(items map[string][]byte, genesis *Genesis, nativeCommit, scheme string) (Static, error) {
 	bad := func(format string, args ...any) (Static, error) {
 		return Static{}, fmt.Errorf("%w: "+format, append([]any{ErrStaticInput}, args...)...)
+	}
+	profile, err := stateProfile(scheme)
+	if err != nil {
+		return bad("state profile: %v", err)
 	}
 	for _, name := range StaticItemNames {
 		if _, ok := items[name]; !ok {
@@ -260,7 +278,7 @@ func DecodeStatic(items map[string][]byte, genesis *Genesis, nativeCommit string
 		return bad("native-commit differs from the home's commit")
 	}
 	if !bytes.Equal(items["normalization-profile"], []byte(NormalizationProfile)) ||
-		!bytes.Equal(items["state-profile"], []byte(StateProfile)) {
+		!bytes.Equal(items["state-profile"], []byte(profile)) {
 		return bad("profile items differ")
 	}
 	static.Root = static.Parent.Root

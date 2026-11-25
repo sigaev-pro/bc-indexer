@@ -48,6 +48,28 @@ func stateProfile(scheme string) string {
 	return ""
 }
 
+// StateProfile is the capture state profile of BSC on a store of the given
+// scheme: the static state-profile item of every capsule of that store. An
+// empty string for a scheme this build does not support.
+func StateProfile(scheme string) string { return stateProfile(scheme) }
+
+// ProfileDigest is the SHA-256 of the state profile of the scheme, as 64
+// lowercase hex digits: the profile field of every pin and the profile of the
+// store identity, so that a store bound under another profile is refused.
+func ProfileDigest(scheme string) string { return profileOf(scheme) }
+
+// StoreScheme returns the state scheme that a stopped native instance
+// directory records, or an empty string for a store without state. It opens
+// the store read-only and never writes.
+func StoreScheme(instanceDir string) (string, error) {
+	db, _, err := openReadOnly(filepath.Join(instanceDir, "chaindata"))
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+	return rawdb.ReadStateScheme(db), nil
+}
+
 // legacyOffset is the offset that the prune-block or pruneancient option of
 // an older BSC client left in the key-value store: the first block it kept.
 func legacyOffset(db ethdb.KeyValueStore) uint64 { return rawdb.ReadLegacyOffset(db) }
@@ -68,7 +90,7 @@ func Preflight(instanceDir string, expected StoreIdentity) (StoreReport, error) 
 		return StoreReport{}, err
 	}
 	defer db.Close()
-	report, err := checkStore(db, expected)
+	report, err := checkStore(db, nil, expected)
 	report.Engine = engine
 	return report, err
 }

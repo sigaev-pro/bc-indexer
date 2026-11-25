@@ -8,11 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -67,10 +67,11 @@ func LoadConfig() (*FileConfig, error) {
 }
 
 // CheckProfile is the capture profile check of eth.New, before the store is
-// opened: the state profile of E01-02.pins (hash scheme, full garbage
-// collection, no block-data pruning), full sync only (bsc.snap-sync), and no
-// voting or builder role (bsc.sealing). Mining is refused when it starts
-// (Ethereum.StartMining).
+// opened: the fast-node state profile of E01-02.pins (D108: the hash, the
+// path or no state scheme, full garbage collection, tries kept and verified
+// locally, a block history of N = 600,000 blocks or of the entire chain), full
+// sync only (bsc.snap-sync), and no voting or builder role (bsc.sealing).
+// Mining is refused when it starts (Ethereum.StartMining).
 func CheckProfile(cfg *ethconfig.Config) error {
 	if _, err := stateprovider.CheckProfile(cfg); err != nil {
 		return err
@@ -87,8 +88,35 @@ func CheckProfile(cfg *ethconfig.Config) error {
 	return nil
 }
 
-// noMirror is the mirror of a node without E05-01.registry: no decision is
-// applied, so every decision stays a delivery obligation (D101).
+// Preflight checks the stopped native instance directory read-only before the
+// node opens its store (E01-02.pins, D108): the state scheme the store
+// records (hash or path), the chain and genesis, the binding, every live pin
+// and the retention floor N. A store bound to this identity, or an unbound
+// store without pins, passes; a store of another identity, a pruned store or
+// an unreadable pin is refused, and nothing is written. A new instance
+// without chaindata, or one without state, passes: the native open decides.
+func Preflight(instanceDir string, config *ethconfig.Config, storeID string) error {
+	if _, err := os.Stat(filepath.Join(instanceDir, "chaindata")); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	scheme, err := stateprovider.StoreScheme(instanceDir)
+	if err != nil || scheme == "" {
+		return nil
+	}
+	identity := stateprovider.StoreIdentity{StoreID: storeID, ChainID: config.Genesis.Config.ChainID.String(),
+		GenesisHash: config.Genesis.ToBlock().Hash(), StateScheme: scheme}
+	_, err = stateprovider.Preflight(instanceDir, identity)
+	if err == nil {
+		return nil
+	}
+	unbound := identity
+	unbound.StoreID = ""
+	if _, unboundErr := stateprovider.Preflight(instanceDir, unbound); unboundErr == nil {
+		return nil
+	}
+	return err
+}
+
 type noMirror struct{}
 
 func (noMirror) Applied(uint64, string) (bool, error) { return false, nil }
@@ -131,9 +159,6 @@ func NodeConfig(file FileConfig) (Config, error) {
 // first start stays in BOOTSTRAP until GoLive.
 func Attach(chain *core.BlockChain, db ethdb.Database, calls *bsc.SystemCallBackend, cfg Config,
 	opts Options) (*Lifecycle, error) {
-	if chain.TrieDB().Scheme() != rawdb.HashScheme {
-		return nil, fmt.Errorf("%w: the lifecycle needs the hash state scheme", ErrConfig)
-	}
 	if calls == nil {
 		return nil, fmt.Errorf("%w: missing system-call API", ErrConfig)
 	}
@@ -153,8 +178,19 @@ func Attach(chain *core.BlockChain, db ethdb.Database, calls *bsc.SystemCallBack
 		}
 		store = deleter
 	}
-	identity := stateprovider.StoreIdentity{StoreID: cfg.StoreID, ChainID: chain.Config().ChainID.String(),
-		GenesisHash: chain.Genesis().Hash(), StateScheme: rawdb.HashScheme}
+	// The identity comes from the store (E01-02.pins): its recorded state
+	// scheme, hash or path (D108), and the profile of that scheme.
+	identity, err := stateprovider.ReadIdentity(db)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrConfig, err)
+	}
+	if identity.ChainID != chain.Config().ChainID.String() || identity.GenesisHash != chain.Genesis().Hash() ||
+		identity.StateScheme != chain.TrieDB().Scheme() {
+		return nil, fmt.Errorf("%w: the store is %s of chain %s genesis %s, the node is %s of chain %s genesis %s",
+			ErrConfig, identity.StateScheme, identity.ChainID, identity.GenesisHash, chain.TrieDB().Scheme(),
+			chain.Config().ChainID, chain.Genesis().Hash())
+	}
+	identity.StoreID = cfg.StoreID
 	calls.Bind(chain, nil)
 	hook, err := bscdecision.Start(admission.NewGuard(), db, chain, bscdecision.Config{Seam: bsc.Config{
 		Producer: cfg.Producer, Identity: identity, GenesisFile: cfg.GenesisFile, NativeCommit: cfg.NativeCommit,
@@ -164,7 +200,7 @@ func Attach(chain *core.BlockChain, db ethdb.Database, calls *bsc.SystemCallBack
 	}
 	calls.Bind(chain, hook.Seam())
 	l := &Lifecycle{hook: hook, chain: chain, db: db, store: store, storeID: cfg.StoreID, mirror: mirror,
-		roots: bscdecision.NewRoots(db), opts: opts, emit: emit}
+		roots: bscdecision.NewRoots(db, chain.TrieDB().Scheme()), opts: opts, emit: emit}
 	release := hook.Acquire()
 	adm, token := hook.Seam().Admission()
 	l.gate, err = lifecycle.Open(token, store, adm, cfg.StoreID, "bsc", false)
