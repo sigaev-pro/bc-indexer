@@ -1,6 +1,6 @@
 # Runtime image of the capture-enabled BSC client. The build procedure is
-# test/harness/bsc_capture_build.py: it compiles the patched ./cmd/geth in
-# the pinned compiler image, then runs this file with the pinned runtime
+# bsc_capture_build.py next to this file: it compiles the patched ./cmd/geth
+# in the pinned compiler image, then runs this file with the pinned runtime
 # image as BASE_IMAGE and the provenance labels on the command line. This
 # file holds no version or digest that can drift from the candidate lock.
 ARG BASE_IMAGE

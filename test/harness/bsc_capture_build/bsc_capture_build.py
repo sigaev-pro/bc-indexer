@@ -15,7 +15,7 @@ then run in the new image through the owned container boundary.
 `smoke` starts the image offline on a throwaway home with a minimal capture
 config (EXTRACTOR_BSC_CONFIG) and the Chapel genesis, stops it after a short
 time, and runs the refusal controls that show the extractor hooks in the
-start path.
+start path. The commands are in README.md next to this file.
 
 The candidate lock keeps `patched-native-images` PENDING_IMPLEMENTATION:
 this is the first capture-enabled client image, not the accepted output of
@@ -36,9 +36,10 @@ import time
 import uuid
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
-sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE / "fixtures" / "lifecycle_bsc"))
+HARNESS = HERE.parent
+ROOT = HERE.parents[2]
+sys.path.insert(0, str(HARNESS))
+sys.path.insert(0, str(HARNESS / "fixtures" / "lifecycle_bsc"))
 import bsc_lifecycle  # noqa: E402
 import pins  # noqa: E402
 import bsc_source_inputs as probe14  # noqa: E402
@@ -48,7 +49,7 @@ from artifacts import (check_deadline, copy_artifact, load, read_bytes, referenc
 FAMILY = "bsc"
 REPOSITORY = "bc-indexer/bsc-capture"
 SUFFIX = "capture"
-DOCKERFILE = HERE / "Dockerfile.bsc-capture"
+DOCKERFILE = HERE / "Dockerfile"
 LOCK_PATH = ROOT / ".project" / "bootstrap" / "components" / "candidate-lock.json"
 PATCHES = ("01-core-import-seam.diff", "02-rawdb-freezer.diff", "03-eth-recover-pruning.diff",
            "04-geth-prune-state.diff", "05-vm-safe-point.diff", "06-parlia-snapshots.diff",
@@ -71,7 +72,8 @@ START_MARKERS = ("Starting BSC on Chapel testnet", "Initialised chain configurat
                  "Started P2P networking", "Got interrupt, shutting down", "Blockchain stopped")
 READY_MARKER = "Started P2P networking"
 LABEL, OCI = "io.extractor.", "org.opencontainers.image."
-HARNESS_FILES = bsc_lifecycle.HARNESS_FILES + ("bsc_capture_build.py", "Dockerfile.bsc-capture")
+HARNESS_FILES = bsc_lifecycle.HARNESS_FILES
+OWN_FILES = (HERE / "bsc_capture_build.py", DOCKERFILE)
 BUILD_SECONDS, SMOKE_SECONDS, IMAGE_SECONDS = 3600, 900, 900
 BINARY_LIMIT, LOG_LIMIT = 1024 * 1024 * 1024, 8 * 1024 * 1024
 SMOKE_STORE = "0123456789abcdef0123456789abcdef"
@@ -81,7 +83,7 @@ STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
 def tag_for(version):
     """The image tag of an upstream BSC version."""
-    require(isinstance(version, str) and re.fullmatch(r"v\d+\.\d+\.\d+", version) is not None,
+    require(isinstance(version, str) and re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version) is not None,
             "Unsupported BSC version: " + str(version))
     return f"{REPOSITORY}:{version[1:]}-{SUFFIX}"
 
@@ -151,7 +153,8 @@ def image_labels(facts):
 
 
 def version_fields(text):
-    """The lines of `geth version` as a dict; a line without a colon is the title."""
+    """The valued lines of `geth version` as a dict; the title and the empty
+    GOPATH= and GOROOT= lines hold no colon and are skipped."""
     fields = {}
     for line in text.strip().splitlines():
         name, separator, value = line.partition(":")
@@ -252,6 +255,14 @@ def host(runner, name, argv, timeout, check=True):
     return code, out
 
 
+def inspected(raw):
+    """The one image of a `docker image inspect` output."""
+    rows = json.loads(raw)
+    require(isinstance(rows, list) and len(rows) == 1 and isinstance(rows[0], dict),
+            "Docker did not describe exactly one image")
+    return rows[0]
+
+
 def retained(output, sources, deadline):
     """Copy files that decide the result next to the harness sources; return their references."""
     directory, origins = output / "block-code", []
@@ -294,12 +305,12 @@ def build(manifest_path, expected_sha, output):
 
     def body(output, runner):
         origins, proof["harness_sources"] = source_snapshot(output, HARNESS_FILES, deadline)
-        drivers = retained(output, [bsc_lifecycle.FIXTURE / "bsc_lifecycle.py"], deadline)
+        drivers = retained(output, [*OWN_FILES, bsc_lifecycle.FIXTURE / "bsc_lifecycle.py"], deadline)
         runtime, digest = selected["runtime_image"], "@" + selected["runtime_image"].partition("@")[2]
         # The pinned images are already in Docker; nothing is pulled.
         code, raw = host(runner, "runtime-inspect", ["docker", "image", "inspect", runtime], 60)
         require(code == 0, "The pinned runtime image is not present in Docker")
-        base = json.loads(raw)[0]
+        base = inspected(raw)
         require(base["Architecture"] == "amd64" and base["Os"] == "linux" and
                 any(row.endswith(digest) for row in base["RepoDigests"]), "Runtime image differs from its pin")
         _, raw = host(runner, "docker-version", ["docker", "version", "--format", "{{.Server.Version}}"], 60)
@@ -356,7 +367,7 @@ def build(manifest_path, expected_sha, output):
         try:
             host(runner, "build", argv, IMAGE_SECONDS)
             _, raw = host(runner, "image-inspect", ["docker", "image", "inspect", tag], 60)
-            image, image_id = json.loads(raw)[0], identity.read_text().strip()
+            image, image_id = inspected(raw), identity.read_text().strip()
             require(image["Id"] == image_id and image["Architecture"] == "amd64" and image["Os"] == "linux",
                     "Built image identity differs from its record")
             check_labels(image["Config"].get("Labels", {}), facts)
@@ -407,10 +418,10 @@ def smoke(image, output, seconds):
              "seconds": seconds, "error": None}
 
     def body(output, runner):
-        origins, proof["harness_sources"] = source_snapshot(output, ("bsc_capture_build.py",), deadline)
+        origins = retained(output, OWN_FILES[:1], deadline)
         code, raw = host(runner, "image-inspect", ["docker", "image", "inspect", image], 60)
         require(code == 0, "The image is not present in Docker")
-        labels = json.loads(raw)[0]["Config"].get("Labels", {})
+        labels = inspected(raw)["Config"].get("Labels", {})
         commit, names = labels.get(LABEL + "source-commit"), (labels.get(LABEL + "patches") or "").split(";")
         require(commit is not None and re.fullmatch(r"[0-9a-f]{40}", commit) is not None and
                 [part.partition("=")[0] for part in names] == list(PATCHES) and
