@@ -218,7 +218,7 @@ class FakeNative:
 
     def command(self, image, argv, mounts, **kwargs):
         targets = {target: source for source, target, _ in mounts}
-        self.commands.append((image, argv, kwargs.get("environment")))
+        self.commands.append((image, argv, kwargs.get("environment"), kwargs.get("entrypoint")))
         stdout = self.output / "logs" / f"{len(self.commands):03d}.stdout"
         if argv[:2] == [build.GO, "build"]:
             (targets["/work/generated"] / "geth").write_bytes(self.binary)
@@ -339,7 +339,7 @@ class ProcedureFixture(unittest.TestCase):
 
     @property
     def native(self):
-        """The owned container commands (image, argv, environment) of the last run."""
+        """The owned container commands (image, argv, environment, entry point) of the last run."""
         return [row for row in FakeNative.instances[-1].commands if isinstance(row, tuple)]
 
 
@@ -374,13 +374,14 @@ class BuildTest(ProcedureFixture):
         self.assertEqual(build_args, ["BASE_IMAGE=" + DEBIAN, "SOURCE_DATE_EPOCH=" + str(EPOCH)])
         self.assertEqual(command[2:7], ["--platform", "linux/amd64", "--pull=false", "--network", "none"])
         self.assertEqual(self.docker.removed, [])
-        self.assertEqual([argv for image, argv, _ in self.native[:4]], [
+        self.assertEqual([argv for image, argv, _, _ in self.native[:4]], [
             self.native[0][1][:2] + ["extractor", *sorted(f"core/file{index}.go" for index in range(8))],
             [build.GO, "version"], build.build_arguments(COMMIT), [build.GO, "version", "-m", "/work/generated/geth"]])
-        self.assertEqual([(image, argv) for image, argv, _ in self.native[4:]],
+        self.assertEqual([(image, argv) for image, argv, _, _ in self.native[4:]],
                          [(TAG, ["version"]), (TAG, ["--chapel", *build.PROFILE, "--datadir", "/work/dumpconfig",
                                                      "dumpconfig"])])
-        self.assertTrue(all(image == GOLANG for image, _, _ in self.native[:4]))
+        self.assertTrue(all(image == GOLANG for image, _, _, _ in self.native[:4]))
+        self.assertTrue(all(entry is None for _, _, _, entry in self.native))
         record = json.loads((self.output / "build.json").read_text())
         self.assertEqual((record["result"], record["source_commit"], record["cleanup_complete"]), ("PASS", "b" * 40, True))
         self.assertEqual(len(record["commands"]), 6 + 5)  # six owned commands and five host records
@@ -436,17 +437,18 @@ class SmokeTest(ProcedureFixture):
         self.assertEqual(foreign["store_id"], build.FOREIGN_STORE)
         self.assertEqual(json.loads(Path(proof["genesis"]["path"]).read_text())["config"]["chainId"], 97)
         home = ["--chapel", "--datadir", "/home"]
-        self.assertEqual([argv for image, argv, _ in self.native], [
+        self.assertEqual([argv for image, argv, _, _ in self.native], [
             ["--chapel", "dumpgenesis"], [*home, "--state.scheme", "hash", "init", "/config/genesis.json"],
             ["/bin/sh", "-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "start", 20)],
             ["/bin/sh", "-c", build.start_script([*home, "--state.scheme", "hash", "--gcmode", "full", *build.OFFLINE],
                                                  "snap-sync")],
             ["/bin/sh", "-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "foreign-store")]])
-        self.assertEqual([environment for image, argv, environment in self.native],
+        self.assertEqual([row[2] for row in self.native],
                          [None, None, {"EXTRACTOR_BSC_CONFIG": "/config/capture.json"},
                           {"EXTRACTOR_BSC_CONFIG": "/config/capture.json"},
                           {"EXTRACTOR_BSC_CONFIG": "/config/foreign.json"}])
-        self.assertTrue(all(image == TAG for image, _, _ in self.native))
+        self.assertTrue(all(image == TAG for image, _, _, _ in self.native))
+        self.assertEqual([row[3] for row in self.native], [None, None, "/bin/sh", "/bin/sh", "/bin/sh"])
 
     def test_a_control_that_passes_fails_the_smoke(self):
         FakeNative.control = {**FakeNative.control, "snap-sync": (0, START_LOG)}

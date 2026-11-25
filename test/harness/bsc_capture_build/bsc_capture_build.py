@@ -444,14 +444,16 @@ def smoke(image, output, seconds):
         # The native init of the deployment contract, with the explicit hash scheme.
         runner.command(image, [*home, "--state.scheme", "hash", "init", "/config/genesis.json"], mounts, cap=300,
                        memory="1g")
+        # The image entry point is geth; the scripts run through a shell.
         runner.command(image, ["/bin/sh", "-c", start_script([*home, *PROFILE, *OFFLINE], "start", seconds)], mounts,
-                       cap=seconds + 240, memory="2g", environment={"EXTRACTOR_BSC_CONFIG": "/config/capture.json"})
+                       cap=seconds + 240, memory="2g", environment={"EXTRACTOR_BSC_CONFIG": "/config/capture.json"},
+                       entrypoint="/bin/sh")
         # A control with the default sync mode (snap) and one with another store ID.
         controls = {"snap-sync": (["--state.scheme", "hash", "--gcmode", "full", *OFFLINE], "capture.json", "bsc.snap-sync"),
                     "foreign-store": ([*PROFILE, *OFFLINE], "foreign.json", "native store identity mismatch")}
         for name, (flags, config_name, _) in controls.items():
             runner.command(image, ["/bin/sh", "-c", start_script([*home, *flags], name)], mounts, cap=240, memory="2g",
-                           environment={"EXTRACTOR_BSC_CONFIG": "/config/" + config_name})
+                           environment={"EXTRACTOR_BSC_CONFIG": "/config/" + config_name}, entrypoint="/bin/sh")
         runs = {name: (int(read_bytes(root / "work" / (name + ".exit"), 64, deadline).decode().strip()),
                        read_bytes(root / "work" / (name + ".out"), LOG_LIMIT, deadline).decode(errors="replace"))
                 for name in ("start", *controls)}

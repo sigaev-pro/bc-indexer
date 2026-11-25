@@ -74,7 +74,9 @@ The `[Eth]` section then shows `StateScheme = "hash"`, `SyncMode = "full"`,
 `smoke` starts the image offline on a throwaway home. It takes the Chapel
 genesis from the image itself, runs the init, starts the node with a minimal
 capture config for `--seconds` after its start, stops it with SIGINT, and
-runs two controls on the same home. The node log names the Chapel network,
+runs two controls on the same home. The image entry point is `geth`, so the
+start and the controls run their shell scripts through the `entrypoint`
+option of the owned command boundary (`native.py`). The node log names the Chapel network,
 the chain configuration, full sync and the clean stop. The controls show
 the extractor hooks in the start path: the default sync mode (snap) is
 refused with `bsc.snap-sync`, and another `store_id` is refused with
