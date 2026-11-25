@@ -15,8 +15,10 @@ local fixtures only.
 
 ## What the build does
 
-1. It reads the accepted BuildManifest and binds it to the candidate lock:
-   the BSC commit, the Go version and both image references must agree.
+1. It reads the accepted BuildManifest once, against `--sha256`, and binds
+   it to the candidate lock: the plan of the manifest names the lock by
+   digest, and the BSC version and commit, the Go version and both image
+   references must agree between them.
 2. It extracts the accepted BSC source archive and applies patches 01 to 08
    through the existing install path of the lifecycle block (`install` in
    `test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py`): the admission

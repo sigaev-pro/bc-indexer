@@ -52,8 +52,8 @@ import bsc_admission  # noqa: E402
 import bsc_lifecycle  # noqa: E402
 import pins  # noqa: E402
 import bsc_source_inputs as probe14  # noqa: E402
-from artifacts import (check_deadline, copy_artifact, load, read_bytes, reference, require,  # noqa: E402
-                       source_snapshot, sources_unchanged)
+from artifacts import (check_deadline, captured_json, copy_artifact, pinned_json, read_artifact, read_bytes,  # noqa: E402
+                       reference, require, source_snapshot, sources_unchanged)
 
 FAMILY = "bsc"
 REPOSITORY = "bc-indexer/bsc-capture"
@@ -114,17 +114,27 @@ def tag_for(version, variant=None):
 
 
 def lock_pins(lock_path, manifest, deadline=None):
-    """The BSC, Go and image pins of the candidate lock, bound to the accepted manifest."""
-    lock_ref = reference(lock_path, 4 * 1024 * 1024, deadline)
-    lock = load(lock_path, 4 * 1024 * 1024, deadline)
+    """The BSC, Go and image pins of the candidate lock, bound to the accepted manifest:
+    its plan names the lock by digest, the BSC version and commit, the Go version
+    and both image references."""
+    lock_ref, lock = captured_json(lock_path, 4 * 1024 * 1024, deadline)
+    plan = manifest.get("plan")
+    require(isinstance(plan, dict), "The accepted build has no plan")
     component, images = lock["components"]["bsc"], lock["components"]
+    require(lock_ref["sha256"] == plan.get("lock_sha256"),
+            "The candidate lock differs from the lock of the accepted build plan")
     require(component["commit"] == manifest["builds"][FAMILY]["source_commit"],
             "The lock names another BSC commit than the accepted build")
+    source = plan.get("sources", {}).get(FAMILY)
+    require(isinstance(source, dict) and component["version"] == source.get("version"),
+            "The lock names another BSC version than the accepted build plan")
     for name in ("golang-build-image", "debian-runtime-image"):
         require(images[name]["pull_reference"] == manifest["image_inputs"][name]["reference"],
                 f"The lock image {name} differs from the accepted build")
     require(manifest["builds"][FAMILY]["compiler_image"] == images["golang-build-image"]["pull_reference"],
             "Unexpected compiler image")
+    require(images["go"]["version"] == plan.get("compiler", {}).get("version"),
+            "The lock Go version differs from the compiler of the accepted build plan")
     return lock_ref, {"repository": component["source_repository"], "version": component["version"],
                       "commit": component["commit"], "go_version": images["go"]["version"],
                       "compiler_image": images["golang-build-image"]["pull_reference"],
@@ -270,9 +280,9 @@ def source_date_epoch(manifest_path, manifest, deadline=None):
     stored it as the creation time of its vanilla OCI configuration."""
     descriptor = manifest["builds"][FAMILY].get("oci_config")
     require(descriptor is not None, "The accepted build has no vanilla OCI configuration")
-    path = Path(descriptor["path"])
-    path = path if path.is_absolute() else manifest_path.parent / path
-    created = json.loads(read_bytes(path, 1024 * 1024, deadline))["created"]
+    # The descriptor is relative to the accepted build storage, and its digest is checked.
+    _, data = read_artifact(descriptor, 1024 * 1024, manifest_path.parent, deadline)
+    created = json.loads(data)["created"]
     require(isinstance(created, str) and created.endswith("Z"), "Malformed creation time: " + str(created))
     try:
         moment = datetime.datetime.fromisoformat(created[:-1] + "+00:00")
@@ -506,9 +516,8 @@ def build(manifest_path, expected_sha, output, variant=None):
     started = time.monotonic()
     deadline = started + BUILD_SECONDS
     require(manifest_path.is_absolute() and output.is_absolute(), "Paths must be absolute")
-    manifest_ref = reference(manifest_path, 64 * 1024 * 1024, deadline)
-    require(manifest_ref["sha256"] == expected_sha, "BuildManifest digest mismatch")
-    manifest = load(manifest_path, 64 * 1024 * 1024, deadline)
+    # One read checks the pin and parses the manifest.
+    manifest_ref, manifest = pinned_json(manifest_path, expected_sha, 64 * 1024 * 1024, deadline)
     require(manifest.get("evidence_kind") == "actual-build" and manifest.get("task_id") == "E01-01.builds",
             "An accepted actual build is required")
     lock_ref, selected = lock_pins(LOCK_PATH, manifest, deadline)

@@ -51,6 +51,13 @@ def done(argv, code=0, out=b"", err=b""):
     return subprocess.CompletedProcess(argv, code, out, err)
 
 
+def relative_reference(path, base):
+    """A descriptor of a file below base, relative to base, as the accepted
+    manifest holds its artifacts."""
+    row = reference(path)
+    return {"path": path.relative_to(base).as_posix(), "sha256": row["sha256"], "size_bytes": row["size_bytes"]}
+
+
 def provenance_rows(variant=None):
     """The provenance of a base build, or of a variant with its applied overlay."""
     patched = [{"patch": {"path": "/p/" + name, "sha256": f"{index:064x}", "size_bytes": 10}, "files": []}
@@ -101,13 +108,16 @@ class LockTest(unittest.TestCase):
                                     "go": {"version": "go1.27.3"},
                                     "golang-build-image": {"pull_reference": GOLANG},
                                     "debian-runtime-image": {"pull_reference": DEBIAN}}}
+        self.plan = {"sources": {"bsc": {"version": "v1.8.2"}}, "compiler": {"version": "go1.27.3"}}
         self.manifest = {"builds": {"bsc": {"source_commit": COMMIT, "compiler_image": GOLANG}},
                          "image_inputs": {"golang-build-image": {"reference": GOLANG},
-                                          "debian-runtime-image": {"reference": DEBIAN}}}
+                                          "debian-runtime-image": {"reference": DEBIAN}},
+                         "plan": self.plan}
 
     def pins(self):
         path = self.root / "candidate-lock.json"
         path.write_text(json.dumps(self.lock))
+        self.plan["lock_sha256"] = reference(path)["sha256"]
         return build.lock_pins(path, self.manifest)
 
     def test_bound_pins(self):
@@ -120,13 +130,25 @@ class LockTest(unittest.TestCase):
                    lambda: self.lock["components"]["debian-runtime-image"].update(pull_reference="debian@sha256:" + "9" * 64),
                    lambda: self.lock["components"]["golang-build-image"].update(pull_reference=GOLANG[:-1] + "0"),
                    lambda: self.manifest["builds"]["bsc"].update(compiler_image="golang:latest"),
-                   lambda: self.manifest["image_inputs"]["debian-runtime-image"].update(reference="debian:13")]
+                   lambda: self.manifest["image_inputs"]["debian-runtime-image"].update(reference="debian:13"),
+                   lambda: self.lock["components"]["go"].update(version="go1.27.2"),
+                   lambda: self.lock["components"]["bsc"].update(version="v1.8.1"),
+                   lambda: self.plan["sources"]["bsc"].update(version="v1.8.1"),
+                   lambda: self.manifest.pop("plan")]
         for index, change in enumerate(changes):
             original = json.dumps(self.lock), json.dumps(self.manifest)
             change()
             with self.subTest(change=index), self.assertRaises(Rejected):
                 self.pins()
             self.lock, self.manifest = json.loads(original[0]), json.loads(original[1])
+            self.plan = self.manifest["plan"]
+
+    def test_the_plan_binds_the_lock_by_digest(self):
+        path = self.root / "candidate-lock.json"
+        path.write_text(json.dumps(self.lock))
+        self.plan["lock_sha256"] = "0" * 64
+        with self.assertRaisesRegex(Rejected, "candidate lock differs"):
+            build.lock_pins(path, self.manifest)
 
 
 class LabelsTest(unittest.TestCase):
@@ -278,12 +300,21 @@ class EpochTest(unittest.TestCase):
         (root / "oci").mkdir()
         config = root / "oci" / "config.json"
         config.write_text(json.dumps({"created": "2026-11-03T02:04:27Z"}))
-        manifest = {"builds": {"bsc": {"oci_config": reference(config)}}}
+        manifest = {"builds": {"bsc": {"oci_config": relative_reference(config, root)}}}
         self.assertEqual(build.source_date_epoch(root / "manifest.json", manifest), EPOCH)
+        # A created time of another shape is refused, with the bytes still bound to the manifest.
         for created in ("2026-11-03T02:04:27", "yesterday", 17, None):
             config.write_text(json.dumps({"created": created}))
+            manifest["builds"]["bsc"]["oci_config"] = relative_reference(config, root)
             with self.subTest(created=created), self.assertRaises(Rejected):
                 build.source_date_epoch(root / "manifest.json", manifest)
+        config.write_text(json.dumps({"created": "2026-11-03T02:04:27Z"}))
+        for descriptor in ({**relative_reference(config, root), "sha256": "0" * 64},
+                           {**relative_reference(config, root), "size_bytes": 1},
+                           {**relative_reference(config, root), "path": "../" + root.name + "/oci/config.json"},
+                           {**reference(config)}):
+            with self.subTest(descriptor=descriptor["path"]), self.assertRaises(Rejected):
+                build.source_date_epoch(root / "manifest.json", {"builds": {"bsc": {"oci_config": descriptor}}})
         with self.assertRaises(Rejected):
             build.source_date_epoch(root / "manifest.json", {"builds": {"bsc": {}}})
 
@@ -439,6 +470,7 @@ class FakeNative:
 
     instances = []
     version, config, control, binary, libraries = VERSION, CONFIG, {}, b"geth", LIBRARIES
+    during_build = None  # a test's hook, run while the compiler works
 
     def __init__(self, output, deadline):
         self.output, self.nonce, self.commands, self.owned, self.deadline = output, "n", [], [], deadline
@@ -453,6 +485,8 @@ class FakeNative:
         self.commands.append({"owned": len(self.owned)})  # one record per owned command, as in native.py
         stdout = self.output / "logs" / f"{len(self.commands):03d}.stdout"
         if argv[:2] == [build.GO, "build"]:
+            if FakeNative.during_build is not None:
+                FakeNative.during_build()
             (targets["/work/generated"] / "geth").write_bytes(self.binary)
         elif argv == [build.GO, "version"]:
             stdout.write_text("go version go1.27.3 linux/amd64\n")
@@ -532,18 +566,22 @@ class ProcedureFixture(unittest.TestCase):
         (self.accepted / "oci").mkdir()
         config = self.accepted / "oci" / "config.json"
         config.write_text(json.dumps({"created": "2026-11-03T02:04:27Z"}))
-        manifest = self.accepted / "manifest.json"
-        manifest.write_text(json.dumps({
-            "evidence_kind": "actual-build", "task_id": "E01-01.builds",
-            "builds": {"bsc": {"source_commit": COMMIT, "compiler_image": GOLANG, "oci_config": reference(config)}},
-            "image_inputs": {"golang-build-image": {"reference": GOLANG},
-                             "debian-runtime-image": {"reference": DEBIAN}}}))
-        self.sha = reference(manifest)["sha256"]
         lock = self.root / "candidate-lock.json"
         lock.write_text(json.dumps({"components": {
             "bsc": {"source_repository": SELECTED["repository"], "version": "v1.8.2", "commit": COMMIT},
             "go": {"version": "go1.27.3"}, "golang-build-image": {"pull_reference": GOLANG},
             "debian-runtime-image": {"pull_reference": DEBIAN}}}))
+        manifest = self.accepted / "manifest.json"
+        manifest.write_text(json.dumps({
+            "evidence_kind": "actual-build", "task_id": "E01-01.builds",
+            "builds": {"bsc": {"source_commit": COMMIT, "compiler_image": GOLANG,
+                               "oci_config": relative_reference(config, self.accepted)}},
+            "image_inputs": {"golang-build-image": {"reference": GOLANG},
+                             "debian-runtime-image": {"reference": DEBIAN}},
+            "plan": {"lock_sha256": reference(lock)["sha256"], "compiler": {"version": "go1.27.3"},
+                     "sources": {"bsc": {"version": "v1.8.2", "commit": COMMIT}}}}))
+        self.sha = reference(manifest)["sha256"]
+        self.closure = COMMIT
         self.docker = FakeDocker()
         patches = [mock.patch.object(build, "LOCK_PATH", lock),
                    mock.patch.object(build.pins, "source_commit", return_value="b" * 40),
@@ -561,7 +599,27 @@ class ProcedureFixture(unittest.TestCase):
         source.mkdir()
         (source / "go.mod").write_text("module github.com/ethereum/go-ethereum\n")
         (source / "go.sum").write_text("")
-        return {"source_commit": COMMIT}, reference(source / "go.mod"), source
+        return {"source_commit": self.closure}, reference(source / "go.mod"), source
+
+    def rewrite_manifest(self, change, bind=True):
+        """Change the fixture manifest and return its new pin. With bind, the plan
+        keeps naming the lock on disk."""
+        manifest = json.loads((self.accepted / "manifest.json").read_text())
+        change(manifest)
+        if bind:
+            manifest["plan"]["lock_sha256"] = reference(self.root / "candidate-lock.json")["sha256"]
+        (self.accepted / "manifest.json").write_text(json.dumps(manifest))
+        return reference(self.accepted / "manifest.json")["sha256"]
+
+    def fails(self, arrange, message, removed=None):
+        """Run a build where `arrange` fed a wrong answer; it must FAIL with `message`."""
+        arrange()
+        proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
+        self.assertEqual((proof["result"], proof["cleanup_complete"]), ("FAIL", True))
+        self.assertIn(message, proof["error"])
+        if removed is not None:
+            self.assertEqual(self.docker.removed, removed)
+        return proof
 
     def install(self, source, root, deadline):
         directory = root / "patches"
@@ -768,6 +826,31 @@ class BuildTest(ProcedureFixture):
             proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
         self.assertEqual((proof["result"], self.docker.removed), ("FAIL", [TAG]))
         self.assertIn("exactly one image", proof["error"])
+
+    def test_the_lock_is_the_one_the_plan_names(self):
+        sha = self.rewrite_manifest(lambda manifest: manifest["plan"].update(lock_sha256="0" * 64), bind=False)
+        with self.assertRaisesRegex(Rejected, "candidate lock differs from the lock of the accepted build plan"):
+            build.build(self.accepted / "manifest.json", sha, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_the_vanilla_configuration_is_bound_to_the_manifest(self):
+        sha = self.rewrite_manifest(lambda manifest: None)
+        FakeNative.during_build = lambda: (self.accepted / "oci" / "config.json").write_text(
+            json.dumps({"created": "2026-11-04T00:00:00Z"}))
+        proof = self.fails(lambda: None, "Artifact bytes changed")
+        self.assertEqual([argv for argv in self.docker.calls if argv[1] == "build"], [])
+        self.assertIsNone(proof["previous_image_id"])
+        self.assertTrue(FakeNative.instances[-1].owned)  # the compile ran first
+
+    def test_the_manifest_is_read_once(self):
+        original = build.pinned_json
+        reads = []
+        def counted(path, *arguments, **keywords):
+            reads.append(path)
+            return original(path, *arguments, **keywords)
+        with mock.patch.object(build, "pinned_json", counted):
+            build.build(self.accepted / "manifest.json", self.sha, self.output)
+        self.assertEqual(reads, [self.accepted / "manifest.json"])
 
     def test_refusals_leave_no_output(self):
         with self.assertRaises(Rejected):
