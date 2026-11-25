@@ -43,6 +43,9 @@ LIBRARIES = ("\tlinux-vdso.so.1 (0x00007ffc1a1b1000)\n\tlibc.so.6 => /lib/x86_64
              "\t/lib64/ld-linux-x86-64.so.2 (0x00007f0b5e400000)\n")
 MISSING = LIBRARIES + "\tlibrocksdb.so.10 => not found\n"
 LDD = ["-c", "ldd /usr/local/bin/geth || true"]
+GO_VERSION = "go version go1.27.3 linux/amd64\n"
+GENESIS = {"config": {"chainId": 97}, "alloc": {}}
+ENTRYPOINT = ["/usr/local/bin/geth"]
 FIXTURE = Path(tempfile.gettempdir()).resolve() / "bsc-capture-variant-fixture"
 NO_INPUT = {"patches": [], "packages": [], "include": [], "library": [], "link": [], "runtime_libraries": []}
 
@@ -505,6 +508,9 @@ class FakeNative:
 
     instances = []
     version, config, control, binary, libraries = VERSION, CONFIG, {}, b"geth", LIBRARIES
+    # Answers a test makes wrong: the files gofmt names, the compiler's version
+    # and the genesis dump.
+    gofmt, go_version, genesis = (), GO_VERSION, GENESIS
     during_build = None  # a test's hook, run while the compiler works
 
     def __init__(self, output, deadline):
@@ -523,16 +529,20 @@ class FakeNative:
             if FakeNative.during_build is not None:
                 FakeNative.during_build()
             (targets["/work/generated"] / "geth").write_bytes(self.binary)
+        elif argv[0].endswith("gofmt"):
+            stdout.write_text("".join(name + "\n" for name in self.gofmt))
         elif argv == [build.GO, "version"]:
-            stdout.write_text("go version go1.27.3 linux/amd64\n")
+            stdout.write_text(self.go_version)
         elif argv == ["version"]:
             stdout.write_text(self.version)
         elif argv[-1] == "dumpconfig":
             stdout.write_text(self.config)
         elif argv[-1] == "dumpgenesis":
-            stdout.write_text(json.dumps({"config": {"chainId": 97}, "alloc": {}}))
+            stdout.write_text(json.dumps(self.genesis))
         elif argv[1].startswith("ldd "):
             stdout.write_text(self.libraries)
+        elif argv[1].startswith("sha256sum "):
+            stdout.write_text(hashlib.sha256(self.binary).hexdigest() + "  /usr/local/bin/geth\n")
         elif argv[0] == "-c":
             name = argv[-1].split("/work/")[1].split(".out")[0]
             code, text = self.control[name]
@@ -613,6 +623,8 @@ class FakeDocker:
             return done(argv, 0, (answer + "\n").encode())
         if self.raw is not None and step == "inspect-built":
             return done(argv, 0, self.raw)
+        if "Config" in changes:  # a test changes the labels or the entry point, not both at once
+            changes = {**changes, "Config": {**image["Config"], **changes["Config"]}}
         return done(argv, 0, json.dumps([{**image, **changes}]).encode())
 
     def __call__(self, argv, **kwargs):
@@ -642,7 +654,9 @@ class ProcedureFixture(unittest.TestCase):
 
     def setUp(self):
         FakeNative.instances = []
-        FakeNative.libraries = LIBRARIES
+        for name, value in (("libraries", LIBRARIES), ("gofmt", ()), ("go_version", GO_VERSION), ("genesis", GENESIS),
+                            ("during_build", None), ("config", CONFIG), ("version", VERSION), ("control", {})):
+            setattr(FakeNative, name, value)
         self.root = Path(tempfile.mkdtemp()).resolve()
         self.output, self.accepted = self.root / "out", self.root / "accepted"
         (self.accepted / "cache" / "bsc" / "mod").mkdir(parents=True)
@@ -705,14 +719,20 @@ class ProcedureFixture(unittest.TestCase):
         self.assertIn(IMAGE_ID, self.docker.removed)
         return proof
 
-    def fails(self, arrange, message, removed=None):
-        """Run a build where `arrange` fed a wrong answer; it must FAIL with `message`."""
-        arrange()
+    def wrong(self, message, stage):
+        """Run the build after a test made one answer wrong. It must FAIL with
+        `message` at `stage`: "early", before an image is built, or "image",
+        after one was; then the unchecked image is removed and no tag is set."""
         proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
         self.assertEqual((proof["result"], proof["cleanup_complete"]), ("FAIL", True))
         self.assertIn(message, proof["error"])
-        if removed is not None:
-            self.assertEqual(self.docker.removed, removed)
+        self.assertFalse((self.output / "provenance.json").exists())
+        built = [argv for argv in self.docker.calls if argv[1] == "build"]
+        if stage == "early":
+            self.assertEqual(built, [])
+        else:
+            self.assertEqual(len(built), 1)
+            self.assertEqual((self.docker.removed, self.docker.tagged, self.docker.tags), ([IMAGE_ID], [], {}))
         return proof
 
     def install(self, source, root, deadline):
@@ -999,13 +1019,12 @@ class BuildTest(ProcedureFixture):
         self.assertFalse(self.output.exists())
 
     def test_the_vanilla_configuration_is_bound_to_the_manifest(self):
-        sha = self.rewrite_manifest(lambda manifest: None)
+        self.rewrite_manifest(lambda manifest: None)
         FakeNative.during_build = lambda: (self.accepted / "oci" / "config.json").write_text(
             json.dumps({"created": "2026-11-04T00:00:00Z"}))
-        proof = self.fails(lambda: None, "Artifact bytes changed")
-        self.assertEqual([argv for argv in self.docker.calls if argv[1] == "build"], [])
+        proof = self.wrong("Artifact bytes changed", "early")
         self.assertIsNone(proof["previous_image_id"])
-        self.assertTrue(FakeNative.instances[-1].owned)  # the compile ran first
+        self.assertEqual(len(self.native), 4)  # the compile ran first
 
     def test_the_manifest_is_read_once(self):
         original = build.pinned_json
@@ -1043,12 +1062,99 @@ class BuildTest(ProcedureFixture):
         self.assertEqual(self.docker.calls, [])
 
 
+def without(labels, key):
+    return {name: value for name, value in labels.items() if name != key}
+
+
+def capture_labels():
+    """The labels of an image the procedure built: the ones of a base build, with the
+    digest of the binary the native fake writes."""
+    return {**build.image_labels(provenance_rows()),
+            "io.extractor.binary-sha256": hashlib.sha256(b"geth").hexdigest()}
+
+
+# A wrong answer from the manifest, from Docker or from the compiler, the message
+# of the check that refuses it, and where: before an output exists ("refused"),
+# before an image is built ("early"), or after one was ("image").
+WRONG_ANSWERS = (
+    ("manifest evidence kind", lambda t: setattr(t, "sha", t.rewrite_manifest(
+        lambda m: m.update(evidence_kind="synthetic-benchmark"))), "An accepted actual build is required", "refused"),
+    ("manifest task", lambda t: setattr(t, "sha", t.rewrite_manifest(
+        lambda m: m.update(task_id="E01-02.admission"))), "An accepted actual build is required", "refused"),
+    ("runtime image absent", lambda t: setattr(t.docker, "exits", {"inspect-base": 1}),
+     "The pinned runtime image is not present in Docker", "early"),
+    ("runtime image digest", lambda t: setattr(t.docker, "base", {"RepoDigests": ["debian@sha256:" + "9" * 64]}),
+     "Runtime image differs from its pin", "early"),
+    ("runtime image architecture", lambda t: setattr(t.docker, "base", {"Architecture": "arm64"}),
+     "Runtime image differs from its pin", "early"),
+    ("source closure commit", lambda t: setattr(t, "closure", "0" * 40),
+     "Source closure names another commit", "early"),
+    ("gofmt", lambda t: setattr(FakeNative, "gofmt", ["core/file0.go"]), "gofmt reports unformatted files", "early"),
+    ("compiler version", lambda t: setattr(FakeNative, "go_version", "go version go1.27.2 linux/amd64\n"),
+     "Compiler image does not run the pinned Go", "early"),
+    ("image id", lambda t: setattr(t.docker, "image", {"Id": PREVIOUS}),
+     "Built image identity differs from its record", "image"),
+    ("image architecture", lambda t: setattr(t.docker, "image", {"Architecture": "arm64"}),
+     "Built image identity differs from its record", "image"),
+    ("layers without the base", lambda t: setattr(t.docker, "image", {"RootFS": {"Layers": [EXTRA_LAYER]}}),
+     "Image is not the pinned runtime image with the layers of this build", "image"),
+    ("layers too many", lambda t: setattr(t.docker, "image", {"RootFS": {"Layers": [BASE_LAYER, EXTRA_LAYER, LAST_LAYER]}}),
+     "Image is not the pinned runtime image with the layers of this build", "image"),
+    ("entrypoint", lambda t: setattr(t.docker, "image", {"Config": {"Entrypoint": ["/bin/sh"]}}),
+     "Image entrypoint differs", "image"),
+    ("label changed", lambda t: setattr(t.docker, "image", {"Config": {
+        "Labels": {**t.docker.labels, "io.extractor.binary-sha256": "0" * 64}}}),
+     "Image labels differ from the provenance", "image"),
+    ("label missing", lambda t: setattr(t.docker, "image", {"Config": {
+        "Labels": without(t.docker.labels, "io.extractor.patches")}}),
+     "Image labels differ from the provenance", "image"),
+    ("effective config", lambda t: setattr(FakeNative, "config", CONFIG.replace('SyncMode = "full"', 'SyncMode = "snap"')),
+     "Effective config differs from the capture profile", "image"),
+)
+
+
+def wrong_answer(arrange, message, stage):
+    def test(self):
+        arrange(self)
+        if stage == "refused":
+            with self.assertRaisesRegex(Rejected, message):
+                build.build(self.accepted / "manifest.json", self.sha, self.output)
+            self.assertFalse(self.output.exists())
+            self.assertEqual(self.docker.calls, [])
+        else:
+            self.wrong(message, stage)
+    test.__doc__ = message
+    return test
+
+
+for name, arrange, message, stage in WRONG_ANSWERS:
+    setattr(BuildTest, "test_wrong_" + name.replace(" ", "_"), wrong_answer(arrange, message, stage))
+
+
+class PatchOracleTest(unittest.TestCase):
+    """PATCHES against the repository: an oracle that does not derive from the constant."""
+
+    def test_the_patch_list_is_the_set_of_diff_files_under_adapters_bsc(self):
+        diffs = sorted(path.name for path in (build.ROOT / "adapters" / "bsc").rglob("*.diff"))
+        self.assertEqual(sorted(build.PATCHES), diffs)
+        self.assertEqual(len(diffs), 8)
+        self.assertEqual([name[:2] for name in build.PATCHES], [f"{number:02d}" for number in range(1, 9)])
+
+    def test_every_patch_changes_go_source_only(self):
+        # So the Go files the base build hands to gofmt are the files its patches touch.
+        for name in build.PATCHES:
+            path = next((build.ROOT / "adapters" / "bsc").rglob(name))
+            targets = [line[6:] for line in path.read_text().splitlines() if line.startswith("+++ b/")]
+            self.assertTrue(targets and all(target.endswith(".go") for target in targets), name)
+
+
 class SmokeTest(ProcedureFixture):
     def setUp(self):
         super().setUp()
         FakeNative.control = {"start": (0, START_LOG), **REFUSALS}
         FakeNative.version = VERSION
         self.docker.tag(TAG, IMAGE_ID)  # the image under test exists
+        self.docker.labels = capture_labels()
 
     def test_smoke_passes(self):
         proof = build.smoke(TAG, self.output, 20)
@@ -1067,7 +1173,8 @@ class SmokeTest(ProcedureFixture):
         path_home = ["--chapel", "--datadir", "/home-path"]
         capture = {"EXTRACTOR_BSC_CONFIG": "/config/capture.json"}
         self.assertEqual([row["argv"] for row in self.native], [
-            ["--chapel", "dumpgenesis"], [*home, "--state.scheme", "hash", "init", "/config/genesis.json"],
+            ["-c", "sha256sum /usr/local/bin/geth"], ["--chapel", "dumpgenesis"],
+            [*home, "--state.scheme", "hash", "init", "/config/genesis.json"],
             ["-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "start", 20)],
             [*path_home, "init", "/config/genesis.json"],
             ["-c", build.start_script([*home, "--state.scheme", "hash", "--gcmode", "full", *build.OFFLINE], "snap-sync")],
@@ -1077,14 +1184,15 @@ class SmokeTest(ProcedureFixture):
             ["-c", build.start_script([*path_home, "--gcmode", "full", *build.FAST_NODE, *build.OFFLINE], "path-scheme")]])
         self.assertNotIn("--state.scheme", self.native[-1]["argv"][-1].split("> /work/")[0])
         self.assertEqual([row["environment"] for row in self.native],
-                         [None, None, capture, None, capture, {"EXTRACTOR_BSC_CONFIG": "/config/foreign.json"},
+                         [None, None, None, capture, None, capture, {"EXTRACTOR_BSC_CONFIG": "/config/foreign.json"},
                           capture, capture])
         self.assertEqual([row["entrypoint"] for row in self.native],
-                         [None, None, "/bin/sh", None, "/bin/sh", "/bin/sh", "/bin/sh", "/bin/sh"])
+                         ["/bin/sh", None, None, "/bin/sh", None, "/bin/sh", "/bin/sh", "/bin/sh", "/bin/sh"])
         self.assertIn((self.output / "smoke" / "home-path", "/home-path", False), self.native[-1]["mounts"])
         self.assertEqual(len(self.native[-1]["mounts"]), 4)
         self.assertTrue(all(row["image"] == TAG for row in self.native))
-        scripts = [row["argv"][1] for row in self.native if row["entrypoint"] == "/bin/sh"]
+        scripts = [row["argv"][1] for row in self.native
+                   if row["entrypoint"] == "/bin/sh" and row["argv"][1].startswith("geth ")]
         self.assertIn("--syncmode full", scripts[0])
         self.assertNotIn("--syncmode", scripts[1])
         self.assertIn("--maxpeers 0", scripts[0])
@@ -1114,18 +1222,51 @@ class SmokeTest(ProcedureFixture):
         self.assertEqual(proof["result"], "FAIL")
         self.assertIn("does not name", proof["error"])
 
-    def test_an_image_without_the_labels_is_refused(self):
-        for labels in ({}, {**build.image_labels(provenance_rows()), "io.extractor.source-commit": "short"},
-                       {**build.image_labels(provenance_rows()),
-                        "io.extractor.patches": "01-core-import-seam.diff=" + "0" * 64}):
-            with self.subTest(labels=list(labels)[:2]):
+    def test_an_image_without_the_labels_of_a_capture_build_is_refused(self):
+        full = capture_labels()
+        without_binary = without(full, "io.extractor.binary-sha256")
+        cases = [({}, "no labels"), (without(full, "io.extractor.source-commit"), "no source commit"),
+                 ({**without_binary, "io.extractor.binary-sha256": ""}, "empty binary digest"),
+                 ({**full, "io.extractor.source-commit": "54afaff4"}, "a short source commit"),
+                 ({**full, "io.extractor.source-commit": COMMIT.upper()}, "an uppercase source commit"),
+                 ({**full, "io.extractor.patches": "01-core-import-seam.diff=" + "0" * 64}, "one patch of eight"),
+                 ({**full, "io.extractor.patches": ";".join(name + "=" + "0" * 64 for name in
+                                                           (*build.PATCHES, "09-other.diff"))}, "a ninth patch"),
+                 ({**full, "io.extractor.patches": ""}, "no patch label"),
+                 ({**full, "io.extractor.binary-sha256": "not-a-digest"}, "a binary digest that is not one"),
+                 ({**full, "io.extractor.binary-sha256": "0" * 63}, "a short binary digest"),
+                 ({**full, "io.extractor.binary-sha256": "A" * 64}, "an uppercase binary digest")]
+        for index, (labels, name) in enumerate(cases):
+            with self.subTest(name=name):
+                FakeNative.instances = []
                 self.docker.labels = labels
+                self.output = self.root / f"unlabeled-{index}"
                 proof = build.smoke(TAG, self.output, 20)
                 self.assertEqual(proof["result"], "FAIL")
                 self.assertIn("not a capture build", proof["error"])
                 FakeNative.instances[-1].cleanup_complete = True
-                self.output = self.root / ("out-" + str(len(FakeNative.instances)))
+                self.assertFalse(self.native)
+
+    def test_an_image_whose_binary_is_not_the_labeled_one_is_refused(self):
+        # A vanilla image labeled like a capture build is not one.
+        self.docker.labels = {**capture_labels(), "io.extractor.binary-sha256": "0" * 64}
+        proof = build.smoke(TAG, self.output, 20)
+        self.assertEqual((proof["result"], proof["error"]),
+                         ("FAIL", "Rejected: The binary of the image is not the one its label records"))
+        self.assertEqual(len(self.native), 1)
+
+    def test_an_image_that_is_absent_is_refused(self):
+        self.docker.exits = {"inspect-built": 1}
+        proof = build.smoke(TAG, self.output, 20)
+        self.assertEqual((proof["result"], proof["error"]), ("FAIL", "Rejected: The image is not present in Docker"))
         self.assertFalse(self.native)
+
+    def test_an_image_of_another_network_is_refused(self):
+        FakeNative.genesis = {"config": {"chainId": 56}, "alloc": {}}
+        proof = build.smoke(TAG, self.output, 20)
+        self.assertEqual((proof["result"], proof["error"]),
+                         ("FAIL", "Rejected: The image does not dump the Chapel genesis"))
+        self.assertEqual(len(self.native), 2)  # the digest check, then the genesis dump
 
     def test_arguments_are_checked(self):
         for image, seconds in (("latest", 20), ("a/b:tag", 5), ("a/b:tag", 121), ("a/b:tag", "20"), ("A/B:tag", 20)):

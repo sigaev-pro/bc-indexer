@@ -585,7 +585,7 @@ def build(manifest_path, expected_sha, output, variant=None):
         drivers = retained(output, [*OWN_FILES, bsc_lifecycle.FIXTURE / "bsc_lifecycle.py"], deadline)
         runtime, digest = selected["runtime_image"], "@" + selected["runtime_image"].partition("@")[2]
         # The pinned images are already in Docker; nothing is pulled.
-        code, raw = host(runner, "runtime-inspect", ["docker", "image", "inspect", runtime], 60)
+        code, raw = host(runner, "runtime-inspect", ["docker", "image", "inspect", runtime], 60, check=False)
         require(code == 0, "The pinned runtime image is not present in Docker")
         base = inspected(raw)
         require(base["Architecture"] == "amd64" and base["Os"] == "linux" and
@@ -740,15 +740,21 @@ def smoke(image, output, seconds):
 
     def body(output, runner):
         origins = retained(output, OWN_FILES[:1], deadline)
-        code, raw = host(runner, "image-inspect", ["docker", "image", "inspect", image], 60)
+        code, raw = host(runner, "image-inspect", ["docker", "image", "inspect", image], 60, check=False)
         require(code == 0, "The image is not present in Docker")
         labels = inspected(raw)["Config"].get("Labels", {})
         commit, names = labels.get(LABEL + "source-commit"), (labels.get(LABEL + "patches") or "").split(";")
+        binary = labels.get(LABEL + "binary-sha256")
         require(commit is not None and re.fullmatch(r"[0-9a-f]{40}", commit) is not None and
                 [part.partition("=")[0] for part in names] == list(PATCHES) and
-                labels.get(LABEL + "binary-sha256") is not None,
+                binary is not None and re.fullmatch(r"[0-9a-f]{64}", binary) is not None,
                 "The image is not a capture build made by this procedure")
         proof["variant"] = labels.get(LABEL + "variant")
+        # The binary in the image is the one the build recorded.
+        digest = runner.command(image, ["-c", f"sha256sum /usr/local/bin/{BINARY}"], [], cap=120, memory="256m",
+                                entrypoint="/bin/sh")
+        require(read_bytes(digest, 4096, deadline).decode().split()[0] == binary,
+                "The binary of the image is not the one its label records")
         root = output / "smoke"
         for name in ("config", "home", "home-path", "work"):
             (root / name).mkdir(parents=True)

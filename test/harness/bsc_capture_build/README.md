@@ -101,7 +101,9 @@ chain configuration, full sync and the clean stop. A first start stays in
 BOOTSTRAP, so the log line `Extractor lifecycle is live` needs a real sync
 and is not part of the smoke. The image entry point is `geth`, so the start
 and the controls run their shell scripts through the `entrypoint` option of
-the owned command boundary (`native.py`).
+the owned command boundary (`native.py`). `smoke` accepts only an image
+with the labels of this procedure, and it hashes the binary in the image:
+the digest must equal the label `io.extractor.binary-sha256`.
 
 ```sh
 python3 -I test/harness/bsc_capture_build/bsc_capture_build.py smoke \
