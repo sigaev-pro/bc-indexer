@@ -10,6 +10,8 @@ require (
 	github.com/sigaev-pro/bc-indexer/gateway/destination v0.0.0
 	github.com/sigaev-pro/bc-indexer/gateway/journal v0.0.0
 	github.com/sigaev-pro/bc-indexer/gateway/session v0.0.0
+	github.com/sigaev-pro/bc-indexer/protocol/codec v0.0.0
+	github.com/sigaev-pro/bc-indexer/protocol/proto v0.0.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 )
@@ -18,7 +20,6 @@ require (
 	github.com/sigaev-pro/bc-indexer/protocol/balance v0.0.0 // indirect
 	github.com/sigaev-pro/bc-indexer/protocol/block v0.0.0 // indirect
 	github.com/sigaev-pro/bc-indexer/protocol/profiles v0.0.0 // indirect
-	github.com/sigaev-pro/bc-indexer/protocol/proto v0.0.0 // indirect
 	github.com/sigaev-pro/bc-indexer/protocol/semantic v0.0.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
@@ -47,3 +48,6 @@ replace github.com/sigaev-pro/bc-indexer/protocol/profiles => ../../protocol/pro
 replace github.com/sigaev-pro/bc-indexer/protocol/proto => ../../protocol/proto
 
 replace github.com/sigaev-pro/bc-indexer/protocol/semantic => ../../protocol/semantic
+
+// The tests build records, manifests and frames with the real codec.
+replace github.com/sigaev-pro/bc-indexer/protocol/codec => ../../protocol/codec

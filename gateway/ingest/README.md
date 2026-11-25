@@ -19,7 +19,7 @@ CONTROL_WIRE_CONTRACT's RPC table:
 | `PrepareChunk` | one bounded manifest chunk; idempotent, cursor-based |
 | `FinalizePrepare` | verifies the full manifest, returns the exact reservation seed and plan digest |
 | `BeginPublish` | accepts seed/plan/layout identity, returns durable resume cursors |
-| `PublishChunk` | bidirectional stream of bounded transport frame chunks; one response per request, errors do not close the stream |
+| `PublishChunk` | bidirectional stream of bounded chunks of encoded transport frames; one response per request, errors do not close the stream |
 | `FinalizePublish` | closes a normal batch: `CLOSED` after completeness validation |
 | `SealImport` | closes an IMPORT_SEALED batch with the same validation |
 | `GetBatchState` | durable state of one batch, the `IngestAck` only while it is durable, and one bounded page of frame cursors |
@@ -67,6 +67,14 @@ With these RPCs a gateway acknowledgement reaches the producer:
   (`GRPCServerOptions` sets the gRPC receive bound; larger messages are
   refused with ResourceExhausted at the transport level); one data chunk is
   at most 64 KiB (`LIMIT_INCOMPATIBLE`).
+- **A frame is sent as its encoded TransportFrame.** The data of a
+  `PublishChunk` is a byte range of the canonical encoding of one frame,
+  the wrapper plus the data it carries, and the offset counts bytes inside
+  that encoding. A frame is larger than its data (a 137-byte fragment makes
+  a 353-byte frame), so a frame of a 64 KiB fragment does not fit one data
+  chunk and arrives in several chunks. The journal computes the exact size
+  of every declared frame; the cursors of `GetBatchState` and
+  `BeginPublish` count encoded frame bytes.
 - **IMPORT_SEALED** imports the original seed (issuer epoch preserved, no
   sequence allocated) and seals only through `SealImport`;
   `FinalizePublish`/`SealImport` cannot be mixed.

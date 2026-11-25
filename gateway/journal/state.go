@@ -320,6 +320,7 @@ func (j *Journal) RecoveryRelease(id BatchID, ack IngestAck, assertion OutboxAss
 	if err := j.st.Apply(b); err != nil {
 		return 0, err
 	}
+	j.forgetManifest(id)
 	return id.Seq, nil
 }
 

@@ -22,6 +22,10 @@
 //     an immutable conflict, a gap reports the expected cursor, and every
 //     data chunk is at most MaxDataChunkBytes (64 KiB). A manifest or frame
 //     stream only closes after all contiguous chunks are verified.
+//   - A frame stream is one encoded TransportFrame, the wrapper plus the
+//     data it carries. Its exact size is fixed when the frame is declared,
+//     from the reservation, the fragment count of the event in the stored
+//     manifest and the declared layout entry (frame.go).
 //   - CLOSED is the only publishable state: FinalizePublish verifies the
 //     layout manifest digest over the declared entries and the completeness
 //     of every transport frame before the atomic CLOSED commit. Publication
@@ -144,6 +148,13 @@ type Journal struct {
 	// this journal is the only writer of the switch records.
 	sw     Switch
 	swOpen bool
+	// manifests keeps, per open batch, the fragment count of every event
+	// of its manifest, read once for the frame accounting (frame.go). An
+	// entry is dropped when the batch is closed or retired.
+	manifests map[BatchID][]uint64
+	// frameScratch is the reused buffer for the data length probe of the
+	// frame accounting; it grows to the fragment bound once.
+	frameScratch []byte
 }
 
 // Counters holds the monotonic allocation counters; values start at 1.

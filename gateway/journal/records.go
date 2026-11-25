@@ -223,8 +223,11 @@ func (e LayoutEntry) FrameCount() uint64 {
 	return e.PartCount
 }
 
-// FrameTotal returns the declared byte size of one frame of this entry.
-func (e LayoutEntry) FrameTotal(frame uint64) uint64 {
+// FrameData returns the number of data bytes one frame of this entry
+// carries: the whole fragment for COMPLETE, the part's slice for PART. It is
+// not the size of the frame stream: a frame stream is the encoded
+// TransportFrame, the wrapper plus these bytes (frame.go).
+func (e LayoutEntry) FrameData(frame uint64) uint64 {
 	if e.Form == 0 {
 		return e.FragmentTotal
 	}

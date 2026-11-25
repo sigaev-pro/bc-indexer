@@ -14,8 +14,9 @@ package journal
 //	batch/<id>/reservation                Reservation record
 //	batch/<id>/publish                    Publish record
 //	batch/<id>/layout/<o>/<f>             LayoutEntry record
-//	batch/<id>/framehead/<o>/<f>/<fi>     u64 frame total bytes
-//	batch/<id>/frames/<o>/<f>/<fi>/<off>  transport frame chunks
+//	batch/<id>/framehead/<o>/<f>/<fi>     u64 encoded size of the frame
+//	                                      (the TransportFrame, wrapper plus data)
+//	batch/<id>/frames/<o>/<f>/<fi>/<off>  chunks of the encoded frame
 //	batch/<id>/closed                     Closed record
 //	batch/<id>/ackset/<o>/<f>/<fi>        presence = frame PubAck recorded
 //	batch/<id>/nats_acked                 NatsAcked record

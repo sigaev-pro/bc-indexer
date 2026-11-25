@@ -90,8 +90,15 @@ func TestBatchStateReportsEveryPhase(t *testing.T) {
 	}
 
 	// A retired batch is gone: no plan is compared, no ack is returned.
-	if done, err := j.ReleaseCleanup(pf.id, 50); err != nil || !done {
-		t.Fatalf("cleanup: done=%v err=%v", done, err)
+	// The cleanup runs in bounded steps until no payload key is left.
+	for {
+		done, err := j.ReleaseCleanup(pf.id, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done {
+			break
+		}
 	}
 	if _, err := j.CompleteRelease(pf.id); err != nil {
 		t.Fatal(err)

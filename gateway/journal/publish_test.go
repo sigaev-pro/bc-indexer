@@ -26,7 +26,9 @@ type frameFixture struct {
 func newPlan(t *testing.T, j *Journal, seq uint64, importMode bool) planFixture {
 	t.Helper()
 	id := testBatch(seq)
-	manifest := []byte("extractor.manifest.v2\x00payload")
+	// A real descriptor manifest, two events of three fragments each; the
+	// plan carries fragment 0 of each event.
+	manifest := testManifest(t, []uint64{6, 3, 3}, []uint64{6, 3, 3})
 	var res Reservation
 	if importMode {
 		digest := sha256.Sum256(manifest)
@@ -48,21 +50,19 @@ func newPlan(t *testing.T, j *Journal, seq uint64, importMode bool) planFixture 
 		res = prepareBatch(t, j, id, manifest, 2)
 	}
 
-	complete := FrameMeta{Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6}
-	part := FrameMeta{Form: 1, Capacity: 4, PartCount: 2, FragmentTotal: 6}
+	// The frames are the encoded TransportFrames the producer writes, the
+	// wrapper plus the data: "abcdef" in one COMPLETE frame, "wxyz" and "uv"
+	// as two PART frames.
+	entries := []LayoutEntry{
+		{Ordinal: 0, FragmentIndex: 0, Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6},
+		{Ordinal: 1, FragmentIndex: 0, Form: 1, Capacity: 4, PartCount: 2, FragmentTotal: 6},
+	}
 	pf := planFixture{
 		id:         id,
 		res:        res,
 		planDigest: PlanDigest(res.Seed),
-		entries: []LayoutEntry{
-			{Ordinal: 0, FragmentIndex: 0, Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6},
-			{Ordinal: 1, FragmentIndex: 0, Form: 1, Capacity: 4, PartCount: 2, FragmentTotal: 6},
-		},
-		frames: []frameFixture{
-			{FrameAddr{0, 0, 0}, complete, []byte("abcdef")},
-			{FrameAddr{1, 0, 0}, part, []byte("wxyz")},
-			{FrameAddr{1, 0, 1}, part, []byte("uv")},
-		},
+		entries:    entries,
+		frames:     testPlanFrames(res.SequenceBase, entries),
 	}
 	pf.layout = computeLayoutDigest(pf.planDigest, pf.entries)
 	return pf
@@ -178,9 +178,11 @@ func TestPublishChunkValidation(t *testing.T) {
 	if next, err = j.PublishChunk(pf.id, pf.planDigest, first.addr, &meta, 5, sha256.Sum256([]byte("f")), []byte("f")); !errors.Is(err, ErrOffsetMismatch) || next != 3 {
 		t.Fatalf("gap: next=%d err=%v, want cursor 3", next, err)
 	}
-	// Bytes beyond the declared frame total are rejected.
-	if _, err := j.PublishChunk(pf.id, pf.planDigest, first.addr, &meta, 3, sha256.Sum256([]byte("defg")), []byte("defg")); !errors.Is(err, ErrStateConflict) {
-		t.Fatalf("overrun of declared total: got %v", err)
+	// Bytes beyond the encoded size of the frame are rejected: a chunk at
+	// the current cursor that reaches past the end of the frame.
+	over := make([]byte, uint64(len(first.bytes))-3+1)
+	if _, err := j.PublishChunk(pf.id, pf.planDigest, first.addr, &meta, 3, sha256.Sum256(over), over); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("overrun of encoded size: got %v", err)
 	}
 	// A chunk may not exceed 64 KiB.
 	big := make([]byte, MaxDataChunkBytes+1)
@@ -270,7 +272,7 @@ func TestFinalizePublishValidation(t *testing.T) {
 	}
 	// The stream cannot grow after CLOSED; stored retries stay no-ops.
 	first := pf.frames[0]
-	if _, err := j.PublishChunk(pf.id, pf.planDigest, first.addr, &first.meta, 6, sha256.Sum256([]byte("zz")), []byte("zz")); err == nil {
+	if _, err := j.PublishChunk(pf.id, pf.planDigest, first.addr, &first.meta, uint64(len(first.bytes)), sha256.Sum256([]byte("zz")), []byte("zz")); err == nil {
 		t.Fatal("extension after CLOSED must be rejected")
 	}
 	if _, err := j.PublishChunk(pf.id, pf.planDigest, first.addr, &first.meta, 0, sha256.Sum256(first.bytes), first.bytes); err != nil {
@@ -296,8 +298,10 @@ func TestEntryCountMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	pf.publishFrames(t, j)
-	extra := FrameMeta{Form: 0, Capacity: 2, PartCount: 1, FragmentTotal: 2}
-	if _, err := j.PublishChunk(pf.id, pf.planDigest, FrameAddr{7, 0, 0}, &extra, 0, sha256.Sum256([]byte("ab")), []byte("ab")); err != nil {
+	extra := FrameMeta{Form: 0, Capacity: 3, PartCount: 1, FragmentTotal: 3}
+	// Fragment 1 of event 0 is in the manifest and outside the bound entry
+	// count.
+	if _, err := j.PublishChunk(pf.id, pf.planDigest, FrameAddr{0, 1, 0}, &extra, 0, sha256.Sum256([]byte("abc")), []byte("abc")); err != nil {
 		t.Fatal(err)
 	}
 	if err := j.FinalizePublish(pf.id, pf.planDigest, pf.res.ManifestDigest, pf.layout); !errors.Is(err, ErrIncomplete) {

@@ -14,7 +14,7 @@ the shared storage seam.
 | `PrepareChunk(id, digest, offset, sha, data)` | bound digest, contiguous offsets, data <= 64 KiB | one manifest chunk |
 | `FinalizePrepare(id, digest)` | complete stream, rehash equals the digest | reservation seed + sequence range + PREPARED (normal); state switch only (import) |
 | `BeginPublish(id, seed, planDigest, layoutDigest, entryCount)` | seed equals the stored reservation, planDigest = SHA-256(seed) | publish record + RECEIVING |
-| `PublishChunk(id, planDigest, addr, meta, offset, sha, data)` | plan identity, first chunk declares the frame, offsets contiguous, data <= 64 KiB | declaration + one frame chunk |
+| `PublishChunk(id, planDigest, addr, meta, offset, sha, data)` | plan identity, first chunk declares the frame and fixes its encoded size, offsets contiguous inside the encoded frame, data <= 64 KiB | declaration + one chunk of the encoded frame |
 | `FinalizePublish` / `SealImport(id, plan, manifest, layout)` | complete frames of every declared entry, recomputed layout digest matches | CLOSED marker + CLOSED |
 | `RecordPubAck(id, plan, addr)` | CLOSED batch, declared frame | ackset key |
 | `MarkNATSACKed(id, plan, manifest)` | every frame of every fragment acknowledged | NATS_ACKED marker + state |
@@ -52,6 +52,19 @@ Rules held by the journal:
   hole returns `ErrOffsetMismatch` with the expected cursor, a conflicting
   rewrite is `ErrImmutableConflict`, data chunks are at most 64 KiB, and a
   stream closes only after every contiguous chunk is verified.
+- **A frame stream is one encoded TransportFrame**, the wrapper plus the
+  data it carries; the journal does not count data bytes. When a frame is
+  declared, the journal fixes its exact encoded size from the reservation
+  (the chain sequence of the event), the fragment count of the event in the
+  stored manifest, and the declared layout entry, and asks `protocol/proto`
+  for the size (`TransportFrame.EncodedFrameSize`). A chunk is a byte range
+  of that encoding, so a frame of a 64 KiB fragment, which is larger than
+  one data chunk, arrives in several chunks with offsets inside the frame.
+  A chunk may not carry bytes past the size, and a frame is complete when
+  its stream covers it exactly. A stored manifest that is not a descriptor
+  stream has no fragment count to read: its batch prepares and reserves as
+  before, and the declaration of its first frame is `ErrManifestMismatch`
+  and writes nothing.
 - **CLOSED is the only publishable state**; PubAck accounting runs only on
   CLOSED batches, undeclared frames are never created by a late callback,
   duplicates are tolerated, and NATS_ACKED needs every frame acknowledged.

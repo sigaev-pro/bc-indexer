@@ -149,7 +149,8 @@ func TestGetBatchStateOverRPC(t *testing.T) {
 	if resp.GetError() != nil || resp.GetState() != BatchState_CLOSED || resp.GetAck() != nil || len(resp.GetCursors()) != 3 {
 		t.Fatalf("closed: %s ack=%v cursors=%d %+v", resp.GetState(), resp.GetAck(), len(resp.GetCursors()), resp.GetError())
 	}
-	if c := resp.GetCursors()[0]; c.GetOrdinal() != 0 || c.GetFragmentIndex() != 0 || c.GetFrameIndex() != 0 || c.GetNextOffset() != 6 {
+	// The cursor counts encoded frame bytes: the first frame is complete.
+	if c := resp.GetCursors()[0]; c.GetOrdinal() != 0 || c.GetFragmentIndex() != 0 || c.GetFrameIndex() != 0 || c.GetNextOffset() != uint64(len(p.frames[0].data)) {
 		t.Fatalf("first cursor: %+v", c)
 	}
 	// Another plan never reads this batch.
@@ -176,8 +177,15 @@ func TestGetBatchStateOverRPC(t *testing.T) {
 		t.Fatalf("releasing: %s %+v %+v", resp.GetState(), resp.GetAck(), resp.GetError())
 	}
 	// RETIRED answers without any acknowledgement, whatever plan is named.
-	if _, err := h.j.ReleaseCleanup(jid(1), 50); err != nil {
-		t.Fatal(err)
+	// The cleanup runs in bounded steps until no payload key is left.
+	for {
+		done, err := h.j.ReleaseCleanup(jid(1), 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done {
+			break
+		}
 	}
 	if _, err := h.j.CompleteRelease(jid(1)); err != nil {
 		t.Fatal(err)
