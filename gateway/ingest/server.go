@@ -2,8 +2,10 @@
 // of the gateway ingest boundary. The .proto file defines the service
 // (HelloChallenge, OpenSession, BeginPrepare, PrepareChunk, FinalizePrepare,
 // BeginPublish, a bidirectional PublishChunk stream, FinalizePublish and
-// SealImport for IMPORT_SEALED recovery); this server implements it on top
-// of the gateway journal (E03-01.gateway_store) and the session fencing
+// SealImport for IMPORT_SEALED recovery, then GetBatchState, Release,
+// RecoveryRelease and the SealGeneration, PrepareSwitch, CommitSwitch and
+// Resume cutover RPCs); this server implements it on top of
+// the gateway journal (E03-01.gateway_store) and the session fencing
 // boundary (E03-02.fencing).
 //
 // Contract held here (CONTROL_WIRE_CONTRACT unless noted):
@@ -15,7 +17,8 @@
 //     under the gate's serialized ordering, not only when the RPC is read.
 //   - Typed errors answer with the registry's code and retry action; the
 //     gRPC status is only a transport categorization. A session-stale RPC
-//     after a barrier creates no state.
+//     after a barrier creates no state. A sealed admission generation
+//     opens no session, also after a gateway restart.
 //   - Bounds: one RPC including its wrapper is at most 256 KiB (the server
 //     rejects larger messages at the transport level), one data chunk is at
 //     most 64 KiB (LIMIT_INCOMPATIBLE).
@@ -58,11 +61,16 @@ type Server struct {
 
 	journal *journal.Journal
 	gate    *session.Gate
+	// publisher fences the internal publisher worker. Release and
+	// SealGeneration raise its barriers; the process wiring hands the same
+	// gate to the publisher (PublisherGate).
+	publisher *session.PublisherGate
 
 	mu         sync.Mutex
 	boot       [16]byte
 	challenges map[[16]byte]struct{}
 	sessions   map[[32]byte]*sessionRecord
+	verifier   TargetVerifier
 }
 
 // New creates the server over one gateway journal and one session gate.
@@ -74,10 +82,19 @@ func New(j *journal.Journal, g *session.Gate) (*Server, error) {
 	return &Server{
 		journal:    j,
 		gate:       g,
+		publisher:  session.NewPublisherGate(),
 		boot:       boot,
 		challenges: make(map[[16]byte]struct{}),
 		sessions:   make(map[[32]byte]*sessionRecord),
 	}, nil
+}
+
+// PublisherGate returns the publisher fence the Release and SealGeneration
+// barriers raise. The publisher worker applies its PubAck callbacks through
+// the same gate, so a callback of an older generation or of a released batch
+// never creates state.
+func (s *Server) PublisherGate() *session.PublisherGate {
+	return s.publisher
 }
 
 // GRPCServerOptions returns the server options every deployment must use:
@@ -162,6 +179,16 @@ func (s *Server) openSession(req *OpenSessionRequest) (*OpenSessionResponse, *wi
 		return nil, &wireError{ErrorCode_SESSION_STALE, RetryAction_RECONNECT, "unknown challenge for this boot"}
 	}
 
+	// A sealed admission generation opens no session. The admission barrier
+	// of the gate lives in the process, so after a gateway restart only the
+	// durable seal still forbids the data RPCs of the sealed generation. The
+	// retry of the seal and its Resume come from the next generation.
+	if seal, sealed, err := s.journal.SealedGeneration(journal.BatchID{ProducerID: producerID, RunID: runID}); err != nil {
+		return nil, mapJournalError(err)
+	} else if sealed && req.GetAdmissionGeneration() <= seal.AdmissionGeneration {
+		return nil, &wireError{ErrorCode_GENERATION_CONFLICT, RetryAction_RECONNECT, "admission generation is sealed"}
+	}
+
 	tok, err := s.gate.Open(req.GetAdmissionGeneration())
 	if err != nil {
 		return nil, mapJournalError(err)
@@ -211,6 +238,14 @@ func (s *Server) mutate(header *SessionHeader, fn func() error) *wireError {
 }
 
 func (s *Server) checkHeader(header *SessionHeader) (*sessionRecord, *wireError) {
+	return s.checkHeaderFor(header, nil)
+}
+
+// checkHeaderFor is checkHeader with one more admitted binding digest:
+// admitBinding lets the commit of a destination switch answer the session
+// that prepared it, which is bound to the old binding of that switch. The
+// header binding must then equal the store binding or admitBinding.
+func (s *Server) checkHeaderFor(header *SessionHeader, admitBinding *[32]byte) (*sessionRecord, *wireError) {
 	if header == nil {
 		return nil, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, "missing session header"}
 	}
@@ -241,7 +276,10 @@ func (s *Server) checkHeader(header *SessionHeader) (*sessionRecord, *wireError)
 		return nil, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RECONNECT, "header identity does not match the session"}
 	}
 	bnd := s.journal.BindingDigest()
-	if len(header.GetBindingDigest()) != 32 || string(header.GetBindingDigest()) != string(bnd[:]) {
+	digest := header.GetBindingDigest()
+	bindingOK := len(digest) == 32 && (string(digest) == string(bnd[:]) ||
+		(admitBinding != nil && string(digest) == string(admitBinding[:])))
+	if !bindingOK {
 		return nil, &wireError{ErrorCode_BINDING_MISMATCH, RetryAction_FIX_CONFIG, "binding digest does not match the gateway store"}
 	}
 	return rec, nil
