@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run single-check mutants of the state-provider packages in owned containers.
 
-The table (test/harness/pins.mutants.json) names for every mutant the family
+The table (test/harness/pins_native.mutants.json) names for every mutant the family
 of the native module it runs in. Each mutant replaces exactly one fragment of
 a state-provider source inside a fresh copy of the accepted native tree of
 its family, must compile, and is KILLED when the compiled tests fail and name
@@ -186,7 +186,7 @@ def main():
     run_parser = commands.add_parser("mutants")
     run_parser.add_argument("tool", type=Path)
     run_parser.add_argument("--sha256", required=True)
-    run_parser.add_argument("--table", type=Path, default=HERE / "pins.mutants.json")
+    run_parser.add_argument("--table", type=Path, default=HERE / "pins_native.mutants.json")
     run_parser.add_argument("--profile-manifest", nargs=2, action="append", metavar=("PATH", "SHA256"), required=True)
     run_parser.add_argument("--output", type=Path, required=True)
     run_parser.add_argument("--only", action="append", default=[])

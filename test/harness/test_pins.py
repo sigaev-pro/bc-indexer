@@ -149,6 +149,9 @@ class ReportTests(unittest.TestCase):
             "fresh rejected": ("TestNativeStorePreflight", "preflight", lambda v: v.update(bound_store="mismatch")),
             "converted": ("TestNativeStorePreflight", "preflight", lambda v: v.update(native_hash_override_on_path_store="<nil>")),
             "profile flipped": ("TestNativeEffectiveProfile", "profile", lambda v: v["results"]["allowed_config"].update(accepted=False)),
+            "one wrong effective value among several": ("TestNativeEffectiveProfile", "profile",
+                                                        lambda v: v["results"]["allowed_state_history_flag"]["detail"]["profile"]
+                                                        .update(state_scheme="hash")),
             "forbidden accepted": ("TestNativeEffectiveProfile", "profile",
                                    lambda v: v["results"]["wrong_gc_profile_archive_flag"].update(accepted=True)),
             "case missing": ("TestNativeEffectiveProfile", "profile", lambda v: v["cases"].pop()),
@@ -214,6 +217,21 @@ class ReportTests(unittest.TestCase):
                                   lambda v: dict(v, **{"ancient tail N blocks behind the head": refusal(tail, floor + tail)})),
                 "tail numbers": (retention, "ancient_tail",
                                  lambda v: dict(v, **{"ancient tail N-1 blocks behind the head": refusal(tail - 1, floor + tail - 1)})),
+                "tail coverage head": (retention, "ancient_tail", lambda v: dict(v, **{
+                    "ancient tail N blocks behind the head": dict(v["ancient tail N blocks behind the head"],
+                                                                  head=floor + tail - 1)})),
+                "tail refusal is a coverage": (retention, "ancient_tail", lambda v: dict(v, **{
+                    "ancient tail N-1 blocks behind the head": v["ancient tail N blocks behind the head"]})),
+                "offset head numbers": (offset, "legacy_offset_at_floor",
+                                        lambda v: dict(v, **{"offset N-1 blocks behind the head": refusal(3, floor + 3)})),
+                "offset floor number": (offset, "legacy_offset_at_floor", lambda v: dict(v, **{
+                    "offset N-1 blocks behind the head": "forbidden pruning profile: store keeps blocks from 3, head %d, "
+                    "fewer than 1 blocks behind the head" % (floor + 2)})),
+                "offset refused for another reason": (offset, "legacy_offset_at_floor", lambda v: dict(v, **{
+                    "offset N-1 blocks behind the head": "native store identity mismatch: store keeps blocks from 3, head %d, "
+                    "fewer than %d blocks behind the head" % (floor + 2, floor)})),
+                "offset on a home without a head accepted": (offset, "legacy_offset_at_floor", lambda v: dict(v, **{
+                    "offset on a genesis-only home": "<nil>"})),
             }
             for label, (test, name, replace) in mutations.items():
                 rows = [dict(row, value=replace(row["value"])) if (row["test"], row["name"]) == (test, name) else row
@@ -226,8 +244,8 @@ class ReportTests(unittest.TestCase):
             rows = report(family)
             for name in ("pruned_store_at_floor", "pruned_store_below_floor"):
                 find(rows, "TestNativeStorePreflight", "preflight")[name] = "<nil>"
-            with self.subTest(family, label="a client without block pruning has no pruned homes"), \
-                    self.assertRaises(ValueError):
+            with self.subTest(family=family, label="a client without block pruning has no pruned homes"), \
+                    self.assertRaisesRegex(ValueError, "no pruned homes"):
                 pins.evaluate_report(family, rows, blocks())
 
     def test_pruned_home_rows_are_required(self):

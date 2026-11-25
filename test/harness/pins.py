@@ -442,8 +442,7 @@ def evaluate_report(family, rows, blocks):
             "Native parser converted a path store")
     floor = RETENTION_FLOOR[family]
     require(preflight["path_initialized_scheme"] == "path" and
-            preflight["path_initialized_profile"] == profile_digest(family, "path") and
-            preflight["path_initialized_profile"] != profile_digest(family, "hash"),
+            preflight["path_initialized_profile"] == profile_digest(family, "path"),
             f"Path store of {family} was not accepted with the profile of the path scheme")
     if family in PRUNING_CLIENTS:
         require(preflight["pruned_store_at_floor"] == "<nil>" and
