@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/extractor/decision"
@@ -96,13 +97,31 @@ func TestCheckProfile(t *testing.T) {
 	if err := CheckProfile(base()); err != nil {
 		t.Fatal(err)
 	}
+	// The fast-node profile of D108: the scheme of the store (none keeps it),
+	// N blocks of block and state history, and the deprecated pruneancient.
+	for name, change := range map[string]func(*ethconfig.Config){
+		"no scheme":     func(c *ethconfig.Config) { c.StateScheme = "" },
+		"path scheme":   func(c *ethconfig.Config) { c.StateScheme = rawdb.PathScheme },
+		"block history": func(c *ethconfig.Config) { c.BlockHistory = 600000 },
+		"pruneancient":  func(c *ethconfig.Config) { c.PruneAncientData, c.BlockHistory = true, 600000 },
+	} {
+		cfg := base()
+		change(cfg)
+		if err := CheckProfile(cfg); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
 	on := true
 	for name, mutate := range map[string]func(*ethconfig.Config){
-		"snap sync":   func(c *ethconfig.Config) { c.SyncMode = ethconfig.SnapSync },
-		"vote":        func(c *ethconfig.Config) { c.Miner.VoteEnable = true },
-		"builder":     func(c *ethconfig.Config) { c.Miner.Mev.Enabled = &on },
-		"path scheme": func(c *ethconfig.Config) { c.StateScheme = rawdb.PathScheme },
-		"archive":     func(c *ethconfig.Config) { c.NoPruning = true },
+		"snap sync":                     func(c *ethconfig.Config) { c.SyncMode = ethconfig.SnapSync },
+		"vote":                          func(c *ethconfig.Config) { c.Miner.VoteEnable = true },
+		"builder":                       func(c *ethconfig.Config) { c.Miner.Mev.Enabled = &on },
+		"tries none":                    func(c *ethconfig.Config) { c.TriesVerifyMode = core.NoneVerify },
+		"block history below the floor": func(c *ethconfig.Config) { c.BlockHistory = 599999 },
+		"state history below the floor under path": func(c *ethconfig.Config) {
+			c.StateScheme, c.StateHistory = rawdb.PathScheme, 599999
+		},
+		"archive": func(c *ethconfig.Config) { c.NoPruning = true },
 	} {
 		cfg := base()
 		mutate(cfg)

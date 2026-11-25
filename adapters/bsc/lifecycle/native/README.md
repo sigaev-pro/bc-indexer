@@ -26,10 +26,11 @@ development sample are in
 - `eth.New` on a capture node (the config file named by
   `EXTRACTOR_BSC_CONFIG`: store ID, producer and run, native commit, genesis
   file): before the store is opened, `CheckProfile` refuses what the capture
-  profile forbids. It runs the state profile check of E01-02.pins (hash
-  scheme, full garbage collection, no block-data pruning), then refuses any
-  sync mode but full (`bsc.snap-sync`), voting and the MEV builder role
-  (`bsc.sealing`).
+  profile forbids. It runs the fast-node state profile check of E01-02.pins
+  (D108, PR #230: the hash, the path or no state scheme, full garbage
+  collection, tries kept and verified locally, a block history of N = 600,000
+  blocks or of the entire chain), then refuses any sync mode but full
+  (`bsc.snap-sync`), voting and the MEV builder role (`bsc.sealing`).
 - Parlia is built with the system-call API (`bsc.NewSystemCallAPI`) instead
   of the RPC backend, before `CreateConsensusEngine`
   (`bsc.system-call-api`). After `NewBlockChain`, `Attach` binds it to the

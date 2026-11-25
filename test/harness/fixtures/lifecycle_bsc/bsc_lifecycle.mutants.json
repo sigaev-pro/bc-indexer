@@ -52,6 +52,24 @@
       "replacement": ""
     },
     {
+      "name": "profile tries none",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "(\"tries_none\", \"tries-verify-mode\"), ",
+      "replacement": ""
+    },
+    {
+      "name": "profile block history below the floor",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "(\"block_history_below_floor\", \"history.blocks\"),",
+      "replacement": ""
+    },
+    {
+      "name": "profile state history below the floor",
+      "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
+      "original": "(\"state_history_below_floor\", \"history.state\"), ",
+      "replacement": ""
+    },
+    {
       "name": "step error class",
       "file": "test/harness/fixtures/lifecycle_bsc/bsc_lifecycle.py",
       "original": "c.check(f\"{where}: error class\", step[\"class\"] == klass, (step[\"class\"], step[\"error\"]))",

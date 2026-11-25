@@ -20,7 +20,8 @@ state root differs, and timestamps are the parent's plus 3 seconds (S3 plus
 4), so the blocks are the same in every run. Plato is active at block 7.
 
 1. Profile refusals outside the gate: `CheckProfile` with snap sync, voting,
-   the builder role and the path scheme; `eth.New` with snap sync; `Start`
+   the builder role, tries disabled, a block history and a state history
+   below the floor N (D108, PR #230); `eth.New` with snap sync; `Start`
    with a Parlia engine without the system-call API.
 2. Native caller path: the shipped node (`eth.New` with the capture config).
    Imports go through `admin_importChain`, rewinds through `debug_setHead`,

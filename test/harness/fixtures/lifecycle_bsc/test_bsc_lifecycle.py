@@ -220,6 +220,14 @@ class RefusalTests(unittest.TestCase):
             report["profile"]["snap_sync"] = None
         self.refused(change)
 
+    def test_profile_accepts_a_refusal_of_the_fast_node_profile(self):
+        # Tries disabled and a history below the floor N (D108, PR #230).
+        for key in ("tries_none", "block_history_below_floor", "state_history_below_floor"):
+            def change(report, trace, raw, key=key):
+                report["profile"][key] = None
+            with self.subTest(key):
+                self.refused(change)
+
     def test_decided_events_miss_the_verified_block(self):
         def change(report, trace, raw):
             report["events"]["decided"]["A5"] = [e for e in report["events"]["decided"]["A5"]
