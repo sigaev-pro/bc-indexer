@@ -12,6 +12,7 @@ package storagetest
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/sigaev-pro/bc-indexer/core/journal/storage"
@@ -30,7 +31,11 @@ func Run(t *testing.T, newStore NewStore) {
 		{"GetPutDelete", GetPutDelete},
 		{"ApplyIsAtomic", ApplyIsAtomic},
 		{"ApplyVisibility", ApplyVisibility},
+		{"ApplyDeletesExistingKeys", ApplyDeletesExistingKeys},
+		{"BatchOrderIsCommitOrder", BatchOrderIsCommitOrder},
+		{"PutOverwritesExistingKey", PutOverwritesExistingKey},
 		{"IterateOrderAndBounds", IterateOrderAndBounds},
+		{"IterateHandsOutStoredValues", IterateHandsOutStoredValues},
 		{"IterateStopAndError", IterateStopAndError},
 		{"IterateSnapshotIsStable", IterateSnapshotIsStable},
 		{"InputBytesAreCopied", InputBytesAreCopied},
@@ -221,7 +226,7 @@ func IterateSnapshotIsStable(t *testing.T, st storage.Storage) {
 }
 
 // InputBytesAreCopied checks that a store keeps what was written even when
-// the caller reuses its buffers afterwards.
+// the caller reuses its buffers after that.
 func InputBytesAreCopied(t *testing.T, st storage.Storage) {
 	t.Helper()
 	key := []byte("k")
@@ -290,4 +295,161 @@ func EmptyKeysAndValues(t *testing.T, st storage.Storage) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// ApplyDeletesExistingKeys checks that Apply carries out the deletions of a
+// batch on keys that are there, next to its writes. ApplyIsAtomic deletes a
+// key that never existed, which a store that ignores deletions would pass.
+// The journals clean up payload with batches that delete existing keys
+// (the Cleanup call of core/journal/producer, the Release step of
+// gateway/journal).
+func ApplyDeletesExistingKeys(t *testing.T, st storage.Storage) {
+	t.Helper()
+	for _, k := range []string{"k1", "k2", "k3", "k4"} {
+		if err := st.Put([]byte(k), []byte("value of "+k)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := storage.NewBatch()
+	b.Delete([]byte("k1"))
+	b.Delete([]byte("k3"))
+	b.Put([]byte("k5"), []byte("value of k5"))
+	b.Delete([]byte("never-there"))
+	if err := st.Apply(b); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"k1", "k3"} {
+		if _, err := st.Get([]byte(k)); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("key %q survived a batch that deleted it: %v", k, err)
+		}
+	}
+	for _, k := range []string{"k2", "k4", "k5"} {
+		v, err := st.Get([]byte(k))
+		if err != nil || string(v) != "value of "+k {
+			t.Fatalf("key %q = %q, %v after the batch; want %q", k, v, err, "value of "+k)
+		}
+	}
+
+	// A batch of nothing but deletions empties the store.
+	b = storage.NewBatch()
+	for _, k := range []string{"k2", "k4", "k5"} {
+		b.Delete([]byte(k))
+	}
+	if err := st.Apply(b); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	if err := st.Iterate(nil, nil, func(k, v []byte) error {
+		left++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Fatalf("%d keys survived a batch that deleted every key", left)
+	}
+}
+
+// BatchOrderIsCommitOrder checks that a batch applies its operations in the
+// order given, one key after another. A store that ran every deletion
+// before every write would answer both of these the wrong way.
+func BatchOrderIsCommitOrder(t *testing.T, st storage.Storage) {
+	t.Helper()
+	if err := st.Put([]byte("replaced"), []byte("old")); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Put([]byte("kept"), []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	b := storage.NewBatch()
+	// A deletion followed by a write of the same key leaves the new value.
+	b.Delete([]byte("replaced"))
+	b.Put([]byte("replaced"), []byte("new"))
+	// A write followed by a deletion of the same key removes the key.
+	b.Put([]byte("removed"), []byte("temporary"))
+	b.Delete([]byte("removed"))
+	// The same on a key the store has never seen.
+	b.Delete([]byte("absent"))
+	b.Put([]byte("absent"), []byte("written"))
+	b.Put([]byte("gone"), []byte("written"))
+	b.Delete([]byte("gone"))
+	if err := st.Apply(b); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"replaced": "new", "kept": "value", "absent": "written"}
+	for key, value := range want {
+		got, err := st.Get([]byte(key))
+		if err != nil || string(got) != value {
+			t.Fatalf("key %q = %q, %v after the batch, want %q", key, got, err, value)
+		}
+	}
+	for _, key := range []string{"removed", "gone"} {
+		if _, err := st.Get([]byte(key)); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("key %q survived a batch that wrote and then deleted it: %v", key, err)
+		}
+	}
+}
+
+// PutOverwritesExistingKey checks that Put replaces the value of a key that
+// is already there, and that the old value is gone.
+func PutOverwritesExistingKey(t *testing.T, st storage.Storage) {
+	t.Helper()
+	for _, v := range []string{"first", "second", "third"} {
+		if err := st.Put([]byte("k"), []byte(v)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := st.Get([]byte("k"))
+		if err != nil || string(got) != v {
+			t.Fatalf("Put %q: Get returns %q, %v", v, got, err)
+		}
+	}
+	var pairs []string
+	if err := st.Iterate(nil, nil, func(k, v []byte) error {
+		pairs = append(pairs, string(k)+"="+string(v))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(pairs) != 1 || pairs[0] != "k=third" {
+		t.Fatalf("the store holds %v, want exactly [k=third]", pairs)
+	}
+}
+
+// IterateHandsOutStoredValues checks that a walk returns, under each key,
+// the value that is stored there. The other walk cases look at the keys
+// only.
+func IterateHandsOutStoredValues(t *testing.T, st storage.Storage) {
+	t.Helper()
+	const keys = 20
+	key := func(i int) string { return fmt.Sprintf("k%02d", i) }
+	value := func(i int) string { return fmt.Sprintf("value of %02d", i*i) }
+	for i := 0; i < keys; i++ {
+		if err := st.Put([]byte(key(i)), []byte(value(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(lo, hi []byte, from, to int) {
+		t.Helper()
+		var seen []string
+		if err := st.Iterate(lo, hi, func(k, v []byte) error {
+			seen = append(seen, string(k)+"="+string(v))
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var want []string
+		for i := from; i < to; i++ {
+			want = append(want, key(i)+"="+value(i))
+		}
+		if len(seen) != len(want) {
+			t.Fatalf("walk [%d,%d) saw %d pairs, want %d: %v", from, to, len(seen), len(want), seen)
+		}
+		for i := range want {
+			if seen[i] != want[i] {
+				t.Fatalf("pair %d of the walk is %q, want %q", i, seen[i], want[i])
+			}
+		}
+	}
+	check(nil, nil, 0, keys)
+	check([]byte("k05"), []byte("k12"), 5, 12)
 }

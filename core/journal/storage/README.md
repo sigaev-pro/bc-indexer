@@ -50,7 +50,10 @@ Rules every implementation must hold:
 - `core/journal/storage/storagetest` is the conformance suite. Every
   implementation runs the same cases, so the durable store is checked by the
   same evidence as the memory store. `TestMemoryConformance` in this module
-  runs it for `MemoryStorage`.
+  runs it for `MemoryStorage`. Besides the seam rules above, the cases pin
+  what the journals rely on: a batch deletes keys that are there and applies
+  its operations in the order given, `Put` replaces a value, and a walk
+  returns the value stored under each key.
 
 The module is a separate Go module with a `go 1.25` directive, so the accepted
 Geth, BSC and Bor client build graphs can compile it unchanged (same rule as
