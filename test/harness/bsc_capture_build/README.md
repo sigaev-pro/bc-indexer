@@ -74,6 +74,26 @@ without a record. That image has no tag, `OUTPUT/image-id.txt` names it
 once `docker build` had finished, and `docker images --filter dangling=true`
 lists it; remove it with `docker image rm`.
 
+## Exit codes and limits
+
+Both commands print one JSON line with `result` and exit with:
+
+- 0 for `PASS`;
+- 1 for `FAIL`: the run started, and its record is `OUTPUT/build.json`
+  or `OUTPUT/smoke.json`;
+- 2 for `REFUSED`: an input was refused before an output existed, so
+  there is no record. A wrong command line also exits with 2.
+
+`build` has 3,600 seconds: at most 900 for `docker build`, 3,000 for
+`go build`, 300 for `gofmt`, 120 for each other container command, and 60
+for each host command, except the removal of an image (120). A base build
+took between 4 and 14 minutes on one host, depending on what else ran.
+
+`smoke` has 900 seconds: 120 for the digest, the symbols and the genesis
+dump, 300 for each init, `--seconds` plus 240 for the start, and 165 for
+each control. A control's node runs for at most 45 seconds before
+`timeout` stops it.
+
 ## Verify and smoke
 
 `dumpconfig` needs a writable data directory, so give it one:
@@ -126,6 +146,8 @@ of the smoke still passed.
 python3 -I test/harness/bsc_capture_build/bsc_capture_build.py smoke \
   --image bc-indexer/bsc-capture:1.8.2-capture --output "$SMOKE" --seconds 20
 ```
+
+`--seconds` is 20 by default and must be from 10 to 120.
 
 Portable tests of the procedure run without Docker:
 
