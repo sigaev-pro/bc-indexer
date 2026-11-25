@@ -28,11 +28,20 @@ def report(family="geth", same_root=False):
     def walk():
         return {"accounts": 3, "slots": 1, "codes": 1}
     preflight = {name: prefix + ": detail" for name, prefix in pins.PREFLIGHT_REJECTIONS.items()}
-    preflight.update(unbound_fresh_store="<nil>", bound_store="<nil>",
+    preflight.update({name: "<nil>" for name in pins.PREFLIGHT_ACCEPTED})
+    preflight.update(path_initialized_scheme="path", path_initialized_profile=pins.profile_digest(family, "path"),
                      native_hash_override_on_path_store="incompatible state scheme, stored: path, provided: hash",
                      native_default_scheme_for_empty_store="path")
+    floor = pins.RETENTION_FLOOR[family]
+    if family in pins.PRUNING_CLIENTS:
+        preflight.update(pruned_store_at_floor="<nil>", pruned_store_below_floor="forbidden pruning profile: store keeps"
+                         " blocks from %d, head %d, fewer than %d blocks behind the head" % (
+                             pins.PRUNED_BELOW_FLOOR, floor + pins.PRUNED_AT_FLOOR, floor))
     expected = pins.PROFILE_EXPECTED[family]
     cases = sorted(expected)
+    def refusal(oldest, head):
+        return "forbidden pruning profile: store keeps blocks from %d, head %d, fewer than %d blocks behind the head" % (
+            oldest, head, floor)
     rows = [
         ("TestNativeVolatileTrieLost", "pinned", {
             "pinned": True, "child": {"head": 2, "block1_root_on_disk_before": False, "block1_root_on_disk_after": True},
@@ -52,13 +61,25 @@ def report(family="geth", same_root=False):
             "unguarded_verify": "pinned native data is unavailable: pin obs-rewind header 1"}),
         ("TestNativeStorePreflight", "preflight", preflight),
         ("TestNativeEffectiveProfile", "profile", {"cases": cases, "results": {
-            name: {"accepted": True, "reason": "", "detail": {}} if expected[name] is None else
+            name: {"accepted": True, "reason": "", "detail": {"profile": dict(pins.PROFILE_VALUES[family].get(name, {}))}}
+            if expected[name] is None else
             {"accepted": False, "reason": expected[name],
              "detail": {"layer": "profile", "error": "native profile violates capture constraints: " + expected[name]}}
             for name in cases}}),
     ]
-    if family in ("bsc", "bor"):
-        rows.append(("TestNativeLegacyPruneOffset", "legacy_offset", "forbidden pruning profile: legacy pruned-block offset"))
+    if family in pins.PRUNING_CLIENTS:
+        rows += [
+            ("TestNativeStorePreflight", "coverage", {"oldest": pins.PRUNED_AT_FLOOR, "head": floor + pins.PRUNED_AT_FLOOR,
+                                                      "floor": floor}),
+            ("TestNativeLegacyPruneOffset", "legacy_offset", refusal(5, 0)),
+            ("TestNativeLegacyPruneOffset", "legacy_offset_at_floor", {
+                "offset on a genesis-only home": refusal(5, 0),
+                "offset N blocks behind the head": "<nil>",
+                "offset N-1 blocks behind the head": refusal(3, floor + 2)}),
+            ("TestNativeRetentionFloor", "ancient_tail", {
+                "ancient tail N blocks behind the head": {"oldest": pins.ANCIENT_TAIL, "head": floor + pins.ANCIENT_TAIL,
+                                                         "floor": floor},
+                "ancient tail N-1 blocks behind the head": refusal(pins.ANCIENT_TAIL, floor + pins.ANCIENT_TAIL - 1)})]
     return [{"family": family, "test": test, "name": name, "value": value} for test, name, value in rows]
 
 
@@ -117,7 +138,14 @@ class ReportTests(unittest.TestCase):
             "rewind allowed": ("TestNativeRewindDeletesPinnedHeader", "rewind", lambda v: v.update(refused="<nil>")),
             "rewind kept": ("TestNativeRewindDeletesPinnedHeader", "rewind", lambda v: v.update(unguarded_verify="<nil>")),
             "foreign accepted": ("TestNativeStorePreflight", "preflight", lambda v: v.update(foreign_genesis="<nil>")),
-            "wrong reason": ("TestNativeStorePreflight", "preflight", lambda v: v.update(path_initialized_store="forbidden pruning profile")),
+            "wrong reason": ("TestNativeStorePreflight", "preflight",
+                             lambda v: v.update(forbidden_pruning_leftover="native store identity mismatch")),
+            "path store rejected": ("TestNativeStorePreflight", "preflight", lambda v: v.update(path_initialized_store="unsupported state backend")),
+            "path store without scheme": ("TestNativeStorePreflight", "preflight", lambda v: v.update(path_initialized_scheme="hash")),
+            "path store with the hash profile": ("TestNativeStorePreflight", "preflight",
+                                                 lambda v: v.update(path_initialized_profile=pins.profile_digest("geth", "hash"))),
+            "wrong effective value": ("TestNativeEffectiveProfile", "profile",
+                                      lambda v: v["results"]["path_profile_flag"]["detail"]["profile"].update(state_scheme="hash")),
             "fresh rejected": ("TestNativeStorePreflight", "preflight", lambda v: v.update(bound_store="mismatch")),
             "converted": ("TestNativeStorePreflight", "preflight", lambda v: v.update(native_hash_override_on_path_store="<nil>")),
             "profile flipped": ("TestNativeEffectiveProfile", "profile", lambda v: v["results"]["allowed_config"].update(accepted=False)),
@@ -125,13 +153,13 @@ class ReportTests(unittest.TestCase):
                                    lambda v: v["results"]["wrong_gc_profile_archive_flag"].update(accepted=True)),
             "case missing": ("TestNativeEffectiveProfile", "profile", lambda v: v["cases"].pop()),
             "other reason": ("TestNativeEffectiveProfile", "profile",
-                             lambda v: v["results"]["wrong_hash_profile_flag"]["detail"].update(error="unknown flag")),
+                             lambda v: v["results"]["wrong_gc_profile_archive_flag"]["detail"].update(error="unknown flag")),
             "accepted with reason": ("TestNativeEffectiveProfile", "profile",
                                      lambda v: v["results"]["allowed_config"].update(reason="x")),
             "rejected without reason": ("TestNativeEffectiveProfile", "profile",
-                                        lambda v: v["results"]["wrong_hash_profile_flag"].update(reason="")),
+                                        lambda v: v["results"]["wrong_gc_profile_archive_flag"].update(reason="")),
             "report names another reason": ("TestNativeEffectiveProfile", "profile",
-                                            lambda v: v["results"]["wrong_hash_profile_flag"].update(reason="state")),
+                                            lambda v: v["results"]["wrong_gc_profile_archive_flag"].update(reason="state")),
             "extra result": ("TestNativeEffectiveProfile", "profile",
                              lambda v: v["results"].update(other={"accepted": True, "reason": "", "detail": {}})),
             "pinned root missing": ("TestNativeVolatileTrieLost", "pinned", lambda v: v.update(block1_root_on_disk=False)),
@@ -159,27 +187,68 @@ class ReportTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             pins.evaluate_report("geth", rows[1:], blocks())
 
-    def test_bor_needs_the_legacy_offset_rejection(self):
-        rows = report("bor")
-        with self.assertRaises(KeyError):
-            pins.evaluate_report("bor", rows[:-1], blocks())
+    def test_pruned_homes_reject_when_their_measurements_are_wrong(self):
+        for family in pins.PRUNING_CLIENTS:
+            floor, tail = pins.RETENTION_FLOOR[family], pins.ANCIENT_TAIL
 
-    def test_bsc_needs_the_legacy_offset_rejection(self):
-        rows = report("bsc")
-        find(rows, "TestNativeLegacyPruneOffset", "legacy_offset")
-        rows[-1]["value"] = "<nil>"
-        with self.assertRaises(ValueError):
-            pins.evaluate_report("bsc", rows, blocks())
-        with self.assertRaises(KeyError):
-            pins.evaluate_report("bsc", rows[:-1], blocks())
+            def refusal(oldest, head):
+                return ("forbidden pruning profile: store keeps blocks from %d, head %d, fewer than %d blocks behind the head"
+                        % (oldest, head, floor))
+            preflight, coverage = "TestNativeStorePreflight", "TestNativeStorePreflight"
+            offset, retention = "TestNativeLegacyPruneOffset", "TestNativeRetentionFloor"
+            mutations = {
+                "at floor rejected": (preflight, "preflight", lambda v: dict(v, pruned_store_at_floor="mismatch")),
+                "below floor accepted": (preflight, "preflight", lambda v: dict(v, pruned_store_below_floor="<nil>")),
+                "below floor for another reason": (preflight, "preflight",
+                                                   lambda v: dict(v, pruned_store_below_floor="native store identity mismatch")),
+                "coverage oldest": (coverage, "coverage", lambda v: dict(v, oldest=tail)),
+                "coverage head": (coverage, "coverage", lambda v: dict(v, head=floor + tail)),
+                "coverage floor": (coverage, "coverage", lambda v: dict(v, floor=1)),
+                "offset not refused": (offset, "legacy_offset", lambda v: "<nil>"),
+                "offset of another home": (offset, "legacy_offset", lambda v: refusal(3, floor + 2)),
+                "offset at floor refused": (offset, "legacy_offset_at_floor",
+                                            lambda v: dict(v, **{"offset N blocks behind the head": refusal(3, floor + 3)})),
+                "offset numbers": (offset, "legacy_offset_at_floor",
+                                   lambda v: dict(v, **{"offset N-1 blocks behind the head": refusal(2, floor + 2)})),
+                "tail accepted": (retention, "ancient_tail",
+                                  lambda v: dict(v, **{"ancient tail N blocks behind the head": refusal(tail, floor + tail)})),
+                "tail numbers": (retention, "ancient_tail",
+                                 lambda v: dict(v, **{"ancient tail N-1 blocks behind the head": refusal(tail - 1, floor + tail - 1)})),
+            }
+            for label, (test, name, replace) in mutations.items():
+                rows = [dict(row, value=replace(row["value"])) if (row["test"], row["name"]) == (test, name) else row
+                        for row in report(family)]
+                with self.subTest(family=family, label=label), self.assertRaises(ValueError):
+                    pins.evaluate_report(family, rows, blocks())
+        for family in pins.FAMILIES:
+            if family in pins.PRUNING_CLIENTS:
+                continue
+            rows = report(family)
+            for name in ("pruned_store_at_floor", "pruned_store_below_floor"):
+                find(rows, "TestNativeStorePreflight", "preflight")[name] = "<nil>"
+            with self.subTest(family, label="a client without block pruning has no pruned homes"), \
+                    self.assertRaises(ValueError):
+                pins.evaluate_report(family, rows, blocks())
 
-    def test_bsc_needs_its_extra_profile_cases(self):
-        with self.assertRaises(ValueError):
-            rows = report("bsc")
+    def test_pruned_home_rows_are_required(self):
+        for family in pins.PRUNING_CLIENTS:
+            rows = report(family)
+            with self.subTest(family, label="rows"), self.assertRaises(KeyError):
+                pins.evaluate_report(family, rows[:-4], blocks())
+        for family in pins.FAMILIES:
+            rows = report(family)
             profile = find(rows, "TestNativeEffectiveProfile", "profile")
-            profile["cases"].remove("forbidden_pruning_ancient_flag")
-            del profile["results"]["forbidden_pruning_ancient_flag"]
-            pins.evaluate_report("bsc", rows, blocks())
+            name = "fastnode_snapshot_flags" if family == "bsc" else "path_profile_flag"
+            profile["cases"].remove(name)
+            del profile["results"][name]
+            with self.subTest(family, label="fast-node cases"), self.assertRaises(ValueError):
+                pins.evaluate_report(family, rows, blocks())
+
+    def test_profile_digests_follow_the_state_profiles(self):
+        for family, profiles in pins.STATE_PROFILES.items():
+            self.assertEqual(pins.profile_digest(family, "path"), hashlib.sha256(profiles["path"].encode()).hexdigest())
+            self.assertNotEqual(pins.profile_digest(family, "path"), pins.profile_digest(family, "hash"))
+            self.assertEqual(pins.RETENTION_FLOOR[family], int(profiles["path"].split(">=")[1].split(";")[0]))
 
     def test_read_report_rejects_malformed_rows(self):
         with tempfile.TemporaryDirectory() as raw:

@@ -5,7 +5,8 @@
 `adapters/<family>/state_provider` inside each accepted native module with the
 accepted offline compiler, and writes a tool manifest that the caller must pin.
 `run` executes the compiled native tests against the accepted private fixture
-of each family under one 1,800-second budget and checks their report.
+of each family under one 1,800-second budget and checks their report: the
+pins, the fast-node profile of D108, the retention floor and the path scheme.
 Private local evidence gives no public-profile credit.
 """
 
@@ -44,44 +45,93 @@ COMMON_TESTS = (
     "TestUnitMisfiledLedgerRecordFailsClosed", "TestUnitLedgerKeysAreNotNativeStateKeys", "TestUnitStoreChecks",
     "TestUnitCheckProfileFields", "TestNativeVolatileTrieLost", "TestNativePinnedStatePruning",
     "TestNativeRewindDeletesPinnedHeader", "TestNativeStorePreflight", "TestNativeEffectiveProfile",
-    "TestUnitLedgerPinOfAnotherStoreRejects", "TestUnitGuardedPrunerPaths", "TestUnitFreezeLimit")
-FAMILY_TESTS = {"geth": (), "bsc": ("TestNativeLegacyPruneOffset",), "bor": ("TestNativeLegacyPruneOffset",)}
+    "TestUnitLedgerPinOfAnotherStoreRejects", "TestUnitGuardedPrunerPaths", "TestUnitFreezeLimit",
+    "TestUnitRetentionFloor", "TestUnitPathStoreOpensWithoutPins", "TestUnitStoreProfile", "TestUnitFloorIsNative")
+# TestNativeRetentionFloor prunes a real ancient store; Geth keeps every block at its commit.
+FAMILY_TESTS = {"geth": (), "bsc": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor"),
+                "bor": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor")}
+# Independent copies of the fast-node profile of D108. N is the retention floor of a client;
+# a profile string is the state profile of a scheme, whose SHA-256 binds the profile to a store.
+RETENTION_FLOOR = {"geth": 90000, "bsc": 600000, "bor": 90000}
+STATE_PROFILES = {
+    "geth": {"hash": "state.scheme=hash;gcmode=full", "path": "state.scheme=path;gcmode=full;history.state>=90000"},
+    "bsc": {"hash": "state.scheme=hash;gcmode=full;snapshots=off",
+            "path": "state.scheme=path;gcmode=full;history.blocks>=600000;history.state>=600000;tries=local"},
+    "bor": {"hash": "state.scheme=hash;gcmode=full;syncmode=full",
+            "path": "state.scheme=path;gcmode=full;syncmode=full;history.state>=90000"}}
 # Expected outcome of every profile case, fixed here independently of the Go
 # report: accepted cases map to None, rejected cases to the text their
-# rejection must contain.
-_ETH_PROFILE = {
-    "baseline_flags": None, "allowed_native_args": None, "allowed_environment": None, "allowed_config": None,
-    "wrong_hash_profile_default": 'state scheme ""', "wrong_hash_profile_flag": 'state scheme "path"',
-    "wrong_hash_profile_environment": 'state scheme "path"', "wrong_hash_profile_config": 'state scheme "path"',
-    "environment_over_config_cannot_bypass": 'state scheme "path"', "flag_over_config_cannot_bypass": "gcmode archive",
-    "wrong_gc_profile_archive_flag": "gcmode archive", "wrong_gc_profile_archive_environment": "gcmode archive",
-    "wrong_gc_profile_archive_config": "gcmode archive"}
+# rejection must contain. A refusal at the profile layer names the error of
+# the profile ("capture constraints"), so a refusal of the native parser does
+# not pass for it.
+_COMMON_PROFILE = {
+    "baseline_flags": None, "fastnode_default_scheme": None, "path_profile_flag": None,
+    "path_profile_environment": None, "path_profile_config": None, "allowed_state_history_under_hash": None,
+    "flag_over_config_cannot_bypass": "gcmode archive", "wrong_gc_profile_archive_flag": "gcmode archive",
+    "wrong_gc_profile_archive_environment": "gcmode archive", "wrong_gc_profile_archive_config": "gcmode archive",
+    "forbidden_state_history_flag": "capture constraints: history.state", "forbidden_state_history_config":
+    "capture constraints: history.state"}
 PROFILE_EXPECTED = {
-    "geth": _ETH_PROFILE,
-    "bsc": dict(_ETH_PROFILE, **{
+    "geth": dict(_COMMON_PROFILE, **{
+        "allowed_native_args": None, "allowed_environment": None, "allowed_config": None,
+        "allowed_state_history_flag": None, "environment_over_config_cannot_bypass": "gcmode archive"}),
+    "bsc": dict(_COMMON_PROFILE, **{
+        "allowed_native_args": None, "allowed_environment": None, "allowed_config": None,
+        "fastnode_snapshot_flags": None, "allowed_block_history_flag": None, "allowed_block_history_environment": None,
+        "allowed_pruneancient_flag": None, "allowed_state_history_flag": None, "allowed_state_history_entire_chain": None,
         # BSC's own parser refuses a CLI or environment scheme that conflicts with the config file.
         "environment_over_config_cannot_bypass": "incompatible state scheme",
-        "forbidden_pruning_ancient_flag": "pruneancient deletes block data",
-        "forbidden_pruning_block_history_flag": "history.blocks",
-        "forbidden_pruning_block_history_environment": "history.blocks",
-        "forbidden_pruning_block_history_config": "history.blocks"}),
+        "forbidden_block_history_config": "capture constraints: history.blocks 1000",
+        "forbidden_tries_none_flag": "capture constraints: tries-verify-mode",
+        "forbidden_tries_none_config": "capture constraints: tries-verify-mode",
+        "forbidden_scheme_config": "capture constraints: state scheme"}),
     "bor": {
         "baseline_config": None, "allowed_config": None, "allowed_native_args": None,
-        "environment_is_not_a_config_source": None, "wrong_hash_profile_default": 'state.scheme "path"',
-        "wrong_hash_profile_config": 'state.scheme "path"', "wrong_hash_profile_flag": 'state.scheme "path"',
-        "wrong_gc_profile_archive_flag": 'gcmode "archive"', "wrong_gc_profile_archive_config": 'gcmode "archive"',
-        "wrong_syncmode_flag": 'syncmode "snap"', "bor_pipelined_import": "pipeline.enable-import-src",
-        "bor_parallel_stateless": "witness.parallelstatelessimport", "bor_witness_sync": "witness.syncwithwitnesses",
+        "environment_is_not_a_config_source": None, "path_profile_default": None, "path_profile_config": None,
+        "path_profile_flag": None, "allowed_state_history_under_hash": None, "allowed_state_history_under_path": None,
+        "wrong_scheme_flag": "capture constraints: state.scheme", "wrong_scheme_config":
+        "capture constraints: state.scheme", "wrong_gc_profile_archive_flag": 'gcmode "archive"',
+        "wrong_gc_profile_archive_config": 'gcmode "archive"', "wrong_syncmode_flag": 'syncmode "snap"',
+        "bor_pipelined_import": "pipeline.enable-import-src", "bor_parallel_stateless":
+        "witness.parallelstatelessimport", "bor_witness_sync": "witness.syncwithwitnesses",
         "bor_preconfirmation_relay": "relay.enable-preconfs", "bor_preconfirmation_rpc": "accept-preconf-tx",
         "bor_blockstm_enable": "parallelevm.enable", "bor_blockstm_enforce": "parallelevm.enforce",
-        "bor_blockstm_config": "parallelevm.enable", "bor_sequencer": "sequencer.enabled"},
-}
+        "bor_blockstm_config": "parallelevm.enable", "bor_sequencer": "sequencer.enabled",
+        "forbidden_state_history_flag": "capture constraints: history.state", "forbidden_state_history_config":
+        "capture constraints: history.state"}}
+# Effective values, as the accepted profile reports them, of the cases that
+# carry the fast-node profile (D108): field -> value.
+PROFILE_VALUES = {
+    "geth": {"fastnode_default_scheme": {"state_scheme": ""}, "path_profile_flag": {"state_scheme": "path"},
+             "path_profile_environment": {"state_scheme": "path"}, "path_profile_config": {"state_scheme": "path"},
+             "allowed_state_history_flag": {"state_scheme": "path", "state_history": 90000},
+             "allowed_state_history_under_hash": {"state_scheme": "hash", "state_history": 89999}},
+    "bsc": {"fastnode_default_scheme": {"state_scheme": "", "block_history": 0},
+            "path_profile_flag": {"state_scheme": "path"}, "path_profile_environment": {"state_scheme": "path"},
+            "path_profile_config": {"state_scheme": "path"},
+            "fastnode_snapshot_flags": {"state_scheme": "", "block_history": 600000, "state_history": 600000,
+                                        "tries_verify_mode": "local", "transaction_history": 600000,
+                                        "log_history": 600000},
+            "allowed_block_history_flag": {"block_history": 600000},
+            "allowed_block_history_environment": {"block_history": 600000},
+            "allowed_pruneancient_flag": {"block_history": 600000, "prune_ancient_data": True},
+            "allowed_state_history_flag": {"state_scheme": "path", "state_history": 600000},
+            "allowed_state_history_entire_chain": {"state_scheme": "path", "state_history": 0},
+            "allowed_state_history_under_hash": {"state_scheme": "hash", "state_history": 599999}},
+    "bor": {"path_profile_default": {"state_scheme": "path", "state_history": 90000},
+            "path_profile_config": {"state_scheme": "path"}, "path_profile_flag": {"state_scheme": "path"},
+            "allowed_state_history_under_hash": {"state_scheme": "hash", "state_history": 89999},
+            "allowed_state_history_under_path": {"state_scheme": "path", "state_history": 90000}}}
+PREFLIGHT_ACCEPTED = ("unbound_fresh_store", "bound_store", "path_initialized_store")
 PREFLIGHT_REJECTIONS = {
     "foreign_identity": "native store identity mismatch", "unbound_start_on_bound_store": "native store identity mismatch",
     "bound_expectation_on_unbound_store": "native store identity mismatch",
     "foreign_genesis": "native store identity mismatch", "wrong_chain": "native store identity mismatch",
-    "path_initialized_store": "unsupported state backend", "forbidden_pruning_leftover": "forbidden pruning profile",
-    "wrong_datadir_empty": "native store identity mismatch"}
+    "forbidden_pruning_leftover": "forbidden pruning profile", "wrong_datadir_empty": "native store identity mismatch"}
+# The clients whose older versions could prune block data: their homes carry an offset or a tail.
+PRUNING_CLIENTS = ("bsc", "bor")
+# Offset and tail of the pruned homes of the tests, relative to the floor.
+PRUNED_AT_FLOOR, PRUNED_BELOW_FLOOR, ANCIENT_TAIL = 7, 8, 4
 STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 PREPARATION_SECONDS = 3600
 RUN_SECONDS = 1800
@@ -132,6 +182,17 @@ def canonical_digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def retention_refusal(value, oldest, head, floor):
+    """The refusal of a store that keeps fewer than N blocks behind its head, with its measured numbers."""
+    return (isinstance(value, str) and value.startswith("forbidden pruning profile") and f"from {oldest}," in value and
+            f"head {head}," in value and f"fewer than {floor} " in value)
+
+
+def profile_digest(family, scheme):
+    """The SHA-256 of the state profile of a scheme, as the provider binds it to a store."""
+    return hashlib.sha256(STATE_PROFILES[family][scheme].encode()).hexdigest()
+
+
 def adapter_files(family):
     """Return (source path, path inside the native tree) for every adapter file."""
     base = ROOT / "adapters" / family / "state_provider"
@@ -171,9 +232,12 @@ def environment(build_cache="/work/build-cache"):
             "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local", "GOWORK": "off"}
 
 
-def prepare_family(family, manifest, manifest_path, output, runner, deadline):
+def extract_family(family, manifest, manifest_path, root, deadline):
+    """Extract the accepted native source of a family into the new directory
+    root, install the adapter files and prepare the build directories. Return
+    the source tree, the retained copy of the source archive and the mounts of
+    a compile command."""
     closure = manifest["module_closures"][family]
-    root = output / family
     root.mkdir()
     archive = artifact(closure["source_archive"], 256 * 1024 * 1024, manifest_path.parent, deadline)
     copied = copy_artifact(archive, root / "source.tar", closure["source_archive"], 256 * 1024 * 1024, deadline)
@@ -198,6 +262,14 @@ def prepare_family(family, manifest, manifest_path, output, runner, deadline):
     mounts = [(source, "/source", True), (manifest_path.parent / "cache" / family / "mod", "/modules", True),
               (root, "/work", True)]
     mounts += [(root / name, "/work/" + name, False) for name in ("metadata", "generated", "build-cache", "build-temp", "gopath")]
+    return source, copied, adapters, mounts
+
+
+def prepare_family(family, manifest, manifest_path, output, runner, deadline):
+    closure = manifest["module_closures"][family]
+    root = output / family
+    source, copied, adapters, mounts = extract_family(family, manifest, manifest_path, root, deadline)
+    compiler = manifest["builds"][family]["compiler_image"]
     first = len(runner.commands)
     runner.command(compiler, ["/usr/local/go/bin/go", "vet", PACKAGE], mounts, cap=1500, memory="6g", cwd="/source",
                    environment=environment())
@@ -359,18 +431,42 @@ def evaluate_report(family, rows, blocks):
             pruning["unguarded_preflight"].startswith("pinned native data is unavailable") and
             pruning["released_side_deleted"] is True and pruning["head_walk"]["accounts"] > 0,
             "Pruning observation failed")
-    if family in ("bsc", "bor"):
-        require(named[("TestNativeLegacyPruneOffset", "legacy_offset")].startswith("forbidden pruning profile"),
-                "Legacy prune offset was not rejected")
     rewind = named[("TestNativeRewindDeletesPinnedHeader", "rewind")]
     require(rewind["refused"].startswith("live pins forbid this native deletion: rewind to 0") and
             rewind["unguarded_verify"].startswith("pinned native data is unavailable"), "Rewind observation failed")
     preflight = named[("TestNativeStorePreflight", "preflight")]
-    require(preflight["unbound_fresh_store"] == "<nil>" and preflight["bound_store"] == "<nil>", "Compatible homes rejected")
+    require(all(preflight[case] == "<nil>" for case in PREFLIGHT_ACCEPTED), "Compatible homes rejected")
     for case, prefix in PREFLIGHT_REJECTIONS.items():
         require(preflight[case].startswith(prefix), f"Preflight case {case} returned {preflight[case]}")
     require(preflight["native_hash_override_on_path_store"].startswith("incompatible state scheme"),
             "Native parser converted a path store")
+    floor = RETENTION_FLOOR[family]
+    require(preflight["path_initialized_scheme"] == "path" and
+            preflight["path_initialized_profile"] == profile_digest(family, "path") and
+            preflight["path_initialized_profile"] != profile_digest(family, "hash"),
+            f"Path store of {family} was not accepted with the profile of the path scheme")
+    if family in PRUNING_CLIENTS:
+        require(preflight["pruned_store_at_floor"] == "<nil>" and
+                preflight["pruned_store_below_floor"].startswith("forbidden pruning profile"),
+                "The retention floor of the pruned homes was not applied")
+        require(named[("TestNativeStorePreflight", "coverage")] == {"oldest": PRUNED_AT_FLOOR,
+                "head": floor + PRUNED_AT_FLOOR, "floor": floor}, "Coverage of the home at the floor was not reported")
+        require(retention_refusal(named[("TestNativeLegacyPruneOffset", "legacy_offset")], 5, 0, floor),
+                "Legacy prune offset was not rejected")
+        offset = named[("TestNativeLegacyPruneOffset", "legacy_offset_at_floor")]
+        require(offset["offset N blocks behind the head"] == "<nil>" and
+                retention_refusal(offset["offset N-1 blocks behind the head"], 3, floor + 2, floor) and
+                retention_refusal(offset["offset on a genesis-only home"], 5, 0, floor),
+                "Legacy prune offset was not measured")
+        tail = named[("TestNativeRetentionFloor", "ancient_tail")]
+        require(tail["ancient tail N blocks behind the head"] == {"oldest": ANCIENT_TAIL, "head": floor + ANCIENT_TAIL,
+                "floor": floor} and
+                retention_refusal(tail["ancient tail N-1 blocks behind the head"], ANCIENT_TAIL,
+                                  floor + ANCIENT_TAIL - 1, floor),
+                "The ancient tail was not measured")
+    else:
+        require("pruned_store_at_floor" not in preflight and "pruned_store_below_floor" not in preflight,
+                f"{family} has no pruned homes to check")
     profile = named[("TestNativeEffectiveProfile", "profile")]
     expected = PROFILE_EXPECTED[family]
     require(set(profile["cases"]) == set(expected) == set(profile["results"]), "Profile cases differ from the declared set")
@@ -380,9 +476,14 @@ def evaluate_report(family, rows, blocks):
                 f"Profile case {case} has the wrong outcome")
         require(reason is None or reason in " ".join(strings(result["detail"])),
                 f"Profile case {case} was rejected for another reason")
+    for case, values in PROFILE_VALUES[family].items():
+        reported = profile["results"][case]["detail"]["profile"]
+        require(all(reported.get(field) == value for field, value in values.items()),
+                f"Profile case {case} reported {reported}, want {values}")
     return {"recovered_head": pinned["recovered_head"], "pinned_walk": pinned["walk"], "pruning_refused": pruning["refused"],
             "native_default_scheme_for_empty_store": preflight["native_default_scheme_for_empty_store"],
-            "profile_cases": len(profile["cases"])}
+            "coverage": named.get(("TestNativeStorePreflight", "coverage")),
+            "path_profile": preflight["path_initialized_profile"], "profile_cases": len(profile["cases"])}
 
 
 def foreign_harness_containers():
@@ -392,26 +493,37 @@ def foreign_harness_containers():
     return result.stdout.split()
 
 
-def run_family(family, entry, fixture, output, runner, deadline):
-    root = output / family
-    (root / "inputs").mkdir(parents=True)
-    (root / "work").mkdir()
-    (root / "temp").mkdir()
-    inputs = {name: copy_artifact(Path(ref["path"]), root / "inputs" / name, ref, 64 * 1024 * 1024, deadline)
-              for name, ref in fixture["inputs"].items()}
-    binary = artifact(entry["test_binary"], 1024 * 1024 * 1024, deadline=deadline)
+def prepare_inputs(family, fixture, root, deadline):
+    """Create the run directories of a family under root and copy the fixture inputs into them."""
+    for name in ("inputs", "work", "temp"):
+        (root / name).mkdir(parents=True)
+    return {name: copy_artifact(Path(ref["path"]), root / "inputs" / name, ref, 64 * 1024 * 1024, deadline)
+            for name, ref in fixture["inputs"].items()}
+
+
+def run_tests(entry, native_binary, fixture, root, binary, runner, deadline):
+    """Run a compiled state-provider test binary once on the fixture inputs
+    under root and return the path of its standard output."""
+    binary = artifact(binary, 1024 * 1024 * 1024, deadline=deadline)
     mounts = [(binary.parent, "/tool", True), (root / "inputs", "/inputs", True), (root / "work", "/work", False),
               (root / "temp", "/scratch", False)]
     env = {"EXTRACTOR_PINS_INPUTS": "/inputs", "EXTRACTOR_PINS_WORK": "/work",
            "EXTRACTOR_PINS_REPORT": "/work/report.jsonl", "TMPDIR": "/scratch", "HOME": "/scratch"}
-    if entry["native_binary"] is not None:
-        native = artifact(entry["native_binary"], 1024 * 1024 * 1024, fixture["build_root"], deadline)
+    if native_binary is not None:
+        native = artifact(native_binary, 1024 * 1024 * 1024, fixture["build_root"], deadline)
         mounts.append((native.parent, "/native", True))
         env["EXTRACTOR_NATIVE_BINARY"] = "/native/" + native.name
+    return runner.command(entry["compiler"], ["/tool/" + binary.name, "-test.v", "-test.count=1", "-test.run", TEST_PATTERN,
+                                               "-test.timeout", f"{TEST_CAP - 60}s"],
+                          mounts, cap=TEST_CAP, memory="2g", cwd="/scratch", environment=env)
+
+
+def run_family(family, entry, fixture, output, runner, deadline):
+    root = output / family
+    inputs = prepare_inputs(family, fixture, root, deadline)
     started = time.monotonic()
-    stdout = runner.command(entry["compiler"], ["/tool/pins.test", "-test.v", "-test.count=1", "-test.run", TEST_PATTERN,
-                                                "-test.timeout", f"{TEST_CAP - 60}s"],
-                            mounts, cap=TEST_CAP, memory="2g", cwd="/scratch", environment=env)
+    stdout = run_tests(entry, entry["native_binary"], fixture, root, artifact(entry["test_binary"], 1024 * 1024 * 1024,
+                                                                               deadline=deadline), runner, deadline)
     elapsed = round(time.monotonic() - started, 3)
     passed = parse_go_test(read_bytes(stdout, 8 * 1024 * 1024, deadline).decode(), COMMON_TESTS + FAMILY_TESTS[family])
     report = root / "work/report.jsonl"

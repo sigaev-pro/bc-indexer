@@ -1,0 +1,532 @@
+{
+  "schema_version": 1,
+  "language": "go-native-state-provider",
+  "description": "Single-check mutants of the state-provider packages (adapters/<family>/state_provider). A mutant runs in the native module of its family; shared-file mutants name the family whose tests observe them.",
+  "mutants": [
+    {
+      "name": "identity profile is overwritten",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif identity.Profile == \"\" {\n\t\tidentity.Profile = profileOf(identity.StateScheme)",
+      "replacement": "\tidentity.Profile = profileOf(identity.StateScheme)"
+    },
+    {
+      "name": "identity without a profile takes the hash profile",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tidentity.Profile = profileOf(identity.StateScheme)\n",
+      "replacement": "\t\tidentity.Profile = profileOf(rawdb.HashScheme)\n"
+    },
+    {
+      "name": "unknown scheme has a profile digest",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif stateProfile(scheme) == \"\" {\n\t\treturn \"\"\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "identity accepts a store without a scheme",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif profileOf(scheme) == \"\" {\n\t\treturn StoreIdentity{}, fmt.Errorf(\"%w: state scheme",
+      "replacement": "\tif false {\n\t\treturn StoreIdentity{}, fmt.Errorf(\"%w: state scheme"
+    },
+    {
+      "name": "identity does not name the profile",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tProfile: profileOf(scheme)}, nil",
+      "replacement": "\t\tProfile: \"\"}, nil"
+    },
+    {
+      "name": "binding under another profile is malformed",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tif validIdentity(named) == nil {\n",
+      "replacement": "\t\tif true {\n"
+    },
+    {
+      "name": "binding without a profile stays without one",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\treturn identity.withProfile(), true, nil",
+      "replacement": "\treturn identity, true, nil"
+    },
+    {
+      "name": "provider without a trie database",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif tdb == nil {\n\t\treturn nil, fmt.Errorf(\"%w: the trie database is missing\", ErrUnsupportedBackend)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "provider of another scheme than the store",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif tdb.Scheme() != expected.StateScheme {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "pin on a path store is not refused",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif p.triedb.Scheme() != rawdb.HashScheme {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "pin store without a profile is refused",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tpin.Store = pin.Store.withProfile()\n\tif err := validPin(pin); err != nil {\n",
+      "replacement": "\tif err := validPin(pin); err != nil {\n"
+    },
+    {
+      "name": "listed pin without a profile",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tpin.Store = pin.Store.withProfile()\n",
+      "replacement": ""
+    },
+    {
+      "name": "read pin without a profile",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tpin.Store = pin.Store.withProfile()\n\tif err := validPin(pin); err != nil || pin.ID != id {",
+      "replacement": "\tif err := validPin(pin); err != nil || pin.ID != id {"
+    },
+    {
+      "name": "floor counts no blocks behind the head",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif c.Head > c.Floor {\n\t\tallowed = c.Head - c.Floor",
+      "replacement": "\tif false {\n\t\tallowed = c.Head - c.Floor"
+    },
+    {
+      "name": "floor allows one block less",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tallowed = c.Head - c.Floor\n",
+      "replacement": "\t\tallowed = c.Head - c.Floor + 1\n"
+    },
+    {
+      "name": "store at the floor is refused",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif c.Oldest > allowed {\n",
+      "replacement": "\tif c.Oldest >= allowed {\n"
+    },
+    {
+      "name": "store without an ancient part is an error",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif errors.Is(err, errNoAncientStore) {\n",
+      "replacement": "\tif errors.Is(err, nil) {\n"
+    },
+    {
+      "name": "store without an ancient part has no sentinel",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\t_, err := ancientTail(rawdb.NewDatabase(rawdb.NewMemoryDatabase()))\n\t\treturn err\n",
+      "replacement": "\t\t_, err := ancientTail(rawdb.NewDatabase(rawdb.NewMemoryDatabase()))\n\t\t_ = err\n\t\treturn nil\n"
+    },
+    {
+      "name": "legacy offset is not the oldest block (bsc)",
+      "family": "bsc",
+      "file": "provider.go",
+      "original": "Coverage{Oldest: max(legacyOffset(db), tail), Head: head, Floor: retentionFloor}",
+      "replacement": "Coverage{Oldest: tail, Head: head, Floor: retentionFloor}"
+    },
+    {
+      "name": "legacy offset is not the oldest block (bor)",
+      "family": "bor",
+      "file": "provider.go",
+      "original": "Coverage{Oldest: max(legacyOffset(db), tail), Head: head, Floor: retentionFloor}",
+      "replacement": "Coverage{Oldest: tail, Head: head, Floor: retentionFloor}"
+    },
+    {
+      "name": "ancient tail is not the oldest block",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "Coverage{Oldest: max(legacyOffset(db), tail), Head: head, Floor: retentionFloor}",
+      "replacement": "Coverage{Oldest: legacyOffset(db), Head: head, Floor: retentionFloor}"
+    },
+    {
+      "name": "head of the store is not read",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif header := rawdb.ReadHeadHeader(db); header != nil {\n",
+      "replacement": "\tif header := rawdb.ReadHeadHeader(db); false {\n"
+    },
+    {
+      "name": "coverage does not report the floor",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "Head: head, Floor: retentionFloor}",
+      "replacement": "Head: head, Floor: 0}"
+    },
+    {
+      "name": "store check skips the retention floor",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif err := coverage.check(); err != nil {\n\t\treturn StoreReport{}, err\n\t}\n",
+      "replacement": "\t_ = coverage\n"
+    },
+    {
+      "name": "store check expects no profile",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "func checkStore(db ethdb.Database, expected StoreIdentity) (StoreReport, error) {\n\texpected = expected.withProfile()\n",
+      "replacement": "func checkStore(db ethdb.Database, expected StoreIdentity) (StoreReport, error) {\n"
+    },
+    {
+      "name": "identity without a profile is complete",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\tif profile == \"\" {\n\t\tprofile = profileOf(identity.StateScheme)\n\t}\n",
+      "replacement": ""
+    },
+    {
+      "name": "profile of any text is accepted",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tidentity.GenesisHash == (common.Hash{}) || !digestPattern.MatchString(profile) ||\n",
+      "replacement": "\t\tidentity.GenesisHash == (common.Hash{}) ||\n"
+    },
+    {
+      "name": "profile of another scheme is accepted",
+      "family": "geth",
+      "file": "provider.go",
+      "original": "\t\tprofile != profileOf(identity.StateScheme) {\n",
+      "replacement": "\t\tfalse {\n"
+    },
+    {
+      "name": "floor N of bsc (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "const retentionFloor uint64 = 600_000",
+      "replacement": "const retentionFloor uint64 = 1"
+    },
+    {
+      "name": "hash state profile of bsc (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\t\treturn \"state.scheme=hash;gcmode=full;snapshots=off\"\n",
+      "replacement": "\t\treturn \"state.scheme=hash;gcmode=full\"\n"
+    },
+    {
+      "name": "path state profile of bsc (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "return \"state.scheme=path;gcmode=full;history.blocks>=600000;history.state>=600000;tries=local\"",
+      "replacement": "return \"state.scheme=path;gcmode=full\""
+    },
+    {
+      "name": "legacy offset of BSC is not read (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "func legacyOffset(db ethdb.KeyValueStore) uint64 { return rawdb.ReadLegacyOffset(db) }",
+      "replacement": "func legacyOffset(db ethdb.KeyValueStore) uint64 { return 0 }"
+    },
+    {
+      "name": "ancient tail of BSC is not read (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "func ancientTail(db ethdb.Database) (uint64, error) { return db.Tail() }",
+      "replacement": "func ancientTail(db ethdb.Database) (uint64, error) { return 0, nil }"
+    },
+    {
+      "name": "store with a legacy offset is opened natively (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif legacyOffset(kv) > 0 {\n\t\treturn rawdb.NewDatabase(kv), engine, nil",
+      "replacement": "\tif false {\n\t\treturn rawdb.NewDatabase(kv), engine, nil"
+    },
+    {
+      "name": "block history below the floor is accepted (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif cfg.BlockHistory != 0 && cfg.BlockHistory < retentionFloor {\n\t\tproblems = append(problems, fmt.Sprintf(\"history.blocks",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, fmt.Sprintf(\"history.blocks"
+    },
+    {
+      "name": "block history of the entire chain is refused (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif cfg.BlockHistory != 0 && cfg.BlockHistory < retentionFloor {",
+      "replacement": "\tif cfg.BlockHistory < retentionFloor {"
+    },
+    {
+      "name": "state history under a path config (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif cfg.StateScheme == rawdb.PathScheme {\n\t\tproblems = append(problems, pathProblems(cfg)...)",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, pathProblems(cfg)...)"
+    },
+    {
+      "name": "node without tries is accepted (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif cfg.TriesVerifyMode != core.LocalVerify {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "archive node is accepted (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif cfg.NoPruning {\n\t\tproblems = append(problems, \"gcmode archive, want full\")",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, \"gcmode archive, want full\")"
+    },
+    {
+      "name": "every scheme is refused (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif scheme == \"\" || profileOf(scheme) != \"\" {\n\t\treturn nil\n\t}",
+      "replacement": "\tif false {\n\t\treturn nil\n\t}"
+    },
+    {
+      "name": "no scheme is refused (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif scheme == \"\" || profileOf(scheme) != \"\" {",
+      "replacement": "\tif profileOf(scheme) != \"\" {"
+    },
+    {
+      "name": "state history below the floor under path is accepted (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif cfg.StateHistory != 0 && cfg.StateHistory < retentionFloor {\n\t\treturn []string{fmt.Sprintf(\"history.state",
+      "replacement": "\tif false {\n\t\treturn []string{fmt.Sprintf(\"history.state"
+    },
+    {
+      "name": "state history of the entire chain under path is refused (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif cfg.StateHistory != 0 && cfg.StateHistory < retentionFloor {",
+      "replacement": "\tif cfg.StateHistory < retentionFloor {"
+    },
+    {
+      "name": "store profile keeps the scheme of the config (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\t\tprofile.StateScheme = scheme\n\t\tif scheme == rawdb.PathScheme {",
+      "replacement": "\t\tif scheme == rawdb.PathScheme {"
+    },
+    {
+      "name": "store profile accepts a config of another scheme (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\t\tif cfg.StateScheme != \"\" && cfg.StateScheme != scheme {\n",
+      "replacement": "\t\tif false {\n"
+    },
+    {
+      "name": "store profile applies no state history floor (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\t\tif scheme == rawdb.PathScheme {\n\t\t\tproblems = append(problems, pathProblems(cfg)...)",
+      "replacement": "\t\tif false {\n\t\t\tproblems = append(problems, pathProblems(cfg)...)"
+    },
+    {
+      "name": "store profile accepts a store without a scheme (bsc)",
+      "family": "bsc",
+      "file": "family.go",
+      "original": "\tif profileOf(scheme) == \"\" {\n\t\tproblems = append(problems, fmt.Sprintf(\"state scheme %q, want %q or %q\"",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, fmt.Sprintf(\"state scheme %q, want %q or %q\""
+    },
+    {
+      "name": "floor N of geth (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "const retentionFloor uint64 = 90_000",
+      "replacement": "const retentionFloor uint64 = 1"
+    },
+    {
+      "name": "hash state profile of geth (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\t\treturn \"state.scheme=hash;gcmode=full\"\n",
+      "replacement": "\t\treturn \"state.scheme=hash\"\n"
+    },
+    {
+      "name": "path state profile of geth (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "return \"state.scheme=path;gcmode=full;history.state>=90000\"",
+      "replacement": "return \"state.scheme=path;gcmode=full\""
+    },
+    {
+      "name": "ancient tail of Geth is not read (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "func ancientTail(db ethdb.Database) (uint64, error) { return db.Tail(\"\") }",
+      "replacement": "func ancientTail(db ethdb.Database) (uint64, error) { return 0, nil }"
+    },
+    {
+      "name": "state history under a path config (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\tif cfg.StateScheme == rawdb.PathScheme {\n\t\tproblems = append(problems, pathProblems(cfg)...)",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, pathProblems(cfg)...)"
+    },
+    {
+      "name": "archive node is accepted (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\tif cfg.NoPruning {\n\t\tproblems = append(problems, \"gcmode archive, want full\")",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, \"gcmode archive, want full\")"
+    },
+    {
+      "name": "every scheme is refused (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\tif scheme == \"\" || profileOf(scheme) != \"\" {\n\t\treturn nil\n\t}",
+      "replacement": "\tif false {\n\t\treturn nil\n\t}"
+    },
+    {
+      "name": "no scheme is refused (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\tif scheme == \"\" || profileOf(scheme) != \"\" {",
+      "replacement": "\tif profileOf(scheme) != \"\" {"
+    },
+    {
+      "name": "state history below the floor under path is accepted (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\tif cfg.StateHistory != 0 && cfg.StateHistory < retentionFloor {\n\t\treturn []string{fmt.Sprintf(\"history.state",
+      "replacement": "\tif false {\n\t\treturn []string{fmt.Sprintf(\"history.state"
+    },
+    {
+      "name": "state history of the entire chain under path is refused (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\tif cfg.StateHistory != 0 && cfg.StateHistory < retentionFloor {",
+      "replacement": "\tif cfg.StateHistory < retentionFloor {"
+    },
+    {
+      "name": "store profile keeps the scheme of the config (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\t\tprofile.StateScheme = scheme\n\t\tif scheme == rawdb.PathScheme {",
+      "replacement": "\t\tif scheme == rawdb.PathScheme {"
+    },
+    {
+      "name": "store profile accepts a config of another scheme (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\t\tif cfg.StateScheme != \"\" && cfg.StateScheme != scheme {\n",
+      "replacement": "\t\tif false {\n"
+    },
+    {
+      "name": "store profile applies no state history floor (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\t\tif scheme == rawdb.PathScheme {\n\t\t\tproblems = append(problems, pathProblems(cfg)...)",
+      "replacement": "\t\tif false {\n\t\t\tproblems = append(problems, pathProblems(cfg)...)"
+    },
+    {
+      "name": "store profile accepts a store without a scheme (geth)",
+      "family": "geth",
+      "file": "family.go",
+      "original": "\tif profileOf(scheme) == \"\" {\n\t\tproblems = append(problems, fmt.Sprintf(\"state scheme %q, want %q or %q\"",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, fmt.Sprintf(\"state scheme %q, want %q or %q\""
+    },
+    {
+      "name": "floor N of bor (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "const retentionFloor uint64 = 90_000",
+      "replacement": "const retentionFloor uint64 = 1"
+    },
+    {
+      "name": "hash state profile of bor (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "return \"state.scheme=hash;gcmode=full;syncmode=full\"",
+      "replacement": "return \"state.scheme=hash;gcmode=full\""
+    },
+    {
+      "name": "path state profile of bor (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "return \"state.scheme=path;gcmode=full;syncmode=full;history.state>=90000\"",
+      "replacement": "return \"state.scheme=path;gcmode=full;syncmode=full\""
+    },
+    {
+      "name": "legacy offset of Bor is not read (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "func legacyOffset(db ethdb.KeyValueReader) uint64 { return rawdb.ReadOffsetOfCurrentAncientFreezer(db) }",
+      "replacement": "func legacyOffset(db ethdb.KeyValueReader) uint64 { return 0 }"
+    },
+    {
+      "name": "ancient tail of Bor is not read (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "func ancientTail(db ethdb.Database) (uint64, error) { return db.Tail() }",
+      "replacement": "func ancientTail(db ethdb.Database) (uint64, error) { return 0, nil }"
+    },
+    {
+      "name": "store with a legacy offset is opened natively (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\tif legacyOffset(kv) > 0 {\n\t\treturn rawdb.NewDatabase(kv), engine, nil",
+      "replacement": "\tif false {\n\t\treturn rawdb.NewDatabase(kv), engine, nil"
+    },
+    {
+      "name": "state scheme other than hash and path is accepted (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\tif cfg.StateScheme != rawdb.HashScheme && cfg.StateScheme != rawdb.PathScheme {\n",
+      "replacement": "\tif false {\n"
+    },
+    {
+      "name": "state history without a history config is accepted (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\tif cfg.History == nil {\n\t\tproblems = append(problems, \"history.state is unknown: no history config\")",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, \"history.state is unknown: no history config\")"
+    },
+    {
+      "name": "state history below the floor under path is accepted (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\t} else if cfg.StateScheme == rawdb.PathScheme && history != 0 && history < retentionFloor {\n",
+      "replacement": "\t} else if false {\n"
+    },
+    {
+      "name": "state history of the entire chain under path is refused (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "history != 0 && history < retentionFloor {",
+      "replacement": "history < retentionFloor {"
+    },
+    {
+      "name": "archive node is accepted (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\twant(cfg.GcMode == \"full\", fmt.Sprintf(\"gcmode %q, want full\", cfg.GcMode))\n",
+      "replacement": ""
+    },
+    {
+      "name": "store profile keeps the scheme of the config (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\t\tprofile.StateScheme = scheme\n",
+      "replacement": ""
+    },
+    {
+      "name": "store profile accepts a config of another scheme (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\t\tif cfg != nil && cfg.StateScheme != scheme {\n",
+      "replacement": "\t\tif false {\n"
+    },
+    {
+      "name": "store profile accepts a store without a scheme (bor)",
+      "family": "bor",
+      "file": "family.go",
+      "original": "\tif profileOf(scheme) == \"\" {\n\t\tproblems = append(problems, fmt.Sprintf(\"state scheme %q, want %q or %q\"",
+      "replacement": "\tif false {\n\t\tproblems = append(problems, fmt.Sprintf(\"state scheme %q, want %q or %q\""
+    }
+  ]
+}
