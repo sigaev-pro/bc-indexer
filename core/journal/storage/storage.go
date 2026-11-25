@@ -4,9 +4,12 @@
 // Both state machines of DELIVERY_STATE_MACHINE run on RocksDB (10.4.2 with
 // grocksdb v1.10.2 per COMPONENT_STACK), but neither store may import a
 // concrete database: the seam is this small ordered-key interface so the
-// stores compile and test without a native RocksDB build. The RocksDB adapter
-// is a thin wrapper over the same interface added when the demo environment
-// runs; tests use the memory-backed adapter in this package.
+// stores compile and test without a native RocksDB build. The RocksDB
+// implementation is the separate module core/journal/storage/rocksdb, which
+// needs CGO and the native engine; this module and the stores build without
+// it. The conformance suite every implementation runs is in
+// core/journal/storage/storagetest; this package ships the memory-backed
+// implementation for tests and tools.
 //
 // Contract of every implementation:
 //
@@ -20,8 +23,10 @@
 //     crash-safe. No implementation may split one batch.
 //   - Apply rejects a batch larger than MaxBatchBytes before touching state
 //     (CONTROL_WIRE_CONTRACT: a bounded WriteBatch is at most 1 MiB including
-//     metadata and marker bytes).
+//     metadata and the marker).
 //   - Get returns a copy; callers cannot reach into the store's memory.
+//   - An implementation outside this package reads a batch with Batch.Visit;
+//     Apply of one batch is one atomic commit and is never split.
 package storage
 
 import "errors"
@@ -106,6 +111,40 @@ func (b *Batch) Len() int { return len(b.ops) }
 // Size returns the accounted byte size of the batch: key and value bytes plus
 // BatchOpOverhead per operation.
 func (b *Batch) Size() int { return b.size }
+
+// OpKind tells a buffered write from a buffered deletion.
+type OpKind uint8
+
+const (
+	// OpPut is a buffered key/value write.
+	OpPut OpKind = iota + 1
+	// OpDelete is a buffered key deletion.
+	OpDelete
+)
+
+// Op is one buffered operation of a Batch, as Visit reports it. Value is nil
+// for OpDelete.
+type Op struct {
+	Kind  OpKind
+	Key   []byte
+	Value []byte
+}
+
+// Visit reports every buffered operation to fn in commit order and stops at
+// the first fn that returns false. It is how a Storage implementation outside
+// this package reads a batch. The slices belong to the batch: fn must not
+// modify them and must copy anything it keeps.
+func (b *Batch) Visit(fn func(Op) bool) {
+	for _, op := range b.ops {
+		reported := Op{Kind: OpPut, Key: op.key, Value: op.value}
+		if op.del {
+			reported = Op{Kind: OpDelete, Key: op.key}
+		}
+		if !fn(reported) {
+			return
+		}
+	}
+}
 
 // Reset empties the batch so its buffer can be reused.
 func (b *Batch) Reset() {
