@@ -852,6 +852,22 @@ class BuildTest(ProcedureFixture):
             build.build(self.accepted / "manifest.json", self.sha, self.output)
         self.assertEqual(reads, [self.accepted / "manifest.json"])
 
+    def test_an_output_inside_the_repository_is_refused_before_anything_runs(self):
+        inside = build.ROOT / "not-created-by-a-test"
+        for output in (inside, build.ROOT / "bsc-capture-output" / ".." / "not-created-by-a-test",
+                       build.ROOT / "test" / "harness" / "out"):
+            with self.subTest(output=output), self.assertRaisesRegex(Rejected, "cannot be inside the repository"):
+                build.build(self.accepted / "manifest.json", self.sha, output)
+            with self.assertRaisesRegex(Rejected, "cannot be inside the repository"):
+                build.smoke(TAG, output, 20)
+        self.assertFalse(inside.exists())
+        self.assertFalse((build.ROOT / "bsc-capture-output").exists())
+        self.assertFalse((build.ROOT / "test" / "harness" / "out").exists())
+        with self.assertRaisesRegex(Rejected, "must be absolute"):
+            build.build(self.accepted / "manifest.json", self.sha, Path("relative/out"))
+        self.assertEqual(self.docker.calls, [])
+        self.assertEqual(FakeNative.instances, [])
+
     def test_refusals_leave_no_output(self):
         with self.assertRaises(Rejected):
             build.build(self.accepted / "manifest.json", "0" * 64, self.output)

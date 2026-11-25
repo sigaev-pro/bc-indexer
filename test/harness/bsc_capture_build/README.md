@@ -44,9 +44,10 @@ local fixtures only.
 Requirements: Python 3.12 or newer; Docker with the pinned `golang` and
 `debian` images already present; the accepted BuildManifest with its source
 archive and module cache. All paths must be absolute, with no symlink
-ancestors. `OUTPUT` must be a new directory outside the accepted build
-storage, for example under the ignored `.project/runtime/` directory of a
-checkout.
+ancestors. `OUTPUT` must be a new directory outside the repository checkout
+and outside the accepted build storage; `build` and `smoke` refuse anything
+else before they run. A build leaves about 1.5 GB, and an output under
+`adapters/` or `test/` would also break the source check of its record.
 
 ```sh
 python3 -I test/harness/bsc_capture_build/bsc_capture_build.py build \

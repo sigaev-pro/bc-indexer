@@ -466,6 +466,14 @@ def host(runner, name, argv, timeout, check=True):
     return code, out
 
 
+def check_output(output):
+    """The output is an absolute path outside the repository checkout that holds
+    this tool. A run leaves about 1.5 GB, and under adapters/ or test/ it would
+    also break the source check of its own record."""
+    require(output.is_absolute(), "The output path must be absolute")
+    require(not output.resolve().is_relative_to(ROOT), f"The output cannot be inside the repository: {output}")
+
+
 def inspected(raw):
     """The one image of a `docker image inspect` output."""
     rows = json.loads(raw)
@@ -515,7 +523,8 @@ def check_labels(labels, facts):
 def build(manifest_path, expected_sha, output, variant=None):
     started = time.monotonic()
     deadline = started + BUILD_SECONDS
-    require(manifest_path.is_absolute() and output.is_absolute(), "Paths must be absolute")
+    require(manifest_path.is_absolute(), "The BuildManifest path must be absolute")
+    check_output(output)
     # One read checks the pin and parses the manifest.
     manifest_ref, manifest = pinned_json(manifest_path, expected_sha, 64 * 1024 * 1024, deadline)
     require(manifest.get("evidence_kind") == "actual-build" and manifest.get("task_id") == "E01-01.builds",
@@ -659,7 +668,7 @@ def capture_config(store_id, commit):
 def smoke(image, output, seconds):
     started = time.monotonic()
     deadline = started + SMOKE_SECONDS
-    require(output.is_absolute(), "Output must be absolute")
+    check_output(output)
     require(re.fullmatch(r"[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9_][A-Za-z0-9._-]*", image) is not None,
             "Invalid image reference")
     require(type(seconds) is int and 10 <= seconds <= 120, "Seconds must be between 10 and 120")
