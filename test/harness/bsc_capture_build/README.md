@@ -107,9 +107,18 @@ An overlay on top of patches 01 to 08, for the in-node collector:
 
 - `--extra-package SOURCE=TARGET` installs a file or a directory at a new
   path of the source tree. It never replaces a native or an installed file.
-- `--extra-patch PATH` applies a unified diff after patches 01 to 08 with the
-  same strict applier. An overlay patch can also change what the packages
-  installed.
+  A relative `SOURCE`, like a relative `--extra-patch`, resolves against the
+  root of the repository checkout and not against the working directory.
+  `TARGET` must not contain a backslash.
+- `--extra-patch PATH` applies a unified diff after patches 01 to 08 with
+  the same strict applier. An overlay patch can also change what the
+  packages installed. A patch may change Go source, `go.mod` and `go.sum`;
+  any other file is refused. `go.mod` and `go.sum` are not gofmt-checked:
+  the compile step reads the patched copies of the tree.
+- A module of the node graph requires no third-party version above the
+  accepted BSC `go.mod`: the build compiles offline, with `-mod=readonly`,
+  on the module cache of the accepted build, which holds exactly those
+  versions. A module that is replaced by a directory needs no `go.sum` line.
 
 A C library that the binary links, for RocksDB 10.4.2:
 
@@ -135,12 +144,49 @@ a shared library and its link flag. The build linked the library,
 `geth dumpconfig` ran there. The same variant without
 `--runtime-library` was refused and its tag removed.
 
+The arguments of the two variants of the live capture plan follow. Their
+patches and packages belong to the streams that write them.
+
+```sh
+python3 -I test/harness/bsc_capture_build/bsc_capture_build.py build \
+  --build-manifest "$BUILD_ARTIFACTS/manifest.json" \
+  --sha256 "$ACCEPTED_BUILD_MANIFEST_SHA256" --output "$OUT" \
+  --variant fastnode \
+  --extra-patch adapters/bsc/state_provider/native/patches/09-fast-node-path.diff
+```
+
+```sh
+python3 -I test/harness/bsc_capture_build/bsc_capture_build.py build \
+  --build-manifest "$BUILD_ARTIFACTS/manifest.json" \
+  --sha256 "$ACCEPTED_BUILD_MANIFEST_SHA256" --output "$OUT" \
+  --variant collector \
+  --extra-patch adapters/bsc/state_provider/native/patches/09-fast-node-path.diff \
+  --extra-patch adapters/bsc/collector/native/patches/10-collector-wiring.diff \
+  --extra-patch adapters/bsc/collector/native/go.mod.diff \
+  --extra-package adapters/bsc/collector/native/go=extractor/bsc/collector \
+  --extra-package adapters/bsc/collector=extractor-modules/adapters/bsc/collector \
+  --extra-package adapters/ingestclient=extractor-modules/adapters/ingestclient \
+  --extra-package core/journal/storage=extractor-modules/core/journal/storage \
+  --extra-package core/journal/producer=extractor-modules/core/journal/producer \
+  --extra-package core/normalization/bsc=extractor-modules/core/normalization/bsc \
+  --extra-package protocol/balance=extractor-modules/protocol/balance \
+  --extra-package protocol/block=extractor-modules/protocol/block \
+  --extra-package protocol/semantic=extractor-modules/protocol/semantic \
+  --extra-package protocol/profiles=extractor-modules/protocol/profiles \
+  --extra-package protocol/proto=extractor-modules/protocol/proto \
+  --extra-package protocol/codec=extractor-modules/protocol/codec \
+  --extra-package protocol/compatibility=extractor-modules/protocol/compatibility \
+  --extra-package gateway/destination=extractor-modules/gateway/destination \
+  --extra-package config=extractor-modules/config
+```
+
 What each variant still needs: the packages and patches of the collector;
 and for RocksDB, an installation prefix built from its source with the build
 dependencies of the candidate lock, the overlay that uses it, and a choice
-between static and dynamic linking. The build compiles with the accepted
-`go.mod` copy and the offline module cache (`-mod=readonly`), so a variant
-that adds a Go module needs an extended module input first.
+between static and dynamic linking. A third-party module or version outside
+the accepted graph, such as the RocksDB bindings, still needs an extended
+module input: an overlay `go.sum` and a cache that holds the accepted
+modules and the extras.
 
 ## Run on Chapel for capture
 

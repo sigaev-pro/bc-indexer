@@ -63,6 +63,8 @@ LOCK_PATH = ROOT / ".project" / "bootstrap" / "components" / "candidate-lock.jso
 PATCHES = ("01-core-import-seam.diff", "02-rawdb-freezer.diff", "03-eth-recover-pruning.diff",
            "04-geth-prune-state.diff", "05-vm-safe-point.diff", "06-parlia-snapshots.diff",
            "07-core-decision-step.diff", "08-core-lifecycle-seams.diff")
+# The module files a patch may change besides Go source. gofmt cannot read them.
+MODULE_FILES = ("go.mod", "go.sum")
 GO = "/usr/local/go/bin/go"
 TARGET = "./cmd/geth"
 BINARY = "geth"
@@ -472,6 +474,21 @@ def check_patch_set(patched):
     require(names == list(PATCHES), f"Applied patch set differs from 01 to 08: {names}")
 
 
+def gofmt_paths(patched):
+    """The patched files that gofmt checks, sorted: the Go source. go.mod and
+    go.sum are module files, which gofmt cannot read, so a patch may change
+    them and they stay out. Any other patched file is refused."""
+    paths = set()
+    for item in patched:
+        for row in item["files"]:
+            path = row["path"]
+            require(path.endswith(".go") or path in MODULE_FILES,
+                    "A patch may change Go source, go.mod and go.sum only: " + path)
+            if path.endswith(".go"):
+                paths.add(path)
+    return sorted(paths)
+
+
 def check_labels(labels, facts):
     """Every expected label of the provenance is on the image."""
     wrong = {key: [labels.get(key), value] for key, value in image_labels(facts).items()
@@ -530,8 +547,7 @@ def build(manifest_path, expected_sha, output, variant=None):
         environment = {**pins.environment(), **variant_environment(variant)}
         mounts = probe14.build_mounts(source, manifest_path.parent / "cache" / FAMILY / "mod", root) + \
             variant_mounts(variant)
-        formatted = runner.command(compiler, ["/usr/local/go/bin/gofmt", "-l", "extractor",
-                                               *sorted({row["path"] for item in patched for row in item["files"]})],
+        formatted = runner.command(compiler, ["/usr/local/go/bin/gofmt", "-l", "extractor", *gofmt_paths(patched)],
                                    mounts, cap=300, memory="2g", cwd="/source", environment=environment)
         require(not read_bytes(formatted, LOG_LIMIT, deadline).strip(), "gofmt reports unformatted files")
         version = runner.command(compiler, [GO, "version"], mounts, cap=120, memory="512m", cwd="/source",

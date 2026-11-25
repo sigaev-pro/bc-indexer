@@ -397,6 +397,16 @@ class VariantTest(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "already exists"):
             build.apply_variant(source, record, variant)
 
+    def test_gofmt_receives_go_source_only(self):
+        def row(*paths):
+            return {"patch": {"path": "/p/x.diff"}, "files": [{"path": path} for path in paths]}
+        self.assertEqual(build.gofmt_paths([row("b.go", "a.go"), row("go.mod", "go.sum", "c.go")]),
+                         ["a.go", "b.go", "c.go"])
+        self.assertEqual(build.gofmt_paths([]), [])
+        for path in ("README.md", "Makefile", "go.mod.bak", "sub/go.sum.txt", "x.go/mod.go.bak"):
+            with self.subTest(path=path), self.assertRaisesRegex(Rejected, "only"):
+                build.gofmt_paths([row("a.go", path)])
+
     def test_an_overlay_patch_never_finds_a_missing_or_changed_context(self):
         variant = overlay(self.root)
         source, record = self.root / "tree", self.root / "record"
@@ -683,6 +693,36 @@ class BuildTest(ProcedureFixture):
         with mock.patch("builtins.print"):
             self.assertEqual(build.main([*base, "--output", str(self.root / "none"), "--cgo-link", "-lrocksdb"]), 2)
         self.assertFalse((self.root / "none").exists())
+
+    def test_a_variant_may_patch_the_module_files(self):
+        module = self.root / "go.mod.diff"
+        module.write_text("--- a/go.mod\n+++ b/go.mod\n@@ -1 +1,3 @@\n module github.com/ethereum/go-ethereum\n"
+                          "+\n+require github.com/sigaev-pro/bc-indexer/adapters/ingestclient v0.0.0\n")
+        source = self.root / "zz_probe.diff"
+        source.write_text('--- /dev/null\n+++ b/cmd/geth/zz_probe.go\n@@ -0,0 +1,3 @@\n+package main\n+\n'
+                          '+import _ "github.com/ethereum/go-ethereum/extractor/bsc/probe"\n')
+        variant = build.variant_of("probe", [str(module), str(source)], [], [], [], [], [])
+        proof = build.build(self.accepted / "manifest.json", self.sha, self.output, variant)
+        self.assertEqual((proof["result"], proof["error"]), ("PASS", None))
+        self.assertEqual(self.native[0]["argv"], ["/usr/local/go/bin/gofmt", "-l", "extractor", "cmd/geth/zz_probe.go",
+                                                   *sorted(f"core/file{index}.go" for index in range(8))])
+        self.assertEqual((self.output / "bsc" / "metadata" / "go.mod").read_text(),
+                         "module github.com/ethereum/go-ethereum\n\n"
+                         "require github.com/sigaev-pro/bc-indexer/adapters/ingestclient v0.0.0\n")
+        provenance = json.loads((self.output / "provenance.json").read_text())
+        self.assertEqual([row["files"][0]["path"] for row in provenance["variant"]["patches"]],
+                         ["go.mod", "cmd/geth/zz_probe.go"])
+        self.assertEqual(provenance["build_environment"], {})
+
+    def test_a_patch_on_any_other_non_go_file_is_refused(self):
+        notes = self.root / "notes.diff"
+        notes.write_text("--- /dev/null\n+++ b/docs/notes.md\n@@ -0,0 +1 @@\n+# notes\n")
+        variant = build.variant_of("notes", [str(notes)], [], [], [], [], [])
+        proof = build.build(self.accepted / "manifest.json", self.sha, self.output, variant)
+        self.assertEqual(proof["result"], "FAIL")
+        self.assertIn("A patch may change Go source, go.mod and go.sum only: docs/notes.md", proof["error"])
+        self.assertEqual([argv for argv in self.docker.calls if argv[1] == "build"], [])
+        self.assertEqual(self.native, [])
 
     def test_a_changed_variant_input_fails_before_an_image_exists(self):
         variant = overlay(self.root)
