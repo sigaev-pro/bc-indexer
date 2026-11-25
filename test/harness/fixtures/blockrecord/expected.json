@@ -1,0 +1,1437 @@
+{
+  "schema_version": 1,
+  "description": "Golden vectors of one BSC Chapel block event: a fixed Input and the semantic digest, record digest and fragment digests an independent implementation computes from it. generate.py writes this file; the Go test of core/normalization/bsc/blockrecord reads it.",
+  "fixture": {
+    "endpoint": "https://bsc-testnet-rpc.publicnode.com",
+    "acquired_at": "2026-11-25T14:16:41Z",
+    "block_number": 144802468,
+    "block_hash": "0xf69fc5269ddd1fa621fcecb81be49e76e1fcdd2ff6a0e88cd4883901454c620f",
+    "genesis_hash": "0x6d3c66c5357ec91d5c43af47e234a939b22557cbb552dc45bebbceeed90fbe34",
+    "header_rlp_sha256": "c267c03d36c5050dfee78faedd7999f200bbd5a74819b98e2afc788153b5d918"
+  },
+  "registry": {
+    "schema_version": 2,
+    "messages": {
+      "1": {
+        "name": "Envelope",
+        "fields": [
+          [
+            1,
+            "schema_version",
+            "uint32",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "network",
+            "message",
+            2,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "profile_ref",
+            "message",
+            3,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            4,
+            "event_id",
+            "bytes",
+            0,
+            false,
+            "",
+            40,
+            ""
+          ],
+          [
+            5,
+            "producer_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            6,
+            "run_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            7,
+            "source",
+            "message",
+            4,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            8,
+            "capture_mode",
+            "enum",
+            0,
+            false,
+            "CaptureMode",
+            0,
+            ""
+          ],
+          [
+            104,
+            "block_applied",
+            "message",
+            10,
+            false,
+            "",
+            0,
+            "payload"
+          ]
+        ]
+      },
+      "2": {
+        "name": "NetworkIdentity",
+        "fields": [
+          [
+            1,
+            "family",
+            "enum",
+            0,
+            false,
+            "NetworkFamily",
+            0,
+            ""
+          ],
+          [
+            2,
+            "chain_id",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            3,
+            "genesis_hash",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ]
+        ]
+      },
+      "3": {
+        "name": "ProfileRef",
+        "fields": [
+          [
+            1,
+            "network_profile",
+            "utf8",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "client_commit",
+            "utf8",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "adapter_version",
+            "utf8",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            4,
+            "fork_rules_version",
+            "utf8",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            5,
+            "normalization_version",
+            "utf8",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "4": {
+        "name": "SourceRef",
+        "fields": [
+          [
+            1,
+            "node_instance_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            2,
+            "writer_epoch",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            3,
+            "source_sequence",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "10": {
+        "name": "BlockApplied",
+        "fields": [
+          [
+            1,
+            "activation",
+            "message",
+            11,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "admission",
+            "message",
+            13,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "metadata",
+            "message",
+            14,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            4,
+            "initial_snapshot",
+            "message",
+            23,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "11": {
+        "name": "BlockActivationRef",
+        "fields": [
+          [
+            1,
+            "network",
+            "message",
+            2,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "block_hash",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            3,
+            "producer_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            4,
+            "run_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            5,
+            "activation_id",
+            "message",
+            12,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "12": {
+        "name": "ActivationID",
+        "fields": [
+          [
+            1,
+            "decision_sequence",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "entity_ordinal",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "13": {
+        "name": "ObservationRef",
+        "fields": [
+          [
+            1,
+            "producer_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            2,
+            "run_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            3,
+            "observation_sequence",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "14": {
+        "name": "BlockMetadata",
+        "fields": [
+          [
+            1,
+            "number",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "hash",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            3,
+            "parent_hash",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            4,
+            "timestamp",
+            "message",
+            15,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            5,
+            "source_transaction_count",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            6,
+            "header",
+            "message",
+            16,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            7,
+            "details",
+            "message",
+            17,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "15": {
+        "name": "Timestamp",
+        "fields": [
+          [
+            1,
+            "seconds",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "nanos",
+            "uint32",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "precision",
+            "enum",
+            0,
+            false,
+            "TimestampPrecision",
+            0,
+            ""
+          ]
+        ]
+      },
+      "16": {
+        "name": "BlockHeader",
+        "fields": [
+          [
+            1,
+            "parent_hash",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            2,
+            "uncle_hash",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            3,
+            "beneficiary",
+            "bytes",
+            0,
+            false,
+            "",
+            20,
+            ""
+          ],
+          [
+            4,
+            "state_root",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            5,
+            "transactions_root",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            6,
+            "receipts_root",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            7,
+            "logs_bloom",
+            "bytes",
+            0,
+            false,
+            "",
+            256,
+            ""
+          ],
+          [
+            8,
+            "difficulty",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            9,
+            "number",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            10,
+            "gas_limit",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            11,
+            "gas_used",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            12,
+            "timestamp_seconds",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            13,
+            "extra_data",
+            "bytes",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            14,
+            "mix_digest",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ],
+          [
+            15,
+            "nonce",
+            "bytes",
+            0,
+            false,
+            "",
+            8,
+            ""
+          ],
+          [
+            16,
+            "base_fee",
+            "bytes",
+            0,
+            true,
+            "",
+            32,
+            ""
+          ],
+          [
+            17,
+            "withdrawals_root",
+            "bytes",
+            0,
+            true,
+            "",
+            32,
+            ""
+          ],
+          [
+            18,
+            "blob_gas_used",
+            "uint64",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            19,
+            "excess_blob_gas",
+            "uint64",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            20,
+            "parent_beacon_block_root",
+            "bytes",
+            0,
+            true,
+            "",
+            32,
+            ""
+          ],
+          [
+            21,
+            "requests_hash",
+            "bytes",
+            0,
+            true,
+            "",
+            32,
+            ""
+          ],
+          [
+            22,
+            "source_rlp",
+            "bytes",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "17": {
+        "name": "FamilyDetails",
+        "fields": [
+          [
+            1,
+            "eth",
+            "message",
+            18,
+            false,
+            "",
+            0,
+            "family"
+          ],
+          [
+            2,
+            "bsc",
+            "message",
+            19,
+            false,
+            "",
+            0,
+            "family"
+          ],
+          [
+            3,
+            "bor",
+            "message",
+            21,
+            false,
+            "",
+            0,
+            "family"
+          ]
+        ]
+      },
+      "18": {
+        "name": "EthBlockDetails",
+        "fields": [
+          [
+            1,
+            "block_access_list_hash",
+            "bytes",
+            0,
+            true,
+            "",
+            32,
+            ""
+          ],
+          [
+            2,
+            "slot_number",
+            "uint64",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "19": {
+        "name": "BscBlockDetails",
+        "fields": [
+          [
+            1,
+            "parlia_system_transaction_count",
+            "uint64",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "vote_snapshot",
+            "message",
+            20,
+            true,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "20": {
+        "name": "ParliaVoteSnapshot",
+        "fields": [
+          [
+            1,
+            "justified",
+            "message",
+            25,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "finalized",
+            "message",
+            25,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "21": {
+        "name": "BorBlockDetails",
+        "fields": [
+          [
+            1,
+            "sprint_length",
+            "uint64",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "sprint_end",
+            "bool",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "side_chain_block",
+            "bool",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            4,
+            "state_sync_count",
+            "uint64",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            5,
+            "state_sync_mode",
+            "enum",
+            0,
+            true,
+            "StateSyncMode",
+            0,
+            ""
+          ],
+          [
+            6,
+            "heimdall_checkpoints",
+            "list",
+            22,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "22": {
+        "name": "HeimdallCheckpointRef",
+        "fields": [
+          [
+            1,
+            "kind",
+            "enum",
+            0,
+            false,
+            "CheckpointKind",
+            0,
+            ""
+          ],
+          [
+            2,
+            "end",
+            "message",
+            25,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "checkpoint_id",
+            "uint64",
+            0,
+            true,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "23": {
+        "name": "LifecycleSnapshot",
+        "fields": [
+          [
+            1,
+            "native_decision",
+            "message",
+            24,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "observed_execution_head",
+            "message",
+            25,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "markers",
+            "message",
+            26,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "24": {
+        "name": "NativeDecisionRef",
+        "fields": [
+          [
+            1,
+            "node_instance_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            2,
+            "producer_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            3,
+            "run_id",
+            "bytes",
+            0,
+            false,
+            "",
+            16,
+            ""
+          ],
+          [
+            4,
+            "decision_sequence",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "25": {
+        "name": "AnchorRef",
+        "fields": [
+          [
+            1,
+            "height",
+            "uint64",
+            0,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "hash",
+            "bytes",
+            0,
+            false,
+            "",
+            32,
+            ""
+          ]
+        ]
+      },
+      "26": {
+        "name": "FinalityMarkers",
+        "fields": [
+          [
+            1,
+            "eth",
+            "message",
+            27,
+            false,
+            "",
+            0,
+            "family"
+          ],
+          [
+            2,
+            "bsc",
+            "message",
+            28,
+            false,
+            "",
+            0,
+            "family"
+          ],
+          [
+            3,
+            "polygon",
+            "message",
+            30,
+            false,
+            "",
+            0,
+            "family"
+          ]
+        ]
+      },
+      "27": {
+        "name": "EthereumMarkers",
+        "fields": [
+          [
+            1,
+            "safe",
+            "message",
+            31,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "finalized",
+            "message",
+            31,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "safe_basis",
+            "enum",
+            0,
+            false,
+            "EthereumSafeBasis",
+            0,
+            ""
+          ]
+        ]
+      },
+      "28": {
+        "name": "BscMarkers",
+        "fields": [
+          [
+            1,
+            "attested",
+            "message",
+            29,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "effective_finalized",
+            "message",
+            31,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "effective_basis",
+            "enum",
+            0,
+            false,
+            "BscEffectiveBasis",
+            0,
+            ""
+          ]
+        ]
+      },
+      "29": {
+        "name": "AttestedSnapshot",
+        "fields": [
+          [
+            1,
+            "snapshot_head",
+            "message",
+            25,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "justified",
+            "message",
+            25,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "finalized",
+            "message",
+            25,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "30": {
+        "name": "PolygonMarkers",
+        "fields": [
+          [
+            1,
+            "milestone",
+            "message",
+            31,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            2,
+            "checkpoint",
+            "message",
+            31,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "native_finalized",
+            "message",
+            31,
+            false,
+            "",
+            0,
+            ""
+          ],
+          [
+            4,
+            "l1_checkpoint",
+            "message",
+            31,
+            false,
+            "",
+            0,
+            ""
+          ]
+        ]
+      },
+      "31": {
+        "name": "ReferenceObservation",
+        "fields": [
+          [
+            1,
+            "kind",
+            "enum",
+            0,
+            false,
+            "ReferenceKind",
+            0,
+            ""
+          ],
+          [
+            2,
+            "anchor",
+            "message",
+            25,
+            true,
+            "",
+            0,
+            ""
+          ],
+          [
+            3,
+            "origin",
+            "enum",
+            0,
+            true,
+            "EvidenceOrigin",
+            0,
+            ""
+          ],
+          [
+            4,
+            "reason",
+            "enum",
+            0,
+            true,
+            "UnavailableReason",
+            0,
+            ""
+          ]
+        ]
+      }
+    },
+    "enums": {
+      "CaptureMode": {
+        "LIVE": 1
+      },
+      "NetworkFamily": {
+        "EVM": 1
+      },
+      "TimestampPrecision": {
+        "SECONDS": 1,
+        "MILLISECONDS": 2,
+        "NANOSECONDS": 3
+      },
+      "StateSyncMode": {
+        "END_OF_BLOCK_COMMIT": 1,
+        "BODY_TRANSACTION": 2
+      },
+      "CheckpointKind": {
+        "MILESTONE": 1,
+        "CHECKPOINT": 2
+      },
+      "EvidenceOrigin": {
+        "NATIVE_LIVE": 1,
+        "NATIVE_RESTART": 2,
+        "RETAINED_DURABLE": 3
+      },
+      "UnavailableReason": {
+        "SOURCE_OFFLINE": 1,
+        "SOURCE_SYNCING": 2,
+        "STATE_UNAVAILABLE": 3,
+        "CHECKPOINT_PENDING": 4
+      },
+      "ReferenceKind": {
+        "KNOWN": 1,
+        "NOT_OBSERVED": 2,
+        "NATIVE_REFERENCE_UNSET": 3,
+        "UNAVAILABLE": 4
+      },
+      "EthereumSafeBasis": {
+        "CONSENSUS_SETTER": 1,
+        "STARTUP_FINALIZED_FALLBACK": 2,
+        "UNSET": 3
+      },
+      "BscEffectiveBasis": {
+        "HEADER_SNAPSHOT": 1,
+        "VOTE_POOL_QUORUM": 2,
+        "GENESIS_FALLBACK": 3,
+        "UNSET": 4
+      }
+    },
+    "profile": {
+      "network_profile": "bsc-testnet",
+      "client_commit": "54afaff4da31ac9e49ba646a4f65104edac5a2f3",
+      "adapter_version": "bsc-adapter-v1",
+      "fork_rules_version": "bsc-fork-rules-v1",
+      "normalization_version": "bsc-normalization-v1",
+      "chain_id": "0000000000000000000000000000000000000000000000000000000000000061"
+    }
+  },
+  "input": {
+    "network": {
+      "chain_id": "0000000000000000000000000000000000000000000000000000000000000061",
+      "genesis_hash": "6d3c66c5357ec91d5c43af47e234a939b22557cbb552dc45bebbceeed90fbe34"
+    },
+    "node_instance_id": "901430385b3692a8ce930f61ec1286b4",
+    "producer_id": "db2a4336bafc5ee2de9aca907c3fdeb3",
+    "run_id": "00f4c790fa3b5fabc1423b8a16e96ea7",
+    "writer_epoch": "6e31d4646398026c6bb75ad145f75a41",
+    "source_sequence": 1,
+    "decision_sequence": 12,
+    "observation_sequence": 11,
+    "header": {
+      "hash": "0xf69fc5269ddd1fa621fcecb81be49e76e1fcdd2ff6a0e88cd4883901454c620f",
+      "parent_hash": "0x1e4f8046ea92c5ffb2e39ab8f482f78f9e74d2641bbd33c550e8aa67b6898ddf",
+      "uncle_hash": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+      "beneficiary": "0x76d76ee8823de52a1a431884c2ca930c5e72bff3",
+      "state_root": "0xe48ce2953661bf9eab8a96319fb3df4951cfc81de11b503a126e5475401de1d7",
+      "transactions_root": "0xdaef932cbad03c1a7f23e83844d10bb2dbda2d0d55f56ca7772f03c36bbd9d81",
+      "receipts_root": "0x7e7c3fe53819ec3839af3e7347d40c1987497cb13d99528b574cad39fd02bc5f",
+      "logs_bloom": "0x00000000000000000000004000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002010000000000000000000000000000000080020000200010000000000000000080004000000000000000000000000000000000000000000000000000000000000000400000000020000000000000020000000000000002008000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000104002000000000000000000000000010000040000010000008000000000004000000000000000",
+      "difficulty": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "number": 144802468,
+      "gas_limit": 100000000,
+      "gas_used": 309667,
+      "time": 1795616202,
+      "extra_data": "0xdb8301080188393437626131636289676f312e32352e3134836c696e283fedb7f8b48201ffb860903df91d68bab90b6726196da901602cbb99ec887dcf715aade2887d5473b9b423819d663b9ea6f0968c16a2f7f5a21f0e09bdfa9617bc0e0f135f5c75cde276afa731d38a23ca17ff0b74a2e270be119edd64e34b0c82e12e2ee4db02862f4df84c8408a182a2a0f6cc9777f25458880905488c8e4f0ccc00d5efa4e506d6fbf21122861dc025ac8408a182a3a01e4f8046ea92c5ffb2e39ab8f482f78f9e74d2641bbd33c550e8aa67b6898ddf803bb9efa569c81b1b87f3d6317993cc4193049a709d2442f087351ae6c0aaf77966d2af18d10e96ca503036d4f4312c007091a81c3fcd959f1acefe33d02524d200",
+      "mix_digest": "0x00000000000000000000000000000000000000000000000000000000000001c2",
+      "nonce": "0x0000000000000000",
+      "source_rlp": "0xf9037ba01e4f8046ea92c5ffb2e39ab8f482f78f9e74d2641bbd33c550e8aa67b6898ddfa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479476d76ee8823de52a1a431884c2ca930c5e72bff3a0e48ce2953661bf9eab8a96319fb3df4951cfc81de11b503a126e5475401de1d7a0daef932cbad03c1a7f23e83844d10bb2dbda2d0d55f56ca7772f03c36bbd9d81a07e7c3fe53819ec3839af3e7347d40c1987497cb13d99528b574cad39fd02bc5fb9010000000000000000000000004000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002010000000000000000000000000000000080020000200010000000000000000080004000000000000000000000000000000000000000000000000000000000000000400000000020000000000000020000000000000002008000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000104002000000000000000000000000010000040000010000008000000000004000000000000000028408a182a48405f5e1008304b9a3846b06edcab90117db8301080188393437626131636289676f312e32352e3134836c696e283fedb7f8b48201ffb860903df91d68bab90b6726196da901602cbb99ec887dcf715aade2887d5473b9b423819d663b9ea6f0968c16a2f7f5a21f0e09bdfa9617bc0e0f135f5c75cde276afa731d38a23ca17ff0b74a2e270be119edd64e34b0c82e12e2ee4db02862f4df84c8408a182a2a0f6cc9777f25458880905488c8e4f0ccc00d5efa4e506d6fbf21122861dc025ac8408a182a3a01e4f8046ea92c5ffb2e39ab8f482f78f9e74d2641bbd33c550e8aa67b6898ddf803bb9efa569c81b1b87f3d6317993cc4193049a709d2442f087351ae6c0aaf77966d2af18d10e96ca503036d4f4312c007091a81c3fcd959f1acefe33d02524d200a000000000000000000000000000000000000000000000000000000000000001c288000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "base_fee": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "withdrawals_root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+      "blob_gas_used": 0,
+      "excess_blob_gas": 0,
+      "parent_beacon_block_root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "requests_hash": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tx_count": 3,
+    "system_tx_count": 1,
+    "old_head": {
+      "number": 144802467,
+      "hash": "0x1e4f8046ea92c5ffb2e39ab8f482f78f9e74d2641bbd33c550e8aa67b6898ddf"
+    },
+    "new_head": {
+      "number": 144802468,
+      "hash": "0xf69fc5269ddd1fa621fcecb81be49e76e1fcdd2ff6a0e88cd4883901454c620f"
+    },
+    "justified": {
+      "number": 144802467,
+      "hash": "0x1e4f8046ea92c5ffb2e39ab8f482f78f9e74d2641bbd33c550e8aa67b6898ddf"
+    },
+    "finalized": {
+      "number": 144802466,
+      "hash": "0xf6cc9777f25458880905488c8e4f0ccc00d5efa4e506d6fbf21122861dc025ac"
+    },
+    "attestation": {
+      "status": "ATTESTED",
+      "justified": {
+        "number": 144802467,
+        "hash": "0x1e4f8046ea92c5ffb2e39ab8f482f78f9e74d2641bbd33c550e8aa67b6898ddf"
+      },
+      "finalized": {
+        "number": 144802466,
+        "hash": "0xf6cc9777f25458880905488c8e4f0ccc00d5efa4e506d6fbf21122861dc025ac"
+      },
+      "digest": "6bf33c0aeda33fbb70fbb450a2cf5969e77858b818beff7ae579f6016d3476fe"
+    }
+  },
+  "event_sequence": 1,
+  "expected": {
+    "semantic_digest": "d21df1dbe34a0de0d8d95d29ad41219129e76e3295b7f314c2aa11c0bbefadc2",
+    "node_count": 99,
+    "blob_count": 45,
+    "total_blob_bytes": 2511,
+    "fragment_count": 4,
+    "record_length": 6036,
+    "content_bytes": 5949,
+    "record_digest": "31262aaf5a6db88c9297a03df030eef0c25b60ea286d338133113c8c3f9443a2",
+    "fragment_manifest_digest": "033b550d90fef5ee3144bd9e61a2baf3059937a9a70940a34da3ff08d5ec31b3",
+    "fragments": [
+      {
+        "index": 0,
+        "length": 137,
+        "sha256": "2e8e92cceef645fe1a17370695bfec6ca613ae89d3ed90b054e0acff3e73c2f8"
+      },
+      {
+        "index": 1,
+        "length": 2886,
+        "sha256": "59afdcf1f5a6013fe00d7231b74fca0d6988707ffdcaf57b09bae529d536d304"
+      },
+      {
+        "index": 2,
+        "length": 2926,
+        "sha256": "b3c75c249e253060162b74f6eababbb0377af4f1bf33386d258279e3db0be224"
+      },
+      {
+        "index": 3,
+        "length": 87,
+        "sha256": "dcd52401cb35a82d2761f8d4f7998ad064a9d6adc6a6ef28601e333fe8e79f3f"
+      }
+    ],
+    "manifest_digest": "255e2b6c66126bc3b4241cfb6e258698291ee386fcf76e2f924bffe0bd285968"
+  }
+}
