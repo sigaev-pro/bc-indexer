@@ -24,7 +24,7 @@ func TestRecoveryAtEveryPhase(t *testing.T) {
 	st := storage.NewMemory()
 	j := reopen(t, st)
 	id := testBatch(1)
-	manifest := []byte("extractor.manifest.v2\x00recovery")
+	manifest := testManifest(t, []uint64{4, 3, 3})
 	digest := sha256.Sum256(manifest)
 
 	// Partial manifest stream resumes at the durable offset.
@@ -64,7 +64,10 @@ func TestRecoveryAtEveryPhase(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := FrameMeta{Form: 0, Capacity: 4, PartCount: 1, FragmentTotal: 4}
-	if _, err := j.PublishChunk(id, plan, FrameAddr{0, 0, 0}, &meta, 0, sha256.Sum256([]byte("ab")), []byte("ab")); err != nil {
+	// The frame is the encoded TransportFrame of the 4 data bytes; it arrives
+	// in two pieces across the restart.
+	frame := testFrame(res.SequenceBase, entries[0], 3, 0, []byte("abcd"))
+	if _, err := j.PublishChunk(id, plan, FrameAddr{0, 0, 0}, &meta, 0, sha256.Sum256(frame[:2]), frame[:2]); err != nil {
 		t.Fatal(err)
 	}
 	j = reopen(t, st)
@@ -72,7 +75,7 @@ func TestRecoveryAtEveryPhase(t *testing.T) {
 	if err != nil || len(resumePub.Frames) != 1 || resumePub.Frames[0].NextBytes != 2 {
 		t.Fatalf("publish cursors after reopen: %+v %v", resumePub, err)
 	}
-	if _, err := j.PublishChunk(id, plan, FrameAddr{0, 0, 0}, &meta, 2, sha256.Sum256([]byte("cd")), []byte("cd")); err != nil {
+	if _, err := j.PublishChunk(id, plan, FrameAddr{0, 0, 0}, &meta, 2, sha256.Sum256(frame[2:]), frame[2:]); err != nil {
 		t.Fatal(err)
 	}
 	if err := j.FinalizePublish(id, plan, digest, layout); err != nil {

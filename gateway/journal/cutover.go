@@ -654,6 +654,12 @@ func decodeSwitch(b []byte) (Switch, error) {
 }
 
 // Resume record: the ResumeAck followed by the whole old seal it continues.
+//
+// The record keeps record version 1 although its layout changed once: it
+// first appeared in PR #227 as the ack alone and gained the old seal inside
+// the same PR, before it merged, so no build outside that PR's history ever
+// wrote the first layout. A record of that layout is refused and never
+// misread: nothing follows its ack, so decodeSeal reports a corrupt record.
 func encodeResumeRecord(v resumeRecord) []byte {
 	e := &encoder{}
 	e.u8(recordVersion)

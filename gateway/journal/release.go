@@ -155,6 +155,7 @@ func (j *Journal) CompleteRelease(id BatchID) (uint64, error) {
 	if err := j.st.Apply(b); err != nil {
 		return 0, err
 	}
+	j.forgetManifest(id)
 	return id.Seq, nil
 }
 

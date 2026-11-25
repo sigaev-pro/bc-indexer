@@ -141,7 +141,8 @@ func (m *MemoryGateway) Batch(fence Fence, id BatchID) (GatewayRecord, bool) {
 // ImportClosed registers a CLOSED batch, the single exit of the ordinary
 // publish stream and of IMPORT_SEALED. With preserveEpoch the issuer epoch
 // of the imported plan stands (no new allocation); otherwise the store
-// epoch of this gateway becomes the issuer.
+// epoch of this gateway becomes the issuer. It runs only in an admission
+// generation that is open for data (admitDataLocked).
 func (m *MemoryGateway) ImportClosed(fence Fence, plan SealedPlan, preserveEpoch bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -152,11 +153,8 @@ func (m *MemoryGateway) ImportClosed(fence Fence, plan SealedPlan, preserveEpoch
 	if err := m.guardRetiredLocked(key, plan.Identity.Batch.Seq); err != nil {
 		return err
 	}
-	if m.sealAck != nil && fence.AdmissionGeneration <= m.sealAck.AdmissionGeneration {
-		// SEALED_GENERATION forbids Prepare of the sealed admission
-		// generation; new data waits for the Resume generation.
-		return fmt.Errorf("%w: admission generation %d is sealed (DRAIN_REQUIRED)",
-			ErrState, fence.AdmissionGeneration)
+	if err := m.admitDataLocked(fence); err != nil {
+		return err
 	}
 	if !preserveEpoch {
 		plan.Identity.IssuerStoreEpoch = m.epoch
@@ -185,6 +183,27 @@ func (m *MemoryGateway) ImportClosed(fence Fence, plan SealedPlan, preserveEpoch
 		FrameKeys: append([]FrameKey(nil), plan.FrameKeys...),
 	}
 	return nil
+}
+
+// admitDataLocked holds the data admission rule of the drain and cutover
+// protocol (DELIVERY_STATE_MACHINE; acceptance case AC-DLV-11-02), the same
+// rule the gateway journal holds: a run without a seal admits data in every
+// generation; a sealed run admits data only in the generation its Resume
+// opened; while a destination switch is prepared and not committed, no run
+// admits data, because the active binding is about to change. The caller
+// holds m.mu.
+func (m *MemoryGateway) admitDataLocked(fence Fence) error {
+	if m.switchPhase == SwitchPreparedPhase {
+		return fmt.Errorf("%w: a destination switch is prepared, data waits for its commit and the Resume (DRAIN_REQUIRED)", ErrState)
+	}
+	if m.sealAck == nil {
+		return nil
+	}
+	if m.resumeAck != nil && m.resumeAck.NewAdmissionGeneration == fence.AdmissionGeneration {
+		return nil
+	}
+	return fmt.Errorf("%w: admission generation %d is not open for data, the run is sealed until its Resume (DRAIN_REQUIRED)",
+		ErrState, fence.AdmissionGeneration)
 }
 
 // guardRetiredLocked rejects sequences at or below the retired prefix.

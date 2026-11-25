@@ -1,0 +1,46 @@
+{
+ "schema_version": 1,
+ "description": "Single-check mutants of the reference engine's data admission rule: a sealed run admits data only in the generation its Resume opened, and a prepared switch closes admission until its commit.",
+ "language": "go",
+ "root": "../..",
+ "copy": [
+  "core/delivery/*.go",
+  "core/delivery/*/*.go",
+  "protocol/**/*.go"
+ ],
+ "go_module": "github.com/sigaev-pro/bc-indexer",
+ "test": [
+  "go",
+  "test",
+  "-count=1",
+  "./core/delivery/",
+  "./core/delivery/maintenance/"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "reference engine: prepared switch does not close admission",
+   "file": "core/delivery/memory_gateway.go",
+   "original": "if m.switchPhase == SwitchPreparedPhase {\n\t\treturn fmt.Errorf(\"%w: a destination switch is prepared, data waits for its commit and the Resume (DRAIN_REQUIRED)\", ErrState)\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "reference engine: sealed run admits data",
+   "file": "core/delivery/memory_gateway.go",
+   "original": "if m.resumeAck != nil && m.resumeAck.NewAdmissionGeneration == fence.AdmissionGeneration {",
+   "replacement": "if m.resumeAck != nil {"
+  },
+  {
+   "name": "reference engine: resume opens every generation",
+   "file": "core/delivery/memory_gateway.go",
+   "original": "if m.resumeAck != nil && m.resumeAck.NewAdmissionGeneration == fence.AdmissionGeneration {",
+   "replacement": "if m.resumeAck != nil && m.resumeAck.NewAdmissionGeneration >= 0 {"
+  },
+  {
+   "name": "reference engine: resume accepted under a prepared switch",
+   "file": "core/delivery/memory_maintenance.go",
+   "original": "if m.switchPhase == SwitchPreparedPhase {\n\t\t// The switch of a seal runs between the seal and the Resume: its\n\t\t// commit decides the active binding the resume continues.\n\t\treturn ResumeAck{}, fmt.Errorf(\"%w: a destination switch is prepared, the Resume waits for its commit\", ErrState)\n\t}\n",
+   "replacement": ""
+  }
+ ]
+}

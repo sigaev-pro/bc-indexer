@@ -38,9 +38,6 @@ func (m FrameMeta) entry(addr FrameAddr) LayoutEntry {
 	}
 }
 
-// FrameTotal is the declared byte size of one frame.
-func (m FrameMeta) frameTotal(frame uint64) uint64 { return m.entry(FrameAddr{}).FrameTotal(frame) }
-
 // PublishResume reports the durable resume cursors after BeginPublish.
 type PublishResume struct {
 	// Frames lists every declared frame with its next expected offset.
@@ -109,10 +106,13 @@ func (j *Journal) BeginPublish(id BatchID, seed []byte, planDigest, layoutDigest
 // PublishChunk stores one bounded chunk of one transport frame. The first
 // chunk of a frame (offset 0) must carry the frame declaration, which also
 // declares the layout entry; later chunks repeat it identically or omit it.
-// The same bytes at the same offset are idempotent; a hole returns
-// ErrOffsetMismatch with the expected cursor; a conflicting rewrite or a
-// changed declaration is an immutable conflict. A frame may not extend
-// beyond its declared total, and the stream cannot grow after CLOSED.
+// The chunk is a byte range of the canonical encoding of the TransportFrame
+// (frame.go): the offset counts encoded frame bytes, and a frame larger
+// than one chunk arrives in several chunks. The same bytes at the same
+// offset are idempotent; a hole returns ErrOffsetMismatch with the expected
+// cursor; a conflicting rewrite or a changed declaration is an immutable
+// conflict. A frame may not extend beyond its encoded size, and the stream
+// cannot grow after CLOSED.
 func (j *Journal) PublishChunk(id BatchID, planDigest [32]byte, addr FrameAddr, meta *FrameMeta, offset uint64, chunkSHA [32]byte, data []byte) (nextOffset uint64, err error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -141,21 +141,17 @@ func (j *Journal) PublishChunk(id BatchID, planDigest [32]byte, addr FrameAddr, 
 		return 0, ErrPayloadDigest
 	}
 
-	var total uint64
+	// A declaration fixes the layout entry and the encoded size of the
+	// frame, and a changed declaration is an immutable conflict.
 	if meta != nil {
 		if err := j.declareFrame(id, addr, *meta); err != nil {
 			return 0, err
 		}
-		total = meta.frameTotal(addr.FrameIndex)
 	}
-	head, err := j.frameTotalOf(id, addr)
+	total, err := j.frameTotalOf(id, addr)
 	if err != nil {
 		return 0, err
 	}
-	if meta != nil && head != total {
-		return 0, ErrImmutableConflict
-	}
-	total = head
 
 	prefix := frameKeyPrefix(id, addr.Ordinal, addr.FragmentIndex, addr.FrameIndex)
 	cover, _, err := chunkCover(j.st, prefix)
@@ -169,7 +165,7 @@ func (j *Journal) PublishChunk(id BatchID, planDigest [32]byte, addr FrameAddr, 
 			return cover, ErrStateConflict // the frame stream is closed
 		}
 		if cover+uint64(len(data)) > total {
-			return cover, ErrStateConflict // beyond the declared frame size
+			return cover, ErrStateConflict // beyond the encoded size of the frame
 		}
 		if err := j.st.Put(key, append([]byte(nil), data...)); err != nil {
 			return 0, err
@@ -192,8 +188,10 @@ func (j *Journal) PublishChunk(id BatchID, planDigest [32]byte, addr FrameAddr, 
 	}
 }
 
-// declareFrame records the frame declaration (layout entry plus per-frame
-// total) and rejects any change to an existing declaration.
+// declareFrame records the frame declaration, the layout entry plus the
+// encoded size of the frame, and rejects any change to an existing
+// declaration. Nothing is written before every check passed, so a refused
+// or failed declaration leaves no entry behind.
 func (j *Journal) declareFrame(id BatchID, addr FrameAddr, meta FrameMeta) error {
 	if meta.Form > 1 {
 		return ErrStateConflict
@@ -219,6 +217,7 @@ func (j *Journal) declareFrame(id BatchID, addr FrameAddr, meta FrameMeta) error
 	}
 
 	lkey := layoutKey(id, addr.Ordinal, addr.FragmentIndex)
+	newEntry := false
 	if raw, err := j.st.Get(lkey); err == nil {
 		old, derr := decodeLayoutEntry(raw)
 		if derr != nil {
@@ -227,23 +226,37 @@ func (j *Journal) declareFrame(id BatchID, addr FrameAddr, meta FrameMeta) error
 		if old != entry {
 			return ErrImmutableConflict
 		}
-	} else if err != storage.ErrNotFound {
+	} else if err == storage.ErrNotFound {
+		newEntry = true
+	} else {
 		return err
-	} else if err := j.st.Put(lkey, encodeLayoutEntry(entry)); err != nil {
+	}
+	total, err := j.encodedFrameSize(id, entry, addr.FrameIndex)
+	if err != nil {
 		return err
 	}
 
 	hkey := frameHeadKey(id, addr.Ordinal, addr.FragmentIndex, addr.FrameIndex)
-	total := entry.FrameTotal(addr.FrameIndex)
+	newHead := false
 	if raw, err := j.st.Get(hkey); err == nil {
 		if beU64(raw) != total {
 			return ErrImmutableConflict
 		}
 		return nil
-	} else if err != storage.ErrNotFound {
+	} else if err == storage.ErrNotFound {
+		newHead = true
+	} else {
 		return err
 	}
-	return j.st.Put(hkey, u64be(total))
+	if newEntry {
+		if err := j.st.Put(lkey, encodeLayoutEntry(entry)); err != nil {
+			return err
+		}
+	}
+	if newHead {
+		return j.st.Put(hkey, u64be(total))
+	}
+	return nil
 }
 
 func (j *Journal) frameTotalOf(id BatchID, addr FrameAddr) (uint64, error) {
@@ -298,7 +311,8 @@ func (j *Journal) layoutDigest(id BatchID, planDigest [32]byte, entryCount uint6
 	return d, entries, nil
 }
 
-// completeFrames verifies every declared frame received its full bytes.
+// completeFrames verifies every declared frame received its full bytes: the
+// stream of a frame must cover exactly its encoded size.
 func (j *Journal) completeFrames(id BatchID, entries []LayoutEntry) error {
 	for _, e := range entries {
 		for f := uint64(0); f < e.FrameCount(); f++ {
@@ -307,7 +321,15 @@ func (j *Journal) completeFrames(id BatchID, entries []LayoutEntry) error {
 			if err != nil {
 				return err
 			}
-			if cover != e.FrameTotal(f) {
+			addr := FrameAddr{Ordinal: e.Ordinal, FragmentIndex: e.FragmentIndex, FrameIndex: f}
+			total, err := j.frameTotalOf(id, addr)
+			if err == ErrBatchNotFound {
+				return ErrIncomplete // the frame was never declared
+			}
+			if err != nil {
+				return err
+			}
+			if cover != total {
 				return ErrIncomplete
 			}
 		}
@@ -402,7 +424,11 @@ func (j *Journal) finalize(id BatchID, planDigest, manifestDigest, layoutDigest 
 		BindingDigest:  j.bnd,
 	}))
 	j.putState(b, id, StateClosed)
-	return j.st.Apply(b)
+	if err := j.st.Apply(b); err != nil {
+		return err
+	}
+	j.forgetManifest(id)
+	return nil
 }
 
 // frameCursors lists every declared frame with its durable next offset, for

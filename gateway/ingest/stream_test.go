@@ -8,6 +8,7 @@ import (
 
 	"github.com/sigaev-pro/bc-indexer/gateway/journal"
 	"github.com/sigaev-pro/bc-indexer/gateway/session"
+	"github.com/sigaev-pro/bc-indexer/protocol/proto"
 )
 
 // framePlan is one publishable plan over the wire: event 0 fragment 0 as
@@ -29,7 +30,9 @@ type frameSend struct {
 
 func newFramePlan(t *testing.T, h *harness, s *sessionCtx, seq uint64, importMode bool) framePlan {
 	t.Helper()
-	manifest := []byte("extractor.manifest.v2\x00stream")
+	// A real descriptor manifest of two events; the plan carries fragment 0
+	// of each event. Its frames are the encoded TransportFrames.
+	manifest := wireManifest(t, []uint64{6, 3, 3}, []uint64{6, 3, 3})
 	digest := sha32(manifest)
 
 	var seed []byte
@@ -69,18 +72,31 @@ func newFramePlan(t *testing.T, h *harness, s *sessionCtx, seq uint64, importMod
 	if err != nil || fin.GetError() != nil {
 		t.Fatalf("finalize prepare: %v %+v", err, fin.GetError())
 	}
-	return framePlan{
+	// The frames are the encoded TransportFrames of the layout entries, built
+	// on the sequence base of the reservation the gateway allocated.
+	layout, err := journal.ParseSeed(fin.GetSeed())
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := layout.SequenceBase
+	wrap := func(e proto.LayoutManifestEntry, part uint64, data []byte) []byte {
+		return wireFrame(base, e, 3, part, data)
+	}
+	complete := proto.LayoutManifestEntry{Ordinal: 0, FragmentIndex: 0, Form: proto.FormComplete, Capacity: 6, PartCount: 1, FragmentTotalBytes: 6}
+	split := proto.LayoutManifestEntry{Ordinal: 1, FragmentIndex: 0, Form: proto.FormPart, Capacity: 4, PartCount: 2, FragmentTotalBytes: 6}
+	pf := framePlan{
 		batchSeq:   seq,
 		manifest:   manifest,
 		seed:       fin.GetSeed(),
 		planDigest: fin.GetPlanDigest(),
-		layout:     layoutDigestOf(as32(fin.GetPlanDigest())),
 		frames: []frameSend{
-			{0, 0, 0, 0, 6, 1, 6, []byte("abcdef")},
-			{1, 0, 0, 1, 4, 2, 6, []byte("wxyz")},
-			{1, 0, 1, 1, 4, 2, 6, []byte("uv")},
+			{0, 0, 0, 0, 6, 1, 6, wrap(complete, 0, []byte("abcdef"))},
+			{1, 0, 0, 1, 4, 2, 6, wrap(split, 0, []byte("wxyz"))},
+			{1, 0, 1, 1, 4, 2, 6, wrap(split, 1, []byte("uv"))},
 		},
 	}
+	pf.layout = layoutDigestOf(as32(fin.GetPlanDigest()))
+	return pf
 }
 
 func as32(b []byte) [32]byte {

@@ -19,7 +19,7 @@ CONTROL_WIRE_CONTRACT's RPC table:
 | `PrepareChunk` | one bounded manifest chunk; idempotent, cursor-based |
 | `FinalizePrepare` | verifies the full manifest, returns the exact reservation seed and plan digest |
 | `BeginPublish` | accepts seed/plan/layout identity, returns durable resume cursors |
-| `PublishChunk` | bidirectional stream of bounded transport frame chunks; one response per request, errors do not close the stream |
+| `PublishChunk` | bidirectional stream of bounded chunks of encoded transport frames; one response per request, errors do not close the stream |
 | `FinalizePublish` | closes a normal batch: `CLOSED` after completeness validation |
 | `SealImport` | closes an IMPORT_SEALED batch with the same validation |
 | `GetBatchState` | durable state of one batch, the `IngestAck` only while it is durable, and one bounded page of frame cursors |
@@ -58,7 +58,8 @@ With these RPCs a gateway acknowledgement reaches the producer:
   Without this rule a batch created between a seal and its Resume could
   never be acknowledged or released: the publisher refuses a batch of a
   binding that is no longer active, and an unreleasable batch would hold the
-  next seal.
+  next seal. The reference engine in `core/delivery/maintenance` holds
+  the same rule.
 - **Typed errors.** Answers carry the registry's `{code, request_id,
   owner_state, retry_action, detail}`; the gRPC status is only a transport
   categorization. Journal errors map one-to-one; unknown errors become
@@ -67,6 +68,14 @@ With these RPCs a gateway acknowledgement reaches the producer:
   (`GRPCServerOptions` sets the gRPC receive bound; larger messages are
   refused with ResourceExhausted at the transport level); one data chunk is
   at most 64 KiB (`LIMIT_INCOMPATIBLE`).
+- **A frame is sent as its encoded TransportFrame.** The data of a
+  `PublishChunk` is a byte range of the canonical encoding of one frame,
+  the wrapper plus the data it carries, and the offset counts bytes inside
+  that encoding. A frame is larger than its data (a 137-byte fragment makes
+  a 353-byte frame), so a frame of a 64 KiB fragment does not fit one data
+  chunk and arrives in several chunks. The journal computes the exact size
+  of every declared frame; the cursors of `GetBatchState` and
+  `BeginPublish` count encoded frame bytes.
 - **IMPORT_SEALED** imports the original seed (issuer epoch preserved, no
   sequence allocated) and seals only through `SealImport`;
   `FinalizePublish`/`SealImport` cannot be mixed.
@@ -158,9 +167,11 @@ With these RPCs a gateway acknowledgement reaches the producer:
   It stays `MODE_CONFLICT`, the existing mapping of a refused transition.
 - A data RPC refused during a drain answers `DRAIN_REQUIRED` with
   `RECONNECT`: the producer comes back in the generation the Resume opened.
-  Within one gateway process the admission barrier refuses the same RPC with
-  `SESSION_STALE`; the seal alone cannot answer after a restart, so the
-  durable rule names the cause.
+  This holds before and after a gateway restart, for every session of a
+  generation that is not open, the next generation before its Resume
+  included. `SESSION_STALE` is for the fenced session only: the session of
+  the sealed generation itself, whose token the barrier removed inside the
+  gateway process.
 - A seal at highwater 0 is accepted for a run that never created a batch:
   the contract fixes zero as the empty frontier. This diverges from the
   reference engine in `core/delivery/maintenance`, which rejects a zero

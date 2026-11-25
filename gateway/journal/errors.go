@@ -22,7 +22,8 @@ var (
 	// example FinalizePublish on an IMPORT_SEALED batch).
 	ErrModeConflict = errors.New("gateway journal: mode conflict")
 	// ErrManifestMismatch is a manifest stream whose digest or completeness
-	// check failed.
+	// check failed, or whose stored bytes are not a descriptor stream the
+	// frame accounting can read.
 	ErrManifestMismatch = errors.New("gateway journal: manifest digest mismatch")
 	// ErrLayoutMismatch is a layout manifest digest mismatch.
 	ErrLayoutMismatch = errors.New("gateway journal: layout manifest digest mismatch")
