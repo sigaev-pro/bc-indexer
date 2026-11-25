@@ -542,51 +542,99 @@ class FakeNative:
         return stdout
 
 
+PREVIOUS = "sha256:" + "8" * 64
+
+
 class FakeDocker:
-    """Answers the Docker CLI of the host: inspect, version, build and remove."""
+    """Answers the Docker CLI of the host. A test makes an answer wrong through
+    the attributes: built (the image id that docker build writes), image and
+    base (changes of what docker inspect returns for the built and for the
+    pinned runtime image), exits (exit codes by step name), tags (the tag
+    table), raw (the whole answer of docker inspect for the built image) and
+    tag_answer (the id that docker inspect returns for the tag at the end)."""
 
     def __init__(self):
-        self.calls, self.labels, self.removed, self.shared = [], build.image_labels(provenance_rows()), [], False
+        self.calls, self.removed, self.tagged, self.tag_attempts = [], [], [], []
+        self.known = {BASE_ID}  # the images Docker holds: the pinned runtime, built and tagged ones
+        self.labels, self.shared, self.built = build.image_labels(provenance_rows()), False, IMAGE_ID
+        self.image, self.base, self.exits, self.tags = {}, {}, {}, {}
+        self.raw, self.tag_answer = None, None
 
-    def answer(self, argv, **kwargs):
+    def tag(self, name, identifier):
+        """An image that exists under a tag before the run."""
+        self.tags[name] = identifier
+        self.known.add(identifier)
+
+    def reply(self, argv, **kwargs):
         if argv[0] != "docker":
             return RUN(argv, **kwargs)
         self.calls.append(argv)
-
-        def image(identifier):
-            # The binary is one layer; shared libraries and ldconfig add two.
-            layers = [BASE_LAYER] + ([EXTRA_LAYER] if identifier == IMAGE_ID else []) + \
-                ([EXTRA_LAYER, LAST_LAYER] if identifier == IMAGE_ID and self.shared else [])
-            return json.dumps([{"Architecture": "amd64", "Os": "linux", "Id": identifier, "Config": {
-                "Labels": self.labels, "Entrypoint": ["/usr/local/bin/geth"]}, "RootFS": {"Layers": layers}}]).encode()
-        if argv[1] == "ps":
-            return done(argv, 0, b"")
-        if argv[:3] == ["docker", "image", "inspect"] and "--format" in argv:
-            return done(argv, 1, b"", b"Error: No such image")
-        if argv[:3] == ["docker", "image", "inspect"] and argv[3] == DEBIAN:
-            return done(argv, 0, json.dumps([{"Architecture": "amd64", "Os": "linux", "Id": BASE_ID, "Config": {},
-                                              "RepoDigests": ["debian@" + DEBIAN.partition("@")[2]],
-                                              "RootFS": {"Layers": [BASE_LAYER]}}]).encode())
-        if argv[:2] == ["docker", "version"]:
-            return done(argv, 0, b"29.8.2\n")
-        if argv[1] == "build":
+        step = {"ps": "ps", "version": "version", "build": "build", "tag": "tag", "rm": "remove",
+                "inspect": "inspect"}[argv[1] if argv[1] != "image" else argv[2]]
+        if step == "ps":
+            return done(argv, self.exits.get("ps", 0), b"")
+        if step == "version":
+            return done(argv, self.exits.get("version", 0), b"29.8.2\n")
+        if step == "build":
+            code = self.exits.get("build", 0)
             position = argv.index("--label")
             self.labels = {}
             while argv[position] == "--label":
                 self.labels[argv[position + 1].partition("=")[0]] = argv[position + 1].partition("=")[2]
                 position += 2
             self.shared = (Path(argv[-1]) / "libs").is_dir()
-            Path(argv[argv.index("--iidfile") + 1]).write_text(IMAGE_ID + "\n")
-            return done(argv, 0, b"", b"")
-        if argv[:3] == ["docker", "image", "inspect"]:
-            return done(argv, 0, image(IMAGE_ID))
-        if argv[:3] == ["docker", "image", "rm"]:
-            self.removed.append(argv[-1])
-            return done(argv, 0, b"")
-        raise AssertionError("unexpected Docker command: " + " ".join(argv))
+            if code == 0:
+                self.known.add(self.built)
+                Path(argv[argv.index("--iidfile") + 1]).write_text(self.built + "\n")
+                return done(argv, 0, b"", b"")
+            return done(argv, code, b"", b"docker: the build failed\n")
+        target = argv[-1]
+        if target == DEBIAN:  # the pinned runtime image, by its reference
+            step, image, changes = "inspect-base", {"Architecture": "amd64", "Os": "linux", "Id": BASE_ID, "Config": {},
+                                                    "RepoDigests": ["debian@" + DEBIAN.partition("@")[2]],
+                                                    "RootFS": {"Layers": [BASE_LAYER]}}, self.base
+        else:
+            identifier = self.tags.get(target, target)
+            if identifier not in self.known:
+                return done(argv, self.exits.get("inspect-absent", 1), b"", b"Error: No such image")
+            # The binary is one layer; shared libraries and ldconfig add two.
+            layers = [BASE_LAYER, EXTRA_LAYER] + ([EXTRA_LAYER, LAST_LAYER] if self.shared else [])
+            image, changes = {"Architecture": "amd64", "Os": "linux", "Id": identifier, "Config": {
+                "Labels": self.labels, "Entrypoint": ["/usr/local/bin/geth"]}, "RootFS": {"Layers": layers}}, self.image
+            # By the tag is how the build asks which image the tag names.
+            step = "inspect-tag" if "--format" in argv else "inspect-built"
+        code = self.exits.get(step, self.exits.get("inspect", 0))
+        if callable(code):  # an exit that depends on what happened before
+            code = code(self)
+        if code:
+            return done(argv, code, b"", b"docker: inspect failed\n")
+        if step == "inspect-tag":
+            answer = self.tag_answer if self.tag_answer is not None and self.tagged else image["Id"]
+            return done(argv, 0, (answer + "\n").encode())
+        if self.raw is not None and step == "inspect-built":
+            return done(argv, 0, self.raw)
+        return done(argv, 0, json.dumps([{**image, **changes}]).encode())
 
     def __call__(self, argv, **kwargs):
-        return FakeDocker.answer(self, argv, **kwargs)
+        if argv[:3] == ["docker", "image", "tag"]:
+            self.calls.append(argv)
+            self.tag_attempts.append((argv[3], argv[4]))
+            if argv[3] not in self.known:
+                return done(argv, 1, b"", b"Error: No such image\n")
+            code = self.exits.get("tag", 0)
+            if code == 0:
+                self.tags[argv[4]] = argv[3]
+                self.tagged.append((argv[3], argv[4]))
+            return done(argv, code, b"", b"" if code == 0 else b"docker: the tag failed\n")
+        if argv[:3] == ["docker", "image", "rm"]:
+            self.calls.append(argv)
+            self.removed.append(argv[-1])
+            code = self.exits.get("remove", 0)
+            if code == 0:
+                self.tags = {name: value for name, value in self.tags.items() if value != argv[-1]}
+                self.known.discard(argv[-1])
+            return done(argv, code, b"", b"" if code == 0 else b"docker: the remove failed\n")
+        return FakeDocker.reply(self, argv, **kwargs)
 
 
 class ProcedureFixture(unittest.TestCase):
@@ -645,6 +693,17 @@ class ProcedureFixture(unittest.TestCase):
             manifest["plan"]["lock_sha256"] = reference(self.root / "candidate-lock.json")["sha256"]
         (self.accepted / "manifest.json").write_text(json.dumps(manifest))
         return reference(self.accepted / "manifest.json")["sha256"]
+
+    def build_and_fail(self, message, tagged=()):
+        """Run a build that must FAIL with `message`. The tag never ends on the
+        unchecked image: either it was not set, or the previous image got it back."""
+        proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
+        self.assertEqual((proof["result"], proof["cleanup_complete"]), ("FAIL", True))
+        self.assertIn(message, proof["error"])
+        self.assertEqual(self.docker.tagged, list(tagged))
+        self.assertNotIn(IMAGE_ID, self.docker.tags.values())
+        self.assertIn(IMAGE_ID, self.docker.removed)
+        return proof
 
     def fails(self, arrange, message, removed=None):
         """Run a build where `arrange` fed a wrong answer; it must FAIL with `message`."""
@@ -708,7 +767,9 @@ class BuildTest(ProcedureFixture):
         self.assertEqual((self.output / "image-id.txt").read_text().strip(), IMAGE_ID)
         command = next(argv for argv in self.docker.calls if argv[1] == "build")
         self.assertEqual(self.docker.labels, build.image_labels({**provenance}))
-        self.assertEqual(command[command.index("--tag") + 1], TAG)
+        self.assertNotIn("--tag", command)  # the image is built without a tag
+        self.assertEqual(self.docker.tagged, [(IMAGE_ID, TAG)])
+        self.assertEqual(self.docker.tags, {TAG: IMAGE_ID})
         self.assertEqual(command[command.index("--iidfile") + 1], str(self.output / "image-id.txt"))
         self.assertEqual(command[-1], str(self.output / "image"))
         build_args = [command[index + 1] for index, part in enumerate(command) if part == "--build-arg"]
@@ -719,15 +780,19 @@ class BuildTest(ProcedureFixture):
         self.assertEqual([row["argv"] for row in native[:4]], [
             ["/usr/local/go/bin/gofmt", "-l", "extractor", *sorted(f"core/file{index}.go" for index in range(8))],
             [build.GO, "version"], build.build_arguments(COMMIT), [build.GO, "version", "-m", "/work/generated/geth"]])
+        # The checks run on the image by its id, before the tag exists.
         self.assertEqual([(row["image"], row["argv"]) for row in native[4:]],
-                         [(TAG, LDD), (TAG, ["version"]),
-                          (TAG, ["--chapel", *build.PROFILE, "--datadir", "/work/dumpconfig", "dumpconfig"])])
+                         [(IMAGE_ID, LDD), (IMAGE_ID, ["version"]),
+                          (IMAGE_ID, ["--chapel", *build.PROFILE, "--datadir", "/work/dumpconfig", "dumpconfig"])])
         self.assertTrue(all(row["image"] == GOLANG for row in native[:4]))
         self.assertEqual([row["entrypoint"] for row in native], [None] * 4 + ["/bin/sh", None, None])
         self.assertEqual([row["environment"] for row in native[:4]], [build.pins.environment()] * 4)
         record = json.loads((self.output / "build.json").read_text())
         self.assertEqual((record["result"], record["source_commit"], record["cleanup_complete"]), ("PASS", "b" * 40, True))
-        self.assertEqual(len(record["commands"]), 7 + 5)  # seven owned commands and five host records
+        self.assertEqual(len(record["commands"]), 7 + 7)  # seven owned commands and seven host records
+        steps = [Path(row["request"]["path"]).name.split("-", 2)[2].split(".")[0] if "request" in row else "owned"
+                 for row in record["commands"]]
+        self.assertEqual(steps[-4:], ["image-inspect", "owned", "owned", "owned"][:0] + steps[-4:])
         self.assertEqual(set(record["commands"][0]), {"request", "result", "stdout", "stderr"})
         self.assertEqual(json.loads(Path(record["commands"][0]["request"]["path"]).read_text())["argv"][:4],
                          ["docker", "image", "inspect", DEBIAN])
@@ -757,7 +822,8 @@ class BuildTest(ProcedureFixture):
         command = next(argv for argv in self.docker.calls if argv[1] == "build")
         self.assertEqual(self.docker.labels, build.image_labels({**provenance}))
         self.assertEqual(self.docker.labels["io.extractor.variant"], "collector")
-        self.assertEqual(command[command.index("--tag") + 1], tag)
+        self.assertNotIn("--tag", command)
+        self.assertEqual(self.docker.tagged, [(IMAGE_ID, tag)])
         compile_command = self.native[2]
         self.assertEqual({key: compile_command["environment"][key] for key in ("CGO_CFLAGS", "CGO_LDFLAGS")},
                          provenance["build_environment"])
@@ -770,11 +836,11 @@ class BuildTest(ProcedureFixture):
                          "// Package collector is a test overlay.\n")
         self.assertEqual(self.docker.removed, [])
 
-    def test_a_missing_shared_library_removes_the_tag(self):
+    def test_a_missing_shared_library_removes_the_unchecked_image(self):
         variant = overlay(self.root)
         FakeNative.libraries = MISSING
         proof = build.build(self.accepted / "manifest.json", self.sha, self.output, variant)
-        self.assertEqual((proof["result"], self.docker.removed), ("FAIL", [TAG + "-collector"]))
+        self.assertEqual((proof["result"], self.docker.removed, self.docker.tagged), ("FAIL", [IMAGE_ID], []))
         self.assertIn("librocksdb.so.10", proof["error"])
         self.assertFalse((self.output / "provenance.json").exists())
         self.assertEqual(len(self.native), 5)  # the node was not started on an image that cannot load it
@@ -866,24 +932,65 @@ class BuildTest(ProcedureFixture):
         self.assertEqual(proof["result"], "FAIL")  # an installed package of the base build is bound too
         self.assertIn("Input changed during the build", proof["error"])
 
-    def test_a_failed_check_removes_the_tag_and_keeps_the_fail(self):
+    def test_the_tag_moves_only_after_every_check_passed(self):
+        self.docker.tag(TAG, PREVIOUS)
+        proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
+        self.assertEqual((proof["result"], proof["previous_image_id"]), ("PASS", PREVIOUS))
+        self.assertEqual((self.docker.tagged, self.docker.tags, self.docker.removed), ([(IMAGE_ID, TAG)], {TAG: IMAGE_ID}, []))
+        record = json.loads((self.output / "build.json").read_text())
+        steps = ["owned" if "owned" in row else Path(row["request"]["path"]).name for row in record["commands"]]
+        self.assertEqual(steps[-2:], ["host-012-tag-image.request.json", "host-013-tag-inspect.request.json"])
+        self.assertEqual(steps[-5:-2], ["owned"] * 3)  # ldd, version and dumpconfig came first
+        self.assertEqual(steps.count("owned"), 7)
+        self.assertEqual(len(steps), 14)
+        self.assertFalse((self.output / "image-id.txt").read_text().strip() != IMAGE_ID)
+
+    def test_a_failed_check_keeps_the_previous_image_tagged(self):
+        self.docker.tag(TAG, PREVIOUS)
         with mock.patch.object(FakeNative, "version", VERSION.replace(COMMIT, "0" * 40)):
             proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
-        self.assertEqual(proof["result"], "FAIL")
+        self.assertEqual((proof["result"], proof["previous_image_id"]), ("FAIL", PREVIOUS))
         self.assertIn("Version output differs", proof["error"])
-        self.assertEqual(self.docker.removed, [TAG])
+        self.assertEqual((self.docker.removed, self.docker.tagged), ([IMAGE_ID], []))
+        self.assertEqual(self.docker.tags, {TAG: PREVIOUS})
         self.assertFalse((self.output / "provenance.json").exists())
         self.assertEqual(json.loads((self.output / "build.json").read_text())["result"], "FAIL")
 
-    def test_a_failed_image_check_removes_the_tag(self):
-        def empty(docker, argv, **kwargs):
-            if argv[:3] == ["docker", "image", "inspect"] and argv[3] == TAG:
-                return done(argv, 0, b"[]")
-            return FakeDocker.answer(docker, argv, **kwargs)
-        with mock.patch.object(FakeDocker, "__call__", empty):
-            proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
-        self.assertEqual((proof["result"], self.docker.removed), ("FAIL", [TAG]))
-        self.assertIn("exactly one image", proof["error"])
+    def test_a_failed_tag_command_leaves_the_previous_image_tagged(self):
+        self.docker.tag(TAG, PREVIOUS)
+        self.docker.exits = {"tag": 1}
+        self.build_and_fail("Docker tag-image failed")
+        self.assertEqual((self.docker.tags, self.docker.removed, self.docker.tagged), ({TAG: PREVIOUS}, [IMAGE_ID], []))
+
+    def test_a_failed_tag_inspect_restores_the_previous_tag(self):
+        self.docker.tag(TAG, PREVIOUS)
+        self.docker.exits = {"inspect-tag": lambda docker: 1 if docker.tagged else 0}
+        proof = self.build_and_fail("Docker tag-inspect failed", tagged=[(IMAGE_ID, TAG), (PREVIOUS, TAG)])
+        self.assertEqual((self.docker.tags, self.docker.removed), ({TAG: PREVIOUS}, [IMAGE_ID]))
+        self.assertEqual(proof["previous_image_id"], PREVIOUS)
+
+    def test_a_tag_that_does_not_end_on_the_checked_image_is_undone(self):
+        self.docker.tag(TAG, PREVIOUS)
+        self.docker.tag_answer = PREVIOUS
+        proof = self.build_and_fail("The tag does not point at the checked image",
+                                    tagged=[(IMAGE_ID, TAG), (PREVIOUS, TAG)])
+        self.assertEqual((self.docker.tags, self.docker.removed, self.docker.tag_attempts),
+                         ({TAG: PREVIOUS}, [IMAGE_ID], [(IMAGE_ID, TAG), (PREVIOUS, TAG)]))
+
+    def test_a_failed_docker_build_leaves_nothing(self):
+        self.docker.tag(TAG, PREVIOUS)
+        self.docker.exits = {"build": 1}
+        proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
+        self.assertEqual(proof["result"], "FAIL")
+        self.assertIn("Docker build failed", proof["error"])
+        self.assertEqual((self.docker.tags, self.docker.removed, self.docker.tagged), ({TAG: PREVIOUS}, [], []))
+        self.assertFalse((self.output / "image-id.txt").exists())
+        self.assertEqual(len(self.native), 4)  # nothing ran in an image
+
+    def test_a_failed_image_check_removes_the_unchecked_image(self):
+        self.docker.raw = b"[]"
+        self.build_and_fail("exactly one image")
+        self.assertEqual((self.docker.removed, self.docker.tagged), ([IMAGE_ID], []))
 
     def test_the_lock_is_the_one_the_plan_names(self):
         sha = self.rewrite_manifest(lambda manifest: manifest["plan"].update(lock_sha256="0" * 64), bind=False)
@@ -941,6 +1048,7 @@ class SmokeTest(ProcedureFixture):
         super().setUp()
         FakeNative.control = {"start": (0, START_LOG), **REFUSALS}
         FakeNative.version = VERSION
+        self.docker.tag(TAG, IMAGE_ID)  # the image under test exists
 
     def test_smoke_passes(self):
         proof = build.smoke(TAG, self.output, 20)
@@ -983,6 +1091,7 @@ class SmokeTest(ProcedureFixture):
 
     def test_smoke_names_the_variant_of_the_image(self):
         self.docker.labels = {**self.docker.labels, "io.extractor.variant": "collector"}
+        self.docker.tag(TAG + "-collector", IMAGE_ID)
         proof = build.smoke(TAG + "-collector", self.output, 20)
         self.assertEqual((proof["result"], proof["variant"]), ("PASS", "collector"))
 

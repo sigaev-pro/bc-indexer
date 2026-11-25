@@ -592,6 +592,7 @@ def build(manifest_path, expected_sha, output, variant=None):
                 any(row.endswith(digest) for row in base["RepoDigests"]), "Runtime image differs from its pin")
         _, raw = host(runner, "docker-version", ["docker", "version", "--format", "{{.Server.Version}}"], 60)
         docker_version = raw.decode().strip()
+        # The image the tag points at now, for the record: a rebuild leaves it untagged.
         code, raw = host(runner, "previous-image", ["docker", "image", "inspect", "--format", "{{.Id}}", tag], 60,
                          check=False)
         proof["previous_image_id"] = raw.decode().strip() if code == 0 else None
@@ -657,14 +658,18 @@ def build(manifest_path, expected_sha, output, variant=None):
         (context / "Dockerfile").write_text(dockerfile(variant))
         # The binary is one layer; shared libraries and ldconfig add two.
         added = 1 + (2 if shared else 0)
+        # The image is built without a tag. It gets the tag only after every
+        # check passed, so a failed or killed run never puts an unchecked image
+        # behind the tag, and never leaves the previous good image untagged.
         argv = ["docker", "build", "--platform", "linux/amd64", "--pull=false", "--network", "none",
                 "--build-arg", "BASE_IMAGE=" + runtime, "--build-arg", "SOURCE_DATE_EPOCH=" + str(epoch),
                 *(part for key, value in image_labels(facts).items() for part in ("--label", key + "=" + value)),
-                "--iidfile", str(identity), "--tag", tag, str(context)]
+                "--iidfile", str(identity), str(context)]
         try:
             host(runner, "build", argv, IMAGE_SECONDS)
-            _, raw = host(runner, "image-inspect", ["docker", "image", "inspect", tag], 60)
-            image, image_id = inspected(raw), identity.read_text().strip()
+            image_id = identity.read_text().strip()
+            _, raw = host(runner, "image-inspect", ["docker", "image", "inspect", image_id], 60)
+            image = inspected(raw)
             require(image["Id"] == image_id and image["Architecture"] == "amd64" and image["Os"] == "linux",
                     "Built image identity differs from its record")
             check_labels(image["Config"].get("Labels", {}), facts)
@@ -672,24 +677,36 @@ def build(manifest_path, expected_sha, output, variant=None):
             layers, base_layers = image["RootFS"]["Layers"], base["RootFS"]["Layers"]
             require(layers[:len(base_layers)] == base_layers and len(layers) == len(base_layers) + added,
                     "Image is not the pinned runtime image with the layers of this build")
-            # The checks run in the new image, in owned offline containers. The
-            # first one comes first so that a missing shared library is named:
-            # without it the binary cannot even start.
-            loader = runner.command(tag, ["-c", f"ldd /usr/local/bin/{BINARY} || true"], [], cap=120, memory="512m",
-                                    entrypoint="/bin/sh")
+            # The checks run in the new image, by its id and in owned offline
+            # containers. The first one comes first so that a missing shared
+            # library is named: without it the binary cannot even start.
+            loader = runner.command(image_id, ["-c", f"ldd /usr/local/bin/{BINARY} || true"], [], cap=120,
+                                    memory="512m", entrypoint="/bin/sh")
             libraries = dynamic_libraries(read_bytes(loader, 64 * 1024, deadline).decode())
             check_libraries(libraries)
-            version = runner.command(tag, ["version"], [], cap=120, memory="512m")
+            version = runner.command(image_id, ["version"], [], cap=120, memory="512m")
             fields = version_fields(read_bytes(version, 64 * 1024, deadline).decode())
             check_version(fields, selected)
-            config = runner.command(tag, ["--chapel", *PROFILE, "--datadir", "/work/dumpconfig", "dumpconfig"],
+            config = runner.command(image_id, ["--chapel", *PROFILE, "--datadir", "/work/dumpconfig", "dumpconfig"],
                                     [(root / "work", "/work", False)], cap=120, memory="1g")
             text = read_bytes(config, 4 * 1024 * 1024, deadline).decode()
             check_effective_config(text)
         except BaseException:
-            # A failed record never leaves its tag on an image.
+            # The tag was not touched. The unchecked image of this run goes away.
             if identity.exists():
-                host(runner, "remove-image", ["docker", "image", "rm", "-f", tag], 120, check=False)
+                host(runner, "remove-image", ["docker", "image", "rm", "-f", image_id], 120, check=False)
+            raise
+        try:
+            host(runner, "tag-image", ["docker", "image", "tag", image_id, tag], 60)
+            _, raw = host(runner, "tag-inspect", ["docker", "image", "inspect", "--format", "{{.Id}}", tag], 60)
+            require(raw.decode().strip() == image_id, "The tag does not point at the checked image")
+        except BaseException:
+            # The tag did not end on the checked image. The previous image gets
+            # its tag back, and the new image goes away.
+            if proof["previous_image_id"] is not None:
+                host(runner, "restore-tag", ["docker", "image", "tag", proof["previous_image_id"], tag], 60,
+                     check=False)
+            host(runner, "remove-image", ["docker", "image", "rm", "-f", image_id], 120, check=False)
             raise
         provenance = {**facts, "image": tag, "image_id": image_id, "image_layers": layers,
                       "runtime_image_id": base["Id"], "docker_server_version": docker_version,

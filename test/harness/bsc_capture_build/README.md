@@ -58,8 +58,21 @@ python3 -I test/harness/bsc_capture_build/bsc_capture_build.py build \
 
 The command holds the host-wide harness lock, pulls nothing, and uses two
 CPUs. Exit 0 with `"result": "PASS"` means the image is built and checked.
-Every run writes `OUTPUT/build.json` with its commands and logs; a failed
-check removes the image tag, so a failed record never leaves its image.
+Every run writes `OUTPUT/build.json` with its commands and logs.
+
+The image is built without a tag, checked by its image id, and gets its
+tag only after every check passed. A failed check removes the unchecked
+image and leaves the tag where it was. A rebuild leaves the previous good
+image untagged; `previous_image_id` in `build.json` names it, and
+`docker image tag <that id> bc-indexer/bsc-capture:1.8.2-capture` gives it
+its tag back. If the tag cannot be moved, the previous image gets its tag
+back and the new image is removed.
+
+`docker build` and the tag commands run on the host, outside the owned
+container boundary. A driver that is killed can therefore leave an image
+without a record. That image has no tag, `OUTPUT/image-id.txt` names it
+once `docker build` had finished, and `docker images --filter dangling=true`
+lists it; remove it with `docker image rm`.
 
 ## Verify and smoke
 
