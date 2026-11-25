@@ -22,6 +22,12 @@ publisher fencing for the gateway
     commit, not only when the RPC is read. A barrier raised after `Mutate`
     returned cannot undo `fn`; a barrier raised before it starts prevents
     `fn` from running at all.
+  - `MutateRaise(token, epoch, fn)` is `Mutate` for the barrier steps
+    (SealGeneration, Resume): when `fn` succeeds it also raises the
+    barrier to `epoch` before the mutex is released, so the commit and the
+    barrier are one serialized step and no RPC of an older epoch commits
+    between them. A failed `fn` leaves the barrier unchanged; the barrier
+    never lowers.
 - `PublisherGate` — fences the internal publisher worker by
   `publisher_generation`: PubAck callbacks carry
   `{batch_id, plan_digest, generation}`. `NewGeneration()` and

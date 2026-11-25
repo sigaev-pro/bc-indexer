@@ -130,6 +130,15 @@ type Journal struct {
 	bnd    [32]byte
 	frames uint64
 	ct     Counters
+	// Active destination binding. bnd is its digest (also the digest every
+	// reservation and CLOSED marker records); gen is its generation. The
+	// content identity is known (hasBinding) once a switch committed it or
+	// Open supplied it through Options.Binding.
+	gen        uint64
+	dstID      [16]byte
+	chainID    [32]byte
+	genesis    [32]byte
+	hasBinding bool
 }
 
 // Counters holds the monotonic allocation counters; values start at 1.
@@ -146,6 +155,15 @@ type Options struct {
 	// FrameLimit is transport.max_frame_bytes recorded in reservation seeds;
 	// zero selects DefaultFrameLimit.
 	FrameLimit uint64
+	// Binding is the content identity of the active destination binding
+	// (destination id, generation and network) of a store that never
+	// committed a switch. It lets PrepareSwitch check that a desired
+	// descriptor continues the same destination line and network. When the
+	// store already holds a committed binding (meta/destination_binding),
+	// the durable record wins over this option and over BindingDigest.
+	// Without either, a switch is refused: its continuity checks need the
+	// active binding identity.
+	Binding *Binding
 }
 
 // Open loads or initializes the journal. On an empty storage it creates the
@@ -155,6 +173,25 @@ func Open(st storage.Storage, opt Options) (*Journal, error) {
 	j := &Journal{st: st, bnd: opt.BindingDigest, frames: opt.FrameLimit}
 	if j.frames == 0 {
 		j.frames = DefaultFrameLimit
+	}
+	// Binding generations start at 1.
+	j.gen = 1
+	if raw, err := st.Get([]byte(keyBinding)); err == nil {
+		ab, derr := decodeBinding(raw)
+		if derr != nil {
+			return nil, derr
+		}
+		// The durable active binding is the only authority: a descriptor
+		// file or a stale option never activates or reverts a binding.
+		j.applyBinding(ab)
+	} else if err != storage.ErrNotFound {
+		return nil, err
+	} else if opt.Binding != nil {
+		if opt.Binding.DestinationID == ([16]byte{}) || opt.Binding.Generation == 0 ||
+			opt.Binding.DescriptorDigest != opt.BindingDigest {
+			return nil, ErrInvalidBinding
+		}
+		j.applyBinding(*opt.Binding)
 	}
 	if raw, err := st.Get([]byte(keyEpoch)); err == nil {
 		if len(raw) != 16 {

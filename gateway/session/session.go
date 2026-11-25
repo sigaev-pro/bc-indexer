@@ -159,6 +159,28 @@ func (g *Gate) Mutate(t Token, fn func() error) error {
 	return fn()
 }
 
+// MutateRaise is Mutate for the barrier steps (SealGeneration, Resume): it
+// validates the token, runs fn under the gate's serialized ordering and, only
+// when fn succeeded, raises the barrier to epoch before the mutex is
+// released. The commit of fn and the barrier are therefore one step: no RPC
+// of an older epoch can commit between them, and a failed fn leaves the
+// barrier where it was. The barrier never lowers. fn must not call back into
+// the Gate (it would deadlock).
+func (g *Gate) MutateRaise(t Token, epoch uint64, fn func() error) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.checkLocked(t); err != nil {
+		return err
+	}
+	if err := fn(); err != nil {
+		return err
+	}
+	if epoch > g.barrier {
+		g.barrier = epoch
+	}
+	return nil
+}
+
 // PublisherGate fences the internal publisher worker and its PubAck
 // callbacks by publisher_generation and by released batch.
 type PublisherGate struct {
