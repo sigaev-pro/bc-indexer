@@ -42,6 +42,29 @@ var (
 	ErrChunkTooLarge = errors.New("gateway journal: data chunk exceeds 64 KiB")
 	// ErrIncomplete is a closing attempt with an incomplete stream.
 	ErrIncomplete = errors.New("gateway journal: stream incomplete")
+	// ErrBindingMismatch is a destination binding that is not the active
+	// one or not a legal successor of it (another destination line, another
+	// network, a digest the store does not admit).
+	ErrBindingMismatch = errors.New("gateway journal: destination binding mismatch")
+	// ErrBindingGeneration is a binding generation that is not exactly the
+	// next after the active one (an unexpected jump is forbidden).
+	ErrBindingGeneration = errors.New("gateway journal: destination binding generation conflict")
+	// ErrDrainRequired is a transition that needs a sealed (drained)
+	// generation and none is durable.
+	ErrDrainRequired = errors.New("gateway journal: drain required")
+	// ErrGenerationConflict is an admission generation that is not the one
+	// the durable transition allows (Resume accepts exactly the next one).
+	ErrGenerationConflict = errors.New("gateway journal: admission generation conflict")
+	// ErrInvalidIntent is a control intent with an unset identity or
+	// counter (a zero id, a zero generation).
+	ErrInvalidIntent = errors.New("gateway journal: invalid control intent")
+	// ErrAdmissionClosed is a data RPC of a generation that is not open for
+	// data: the run is sealed and no Resume opened the generation, or a
+	// destination switch is prepared.
+	ErrAdmissionClosed = errors.New("gateway journal: data admission is closed")
+	// ErrInvalidBinding is a Binding option that does not agree with the
+	// BindingDigest option or carries a zero identity or generation.
+	ErrInvalidBinding = errors.New("gateway journal: invalid destination binding")
 	// errCorrupt is an unreadable store record; fatal for the owner.
 	errCorrupt = errors.New("gateway journal: corrupt record")
 )

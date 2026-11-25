@@ -159,12 +159,47 @@ func (g *Gate) Mutate(t Token, fn func() error) error {
 	return fn()
 }
 
+// MutateRaise is Mutate for the barrier steps (SealGeneration, Resume): it
+// validates the token, runs fn under the gate's serialized ordering and, only
+// when fn succeeded, raises the barrier to epoch before the mutex is
+// released. The commit of fn and the barrier are therefore one step: no RPC
+// of an older epoch can commit between them, and a failed fn leaves the
+// barrier where it was. The barrier never lowers. fn must not call back into
+// the Gate (it would deadlock).
+func (g *Gate) MutateRaise(t Token, epoch uint64, fn func() error) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err := g.checkLocked(t); err != nil {
+		return err
+	}
+	if err := fn(); err != nil {
+		return err
+	}
+	if epoch > g.barrier {
+		g.barrier = epoch
+	}
+	return nil
+}
+
+// maxReleasedBatches bounds the per-batch release barriers a PublisherGate
+// remembers: the most recent releases. A gateway that runs for a long time
+// releases one batch after another, so the set has to be bounded.
+const maxReleasedBatches = 4096
+
 // PublisherGate fences the internal publisher worker and its PubAck
 // callbacks by publisher_generation and by released batch.
 type PublisherGate struct {
 	mu         sync.Mutex
 	generation uint64
 	released   map[[40]byte]struct{}
+	// releaseOrder is the ring of the remembered releases, filled in order,
+	// releaseNext the slot of the next one and releaseCount how many are
+	// remembered. Once the ring is full, the slot of the next release holds
+	// the oldest remembered one, which is forgotten when it is reused. The
+	// ring is allocated with the first release.
+	releaseOrder [][40]byte
+	releaseNext  int
+	releaseCount int
 }
 
 // NewPublisherGate returns a publisher gate at generation 1 with nothing
@@ -199,9 +234,28 @@ func (p *PublisherGate) NewGeneration() uint64 {
 
 // Release puts a per-batch barrier: the ordered release of one batch began,
 // so later callbacks for it cannot resurrect state.
+//
+// The gate remembers the maxReleasedBatches most recent releases and
+// forgets the oldest one beyond that. Forgetting is safe: a batch that many
+// releases behind is long retired, its records left with the retire commit,
+// and the journal never creates a record for a callback of a batch it does
+// not hold. A repeated Release of one batch puts the barrier once.
 func (p *PublisherGate) Release(batch [40]byte) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if _, done := p.released[batch]; done {
+		return
+	}
+	if p.releaseOrder == nil {
+		p.releaseOrder = make([][40]byte, maxReleasedBatches)
+	}
+	if p.releaseCount == maxReleasedBatches {
+		delete(p.released, p.releaseOrder[p.releaseNext]) // the oldest remembered release
+	} else {
+		p.releaseCount++
+	}
+	p.releaseOrder[p.releaseNext] = batch
+	p.releaseNext = (p.releaseNext + 1) % maxReleasedBatches
 	p.released[batch] = struct{}{}
 }
 

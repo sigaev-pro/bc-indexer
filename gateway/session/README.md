@@ -22,6 +22,12 @@ publisher fencing for the gateway
     commit, not only when the RPC is read. A barrier raised after `Mutate`
     returned cannot undo `fn`; a barrier raised before it starts prevents
     `fn` from running at all.
+  - `MutateRaise(token, epoch, fn)` is `Mutate` for the barrier steps
+    (SealGeneration, Resume): when `fn` succeeds it also raises the
+    barrier to `epoch` before the mutex is released, so the commit and the
+    barrier are one serialized step and no RPC of an older epoch commits
+    between them. A failed `fn` leaves the barrier unchanged; the barrier
+    never lowers.
 - `PublisherGate` — fences the internal publisher worker by
   `publisher_generation`: PubAck callbacks carry
   `{batch_id, plan_digest, generation}`. `NewGeneration()` and
@@ -29,6 +35,11 @@ publisher fencing for the gateway
   callback for a released batch (`ErrBatchReleased`) never creates state.
   Duplicates of still-valid callbacks stay allowed: already-sent network
   bytes cannot be recalled, and the journal answers them idempotently.
+  The gate remembers the 4096 most recent releases and forgets the oldest
+  one beyond that, so a long-running gateway does not grow one entry per
+  released batch forever. Forgetting is safe: a batch that many releases
+  behind is long retired, and the journal never creates a record for a
+  callback of a batch it does not hold.
 
 The package keeps no durable state: `boot_nonce` and session lifetimes are
 per process by contract, so a restart fences every old token implicitly.

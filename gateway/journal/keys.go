@@ -20,11 +20,26 @@ package journal
 //	batch/<id>/ackset/<o>/<f>/<fi>        presence = frame PubAck recorded
 //	batch/<id>/nats_acked                 NatsAcked record
 //	batch/<id>/releasing                  Releasing record
+//	batch/<id>/recovered                  Recovered record (RecoveryRelease assertion)
+//	meta/destination_binding              Binding record (the active binding)
+//	sealed_generation/<producer16><run16> Seal record
+//	resume/<producer16><run16>            Resume record
+//	cutover/<generation>                  Switch record; generation is the one
+//	                                      of the new binding the switch activates
 const (
 	keyEpoch    = "meta/store_epoch"
 	keyCounters = "meta/counters"
 	keyRetired  = "retired_prefix/"
 	keyBatch    = "batch/"
+)
+
+// Keys of the drain/cutover control records (the cutover prefixes of
+// DELIVERY_STATE_MACHINE).
+const (
+	keyBinding = "meta/destination_binding"
+	keySealed  = "sealed_generation/"
+	keyResumed = "resume/"
+	keyCutover = "cutover/"
 )
 
 func retiredKey(id BatchID) []byte {

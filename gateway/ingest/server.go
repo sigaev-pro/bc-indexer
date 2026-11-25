@@ -2,8 +2,10 @@
 // of the gateway ingest boundary. The .proto file defines the service
 // (HelloChallenge, OpenSession, BeginPrepare, PrepareChunk, FinalizePrepare,
 // BeginPublish, a bidirectional PublishChunk stream, FinalizePublish and
-// SealImport for IMPORT_SEALED recovery); this server implements it on top
-// of the gateway journal (E03-01.gateway_store) and the session fencing
+// SealImport for IMPORT_SEALED recovery, then GetBatchState, Release,
+// RecoveryRelease and the SealGeneration, PrepareSwitch, CommitSwitch and
+// Resume cutover RPCs); this server implements it on top of
+// the gateway journal (E03-01.gateway_store) and the session fencing
 // boundary (E03-02.fencing).
 //
 // Contract held here (CONTROL_WIRE_CONTRACT unless noted):
@@ -15,10 +17,16 @@
 //     under the gate's serialized ordering, not only when the RPC is read.
 //   - Typed errors answer with the registry's code and retry action; the
 //     gRPC status is only a transport categorization. A session-stale RPC
-//     after a barrier creates no state.
+//     after a barrier creates no state. A sealed admission generation
+//     opens no session, also after a gateway restart.
 //   - Bounds: one RPC including its wrapper is at most 256 KiB (the server
 //     rejects larger messages at the transport level), one data chunk is at
 //     most 64 KiB (LIMIT_INCOMPATIBLE).
+//   - Data waits for the Resume (DELIVERY_STATE_MACHINE): a data RPC runs
+//     only in an admission generation that is open for the run. A sealed
+//     run is closed until its Resume, and a prepared switch closes every
+//     run. The journal holds the rule (CheckDataAdmission), and a refused
+//     data RPC answers DRAIN_REQUIRED and creates no state.
 //   - IMPORT_SEALED carries the original seed in BeginPrepare; no new
 //     sequence is allocated and the original issuer epoch survives.
 //   - Offsets, conflicts and the manifest digest are validated before any
@@ -58,11 +66,16 @@ type Server struct {
 
 	journal *journal.Journal
 	gate    *session.Gate
+	// publisher fences the internal publisher worker. Release and
+	// SealGeneration raise its barriers; the process wiring hands the same
+	// gate to the publisher (PublisherGate).
+	publisher *session.PublisherGate
 
 	mu         sync.Mutex
 	boot       [16]byte
 	challenges map[[16]byte]struct{}
 	sessions   map[[32]byte]*sessionRecord
+	verifier   TargetVerifier
 }
 
 // New creates the server over one gateway journal and one session gate.
@@ -74,10 +87,19 @@ func New(j *journal.Journal, g *session.Gate) (*Server, error) {
 	return &Server{
 		journal:    j,
 		gate:       g,
+		publisher:  session.NewPublisherGate(),
 		boot:       boot,
 		challenges: make(map[[16]byte]struct{}),
 		sessions:   make(map[[32]byte]*sessionRecord),
 	}, nil
+}
+
+// PublisherGate returns the publisher fence the Release and SealGeneration
+// barriers raise. The publisher worker applies its PubAck callbacks through
+// the same gate, so a callback of an older generation or of a released batch
+// never creates state.
+func (s *Server) PublisherGate() *session.PublisherGate {
+	return s.publisher
 }
 
 // GRPCServerOptions returns the server options every deployment must use:
@@ -162,6 +184,16 @@ func (s *Server) openSession(req *OpenSessionRequest) (*OpenSessionResponse, *wi
 		return nil, &wireError{ErrorCode_SESSION_STALE, RetryAction_RECONNECT, "unknown challenge for this boot"}
 	}
 
+	// A sealed admission generation opens no session. The admission barrier
+	// of the gate lives in the process, so after a gateway restart only the
+	// durable seal still forbids the data RPCs of the sealed generation. The
+	// retry of the seal and its Resume come from the next generation.
+	if seal, sealed, err := s.journal.SealedGeneration(journal.BatchID{ProducerID: producerID, RunID: runID}); err != nil {
+		return nil, mapJournalError(err)
+	} else if sealed && req.GetAdmissionGeneration() <= seal.AdmissionGeneration {
+		return nil, &wireError{ErrorCode_GENERATION_CONFLICT, RetryAction_RECONNECT, "admission generation is sealed"}
+	}
+
 	tok, err := s.gate.Open(req.GetAdmissionGeneration())
 	if err != nil {
 		return nil, mapJournalError(err)
@@ -199,18 +231,62 @@ func (s *Server) openSession(req *OpenSessionRequest) (*OpenSessionResponse, *wi
 // Mutating RPC boundary
 // ---------------------------------------------------------------------------
 
-// mutate validates the header and runs fn under the gate's serialized
-// ordering together with the token check.
+// mutate is the boundary of the data RPCs, the Prepare and Publish steps.
+// It validates the header, checks that the admission generation of the
+// session is open for data, and runs fn under the gate's serialized ordering
+// together with the token check.
+//
+// Data waits for the Resume (DELIVERY_STATE_MACHINE, the drain and cutover
+// section). A sealed run admits data only in the generation its Resume
+// opened, and while a destination switch is prepared no run admits data.
+// Until then every data RPC answers DRAIN_REQUIRED and creates no state. A
+// batch created in a closed generation could never be acknowledged or
+// released: the publisher refuses a batch of a binding that is no longer
+// active, and an unreleasable batch would hold the next seal. The journal
+// holds the rule (CheckDataAdmission); the control RPCs that must keep
+// working during a drain go through mutateControl.
 func (s *Server) mutate(header *SessionHeader, fn func() error) *wireError {
 	rec, we := s.checkHeader(header)
 	if we != nil {
 		return we
 	}
-	err := s.gate.Mutate(rec.token, fn)
+	err := s.gate.Mutate(rec.token, func() error {
+		if err := s.journal.CheckDataAdmission(runOf(header), rec.admissionGen); err != nil {
+			return toWireError(err)
+		}
+		return fn()
+	})
 	return toWireError(err)
 }
 
+// mutateControl is mutate for the control RPCs that carry a session header
+// but are not data (GetBatchState, Release, RecoveryRelease, PrepareSwitch):
+// a drain closes data admission, not these.
+func (s *Server) mutateControl(header *SessionHeader, fn func() error) *wireError {
+	rec, we := s.checkHeader(header)
+	if we != nil {
+		return we
+	}
+	return toWireError(s.gate.Mutate(rec.token, fn))
+}
+
+// checkHeader validates a session header against the session registry, the
+// gate and the store binding.
 func (s *Server) checkHeader(header *SessionHeader) (*sessionRecord, *wireError) {
+	rec, we := s.checkSession(header)
+	if we != nil {
+		return nil, we
+	}
+	if we := s.checkBinding(header, nil); we != nil {
+		return nil, we
+	}
+	return rec, nil
+}
+
+// checkSession validates every part of a header except its binding digest.
+// It reads no store, so a request with an invalid header is refused before
+// anything is read.
+func (s *Server) checkSession(header *SessionHeader) (*sessionRecord, *wireError) {
 	if header == nil {
 		return nil, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, "missing session header"}
 	}
@@ -240,11 +316,23 @@ func (s *Server) checkHeader(header *SessionHeader) (*sessionRecord, *wireError)
 	if string(header.GetProducerId()) != string(rec.producerID[:]) || string(header.GetRunId()) != string(rec.runID[:]) {
 		return nil, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RECONNECT, "header identity does not match the session"}
 	}
-	bnd := s.journal.BindingDigest()
-	if len(header.GetBindingDigest()) != 32 || string(header.GetBindingDigest()) != string(bnd[:]) {
-		return nil, &wireError{ErrorCode_BINDING_MISMATCH, RetryAction_FIX_CONFIG, "binding digest does not match the gateway store"}
-	}
 	return rec, nil
+}
+
+// checkBinding validates the binding digest of a header whose session
+// checkSession accepted. admitBinding optionally admits one more digest
+// besides the store binding: the commit of a destination switch must answer
+// the session that prepared it, which is bound to the old binding of that
+// switch.
+func (s *Server) checkBinding(header *SessionHeader, admitBinding *[32]byte) *wireError {
+	bnd := s.journal.BindingDigest()
+	digest := header.GetBindingDigest()
+	bindingOK := len(digest) == 32 && (string(digest) == string(bnd[:]) ||
+		(admitBinding != nil && string(digest) == string(admitBinding[:])))
+	if !bindingOK {
+		return &wireError{ErrorCode_BINDING_MISMATCH, RetryAction_FIX_CONFIG, "binding digest does not match the gateway store"}
+	}
+	return nil
 }
 
 func (s *Server) batchID(header *SessionHeader, b *BatchId) (journal.BatchID, *wireError) {

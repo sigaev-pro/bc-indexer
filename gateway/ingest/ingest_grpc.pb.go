@@ -37,6 +37,13 @@ const (
 	Ingest_PublishChunk_FullMethodName    = "/bcindexer.ingest.v2.Ingest/PublishChunk"
 	Ingest_FinalizePublish_FullMethodName = "/bcindexer.ingest.v2.Ingest/FinalizePublish"
 	Ingest_SealImport_FullMethodName      = "/bcindexer.ingest.v2.Ingest/SealImport"
+	Ingest_GetBatchState_FullMethodName   = "/bcindexer.ingest.v2.Ingest/GetBatchState"
+	Ingest_Release_FullMethodName         = "/bcindexer.ingest.v2.Ingest/Release"
+	Ingest_RecoveryRelease_FullMethodName = "/bcindexer.ingest.v2.Ingest/RecoveryRelease"
+	Ingest_SealGeneration_FullMethodName  = "/bcindexer.ingest.v2.Ingest/SealGeneration"
+	Ingest_PrepareSwitch_FullMethodName   = "/bcindexer.ingest.v2.Ingest/PrepareSwitch"
+	Ingest_CommitSwitch_FullMethodName    = "/bcindexer.ingest.v2.Ingest/CommitSwitch"
+	Ingest_Resume_FullMethodName          = "/bcindexer.ingest.v2.Ingest/Resume"
 )
 
 // IngestClient is the client API for Ingest service.
@@ -62,6 +69,29 @@ type IngestClient interface {
 	FinalizePublish(ctx context.Context, in *FinalizePublishRequest, opts ...grpc.CallOption) (*FinalizePublishResponse, error)
 	// Closes an IMPORT_SEALED batch with the same validation rules.
 	SealImport(ctx context.Context, in *FinalizePublishRequest, opts ...grpc.CallOption) (*FinalizePublishResponse, error)
+	// Reports the durable state of one batch, its IngestAck when that is
+	// durable, and one bounded page of frame cursors.
+	GetBatchState(ctx context.Context, in *GetBatchStateRequest, opts ...grpc.CallOption) (*GetBatchStateResponse, error)
+	// Drives the ordered release of one NATS_ACKED batch to its final commit
+	// and answers ReleaseAck only after it.
+	Release(ctx context.Context, in *ReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error)
+	// Completes a batch the gateway store lost from the producer's saved
+	// IngestAck and ACKED/outbox assertion, without the payload.
+	RecoveryRelease(ctx context.Context, in *RecoveryReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error)
+	// Seals an exhausted admission generation and fences the sessions of
+	// that generation. From the seal until the Resume, every data RPC of the
+	// run answers DRAIN_REQUIRED.
+	SealGeneration(ctx context.Context, in *SealGenerationRequest, opts ...grpc.CallOption) (*SealGenerationResponse, error)
+	// Checks the desired destination and durably prepares the switch; the
+	// active binding stays the old one. A prepared switch closes data
+	// admission for every run until CommitSwitch.
+	PrepareSwitch(ctx context.Context, in *PrepareSwitchRequest, opts ...grpc.CallOption) (*PrepareSwitchResponse, error)
+	// Durably activates the prepared switch; a retry answers the committed
+	// receipt. The Resume of the seal waits for this commit.
+	CommitSwitch(ctx context.Context, in *CommitSwitchRequest, opts ...grpc.CallOption) (*CommitSwitchResponse, error)
+	// Opens the next admission generation of a sealed run, the only one that
+	// admits data from then on. It needs no prepared switch.
+	Resume(ctx context.Context, in *ResumeRequest, opts ...grpc.CallOption) (*ResumeResponse, error)
 }
 
 type ingestClient struct {
@@ -165,6 +195,76 @@ func (c *ingestClient) SealImport(ctx context.Context, in *FinalizePublishReques
 	return out, nil
 }
 
+func (c *ingestClient) GetBatchState(ctx context.Context, in *GetBatchStateRequest, opts ...grpc.CallOption) (*GetBatchStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBatchStateResponse)
+	err := c.cc.Invoke(ctx, Ingest_GetBatchState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestClient) Release(ctx context.Context, in *ReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseResponse)
+	err := c.cc.Invoke(ctx, Ingest_Release_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestClient) RecoveryRelease(ctx context.Context, in *RecoveryReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseResponse)
+	err := c.cc.Invoke(ctx, Ingest_RecoveryRelease_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestClient) SealGeneration(ctx context.Context, in *SealGenerationRequest, opts ...grpc.CallOption) (*SealGenerationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SealGenerationResponse)
+	err := c.cc.Invoke(ctx, Ingest_SealGeneration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestClient) PrepareSwitch(ctx context.Context, in *PrepareSwitchRequest, opts ...grpc.CallOption) (*PrepareSwitchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrepareSwitchResponse)
+	err := c.cc.Invoke(ctx, Ingest_PrepareSwitch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestClient) CommitSwitch(ctx context.Context, in *CommitSwitchRequest, opts ...grpc.CallOption) (*CommitSwitchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CommitSwitchResponse)
+	err := c.cc.Invoke(ctx, Ingest_CommitSwitch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ingestClient) Resume(ctx context.Context, in *ResumeRequest, opts ...grpc.CallOption) (*ResumeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResumeResponse)
+	err := c.cc.Invoke(ctx, Ingest_Resume_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IngestServer is the server API for Ingest service.
 // All implementations must embed UnimplementedIngestServer
 // for forward compatibility.
@@ -188,6 +288,29 @@ type IngestServer interface {
 	FinalizePublish(context.Context, *FinalizePublishRequest) (*FinalizePublishResponse, error)
 	// Closes an IMPORT_SEALED batch with the same validation rules.
 	SealImport(context.Context, *FinalizePublishRequest) (*FinalizePublishResponse, error)
+	// Reports the durable state of one batch, its IngestAck when that is
+	// durable, and one bounded page of frame cursors.
+	GetBatchState(context.Context, *GetBatchStateRequest) (*GetBatchStateResponse, error)
+	// Drives the ordered release of one NATS_ACKED batch to its final commit
+	// and answers ReleaseAck only after it.
+	Release(context.Context, *ReleaseRequest) (*ReleaseResponse, error)
+	// Completes a batch the gateway store lost from the producer's saved
+	// IngestAck and ACKED/outbox assertion, without the payload.
+	RecoveryRelease(context.Context, *RecoveryReleaseRequest) (*ReleaseResponse, error)
+	// Seals an exhausted admission generation and fences the sessions of
+	// that generation. From the seal until the Resume, every data RPC of the
+	// run answers DRAIN_REQUIRED.
+	SealGeneration(context.Context, *SealGenerationRequest) (*SealGenerationResponse, error)
+	// Checks the desired destination and durably prepares the switch; the
+	// active binding stays the old one. A prepared switch closes data
+	// admission for every run until CommitSwitch.
+	PrepareSwitch(context.Context, *PrepareSwitchRequest) (*PrepareSwitchResponse, error)
+	// Durably activates the prepared switch; a retry answers the committed
+	// receipt. The Resume of the seal waits for this commit.
+	CommitSwitch(context.Context, *CommitSwitchRequest) (*CommitSwitchResponse, error)
+	// Opens the next admission generation of a sealed run, the only one that
+	// admits data from then on. It needs no prepared switch.
+	Resume(context.Context, *ResumeRequest) (*ResumeResponse, error)
 	mustEmbedUnimplementedIngestServer()
 }
 
@@ -224,6 +347,27 @@ func (UnimplementedIngestServer) FinalizePublish(context.Context, *FinalizePubli
 }
 func (UnimplementedIngestServer) SealImport(context.Context, *FinalizePublishRequest) (*FinalizePublishResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SealImport not implemented")
+}
+func (UnimplementedIngestServer) GetBatchState(context.Context, *GetBatchStateRequest) (*GetBatchStateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBatchState not implemented")
+}
+func (UnimplementedIngestServer) Release(context.Context, *ReleaseRequest) (*ReleaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Release not implemented")
+}
+func (UnimplementedIngestServer) RecoveryRelease(context.Context, *RecoveryReleaseRequest) (*ReleaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecoveryRelease not implemented")
+}
+func (UnimplementedIngestServer) SealGeneration(context.Context, *SealGenerationRequest) (*SealGenerationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SealGeneration not implemented")
+}
+func (UnimplementedIngestServer) PrepareSwitch(context.Context, *PrepareSwitchRequest) (*PrepareSwitchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PrepareSwitch not implemented")
+}
+func (UnimplementedIngestServer) CommitSwitch(context.Context, *CommitSwitchRequest) (*CommitSwitchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CommitSwitch not implemented")
+}
+func (UnimplementedIngestServer) Resume(context.Context, *ResumeRequest) (*ResumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Resume not implemented")
 }
 func (UnimplementedIngestServer) mustEmbedUnimplementedIngestServer() {}
 func (UnimplementedIngestServer) testEmbeddedByValue()                {}
@@ -397,6 +541,132 @@ func _Ingest_SealImport_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Ingest_GetBatchState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBatchStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServer).GetBatchState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Ingest_GetBatchState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServer).GetBatchState(ctx, req.(*GetBatchStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Ingest_Release_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServer).Release(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Ingest_Release_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServer).Release(ctx, req.(*ReleaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Ingest_RecoveryRelease_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecoveryReleaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServer).RecoveryRelease(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Ingest_RecoveryRelease_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServer).RecoveryRelease(ctx, req.(*RecoveryReleaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Ingest_SealGeneration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SealGenerationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServer).SealGeneration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Ingest_SealGeneration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServer).SealGeneration(ctx, req.(*SealGenerationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Ingest_PrepareSwitch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareSwitchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServer).PrepareSwitch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Ingest_PrepareSwitch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServer).PrepareSwitch(ctx, req.(*PrepareSwitchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Ingest_CommitSwitch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommitSwitchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServer).CommitSwitch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Ingest_CommitSwitch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServer).CommitSwitch(ctx, req.(*CommitSwitchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Ingest_Resume_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngestServer).Resume(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Ingest_Resume_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngestServer).Resume(ctx, req.(*ResumeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Ingest_ServiceDesc is the grpc.ServiceDesc for Ingest service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -435,6 +705,34 @@ var Ingest_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SealImport",
 			Handler:    _Ingest_SealImport_Handler,
+		},
+		{
+			MethodName: "GetBatchState",
+			Handler:    _Ingest_GetBatchState_Handler,
+		},
+		{
+			MethodName: "Release",
+			Handler:    _Ingest_Release_Handler,
+		},
+		{
+			MethodName: "RecoveryRelease",
+			Handler:    _Ingest_RecoveryRelease_Handler,
+		},
+		{
+			MethodName: "SealGeneration",
+			Handler:    _Ingest_SealGeneration_Handler,
+		},
+		{
+			MethodName: "PrepareSwitch",
+			Handler:    _Ingest_PrepareSwitch_Handler,
+		},
+		{
+			MethodName: "CommitSwitch",
+			Handler:    _Ingest_CommitSwitch_Handler,
+		},
+		{
+			MethodName: "Resume",
+			Handler:    _Ingest_Resume_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

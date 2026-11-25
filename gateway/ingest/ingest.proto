@@ -247,6 +247,7 @@ enum BatchState {
   NATS_ACKED = 5;
   RELEASING = 6;
   RETIRED = 7;
+  NOT_FOUND = 8; // GetBatchState only: the gateway holds no record of the batch
 }
 
 message FinalizePublishRequest {
@@ -259,6 +260,176 @@ message FinalizePublishRequest {
 
 message FinalizePublishResponse {
   BatchState state = 1; // CLOSED on success
+  Error error = 15;
+}
+
+// ---------------------------------------------------------------------------
+// Batch state, release and recovery release
+// ---------------------------------------------------------------------------
+
+// The full durable acknowledgement of one delivered batch: {batch_id,
+// manifest_digest, plan_digest, layout_manifest_digest, binding_digest,
+// issuer_store_epoch}. It exists only once the batch is NATS_ACKED; a
+// partial acknowledgement or a successful transport write never composes
+// one. The producer keeps the whole record until a verified ReleaseAck.
+message IngestAck {
+  BatchId batch = 1;
+  bytes manifest_digest = 2;        // Hash32
+  bytes plan_digest = 3;            // Hash32
+  bytes layout_manifest_digest = 4; // Hash32
+  bytes binding_digest = 5;         // Hash32
+  bytes issuer_store_epoch = 6;     // Id16
+}
+
+message GetBatchStateRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes plan_digest = 3;  // Hash32; must equal the stored plan from PREPARED on
+  FrameCursor cursor = 4; // optional: continue after this frame of an earlier page
+}
+
+message GetBatchStateResponse {
+  BatchState state = 1; // NOT_FOUND when the gateway holds no record of the batch
+  IngestAck ack = 2;    // set only while the NATS_ACKED marker is durable
+  repeated FrameCursor cursors = 3; // one bounded page, in (ordinal, fragment, frame) order
+  FrameCursor next_cursor = 4; // continuation: last cursor of a page that has more
+  Error error = 15;
+}
+
+message ReleaseRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  bytes manifest_digest = 3; // Hash32
+  bytes plan_digest = 4;     // Hash32
+}
+
+// ReleaseAck answers an ordered Release or a RecoveryRelease, only after
+// the final atomic commit: {batch_id, retired_prefix}.
+message ReleaseAck {
+  BatchId batch = 1;
+  uint64 retired_prefix = 2; // the gateway's durable retired prefix of the run
+}
+
+message ReleaseResponse {
+  ReleaseAck ack = 1;
+  Error error = 15;
+}
+
+// The producer's durable ACKED/outbox assertion of a RecoveryRelease: a
+// fixed versioned schema, never an opaque map. The producer states that it
+// durably holds the ACKED_CLEANUP state and the release_outbox entry of the
+// batch under exactly this plan and binding identity.
+message OutboxAssertion {
+  uint32 schema_version = 1; // must be 1
+  BatchId batch = 2;
+  bytes plan_digest = 3;    // Hash32: equals IngestAck.plan_digest
+  bytes binding_digest = 4; // Hash32: equals IngestAck.binding_digest
+}
+
+message RecoveryReleaseRequest {
+  SessionHeader header = 1;
+  BatchId batch = 2;
+  IngestAck ingest_ack = 3;      // the exact saved IngestAck
+  OutboxAssertion assertion = 4; // the durable ACKED/outbox assertion
+}
+
+// ---------------------------------------------------------------------------
+// Drain and cutover: seal, switch, resume
+// ---------------------------------------------------------------------------
+
+// SealAck is the durable answer of a SealGeneration: the whole intent bound
+// together. One matching number alone is never enough.
+message SealAck {
+  bytes drain_id = 1;           // Id16
+  bytes binding_digest = 2;     // Hash32: the binding that was sealed
+  uint64 admission_generation = 3;
+  uint64 highwater = 4;
+  bytes issuer_store_epoch = 5; // Id16
+}
+
+message SealGenerationRequest {
+  SessionHeader header = 1;
+  uint64 binding_generation = 2;
+  uint64 admission_generation = 3; // the generation being sealed
+  bytes drain_id = 4;              // Id16
+  uint64 batch_highwater = 5;      // last batch sequence of the drained run; 0 is the empty frontier
+}
+
+message SealGenerationResponse {
+  SealAck seal = 1;
+  Error error = 15;
+}
+
+// SwitchPrepared is the receipt of a PrepareSwitch; SwitchCommitted repeats
+// exactly this identity.
+message SwitchPrepared {
+  bytes switch_id = 1;          // Id16
+  bytes old_binding_digest = 2; // Hash32
+  bytes new_binding_digest = 3; // Hash32
+  bytes drain_id = 4;           // Id16
+  uint64 admission_generation = 5;
+  bytes issuer_store_epoch = 6; // Id16
+}
+
+message PrepareSwitchRequest {
+  SessionHeader header = 1;
+  SealAck old_seal = 2;
+  bytes old_binding_digest = 3; // Hash32: the active binding the switch continues
+  bytes desired_descriptor = 4; // DestinationBinding JSON, at most 16 KiB
+  bytes switch_id = 5;          // Id16
+}
+
+message PrepareSwitchResponse {
+  SwitchPrepared prepared = 1;
+  Error error = 15;
+}
+
+// The producer's durable binding commit assertion of a CommitSwitch: the
+// producer durably committed the new binding of this switch.
+message BindingCommitAssertion {
+  uint32 schema_version = 1; // must be 1
+  bytes switch_id = 2;       // Id16
+  bytes binding_digest = 3;  // Hash32: the new binding
+  uint64 binding_generation = 4;
+}
+
+message CommitSwitchRequest {
+  SessionHeader header = 1;
+  bytes switch_id = 2;         // Id16
+  SwitchPrepared prepared = 3; // the exact SwitchPrepared receipt
+  BindingCommitAssertion assertion = 4;
+}
+
+// SwitchCommitted carries the same identity the SwitchPrepared carried.
+message SwitchCommitted {
+  SwitchPrepared prepared = 1;
+}
+
+message CommitSwitchResponse {
+  SwitchCommitted committed = 1;
+  Error error = 15;
+}
+
+message ResumeRequest {
+  SessionHeader header = 1;
+  SealAck old_seal = 2;
+  bytes resume_id = 3;             // Id16
+  bytes active_binding_digest = 4; // Hash32
+  uint64 next_admission_generation = 5;
+}
+
+// ResumeAck is the durable answer of a Resume.
+message ResumeAck {
+  bytes resume_id = 1; // Id16
+  bytes binding_digest = 2; // Hash32
+  uint64 old_admission_generation = 3;
+  uint64 new_admission_generation = 4;
+  bytes drain_id = 5; // Id16
+  bytes issuer_store_epoch = 6; // Id16
+}
+
+message ResumeResponse {
+  ResumeAck ack = 1;
   Error error = 15;
 }
 
@@ -286,4 +457,27 @@ service Ingest {
   rpc FinalizePublish(FinalizePublishRequest) returns (FinalizePublishResponse);
   // Closes an IMPORT_SEALED batch with the same validation rules.
   rpc SealImport(FinalizePublishRequest) returns (FinalizePublishResponse);
+  // Reports the durable state of one batch, its IngestAck when that is
+  // durable, and one bounded page of frame cursors.
+  rpc GetBatchState(GetBatchStateRequest) returns (GetBatchStateResponse);
+  // Drives the ordered release of one NATS_ACKED batch to its final commit
+  // and answers ReleaseAck only after it.
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+  // Completes a batch the gateway store lost from the producer's saved
+  // IngestAck and ACKED/outbox assertion, without the payload.
+  rpc RecoveryRelease(RecoveryReleaseRequest) returns (ReleaseResponse);
+  // Seals an exhausted admission generation and fences the sessions of
+  // that generation. From the seal until the Resume, every data RPC of the
+  // run answers DRAIN_REQUIRED.
+  rpc SealGeneration(SealGenerationRequest) returns (SealGenerationResponse);
+  // Checks the desired destination and durably prepares the switch; the
+  // active binding stays the old one. A prepared switch closes data
+  // admission for every run until CommitSwitch.
+  rpc PrepareSwitch(PrepareSwitchRequest) returns (PrepareSwitchResponse);
+  // Durably activates the prepared switch; a retry answers the committed
+  // receipt. The Resume of the seal waits for this commit.
+  rpc CommitSwitch(CommitSwitchRequest) returns (CommitSwitchResponse);
+  // Opens the next admission generation of a sealed run, the only one that
+  // admits data from then on. It needs no prepared switch.
+  rpc Resume(ResumeRequest) returns (ResumeResponse);
 }

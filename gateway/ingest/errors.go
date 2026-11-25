@@ -63,6 +63,20 @@ func mapJournalError(err error) *wireError {
 		return &wireError{ErrorCode_SESSION_STALE, RetryAction_RECONNECT, err.Error()}
 	case errors.Is(err, session.ErrGenerationConflict):
 		return &wireError{ErrorCode_GENERATION_CONFLICT, RetryAction_RECONNECT, err.Error()}
+	case errors.Is(err, journal.ErrBindingMismatch):
+		return &wireError{ErrorCode_BINDING_MISMATCH, RetryAction_FIX_CONFIG, err.Error()}
+	case errors.Is(err, journal.ErrBindingGeneration):
+		return &wireError{ErrorCode_GENERATION_CONFLICT, RetryAction_FIX_CONFIG, err.Error()}
+	case errors.Is(err, journal.ErrDrainRequired):
+		return &wireError{ErrorCode_DRAIN_REQUIRED, RetryAction_DRAIN_OLD_BUILD, err.Error()}
+	case errors.Is(err, journal.ErrAdmissionClosed):
+		// A data RPC of a generation that is not open for data: the producer
+		// comes back in the generation the Resume opened.
+		return &wireError{ErrorCode_DRAIN_REQUIRED, RetryAction_RECONNECT, err.Error()}
+	case errors.Is(err, journal.ErrGenerationConflict):
+		return &wireError{ErrorCode_GENERATION_CONFLICT, RetryAction_RECONNECT, err.Error()}
+	case errors.Is(err, journal.ErrInvalidIntent):
+		return &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, err.Error()}
 	case errors.Is(err, storage.ErrBatchTooLarge):
 		return &wireError{ErrorCode_STORE_FATAL, RetryAction_STOP_LOCAL_OWNER, err.Error()}
 	default:

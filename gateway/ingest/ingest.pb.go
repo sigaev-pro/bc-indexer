@@ -241,6 +241,7 @@ const (
 	BatchState_NATS_ACKED    BatchState = 5
 	BatchState_RELEASING     BatchState = 6
 	BatchState_RETIRED       BatchState = 7
+	BatchState_NOT_FOUND     BatchState = 8 // GetBatchState only: the gateway holds no record of the batch
 )
 
 // Enum value maps for BatchState.
@@ -254,6 +255,7 @@ var (
 		5: "NATS_ACKED",
 		6: "RELEASING",
 		7: "RETIRED",
+		8: "NOT_FOUND",
 	}
 	BatchState_value = map[string]int32{
 		"STATE_UNKNOWN": 0,
@@ -264,6 +266,7 @@ var (
 		"NATS_ACKED":    5,
 		"RELEASING":     6,
 		"RETIRED":       7,
+		"NOT_FOUND":     8,
 	}
 )
 
@@ -2024,6 +2027,1421 @@ func (x *FinalizePublishResponse) GetError() *Error {
 	return nil
 }
 
+// The full durable acknowledgement of one delivered batch: {batch_id,
+// manifest_digest, plan_digest, layout_manifest_digest, binding_digest,
+// issuer_store_epoch}. It exists only once the batch is NATS_ACKED; a
+// partial acknowledgement or a successful transport write never composes
+// one. The producer keeps the whole record until a verified ReleaseAck.
+type IngestAck struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Batch                *BatchId               `protobuf:"bytes,1,opt,name=batch,proto3" json:"batch,omitempty"`
+	ManifestDigest       []byte                 `protobuf:"bytes,2,opt,name=manifest_digest,json=manifestDigest,proto3" json:"manifest_digest,omitempty"`                     // Hash32
+	PlanDigest           []byte                 `protobuf:"bytes,3,opt,name=plan_digest,json=planDigest,proto3" json:"plan_digest,omitempty"`                                 // Hash32
+	LayoutManifestDigest []byte                 `protobuf:"bytes,4,opt,name=layout_manifest_digest,json=layoutManifestDigest,proto3" json:"layout_manifest_digest,omitempty"` // Hash32
+	BindingDigest        []byte                 `protobuf:"bytes,5,opt,name=binding_digest,json=bindingDigest,proto3" json:"binding_digest,omitempty"`                        // Hash32
+	IssuerStoreEpoch     []byte                 `protobuf:"bytes,6,opt,name=issuer_store_epoch,json=issuerStoreEpoch,proto3" json:"issuer_store_epoch,omitempty"`             // Id16
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *IngestAck) Reset() {
+	*x = IngestAck{}
+	mi := &file_ingest_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IngestAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IngestAck) ProtoMessage() {}
+
+func (x *IngestAck) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IngestAck.ProtoReflect.Descriptor instead.
+func (*IngestAck) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *IngestAck) GetBatch() *BatchId {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *IngestAck) GetManifestDigest() []byte {
+	if x != nil {
+		return x.ManifestDigest
+	}
+	return nil
+}
+
+func (x *IngestAck) GetPlanDigest() []byte {
+	if x != nil {
+		return x.PlanDigest
+	}
+	return nil
+}
+
+func (x *IngestAck) GetLayoutManifestDigest() []byte {
+	if x != nil {
+		return x.LayoutManifestDigest
+	}
+	return nil
+}
+
+func (x *IngestAck) GetBindingDigest() []byte {
+	if x != nil {
+		return x.BindingDigest
+	}
+	return nil
+}
+
+func (x *IngestAck) GetIssuerStoreEpoch() []byte {
+	if x != nil {
+		return x.IssuerStoreEpoch
+	}
+	return nil
+}
+
+type GetBatchStateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Header        *SessionHeader         `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	Batch         *BatchId               `protobuf:"bytes,2,opt,name=batch,proto3" json:"batch,omitempty"`
+	PlanDigest    []byte                 `protobuf:"bytes,3,opt,name=plan_digest,json=planDigest,proto3" json:"plan_digest,omitempty"` // Hash32; must equal the stored plan from PREPARED on
+	Cursor        *FrameCursor           `protobuf:"bytes,4,opt,name=cursor,proto3" json:"cursor,omitempty"`                           // optional: continue after this frame of an earlier page
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBatchStateRequest) Reset() {
+	*x = GetBatchStateRequest{}
+	mi := &file_ingest_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBatchStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBatchStateRequest) ProtoMessage() {}
+
+func (x *GetBatchStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBatchStateRequest.ProtoReflect.Descriptor instead.
+func (*GetBatchStateRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GetBatchStateRequest) GetHeader() *SessionHeader {
+	if x != nil {
+		return x.Header
+	}
+	return nil
+}
+
+func (x *GetBatchStateRequest) GetBatch() *BatchId {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *GetBatchStateRequest) GetPlanDigest() []byte {
+	if x != nil {
+		return x.PlanDigest
+	}
+	return nil
+}
+
+func (x *GetBatchStateRequest) GetCursor() *FrameCursor {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
+}
+
+type GetBatchStateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         BatchState             `protobuf:"varint,1,opt,name=state,proto3,enum=bcindexer.ingest.v2.BatchState" json:"state,omitempty"` // NOT_FOUND when the gateway holds no record of the batch
+	Ack           *IngestAck             `protobuf:"bytes,2,opt,name=ack,proto3" json:"ack,omitempty"`                                          // set only while the NATS_ACKED marker is durable
+	Cursors       []*FrameCursor         `protobuf:"bytes,3,rep,name=cursors,proto3" json:"cursors,omitempty"`                                  // one bounded page, in (ordinal, fragment, frame) order
+	NextCursor    *FrameCursor           `protobuf:"bytes,4,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`          // continuation: last cursor of a page that has more
+	Error         *Error                 `protobuf:"bytes,15,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBatchStateResponse) Reset() {
+	*x = GetBatchStateResponse{}
+	mi := &file_ingest_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBatchStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBatchStateResponse) ProtoMessage() {}
+
+func (x *GetBatchStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBatchStateResponse.ProtoReflect.Descriptor instead.
+func (*GetBatchStateResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *GetBatchStateResponse) GetState() BatchState {
+	if x != nil {
+		return x.State
+	}
+	return BatchState_STATE_UNKNOWN
+}
+
+func (x *GetBatchStateResponse) GetAck() *IngestAck {
+	if x != nil {
+		return x.Ack
+	}
+	return nil
+}
+
+func (x *GetBatchStateResponse) GetCursors() []*FrameCursor {
+	if x != nil {
+		return x.Cursors
+	}
+	return nil
+}
+
+func (x *GetBatchStateResponse) GetNextCursor() *FrameCursor {
+	if x != nil {
+		return x.NextCursor
+	}
+	return nil
+}
+
+func (x *GetBatchStateResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+type ReleaseRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Header         *SessionHeader         `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	Batch          *BatchId               `protobuf:"bytes,2,opt,name=batch,proto3" json:"batch,omitempty"`
+	ManifestDigest []byte                 `protobuf:"bytes,3,opt,name=manifest_digest,json=manifestDigest,proto3" json:"manifest_digest,omitempty"` // Hash32
+	PlanDigest     []byte                 `protobuf:"bytes,4,opt,name=plan_digest,json=planDigest,proto3" json:"plan_digest,omitempty"`             // Hash32
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ReleaseRequest) Reset() {
+	*x = ReleaseRequest{}
+	mi := &file_ingest_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseRequest) ProtoMessage() {}
+
+func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseRequest.ProtoReflect.Descriptor instead.
+func (*ReleaseRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ReleaseRequest) GetHeader() *SessionHeader {
+	if x != nil {
+		return x.Header
+	}
+	return nil
+}
+
+func (x *ReleaseRequest) GetBatch() *BatchId {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *ReleaseRequest) GetManifestDigest() []byte {
+	if x != nil {
+		return x.ManifestDigest
+	}
+	return nil
+}
+
+func (x *ReleaseRequest) GetPlanDigest() []byte {
+	if x != nil {
+		return x.PlanDigest
+	}
+	return nil
+}
+
+// ReleaseAck answers an ordered Release or a RecoveryRelease, only after
+// the final atomic commit: {batch_id, retired_prefix}.
+type ReleaseAck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Batch         *BatchId               `protobuf:"bytes,1,opt,name=batch,proto3" json:"batch,omitempty"`
+	RetiredPrefix uint64                 `protobuf:"varint,2,opt,name=retired_prefix,json=retiredPrefix,proto3" json:"retired_prefix,omitempty"` // the gateway's durable retired prefix of the run
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseAck) Reset() {
+	*x = ReleaseAck{}
+	mi := &file_ingest_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseAck) ProtoMessage() {}
+
+func (x *ReleaseAck) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseAck.ProtoReflect.Descriptor instead.
+func (*ReleaseAck) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ReleaseAck) GetBatch() *BatchId {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *ReleaseAck) GetRetiredPrefix() uint64 {
+	if x != nil {
+		return x.RetiredPrefix
+	}
+	return 0
+}
+
+type ReleaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ack           *ReleaseAck            `protobuf:"bytes,1,opt,name=ack,proto3" json:"ack,omitempty"`
+	Error         *Error                 `protobuf:"bytes,15,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseResponse) Reset() {
+	*x = ReleaseResponse{}
+	mi := &file_ingest_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseResponse) ProtoMessage() {}
+
+func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseResponse.ProtoReflect.Descriptor instead.
+func (*ReleaseResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ReleaseResponse) GetAck() *ReleaseAck {
+	if x != nil {
+		return x.Ack
+	}
+	return nil
+}
+
+func (x *ReleaseResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+// The producer's durable ACKED/outbox assertion of a RecoveryRelease: a
+// fixed versioned schema, never an opaque map. The producer states that it
+// durably holds the ACKED_CLEANUP state and the release_outbox entry of the
+// batch under exactly this plan and binding identity.
+type OutboxAssertion struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion uint32                 `protobuf:"varint,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"` // must be 1
+	Batch         *BatchId               `protobuf:"bytes,2,opt,name=batch,proto3" json:"batch,omitempty"`
+	PlanDigest    []byte                 `protobuf:"bytes,3,opt,name=plan_digest,json=planDigest,proto3" json:"plan_digest,omitempty"`          // Hash32: equals IngestAck.plan_digest
+	BindingDigest []byte                 `protobuf:"bytes,4,opt,name=binding_digest,json=bindingDigest,proto3" json:"binding_digest,omitempty"` // Hash32: equals IngestAck.binding_digest
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OutboxAssertion) Reset() {
+	*x = OutboxAssertion{}
+	mi := &file_ingest_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OutboxAssertion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OutboxAssertion) ProtoMessage() {}
+
+func (x *OutboxAssertion) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OutboxAssertion.ProtoReflect.Descriptor instead.
+func (*OutboxAssertion) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *OutboxAssertion) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+func (x *OutboxAssertion) GetBatch() *BatchId {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *OutboxAssertion) GetPlanDigest() []byte {
+	if x != nil {
+		return x.PlanDigest
+	}
+	return nil
+}
+
+func (x *OutboxAssertion) GetBindingDigest() []byte {
+	if x != nil {
+		return x.BindingDigest
+	}
+	return nil
+}
+
+type RecoveryReleaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Header        *SessionHeader         `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	Batch         *BatchId               `protobuf:"bytes,2,opt,name=batch,proto3" json:"batch,omitempty"`
+	IngestAck     *IngestAck             `protobuf:"bytes,3,opt,name=ingest_ack,json=ingestAck,proto3" json:"ingest_ack,omitempty"` // the exact saved IngestAck
+	Assertion     *OutboxAssertion       `protobuf:"bytes,4,opt,name=assertion,proto3" json:"assertion,omitempty"`                  // the durable ACKED/outbox assertion
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecoveryReleaseRequest) Reset() {
+	*x = RecoveryReleaseRequest{}
+	mi := &file_ingest_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecoveryReleaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecoveryReleaseRequest) ProtoMessage() {}
+
+func (x *RecoveryReleaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecoveryReleaseRequest.ProtoReflect.Descriptor instead.
+func (*RecoveryReleaseRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *RecoveryReleaseRequest) GetHeader() *SessionHeader {
+	if x != nil {
+		return x.Header
+	}
+	return nil
+}
+
+func (x *RecoveryReleaseRequest) GetBatch() *BatchId {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *RecoveryReleaseRequest) GetIngestAck() *IngestAck {
+	if x != nil {
+		return x.IngestAck
+	}
+	return nil
+}
+
+func (x *RecoveryReleaseRequest) GetAssertion() *OutboxAssertion {
+	if x != nil {
+		return x.Assertion
+	}
+	return nil
+}
+
+// SealAck is the durable answer of a SealGeneration: the whole intent bound
+// together. One matching number alone is never enough.
+type SealAck struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	DrainId             []byte                 `protobuf:"bytes,1,opt,name=drain_id,json=drainId,proto3" json:"drain_id,omitempty"`                   // Id16
+	BindingDigest       []byte                 `protobuf:"bytes,2,opt,name=binding_digest,json=bindingDigest,proto3" json:"binding_digest,omitempty"` // Hash32: the binding that was sealed
+	AdmissionGeneration uint64                 `protobuf:"varint,3,opt,name=admission_generation,json=admissionGeneration,proto3" json:"admission_generation,omitempty"`
+	Highwater           uint64                 `protobuf:"varint,4,opt,name=highwater,proto3" json:"highwater,omitempty"`
+	IssuerStoreEpoch    []byte                 `protobuf:"bytes,5,opt,name=issuer_store_epoch,json=issuerStoreEpoch,proto3" json:"issuer_store_epoch,omitempty"` // Id16
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *SealAck) Reset() {
+	*x = SealAck{}
+	mi := &file_ingest_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SealAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SealAck) ProtoMessage() {}
+
+func (x *SealAck) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SealAck.ProtoReflect.Descriptor instead.
+func (*SealAck) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SealAck) GetDrainId() []byte {
+	if x != nil {
+		return x.DrainId
+	}
+	return nil
+}
+
+func (x *SealAck) GetBindingDigest() []byte {
+	if x != nil {
+		return x.BindingDigest
+	}
+	return nil
+}
+
+func (x *SealAck) GetAdmissionGeneration() uint64 {
+	if x != nil {
+		return x.AdmissionGeneration
+	}
+	return 0
+}
+
+func (x *SealAck) GetHighwater() uint64 {
+	if x != nil {
+		return x.Highwater
+	}
+	return 0
+}
+
+func (x *SealAck) GetIssuerStoreEpoch() []byte {
+	if x != nil {
+		return x.IssuerStoreEpoch
+	}
+	return nil
+}
+
+type SealGenerationRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Header              *SessionHeader         `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	BindingGeneration   uint64                 `protobuf:"varint,2,opt,name=binding_generation,json=bindingGeneration,proto3" json:"binding_generation,omitempty"`
+	AdmissionGeneration uint64                 `protobuf:"varint,3,opt,name=admission_generation,json=admissionGeneration,proto3" json:"admission_generation,omitempty"` // the generation being sealed
+	DrainId             []byte                 `protobuf:"bytes,4,opt,name=drain_id,json=drainId,proto3" json:"drain_id,omitempty"`                                      // Id16
+	BatchHighwater      uint64                 `protobuf:"varint,5,opt,name=batch_highwater,json=batchHighwater,proto3" json:"batch_highwater,omitempty"`                // last batch sequence of the drained run; 0 is the empty frontier
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *SealGenerationRequest) Reset() {
+	*x = SealGenerationRequest{}
+	mi := &file_ingest_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SealGenerationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SealGenerationRequest) ProtoMessage() {}
+
+func (x *SealGenerationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SealGenerationRequest.ProtoReflect.Descriptor instead.
+func (*SealGenerationRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *SealGenerationRequest) GetHeader() *SessionHeader {
+	if x != nil {
+		return x.Header
+	}
+	return nil
+}
+
+func (x *SealGenerationRequest) GetBindingGeneration() uint64 {
+	if x != nil {
+		return x.BindingGeneration
+	}
+	return 0
+}
+
+func (x *SealGenerationRequest) GetAdmissionGeneration() uint64 {
+	if x != nil {
+		return x.AdmissionGeneration
+	}
+	return 0
+}
+
+func (x *SealGenerationRequest) GetDrainId() []byte {
+	if x != nil {
+		return x.DrainId
+	}
+	return nil
+}
+
+func (x *SealGenerationRequest) GetBatchHighwater() uint64 {
+	if x != nil {
+		return x.BatchHighwater
+	}
+	return 0
+}
+
+type SealGenerationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Seal          *SealAck               `protobuf:"bytes,1,opt,name=seal,proto3" json:"seal,omitempty"`
+	Error         *Error                 `protobuf:"bytes,15,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SealGenerationResponse) Reset() {
+	*x = SealGenerationResponse{}
+	mi := &file_ingest_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SealGenerationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SealGenerationResponse) ProtoMessage() {}
+
+func (x *SealGenerationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SealGenerationResponse.ProtoReflect.Descriptor instead.
+func (*SealGenerationResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *SealGenerationResponse) GetSeal() *SealAck {
+	if x != nil {
+		return x.Seal
+	}
+	return nil
+}
+
+func (x *SealGenerationResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+// SwitchPrepared is the receipt of a PrepareSwitch; SwitchCommitted repeats
+// exactly this identity.
+type SwitchPrepared struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	SwitchId            []byte                 `protobuf:"bytes,1,opt,name=switch_id,json=switchId,proto3" json:"switch_id,omitempty"`                           // Id16
+	OldBindingDigest    []byte                 `protobuf:"bytes,2,opt,name=old_binding_digest,json=oldBindingDigest,proto3" json:"old_binding_digest,omitempty"` // Hash32
+	NewBindingDigest    []byte                 `protobuf:"bytes,3,opt,name=new_binding_digest,json=newBindingDigest,proto3" json:"new_binding_digest,omitempty"` // Hash32
+	DrainId             []byte                 `protobuf:"bytes,4,opt,name=drain_id,json=drainId,proto3" json:"drain_id,omitempty"`                              // Id16
+	AdmissionGeneration uint64                 `protobuf:"varint,5,opt,name=admission_generation,json=admissionGeneration,proto3" json:"admission_generation,omitempty"`
+	IssuerStoreEpoch    []byte                 `protobuf:"bytes,6,opt,name=issuer_store_epoch,json=issuerStoreEpoch,proto3" json:"issuer_store_epoch,omitempty"` // Id16
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *SwitchPrepared) Reset() {
+	*x = SwitchPrepared{}
+	mi := &file_ingest_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchPrepared) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchPrepared) ProtoMessage() {}
+
+func (x *SwitchPrepared) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchPrepared.ProtoReflect.Descriptor instead.
+func (*SwitchPrepared) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *SwitchPrepared) GetSwitchId() []byte {
+	if x != nil {
+		return x.SwitchId
+	}
+	return nil
+}
+
+func (x *SwitchPrepared) GetOldBindingDigest() []byte {
+	if x != nil {
+		return x.OldBindingDigest
+	}
+	return nil
+}
+
+func (x *SwitchPrepared) GetNewBindingDigest() []byte {
+	if x != nil {
+		return x.NewBindingDigest
+	}
+	return nil
+}
+
+func (x *SwitchPrepared) GetDrainId() []byte {
+	if x != nil {
+		return x.DrainId
+	}
+	return nil
+}
+
+func (x *SwitchPrepared) GetAdmissionGeneration() uint64 {
+	if x != nil {
+		return x.AdmissionGeneration
+	}
+	return 0
+}
+
+func (x *SwitchPrepared) GetIssuerStoreEpoch() []byte {
+	if x != nil {
+		return x.IssuerStoreEpoch
+	}
+	return nil
+}
+
+type PrepareSwitchRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Header            *SessionHeader         `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	OldSeal           *SealAck               `protobuf:"bytes,2,opt,name=old_seal,json=oldSeal,proto3" json:"old_seal,omitempty"`
+	OldBindingDigest  []byte                 `protobuf:"bytes,3,opt,name=old_binding_digest,json=oldBindingDigest,proto3" json:"old_binding_digest,omitempty"`  // Hash32: the active binding the switch continues
+	DesiredDescriptor []byte                 `protobuf:"bytes,4,opt,name=desired_descriptor,json=desiredDescriptor,proto3" json:"desired_descriptor,omitempty"` // DestinationBinding JSON, at most 16 KiB
+	SwitchId          []byte                 `protobuf:"bytes,5,opt,name=switch_id,json=switchId,proto3" json:"switch_id,omitempty"`                            // Id16
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *PrepareSwitchRequest) Reset() {
+	*x = PrepareSwitchRequest{}
+	mi := &file_ingest_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareSwitchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareSwitchRequest) ProtoMessage() {}
+
+func (x *PrepareSwitchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareSwitchRequest.ProtoReflect.Descriptor instead.
+func (*PrepareSwitchRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *PrepareSwitchRequest) GetHeader() *SessionHeader {
+	if x != nil {
+		return x.Header
+	}
+	return nil
+}
+
+func (x *PrepareSwitchRequest) GetOldSeal() *SealAck {
+	if x != nil {
+		return x.OldSeal
+	}
+	return nil
+}
+
+func (x *PrepareSwitchRequest) GetOldBindingDigest() []byte {
+	if x != nil {
+		return x.OldBindingDigest
+	}
+	return nil
+}
+
+func (x *PrepareSwitchRequest) GetDesiredDescriptor() []byte {
+	if x != nil {
+		return x.DesiredDescriptor
+	}
+	return nil
+}
+
+func (x *PrepareSwitchRequest) GetSwitchId() []byte {
+	if x != nil {
+		return x.SwitchId
+	}
+	return nil
+}
+
+type PrepareSwitchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Prepared      *SwitchPrepared        `protobuf:"bytes,1,opt,name=prepared,proto3" json:"prepared,omitempty"`
+	Error         *Error                 `protobuf:"bytes,15,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareSwitchResponse) Reset() {
+	*x = PrepareSwitchResponse{}
+	mi := &file_ingest_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareSwitchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareSwitchResponse) ProtoMessage() {}
+
+func (x *PrepareSwitchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareSwitchResponse.ProtoReflect.Descriptor instead.
+func (*PrepareSwitchResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *PrepareSwitchResponse) GetPrepared() *SwitchPrepared {
+	if x != nil {
+		return x.Prepared
+	}
+	return nil
+}
+
+func (x *PrepareSwitchResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+// The producer's durable binding commit assertion of a CommitSwitch: the
+// producer durably committed the new binding of this switch.
+type BindingCommitAssertion struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	SchemaVersion     uint32                 `protobuf:"varint,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"` // must be 1
+	SwitchId          []byte                 `protobuf:"bytes,2,opt,name=switch_id,json=switchId,proto3" json:"switch_id,omitempty"`                 // Id16
+	BindingDigest     []byte                 `protobuf:"bytes,3,opt,name=binding_digest,json=bindingDigest,proto3" json:"binding_digest,omitempty"`  // Hash32: the new binding
+	BindingGeneration uint64                 `protobuf:"varint,4,opt,name=binding_generation,json=bindingGeneration,proto3" json:"binding_generation,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *BindingCommitAssertion) Reset() {
+	*x = BindingCommitAssertion{}
+	mi := &file_ingest_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BindingCommitAssertion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BindingCommitAssertion) ProtoMessage() {}
+
+func (x *BindingCommitAssertion) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BindingCommitAssertion.ProtoReflect.Descriptor instead.
+func (*BindingCommitAssertion) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *BindingCommitAssertion) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+func (x *BindingCommitAssertion) GetSwitchId() []byte {
+	if x != nil {
+		return x.SwitchId
+	}
+	return nil
+}
+
+func (x *BindingCommitAssertion) GetBindingDigest() []byte {
+	if x != nil {
+		return x.BindingDigest
+	}
+	return nil
+}
+
+func (x *BindingCommitAssertion) GetBindingGeneration() uint64 {
+	if x != nil {
+		return x.BindingGeneration
+	}
+	return 0
+}
+
+type CommitSwitchRequest struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Header        *SessionHeader          `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	SwitchId      []byte                  `protobuf:"bytes,2,opt,name=switch_id,json=switchId,proto3" json:"switch_id,omitempty"` // Id16
+	Prepared      *SwitchPrepared         `protobuf:"bytes,3,opt,name=prepared,proto3" json:"prepared,omitempty"`                 // the exact SwitchPrepared receipt
+	Assertion     *BindingCommitAssertion `protobuf:"bytes,4,opt,name=assertion,proto3" json:"assertion,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitSwitchRequest) Reset() {
+	*x = CommitSwitchRequest{}
+	mi := &file_ingest_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitSwitchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitSwitchRequest) ProtoMessage() {}
+
+func (x *CommitSwitchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitSwitchRequest.ProtoReflect.Descriptor instead.
+func (*CommitSwitchRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *CommitSwitchRequest) GetHeader() *SessionHeader {
+	if x != nil {
+		return x.Header
+	}
+	return nil
+}
+
+func (x *CommitSwitchRequest) GetSwitchId() []byte {
+	if x != nil {
+		return x.SwitchId
+	}
+	return nil
+}
+
+func (x *CommitSwitchRequest) GetPrepared() *SwitchPrepared {
+	if x != nil {
+		return x.Prepared
+	}
+	return nil
+}
+
+func (x *CommitSwitchRequest) GetAssertion() *BindingCommitAssertion {
+	if x != nil {
+		return x.Assertion
+	}
+	return nil
+}
+
+// SwitchCommitted carries the same identity the SwitchPrepared carried.
+type SwitchCommitted struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Prepared      *SwitchPrepared        `protobuf:"bytes,1,opt,name=prepared,proto3" json:"prepared,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SwitchCommitted) Reset() {
+	*x = SwitchCommitted{}
+	mi := &file_ingest_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SwitchCommitted) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SwitchCommitted) ProtoMessage() {}
+
+func (x *SwitchCommitted) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SwitchCommitted.ProtoReflect.Descriptor instead.
+func (*SwitchCommitted) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *SwitchCommitted) GetPrepared() *SwitchPrepared {
+	if x != nil {
+		return x.Prepared
+	}
+	return nil
+}
+
+type CommitSwitchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Committed     *SwitchCommitted       `protobuf:"bytes,1,opt,name=committed,proto3" json:"committed,omitempty"`
+	Error         *Error                 `protobuf:"bytes,15,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitSwitchResponse) Reset() {
+	*x = CommitSwitchResponse{}
+	mi := &file_ingest_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitSwitchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitSwitchResponse) ProtoMessage() {}
+
+func (x *CommitSwitchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitSwitchResponse.ProtoReflect.Descriptor instead.
+func (*CommitSwitchResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *CommitSwitchResponse) GetCommitted() *SwitchCommitted {
+	if x != nil {
+		return x.Committed
+	}
+	return nil
+}
+
+func (x *CommitSwitchResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+type ResumeRequest struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Header                  *SessionHeader         `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	OldSeal                 *SealAck               `protobuf:"bytes,2,opt,name=old_seal,json=oldSeal,proto3" json:"old_seal,omitempty"`
+	ResumeId                []byte                 `protobuf:"bytes,3,opt,name=resume_id,json=resumeId,proto3" json:"resume_id,omitempty"`                                    // Id16
+	ActiveBindingDigest     []byte                 `protobuf:"bytes,4,opt,name=active_binding_digest,json=activeBindingDigest,proto3" json:"active_binding_digest,omitempty"` // Hash32
+	NextAdmissionGeneration uint64                 `protobuf:"varint,5,opt,name=next_admission_generation,json=nextAdmissionGeneration,proto3" json:"next_admission_generation,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *ResumeRequest) Reset() {
+	*x = ResumeRequest{}
+	mi := &file_ingest_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeRequest) ProtoMessage() {}
+
+func (x *ResumeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeRequest.ProtoReflect.Descriptor instead.
+func (*ResumeRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ResumeRequest) GetHeader() *SessionHeader {
+	if x != nil {
+		return x.Header
+	}
+	return nil
+}
+
+func (x *ResumeRequest) GetOldSeal() *SealAck {
+	if x != nil {
+		return x.OldSeal
+	}
+	return nil
+}
+
+func (x *ResumeRequest) GetResumeId() []byte {
+	if x != nil {
+		return x.ResumeId
+	}
+	return nil
+}
+
+func (x *ResumeRequest) GetActiveBindingDigest() []byte {
+	if x != nil {
+		return x.ActiveBindingDigest
+	}
+	return nil
+}
+
+func (x *ResumeRequest) GetNextAdmissionGeneration() uint64 {
+	if x != nil {
+		return x.NextAdmissionGeneration
+	}
+	return 0
+}
+
+// ResumeAck is the durable answer of a Resume.
+type ResumeAck struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	ResumeId               []byte                 `protobuf:"bytes,1,opt,name=resume_id,json=resumeId,proto3" json:"resume_id,omitempty"`                // Id16
+	BindingDigest          []byte                 `protobuf:"bytes,2,opt,name=binding_digest,json=bindingDigest,proto3" json:"binding_digest,omitempty"` // Hash32
+	OldAdmissionGeneration uint64                 `protobuf:"varint,3,opt,name=old_admission_generation,json=oldAdmissionGeneration,proto3" json:"old_admission_generation,omitempty"`
+	NewAdmissionGeneration uint64                 `protobuf:"varint,4,opt,name=new_admission_generation,json=newAdmissionGeneration,proto3" json:"new_admission_generation,omitempty"`
+	DrainId                []byte                 `protobuf:"bytes,5,opt,name=drain_id,json=drainId,proto3" json:"drain_id,omitempty"`                              // Id16
+	IssuerStoreEpoch       []byte                 `protobuf:"bytes,6,opt,name=issuer_store_epoch,json=issuerStoreEpoch,proto3" json:"issuer_store_epoch,omitempty"` // Id16
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *ResumeAck) Reset() {
+	*x = ResumeAck{}
+	mi := &file_ingest_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeAck) ProtoMessage() {}
+
+func (x *ResumeAck) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeAck.ProtoReflect.Descriptor instead.
+func (*ResumeAck) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ResumeAck) GetResumeId() []byte {
+	if x != nil {
+		return x.ResumeId
+	}
+	return nil
+}
+
+func (x *ResumeAck) GetBindingDigest() []byte {
+	if x != nil {
+		return x.BindingDigest
+	}
+	return nil
+}
+
+func (x *ResumeAck) GetOldAdmissionGeneration() uint64 {
+	if x != nil {
+		return x.OldAdmissionGeneration
+	}
+	return 0
+}
+
+func (x *ResumeAck) GetNewAdmissionGeneration() uint64 {
+	if x != nil {
+		return x.NewAdmissionGeneration
+	}
+	return 0
+}
+
+func (x *ResumeAck) GetDrainId() []byte {
+	if x != nil {
+		return x.DrainId
+	}
+	return nil
+}
+
+func (x *ResumeAck) GetIssuerStoreEpoch() []byte {
+	if x != nil {
+		return x.IssuerStoreEpoch
+	}
+	return nil
+}
+
+type ResumeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ack           *ResumeAck             `protobuf:"bytes,1,opt,name=ack,proto3" json:"ack,omitempty"`
+	Error         *Error                 `protobuf:"bytes,15,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResumeResponse) Reset() {
+	*x = ResumeResponse{}
+	mi := &file_ingest_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeResponse) ProtoMessage() {}
+
+func (x *ResumeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeResponse.ProtoReflect.Descriptor instead.
+func (*ResumeResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ResumeResponse) GetAck() *ResumeAck {
+	if x != nil {
+		return x.Ack
+	}
+	return nil
+}
+
+func (x *ResumeResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
 var File_ingest_proto protoreflect.FileDescriptor
 
 const file_ingest_proto_rawDesc = "" +
@@ -2187,6 +3605,114 @@ const file_ingest_proto_rawDesc = "" +
 	"\x16layout_manifest_digest\x18\x05 \x01(\fR\x14layoutManifestDigest\"\x82\x01\n" +
 	"\x17FinalizePublishResponse\x125\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1f.bcindexer.ingest.v2.BatchStateR\x05state\x120\n" +
+	"\x05error\x18\x0f \x01(\v2\x1a.bcindexer.ingest.v2.ErrorR\x05error\"\x94\x02\n" +
+	"\tIngestAck\x122\n" +
+	"\x05batch\x18\x01 \x01(\v2\x1c.bcindexer.ingest.v2.BatchIdR\x05batch\x12'\n" +
+	"\x0fmanifest_digest\x18\x02 \x01(\fR\x0emanifestDigest\x12\x1f\n" +
+	"\vplan_digest\x18\x03 \x01(\fR\n" +
+	"planDigest\x124\n" +
+	"\x16layout_manifest_digest\x18\x04 \x01(\fR\x14layoutManifestDigest\x12%\n" +
+	"\x0ebinding_digest\x18\x05 \x01(\fR\rbindingDigest\x12,\n" +
+	"\x12issuer_store_epoch\x18\x06 \x01(\fR\x10issuerStoreEpoch\"\xe1\x01\n" +
+	"\x14GetBatchStateRequest\x12:\n" +
+	"\x06header\x18\x01 \x01(\v2\".bcindexer.ingest.v2.SessionHeaderR\x06header\x122\n" +
+	"\x05batch\x18\x02 \x01(\v2\x1c.bcindexer.ingest.v2.BatchIdR\x05batch\x12\x1f\n" +
+	"\vplan_digest\x18\x03 \x01(\fR\n" +
+	"planDigest\x128\n" +
+	"\x06cursor\x18\x04 \x01(\v2 .bcindexer.ingest.v2.FrameCursorR\x06cursor\"\xb1\x02\n" +
+	"\x15GetBatchStateResponse\x125\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1f.bcindexer.ingest.v2.BatchStateR\x05state\x120\n" +
+	"\x03ack\x18\x02 \x01(\v2\x1e.bcindexer.ingest.v2.IngestAckR\x03ack\x12:\n" +
+	"\acursors\x18\x03 \x03(\v2 .bcindexer.ingest.v2.FrameCursorR\acursors\x12A\n" +
+	"\vnext_cursor\x18\x04 \x01(\v2 .bcindexer.ingest.v2.FrameCursorR\n" +
+	"nextCursor\x120\n" +
+	"\x05error\x18\x0f \x01(\v2\x1a.bcindexer.ingest.v2.ErrorR\x05error\"\xca\x01\n" +
+	"\x0eReleaseRequest\x12:\n" +
+	"\x06header\x18\x01 \x01(\v2\".bcindexer.ingest.v2.SessionHeaderR\x06header\x122\n" +
+	"\x05batch\x18\x02 \x01(\v2\x1c.bcindexer.ingest.v2.BatchIdR\x05batch\x12'\n" +
+	"\x0fmanifest_digest\x18\x03 \x01(\fR\x0emanifestDigest\x12\x1f\n" +
+	"\vplan_digest\x18\x04 \x01(\fR\n" +
+	"planDigest\"g\n" +
+	"\n" +
+	"ReleaseAck\x122\n" +
+	"\x05batch\x18\x01 \x01(\v2\x1c.bcindexer.ingest.v2.BatchIdR\x05batch\x12%\n" +
+	"\x0eretired_prefix\x18\x02 \x01(\x04R\rretiredPrefix\"v\n" +
+	"\x0fReleaseResponse\x121\n" +
+	"\x03ack\x18\x01 \x01(\v2\x1f.bcindexer.ingest.v2.ReleaseAckR\x03ack\x120\n" +
+	"\x05error\x18\x0f \x01(\v2\x1a.bcindexer.ingest.v2.ErrorR\x05error\"\xb4\x01\n" +
+	"\x0fOutboxAssertion\x12%\n" +
+	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x122\n" +
+	"\x05batch\x18\x02 \x01(\v2\x1c.bcindexer.ingest.v2.BatchIdR\x05batch\x12\x1f\n" +
+	"\vplan_digest\x18\x03 \x01(\fR\n" +
+	"planDigest\x12%\n" +
+	"\x0ebinding_digest\x18\x04 \x01(\fR\rbindingDigest\"\x8b\x02\n" +
+	"\x16RecoveryReleaseRequest\x12:\n" +
+	"\x06header\x18\x01 \x01(\v2\".bcindexer.ingest.v2.SessionHeaderR\x06header\x122\n" +
+	"\x05batch\x18\x02 \x01(\v2\x1c.bcindexer.ingest.v2.BatchIdR\x05batch\x12=\n" +
+	"\n" +
+	"ingest_ack\x18\x03 \x01(\v2\x1e.bcindexer.ingest.v2.IngestAckR\tingestAck\x12B\n" +
+	"\tassertion\x18\x04 \x01(\v2$.bcindexer.ingest.v2.OutboxAssertionR\tassertion\"\xca\x01\n" +
+	"\aSealAck\x12\x19\n" +
+	"\bdrain_id\x18\x01 \x01(\fR\adrainId\x12%\n" +
+	"\x0ebinding_digest\x18\x02 \x01(\fR\rbindingDigest\x121\n" +
+	"\x14admission_generation\x18\x03 \x01(\x04R\x13admissionGeneration\x12\x1c\n" +
+	"\thighwater\x18\x04 \x01(\x04R\thighwater\x12,\n" +
+	"\x12issuer_store_epoch\x18\x05 \x01(\fR\x10issuerStoreEpoch\"\xf9\x01\n" +
+	"\x15SealGenerationRequest\x12:\n" +
+	"\x06header\x18\x01 \x01(\v2\".bcindexer.ingest.v2.SessionHeaderR\x06header\x12-\n" +
+	"\x12binding_generation\x18\x02 \x01(\x04R\x11bindingGeneration\x121\n" +
+	"\x14admission_generation\x18\x03 \x01(\x04R\x13admissionGeneration\x12\x19\n" +
+	"\bdrain_id\x18\x04 \x01(\fR\adrainId\x12'\n" +
+	"\x0fbatch_highwater\x18\x05 \x01(\x04R\x0ebatchHighwater\"|\n" +
+	"\x16SealGenerationResponse\x120\n" +
+	"\x04seal\x18\x01 \x01(\v2\x1c.bcindexer.ingest.v2.SealAckR\x04seal\x120\n" +
+	"\x05error\x18\x0f \x01(\v2\x1a.bcindexer.ingest.v2.ErrorR\x05error\"\x85\x02\n" +
+	"\x0eSwitchPrepared\x12\x1b\n" +
+	"\tswitch_id\x18\x01 \x01(\fR\bswitchId\x12,\n" +
+	"\x12old_binding_digest\x18\x02 \x01(\fR\x10oldBindingDigest\x12,\n" +
+	"\x12new_binding_digest\x18\x03 \x01(\fR\x10newBindingDigest\x12\x19\n" +
+	"\bdrain_id\x18\x04 \x01(\fR\adrainId\x121\n" +
+	"\x14admission_generation\x18\x05 \x01(\x04R\x13admissionGeneration\x12,\n" +
+	"\x12issuer_store_epoch\x18\x06 \x01(\fR\x10issuerStoreEpoch\"\x85\x02\n" +
+	"\x14PrepareSwitchRequest\x12:\n" +
+	"\x06header\x18\x01 \x01(\v2\".bcindexer.ingest.v2.SessionHeaderR\x06header\x127\n" +
+	"\bold_seal\x18\x02 \x01(\v2\x1c.bcindexer.ingest.v2.SealAckR\aoldSeal\x12,\n" +
+	"\x12old_binding_digest\x18\x03 \x01(\fR\x10oldBindingDigest\x12-\n" +
+	"\x12desired_descriptor\x18\x04 \x01(\fR\x11desiredDescriptor\x12\x1b\n" +
+	"\tswitch_id\x18\x05 \x01(\fR\bswitchId\"\x8a\x01\n" +
+	"\x15PrepareSwitchResponse\x12?\n" +
+	"\bprepared\x18\x01 \x01(\v2#.bcindexer.ingest.v2.SwitchPreparedR\bprepared\x120\n" +
+	"\x05error\x18\x0f \x01(\v2\x1a.bcindexer.ingest.v2.ErrorR\x05error\"\xb2\x01\n" +
+	"\x16BindingCommitAssertion\x12%\n" +
+	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1b\n" +
+	"\tswitch_id\x18\x02 \x01(\fR\bswitchId\x12%\n" +
+	"\x0ebinding_digest\x18\x03 \x01(\fR\rbindingDigest\x12-\n" +
+	"\x12binding_generation\x18\x04 \x01(\x04R\x11bindingGeneration\"\xfa\x01\n" +
+	"\x13CommitSwitchRequest\x12:\n" +
+	"\x06header\x18\x01 \x01(\v2\".bcindexer.ingest.v2.SessionHeaderR\x06header\x12\x1b\n" +
+	"\tswitch_id\x18\x02 \x01(\fR\bswitchId\x12?\n" +
+	"\bprepared\x18\x03 \x01(\v2#.bcindexer.ingest.v2.SwitchPreparedR\bprepared\x12I\n" +
+	"\tassertion\x18\x04 \x01(\v2+.bcindexer.ingest.v2.BindingCommitAssertionR\tassertion\"R\n" +
+	"\x0fSwitchCommitted\x12?\n" +
+	"\bprepared\x18\x01 \x01(\v2#.bcindexer.ingest.v2.SwitchPreparedR\bprepared\"\x8c\x01\n" +
+	"\x14CommitSwitchResponse\x12B\n" +
+	"\tcommitted\x18\x01 \x01(\v2$.bcindexer.ingest.v2.SwitchCommittedR\tcommitted\x120\n" +
+	"\x05error\x18\x0f \x01(\v2\x1a.bcindexer.ingest.v2.ErrorR\x05error\"\x91\x02\n" +
+	"\rResumeRequest\x12:\n" +
+	"\x06header\x18\x01 \x01(\v2\".bcindexer.ingest.v2.SessionHeaderR\x06header\x127\n" +
+	"\bold_seal\x18\x02 \x01(\v2\x1c.bcindexer.ingest.v2.SealAckR\aoldSeal\x12\x1b\n" +
+	"\tresume_id\x18\x03 \x01(\fR\bresumeId\x122\n" +
+	"\x15active_binding_digest\x18\x04 \x01(\fR\x13activeBindingDigest\x12:\n" +
+	"\x19next_admission_generation\x18\x05 \x01(\x04R\x17nextAdmissionGeneration\"\x8c\x02\n" +
+	"\tResumeAck\x12\x1b\n" +
+	"\tresume_id\x18\x01 \x01(\fR\bresumeId\x12%\n" +
+	"\x0ebinding_digest\x18\x02 \x01(\fR\rbindingDigest\x128\n" +
+	"\x18old_admission_generation\x18\x03 \x01(\x04R\x16oldAdmissionGeneration\x128\n" +
+	"\x18new_admission_generation\x18\x04 \x01(\x04R\x16newAdmissionGeneration\x12\x19\n" +
+	"\bdrain_id\x18\x05 \x01(\fR\adrainId\x12,\n" +
+	"\x12issuer_store_epoch\x18\x06 \x01(\fR\x10issuerStoreEpoch\"t\n" +
+	"\x0eResumeResponse\x120\n" +
+	"\x03ack\x18\x01 \x01(\v2\x1e.bcindexer.ingest.v2.ResumeAckR\x03ack\x120\n" +
 	"\x05error\x18\x0f \x01(\v2\x1a.bcindexer.ingest.v2.ErrorR\x05error*\xee\x02\n" +
 	"\tErrorCode\x12\x15\n" +
 	"\x11ERROR_UNSPECIFIED\x10\x00\x12\x19\n" +
@@ -2218,7 +3744,7 @@ const file_ingest_proto_rawDesc = "" +
 	"\x12DIAGNOSE_IMMUTABLE\x10\a*<\n" +
 	"\vPrepareMode\x12\x12\n" +
 	"\x0ePREPARE_NORMAL\x10\x00\x12\x19\n" +
-	"\x15PREPARE_IMPORT_SEALED\x10\x01*\x83\x01\n" +
+	"\x15PREPARE_IMPORT_SEALED\x10\x01*\x92\x01\n" +
 	"\n" +
 	"BatchState\x12\x11\n" +
 	"\rSTATE_UNKNOWN\x10\x00\x12\r\n" +
@@ -2230,7 +3756,8 @@ const file_ingest_proto_rawDesc = "" +
 	"\n" +
 	"NATS_ACKED\x10\x05\x12\r\n" +
 	"\tRELEASING\x10\x06\x12\v\n" +
-	"\aRETIRED\x10\a2\xb2\a\n" +
+	"\aRETIRED\x10\a\x12\r\n" +
+	"\tNOT_FOUND\x10\b2\xe1\f\n" +
 	"\x06Ingest\x12i\n" +
 	"\x0eHelloChallenge\x12*.bcindexer.ingest.v2.HelloChallengeRequest\x1a+.bcindexer.ingest.v2.HelloChallengeResponse\x12`\n" +
 	"\vOpenSession\x12'.bcindexer.ingest.v2.OpenSessionRequest\x1a(.bcindexer.ingest.v2.OpenSessionResponse\x12c\n" +
@@ -2241,7 +3768,14 @@ const file_ingest_proto_rawDesc = "" +
 	"\fPublishChunk\x12(.bcindexer.ingest.v2.PublishChunkRequest\x1a).bcindexer.ingest.v2.PublishChunkResponse(\x010\x01\x12l\n" +
 	"\x0fFinalizePublish\x12+.bcindexer.ingest.v2.FinalizePublishRequest\x1a,.bcindexer.ingest.v2.FinalizePublishResponse\x12g\n" +
 	"\n" +
-	"SealImport\x12+.bcindexer.ingest.v2.FinalizePublishRequest\x1a,.bcindexer.ingest.v2.FinalizePublishResponseB8Z6github.com/sigaev-pro/bc-indexer/gateway/ingest;ingestb\x06proto3"
+	"SealImport\x12+.bcindexer.ingest.v2.FinalizePublishRequest\x1a,.bcindexer.ingest.v2.FinalizePublishResponse\x12f\n" +
+	"\rGetBatchState\x12).bcindexer.ingest.v2.GetBatchStateRequest\x1a*.bcindexer.ingest.v2.GetBatchStateResponse\x12T\n" +
+	"\aRelease\x12#.bcindexer.ingest.v2.ReleaseRequest\x1a$.bcindexer.ingest.v2.ReleaseResponse\x12d\n" +
+	"\x0fRecoveryRelease\x12+.bcindexer.ingest.v2.RecoveryReleaseRequest\x1a$.bcindexer.ingest.v2.ReleaseResponse\x12i\n" +
+	"\x0eSealGeneration\x12*.bcindexer.ingest.v2.SealGenerationRequest\x1a+.bcindexer.ingest.v2.SealGenerationResponse\x12f\n" +
+	"\rPrepareSwitch\x12).bcindexer.ingest.v2.PrepareSwitchRequest\x1a*.bcindexer.ingest.v2.PrepareSwitchResponse\x12c\n" +
+	"\fCommitSwitch\x12(.bcindexer.ingest.v2.CommitSwitchRequest\x1a).bcindexer.ingest.v2.CommitSwitchResponse\x12Q\n" +
+	"\x06Resume\x12\".bcindexer.ingest.v2.ResumeRequest\x1a#.bcindexer.ingest.v2.ResumeResponseB8Z6github.com/sigaev-pro/bc-indexer/gateway/ingest;ingestb\x06proto3"
 
 var (
 	file_ingest_proto_rawDescOnce sync.Once
@@ -2256,7 +3790,7 @@ func file_ingest_proto_rawDescGZIP() []byte {
 }
 
 var file_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_ingest_proto_goTypes = []any{
 	(ErrorCode)(0),                          // 0: bcindexer.ingest.v2.ErrorCode
 	(RetryAction)(0),                        // 1: bcindexer.ingest.v2.RetryAction
@@ -2286,6 +3820,27 @@ var file_ingest_proto_goTypes = []any{
 	(*PublishChunkResponse)(nil),            // 25: bcindexer.ingest.v2.PublishChunkResponse
 	(*FinalizePublishRequest)(nil),          // 26: bcindexer.ingest.v2.FinalizePublishRequest
 	(*FinalizePublishResponse)(nil),         // 27: bcindexer.ingest.v2.FinalizePublishResponse
+	(*IngestAck)(nil),                       // 28: bcindexer.ingest.v2.IngestAck
+	(*GetBatchStateRequest)(nil),            // 29: bcindexer.ingest.v2.GetBatchStateRequest
+	(*GetBatchStateResponse)(nil),           // 30: bcindexer.ingest.v2.GetBatchStateResponse
+	(*ReleaseRequest)(nil),                  // 31: bcindexer.ingest.v2.ReleaseRequest
+	(*ReleaseAck)(nil),                      // 32: bcindexer.ingest.v2.ReleaseAck
+	(*ReleaseResponse)(nil),                 // 33: bcindexer.ingest.v2.ReleaseResponse
+	(*OutboxAssertion)(nil),                 // 34: bcindexer.ingest.v2.OutboxAssertion
+	(*RecoveryReleaseRequest)(nil),          // 35: bcindexer.ingest.v2.RecoveryReleaseRequest
+	(*SealAck)(nil),                         // 36: bcindexer.ingest.v2.SealAck
+	(*SealGenerationRequest)(nil),           // 37: bcindexer.ingest.v2.SealGenerationRequest
+	(*SealGenerationResponse)(nil),          // 38: bcindexer.ingest.v2.SealGenerationResponse
+	(*SwitchPrepared)(nil),                  // 39: bcindexer.ingest.v2.SwitchPrepared
+	(*PrepareSwitchRequest)(nil),            // 40: bcindexer.ingest.v2.PrepareSwitchRequest
+	(*PrepareSwitchResponse)(nil),           // 41: bcindexer.ingest.v2.PrepareSwitchResponse
+	(*BindingCommitAssertion)(nil),          // 42: bcindexer.ingest.v2.BindingCommitAssertion
+	(*CommitSwitchRequest)(nil),             // 43: bcindexer.ingest.v2.CommitSwitchRequest
+	(*SwitchCommitted)(nil),                 // 44: bcindexer.ingest.v2.SwitchCommitted
+	(*CommitSwitchResponse)(nil),            // 45: bcindexer.ingest.v2.CommitSwitchResponse
+	(*ResumeRequest)(nil),                   // 46: bcindexer.ingest.v2.ResumeRequest
+	(*ResumeAck)(nil),                       // 47: bcindexer.ingest.v2.ResumeAck
+	(*ResumeResponse)(nil),                  // 48: bcindexer.ingest.v2.ResumeResponse
 }
 var file_ingest_proto_depIdxs = []int32{
 	0,  // 0: bcindexer.ingest.v2.Error.code:type_name -> bcindexer.ingest.v2.ErrorCode
@@ -2317,29 +3872,79 @@ var file_ingest_proto_depIdxs = []int32{
 	6,  // 26: bcindexer.ingest.v2.FinalizePublishRequest.batch:type_name -> bcindexer.ingest.v2.BatchId
 	3,  // 27: bcindexer.ingest.v2.FinalizePublishResponse.state:type_name -> bcindexer.ingest.v2.BatchState
 	8,  // 28: bcindexer.ingest.v2.FinalizePublishResponse.error:type_name -> bcindexer.ingest.v2.Error
-	9,  // 29: bcindexer.ingest.v2.Ingest.HelloChallenge:input_type -> bcindexer.ingest.v2.HelloChallengeRequest
-	11, // 30: bcindexer.ingest.v2.Ingest.OpenSession:input_type -> bcindexer.ingest.v2.OpenSessionRequest
-	14, // 31: bcindexer.ingest.v2.Ingest.BeginPrepare:input_type -> bcindexer.ingest.v2.BeginPrepareRequest
-	16, // 32: bcindexer.ingest.v2.Ingest.PrepareChunk:input_type -> bcindexer.ingest.v2.PrepareChunkRequest
-	18, // 33: bcindexer.ingest.v2.Ingest.FinalizePrepare:input_type -> bcindexer.ingest.v2.FinalizePrepareRequest
-	21, // 34: bcindexer.ingest.v2.Ingest.BeginPublish:input_type -> bcindexer.ingest.v2.BeginPublishRequest
-	24, // 35: bcindexer.ingest.v2.Ingest.PublishChunk:input_type -> bcindexer.ingest.v2.PublishChunkRequest
-	26, // 36: bcindexer.ingest.v2.Ingest.FinalizePublish:input_type -> bcindexer.ingest.v2.FinalizePublishRequest
-	26, // 37: bcindexer.ingest.v2.Ingest.SealImport:input_type -> bcindexer.ingest.v2.FinalizePublishRequest
-	10, // 38: bcindexer.ingest.v2.Ingest.HelloChallenge:output_type -> bcindexer.ingest.v2.HelloChallengeResponse
-	12, // 39: bcindexer.ingest.v2.Ingest.OpenSession:output_type -> bcindexer.ingest.v2.OpenSessionResponse
-	15, // 40: bcindexer.ingest.v2.Ingest.BeginPrepare:output_type -> bcindexer.ingest.v2.BeginPrepareResponse
-	17, // 41: bcindexer.ingest.v2.Ingest.PrepareChunk:output_type -> bcindexer.ingest.v2.PrepareChunkResponse
-	19, // 42: bcindexer.ingest.v2.Ingest.FinalizePrepare:output_type -> bcindexer.ingest.v2.FinalizePrepareResponse
-	23, // 43: bcindexer.ingest.v2.Ingest.BeginPublish:output_type -> bcindexer.ingest.v2.BeginPublishResponse
-	25, // 44: bcindexer.ingest.v2.Ingest.PublishChunk:output_type -> bcindexer.ingest.v2.PublishChunkResponse
-	27, // 45: bcindexer.ingest.v2.Ingest.FinalizePublish:output_type -> bcindexer.ingest.v2.FinalizePublishResponse
-	27, // 46: bcindexer.ingest.v2.Ingest.SealImport:output_type -> bcindexer.ingest.v2.FinalizePublishResponse
-	38, // [38:47] is the sub-list for method output_type
-	29, // [29:38] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	6,  // 29: bcindexer.ingest.v2.IngestAck.batch:type_name -> bcindexer.ingest.v2.BatchId
+	7,  // 30: bcindexer.ingest.v2.GetBatchStateRequest.header:type_name -> bcindexer.ingest.v2.SessionHeader
+	6,  // 31: bcindexer.ingest.v2.GetBatchStateRequest.batch:type_name -> bcindexer.ingest.v2.BatchId
+	22, // 32: bcindexer.ingest.v2.GetBatchStateRequest.cursor:type_name -> bcindexer.ingest.v2.FrameCursor
+	3,  // 33: bcindexer.ingest.v2.GetBatchStateResponse.state:type_name -> bcindexer.ingest.v2.BatchState
+	28, // 34: bcindexer.ingest.v2.GetBatchStateResponse.ack:type_name -> bcindexer.ingest.v2.IngestAck
+	22, // 35: bcindexer.ingest.v2.GetBatchStateResponse.cursors:type_name -> bcindexer.ingest.v2.FrameCursor
+	22, // 36: bcindexer.ingest.v2.GetBatchStateResponse.next_cursor:type_name -> bcindexer.ingest.v2.FrameCursor
+	8,  // 37: bcindexer.ingest.v2.GetBatchStateResponse.error:type_name -> bcindexer.ingest.v2.Error
+	7,  // 38: bcindexer.ingest.v2.ReleaseRequest.header:type_name -> bcindexer.ingest.v2.SessionHeader
+	6,  // 39: bcindexer.ingest.v2.ReleaseRequest.batch:type_name -> bcindexer.ingest.v2.BatchId
+	6,  // 40: bcindexer.ingest.v2.ReleaseAck.batch:type_name -> bcindexer.ingest.v2.BatchId
+	32, // 41: bcindexer.ingest.v2.ReleaseResponse.ack:type_name -> bcindexer.ingest.v2.ReleaseAck
+	8,  // 42: bcindexer.ingest.v2.ReleaseResponse.error:type_name -> bcindexer.ingest.v2.Error
+	6,  // 43: bcindexer.ingest.v2.OutboxAssertion.batch:type_name -> bcindexer.ingest.v2.BatchId
+	7,  // 44: bcindexer.ingest.v2.RecoveryReleaseRequest.header:type_name -> bcindexer.ingest.v2.SessionHeader
+	6,  // 45: bcindexer.ingest.v2.RecoveryReleaseRequest.batch:type_name -> bcindexer.ingest.v2.BatchId
+	28, // 46: bcindexer.ingest.v2.RecoveryReleaseRequest.ingest_ack:type_name -> bcindexer.ingest.v2.IngestAck
+	34, // 47: bcindexer.ingest.v2.RecoveryReleaseRequest.assertion:type_name -> bcindexer.ingest.v2.OutboxAssertion
+	7,  // 48: bcindexer.ingest.v2.SealGenerationRequest.header:type_name -> bcindexer.ingest.v2.SessionHeader
+	36, // 49: bcindexer.ingest.v2.SealGenerationResponse.seal:type_name -> bcindexer.ingest.v2.SealAck
+	8,  // 50: bcindexer.ingest.v2.SealGenerationResponse.error:type_name -> bcindexer.ingest.v2.Error
+	7,  // 51: bcindexer.ingest.v2.PrepareSwitchRequest.header:type_name -> bcindexer.ingest.v2.SessionHeader
+	36, // 52: bcindexer.ingest.v2.PrepareSwitchRequest.old_seal:type_name -> bcindexer.ingest.v2.SealAck
+	39, // 53: bcindexer.ingest.v2.PrepareSwitchResponse.prepared:type_name -> bcindexer.ingest.v2.SwitchPrepared
+	8,  // 54: bcindexer.ingest.v2.PrepareSwitchResponse.error:type_name -> bcindexer.ingest.v2.Error
+	7,  // 55: bcindexer.ingest.v2.CommitSwitchRequest.header:type_name -> bcindexer.ingest.v2.SessionHeader
+	39, // 56: bcindexer.ingest.v2.CommitSwitchRequest.prepared:type_name -> bcindexer.ingest.v2.SwitchPrepared
+	42, // 57: bcindexer.ingest.v2.CommitSwitchRequest.assertion:type_name -> bcindexer.ingest.v2.BindingCommitAssertion
+	39, // 58: bcindexer.ingest.v2.SwitchCommitted.prepared:type_name -> bcindexer.ingest.v2.SwitchPrepared
+	44, // 59: bcindexer.ingest.v2.CommitSwitchResponse.committed:type_name -> bcindexer.ingest.v2.SwitchCommitted
+	8,  // 60: bcindexer.ingest.v2.CommitSwitchResponse.error:type_name -> bcindexer.ingest.v2.Error
+	7,  // 61: bcindexer.ingest.v2.ResumeRequest.header:type_name -> bcindexer.ingest.v2.SessionHeader
+	36, // 62: bcindexer.ingest.v2.ResumeRequest.old_seal:type_name -> bcindexer.ingest.v2.SealAck
+	47, // 63: bcindexer.ingest.v2.ResumeResponse.ack:type_name -> bcindexer.ingest.v2.ResumeAck
+	8,  // 64: bcindexer.ingest.v2.ResumeResponse.error:type_name -> bcindexer.ingest.v2.Error
+	9,  // 65: bcindexer.ingest.v2.Ingest.HelloChallenge:input_type -> bcindexer.ingest.v2.HelloChallengeRequest
+	11, // 66: bcindexer.ingest.v2.Ingest.OpenSession:input_type -> bcindexer.ingest.v2.OpenSessionRequest
+	14, // 67: bcindexer.ingest.v2.Ingest.BeginPrepare:input_type -> bcindexer.ingest.v2.BeginPrepareRequest
+	16, // 68: bcindexer.ingest.v2.Ingest.PrepareChunk:input_type -> bcindexer.ingest.v2.PrepareChunkRequest
+	18, // 69: bcindexer.ingest.v2.Ingest.FinalizePrepare:input_type -> bcindexer.ingest.v2.FinalizePrepareRequest
+	21, // 70: bcindexer.ingest.v2.Ingest.BeginPublish:input_type -> bcindexer.ingest.v2.BeginPublishRequest
+	24, // 71: bcindexer.ingest.v2.Ingest.PublishChunk:input_type -> bcindexer.ingest.v2.PublishChunkRequest
+	26, // 72: bcindexer.ingest.v2.Ingest.FinalizePublish:input_type -> bcindexer.ingest.v2.FinalizePublishRequest
+	26, // 73: bcindexer.ingest.v2.Ingest.SealImport:input_type -> bcindexer.ingest.v2.FinalizePublishRequest
+	29, // 74: bcindexer.ingest.v2.Ingest.GetBatchState:input_type -> bcindexer.ingest.v2.GetBatchStateRequest
+	31, // 75: bcindexer.ingest.v2.Ingest.Release:input_type -> bcindexer.ingest.v2.ReleaseRequest
+	35, // 76: bcindexer.ingest.v2.Ingest.RecoveryRelease:input_type -> bcindexer.ingest.v2.RecoveryReleaseRequest
+	37, // 77: bcindexer.ingest.v2.Ingest.SealGeneration:input_type -> bcindexer.ingest.v2.SealGenerationRequest
+	40, // 78: bcindexer.ingest.v2.Ingest.PrepareSwitch:input_type -> bcindexer.ingest.v2.PrepareSwitchRequest
+	43, // 79: bcindexer.ingest.v2.Ingest.CommitSwitch:input_type -> bcindexer.ingest.v2.CommitSwitchRequest
+	46, // 80: bcindexer.ingest.v2.Ingest.Resume:input_type -> bcindexer.ingest.v2.ResumeRequest
+	10, // 81: bcindexer.ingest.v2.Ingest.HelloChallenge:output_type -> bcindexer.ingest.v2.HelloChallengeResponse
+	12, // 82: bcindexer.ingest.v2.Ingest.OpenSession:output_type -> bcindexer.ingest.v2.OpenSessionResponse
+	15, // 83: bcindexer.ingest.v2.Ingest.BeginPrepare:output_type -> bcindexer.ingest.v2.BeginPrepareResponse
+	17, // 84: bcindexer.ingest.v2.Ingest.PrepareChunk:output_type -> bcindexer.ingest.v2.PrepareChunkResponse
+	19, // 85: bcindexer.ingest.v2.Ingest.FinalizePrepare:output_type -> bcindexer.ingest.v2.FinalizePrepareResponse
+	23, // 86: bcindexer.ingest.v2.Ingest.BeginPublish:output_type -> bcindexer.ingest.v2.BeginPublishResponse
+	25, // 87: bcindexer.ingest.v2.Ingest.PublishChunk:output_type -> bcindexer.ingest.v2.PublishChunkResponse
+	27, // 88: bcindexer.ingest.v2.Ingest.FinalizePublish:output_type -> bcindexer.ingest.v2.FinalizePublishResponse
+	27, // 89: bcindexer.ingest.v2.Ingest.SealImport:output_type -> bcindexer.ingest.v2.FinalizePublishResponse
+	30, // 90: bcindexer.ingest.v2.Ingest.GetBatchState:output_type -> bcindexer.ingest.v2.GetBatchStateResponse
+	33, // 91: bcindexer.ingest.v2.Ingest.Release:output_type -> bcindexer.ingest.v2.ReleaseResponse
+	33, // 92: bcindexer.ingest.v2.Ingest.RecoveryRelease:output_type -> bcindexer.ingest.v2.ReleaseResponse
+	38, // 93: bcindexer.ingest.v2.Ingest.SealGeneration:output_type -> bcindexer.ingest.v2.SealGenerationResponse
+	41, // 94: bcindexer.ingest.v2.Ingest.PrepareSwitch:output_type -> bcindexer.ingest.v2.PrepareSwitchResponse
+	45, // 95: bcindexer.ingest.v2.Ingest.CommitSwitch:output_type -> bcindexer.ingest.v2.CommitSwitchResponse
+	48, // 96: bcindexer.ingest.v2.Ingest.Resume:output_type -> bcindexer.ingest.v2.ResumeResponse
+	81, // [81:97] is the sub-list for method output_type
+	65, // [65:81] is the sub-list for method input_type
+	65, // [65:65] is the sub-list for extension type_name
+	65, // [65:65] is the sub-list for extension extendee
+	0,  // [0:65] is the sub-list for field type_name
 }
 
 func init() { file_ingest_proto_init() }
@@ -2357,7 +3962,7 @@ func file_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ingest_proto_rawDesc), len(file_ingest_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   22,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
