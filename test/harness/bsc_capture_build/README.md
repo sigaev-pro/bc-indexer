@@ -32,9 +32,10 @@ local fixtures only.
    to the upstream commit time.
 5. It writes `provenance.json` into the output directory and the same facts
    into the image labels.
-6. It runs `version` and `dumpconfig` in the new image, in owned offline
-   containers, and refuses a version or an effective config that differs
-   from the pins and the capture profile.
+6. It runs `version`, `dumpconfig` and `ldd` in the new image, in owned
+   offline containers. It refuses a version or an effective config that
+   differs from the pins and the capture profile, and a binary with a shared
+   library that the runtime image does not hold.
 
 ## Build
 
@@ -74,15 +75,15 @@ The `[Eth]` section then shows `StateScheme = "hash"`, `SyncMode = "full"`,
 `smoke` starts the image offline on a throwaway home. It takes the Chapel
 genesis from the image itself, runs the init, starts the node with a minimal
 capture config for `--seconds` after its start, stops it with SIGINT, and
-runs two controls on the same home. The image entry point is `geth`, so the
-start and the controls run their shell scripts through the `entrypoint`
-option of the owned command boundary (`native.py`). The node log names the Chapel network,
+runs two controls on the same home. The node log names the Chapel network,
 the chain configuration, full sync and the clean stop. The controls show
 the extractor hooks in the start path: the default sync mode (snap) is
 refused with `bsc.snap-sync`, and another `store_id` is refused with
 `native store identity mismatch`. A first start stays in BOOTSTRAP, so the
 log line `Extractor lifecycle is live` needs a real sync and is not part of
-the smoke.
+the smoke. The image entry point is `geth`, so the start and the controls
+run their shell scripts through the `entrypoint` option of the owned command
+boundary (`native.py`).
 
 ```sh
 python3 -I test/harness/bsc_capture_build/bsc_capture_build.py smoke \
@@ -94,6 +95,43 @@ Portable tests of the procedure run without Docker:
 ```sh
 python3 -B -m unittest discover -s test/harness/bsc_capture_build
 ```
+
+## Later variants
+
+The base build takes no variant input. Two later variants are already
+parameters of `build`; their content is not in this repository yet.
+
+An overlay on top of patches 01 to 08, for the in-node collector:
+
+- `--extra-package SOURCE=TARGET` installs a file or a directory at a new
+  path of the source tree. It never replaces a native or an installed file.
+- `--extra-patch PATH` applies a unified diff after patches 01 to 08 with the
+  same strict applier. An overlay patch can also change what the packages
+  installed.
+
+A C library that the binary links, for RocksDB 10.4.2:
+
+- `--cgo-include DIR` and `--cgo-library DIR` are absolute directories with
+  headers and with libraries. The build mounts them read-only into the
+  compiler container and passes them as `CGO_CFLAGS=-I...` and
+  `CGO_LDFLAGS=-L...`.
+- `--cgo-link FLAG` adds a linker flag, such as `-lrocksdb`.
+- `--runtime-library FILE` is a shared library the image needs in
+  `/usr/local/lib`. A statically linked library needs none.
+
+Both need `--variant NAME`. The tag becomes
+`bc-indexer/bsc-capture:1.8.2-capture-NAME`, and provenance.json and the
+labels `io.extractor.variant`, `io.extractor.overlay-*`, `io.extractor.cgo-*`
+and `io.extractor.runtime-libraries` record the inputs by digest. `ldd`
+then proves that the runtime image holds every shared library of the
+binary.
+
+What each variant still needs: the packages and patches of the collector;
+and for RocksDB, an installation prefix built from its source with the build
+dependencies of the candidate lock, the overlay that uses it, and a choice
+between static and dynamic linking. The build compiles with the accepted
+`go.mod` copy and the offline module cache (`-mod=readonly`), so a variant
+that adds a Go module needs an extended module input first.
 
 ## Run on Chapel for capture
 
@@ -108,8 +146,12 @@ and the genesis file; both are bind-mounted at the paths of
 `/config`).
 
 ```sh
-docker run --rm bc-indexer/bsc-capture:1.8.2-capture --chapel dumpgenesis > "$CONFIG/genesis.json"
+mkdir -p "$CONFIG/bootstrap/bsc"
+docker run --rm bc-indexer/bsc-capture:1.8.2-capture --chapel dumpgenesis \
+  > "$CONFIG/bootstrap/bsc/genesis.json"
 ```
+
+Save this as `$CONFIG/extractor-bsc.json`:
 
 ```json
 {
@@ -121,9 +163,9 @@ docker run --rm bc-indexer/bsc-capture:1.8.2-capture --chapel dumpgenesis > "$CO
 }
 ```
 
-Save the JSON as `$CONFIG/extractor-bsc.json`. Init once, with the explicit
-hash scheme: an empty BSC store selects the path scheme, which the capture
-profile refuses.
+Init once, with the explicit hash scheme: an empty BSC store selects the
+path scheme, which the capture profile refuses, and a later
+`--state.scheme hash` does not convert it (`incompatible state scheme`).
 
 ```sh
 docker run --rm \
@@ -146,15 +188,50 @@ docker run -d --name bsc-capture-chapel \
 
 The profile is `--state.scheme hash --gcmode full` and, for BSC, no
 `--pruneancient` and no nonzero `--history.blocks` (`adapters/README.md`).
-The profile requires full sync: snap sync is refused. `CheckProfile` in
-`adapters/bsc/lifecycle/native/go/node.go` returns an error for every sync
-mode but full (`bsc.snap-sync`), and `adapters/bsc/lifecycle/native/README.md`
-lists `bsc.snap-sync` as a refused caller. BSC selects snap sync by default,
-so `--syncmode full` is mandatory on a capture node; without it the node
-stops with `Failed to register the Ethereum service`.
+The node needs its peers to sync: allow or publish the P2P port of
+NETWORK_PORTS (30311 for `bsc-node`) where the host rules permit it; the
+command above publishes none. A first start runs BOOTSTRAP: it imports
+natively and uncaptured until the initial sync ends, then logs
+`Extractor lifecycle is live` and captures from that boundary. Keep
+`store_id`, `producer_id`, `run_id` and the genesis with the home: another
+binding is a foreign store.
 
-A first start runs BOOTSTRAP: it imports natively and uncaptured until the
-initial sync ends, then logs `Extractor lifecycle is live` and captures from
-that boundary. Keep `store_id`, `producer_id`, `run_id` and the genesis with
-the home: another binding is a foreign store, and the store keeps its
-identity.
+## Full sync, and a data directory of a vanilla node
+
+`.project/docs/DEPLOYMENT_BOOTSTRAP_CONTRACT.md` lists
+`--state.scheme hash --gcmode full` for Geth and BSC; `syncmode="full"`
+stands there for Bor. The BSC capture node is stricter than that line:
+BSC selects snap sync by default, and the capture node refuses it.
+
+- `CheckProfile` in `adapters/bsc/lifecycle/native/go/node.go` returns
+  `sync mode snap (bsc.snap-sync)` for every sync mode but full, before the
+  store is opened. Without `--syncmode full` a capture node stops with
+  `Failed to register the Ethereum service`.
+- The reason is patch 08: it refuses the writers a snap sync needs
+  (`SnapSyncStart`, `SnapSyncComplete`, `InsertReceiptChain`,
+  `InsertHeaderChain`, `InsertHeadersBeforeCutoff` in `core/blockchain.go`)
+  as the caller `bsc.snap-sync`, in every phase of the gate
+  (`Gate.Enter` in `adapters/bsc/lifecycle/lifecycle.go` returns `ErrRefused`
+  for a refused caller without looking at the phase).
+
+The rule is about the start configuration, not about the history of the data
+directory. Nothing in the capture path needs a locally executed history:
+
+- A first start is BOOTSTRAP. Its passes do not observe (`Pass.Observe`), so
+  imports run natively and uncaptured.
+- The recovery drivers (`recover` in
+  `adapters/bsc/lifecycle/native/go/recover.go` and `Hook.Recover` in
+  `adapters/bsc/decision/native/go/recover.go`) read extractor records only.
+  A directory of a vanilla node has none.
+- H is the native head when `eth.Synced()` turns true; `GoLive` flushes that
+  head's state root and writes the view.
+
+So the capture node can open a directory that a vanilla node snap-synced,
+with `--syncmode full`, when that directory holds the same genesis, the hash
+state scheme and no pruned block data. The node runs a full sync of the
+remaining gap uncaptured and goes live at the tip. Blocks before H are
+never captured, whichever way the directory was synced.
+
+This follows from the code. The capture node was not run on a directory
+that a snap sync produced, and no directory of another node was opened.
+Reuse a directory with one writer only: stop the vanilla node first.

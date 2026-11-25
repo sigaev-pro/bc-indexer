@@ -723,6 +723,20 @@ Once the new output exists, the record (`preparation.json` or
 write; a refusal before that leaves no output. Portable tests in
 `test_capture_probe.py` replace Docker at the `Native` boundary.
 
+## Capture-enabled BSC client image
+
+`build` in `test/harness/bsc_capture_build/bsc_capture_build.py` packages
+the first capture-enabled BSC client: the accepted BSC source with patches
+01 to 08, applied through the lifecycle block install path, compiled in the
+pinned compiler image and packed on the pinned runtime image as
+`bc-indexer/bsc-capture:1.8.2-capture`. `smoke` starts the image offline with
+a minimal `EXTRACTOR_BSC_CONFIG` and runs the refusal controls that show the
+extractor hooks in the start path. The commands, the Chapel capture run, the
+variant parameters and the limits are in
+`test/harness/bsc_capture_build/README.md`. The candidate lock keeps
+`patched-native-images` PENDING_IMPLEMENTATION: the image is not an accepted
+output of E01-01.builds and gives no public-profile credit.
+
 ## Evidence figures and mutation checks
 
 `evidence_summary.py RUN_DIR` reads one retained run (`image-fence.json`,
