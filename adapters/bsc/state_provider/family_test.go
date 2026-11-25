@@ -6,8 +6,10 @@ package stateprovider
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"os"
@@ -15,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/parlia"
@@ -25,8 +28,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/pathdb"
@@ -92,6 +97,59 @@ func newMemoryStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Head
 
 func newPathTrieDB(_ ethdb.Database) *triedb.Database {
 	return triedb.NewDatabase(rawdb.NewMemoryDatabase(), &triedb.Config{PathDB: pathdb.Defaults})
+}
+
+// newPathStore is newMemoryStore on a path store: the fixture genesis
+// committed through the path trie database. The native path store writes the
+// genesis state to the key-value store in the background, so it waits until
+// the store carries it; only then does the native reader name the scheme.
+func newPathStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Header) {
+	t.Helper()
+	db := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(db, &triedb.Config{PathDB: pathdb.Defaults})
+	block, err := familyGenesis(t).Commit(db, tdb, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { tdb.Close(); db.Close() })
+	for deadline := time.Now().Add(10 * time.Second); rawdb.ReadStateScheme(db) != rawdb.PathScheme; {
+		if time.Now().After(deadline) {
+			t.Fatal("the path store did not write its genesis state")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return db, tdb, block.Header()
+}
+
+// tailDB is a native database with a synthetic ancient tail.
+type tailDB struct {
+	ethdb.Database
+	tail uint64
+	err  error
+}
+
+func (db tailDB) Tail() (uint64, error) { return db.tail, db.err }
+
+// withTail returns db with the given tail of its ancient store, or the error
+// that reading the tail returns.
+func withTail(db ethdb.Database, tail uint64, err error) ethdb.Database {
+	return tailDB{Database: db, tail: tail, err: err}
+}
+
+// legacyOffsetKey is the key-value key that holds the offset of the prune-block
+// and pruneancient options (the native schema keeps it unexported). A client
+// without such an option has none.
+func legacyOffsetKey() []byte { return []byte("offSetOfCurrentAncientFreezer") }
+
+// openChainData opens only the key-value part of a home, without the native
+// freezer: nothing moves to the ancient store while it is open.
+func openChainData(t testing.TB, instanceDir string) ethdb.Database {
+	t.Helper()
+	kv, err := pebble.New(filepath.Join(instanceDir, "chaindata"), 64, 64, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rawdb.NewDatabase(kv)
 }
 
 // commitSideState writes a side-branch child of parent into the trie cache
@@ -253,7 +311,13 @@ func dumpCase(name, reason string, args, env []string, config string, reflect fu
 	}}
 }
 
-const baseConfig = "[Eth]\nStateScheme = \"hash\"\nNoPruning = false\n"
+const (
+	baseConfig   = "[Eth]\nStateScheme = \"hash\"\nNoPruning = false\n"
+	pathConfig   = "[Eth]\nStateScheme = \"path\"\nNoPruning = false\n"
+	floorText    = "keeps fewer than 600000 blocks"
+	snapshotArgs = "--syncmode=full --history.transactions=600000 --history.blocks=600000 " +
+		"--history.logs=600000 --tries-verify-mode=local"
+)
 
 var baseArgs = []string{"--state.scheme=hash", "--gcmode=full"}
 
@@ -261,70 +325,147 @@ func profileCases(t testing.TB) []profileCase {
 	history := func(value uint64) func(*ethconfigView) bool {
 		return func(view *ethconfigView) bool { return view.TransactionHistory == value }
 	}
+	scheme := func(want string) func(*ethconfigView) bool {
+		return func(view *ethconfigView) bool { return view.StateScheme == want }
+	}
+	blocks := func(want uint64) func(*ethconfigView) bool {
+		return func(view *ethconfigView) bool { return view.BlockHistory == want }
+	}
+	states := func(want uint64) func(*ethconfigView) bool {
+		return func(view *ethconfigView) bool { return view.StateHistory == want }
+	}
 	return []profileCase{
+		// The hash profile of E01 and the values that stay as the operator
+		// set them.
 		dumpCase("baseline_flags", "", baseArgs, nil, "", nil),
 		dumpCase("allowed_native_args", "", append(baseArgs, "--history.transactions=12345"), nil, "", history(12345)),
 		dumpCase("allowed_environment", "", baseArgs, []string{"GETH_HISTORY_TRANSACTIONS=23456"}, "", history(23456)),
 		dumpCase("allowed_config", "", nil, nil, baseConfig+"TransactionHistory = 34567\n", history(34567)),
-		dumpCase("wrong_hash_profile_default", `state scheme ""`, nil, nil, "", nil),
-		dumpCase("wrong_hash_profile_flag", `state scheme "path"`, []string{"--state.scheme=path"}, nil, "", nil),
-		dumpCase("wrong_hash_profile_environment", `state scheme "path"`, nil, []string{"GETH_STATE_SCHEME=path"}, "", nil),
-		dumpCase("wrong_hash_profile_config", `state scheme "path"`, nil, nil, "[Eth]\nStateScheme = \"path\"\n", nil),
-		dumpCase("environment_over_config_cannot_bypass", "incompatible state scheme", nil, []string{"GETH_STATE_SCHEME=path"}, baseConfig, nil),
+		// The fast-node profile of D108: the flags of the official pruned
+		// snapshot pass no state scheme, and the store keeps its own.
+		dumpCase("fastnode_snapshot_flags", "", []string{snapshotArgs}, nil, "", fastnodeSnapshot),
+		dumpCase("fastnode_default_scheme", "", []string{"--syncmode=full"}, nil, "", scheme("")),
+		dumpCase("path_profile_flag", "", []string{"--state.scheme=path", "--gcmode=full"}, nil, "", scheme("path")),
+		dumpCase("path_profile_environment", "", []string{"--gcmode=full"}, []string{"GETH_STATE_SCHEME=path"}, "",
+			scheme("path")),
+		dumpCase("path_profile_config", "", nil, nil, pathConfig, scheme("path")),
+		// Block data of the last N blocks is the fast-node retention. The
+		// flag parser raises a shorter history to N, and the node turns the
+		// deprecated pruneancient option into N.
+		dumpCase("allowed_block_history_flag", "", append(baseArgs, "--history.blocks=90000"), nil, "", blocks(600000)),
+		dumpCase("allowed_block_history_environment", "", baseArgs, []string{"GETH_HISTORY_BLOCKS=90000"}, "",
+			blocks(600000)),
+		dumpCase("allowed_pruneancient_flag", "", append(baseArgs, "--pruneancient"), nil, "", pruneAncient),
+		// The state history matters under the path scheme only.
+		dumpCase("allowed_state_history_flag", "", []string{"--state.scheme=path", "--gcmode=full", "--history.state=600000"},
+			nil, "", states(600000)),
+		dumpCase("allowed_state_history_entire_chain", "", []string{"--state.scheme=path", "--gcmode=full", "--history.state=0"},
+			nil, "", states(0)),
+		dumpCase("allowed_state_history_under_hash", "", []string{"--state.scheme=hash", "--gcmode=full", "--history.state=599999"},
+			nil, "", states(599999)),
+		// A source cannot override another.
+		dumpCase("environment_over_config_cannot_bypass", "incompatible state scheme", nil, []string{"GETH_STATE_SCHEME=path"},
+			baseConfig, nil),
 		dumpCase("flag_over_config_cannot_bypass", "gcmode archive", []string{"--gcmode=archive"}, nil, baseConfig, nil),
-		dumpCase("wrong_gc_profile_archive_flag", "gcmode archive", []string{"--state.scheme=hash", "--gcmode=archive"}, nil, "", nil),
-		dumpCase("wrong_gc_profile_archive_environment", "gcmode archive", []string{"--state.scheme=hash"}, []string{"GETH_GCMODE=archive"}, "", nil),
-		dumpCase("wrong_gc_profile_archive_config", "gcmode archive", nil, nil, "[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", nil),
-		dumpCase("forbidden_pruning_ancient_flag", "pruneancient deletes block data", append(baseArgs, "--pruneancient"), nil, "", nil),
-		dumpCase("forbidden_pruning_block_history_flag", "history.blocks", append(baseArgs, "--history.blocks=90000"), nil, "", nil),
-		dumpCase("forbidden_pruning_block_history_environment", "history.blocks", baseArgs, []string{"GETH_HISTORY_BLOCKS=90000"}, "", nil),
-		dumpCase("forbidden_pruning_block_history_config", "history.blocks", nil, nil, baseConfig+"BlockHistory = 90000\n", nil),
+		// The refusals of the profile.
+		dumpCase("wrong_gc_profile_archive_flag", "gcmode archive", []string{"--state.scheme=hash", "--gcmode=archive"}, nil,
+			"", nil),
+		dumpCase("wrong_gc_profile_archive_environment", "gcmode archive", []string{"--state.scheme=hash"},
+			[]string{"GETH_GCMODE=archive"}, "", nil),
+		dumpCase("wrong_gc_profile_archive_config", "gcmode archive", nil, nil,
+			"[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", nil),
+		// A config file bypasses the clamp of the flag parser.
+		dumpCase("forbidden_block_history_config", "capture constraints: history.blocks 1000", nil, nil,
+			baseConfig+"BlockHistory = 1000\n", nil),
+		dumpCase("forbidden_tries_none_flag", "capture constraints: tries-verify-mode", []string{"--tries-verify-mode=none"},
+			nil, "", nil),
+		dumpCase("forbidden_tries_none_config", "capture constraints: tries-verify-mode", nil, nil,
+			baseConfig+"TriesVerifyMode = \"none\"\n", nil),
+		dumpCase("forbidden_state_history_flag", "capture constraints: history.state 599999",
+			[]string{"--state.scheme=path", "--gcmode=full", "--history.state=599999"}, nil, "", nil),
+		dumpCase("forbidden_state_history_config", "capture constraints: history.state 599999", nil, nil,
+			pathConfig+"StateHistory = 599999\n", nil),
+		dumpCase("forbidden_scheme_config", "capture constraints: state scheme", nil, nil,
+			"[Eth]\nStateScheme = \"bin\"\nNoPruning = false\n", nil),
 	}
+}
+
+// fastnodeSnapshot is the effective config of the flags of the official
+// pruned snapshot: no state scheme, N blocks of block and state history, and
+// tries verified locally.
+func fastnodeSnapshot(view *ethconfigView) bool {
+	return view.StateScheme == "" && !view.NoPruning && view.BlockHistory == retentionFloor &&
+		view.StateHistory == retentionFloor && view.TriesVerifyMode == "local" && !view.PruneAncientData &&
+		view.TransactionHistory == 600000 && view.LogHistory == 600000
+}
+
+// pruneAncient is the effective config of the deprecated pruneancient option:
+// the node turns it into a block history of N.
+func pruneAncient(view *ethconfigView) bool {
+	return view.PruneAncientData && view.BlockHistory == retentionFloor
 }
 
 // ethconfigView is the reported subset of the effective native config.
 type ethconfigView struct {
 	StateScheme        string `json:"state_scheme"`
 	NoPruning          bool   `json:"no_pruning"`
+	PruneAncientData   bool   `json:"prune_ancient_data"`
+	BlockHistory       uint64 `json:"block_history"`
+	StateHistory       uint64 `json:"state_history"`
+	TriesVerifyMode    string `json:"tries_verify_mode"`
 	TransactionHistory uint64 `json:"transaction_history"`
+	LogHistory         uint64 `json:"log_history"`
 }
 
-func viewOf(cfg interface{}) ethconfigView {
-	data, _ := json.Marshal(cfg)
-	var view struct {
-		StateScheme        string
-		NoPruning          bool
-		TransactionHistory uint64
-	}
-	_ = json.Unmarshal(data, &view)
-	return ethconfigView{StateScheme: view.StateScheme, NoPruning: view.NoPruning, TransactionHistory: view.TransactionHistory}
+func viewOf(cfg *ethconfig.Config) ethconfigView {
+	return ethconfigView{StateScheme: cfg.StateScheme, NoPruning: cfg.NoPruning,
+		PruneAncientData: cfg.PruneAncientData, BlockHistory: cfg.BlockHistory, StateHistory: cfg.StateHistory,
+		TriesVerifyMode: cfg.TriesVerifyMode.String(), TransactionHistory: cfg.TransactionHistory,
+		LogHistory: cfg.LogHistory}
 }
 
 func TestUnitCheckProfileFields(t *testing.T) {
-	base := `[Eth]
-StateScheme = "hash"
-NoPruning = false
-`
-	cfg, err := DecodeEffectiveConfig([]byte(base))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := CheckProfile(cfg); err != nil {
-		t.Fatal(err)
-	}
-	for _, body := range []string{
-		strings.Replace(base, `"hash"`, `"path"`, 1),
-		strings.Replace(base, `"hash"`, `""`, 1),
-		strings.Replace(base, "false", "true", 1),
-		base + "PruneAncientData = true\n",
-		base + "BlockHistory = 1\n",
-	} {
+	decode := func(body string) *ethconfig.Config {
 		cfg, err := DecodeEffectiveConfig([]byte(body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := CheckProfile(cfg); !errors.Is(err, ErrProfile) {
-			t.Fatalf("%q accepted: %v", body, err)
+		return cfg
+	}
+	base := "[Eth]\nStateScheme = \"hash\"\nNoPruning = false\n"
+	for name, body := range map[string]string{
+		"hash":                                         base,
+		"no scheme (the flags of the snapshot)":        "[Eth]\nNoPruning = false\n",
+		"path":                                         pathConfig,
+		"block history N":                              base + "BlockHistory = 600000\n",
+		"block history of the entire chain":            base + "BlockHistory = 0\n",
+		"pruneancient with a block history N":          base + "PruneAncientData = true\nBlockHistory = 600000\n",
+		"state history below N under hash":             base + "StateHistory = 599999\n",
+		"state history N under path":                   pathConfig + "StateHistory = 600000\n",
+		"state history of the entire chain under path": pathConfig + "StateHistory = 0\n",
+		"tries local":                                  base + "TriesVerifyMode = \"local\"\n",
+		"search indexes and chain history off or short": base +
+			"TransactionHistory = 1\nLogHistory = 1\nLogNoHistory = true\nTrienodeHistory = 0\n" +
+			"HistoryMode = \"postmerge\"\n",
+	} {
+		profile, err := CheckProfile(decode(body))
+		if err != nil || profile.GCMode != "full" {
+			t.Fatalf("%s: %v (profile %v)", name, err, profile)
+		}
+	}
+	for name, c := range map[string]struct{ body, reason string }{
+		"archive":               {"[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", "gcmode archive"},
+		"block history below N": {base + "BlockHistory = 599999\n", "history.blocks 599999 " + floorText},
+		// The deprecated option does not excuse a shorter history.
+		"pruneancient with a block history below N": {base + "PruneAncientData = true\nBlockHistory = 1000\n",
+			"history.blocks 1000 " + floorText},
+		"state history below N under path": {pathConfig + "StateHistory = 599999\n", "history.state 599999 " + floorText},
+		"tries none":                       {base + "TriesVerifyMode = \"none\"\n", "tries-verify-mode \"none\""},
+		"unknown scheme":                   {"[Eth]\nStateScheme = \"bin\"\nNoPruning = false\n", `state scheme "bin"`},
+	} {
+		_, err := CheckProfile(decode(c.body))
+		if !errors.Is(err, ErrProfile) || !strings.Contains(err.Error(), c.reason) {
+			t.Fatalf("%s: %v, want %q", name, err, c.reason)
 		}
 	}
 	if _, err := DecodeEffectiveConfig([]byte("[Eth]\nUnknownField = 1\n")); err == nil {
@@ -333,28 +474,211 @@ NoPruning = false
 	if _, err := CheckProfile(nil); err == nil {
 		t.Fatal("missing config accepted")
 	}
+	// The profile records the values that the rules read.
+	profile, err := CheckProfile(decode(base + "PruneAncientData = true\nBlockHistory = 600000\nStateHistory = 599999\n" +
+		"TriesVerifyMode = \"local\"\nTransactionHistory = 1\nLogHistory = 2\nHistoryMode = \"postmerge\"\n"))
+	want := EffectiveProfile{StateScheme: rawdb.HashScheme, GCMode: "full", PruneAncientData: true, BlockHistory: 600000,
+		StateHistory: 599999, TriesVerifyMode: "local", HistoryMode: "postmerge", TransactionHistory: 1, LogHistory: 2}
+	if err != nil || profile != want {
+		t.Fatalf("profile %v %v, want %v", profile, err, want)
+	}
 }
 
-// TestNativeLegacyPruneOffset covers the BSC prune-block marker: native Open
-// would rewrite the freezer metadata, so preflight rejects the home first and
-// leaves it unchanged. The marker is written by the test, not by a real
-// prune-block run.
+// TestUnitStoreProfile covers the rules that need the scheme of the opened
+// store: the flags of the official pruned snapshot name no scheme, and the
+// state history floor holds under the scheme the store has.
+func TestUnitStoreProfile(t *testing.T) {
+	decode := func(body string) *ethconfig.Config {
+		cfg, err := DecodeEffectiveConfig([]byte(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	short := decode("[Eth]\nNoPruning = false\nStateHistory = 599999\n")
+	profile, err := CheckProfile(short)
+	if err != nil || profile.StateScheme != "" {
+		t.Fatalf("config without a scheme %v %v", profile, err)
+	}
+	if profile, err = CheckStoreProfile(short, rawdb.HashScheme); err != nil || profile.StateScheme != rawdb.HashScheme ||
+		profile.StateHistory != 599999 {
+		t.Fatalf("hash store %v %v", profile, err)
+	}
+	if _, err = CheckStoreProfile(short, rawdb.PathScheme); !errors.Is(err, ErrProfile) ||
+		!strings.Contains(err.Error(), "history.state 599999") {
+		t.Fatalf("path store with a short state history %v", err)
+	}
+	full := decode("[Eth]\nNoPruning = false\nStateHistory = 600000\n")
+	if profile, err = CheckStoreProfile(full, rawdb.PathScheme); err != nil || profile.StateScheme != rawdb.PathScheme {
+		t.Fatalf("path store %v %v", profile, err)
+	}
+	for _, scheme := range []string{"bin", ""} {
+		if _, err = CheckStoreProfile(full, scheme); !errors.Is(err, ErrProfile) ||
+			!strings.Contains(err.Error(), "state scheme") {
+			t.Fatalf("store of scheme %q %v", scheme, err)
+		}
+	}
+	named := decode(pathConfig + "StateHistory = 600000\n")
+	if _, err = CheckStoreProfile(named, rawdb.HashScheme); !errors.Is(err, ErrProfile) ||
+		!strings.Contains(err.Error(), "is not the") {
+		t.Fatalf("hash store under a path config %v", err)
+	}
+	if _, err = CheckStoreProfile(nil, rawdb.HashScheme); err == nil {
+		t.Fatal("missing config accepted")
+	}
+}
+
+// TestUnitFloorIsNative pins N to the values of the pinned client: the floor
+// is the immutability threshold and the default state history.
+func TestUnitFloorIsNative(t *testing.T) {
+	if retentionFloor != params.FullImmutabilityThreshold || retentionFloor != pathdb.Defaults.StateHistory ||
+		retentionFloor != ethconfig.Defaults.StateHistory {
+		t.Fatalf("retention floor %d is not the native immutability threshold %d or the default state history %d",
+			retentionFloor, params.FullImmutabilityThreshold, ethconfig.Defaults.StateHistory)
+	}
+}
+
+// TestNativeLegacyPruneOffset covers the offset that the prune-block and
+// pruneancient options of an older BSC client leave behind. Native Open would
+// rewrite it, so preflight opens the store without its ancient part, measures
+// the offset as the oldest block and refuses a home that keeps fewer than N
+// blocks behind its head; the home is left unchanged. The offset is written by
+// the test, not by a real prune-block run.
 func TestNativeLegacyPruneOffset(t *testing.T) {
 	genesis := familyGenesis(t)
 	dir := workDir(t, "legacy-offset")
 	initStore(t, dir, genesis, false)
-	db, closeDB := openStore(t, dir)
-	if err := db.Put([]byte("offSetOfCurrentAncientFreezer"), big.NewInt(5).Bytes()); err != nil {
-		t.Fatal(err)
-	}
-	closeDB()
 	unbound := StoreIdentity{ChainID: genesis.Config.ChainID.String(), GenesisHash: genesis.ToBlock().Hash(),
 		StateScheme: rawdb.HashScheme}
-	before := inventory(t, dir)
-	_, err := Preflight(dir, unbound)
-	if !sameInventory(before, inventory(t, dir)) {
-		t.Fatal("preflight changed the home")
+	results := map[string]any{}
+	for _, item := range []struct {
+		name   string
+		offset uint64
+		head   uint64
+		refuse bool
+	}{
+		{"offset on a genesis-only home", 5, 0, true},
+		{"offset N blocks behind the head", 3, retentionFloor + 3, false},
+		{"offset N-1 blocks behind the head", 3, retentionFloor + 2, true},
+	} {
+		db := openChainData(t, dir)
+		first := rawdb.ReadHeader(db, genesis.ToBlock().Hash(), 0)
+		if item.head == 0 {
+			rawdb.WriteHeadHeaderHash(db, genesis.ToBlock().Hash())
+		} else {
+			setHead(t, db, first, item.head)
+		}
+		if err := db.Put(legacyOffsetKey(), new(big.Int).SetUint64(item.offset).Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		db.Close()
+		before := inventory(t, dir)
+		report, err := Preflight(dir, unbound)
+		if !sameInventory(before, inventory(t, dir)) {
+			t.Fatalf("%s: preflight changed the home", item.name)
+		}
+		if item.refuse {
+			if !errors.Is(err, ErrForbiddenPruning) {
+				t.Fatalf("%s: error %v, want the retention floor", item.name, err)
+			}
+			results[item.name] = err.Error()
+			continue
+		}
+		if err != nil || report.Coverage != (Coverage{Oldest: item.offset, Head: item.head, Floor: retentionFloor}) {
+			t.Fatalf("%s: %v %v", item.name, report.Coverage, err)
+		}
+		results[item.name] = "<nil>"
 	}
-	mustErr(t, err, ErrForbiddenPruning)
-	record(t, "legacy_offset", err.Error())
+	if refused, ok := results["offset on a genesis-only home"].(string); !ok ||
+		!strings.HasPrefix(refused, "forbidden pruning profile") {
+		t.Fatalf("the offset on a genesis-only home was not refused: %v", results)
+	}
+	record(t, "legacy_offset", results["offset on a genesis-only home"])
+	record(t, "legacy_offset_at_floor", results)
+}
+
+// TestNativeRetentionFloor covers the floor N of D108 on a home whose ancient
+// store a `--history.blocks` run pruned: the native freezer moved its tail. A
+// home that keeps N blocks behind its head passes; one that keeps fewer is
+// refused and left byte for byte unchanged. The head above the stored headers
+// is written by the test; it is not a consensus-valid chain.
+func TestNativeRetentionFloor(t *testing.T) {
+	genesis := familyGenesis(t)
+	dir := workDir(t, "pruned-home")
+	initStore(t, dir, genesis, false)
+	unbound := StoreIdentity{ChainID: genesis.Config.ChainID.String(), GenesisHash: genesis.ToBlock().Hash(),
+		StateScheme: rawdb.HashScheme}
+	const stored = 4
+	// The ancient store held headers 0 to 3 and was pruned from its start;
+	// the key-value store continues at 4. The head is still the genesis, so
+	// the native freezer of the open store does not move anything.
+	func() {
+		db, closeDB := openStore(t, dir)
+		defer closeDB()
+		first := rawdb.ReadHeader(db, genesis.ToBlock().Hash(), 0)
+		headers := []*types.Header{first}
+		for number := uint64(1); number <= stored; number++ {
+			header := types.CopyHeader(first)
+			header.Number = new(big.Int).SetUint64(number)
+			headers = append(headers, header)
+			if number == stored {
+				rawdb.WriteHeader(db, header)
+				rawdb.WriteCanonicalHash(db, header.Hash(), number)
+			}
+		}
+		if _, err := rawdb.WriteAncientHeaderChain(db, headers[:stored], big.NewInt(0)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.TruncateTail(stored); err != nil {
+			t.Fatalf("prune the ancient store: %v", err)
+		}
+	}()
+	// The head stands N blocks above the tail of the ancient store, or one
+	// block less.
+	results := map[string]any{}
+	for _, item := range []struct {
+		name   string
+		head   uint64 // above N
+		refuse bool
+	}{
+		{"ancient tail N blocks behind the head", stored, false},
+		{"ancient tail N-1 blocks behind the head", stored - 1, true},
+	} {
+		kv := openChainData(t, dir)
+		setHead(t, kv, rawdb.ReadHeader(kv, genesis.ToBlock().Hash(), 0), retentionFloor+item.head)
+		kv.Close()
+		before := inventory(t, dir)
+		report, err := Preflight(dir, unbound)
+		if !sameInventory(before, inventory(t, dir)) {
+			t.Fatalf("%s: preflight changed the home", item.name)
+		}
+		if item.refuse {
+			if !errors.Is(err, ErrForbiddenPruning) {
+				t.Fatalf("%s: error %v, want the retention floor", item.name, err)
+			}
+			results[item.name] = err.Error()
+			continue
+		}
+		if err != nil || report.Coverage != (Coverage{Oldest: stored, Head: retentionFloor + item.head,
+			Floor: retentionFloor}) {
+			t.Fatalf("%s: %v %v", item.name, report.Coverage, err)
+		}
+		results[item.name] = report.Coverage
+	}
+	record(t, "ancient_tail", results)
+}
+
+// TestUnitStateProfiles pins the state profile strings of this client. A
+// string binds the profile to every store of its scheme (D108): a changed
+// string refuses every bound store, so it changes only with a decision.
+func TestUnitStateProfiles(t *testing.T) {
+	want := map[string]string{rawdb.HashScheme: "state.scheme=hash;gcmode=full;snapshots=off", rawdb.PathScheme: "state.scheme=path;gcmode=full;history.blocks>=600000;history.state>=600000;tries=local"}
+	for scheme, profile := range want {
+		if stateProfile(scheme) != profile || profileOf(scheme) != fmt.Sprintf("%x", sha256.Sum256([]byte(profile))) {
+			t.Fatalf("state profile of the %s scheme is %q, want %q", scheme, stateProfile(scheme), profile)
+		}
+	}
+	if stateProfile("") != "" || stateProfile("bin") != "" {
+		t.Fatal("a scheme without a state profile has one")
+	}
 }
