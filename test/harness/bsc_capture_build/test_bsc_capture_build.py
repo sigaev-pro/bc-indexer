@@ -320,7 +320,9 @@ class StartTest(unittest.TestCase):
                          f"timeout -s INT {build.CONTROL_SECONDS} geth --chapel > /work/control.out 2>&1; "
                          "echo $? > /work/control.exit")
         # The start records whether the node was alive when its time was over.
-        self.assertIn(build.RUNNING, script.splitlines()[0])
+        self.assertEqual(script.splitlines()[0], build.RUNNING)
+        self.assertIn('{ read -r _ _ state _ < /proc/$1/stat; } 2>/dev/null && [ "$state" != Z ]', build.RUNNING)
+        self.assertNotIn("kill -0", build.RUNNING)
         self.assertIn('if running "$pid"; then sleep 20; fi', script)
         self.assertIn('alive=$(running "$pid" && echo 1 || echo 0)', script)
         self.assertIn('if [ "$alive" = 1 ]; then kill -INT "$pid"; fi', script)

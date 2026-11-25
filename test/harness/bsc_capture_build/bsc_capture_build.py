@@ -515,8 +515,9 @@ def build_arguments(commit):
 
 # running tells a live process from one that has exited and waits to be reaped:
 # kill -0 succeeds for both, and a node that stopped by itself is reaped only by
-# the final wait.
-RUNNING = 'running() { read -r _ _ state _ < /proc/$1/stat 2>/dev/null && [ "$state" != Z ]; }'
+# the final wait. The redirection error of a missing process goes to the group,
+# so it does not reach the log of the command.
+RUNNING = 'running() { { read -r _ _ state _ < /proc/$1/stat; } 2>/dev/null && [ "$state" != Z ]; }'
 
 
 def start_script(arguments, output, seconds=None):
