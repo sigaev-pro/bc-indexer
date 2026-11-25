@@ -257,6 +257,11 @@ func TestRecoveryReleaseAdvancesExactlyNextSequence(t *testing.T) {
 	if _, err := j.RecoveryRelease(id, ack, foreign); !errors.Is(err, ErrIdentityMismatch) {
 		t.Fatalf("assertion with another plan: got %v, want ErrIdentityMismatch", err)
 	}
+	foreign = assertion
+	foreign.BindingDigest = sha256.Sum256([]byte("another binding in the assertion"))
+	if _, err := j.RecoveryRelease(id, ack, foreign); !errors.Is(err, ErrIdentityMismatch) {
+		t.Fatalf("assertion with another binding than the ack: got %v, want ErrIdentityMismatch", err)
+	}
 	zero := ack
 	zero.IssuerEpoch = [16]byte{}
 	if _, err := j.RecoveryRelease(id, zero, assertion); !errors.Is(err, ErrIdentityMismatch) {
@@ -416,6 +421,16 @@ func TestSealGenerationBindsWholeIntent(t *testing.T) {
 	changed.Highwater = 2
 	if _, err := j.SealGeneration(run, changed); !errors.Is(err, ErrImmutableConflict) {
 		t.Fatalf("same drain with another highwater: got %v, want ErrImmutableConflict", err)
+	}
+	changed = intent
+	changed.BindingGeneration = 4
+	if _, err := j.SealGeneration(run, changed); !errors.Is(err, ErrImmutableConflict) {
+		t.Fatalf("same drain with another binding generation: got %v, want ErrImmutableConflict", err)
+	}
+	changed = intent
+	changed.AdmissionGeneration = 2
+	if _, err := j.SealGeneration(run, changed); !errors.Is(err, ErrImmutableConflict) {
+		t.Fatalf("same drain with another admission generation: got %v, want ErrImmutableConflict", err)
 	}
 	changed = intent
 	changed.DrainID = [16]byte{8}
@@ -623,7 +638,7 @@ func TestCommitSwitchActivatesNewBinding(t *testing.T) {
 	if cur, ok := again.ActiveBinding(); !ok || cur != desired || again.BindingDigest() != desired.DescriptorDigest {
 		t.Fatalf("active binding after reopen: %+v %v, want %+v", cur, ok, desired)
 	}
-	if cur, ok, err := again.CurrentSwitch(); err != nil || !ok || cur.Phase != SwitchCommittedPhase || cur.SwitchPrepared != prepared {
+	if cur, ok := again.CurrentSwitch(); !ok || cur.Phase != SwitchCommittedPhase || cur.SwitchPrepared != prepared {
 		t.Fatalf("switch after reopen: %+v %v %v", cur, ok, err)
 	}
 	// A later batch is bound to the new binding.
@@ -667,6 +682,12 @@ func TestResumeOpensExactlyNextAdmissionGeneration(t *testing.T) {
 	if _, err := j.Resume(run, other); !errors.Is(err, ErrBindingMismatch) {
 		t.Fatalf("resume under another binding: got %v, want ErrBindingMismatch", err)
 	}
+	// A zero next generation is no generation.
+	other = intent
+	other.NextAdmissionGeneration = 0
+	if _, err := j.Resume(run, other); !errors.Is(err, ErrInvalidIntent) {
+		t.Fatalf("resume at generation 0: got %v, want ErrInvalidIntent", err)
+	}
 	// Exactly the next generation.
 	for _, next := range []uint64{1, 3, 5} {
 		other = intent
@@ -699,6 +720,26 @@ func TestResumeOpensExactlyNextAdmissionGeneration(t *testing.T) {
 	other.ResumeID = [16]byte{6}
 	if _, err := j.Resume(run, other); !errors.Is(err, ErrImmutableConflict) {
 		t.Fatalf("another resume id: got %v, want ErrImmutableConflict", err)
+	}
+	// The retry repeats the whole intent: another binding digest, or an old
+	// seal that differs in any one field, is not the same resume.
+	other = intent
+	other.BindingDigest = [32]byte{9}
+	if _, err := j.Resume(run, other); !errors.Is(err, ErrImmutableConflict) {
+		t.Fatalf("same resume id with another binding digest: got %v, want ErrImmutableConflict", err)
+	}
+	for name, change := range map[string]func(*Seal){
+		"highwater":    func(o *Seal) { o.Highwater++ },
+		"binding":      func(o *Seal) { o.BindingDigest[0] ^= 0xFF },
+		"issuer epoch": func(o *Seal) { o.IssuerEpoch[0] ^= 0xFF },
+		"admission":    func(o *Seal) { o.AdmissionGeneration++ },
+		"drain id":     func(o *Seal) { o.DrainID[0] ^= 0xFF },
+	} {
+		other = intent
+		change(&other.OldSeal)
+		if _, err := j.Resume(run, other); !errors.Is(err, ErrImmutableConflict) {
+			t.Fatalf("same resume id with an old seal of another %s: got %v, want ErrImmutableConflict", name, err)
+		}
 	}
 	// The resume is durable.
 	again := reopen(t, st)
@@ -743,8 +784,8 @@ func TestSwitchChecksChangeNothing(t *testing.T) {
 	switchID := [16]byte{0xAB}
 	unchanged := func() {
 		t.Helper()
-		if _, open, err := j.CurrentSwitch(); err != nil || open {
-			t.Fatalf("a check left a switch record: open=%v %v", open, err)
+		if _, open := j.CurrentSwitch(); open {
+			t.Fatalf("a check left a switch record: open=%v", open)
 		}
 	}
 
@@ -873,5 +914,225 @@ func TestSecondDrainCycleSwitchesAgain(t *testing.T) {
 	latest := nextBinding(6)
 	if _, err := again.PrepareSwitch(run, third, latest, [16]byte{0x03}); err != nil {
 		t.Fatalf("third switch: %v", err)
+	}
+}
+
+// countingStorage counts the writes of a store, so a test can prove that a
+// retry writes nothing.
+type countingStorage struct {
+	storage.Storage
+	writes int
+}
+
+func (c *countingStorage) Put(key, value []byte) error {
+	c.writes++
+	return c.Storage.Put(key, value)
+}
+
+func (c *countingStorage) Delete(key []byte) error {
+	c.writes++
+	return c.Storage.Delete(key)
+}
+
+func (c *countingStorage) Apply(b *storage.Batch) error {
+	c.writes++
+	return c.Storage.Apply(b)
+}
+
+// newCountedJournal opens a journal that knows its active binding over a
+// store that counts its writes.
+func newCountedJournal(t *testing.T) (*Journal, *countingStorage) {
+	t.Helper()
+	st := &countingStorage{Storage: storage.NewMemory()}
+	active := Binding{DestinationID: testDestination, Generation: 3, ChainID: testChain,
+		GenesisHash: testGenesis, DescriptorDigest: testBinding}
+	j, err := Open(st, Options{BindingDigest: testBinding, Binding: &active})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return j, st
+}
+
+// A retry of an accepted control intent answers the durable receipt and
+// writes nothing: nothing is ever committed twice.
+func TestRetriesNeverWrite(t *testing.T) {
+	j, st := newCountedJournal(t)
+	run := testBatch(0)
+	unchanged := func(name string, before int) {
+		t.Helper()
+		if st.writes != before {
+			t.Fatalf("the retry of %s wrote %d time(s)", name, st.writes-before)
+		}
+	}
+
+	intent := SealIntent{BindingGeneration: 3, AdmissionGeneration: 1, DrainID: testDrain, Highwater: 0}
+	if _, err := j.SealGeneration(run, intent); err != nil {
+		t.Fatal(err)
+	}
+	before := st.writes
+	if _, err := j.SealGeneration(run, intent); err != nil {
+		t.Fatal(err)
+	}
+	unchanged("the seal", before)
+
+	seal, _, err := j.SealedGeneration(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	desired := nextBinding(4)
+	if _, err := j.PrepareSwitch(run, seal, desired, [16]byte{0x01}); err != nil {
+		t.Fatal(err)
+	}
+	before = st.writes
+	prepared, err := j.PrepareSwitch(run, seal, desired, [16]byte{0x01})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchanged("the prepared switch", before)
+
+	if _, err := j.CommitSwitch([16]byte{0x01}, prepared, desired.DescriptorDigest, 4); err != nil {
+		t.Fatal(err)
+	}
+	before = st.writes
+	if _, err := j.CommitSwitch([16]byte{0x01}, prepared, desired.DescriptorDigest, 4); err != nil {
+		t.Fatal(err)
+	}
+	unchanged("the committed switch", before)
+
+	resume := ResumeIntent{ResumeID: [16]byte{5}, OldSeal: seal, BindingDigest: desired.DescriptorDigest,
+		NextAdmissionGeneration: 2}
+	if _, err := j.Resume(run, resume); err != nil {
+		t.Fatal(err)
+	}
+	before = st.writes
+	if _, err := j.Resume(run, resume); err != nil {
+		t.Fatal(err)
+	}
+	unchanged("the resume", before)
+
+	// The run is live again in generation 2: one batch goes through the
+	// whole release, and a lost one through the recovery release.
+	pf := ackedBatch(t, j, 1)
+	if _, err := j.Release(pf.id, pf.res.ManifestDigest, pf.planDigest, 50); err != nil {
+		t.Fatal(err)
+	}
+	before = st.writes
+	if _, err := j.Release(pf.id, pf.res.ManifestDigest, pf.planDigest, 50); err != nil {
+		t.Fatal(err)
+	}
+	unchanged("the release", before)
+
+	id := testBatch(2)
+	ack := IngestAck{Batch: id, ManifestDigest: [32]byte{1}, PlanDigest: [32]byte{2}, LayoutDigest: [32]byte{3},
+		BindingDigest: desired.DescriptorDigest, IssuerEpoch: [16]byte{0xCD}}
+	assertion := OutboxAssertion{Batch: id, PlanDigest: ack.PlanDigest, BindingDigest: ack.BindingDigest}
+	if _, err := j.RecoveryRelease(id, ack, assertion); err != nil {
+		t.Fatal(err)
+	}
+	before = st.writes
+	if _, err := j.RecoveryRelease(id, ack, assertion); err != nil {
+		t.Fatal(err)
+	}
+	unchanged("the recovery release", before)
+}
+
+// Data admission: a run admits data only in a generation that is open. A
+// seal closes the whole run, a Resume reopens exactly one generation, and a
+// prepared switch closes every run of the store.
+func TestDataAdmission(t *testing.T) {
+	j, st := newBoundJournal(t)
+	run := testBatch(0)
+	other := BatchID{ProducerID: [16]byte{7}, RunID: [16]byte{8}}
+	open := func(j *Journal, id BatchID, generations ...uint64) {
+		t.Helper()
+		for _, g := range generations {
+			if err := j.CheckDataAdmission(id, g); err != nil {
+				t.Fatalf("run %d generation %d: got %v, want open", id.RunID[0], g, err)
+			}
+		}
+	}
+	closed := func(j *Journal, id BatchID, generations ...uint64) {
+		t.Helper()
+		for _, g := range generations {
+			if err := j.CheckDataAdmission(id, g); !errors.Is(err, ErrAdmissionClosed) {
+				t.Fatalf("run %d generation %d: got %v, want ErrAdmissionClosed", id.RunID[0], g, err)
+			}
+		}
+	}
+
+	// A run without a seal admits data in every generation.
+	open(j, run, 1, 2, 9)
+	open(j, other, 1)
+
+	// A seal closes admission for the whole run: the sealed generation and
+	// every later one alike. Another run is not affected by it.
+	seal := sealRun(t, j, 0)
+	closed(j, run, 1, 2, 3, 9)
+	open(j, other, 1, 4)
+
+	// A prepared switch closes admission for every run of the store, also
+	// for a run that is not sealed.
+	desired := nextBinding(4)
+	prepared, err := j.PrepareSwitch(run, seal, desired, [16]byte{0x01})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed(j, run, 2)
+	closed(j, other, 1, 4)
+
+	// The commit alone does not reopen the sealed run; it stops closing the
+	// other one.
+	if _, err := j.CommitSwitch([16]byte{0x01}, prepared, desired.DescriptorDigest, 4); err != nil {
+		t.Fatal(err)
+	}
+	closed(j, run, 2)
+	open(j, other, 1, 4)
+
+	// The Resume reopens exactly the generation it opened.
+	if _, err := j.Resume(run, ResumeIntent{ResumeID: [16]byte{5}, OldSeal: seal,
+		BindingDigest: desired.DescriptorDigest, NextAdmissionGeneration: 2}); err != nil {
+		t.Fatal(err)
+	}
+	open(j, run, 2)
+	closed(j, run, 1, 3, 9)
+
+	// Admission is durable state: it reads the same after a reopen.
+	again := reopen(t, st)
+	open(again, run, 2)
+	closed(again, run, 1, 3, 9)
+	open(again, other, 1)
+}
+
+// Resume comes after the switch: while a switch is prepared, the Resume of
+// its seal is refused, and it is accepted once the switch is committed.
+func TestResumeNeedsThePreparedSwitchCommitted(t *testing.T) {
+	j, _ := newBoundJournal(t)
+	run := testBatch(0)
+	seal := sealRun(t, j, 0)
+	desired := nextBinding(4)
+	prepared, err := j.PrepareSwitch(run, seal, desired, [16]byte{0x01})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resume := ResumeIntent{ResumeID: [16]byte{5}, OldSeal: seal, BindingDigest: desired.DescriptorDigest,
+		NextAdmissionGeneration: 2}
+	if _, err := j.Resume(run, resume); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("resume under a prepared switch: got %v, want ErrStateConflict", err)
+	}
+	if _, ok, err := j.ResumedGeneration(run); err != nil || ok {
+		t.Fatalf("a refused resume left a record: ok=%v %v", ok, err)
+	}
+	// A later seal is impossible while the switch is prepared, so a prepared
+	// switch always belongs to the current seal.
+	if _, err := j.SealGeneration(run, SealIntent{BindingGeneration: 3, AdmissionGeneration: 1,
+		DrainID: [16]byte{6}, Highwater: 0}); !errors.Is(err, ErrImmutableConflict) {
+		t.Fatalf("another seal under a prepared switch: got %v, want ErrImmutableConflict", err)
+	}
+	if _, err := j.CommitSwitch([16]byte{0x01}, prepared, desired.DescriptorDigest, 4); err != nil {
+		t.Fatal(err)
+	}
+	ack, err := j.Resume(run, resume)
+	if err != nil || ack.NewAdmissionGeneration != 2 {
+		t.Fatalf("resume after the commit: %+v %v", ack, err)
 	}
 }

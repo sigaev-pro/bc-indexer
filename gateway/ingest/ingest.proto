@@ -467,14 +467,17 @@ service Ingest {
   // IngestAck and ACKED/outbox assertion, without the payload.
   rpc RecoveryRelease(RecoveryReleaseRequest) returns (ReleaseResponse);
   // Seals an exhausted admission generation and fences the sessions of
-  // that generation.
+  // that generation. From the seal until the Resume, every data RPC of the
+  // run answers DRAIN_REQUIRED.
   rpc SealGeneration(SealGenerationRequest) returns (SealGenerationResponse);
   // Checks the desired destination and durably prepares the switch; the
-  // active binding stays the old one.
+  // active binding stays the old one. A prepared switch closes data
+  // admission for every run until CommitSwitch.
   rpc PrepareSwitch(PrepareSwitchRequest) returns (PrepareSwitchResponse);
   // Durably activates the prepared switch; a retry answers the committed
-  // receipt.
+  // receipt. The Resume of the seal waits for this commit.
   rpc CommitSwitch(CommitSwitchRequest) returns (CommitSwitchResponse);
-  // Opens exactly the next admission generation of a sealed run.
+  // Opens the next admission generation of a sealed run, the only one that
+  // admits data from then on. It needs no prepared switch.
   rpc Resume(ResumeRequest) returns (ResumeResponse);
 }

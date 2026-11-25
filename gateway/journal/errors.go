@@ -58,6 +58,10 @@ var (
 	// ErrInvalidIntent is a control intent with an unset identity or
 	// counter (a zero id, a zero generation).
 	ErrInvalidIntent = errors.New("gateway journal: invalid control intent")
+	// ErrAdmissionClosed is a data RPC of a generation that is not open for
+	// data: the run is sealed and no Resume opened the generation, or a
+	// destination switch is prepared.
+	ErrAdmissionClosed = errors.New("gateway journal: data admission is closed")
 	// ErrInvalidBinding is a Binding option that does not agree with the
 	// BindingDigest option or carries a zero identity or generation.
 	ErrInvalidBinding = errors.New("gateway journal: invalid destination binding")

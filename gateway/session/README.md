@@ -35,6 +35,11 @@ publisher fencing for the gateway
   callback for a released batch (`ErrBatchReleased`) never creates state.
   Duplicates of still-valid callbacks stay allowed: already-sent network
   bytes cannot be recalled, and the journal answers them idempotently.
+  The gate remembers the 4096 most recent releases and forgets the oldest
+  one beyond that, so a long-running gateway does not grow one entry per
+  released batch forever. Forgetting is safe: a batch that many releases
+  behind is long retired, and the journal never creates a record for a
+  callback of a batch it does not hold.
 
 The package keeps no durable state: `boot_nonce` and session lifetimes are
 per process by contract, so a restart fences every old token implicitly.

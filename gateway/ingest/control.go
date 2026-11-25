@@ -106,7 +106,7 @@ func ackToProto(a journal.IngestAck) *IngestAck {
 // the mutations so a batch is never reported across a barrier.
 func (s *Server) GetBatchState(_ context.Context, req *GetBatchStateRequest) (*GetBatchStateResponse, error) {
 	resp := &GetBatchStateResponse{}
-	we := s.mutate(req.GetHeader(), func() error {
+	we := s.mutateControl(req.GetHeader(), func() error {
 		id, werr := s.batchID(req.GetHeader(), req.GetBatch())
 		if werr != nil {
 			return werr
@@ -144,9 +144,15 @@ func (s *Server) GetBatchState(_ context.Context, req *GetBatchStateRequest) (*G
 // Release drives the ordered release of one NATS_ACKED batch and answers
 // ReleaseAck only after the final atomic commit. A repeated Release of an
 // already retired sequence answers the durable prefix again.
+//
+// The order is the one of the contract's release row: the publisher barrier
+// goes up first, then the RELEASING marker is committed, then the bounded
+// cleanup runs and the final commit advances the retired prefix. The
+// journal decides whether the release may start before the barrier is
+// raised, so a refused release never fences a batch that still publishes.
 func (s *Server) Release(_ context.Context, req *ReleaseRequest) (*ReleaseResponse, error) {
 	resp := &ReleaseResponse{}
-	we := s.mutate(req.GetHeader(), func() error {
+	we := s.mutateControl(req.GetHeader(), func() error {
 		id, werr := s.batchID(req.GetHeader(), req.GetBatch())
 		if werr != nil {
 			return werr
@@ -159,17 +165,18 @@ func (s *Server) Release(_ context.Context, req *ReleaseRequest) (*ReleaseRespon
 		if werr != nil {
 			return werr
 		}
-		prefix, err := s.journal.Release(id, manifest, plan, releaseStepKeys)
+		retired, err := s.journal.CheckRelease(id, manifest, plan, releaseStepKeys)
 		if err != nil {
 			return toWireError(err)
 		}
-		if prefix == id.Seq {
-			// The release barrier: from here on a publisher callback of
-			// this batch is rejected. It is raised after the commit because
-			// a refused release must not fence a batch that still publishes;
-			// until the commit the batch is NATS_ACKED, every frame of it is
-			// acknowledged, so a callback in between is a harmless duplicate.
+		if !retired {
+			// The publisher barrier precedes the RELEASING commit: from here
+			// on no publisher callback of this batch is applied.
 			s.publisher.Release(id.Bytes())
+		}
+		prefix, err := s.journal.Release(id, manifest, plan, releaseStepKeys)
+		if err != nil {
+			return toWireError(err)
 		}
 		resp.Ack = &ReleaseAck{Batch: req.GetBatch(), RetiredPrefix: prefix}
 		return nil
@@ -181,12 +188,11 @@ func (s *Server) Release(_ context.Context, req *ReleaseRequest) (*ReleaseRespon
 }
 
 // ingestAckOf parses a presented IngestAck. The batch is validated by the
-// caller against the request and the session identity.
+// caller against the request and the session identity. A missing ack needs
+// no check of its own: the batch of a nil message is no valid batch id, so
+// the first field already refuses it with IDENTITY_MISMATCH.
 func ingestAckOf(m *IngestAck) (journal.IngestAck, *wireError) {
 	var a journal.IngestAck
-	if m == nil {
-		return a, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, "ingest ack is required"}
-	}
 	var werr *wireError
 	if a.Batch, werr = batchIDOf(m.GetBatch()); werr != nil {
 		return a, werr
@@ -249,7 +255,7 @@ func outboxAssertionOf(m *OutboxAssertion) (journal.OutboxAssertion, *wireError)
 // batch the store still holds, is refused and advances nothing.
 func (s *Server) RecoveryRelease(_ context.Context, req *RecoveryReleaseRequest) (*ReleaseResponse, error) {
 	resp := &ReleaseResponse{}
-	we := s.mutate(req.GetHeader(), func() error {
+	we := s.mutateControl(req.GetHeader(), func() error {
 		id, werr := s.batchID(req.GetHeader(), req.GetBatch())
 		if werr != nil {
 			return werr
@@ -262,11 +268,8 @@ func (s *Server) RecoveryRelease(_ context.Context, req *RecoveryReleaseRequest)
 		if werr != nil {
 			return werr
 		}
-		// The ack and the assertion must name the batch of the call, which
-		// already matches the session identity.
-		if ack.Batch != id || assertion.Batch != id {
-			return &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, "ingest ack and assertion must name the batch of the release"}
-		}
+		// The journal refuses an ack or an assertion that does not name
+		// the batch of the call, which already matches the session identity.
 		prefix, err := s.journal.RecoveryRelease(id, ack, assertion)
 		if err != nil {
 			return toWireError(err)
@@ -280,10 +283,15 @@ func (s *Server) RecoveryRelease(_ context.Context, req *RecoveryReleaseRequest)
 	return resp, nil
 }
 
-// mutateFor is mutate with one more admitted binding digest (checkHeaderFor).
+// mutateFor is mutateControl with one more admitted binding digest. The
+// session is validated before the binding, so a caller that must read the
+// store to know the admitted digest does it after the session check.
 func (s *Server) mutateFor(header *SessionHeader, admitBinding *[32]byte, fn func() error) *wireError {
-	rec, we := s.checkHeaderFor(header, admitBinding)
+	rec, we := s.checkSession(header)
 	if we != nil {
+		return we
+	}
+	if we := s.checkBinding(header, admitBinding); we != nil {
 		return we
 	}
 	return toWireError(s.gate.Mutate(rec.token, fn))

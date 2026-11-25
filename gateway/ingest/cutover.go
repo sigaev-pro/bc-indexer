@@ -248,7 +248,7 @@ func (s *Server) PrepareSwitch(ctx context.Context, req *PrepareSwitchRequest) (
 	// (no seal, another old seal, an illegal successor descriptor, another
 	// switch over an unfinished or committed one) is answered as it is.
 	// None of that depends on the target being available.
-	we := s.mutate(header, func() error {
+	we := s.mutateControl(header, func() error {
 		var werr *wireError
 		if in, werr = s.parseSwitch(req); werr != nil {
 			return werr
@@ -274,7 +274,7 @@ func (s *Server) PrepareSwitch(ctx context.Context, req *PrepareSwitchRequest) (
 	if we = s.checkTarget(ctx, in.desired.DescriptorDigest); we != nil {
 		return &PrepareSwitchResponse{Error: we.toProto(header)}, nil
 	}
-	we = s.mutate(header, func() error {
+	we = s.mutateControl(header, func() error {
 		prepared, err := s.journal.PrepareSwitch(in.run, in.oldSeal, in.desired, in.switchID)
 		if err != nil {
 			return toWireError(err)
@@ -330,23 +330,31 @@ func (s *Server) parseCommit(req *CommitSwitchRequest) (switchCommit, *wireError
 // identity the SwitchPrepared carried. The session may be bound to the
 // active binding or to the old binding of this exact switch, which is the
 // session that prepared it.
+//
+// The session is validated before anything is read from the store. The one
+// read, for the old binding that switch admits, cannot fail: the journal
+// holds the switch record in memory since it opened the store.
 func (s *Server) CommitSwitch(ctx context.Context, req *CommitSwitchRequest) (*CommitSwitchResponse, error) {
 	resp := &CommitSwitchResponse{}
 	header := req.GetHeader()
-	// The old binding of the current switch is admitted for this RPC only.
-	// This read only widens the header check: nothing answers before the
-	// session header is validated, and a store error is reported by the
-	// gated step below.
+	rec, we := s.checkSession(header)
+	if we != nil {
+		return &CommitSwitchResponse{Error: we.toProto(header)}, nil
+	}
+	cur, open := s.journal.CurrentSwitch()
 	var admit *[32]byte
-	if cur, open, err := s.journal.CurrentSwitch(); err == nil && open {
+	if open {
 		old := cur.OldDigest
 		admit = &old
+	}
+	if we := s.checkBinding(header, admit); we != nil {
+		return &CommitSwitchResponse{Error: we.toProto(header)}, nil
 	}
 	committed := false
 	// The exact receipt is verified against the durable switch first, so a
 	// refusal never depends on the target. An already committed switch
 	// answers its receipt here: a target outage never cancels it.
-	we := s.mutateFor(header, admit, func() error {
+	err := s.gate.Mutate(rec.token, func() error {
 		c, werr := s.parseCommit(req)
 		if werr != nil {
 			return werr
@@ -366,21 +374,17 @@ func (s *Server) CommitSwitch(ctx context.Context, req *CommitSwitchRequest) (*C
 		committed = true
 		return nil
 	})
-	if we != nil {
+	if we = toWireError(err); we != nil {
 		return &CommitSwitchResponse{Error: we.toProto(header)}, nil
 	}
 	if committed {
 		return resp, nil
 	}
-	// The check above accepted a prepared switch of this id, so it is open.
-	cur, open, err := s.journal.CurrentSwitch()
-	if err != nil {
-		return &CommitSwitchResponse{Error: toWireError(err).toProto(header)}, nil
-	}
 	if !open {
 		return &CommitSwitchResponse{Error: (&wireError{ErrorCode_MODE_CONFLICT, RetryAction_RETRY_BACKOFF,
 			"commit needs the prepared receipt of a switch"}).toProto(header)}, nil
 	}
+	// The check above accepted a prepared switch of this id.
 	// Before the first durable activation the target is re-checked. When
 	// the check fails nothing changes: the producer is not rolled back and
 	// nothing is published to the old destination.

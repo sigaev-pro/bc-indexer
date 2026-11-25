@@ -788,8 +788,8 @@ func TestSwitchOverRPC(t *testing.T) {
 	if verifier.count() != calls {
 		t.Fatalf("a request refused before its target check reached the target: %d checks, want %d", verifier.count(), calls)
 	}
-	if _, open, err := h.j.CurrentSwitch(); err != nil || open {
-		t.Fatalf("a refused switch left a record: open=%v %v", open, err)
+	if _, open := h.j.CurrentSwitch(); open {
+		t.Fatalf("a refused switch left a record: open=%v", open)
 	}
 	// With a verified target the journal checks the durable rules: the old
 	// seal must be the sealed one, and the descriptor a legal successor (the
@@ -807,8 +807,8 @@ func TestSwitchOverRPC(t *testing.T) {
 	// The desired binding must be another one.
 	_, e = prepare(b.header(), seal.GetSeal(), active[:], activeSpec.json(), switchID)
 	wantCode(t, "desired equals active", e, ErrorCode_MODE_CONFLICT, RetryAction_RETRY_BACKOFF)
-	if _, open, err := h.j.CurrentSwitch(); err != nil || open {
-		t.Fatalf("a refused switch left a record: open=%v %v", open, err)
+	if _, open := h.j.CurrentSwitch(); open {
+		t.Fatalf("a refused switch left a record: open=%v", open)
 	}
 
 	// A verified target produces SwitchPrepared; the active binding stays.
@@ -862,8 +862,8 @@ func TestSwitchOverRPC(t *testing.T) {
 	// The first activation re-checks the target; a failure changes nothing.
 	_, e = commit(b.header(), receipt, assertion)
 	wantCode(t, "target down at commit", e, ErrorCode_TRANSIENT_UNAVAILABLE, RetryAction_RETRY_BACKOFF)
-	if cur, open, err := h.j.CurrentSwitch(); err != nil || !open || cur.Phase != journal.SwitchPreparedPhase {
-		t.Fatalf("switch phase after the refused commit: %+v %v %v", cur, open, err)
+	if cur, open := h.j.CurrentSwitch(); !open || cur.Phase != journal.SwitchPreparedPhase {
+		t.Fatalf("switch phase after the refused commit: %+v %v", cur, open)
 	}
 	verifier.err = errors.New("stream metadata key is missing")
 	_, e = commit(b.header(), receipt, assertion)

@@ -79,15 +79,18 @@ type IngestClient interface {
 	// IngestAck and ACKED/outbox assertion, without the payload.
 	RecoveryRelease(ctx context.Context, in *RecoveryReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error)
 	// Seals an exhausted admission generation and fences the sessions of
-	// that generation.
+	// that generation. From the seal until the Resume, every data RPC of the
+	// run answers DRAIN_REQUIRED.
 	SealGeneration(ctx context.Context, in *SealGenerationRequest, opts ...grpc.CallOption) (*SealGenerationResponse, error)
 	// Checks the desired destination and durably prepares the switch; the
-	// active binding stays the old one.
+	// active binding stays the old one. A prepared switch closes data
+	// admission for every run until CommitSwitch.
 	PrepareSwitch(ctx context.Context, in *PrepareSwitchRequest, opts ...grpc.CallOption) (*PrepareSwitchResponse, error)
 	// Durably activates the prepared switch; a retry answers the committed
-	// receipt.
+	// receipt. The Resume of the seal waits for this commit.
 	CommitSwitch(ctx context.Context, in *CommitSwitchRequest, opts ...grpc.CallOption) (*CommitSwitchResponse, error)
-	// Opens exactly the next admission generation of a sealed run.
+	// Opens the next admission generation of a sealed run, the only one that
+	// admits data from then on. It needs no prepared switch.
 	Resume(ctx context.Context, in *ResumeRequest, opts ...grpc.CallOption) (*ResumeResponse, error)
 }
 
@@ -295,15 +298,18 @@ type IngestServer interface {
 	// IngestAck and ACKED/outbox assertion, without the payload.
 	RecoveryRelease(context.Context, *RecoveryReleaseRequest) (*ReleaseResponse, error)
 	// Seals an exhausted admission generation and fences the sessions of
-	// that generation.
+	// that generation. From the seal until the Resume, every data RPC of the
+	// run answers DRAIN_REQUIRED.
 	SealGeneration(context.Context, *SealGenerationRequest) (*SealGenerationResponse, error)
 	// Checks the desired destination and durably prepares the switch; the
-	// active binding stays the old one.
+	// active binding stays the old one. A prepared switch closes data
+	// admission for every run until CommitSwitch.
 	PrepareSwitch(context.Context, *PrepareSwitchRequest) (*PrepareSwitchResponse, error)
 	// Durably activates the prepared switch; a retry answers the committed
-	// receipt.
+	// receipt. The Resume of the seal waits for this commit.
 	CommitSwitch(context.Context, *CommitSwitchRequest) (*CommitSwitchResponse, error)
-	// Opens exactly the next admission generation of a sealed run.
+	// Opens the next admission generation of a sealed run, the only one that
+	// admits data from then on. It needs no prepared switch.
 	Resume(context.Context, *ResumeRequest) (*ResumeResponse, error)
 	mustEmbedUnimplementedIngestServer()
 }

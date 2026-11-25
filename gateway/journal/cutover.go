@@ -90,10 +90,12 @@ type SealIntent struct {
 //
 //   - The binding generation must be the active one; the seal binds the
 //     active binding digest.
-//   - The retired prefix of the producer/run must equal the highwater and no
-//     batch at or below it may be in a non-retired state: the frontier is
-//     exhausted. Zero is a valid highwater for a run that never created a
-//     batch (the empty frontier).
+//   - The retired prefix of the producer/run must equal the highwater: the
+//     frontier is exhausted. The prefix advances only through a completed
+//     release or an accepted recovery assertion, so its equality with the
+//     highwater also proves that no batch at or below it is unfinished. Zero
+//     is a valid highwater for a run that never created a batch (the empty
+//     frontier).
 //   - A retry of the same drain returns the same SealAck when the whole
 //     intent matches; the same drain id with another intent is an immutable
 //     conflict.
@@ -122,7 +124,7 @@ func (j *Journal) SealGeneration(id BatchID, intent SealIntent) (Seal, error) {
 	if err != nil {
 		return Seal{}, err
 	}
-	if sealed && (!resumed || resume.NewAdmissionGeneration != intent.AdmissionGeneration) {
+	if sealed && (!resumed || resume.Ack.NewAdmissionGeneration != intent.AdmissionGeneration) {
 		return Seal{}, ErrImmutableConflict // the generation is already sealed
 	}
 	if intent.BindingGeneration != j.gen {
@@ -130,9 +132,6 @@ func (j *Journal) SealGeneration(id BatchID, intent SealIntent) (Seal, error) {
 	}
 	if prefix := j.readRetired(id); prefix != intent.Highwater {
 		return Seal{}, ErrStateConflict // unfinished operations at or below the highwater
-	}
-	if err := j.assertRetiredBelow(id, intent.Highwater); err != nil {
-		return Seal{}, err
 	}
 
 	next := Seal{
@@ -159,25 +158,6 @@ func (j *Journal) SealedGeneration(id BatchID) (seal Seal, ok bool, err error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.readSeal(id)
-}
-
-// assertRetiredBelow verifies that no batch of the producer/run at or below
-// highwater is in a non-retired state.
-func (j *Journal) assertRetiredBelow(id BatchID, highwater uint64) error {
-	lo := append([]byte(keyBatch), id.ProducerID[:]...)
-	lo = append(lo, id.RunID[:]...)
-	_, hi := keyRange(lo)
-	const suffix = "/state"
-	return j.st.Iterate(lo, hi, func(k, v []byte) error {
-		rest := k[len(lo):]
-		if len(rest) != 8+len(suffix) || string(rest[8:]) != suffix {
-			return nil
-		}
-		if beU64(rest) <= highwater && (len(v) != 1 || State(v[0]) != StateRetired) {
-			return ErrStateConflict
-		}
-		return nil
-	})
 }
 
 // SwitchPhase is the durable phase of one destination switch.
@@ -272,6 +252,7 @@ func (j *Journal) PrepareSwitch(id BatchID, oldSeal Seal, desired Binding, switc
 	if err := j.st.Put(cutoverKey(desired.Generation), encodeSwitch(rec)); err != nil {
 		return SwitchPrepared{}, err
 	}
+	j.sw, j.swOpen = rec, true
 	return rec.SwitchPrepared, nil
 }
 
@@ -291,28 +272,31 @@ func (j *Journal) checkPrepareLocked(id BatchID, oldSeal Seal, desired Binding, 
 	if !seal.sameAck(oldSeal) {
 		return nil, ErrIdentityMismatch // the whole old seal must match
 	}
-	// A switch belongs to the seal it was prepared under. It is an open
-	// transition while it is only prepared, or while its seal is still the
-	// current one; a committed switch of an earlier seal is history and
-	// never blocks the switch of a later drain cycle.
-	cur, open, err := j.lastSwitch()
-	if err != nil {
-		return nil, err
-	}
-	if open && (cur.Phase == SwitchPreparedPhase || cur.DrainID == seal.DrainID) {
-		if cur.SwitchID != switchID {
+	// A switch belongs to the seal it was prepared under. While that seal is
+	// the current one the switch is an open transition: a retry answers its
+	// receipt, and another switch id is refused because a new switch never
+	// jumps an unfinished one. A committed switch of an earlier seal is
+	// history and never blocks the switch of a later drain cycle. A switch
+	// that is only prepared always belongs to the current seal: Resume, and
+	// with it every later seal, is refused while a switch is prepared.
+	if j.swOpen && j.sw.DrainID == seal.DrainID {
+		if j.sw.SwitchID != switchID {
 			return nil, ErrImmutableConflict // another switch of this seal is unfinished
 		}
-		if cur.NewDigest != desired.DescriptorDigest || oldSeal.DrainID != cur.DrainID ||
-			oldSeal.AdmissionGeneration != cur.AdmissionGeneration || oldSeal.BindingDigest != cur.OldDigest {
+		if j.sw.NewDigest != desired.DescriptorDigest || oldSeal.AdmissionGeneration != j.sw.AdmissionGeneration ||
+			oldSeal.BindingDigest != j.sw.OldDigest {
 			return nil, ErrImmutableConflict // the same id must carry the same intent
 		}
-		return &cur.SwitchPrepared, nil // the retry returns the same receipt
+		receipt := j.sw.SwitchPrepared // a copy: the record itself is the journal's
+		return &receipt, nil           // the retry returns the same receipt
 	}
-	if resume, resumed, err := j.readResume(id); err != nil {
+	// This seal was already resumed: a switch runs between the seal and the
+	// Resume, and a later one needs a new drain. The record can only belong
+	// to this seal, because a re-seal deletes the resume it continued.
+	if _, resumed, err := j.readResume(id); err != nil {
 		return nil, err
-	} else if resumed && resume.OldAdmissionGeneration == seal.AdmissionGeneration {
-		return nil, ErrDrainRequired // this seal was already resumed; a switch needs a new drain
+	} else if resumed {
+		return nil, ErrDrainRequired
 	}
 	if desired.DescriptorDigest == j.bnd {
 		return nil, ErrStateConflict // no switch is pending
@@ -342,7 +326,7 @@ func (j *Journal) CheckCommitSwitch(switchID [16]byte, prepared SwitchPrepared, 
 //
 //   - An already committed switch answers its durable receipt to the same
 //     switch id and the same exact SwitchPrepared, whatever the target
-//     availability is; it never contacts the target.
+//     availability is; it never contacts the target and writes nothing.
 //   - A first commit needs the prepared receipt of this switch id; the
 //     presented SwitchPrepared must equal it exactly and the producer's
 //     binding commit assertion must name the new digest and generation.
@@ -357,18 +341,13 @@ func (j *Journal) CommitSwitch(switchID [16]byte, prepared SwitchPrepared, commi
 	if err != nil {
 		return SwitchPrepared{}, err
 	}
-	cur, open, err := j.lastSwitch()
-	if err != nil {
-		return SwitchPrepared{}, err
-	}
-	if !open {
-		return SwitchPrepared{}, ErrStateConflict // nothing changed since the check that admitted the commit
-	}
 	if done {
-		return cur.SwitchPrepared, nil // the durable receipt stands, whatever the target is now
+		// The durable receipt stands, whatever the target is now, and the
+		// commit below never runs a second time.
+		return j.sw.SwitchPrepared, nil
 	}
 
-	rec := cur
+	rec := j.sw
 	rec.Phase = SwitchCommittedPhase
 	b := storage.NewBatch()
 	b.Put(cutoverKey(rec.NewBinding.Generation), encodeSwitch(rec))
@@ -377,45 +356,45 @@ func (j *Journal) CommitSwitch(switchID [16]byte, prepared SwitchPrepared, commi
 		return SwitchPrepared{}, err
 	}
 	j.applyBinding(rec.NewBinding)
+	j.sw = rec
 	return rec.SwitchPrepared, nil
 }
 
 // checkCommitLocked holds every rule of CommitSwitch; the caller holds j.mu.
 func (j *Journal) checkCommitLocked(switchID [16]byte, prepared SwitchPrepared, committedDigest [32]byte, committedGeneration uint64) (bool, error) {
-	cur, open, err := j.lastSwitch()
-	if err != nil {
-		return false, err
-	}
-	if !open {
+	if !j.swOpen {
 		return false, ErrStateConflict // commit needs its PREPARED receipt
 	}
-	if cur.SwitchID != switchID {
+	if j.sw.SwitchID != switchID {
 		return false, ErrImmutableConflict // another switch is prepared or committed
 	}
-	if cur.SwitchPrepared != prepared {
+	if j.sw.SwitchPrepared != prepared {
 		return false, ErrImmutableConflict // the exact SwitchPrepared is required
 	}
-	if cur.Phase == SwitchCommittedPhase {
+	if j.sw.Phase == SwitchCommittedPhase {
 		return true, nil
 	}
-	if committedDigest != cur.NewDigest || committedGeneration != cur.NewBinding.Generation {
+	if committedDigest != j.sw.NewDigest || committedGeneration != j.sw.NewBinding.Generation {
 		return false, ErrIdentityMismatch // the producer must have committed exactly this binding
 	}
 	return false, nil
 }
 
-// CurrentSwitch returns the latest durable switch record of the store; the
-// switch of the highest binding generation is the current one.
-func (j *Journal) CurrentSwitch() (sw Switch, ok bool, err error) {
+// CurrentSwitch returns the latest switch record of the store: the switch
+// of the highest binding generation is the current one. ok is false when the
+// store never held a switch.
+func (j *Journal) CurrentSwitch() (sw Switch, ok bool) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return j.lastSwitch()
+	return j.sw, j.swOpen
 }
 
-// lastSwitch is the current switch record; the caller holds j.mu.
-func (j *Journal) lastSwitch() (sw Switch, ok bool, err error) {
+// readLastSwitch reads the latest switch record of a storage: the record of
+// the highest binding generation is the current one. Open reads it once;
+// from then on the journal keeps it in memory as the only writer.
+func readLastSwitch(st storage.Storage) (sw Switch, ok bool, err error) {
 	lo, hi := keyRange([]byte(keyCutover))
-	err = j.st.Iterate(lo, hi, func(_, v []byte) error {
+	err = st.Iterate(lo, hi, func(_, v []byte) error {
 		rec, derr := decodeSwitch(v)
 		if derr != nil {
 			return derr
@@ -446,14 +425,29 @@ type ResumeAck struct {
 	IssuerEpoch            [16]byte
 }
 
-// Resume accepts exactly the next admission generation of a sealed
-// producer/run and returns the ResumeAck. Rules:
+// resumeRecord is the durable resume record: the ack and the whole old seal
+// it continues, so a retry is compared against the entire intent.
+type resumeRecord struct {
+	Ack     ResumeAck
+	OldSeal Seal
+}
+
+// Resume opens exactly the next admission generation of a sealed
+// producer/run and returns the ResumeAck. From then on the run admits data
+// only in that generation (CheckDataAdmission). Rules:
 //
+//   - The resume id must be set and the next admission generation must not
+//     be zero (ErrInvalidIntent).
+//   - A repeated intent returns the saved ack and writes nothing. The whole
+//     intent is compared: the resume id, the entire old seal, the binding
+//     digest and the next admission generation. The same id with another
+//     intent, or another resume id, is an immutable conflict: a retired or
+//     conflicting intent is rejected.
 //   - The run must hold a durable seal (ErrDrainRequired) and the presented
 //     old seal must equal it entirely (ErrIdentityMismatch).
-//   - A repeated resume id returns the saved ack when the intent is the
-//     same; the same id with another intent or another resume id is an
-//     immutable conflict: a retired or conflicting intent is rejected.
+//   - A prepared switch must be committed first (ErrStateConflict): the
+//     switch of a seal runs between the seal and the Resume, and its commit
+//     decides the active binding the resume continues.
 //   - The binding digest must be the active binding and the next admission
 //     generation exactly one above the sealed one (ErrGenerationConflict).
 //
@@ -469,12 +463,11 @@ func (j *Journal) Resume(id BatchID, intent ResumeIntent) (ResumeAck, error) {
 	if saved, ok, err := j.readResume(id); err != nil {
 		return ResumeAck{}, err
 	} else if ok {
-		if saved.ResumeID == intent.ResumeID {
-			if saved.BindingDigest == intent.BindingDigest &&
-				saved.OldAdmissionGeneration == intent.OldSeal.AdmissionGeneration &&
-				saved.NewAdmissionGeneration == intent.NextAdmissionGeneration &&
-				saved.DrainID == intent.OldSeal.DrainID {
-				return saved, nil // the repeated intent returns the same result
+		if saved.Ack.ResumeID == intent.ResumeID {
+			if saved.Ack.BindingDigest == intent.BindingDigest &&
+				saved.OldSeal.sameAck(intent.OldSeal) &&
+				saved.Ack.NewAdmissionGeneration == intent.NextAdmissionGeneration {
+				return saved.Ack, nil // the repeated intent returns the same result
 			}
 			return ResumeAck{}, ErrImmutableConflict
 		}
@@ -490,6 +483,9 @@ func (j *Journal) Resume(id BatchID, intent ResumeIntent) (ResumeAck, error) {
 	if !seal.sameAck(intent.OldSeal) {
 		return ResumeAck{}, ErrIdentityMismatch
 	}
+	if j.swOpen && j.sw.Phase == SwitchPreparedPhase {
+		return ResumeAck{}, ErrStateConflict // the prepared switch must be committed first
+	}
 	if intent.BindingDigest != j.bnd {
 		return ResumeAck{}, ErrBindingMismatch
 	}
@@ -497,25 +493,29 @@ func (j *Journal) Resume(id BatchID, intent ResumeIntent) (ResumeAck, error) {
 		return ResumeAck{}, ErrGenerationConflict // exactly the next generation
 	}
 
-	ack := ResumeAck{
-		ResumeID:               intent.ResumeID,
-		BindingDigest:          intent.BindingDigest,
-		OldAdmissionGeneration: seal.AdmissionGeneration,
-		NewAdmissionGeneration: intent.NextAdmissionGeneration,
-		DrainID:                seal.DrainID,
-		IssuerEpoch:            j.epoch,
+	rec := resumeRecord{
+		Ack: ResumeAck{
+			ResumeID:               intent.ResumeID,
+			BindingDigest:          intent.BindingDigest,
+			OldAdmissionGeneration: seal.AdmissionGeneration,
+			NewAdmissionGeneration: intent.NextAdmissionGeneration,
+			DrainID:                seal.DrainID,
+			IssuerEpoch:            j.epoch,
+		},
+		OldSeal: seal,
 	}
-	if err := j.st.Put(resumeKey(id), encodeResume(ack)); err != nil {
+	if err := j.st.Put(resumeKey(id), encodeResumeRecord(rec)); err != nil {
 		return ResumeAck{}, err
 	}
-	return ack, nil
+	return rec.Ack, nil
 }
 
 // ResumedGeneration returns the durable ResumeAck of one producer/run.
 func (j *Journal) ResumedGeneration(id BatchID) (ack ResumeAck, ok bool, err error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return j.readResume(id)
+	rec, ok, err := j.readResume(id)
+	return rec.Ack, ok, err
 }
 
 func sealedKey(id BatchID) []byte {
@@ -544,16 +544,16 @@ func (j *Journal) readSeal(id BatchID) (Seal, bool, error) {
 	return seal, err == nil, err
 }
 
-func (j *Journal) readResume(id BatchID) (ResumeAck, bool, error) {
+func (j *Journal) readResume(id BatchID) (resumeRecord, bool, error) {
 	raw, err := j.st.Get(resumeKey(id))
 	if err == storage.ErrNotFound {
-		return ResumeAck{}, false, nil
+		return resumeRecord{}, false, nil
 	}
 	if err != nil {
-		return ResumeAck{}, false, err
+		return resumeRecord{}, false, err
 	}
-	ack, err := decodeResume(raw)
-	return ack, err == nil, err
+	rec, err := decodeResumeRecord(raw)
+	return rec, err == nil, err
 }
 
 // Binding record: destination id, generation, network and descriptor digest.
@@ -653,30 +653,36 @@ func decodeSwitch(b []byte) (Switch, error) {
 	return v, nil
 }
 
-// Resume record: the ResumeAck.
-func encodeResume(v ResumeAck) []byte {
+// Resume record: the ResumeAck followed by the whole old seal it continues.
+func encodeResumeRecord(v resumeRecord) []byte {
 	e := &encoder{}
 	e.u8(recordVersion)
-	e.raw(v.ResumeID[:])
-	e.raw(v.BindingDigest[:])
-	e.u64(v.OldAdmissionGeneration)
-	e.u64(v.NewAdmissionGeneration)
-	e.raw(v.DrainID[:])
-	e.raw(v.IssuerEpoch[:])
+	e.raw(v.Ack.ResumeID[:])
+	e.raw(v.Ack.BindingDigest[:])
+	e.u64(v.Ack.OldAdmissionGeneration)
+	e.u64(v.Ack.NewAdmissionGeneration)
+	e.raw(v.Ack.DrainID[:])
+	e.raw(v.Ack.IssuerEpoch[:])
+	e.raw(encodeSeal(v.OldSeal)[1:]) // the version byte is the record's own
 	return e.b
 }
 
-func decodeResume(b []byte) (ResumeAck, error) {
+func decodeResumeRecord(b []byte) (resumeRecord, error) {
 	d := newDecoder(b)
-	v := ResumeAck{}
-	copy(v.ResumeID[:], d.raw(16))
-	copy(v.BindingDigest[:], d.raw(32))
-	v.OldAdmissionGeneration = d.u64()
-	v.NewAdmissionGeneration = d.u64()
-	copy(v.DrainID[:], d.raw(16))
-	copy(v.IssuerEpoch[:], d.raw(16))
-	if err := d.done(); err != nil {
-		return ResumeAck{}, err
+	v := resumeRecord{}
+	copy(v.Ack.ResumeID[:], d.raw(16))
+	copy(v.Ack.BindingDigest[:], d.raw(32))
+	v.Ack.OldAdmissionGeneration = d.u64()
+	v.Ack.NewAdmissionGeneration = d.u64()
+	copy(v.Ack.DrainID[:], d.raw(16))
+	copy(v.Ack.IssuerEpoch[:], d.raw(16))
+	if d.err != nil {
+		return v, d.err
 	}
+	seal, err := decodeSeal(append([]byte{recordVersion}, d.b...))
+	if err != nil {
+		return v, err
+	}
+	v.OldSeal = seal
 	return v, nil
 }

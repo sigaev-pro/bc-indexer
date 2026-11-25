@@ -139,6 +139,11 @@ type Journal struct {
 	chainID    [32]byte
 	genesis    [32]byte
 	hasBinding bool
+	// sw is the latest switch record of the store, and swOpen whether the
+	// store holds one. Every data RPC consults it, so it is held in memory:
+	// this journal is the only writer of the switch records.
+	sw     Switch
+	swOpen bool
 }
 
 // Counters holds the monotonic allocation counters; values start at 1.
@@ -222,6 +227,12 @@ func Open(st storage.Storage, opt Options) (*Journal, error) {
 	} else {
 		return nil, err
 	}
+	// The latest switch record is read once and then kept in memory.
+	sw, open, err := readLastSwitch(st)
+	if err != nil {
+		return nil, err
+	}
+	j.sw, j.swOpen = sw, open
 	return j, nil
 }
 

@@ -22,13 +22,15 @@ the shared storage seam.
 | `ReleaseCleanup(id, maxKeys)` | RELEASING | bounded payload deletion |
 | `CompleteRelease(id)` | cleanup done, seq exactly retired_prefix+1 | retired_prefix advance + evidence deletion + RETIRED |
 | `BatchState(id, plan, after, limit)` | read-only; from PREPARED on the plan digest must equal the stored plan | one bounded page of frame cursors; the IngestAck only while NATS_ACKED is durable |
+| `CheckRelease(id, manifest, plan, maxKeys)` | read-only; the guard of the row below | nothing |
 | `Release(id, manifest, plan, maxKeys)` | NATS_ACKED or RELEASING, seq exactly retired_prefix+1, both digests equal the NATS_ACKED marker | the begin, bounded cleanup and complete steps up to RETIRED |
 | `RecoveryRelease(id, ack, assertion)` | exactly retired_prefix+1, no local record, the ack names the active binding | recovered assertion + RETIRED + retired_prefix, one commit |
-| `SealGeneration(run, intent)` | active binding generation, retired_prefix equals the highwater, nothing unfinished at or below it | Seal record (the resume record of a resumed generation is retired) |
+| `SealGeneration(run, intent)` | active binding generation, retired_prefix equals the highwater | Seal record (the resume record of a resumed generation is retired) |
 | `PrepareSwitch(run, oldSeal, desired, switchID)` | sealed and not resumed, the old seal equals the durable one, same destination line and network, generation exactly next | Switch record, PREPARED |
 | `CommitSwitch(switchID, prepared, digest, generation)` | the exact prepared receipt and a matching binding commit assertion | Switch record COMMITTED + the active binding |
-| `Resume(run, intent)` | sealed, the old seal equals the durable one, active binding, admission generation exactly next | Resume record |
+| `Resume(run, intent)` | sealed, the old seal equals the durable one, no prepared switch, active binding, admission generation exactly next | Resume record |
 | `CheckPrepareSwitch` / `CheckCommitSwitch` | the same rules as the two rows above, read-only | nothing: a receipt to a retry, an error to a refusal |
+| `CheckDataAdmission(run, admission)` | read-only; the rule of the data admission bullet below | nothing |
 
 Rules held by the journal:
 
@@ -67,17 +69,33 @@ Rules held by the journal:
   sequence answers the durable prefix again; a sequence above
   retired_prefix+1, a batch that is not NATS_ACKED, or another manifest or
   plan digest creates nothing. The cleanup runs in bounded steps and a
-  crash resumes from the remaining keys.
+  crash resumes from the remaining keys. `CheckRelease` holds the guard on
+  its own and writes nothing, so the RPC boundary runs it before it raises
+  the publisher barrier: the barrier then precedes the RELEASING commit,
+  and a refused release fences no batch.
 - **RecoveryRelease is for a batch the store lost.** It needs exactly the
   next sequence, no local record (an existing one is an immutable conflict
   and is kept), and an assertion that names the same plan and binding as
   the saved IngestAck. The accepted assertion is durable, so a retry with a
   different ack is refused.
+- **Data admission is durable state.** A run without a seal admits data in
+  every generation. A seal closes the whole run until a Resume opens
+  exactly the next generation, and only that one is open from then on.
+  While a switch is prepared no run of the store admits data: a batch
+  created meanwhile would be bound to a binding that is not active once the
+  switch commits. `CheckDataAdmission` answers `ErrAdmissionClosed`.
 - **Seal, switch and resume bind the whole intent.** A retry returns the
-  durable receipt; the same identity with another intent, or a new identity
-  over an unfinished one, is `ErrImmutableConflict`. A seal needs
-  `retired_prefix == highwater` (zero is the empty frontier); only the
-  admission generation a Resume opened can be sealed again. A switch needs
+  durable receipt and writes nothing; the same identity with another
+  intent, or a new identity over an unfinished one, is
+  `ErrImmutableConflict`. A retry of a Resume compares the entire old seal,
+  which the resume record keeps next to the ack. The switch of a seal runs
+  before its Resume: while a switch is prepared the Resume is
+  `ErrStateConflict`, so a prepared switch always belongs to the current
+  seal. A seal needs `retired_prefix == highwater` (zero is the empty
+  frontier); the prefix advances only through a completed release or an
+  accepted recovery assertion, so its equality with the highwater also
+  proves that no batch at or below it is unfinished. Only the admission
+  generation a Resume opened can be sealed again. A switch needs
   a seal that was not resumed, a descriptor of the same destination line and
   network at exactly the next generation, and the active binding identity
   (the `Options.Binding` option on a store that never committed a switch,

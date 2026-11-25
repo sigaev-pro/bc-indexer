@@ -193,7 +193,9 @@ func frameAddrAfter(a, b FrameAddr) bool {
 //     resumes from the remaining keys because the RELEASING marker survives
 //     until the final commit.
 func (j *Journal) Release(id BatchID, manifestDigest, planDigest [32]byte, maxKeys int) (uint64, error) {
-	prefix, retired, err := j.admitRelease(id, manifestDigest, planDigest, maxKeys)
+	j.mu.Lock()
+	prefix, retired, err := j.checkReleaseLocked(id, manifestDigest, planDigest, maxKeys)
+	j.mu.Unlock()
 	if err != nil {
 		return 0, err
 	}
@@ -215,11 +217,22 @@ func (j *Journal) Release(id BatchID, manifestDigest, planDigest [32]byte, maxKe
 	return j.CompleteRelease(id)
 }
 
-// admitRelease is the locked read that decides whether a release may start.
-func (j *Journal) admitRelease(id BatchID, manifestDigest, planDigest [32]byte, maxKeys int) (prefix uint64, retired bool, err error) {
+// CheckRelease verifies a Release request against the durable state and
+// changes nothing. retired reports that the batch is already at or below the
+// retired prefix, so the release answers that prefix without a single step.
+// It holds every rule that decides whether a release may start, so the RPC
+// boundary runs it before it raises the publisher barrier: a refused release
+// then never fences a batch that still publishes.
+func (j *Journal) CheckRelease(id BatchID, manifestDigest, planDigest [32]byte, maxKeys int) (retired bool, err error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	_, retired, err = j.checkReleaseLocked(id, manifestDigest, planDigest, maxKeys)
+	return retired, err
+}
 
+// checkReleaseLocked is the locked read that decides whether a release may
+// start; the caller holds j.mu.
+func (j *Journal) checkReleaseLocked(id BatchID, manifestDigest, planDigest [32]byte, maxKeys int) (prefix uint64, retired bool, err error) {
 	if maxKeys <= 0 {
 		return 0, false, ErrStateConflict
 	}
