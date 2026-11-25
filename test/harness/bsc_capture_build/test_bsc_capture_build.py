@@ -57,6 +57,14 @@ def done(argv, code=0, out=b"", err=b""):
     return subprocess.CompletedProcess(argv, code, out, err)
 
 
+def temporary(test, label):
+    """A temporary directory for one test; the test removes it at its end. The
+    path is resolved, because macOS links /var to /private/var."""
+    handle = tempfile.TemporaryDirectory(prefix="bsc-capture-" + label + "-")
+    test.addCleanup(handle.cleanup)
+    return Path(handle.name).resolve()
+
+
 def relative_reference(path, base):
     """A descriptor of a file below base, relative to base, as the accepted
     manifest holds its artifacts."""
@@ -110,7 +118,7 @@ class TagTest(unittest.TestCase):
 
 class LockTest(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp()).resolve()
+        self.root = temporary(self, "lock")
         self.lock = {"components": {"bsc": {"source_repository": SELECTED["repository"], "version": "v1.8.2",
                                             "commit": COMMIT},
                                     "go": {"version": "go1.27.3"},
@@ -345,7 +353,7 @@ class StartTest(unittest.TestCase):
 
 class EpochTest(unittest.TestCase):
     def test_source_time_of_the_accepted_vanilla_configuration(self):
-        root = Path(tempfile.mkdtemp()).resolve()
+        root = temporary(self, "epoch")
         (root / "oci").mkdir()
         config = root / "oci" / "config.json"
         config.write_text(json.dumps({"created": "2026-11-03T02:04:27Z"}))
@@ -388,7 +396,7 @@ def overlay(root):
 
 class VariantTest(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp()).resolve()
+        self.root = temporary(self, "variant")
 
     def test_the_base_build_has_no_variant(self):
         self.assertIsNone(build.variant_of(None, *NO_INPUT.values()))
@@ -710,7 +718,7 @@ class ProcedureFixture(unittest.TestCase):
                             ("during_build", None), ("config", CONFIG), ("version", VERSION), ("control", {}),
                             ("symbols", frozenset(build.CAPTURE_SYMBOLS)), ("start", STARTED)):
             setattr(FakeNative, name, value)
-        self.root = Path(tempfile.mkdtemp()).resolve()
+        self.root = temporary(self, "procedure")
         self.output, self.accepted = self.root / "out", self.root / "accepted"
         (self.accepted / "cache" / "bsc" / "mod").mkdir(parents=True)
         (self.accepted / "oci").mkdir()
@@ -934,8 +942,11 @@ class BuildTest(ProcedureFixture):
         (header / "rocksdb.h").write_text("#include <stdint.h>\n")
         base = ["build", "--build-manifest", str(self.accepted / "manifest.json"), "--sha256", self.sha]
         output = self.root / "link"
-        self.assertEqual(build.main([*base, "--output", str(output), "--variant", "rocksdb", "--cgo-link", "-lrocksdb",
-                                     "--cgo-include", str(header)]), 0)
+        # main prints its result line; the test output stays clean.
+        with mock.patch("builtins.print") as printed:
+            code = build.main([*base, "--output", str(output), "--variant", "rocksdb", "--cgo-link", "-lrocksdb",
+                               "--cgo-include", str(header)])
+        self.assertEqual((code, printed.call_args_list), (0, [mock.call('{"result": "PASS", "error": null}')]))
         provenance = json.loads((output / "provenance.json").read_text())
         self.assertEqual(provenance["variant"]["cgo"]["link"], ["-lrocksdb"])
         self.assertEqual(provenance["build_environment"],
@@ -943,9 +954,36 @@ class BuildTest(ProcedureFixture):
         self.assertEqual(provenance["image"], TAG + "-rocksdb")
         self.assertEqual(build.command_line(["--cgo-link", "-la", "--cgo-link=-lb", "x", "--cgo-link"]),
                          ["--cgo-link=-la", "--cgo-link=-lb", "x", "--cgo-link"])
-        with mock.patch("builtins.print"):
-            self.assertEqual(build.main([*base, "--output", str(self.root / "none"), "--cgo-link", "-lrocksdb"]), 2)
+        with mock.patch("builtins.print") as printed:
+            code = build.main([*base, "--output", str(self.root / "none"), "--cgo-link", "-lrocksdb"])
+        self.assertEqual(code, 2)
+        self.assertTrue(printed.call_args_list[0].args[0].startswith('{"result": "REFUSED"'))
         self.assertFalse((self.root / "none").exists())
+
+    def test_the_exit_codes_of_a_pass_a_fail_and_a_refusal(self):
+        # 0 with a PASS line, 1 with a FAIL line and a record, 2 with a REFUSED
+        # line and no output; a wrong command line also exits with 2.
+        base = ["build", "--build-manifest", str(self.accepted / "manifest.json"), "--sha256", self.sha]
+        with mock.patch("builtins.print") as printed:
+            self.assertEqual(build.main([*base, "--output", str(self.output)]), 0)
+        self.assertEqual(printed.call_args_list, [mock.call('{"result": "PASS", "error": null}')])
+        self.assertTrue((self.output / "build.json").is_file())
+        failed = self.root / "failed"
+        with mock.patch.object(FakeNative, "version", VERSION.replace(COMMIT, "0" * 40)), \
+                mock.patch("builtins.print") as printed:
+            self.assertEqual(build.main([*base, "--output", str(failed)]), 1)
+        self.assertEqual(len(printed.call_args_list), 1)
+        self.assertTrue(printed.call_args_list[0].args[0].startswith('{"result": "FAIL", "error": "Rejected: Version output differs'))
+        self.assertTrue((failed / "build.json").is_file())
+        refused = self.root / "refused"
+        with mock.patch("builtins.print") as printed:
+            self.assertEqual(build.main([*base[:-1], "0" * 64, "--output", str(refused)]), 2)
+        self.assertTrue(printed.call_args_list[0].args[0].startswith('{"result": "REFUSED"'))
+        self.assertFalse(refused.exists())
+        with mock.patch("builtins.print"), self.assertRaises(SystemExit) as stopped:
+            build.main(["build", "--output", str(refused)])
+        self.assertEqual(stopped.exception.code, 2)
+        self.assertFalse(refused.exists())
 
     def test_a_variant_may_patch_the_module_files(self):
         module = self.root / "go.mod.diff"
