@@ -177,6 +177,16 @@ An overlay on top of patches 01 to 08, for the in-node collector:
   on the module cache of the accepted build, which holds exactly those
   versions. A module that is replaced by a directory needs no `go.sum` line.
 
+The module overlay was exercised once (2026-11-25) with a throwaway
+variant that is not in this repository. Its `go.mod.diff` appended one
+`require` and one `replace` to a directory under `extractor-modules/`,
+which held the two generated ingest files, and a probe package named
+`ingest.NewIngestClient`. The build passed, and `go_build_info` names the
+replaced module with gRPC v1.80.0 and protobuf v1.36.11. The relative
+`replace` resolved against the root of the tree, where the compile runs,
+and not against the directory of the copied `go.mod`. `go.sum` stayed the
+accepted one, and `smoke` passed on that image.
+
 A C library that the binary links, for RocksDB 10.4.2:
 
 - `--cgo-include DIR` and `--cgo-library DIR` are absolute directories with
