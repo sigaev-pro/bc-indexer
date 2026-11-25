@@ -141,16 +141,37 @@ def lock_pins(lock_path, manifest, deadline=None):
                       "runtime_image": images["debian-runtime-image"]["pull_reference"]}
 
 
+def file_reference(path, deadline=None):
+    """A reference of a file, with the kind of its digest."""
+    return {**reference(path, BINARY_LIMIT, deadline), "digest_kind": "file"}
+
+
 def tree_reference(path, deadline=None):
     """A reference of a directory: SHA-256 over the sorted relative paths and the
-    file digests under it."""
+    file digests under it, with the kind of its digest."""
     hasher, files, size = hashlib.sha256(), 0, 0
     for item in sorted(part for part in path.rglob("*") if part.is_file()):
         row = reference(item, BINARY_LIMIT, deadline)
         hasher.update(f"{item.relative_to(path).as_posix()} {row['sha256']}\n".encode())
         files, size = files + 1, size + row["size_bytes"]
     require(files, f"Empty directory: {path}")
-    return {"path": str(path), "sha256": hasher.hexdigest(), "files": files, "size_bytes": size}
+    return {"path": str(path), "sha256": hasher.hexdigest(), "files": files, "size_bytes": size, "digest_kind": "tree"}
+
+
+def input_reference(row, deadline=None):
+    """The reference of a recorded input, taken again: a file, or a directory
+    by its tree digest."""
+    path = Path(row["path"])
+    return tree_reference(path, deadline) if row["digest_kind"] == "tree" else file_reference(path, deadline)
+
+
+def check_inputs(rows, when, deadline=None):
+    """Every recorded input still has its digest and its size. A row without a
+    digest kind is a file, as in the installed rows of the harness."""
+    for row in rows:
+        current = input_reference({**row, "digest_kind": row.get("digest_kind", "file")}, deadline)
+        require(current["sha256"] == row["sha256"] and current["size_bytes"] == row["size_bytes"],
+                f"Input changed {when}: {row['path']}")
 
 
 def variant_of(name, patches, packages, include, library, link, runtime_libraries, deadline=None):
@@ -181,9 +202,8 @@ def variant_of(name, patches, packages, include, library, link, runtime_librarie
         require(path.is_file() and path.suffix == ".diff" and path.name not in seen,
                 f"Extra patch is not a new .diff file: {item}")
         seen.add(path.name)
-        row = reference(path, OVERLAY_LIMIT, deadline)
-        patch_rows.append({"path": row["path"], "name": path.name, "sha256": row["sha256"],
-                           "size_bytes": row["size_bytes"]})
+        row = file_reference(path, deadline)
+        patch_rows.append({**row, "name": path.name})
     package_rows, targets = [], []
     for item in packages:
         source, separator, target = item.partition("=")
@@ -193,7 +213,8 @@ def variant_of(name, patches, packages, include, library, link, runtime_librarie
                                                   for other in targets), f"Overlay targets overlap: {item}")
         targets.append(target)
         path = resolve(source, "overlay package")
-        row = reference(path, OVERLAY_LIMIT, deadline) if path.is_file() else tree_reference(path, deadline)
+        # A file is one file; a directory is bound by the digest over its files.
+        row = file_reference(path, deadline) if path.is_file() else tree_reference(path, deadline)
         package_rows.append({"path": target, "source": row})
     trees = {}
     for kind, items in (("include", include), ("library", library)):
@@ -204,7 +225,7 @@ def variant_of(name, patches, packages, include, library, link, runtime_librarie
             trees[kind].append(tree_reference(path, deadline))
     for flag in link:
         require(re.fullmatch(r"-[^\s]+", flag) is not None, f"Invalid linker flag: {flag}")
-    shared = [reference(resolve(item, "runtime library"), BINARY_LIMIT, deadline) for item in runtime_libraries]
+    shared = [file_reference(resolve(item, "runtime library"), deadline) for item in runtime_libraries]
     return {"schema_version": 1, "kind": "bsc-capture-image-variant", "name": name, "patches": patch_rows,
             "packages": package_rows, "cgo": {"include": trees["include"], "library": trees["library"], "link": list(link)},
             "runtime_libraries": shared}
@@ -217,16 +238,25 @@ def apply_variant(source, root, variant, deadline=None):
     installed. Returns the overlay patch rows."""
     kept = root / "overlay"
     for row in variant["packages"]:
-        origin, target = Path(row["source"]["path"]), source / row["path"]
+        recorded, target = row["source"], source / row["path"]
         require(not target.exists() and not target.is_symlink(), f"Overlay target already exists in the native tree: {row['path']}")
-        items = [(origin, target)] if origin.is_file() else [
-            (item, target / item.relative_to(origin)) for item in sorted(origin.rglob("*")) if item.is_file()]
-        for item, destination in items:
-            expected = reference(item, OVERLAY_LIMIT, deadline)
+        # The input is what the variant recorded, checked before anything is copied.
+        check_inputs([recorded], "before its install", deadline)
+        origin = Path(recorded["path"])
+        if recorded["digest_kind"] == "file":
+            items = [(origin, target, recorded)]  # a file package is copied against its recorded digest
+        else:
+            items = [(item, target / item.relative_to(origin), reference(item, OVERLAY_LIMIT, deadline))
+                     for item in sorted(origin.rglob("*")) if item.is_file()]
+        for item, destination, expected in items:
             retained = kept / "packages" / destination.relative_to(source)
             for path in (destination, retained):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 copy_artifact(item, path, expected, OVERLAY_LIMIT, deadline)
+        if recorded["digest_kind"] == "tree":
+            # The installed directory is the tree that was recorded.
+            require(tree_reference(target, deadline)["sha256"] == recorded["sha256"],
+                    f"Installed package differs from its recorded tree: {row['path']}")
     rows = []
     for row in variant["patches"]:
         origin, retained = Path(row["path"]), kept / "patches" / row["name"]
@@ -235,6 +265,13 @@ def apply_variant(source, root, variant, deadline=None):
         copy_artifact(origin, retained, expected, OVERLAY_LIMIT, deadline)
         rows.append({"patch": expected, "files": bsc_admission.apply_patch(source, retained.read_text())})
     return rows
+
+
+def variant_inputs(variant):
+    """Every input of a variant with its recorded digest: the patches, the
+    packages, the header and library directories, and the shared libraries."""
+    return [*variant["patches"], *(row["source"] for row in variant["packages"]),
+            *variant["cgo"]["include"], *variant["cgo"]["library"], *variant["runtime_libraries"]]
 
 
 def variant_mounts(variant):
@@ -301,8 +338,13 @@ def image_facts(selected, patched, installed, harness_commit, go_output, binary,
     return {"schema_version": 1, "kind": "bsc-capture-image-provenance", "platform": "linux/amd64",
             "upstream": {key: selected[key] for key in ("repository", "version", "commit")},
             "patches": [patch_row(row) for row in base],
+            # An installed row is one file, or an overlay package that is a directory;
+            # digest_kind says which digest the row holds.
             "installed": [{"path": row["relative"], "sha256": row["source"]["sha256"],
-                           "size_bytes": row["source"]["size_bytes"]} for row in installed],
+                           "size_bytes": row["source"]["size_bytes"],
+                           "digest_kind": row["source"].get("digest_kind", "file"),
+                           **({"files": row["source"]["files"]} if "files" in row["source"] else {})}
+                          for row in installed],
             "go_version_output": go_output, "go_version": selected["go_version"],
             "compiler_image": selected["compiler_image"], "runtime_image": selected["runtime_image"],
             "build_manifest_sha256": manifest_ref["sha256"], "candidate_lock_sha256": lock_ref["sha256"],
@@ -331,8 +373,9 @@ def image_labels(facts):
         if variant["patches"]:
             labels[LABEL + "overlay-patches"] = ";".join(row["name"] + "=" + row["sha256"] for row in variant["patches"])
         if variant["packages"]:
-            labels[LABEL + "overlay-packages"] = ";".join(row["path"] + "=" + row["source"]["sha256"]
-                                                           for row in variant["packages"])
+            labels[LABEL + "overlay-packages"] = ";".join(
+                row["path"] + "=" + row["source"]["digest_kind"] + ":" + row["source"]["sha256"]
+                for row in variant["packages"])
         if variant["runtime_libraries"]:
             labels[LABEL + "runtime-libraries"] = ";".join(Path(row["path"]).name + "=" + row["sha256"]
                                                            for row in variant["runtime_libraries"])
@@ -587,10 +630,11 @@ def build(manifest_path, expected_sha, output, variant=None):
         read_bytes(info, LOG_LIMIT, deadline)
         sources_unchanged(origins, deadline)
         sources_unchanged(drivers, deadline)
+        # Every input that reached the binary still has its recorded digest: the
+        # installed packages of the base build, and all inputs of a variant.
+        check_inputs([row["source"] for row in installed], "during the build", deadline)
         if variant is not None:
-            for row in [*variant["patches"], *variant["runtime_libraries"]]:
-                require(reference(Path(row["path"]), BINARY_LIMIT, deadline)["sha256"] == row["sha256"],
-                        "Variant input changed during the build: " + row["path"])
+            check_inputs(variant_inputs(variant), "during the build", deadline)
         epoch = source_date_epoch(manifest_path, manifest, deadline)
         facts = image_facts(selected, patched, installed, proof["source_commit"], go_output, binary, manifest_ref,
                             lock_ref, epoch, variant)

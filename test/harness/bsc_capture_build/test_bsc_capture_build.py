@@ -73,14 +73,16 @@ def described_variant():
     """A complete variant, in the shape variant_of describes, and the row of its applied patch."""
     variant = {"schema_version": 1, "kind": "bsc-capture-image-variant", "name": "collector",
                "patches": [{"path": str(FIXTURE / "09-collector.diff"), "name": "09-collector.diff",
-                            "sha256": "1" * 64, "size_bytes": 4}],
+                            "sha256": "1" * 64, "size_bytes": 4, "digest_kind": "file"}],
                "packages": [{"path": "extractor/collector", "source": {"path": str(FIXTURE / "package"), "sha256": "2" * 64,
-                                                                        "files": 2, "size_bytes": 33}}],
-               "cgo": {"include": [{"path": str(FIXTURE / "include"), "sha256": "3" * 64, "files": 1, "size_bytes": 9}],
-                       "library": [{"path": str(FIXTURE / "lib"), "sha256": "4" * 64, "files": 1, "size_bytes": 16}],
+                                                                        "files": 2, "size_bytes": 33, "digest_kind": "tree"}}],
+               "cgo": {"include": [{"path": str(FIXTURE / "include"), "sha256": "3" * 64, "files": 1, "size_bytes": 9,
+                                    "digest_kind": "tree"}],
+                       "library": [{"path": str(FIXTURE / "lib"), "sha256": "4" * 64, "files": 1, "size_bytes": 16,
+                                    "digest_kind": "tree"}],
                        "link": ["-lrocksdb"]},
                "runtime_libraries": [{"path": str(FIXTURE / "lib" / "librocksdb.so.10.4.2"), "sha256": "6" * 64,
-                                      "size_bytes": 16}],
+                                      "size_bytes": 16, "digest_kind": "file"}],
                "rows": {"patch": {"path": str(FIXTURE / "09-collector.diff"), "sha256": "1" * 64, "size_bytes": 4},
                         "files": [{"path": "extractor/collector/doc.go", "new": True, "before_sha256": None,
                                    "after_sha256": "9" * 64}]}}
@@ -176,7 +178,7 @@ class LabelsTest(unittest.TestCase):
         extra = {key: value for key, value in labels.items() if key not in build.image_labels(provenance_rows())}
         self.assertEqual(extra, {"io.extractor.variant": "collector",
                                  "io.extractor.overlay-patches": "09-collector.diff=" + "1" * 64,
-                                 "io.extractor.overlay-packages": "extractor/collector=" + "2" * 64,
+                                 "io.extractor.overlay-packages": "extractor/collector=tree:" + "2" * 64,
                                  "io.extractor.runtime-libraries": "librocksdb.so.10.4.2=" + "6" * 64,
                                  "io.extractor.cgo-include-sha256": "3" * 64,
                                  "io.extractor.cgo-library-sha256": "4" * 64,
@@ -353,17 +355,22 @@ class VariantTest(unittest.TestCase):
 
     def test_variant_parts(self):
         variant = overlay(self.root)
-        patch = reference(self.root / "09-collector.diff")
+        patch = build.file_reference(self.root / "09-collector.diff")
         package = build.tree_reference(self.root / "package")
+        self.assertEqual(patch["digest_kind"], "file")
         self.assertEqual(variant["patches"], [{"path": str(self.root / "09-collector.diff"), "name": "09-collector.diff",
-                                               "sha256": patch["sha256"], "size_bytes": patch["size_bytes"]}])
+                                               "sha256": patch["sha256"], "size_bytes": patch["size_bytes"],
+                                               "digest_kind": "file"}])
         self.assertEqual(variant["packages"], [{"path": "extractor/collector", "source": package}])
-        self.assertEqual((package["files"], package["size_bytes"]), (2, 33))
+        # A directory is bound by the digest over its files, and the row says so.
+        self.assertEqual((package["files"], package["size_bytes"], package["digest_kind"]), (2, 33, "tree"))
+        self.assertEqual([row["digest_kind"] for row in variant["cgo"]["include"] + variant["cgo"]["library"]],
+                         ["tree", "tree"])
+        self.assertEqual(variant["runtime_libraries"], [build.file_reference(self.root / "lib" / "libcprobe.so")])
         self.assertEqual([row["sha256"] for row in variant["cgo"]["include"]],
                          [build.tree_reference(self.root / "include")["sha256"]])
         self.assertEqual(variant["cgo"]["library"], [build.tree_reference(self.root / "lib")])
         self.assertEqual(variant["cgo"]["link"], ["-lcprobe"])
-        self.assertEqual(variant["runtime_libraries"], [reference(self.root / "lib" / "libcprobe.so")])
         self.assertEqual(build.variant_mounts(variant),
                          [(self.root / "include", "/cgo/include/0", True), (self.root / "lib", "/cgo/library/0", True)])
         # Go's own C flags come first: a set CGO_CFLAGS or CGO_LDFLAGS replaces them.
@@ -380,7 +387,8 @@ class VariantTest(unittest.TestCase):
         (second / "b.h").write_text("int b(void);\n")
         variant = build.variant_of("single", [], [f"{single}=extractor/single/single.go"], [str(self.root / "include"),
                             str(second)], [], [], [])
-        self.assertEqual(variant["packages"], [{"path": "extractor/single/single.go", "source": reference(single)}])
+        self.assertEqual(variant["packages"], [{"path": "extractor/single/single.go",
+                                                "source": build.file_reference(single)}])
         self.assertEqual(build.variant_environment(variant),
                          {"CGO_CFLAGS": "-O2 -g -I/cgo/include/0 -I/cgo/include/1"})
         self.assertNotIn("CGO_LDFLAGS", build.variant_environment(variant))
@@ -452,6 +460,33 @@ class VariantTest(unittest.TestCase):
         variant["packages"] = []
         with self.assertRaises(Rejected):
             build.apply_variant(source, record, variant)  # the patch creates an existing file
+
+    def test_a_package_that_changed_after_the_variant_was_described_is_refused(self):
+        variant = overlay(self.root)
+        (self.root / "package" / "collector.go").write_text("package changed\n")
+        source, record = self.root / "tree", self.root / "record"
+        source.mkdir()
+        record.mkdir()
+        with self.assertRaisesRegex(Rejected, "Input changed before its install"):
+            build.apply_variant(source, record, variant)
+        self.assertFalse((source / "extractor").exists())  # nothing was copied
+
+    def test_an_installed_package_must_be_the_recorded_tree(self):
+        overlay(self.root)  # writes the package directory
+        variant = build.variant_of("package", [], [f"{self.root / 'package'}=extractor/collector"], [], [], [], [])
+        source, record = self.root / "tree", self.root / "record"
+        source.mkdir()
+        record.mkdir()
+        original = build.copy_artifact
+
+        def corrupting(origin, destination, expected, maximum, deadline=None):
+            copied = original(origin, destination, expected, maximum, deadline)
+            if destination.is_relative_to(source):
+                destination.write_bytes(destination.read_bytes() + b"// changed\n")
+            return copied
+        with mock.patch.object(build, "copy_artifact", corrupting), \
+                self.assertRaisesRegex(Rejected, "Installed package differs from its recorded tree"):
+            build.apply_variant(source, record, variant)
 
     def test_dockerfile_of_a_variant_with_shared_libraries(self):
         text = build.DOCKERFILE.read_text()
@@ -631,8 +666,11 @@ class ProcedureFixture(unittest.TestCase):
             patched.append({"patch": reference(path), "files": [
                 {"path": f"core/file{index}.go", "new": index % 2 == 0, "before_sha256": None,
                  "after_sha256": f"{index:064x}"}]})
-        installed = [{"relative": "extractor/bsc/lifecycle/lifecycle.go", "source": reference(source / "go.mod"),
-                      "retained": reference(source / "go.mod")}]
+        # The installed package stands outside the source tree, as the adapters do.
+        self.adapter = directory / "lifecycle.go"
+        self.adapter.write_text("package lifecycle\n")
+        installed = [{"relative": "extractor/bsc/lifecycle/lifecycle.go", "source": reference(self.adapter),
+                      "retained": reference(self.adapter)}]
         return patched, installed
 
     @property
@@ -696,6 +734,7 @@ class BuildTest(ProcedureFixture):
 
     def test_variant_build_passes_and_records_the_overlay(self):
         variant = overlay(self.root)
+        package_digest = build.tree_reference(self.root / "package")["sha256"]
         proof = build.build(self.accepted / "manifest.json", self.sha, self.output, variant)
         self.assertEqual((proof["result"], proof["error"]), ("PASS", None))
         tag = TAG + "-collector"
@@ -703,9 +742,12 @@ class BuildTest(ProcedureFixture):
         provenance = json.loads((self.output / "provenance.json").read_text())
         self.assertEqual(provenance["variant"]["name"], "collector")
         self.assertEqual(provenance["variant"]["patches"][0]["files"][0]["path"], "extractor/collector/doc.go")
-        self.assertEqual(provenance["installed"][-1], {"path": "extractor/collector", "sha256": provenance["installed"][-1]["sha256"],
-                                                        "size_bytes": 33})
-        self.assertEqual(provenance["installed"][-1]["sha256"], build.tree_reference(self.root / "package")["sha256"])
+        self.assertEqual(provenance["installed"][-1], {"path": "extractor/collector", "sha256": package_digest,
+                                                        "size_bytes": 33, "digest_kind": "tree", "files": 2})
+        self.assertEqual(provenance["installed"][0], {"path": "extractor/bsc/lifecycle/lifecycle.go",
+                                                      "sha256": reference(self.adapter)["sha256"],
+                                                      "size_bytes": reference(self.adapter)["size_bytes"],
+                                                      "digest_kind": "file"})
         self.assertEqual(provenance["build_environment"],
                          {"CGO_CFLAGS": "-O2 -g -I/cgo/include/0", "CGO_LDFLAGS": "-O2 -g -L/cgo/library/0 -lcprobe"})
         self.assertEqual((self.output / "image" / "libs" / "libcprobe.so").read_bytes(), b"\x7fELF" + bytes(12))
@@ -796,17 +838,33 @@ class BuildTest(ProcedureFixture):
         self.assertEqual([argv for argv in self.docker.calls if argv[1] == "build"], [])
         self.assertEqual(self.native, [])
 
-    def test_a_changed_variant_input_fails_before_an_image_exists(self):
-        variant = overlay(self.root)
-        original = build.probe14.build_mounts
-
-        def changing(*arguments):
-            (self.root / "lib" / "libcprobe.so").write_bytes(b"changed")
-            return original(*arguments)
-        with mock.patch.object(build.probe14, "build_mounts", changing):
-            proof = build.build(self.accepted / "manifest.json", self.sha, self.output, variant)
-        self.assertEqual((proof["result"], self.docker.removed), ("FAIL", []))
-        self.assertIn("Variant input changed", proof["error"])
+    def test_an_input_that_changes_during_the_build_fails_it(self):
+        # Each input that reaches the binary is checked again after the compile.
+        changes = {
+            "patch": lambda base: (base / "09-collector.diff").write_text("changed\n"),
+            "package file": lambda base: (base / "package" / "collector.go").write_text("changed\n"),
+            "package file added": lambda base: (base / "package" / "new.go").write_text("package collector\n"),
+            "header": lambda base: (base / "include" / "cprobe.h").write_text("changed\n"),
+            "library directory": lambda base: (base / "lib" / "libcprobe.so").write_bytes(b"changed"),
+            "runtime library": lambda base: (base / "lib" / "libcprobe.so").write_bytes(b"changed again")}
+        for index, (name, change) in enumerate(changes.items()):
+            with self.subTest(name=name):
+                FakeNative.instances = []
+                base = self.root / f"overlay-{index}"
+                base.mkdir()
+                variant = overlay(base)
+                self.output = self.root / f"changed-{index}"
+                FakeNative.during_build = lambda: change(base)
+                proof = build.build(self.accepted / "manifest.json", self.sha, self.output, variant)
+                self.assertEqual((proof["result"], self.docker.removed), ("FAIL", []))
+                self.assertIn("Input changed during the build", proof["error"])
+                self.assertEqual([argv for argv in self.docker.calls if argv[1] == "build"], [])
+        FakeNative.instances = []
+        self.output = self.root / "changed-adapter"
+        FakeNative.during_build = lambda: self.adapter.write_text("changed\n")
+        proof = build.build(self.accepted / "manifest.json", self.sha, self.output)
+        self.assertEqual(proof["result"], "FAIL")  # an installed package of the base build is bound too
+        self.assertIn("Input changed during the build", proof["error"])
 
     def test_a_failed_check_removes_the_tag_and_keeps_the_fail(self):
         with mock.patch.object(FakeNative, "version", VERSION.replace(COMMIT, "0" * 40)):

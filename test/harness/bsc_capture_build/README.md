@@ -139,9 +139,19 @@ A C library that the binary links, for RocksDB 10.4.2:
 Both need `--variant NAME`. The tag becomes
 `bc-indexer/bsc-capture:1.8.2-capture-NAME`, and provenance.json and the
 labels `io.extractor.variant`, `io.extractor.overlay-*`, `io.extractor.cgo-*`
-and `io.extractor.runtime-libraries` record the inputs by digest. `ldd`
-then proves that the runtime image holds every shared library of the
-binary.
+and `io.extractor.runtime-libraries` record the inputs by digest. A file
+has its file digest; a directory has a tree digest, which is SHA-256 over
+the sorted relative paths and the file digests under it. Each
+`installed` row of provenance.json says which it holds in `digest_kind`,
+and the label `io.extractor.overlay-packages` writes `file:` or `tree:`
+before the digest. `ldd` then proves that the runtime image holds every
+shared library of the binary.
+
+Every input is checked again after the compile and must still have its
+recorded digest: the patches, the packages, the header and library
+directories, the shared libraries, and the installed packages of the base
+build. An overlay package is checked against its recorded digest before
+it is copied, and an installed directory must be the recorded tree.
 
 The parameters were exercised once with a throwaway overlay that is not in
 this repository: a patch, a package with one cgo file, a header directory,
