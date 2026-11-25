@@ -600,11 +600,10 @@ class BuildTest(ProcedureFixture):
             ["/usr/local/go/bin/gofmt", "-l", "extractor", *sorted(f"core/file{index}.go" for index in range(8))],
             [build.GO, "version"], build.build_arguments(COMMIT), [build.GO, "version", "-m", "/work/generated/geth"]])
         self.assertEqual([(row["image"], row["argv"]) for row in native[4:]],
-                         [(TAG, ["version"]),
-                          (TAG, ["--chapel", *build.PROFILE, "--datadir", "/work/dumpconfig", "dumpconfig"]),
-                          (TAG, LDD)])
+                         [(TAG, LDD), (TAG, ["version"]),
+                          (TAG, ["--chapel", *build.PROFILE, "--datadir", "/work/dumpconfig", "dumpconfig"])])
         self.assertTrue(all(row["image"] == GOLANG for row in native[:4]))
-        self.assertEqual([row["entrypoint"] for row in native], [None] * 6 + ["/bin/sh"])
+        self.assertEqual([row["entrypoint"] for row in native], [None] * 4 + ["/bin/sh", None, None])
         self.assertEqual([row["environment"] for row in native[:4]], [build.pins.environment()] * 4)
         record = json.loads((self.output / "build.json").read_text())
         self.assertEqual((record["result"], record["source_commit"], record["cleanup_complete"]), ("PASS", "b" * 40, True))
@@ -654,6 +653,7 @@ class BuildTest(ProcedureFixture):
         self.assertEqual((proof["result"], self.docker.removed), ("FAIL", [TAG + "-collector"]))
         self.assertIn("librocksdb.so.10", proof["error"])
         self.assertFalse((self.output / "provenance.json").exists())
+        self.assertEqual(len(self.native), 5)  # the node was not started on an image that cannot load it
 
     def test_the_command_line_accepts_linker_flags(self):
         header = self.root / "rocksdb" / "include"

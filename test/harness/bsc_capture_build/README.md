@@ -126,6 +126,13 @@ and `io.extractor.runtime-libraries` record the inputs by digest. `ldd`
 then proves that the runtime image holds every shared library of the
 binary.
 
+The parameters were exercised once with a throwaway overlay that is not in
+this repository: a patch, a package with one cgo file, a header directory,
+a shared library and its link flag. The build linked the library,
+`ldd` found it in the runtime image, and `geth version` and
+`geth dumpconfig` ran there. The same variant without
+`--runtime-library` was refused and its tag removed.
+
 What each variant still needs: the packages and patches of the collector;
 and for RocksDB, an installation prefix built from its source with the build
 dependencies of the candidate lock, the overlay that uses it, and a choice

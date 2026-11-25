@@ -581,7 +581,13 @@ def build(manifest_path, expected_sha, output, variant=None):
             layers, base_layers = image["RootFS"]["Layers"], base["RootFS"]["Layers"]
             require(layers[:len(base_layers)] == base_layers and len(layers) == len(base_layers) + added,
                     "Image is not the pinned runtime image with the layers of this build")
-            # The checks run in the new image, in owned offline containers.
+            # The checks run in the new image, in owned offline containers. The
+            # first one comes first so that a missing shared library is named:
+            # without it the binary cannot even start.
+            loader = runner.command(tag, ["-c", f"ldd /usr/local/bin/{BINARY} || true"], [], cap=120, memory="512m",
+                                    entrypoint="/bin/sh")
+            libraries = dynamic_libraries(read_bytes(loader, 64 * 1024, deadline).decode())
+            check_libraries(libraries)
             version = runner.command(tag, ["version"], [], cap=120, memory="512m")
             fields = version_fields(read_bytes(version, 64 * 1024, deadline).decode())
             check_version(fields, selected)
@@ -589,12 +595,6 @@ def build(manifest_path, expected_sha, output, variant=None):
                                     [(root / "work", "/work", False)], cap=120, memory="1g")
             text = read_bytes(config, 4 * 1024 * 1024, deadline).decode()
             check_effective_config(text)
-            # Every shared library of the binary must be in the image, or the node
-            # cannot start there.
-            loader = runner.command(tag, ["-c", f"ldd /usr/local/bin/{BINARY} || true"], [], cap=120, memory="512m",
-                                    entrypoint="/bin/sh")
-            libraries = dynamic_libraries(read_bytes(loader, 64 * 1024, deadline).decode())
-            check_libraries(libraries)
         except BaseException:
             # A failed record never leaves its tag on an image.
             if identity.exists():
