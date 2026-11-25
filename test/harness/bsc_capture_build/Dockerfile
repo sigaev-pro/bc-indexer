@@ -1,0 +1,12 @@
+# Runtime image of the capture-enabled BSC client. The build procedure is
+# bsc_capture_build.py next to this file: it compiles the patched ./cmd/geth
+# in the pinned compiler image, then runs this file with the pinned runtime
+# image as BASE_IMAGE and the provenance labels on the command line. This
+# file holds no version or digest that can drift from the candidate lock.
+# A variant with shared libraries gets two more lines after the binary, the
+# shared libraries in /usr/local/lib and ldconfig; the procedure writes that
+# effective file into the build context.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY --chmod=0755 geth /usr/local/bin/geth
+ENTRYPOINT ["/usr/local/bin/geth"]
