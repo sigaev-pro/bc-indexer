@@ -335,8 +335,9 @@ class VariantTest(unittest.TestCase):
         self.assertEqual(variant["runtime_libraries"], [reference(self.root / "lib" / "libcprobe.so")])
         self.assertEqual(build.variant_mounts(variant),
                          [(self.root / "include", "/cgo/include/0", True), (self.root / "lib", "/cgo/library/0", True)])
+        # Go's own C flags come first: a set CGO_CFLAGS or CGO_LDFLAGS replaces them.
         self.assertEqual(build.variant_environment(variant),
-                         {"CGO_CFLAGS": "-I/cgo/include/0", "CGO_LDFLAGS": "-L/cgo/library/0 -lcprobe"})
+                         {"CGO_CFLAGS": "-O2 -g -I/cgo/include/0", "CGO_LDFLAGS": "-O2 -g -L/cgo/library/0 -lcprobe"})
 
     def test_a_file_package_and_several_directories(self):
         single = self.root / "single.go"
@@ -349,7 +350,9 @@ class VariantTest(unittest.TestCase):
         variant = build.variant_of("single", [], [f"{single}=extractor/single/single.go"], [str(self.root / "include"),
                             str(second)], [], [], [])
         self.assertEqual(variant["packages"], [{"path": "extractor/single/single.go", "source": reference(single)}])
-        self.assertEqual(build.variant_environment(variant), {"CGO_CFLAGS": "-I/cgo/include/0 -I/cgo/include/1"})
+        self.assertEqual(build.variant_environment(variant),
+                         {"CGO_CFLAGS": "-O2 -g -I/cgo/include/0 -I/cgo/include/1"})
+        self.assertNotIn("CGO_LDFLAGS", build.variant_environment(variant))
         self.assertEqual(build.variant_mounts(variant)[-1], (second, "/cgo/include/1", True))
 
     def test_invalid_variants_are_refused(self):
@@ -646,7 +649,7 @@ class BuildTest(ProcedureFixture):
                                                         "size_bytes": 33})
         self.assertEqual(provenance["installed"][-1]["sha256"], build.tree_reference(self.root / "package")["sha256"])
         self.assertEqual(provenance["build_environment"],
-                         {"CGO_CFLAGS": "-I/cgo/include/0", "CGO_LDFLAGS": "-L/cgo/library/0 -lcprobe"})
+                         {"CGO_CFLAGS": "-O2 -g -I/cgo/include/0", "CGO_LDFLAGS": "-O2 -g -L/cgo/library/0 -lcprobe"})
         self.assertEqual((self.output / "image" / "libs" / "libcprobe.so").read_bytes(), b"\x7fELF" + bytes(12))
         self.assertEqual(oct((self.output / "image" / "libs" / "libcprobe.so").stat().st_mode & 0o777), "0o755")
         self.assertIn(build.LIBRARIES, (self.output / "image" / "Dockerfile").read_text())
@@ -676,6 +679,16 @@ class BuildTest(ProcedureFixture):
         self.assertFalse((self.output / "provenance.json").exists())
         self.assertEqual(len(self.native), 5)  # the node was not started on an image that cannot load it
 
+    def test_library_directories_and_link_flags_alone_keep_the_default_flags(self):
+        library = self.root / "rocksdb" / "lib"
+        library.mkdir(parents=True)
+        (library / "librocksdb.a").write_bytes(b"!<arch>\n")
+        variant = build.variant_of("rocksdb", [], [], [], [str(library)], ["-lrocksdb", "-Wl,--no-as-needed"], [])
+        self.assertEqual(build.variant_environment(variant),
+                         {"CGO_LDFLAGS": "-O2 -g -L/cgo/library/0 -lrocksdb -Wl,--no-as-needed"})
+        self.assertEqual(build.variant_mounts(variant), [(library, "/cgo/library/0", True)])
+        self.assertNotIn("CGO_CFLAGS", build.variant_environment(variant))
+
     def test_the_command_line_accepts_linker_flags(self):
         header = self.root / "rocksdb" / "include"
         header.mkdir(parents=True)
@@ -686,7 +699,8 @@ class BuildTest(ProcedureFixture):
                                      "--cgo-include", str(header)]), 0)
         provenance = json.loads((output / "provenance.json").read_text())
         self.assertEqual(provenance["variant"]["cgo"]["link"], ["-lrocksdb"])
-        self.assertEqual(provenance["build_environment"], {"CGO_CFLAGS": "-I/cgo/include/0", "CGO_LDFLAGS": "-lrocksdb"})
+        self.assertEqual(provenance["build_environment"],
+                         {"CGO_CFLAGS": "-O2 -g -I/cgo/include/0", "CGO_LDFLAGS": "-O2 -g -lrocksdb"})
         self.assertEqual(provenance["image"], TAG + "-rocksdb")
         self.assertEqual(build.command_line(["--cgo-link", "-la", "--cgo-link=-lb", "x", "--cgo-link"]),
                          ["--cgo-link=-la", "--cgo-link=-lb", "x", "--cgo-link"])

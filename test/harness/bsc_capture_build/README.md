@@ -124,8 +124,11 @@ A C library that the binary links, for RocksDB 10.4.2:
 
 - `--cgo-include DIR` and `--cgo-library DIR` are absolute directories with
   headers and with libraries. The build mounts them read-only into the
-  compiler container and passes them as `CGO_CFLAGS=-I...` and
-  `CGO_LDFLAGS=-L...`.
+  compiler container and passes them as `CGO_CFLAGS="-O2 -g -I..."` and
+  `CGO_LDFLAGS="-O2 -g -L..."`. Go hands `-O2 -g` to gcc only while these
+  variables are unset, and every C file of the node compiles through cgo,
+  so the variant prefixes them; otherwise the C code of the node would be
+  unoptimized.
 - `--cgo-link FLAG` adds a linker flag, such as `-lrocksdb`.
 - `--runtime-library FILE` is a shared library the image needs in
   `/usr/local/lib`. A statically linked library needs none.

@@ -95,6 +95,10 @@ LIBRARIES = "COPY libs/ /usr/local/lib/\nRUN ldconfig\n"
 # The header and library directories of a variant are read-only mounts of the
 # compiler container at these paths, which the cgo build arguments name.
 CGO_MOUNTS = {"include": "/cgo/include", "library": "/cgo/library"}
+# The flags Go hands to the C compiler and to the linker while CGO_CFLAGS and
+# CGO_LDFLAGS are unset (DefaultCFlags of cmd/go/internal/work/exec.go). A set
+# variable replaces them, so a variant prefixes them and keeps the defaults.
+GO_CGO_FLAGS = ("-O2", "-g")
 BUILD_SECONDS, SMOKE_SECONDS, IMAGE_SECONDS = 3600, 900, 900
 BINARY_LIMIT, LOG_LIMIT, OVERLAY_LIMIT = 1024 * 1024 * 1024, 8 * 1024 * 1024, 16 * 1024 * 1024
 SMOKE_STORE = "0123456789abcdef0123456789abcdef"
@@ -232,18 +236,20 @@ def variant_mounts(variant):
 
 
 def variant_environment(variant):
-    """The cgo build arguments of a variant: the mounted header and library
-    directories and the linker flags."""
+    """The cgo build arguments of a variant: Go's default C flags, then the
+    mounted header and library directories and the linker flags. Go passes
+    `-O2 -g` to gcc only while CGO_CFLAGS and CGO_LDFLAGS are unset, and every
+    C file of the node compiles through cgo, so without the prefix a variant
+    would compile the node's C code unoptimized."""
     if variant is None:
         return {}
-    environment = {}
-    if variant["cgo"]["include"]:
-        environment["CGO_CFLAGS"] = " ".join(f"-I{CGO_MOUNTS['include']}/{index}"
-                                             for index in range(len(variant["cgo"]["include"])))
-    if variant["cgo"]["library"] or variant["cgo"]["link"]:
-        environment["CGO_LDFLAGS"] = " ".join([f"-L{CGO_MOUNTS['library']}/{index}"
-                                               for index in range(len(variant["cgo"]["library"]))]
-                                              + variant["cgo"]["link"])
+    cgo, environment = variant["cgo"], {}
+    if cgo["include"]:
+        environment["CGO_CFLAGS"] = " ".join([*GO_CGO_FLAGS, *(
+            f"-I{CGO_MOUNTS['include']}/{index}" for index in range(len(cgo["include"])))])
+    if cgo["library"] or cgo["link"]:
+        environment["CGO_LDFLAGS"] = " ".join([*GO_CGO_FLAGS, *(
+            f"-L{CGO_MOUNTS['library']}/{index}" for index in range(len(cgo["library"]))), *cgo["link"]])
     return environment
 
 
