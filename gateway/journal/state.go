@@ -193,6 +193,10 @@ func frameAddrAfter(a, b FrameAddr) bool {
 //     resumes from the remaining keys because the RELEASING marker survives
 //     until the final commit.
 func (j *Journal) Release(id BatchID, manifestDigest, planDigest [32]byte, maxKeys int) (uint64, error) {
+	// The check runs under the journal mutex like every journal step, so it
+	// is one step of the serialized writer. No test fails when this lock is
+	// removed: the check reads the store only, and the storage seam
+	// serializes access on its own, so the difference is not observable.
 	j.mu.Lock()
 	prefix, retired, err := j.checkReleaseLocked(id, manifestDigest, planDigest, maxKeys)
 	j.mu.Unlock()

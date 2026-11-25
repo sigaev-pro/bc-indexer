@@ -1,0 +1,232 @@
+{
+ "schema_version": 1,
+ "description": "Single-check mutants of the gateway journal: the frame accounting (a frame stream is the encoded TransportFrame), the data admission rule of the drain and cutover protocol and the transition guards of PR #227. The copy assembles the sources of the journal, the storage seam and the schema modules under one go.mod, because the module's own replace directives point outside its directory; every package keeps its repository-relative import path.",
+ "language": "go",
+ "root": "../..",
+ "copy": [
+  "gateway/journal/*.go",
+  "core/journal/storage/*.go",
+  "protocol/**/*.go"
+ ],
+ "go_module": "github.com/sigaev-pro/bc-indexer",
+ "test": [
+  "go",
+  "test",
+  "-count=1",
+  "./gateway/journal/"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "frame accounting: manifest header of another domain accepted",
+   "file": "gateway/journal/frame.go",
+   "original": "if string(w.pending[:len(manifestDomain)]) != manifestDomain || w.pending[len(manifestDomain)] != 0 {",
+   "replacement": "if false {"
+  },
+  {
+   "name": "frame accounting: event ordinals need not be continuous",
+   "file": "gateway/journal/frame.go",
+   "original": "if err != nil || event.Ordinal != uint64(len(w.counts)) {",
+   "replacement": "if err != nil {"
+  },
+  {
+   "name": "frame accounting: fragment descriptor count may overflow",
+   "file": "gateway/journal/frame.go",
+   "original": "if event.FragmentCount > ^uint64(0)/proto.FragmentDescriptorSize {\n\t\treturn ErrManifestMismatch\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "frame accounting: bytes after the last event accepted",
+   "file": "gateway/journal/frame.go",
+   "original": "if w.stage == manifestEnd {\n\t\t\treturn ErrManifestMismatch // bytes follow the last event\n\t\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "frame accounting: truncated manifest accepted",
+   "file": "gateway/journal/frame.go",
+   "original": "if w.stage != manifestEnd || w.skip != 0 {",
+   "replacement": "if false {"
+  },
+  {
+   "name": "frame accounting: frame without data accepted",
+   "file": "gateway/journal/frame.go",
+   "original": "if data == 0 || data > proto.FragmentMaxBytes {",
+   "replacement": "if data > proto.FragmentMaxBytes {"
+  },
+  {
+   "name": "frame accounting: frame above the fragment bound accepted",
+   "file": "gateway/journal/frame.go",
+   "original": "if data == 0 || data > proto.FragmentMaxBytes {",
+   "replacement": "if data == 0 {"
+  },
+  {
+   "name": "frame accounting: chain sequence overflow ignored",
+   "file": "gateway/journal/frame.go",
+   "original": "if sequence < sequenceBase {\n\t\treturn 0, ErrCounterOverflow\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "frame accounting: event outside the manifest declared",
+   "file": "gateway/journal/frame.go",
+   "original": "if ordinal >= uint64(len(counts)) {\n\t\treturn 0, ErrManifestMismatch // the event is not in the manifest\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "frame accounting: PART frame measured with a maximal part index",
+   "file": "gateway/journal/frame.go",
+   "original": "shape.Part = &proto.FragmentPart{PartIndex: frame, PartCount: entry.PartCount,",
+   "replacement": "shape.Part = &proto.FragmentPart{PartIndex: ^uint64(0), PartCount: entry.PartCount,"
+  },
+  {
+   "name": "frame accounting: COMPLETE frame measured as a PART frame",
+   "file": "gateway/journal/frame.go",
+   "original": "shape.Complete = &proto.CompleteFragment{FragmentBytes: payload}",
+   "replacement": "shape.Part = &proto.FragmentPart{PartIndex: frame, PartCount: entry.PartCount, FragmentTotalBytes: entry.FragmentTotal, Data: payload}"
+  },
+  {
+   "name": "frame accounting: fragment count of the manifest ignored",
+   "file": "gateway/journal/frame.go",
+   "original": "return frameEncodedSize(&j.frameScratch, res.SequenceBase, entry, count, frame)",
+   "replacement": "return frameEncodedSize(&j.frameScratch, res.SequenceBase, entry, count*0+3, frame)"
+  },
+  {
+   "name": "frame accounting: sequence base of the reservation ignored",
+   "file": "gateway/journal/frame.go",
+   "original": "return frameEncodedSize(&j.frameScratch, res.SequenceBase, entry, count, frame)",
+   "replacement": "return frameEncodedSize(&j.frameScratch, res.SequenceBase*0+1, entry, count, frame)"
+  },
+  {
+   "name": "frame accounting: incomplete frame closes the batch",
+   "file": "gateway/journal/publish.go",
+   "original": "if cover != total {\n\t\t\t\treturn ErrIncomplete\n\t\t\t}\n",
+   "replacement": "\t\t\t\t_ = cover\n\t\t\t\t_ = total\n"
+  },
+  {
+   "name": "frame accounting: undeclared frame closes the batch",
+   "file": "gateway/journal/publish.go",
+   "original": "if err == ErrBatchNotFound {\n\t\t\t\treturn ErrIncomplete // the frame was never declared\n\t\t\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "frame accounting: changed frame size on a re-declaration accepted",
+   "file": "gateway/journal/publish.go",
+   "original": "if beU64(raw) != total {\n\t\t\treturn ErrImmutableConflict\n\t\t}\n",
+   "replacement": "\t\t\t_ = raw\n"
+  },
+  {
+   "name": "frame accounting: size error of a declaration ignored",
+   "file": "gateway/journal/publish.go",
+   "original": "total, err := j.encodedFrameSize(id, entry, addr.FrameIndex)\n\tif err != nil {\n\t\treturn err\n\t}\n",
+   "replacement": "total, err := j.encodedFrameSize(id, entry, addr.FrameIndex)\n\t_ = err\n"
+  },
+  {
+   "name": "frame accounting: bytes beyond the encoded size accepted",
+   "file": "gateway/journal/publish.go",
+   "original": "if cover+uint64(len(data)) > total {",
+   "replacement": "if cover+uint64(len(data)) > total && false {"
+  },
+  {
+   "name": "admission: seal read error ignored",
+   "file": "gateway/journal/admission.go",
+   "original": "_, sealed, err := j.readSeal(id)\n\tif err != nil {\n\t\treturn err\n\t}\n",
+   "replacement": "_, sealed, err := j.readSeal(id)\n\t_ = err\n"
+  },
+  {
+   "name": "admission: resume read error ignored",
+   "file": "gateway/journal/admission.go",
+   "original": "resume, resumed, err := j.readResume(id)\n\tif err != nil {\n\t\treturn err\n\t}\n",
+   "replacement": "resume, resumed, err := j.readResume(id)\n\t_ = err\n"
+  },
+  {
+   "name": "seal retry ignores the binding generation",
+   "file": "gateway/journal/cutover.go",
+   "original": "seal.Highwater == intent.Highwater && seal.BindingGeneration == intent.BindingGeneration {",
+   "replacement": "seal.Highwater == intent.Highwater {"
+  },
+  {
+   "name": "seal retry ignores the admission generation",
+   "file": "gateway/journal/cutover.go",
+   "original": "if seal.AdmissionGeneration == intent.AdmissionGeneration &&",
+   "replacement": "if true &&"
+  },
+  {
+   "name": "resume retry ignores the binding digest",
+   "file": "gateway/journal/cutover.go",
+   "original": "if saved.Ack.BindingDigest == intent.BindingDigest &&",
+   "replacement": "if true &&"
+  },
+  {
+   "name": "resume retry ignores the old seal",
+   "file": "gateway/journal/cutover.go",
+   "original": "\t\t\t\tsaved.OldSeal.sameAck(intent.OldSeal) &&\n",
+   "replacement": ""
+  },
+  {
+   "name": "resume with a zero next generation accepted",
+   "file": "gateway/journal/cutover.go",
+   "original": "if intent.ResumeID == ([16]byte{}) || intent.NextAdmissionGeneration == 0 {",
+   "replacement": "if intent.ResumeID == ([16]byte{}) {"
+  },
+  {
+   "name": "recovery assertion may name another binding than the ack",
+   "file": "gateway/journal/state.go",
+   "original": "assertion.PlanDigest != ack.PlanDigest || assertion.BindingDigest != ack.BindingDigest ||",
+   "replacement": "assertion.PlanDigest != ack.PlanDigest ||"
+  },
+  {
+   "name": "resume accepted under a prepared switch",
+   "file": "gateway/journal/cutover.go",
+   "original": "if j.swOpen && j.sw.Phase == SwitchPreparedPhase {\n\t\treturn ResumeAck{}, ErrStateConflict // the prepared switch must be committed first\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "prepared switch does not close admission",
+   "file": "gateway/journal/admission.go",
+   "original": "if j.swOpen && j.sw.Phase == SwitchPreparedPhase {\n\t\treturn ErrAdmissionClosed\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "resume reopens every generation",
+   "file": "gateway/journal/admission.go",
+   "original": "if resumed && resume.Ack.NewAdmissionGeneration == admission {\n\t\treturn nil\n\t}\n",
+   "replacement": "if resumed {\n\t\t_ = resume\n\t\treturn nil\n\t}\n"
+  },
+  {
+   "name": "sealed run admits data",
+   "file": "gateway/journal/admission.go",
+   "original": "\treturn ErrAdmissionClosed\n}",
+   "replacement": "\treturn nil\n}"
+  },
+  {
+   "name": "seal ignores the retired prefix",
+   "file": "gateway/journal/cutover.go",
+   "original": "if prefix := j.readRetired(id); prefix != intent.Highwater {\n\t\treturn Seal{}, ErrStateConflict // unfinished operations at or below the highwater\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "switch allowed over a resumed seal",
+   "file": "gateway/journal/cutover.go",
+   "original": "} else if resumed {\n\t\treturn nil, ErrDrainRequired\n\t}\n",
+   "replacement": "} else if resumed && false {\n\t\treturn nil, ErrDrainRequired\n\t}\n"
+  },
+  {
+   "name": "switch of the current seal treated as history",
+   "file": "gateway/journal/cutover.go",
+   "original": "if j.swOpen && j.sw.DrainID == seal.DrainID {",
+   "replacement": "if false && j.swOpen && j.sw.DrainID == seal.DrainID {"
+  },
+  {
+   "name": "commit retry commits again",
+   "file": "gateway/journal/cutover.go",
+   "original": "if done {\n\t\t// The durable receipt stands, whatever the target is now, and the\n\t\t// commit below never runs a second time.\n\t\treturn j.sw.SwitchPrepared, nil\n\t}\n",
+   "replacement": "\t_ = done\n"
+  },
+  {
+   "name": "lock around the release check removed",
+   "file": "gateway/journal/state.go",
+   "original": "j.mu.Lock()\n\tprefix, retired, err := j.checkReleaseLocked(id, manifestDigest, planDigest, maxKeys)\n\tj.mu.Unlock()\n",
+   "replacement": "prefix, retired, err := j.checkReleaseLocked(id, manifestDigest, planDigest, maxKeys)\n",
+   "equivalent": "The lock makes the check one step of the serialized writer. The check reads the store only and the storage seam serializes access on its own, so no test can observe its absence; the single-writer rule of the journal requires it."
+  }
+ ]
+}

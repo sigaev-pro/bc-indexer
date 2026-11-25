@@ -1,0 +1,120 @@
+{
+ "schema_version": 1,
+ "description": "Single-check mutants of the gateway ingest RPC boundary: the data admission check in the mutating boundary, the session and generation rules of the seal and resume retries, the producer assertions and the release barrier. The copy assembles the sources of the ingest, journal, session and destination modules, the storage seam and the schema modules under one go.mod; run it with GOFLAGS=-mod=mod and a module proxy, because the server depends on gRPC and protobuf: run it with GOFLAGS=-mod=mod, GOPROXY set to the file URL of the module cache download directory and GOSUMDB=off, so the versions resolve from the local cache without the network.",
+ "language": "go",
+ "root": "../..",
+ "copy": [
+  "gateway/ingest/*.go",
+  "gateway/journal/*.go",
+  "gateway/session/*.go",
+  "gateway/destination/*.go",
+  "core/journal/storage/*.go",
+  "protocol/**/*.go"
+ ],
+ "go_module": "github.com/sigaev-pro/bc-indexer",
+ "test": [
+  "go",
+  "test",
+  "-count=1",
+  "./gateway/ingest/"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "seal of the last generation accepted",
+   "file": "gateway/ingest/cutover.go",
+   "original": "if sealed == 0 || sealed == ^uint64(0) || req.GetBindingGeneration() == 0 {",
+   "replacement": "if sealed == 0 || req.GetBindingGeneration() == 0 {"
+  },
+  {
+   "name": "resume retry from a session of another generation accepted",
+   "file": "gateway/ingest/cutover.go",
+   "original": "\t\tif session := header.GetAdmissionGeneration(); session != next && session != next-1 {\n\t\t\treturn &wireError{ErrorCode_GENERATION_CONFLICT, RetryAction_RECONNECT, \"the next generation must be the session's or the one above it\"}\n\t\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "seal retry from a session of another generation accepted",
+   "file": "gateway/ingest/cutover.go",
+   "original": "\t\tif session := header.GetAdmissionGeneration(); session != sealed && session != sealed+1 {\n\t\t\treturn &wireError{ErrorCode_GENERATION_CONFLICT, RetryAction_RECONNECT, \"the sealed generation must be the session's or the one below it\"}\n\t\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "assertion naming another switch accepted",
+   "file": "gateway/ingest/cutover.go",
+   "original": "if assertedID != c.switchID {\n\t\treturn c, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, \"assertion names another switch\"}\n\t}\n",
+   "replacement": "\t_ = assertedID\n"
+  },
+  {
+   "name": "seal raises no publisher barrier",
+   "file": "gateway/ingest/cutover.go",
+   "original": "\t\ts.publisher.NewGeneration()\n",
+   "replacement": ""
+  },
+  {
+   "name": "switch commit without an assertion accepted",
+   "file": "gateway/ingest/cutover.go",
+   "original": "if a == nil {\n\t\treturn c, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, \"binding commit assertion is required\"}\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "recovery release without an assertion accepted",
+   "file": "gateway/ingest/control.go",
+   "original": "if m == nil {\n\t\treturn a, &wireError{ErrorCode_IDENTITY_MISMATCH, RetryAction_RETRY_BACKOFF, \"outbox assertion is required\"}\n\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "data RPC runs without the admission check",
+   "file": "gateway/ingest/server.go",
+   "original": "\t\tif err := s.journal.CheckDataAdmission(runOf(header), rec.admissionGen); err != nil {\n\t\t\treturn toWireError(err)\n\t\t}\n",
+   "replacement": ""
+  },
+  {
+   "name": "admission check reads another generation",
+   "file": "gateway/ingest/server.go",
+   "original": "s.journal.CheckDataAdmission(runOf(header), rec.admissionGen)",
+   "replacement": "s.journal.CheckDataAdmission(runOf(header), 0)"
+  },
+  {
+   "name": "release raises no publisher barrier",
+   "file": "gateway/ingest/control.go",
+   "original": "\t\tif !retired {\n\t\t\t// The publisher barrier precedes the RELEASING commit: from here\n\t\t\t// on no publisher callback of this batch is applied.\n\t\t\ts.publisher.Release(id.Bytes())\n\t\t}\n",
+   "replacement": "\t\t_ = retired\n"
+  },
+  {
+   "name": "release raises the publisher barrier after the final commit",
+   "file": "gateway/ingest/control.go",
+   "original": "\t\tif !retired {\n\t\t\t// The publisher barrier precedes the RELEASING commit: from here\n\t\t\t// on no publisher callback of this batch is applied.\n\t\t\ts.publisher.Release(id.Bytes())\n\t\t}\n",
+   "replacement": "\t\t_ = retired\n"
+  },
+  {
+   "name": "sealed generation opens a session",
+   "file": "gateway/ingest/server.go",
+   "original": "} else if sealed && req.GetAdmissionGeneration() <= seal.AdmissionGeneration {",
+   "replacement": "} else if sealed && req.GetAdmissionGeneration() <= seal.AdmissionGeneration && false {"
+  },
+  {
+   "name": "GetBatchState runs on the data boundary",
+   "file": "gateway/ingest/control.go",
+   "original": "\twe := s.mutateControl(req.GetHeader(), func() error {\n\t\tid, werr := s.batchID(req.GetHeader(), req.GetBatch())\n\t\tif werr != nil {\n\t\t\treturn werr\n\t\t}\n\t\tplan, werr := hash32(req.GetPlanDigest(), \"plan digest\")",
+   "replacement": "\twe := s.mutate(req.GetHeader(), func() error {\n\t\tid, werr := s.batchID(req.GetHeader(), req.GetBatch())\n\t\tif werr != nil {\n\t\t\treturn werr\n\t\t}\n\t\tplan, werr := hash32(req.GetPlanDigest(), \"plan digest\")"
+  },
+  {
+   "name": "Release runs on the data boundary",
+   "file": "gateway/ingest/control.go",
+   "original": "func (s *Server) Release(_ context.Context, req *ReleaseRequest) (*ReleaseResponse, error) {\n\tresp := &ReleaseResponse{}\n\twe := s.mutateControl(req.GetHeader(), func() error {",
+   "replacement": "func (s *Server) Release(_ context.Context, req *ReleaseRequest) (*ReleaseResponse, error) {\n\tresp := &ReleaseResponse{}\n\twe := s.mutate(req.GetHeader(), func() error {"
+  },
+  {
+   "name": "RecoveryRelease runs on the data boundary",
+   "file": "gateway/ingest/control.go",
+   "original": "\twe := s.mutateControl(req.GetHeader(), func() error {\n\t\tid, werr := s.batchID(req.GetHeader(), req.GetBatch())\n\t\tif werr != nil {\n\t\t\treturn werr\n\t\t}\n\t\tack, werr := ingestAckOf(req.GetIngestAck())",
+   "replacement": "\twe := s.mutate(req.GetHeader(), func() error {\n\t\tid, werr := s.batchID(req.GetHeader(), req.GetBatch())\n\t\tif werr != nil {\n\t\t\treturn werr\n\t\t}\n\t\tack, werr := ingestAckOf(req.GetIngestAck())"
+  },
+  {
+   "name": "PrepareSwitch runs on the data boundary",
+   "file": "gateway/ingest/cutover.go",
+   "original": "\twe := s.mutateControl(header, func() error {\n\t\tvar werr *wireError\n\t\tif in, werr = s.parseSwitch(req); werr != nil {",
+   "replacement": "\twe := s.mutate(header, func() error {\n\t\tvar werr *wireError\n\t\tif in, werr = s.parseSwitch(req); werr != nil {"
+  }
+ ]
+}

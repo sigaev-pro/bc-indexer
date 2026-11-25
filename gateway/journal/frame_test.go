@@ -268,3 +268,182 @@ func put64be(b []byte, v uint64) {
 		b[7-i] = byte(v >> (8 * uint(i)))
 	}
 }
+
+// The size of a frame follows the reservation and the manifest. The fragment
+// count of the event and the chain sequence are varints of the wrapper: an
+// event of 200 fragments on a reservation with sequence base 500 needs more
+// bytes than a small one, and a frame sized with other values is not the
+// frame.
+func TestFrameSizeFollowsTheReservationAndTheManifest(t *testing.T) {
+	j, _ := newJournal(t)
+	id := testBatch(1)
+	lengths := make([]uint64, 200)
+	for i := range lengths {
+		lengths[i] = 3
+	}
+	lengths[0] = 6
+	manifest := testManifest(t, lengths)
+	digest := sha256.Sum256(manifest)
+	seed := BuildSeed(SeedLayout{ReservationID: [16]byte{0xCC}, IssuerEpoch: [16]byte{0xDD}, Batch: id,
+		ManifestDigest: digest, EventCount: 1, SequenceBase: 500,
+		BindingDigest: testBinding, FrameLimit: DefaultFrameLimit})
+	if _, err := j.BeginPrepare(id, digest, 1, uint64(len(manifest)), PrepareImportSealed, seed); err != nil {
+		t.Fatal(err)
+	}
+	chunkify(t, j, id, digest, 0, manifest, 7)
+	res, err := j.FinalizePrepare(id, digest)
+	if err != nil || res.SequenceBase != 500 {
+		t.Fatalf("finalize prepare: %+v %v", res, err)
+	}
+	entry := LayoutEntry{Ordinal: 0, FragmentIndex: 0, Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6}
+	plan := PlanDigest(res.Seed)
+	if _, err := j.BeginPublish(id, res.Seed, plan, computeLayoutDigest(plan, []LayoutEntry{entry}), 1); err != nil {
+		t.Fatal(err)
+	}
+	frame := testFrame(500, entry, 200, 0, []byte("abcdef"))
+	for _, wrong := range []struct {
+		name  string
+		count uint64
+		base  uint64
+	}{
+		{"another fragment count", 3, 500},
+		{"another sequence base", 200, 1},
+	} {
+		if len(testFrame(wrong.base, entry, wrong.count, 0, []byte("abcdef"))) == len(frame) {
+			t.Fatalf("%s does not change the size of the frame", wrong.name)
+		}
+	}
+	addr := FrameAddr{0, 0, 0}
+	meta := FrameMeta{Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6}
+	next, err := j.PublishChunk(id, plan, addr, &meta, 0, sha256.Sum256(frame[:10]), frame[:10])
+	if err != nil || next != 10 {
+		t.Fatalf("first piece: next=%d err=%v", next, err)
+	}
+	total := uint64(len(frame))
+	if next, err = j.PublishChunk(id, plan, addr, &meta, 10, sha256.Sum256(frame[10:]), frame[10:]); err != nil || next != total {
+		t.Fatalf("rest of the frame: next=%d err=%v, want %d", next, err, total)
+	}
+	if _, err := j.PublishChunk(id, plan, addr, &meta, total, sha256.Sum256([]byte("x")), []byte("x")); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("byte beyond the frame: got %v, want ErrStateConflict", err)
+	}
+	if err := j.SealImport(id, plan, digest, computeLayoutDigest(plan, []LayoutEntry{entry})); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+}
+
+// Declarations the frame accounting refuses before anything is written.
+func TestFrameDeclarationsTheAccountingRefuses(t *testing.T) {
+	j, _ := newJournal(t)
+	pf := newPlan(t, j, 1, false)
+	pf.beginPublish(t, j)
+	// A frame may carry at most one fragment of the wire bound.
+	for _, meta := range []FrameMeta{
+		{Form: 0, Capacity: 70000, PartCount: 1, FragmentTotal: 70000},
+		{Form: 1, Capacity: 70000, PartCount: 1, FragmentTotal: 70000},
+	} {
+		if _, err := j.PublishChunk(pf.id, pf.planDigest, FrameAddr{0, 0, 0}, &meta, 0, sha256.Sum256([]byte("abc")), []byte("abc")); !errors.Is(err, ErrStateConflict) {
+			t.Fatalf("frame of %d data bytes: got %v, want ErrStateConflict", meta.Capacity, err)
+		}
+	}
+
+	// The chain sequence of an event is the sequence base plus the ordinal:
+	// a base that cannot carry the ordinal is a counter overflow.
+	id := testBatch(2)
+	manifest := testManifest(t, []uint64{6, 3, 3}, []uint64{6, 3, 3})
+	digest := sha256.Sum256(manifest)
+	seed := BuildSeed(SeedLayout{ReservationID: [16]byte{0xCC}, IssuerEpoch: [16]byte{0xDD}, Batch: id,
+		ManifestDigest: digest, EventCount: 2, SequenceBase: ^uint64(0),
+		BindingDigest: testBinding, FrameLimit: DefaultFrameLimit})
+	if _, err := j.BeginPrepare(id, digest, 2, uint64(len(manifest)), PrepareImportSealed, seed); err != nil {
+		t.Fatal(err)
+	}
+	chunkify(t, j, id, digest, 0, manifest, 7)
+	res, err := j.FinalizePrepare(id, digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := LayoutEntry{Ordinal: 1, FragmentIndex: 0, Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6}
+	plan := PlanDigest(res.Seed)
+	if _, err := j.BeginPublish(id, res.Seed, plan, computeLayoutDigest(plan, []LayoutEntry{entry}), 1); err != nil {
+		t.Fatal(err)
+	}
+	meta := FrameMeta{Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6}
+	if _, err := j.PublishChunk(id, plan, FrameAddr{1, 0, 0}, &meta, 0, sha256.Sum256([]byte("abc")), []byte("abc")); !errors.Is(err, ErrCounterOverflow) {
+		t.Fatalf("chain sequence overflow: got %v, want ErrCounterOverflow", err)
+	}
+}
+
+// An event descriptor that claims 2^60 fragments multiplies the fragment
+// descriptor size into a wrap to zero. Without its overflow check the walker
+// would skip nothing and accept the manifest, and the event would carry a
+// frame.
+func TestManifestWithAWrappingFragmentCountIsRefused(t *testing.T) {
+	j, _ := newJournal(t)
+	id := testBatch(1)
+	header := append([]byte(manifestDomain), 0)
+	header = append(header, make([]byte, 7)...)
+	header = append(header, 1) // one event
+	event := proto.EventDescriptor{Ordinal: 0, EventID: proto.NewEventID([16]byte{1}, [16]byte{2}, 1),
+		Family: proto.FamilyTx, Kind: proto.KindApplied, RecordLength: ^uint64(0),
+		RecordDigest: proto.Hash32(sha256.Sum256([]byte("record"))), FragmentCount: 1 << 60}
+	if uint64(len(event.AppendEncoded(nil))) != proto.EventDescriptorSize {
+		t.Fatal("the event descriptor of the test does not encode to its fixed size")
+	}
+	manifest := event.AppendEncoded(header)
+	res := prepareBatch(t, j, id, manifest, 1)
+	entry := LayoutEntry{Ordinal: 0, FragmentIndex: 0, Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6}
+	plan := PlanDigest(res.Seed)
+	if _, err := j.BeginPublish(id, res.Seed, plan, computeLayoutDigest(plan, []LayoutEntry{entry}), 1); err != nil {
+		t.Fatal(err)
+	}
+	meta := FrameMeta{Form: 0, Capacity: 6, PartCount: 1, FragmentTotal: 6}
+	if _, err := j.PublishChunk(id, plan, FrameAddr{0, 0, 0}, &meta, 0, sha256.Sum256([]byte("abc")), []byte("abc")); !errors.Is(err, ErrManifestMismatch) {
+		t.Fatalf("event with a wrapping fragment count: got %v, want ErrManifestMismatch", err)
+	}
+}
+
+// A layout entry without its frame head is the crash between the two writes
+// of a declaration: the frame was never declared, and the batch does not
+// close.
+func TestEntryWithoutItsFrameHeadDoesNotClose(t *testing.T) {
+	j, st := newJournal(t)
+	pf := newPlan(t, j, 1, false)
+	pf.beginPublish(t, j)
+	pf.publishFrames(t, j)
+	if err := st.Delete(frameHeadKey(pf.id, 0, 0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.FinalizePublish(pf.id, pf.planDigest, pf.res.ManifestDigest, pf.layout); !errors.Is(err, ErrIncomplete) {
+		t.Fatalf("entry without its frame head: got %v, want ErrIncomplete", err)
+	}
+}
+
+// A frame head written by the data-length accounting of an earlier build
+// does not match the encoded size of the frame. The declaration of that
+// frame is an immutable conflict and changes nothing: a store from before
+// the frame accounting is never reinterpreted.
+func TestFrameHeadOfTheOldDataAccountingIsRefused(t *testing.T) {
+	j, st := newJournal(t)
+	pf := newPlan(t, j, 1, false)
+	pf.beginPublish(t, j)
+	first := pf.frames[0]
+	meta := first.meta
+	piece := first.bytes[:3]
+	if _, err := j.PublishChunk(pf.id, pf.planDigest, first.addr, &meta, 0, sha256.Sum256(piece), piece); err != nil {
+		t.Fatal(err)
+	}
+	head := frameHeadKey(pf.id, first.addr.Ordinal, first.addr.FragmentIndex, first.addr.FrameIndex)
+	stored, err := st.Get(head)
+	if err != nil || beU64(stored) != uint64(len(first.bytes)) {
+		t.Fatalf("head of a declared frame: %d %v, want the encoded size %d", beU64(stored), err, len(first.bytes))
+	}
+	if err := st.Put(head, u64be(6)); err != nil { // the 6 data bytes, as an earlier build stored them
+		t.Fatal(err)
+	}
+	if _, err := j.PublishChunk(pf.id, pf.planDigest, first.addr, &meta, 0, sha256.Sum256(piece), piece); !errors.Is(err, ErrImmutableConflict) {
+		t.Fatalf("re-declaration over a head of the data-length accounting: got %v, want ErrImmutableConflict", err)
+	}
+	if stored, err = st.Get(head); err != nil || beU64(stored) != 6 {
+		t.Fatalf("the refused re-declaration rewrote the head: %d %v", beU64(stored), err)
+	}
+}

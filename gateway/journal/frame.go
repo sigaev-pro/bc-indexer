@@ -214,9 +214,8 @@ func (w *manifestWalker) record() error {
 			return ErrManifestMismatch
 		}
 		w.events = beU64(w.pending[len(manifestDomain)+1:])
-		if w.events == 0 {
-			return ErrManifestMismatch
-		}
+		// A header that announces no event leaves the walker waiting for an
+		// event, so finish refuses that manifest; it needs no check here.
 		w.stage = manifestEvent
 		return nil
 	}

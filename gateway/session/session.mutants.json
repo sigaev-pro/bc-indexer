@@ -1,0 +1,31 @@
+{
+ "schema_version": 1,
+ "description": "Single-check mutants of the session fencing: the bound of the per-batch release barriers.",
+ "language": "go",
+ "root": "../..",
+ "copy": [
+  "gateway/session/*.go"
+ ],
+ "go_module": "github.com/sigaev-pro/bc-indexer",
+ "test": [
+  "go",
+  "test",
+  "-count=1",
+  "./gateway/session/"
+ ],
+ "timeout_seconds": 300,
+ "mutants": [
+  {
+   "name": "release barriers are not bounded",
+   "file": "gateway/session/session.go",
+   "original": "\t\tdelete(p.released, p.releaseOrder[p.releaseNext]) // the oldest remembered release\n",
+   "replacement": ""
+  },
+  {
+   "name": "a repeated release takes a second slot",
+   "file": "gateway/session/session.go",
+   "original": "if _, done := p.released[batch]; done {\n\t\treturn\n\t}\n",
+   "replacement": ""
+  }
+ ]
+}

@@ -363,6 +363,11 @@ func (m *MemoryGateway) Resume(fence Fence, intent ResumeIntent) (ResumeAck, err
 		}
 		return ResumeAck{}, fmt.Errorf("%w: another resume is already accepted", ErrImmutableConflict)
 	}
+	if m.switchPhase == SwitchPreparedPhase {
+		// The switch of a seal runs between the seal and the Resume: its
+		// commit decides the active binding the resume continues.
+		return ResumeAck{}, fmt.Errorf("%w: a destination switch is prepared, the Resume waits for its commit", ErrState)
+	}
 	if intent.BindingDigest != m.activeDigest {
 		return ResumeAck{}, fmt.Errorf("%w: resume binding differs from the active one", ErrState)
 	}

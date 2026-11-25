@@ -1143,3 +1143,40 @@ func TestResumeNeedsThePreparedSwitchCommitted(t *testing.T) {
 		t.Fatalf("resume after the commit: %+v %v", ack, err)
 	}
 }
+
+// The resume record keeps record version 1 although its layout changed: the
+// record first appeared in PR #227 as the ack alone and gained the old seal
+// inside the same PR, before it merged. No build outside that PR's history
+// ever wrote the first layout. A store of such a build is refused, never
+// misread: the first layout has no seal after its ack, so the decoder
+// reports a corrupt record and no resume is answered from it.
+func TestResumeRecordOfTheFirstLayoutIsRefused(t *testing.T) {
+	j, st := newBoundJournal(t)
+	run := testBatch(0)
+	seal := sealRun(t, j, 0)
+	intent := ResumeIntent{ResumeID: [16]byte{5}, OldSeal: seal,
+		BindingDigest: testBinding, NextAdmissionGeneration: 2}
+	if _, err := j.Resume(run, intent); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := st.Get(resumeKey(run))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first layout: the version byte and the 96 bytes of the ack.
+	first := raw[:1+16+32+8+8+16+16]
+	if len(first) >= len(raw) {
+		t.Fatal("the resume record of this test carries no old seal")
+	}
+	if err := st.Put(resumeKey(run), first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := j.Resume(run, intent); !errors.Is(err, errCorruptRecord) {
+		t.Fatalf("Resume over a record of the first layout: got %v, want the corrupt record error", err)
+	}
+	if _, ok, err := j.ResumedGeneration(run); err == nil || ok {
+		t.Fatalf("ResumedGeneration over a record of the first layout: ok=%v err=%v", ok, err)
+	} else if !errors.Is(err, errCorruptRecord) {
+		t.Fatalf("ResumedGeneration over a record of the first layout: got %v, want the corrupt record error", err)
+	}
+}

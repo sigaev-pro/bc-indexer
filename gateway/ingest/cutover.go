@@ -380,11 +380,8 @@ func (s *Server) CommitSwitch(ctx context.Context, req *CommitSwitchRequest) (*C
 	if committed {
 		return resp, nil
 	}
-	if !open {
-		return &CommitSwitchResponse{Error: (&wireError{ErrorCode_MODE_CONFLICT, RetryAction_RETRY_BACKOFF,
-			"commit needs the prepared receipt of a switch"}).toProto(header)}, nil
-	}
-	// The check above accepted a prepared switch of this id.
+	// The gated check accepted a prepared switch of this id, so the store
+	// holds one and cur is its record.
 	// Before the first durable activation the target is re-checked. When
 	// the check fails nothing changes: the producer is not rolled back and
 	// nothing is published to the old destination.

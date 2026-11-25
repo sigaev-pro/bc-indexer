@@ -506,3 +506,45 @@ func TestControlRPCsRunUnderASeal(t *testing.T) {
 	wantCode(t, "prepare switch under a seal", wireErr(t, switched.GetError(), err),
 		ErrorCode_BINDING_MISMATCH, RetryAction_FIX_CONFIG)
 }
+
+// failingReads is a storage whose read of one key can be made to fail.
+type failingReads struct {
+	storage.Storage
+	key   []byte
+	fails bool
+}
+
+func (f *failingReads) Get(key []byte) ([]byte, error) {
+	if f.fails && string(key) == string(f.key) {
+		return nil, errors.New("test store: read failed")
+	}
+	return f.Storage.Get(key)
+}
+
+// Data admission reads the seal and the resume of the run before a data RPC
+// runs. When the store cannot be read, the RPC is refused and creates no
+// state: a store that cannot be read never answers "open".
+func TestDataRPCRefusedWhenAdmissionReadFails(t *testing.T) {
+	ids := append(append([]byte(nil), testProducer[:]...), testRun[:]...)
+	cases := map[string][]byte{
+		"seal read":   append([]byte("sealed_generation/"), ids...),
+		"resume read": append([]byte("resume/"), ids...),
+	}
+	for name, key := range cases {
+		st := &failingReads{Storage: storage.NewMemory(), key: key}
+		h := startHarness(t, st, openJournal(t, st), session.NewGate())
+		s := h.openSessionAt(t, 1, 1)
+		sealOverWire(t, h, s.header, 1, 1, 0)
+		next := h.openSessionAt(t, 2, 2)
+
+		st.fails = true
+		for _, c := range dataCalls(t, h, next.header, 9) {
+			wantCode(t, name+": "+c.name, c.call(), ErrorCode_STORE_FATAL, RetryAction_STOP_LOCAL_OWNER)
+		}
+		assertNoBatch(t, st, 9)
+		// With the store readable again the same RPC answers for its real
+		// reason: the run is sealed and not resumed.
+		st.fails = false
+		refuseData(t, h, next.header, 9)
+	}
+}

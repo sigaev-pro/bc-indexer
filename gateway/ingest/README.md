@@ -58,7 +58,8 @@ With these RPCs a gateway acknowledgement reaches the producer:
   Without this rule a batch created between a seal and its Resume could
   never be acknowledged or released: the publisher refuses a batch of a
   binding that is no longer active, and an unreleasable batch would hold the
-  next seal.
+  next seal. The reference engine in `core/delivery/maintenance` holds
+  the same rule.
 - **Typed errors.** Answers carry the registry's `{code, request_id,
   owner_state, retry_action, detail}`; the gRPC status is only a transport
   categorization. Journal errors map one-to-one; unknown errors become
@@ -166,9 +167,11 @@ With these RPCs a gateway acknowledgement reaches the producer:
   It stays `MODE_CONFLICT`, the existing mapping of a refused transition.
 - A data RPC refused during a drain answers `DRAIN_REQUIRED` with
   `RECONNECT`: the producer comes back in the generation the Resume opened.
-  Within one gateway process the admission barrier refuses the same RPC with
-  `SESSION_STALE`; the seal alone cannot answer after a restart, so the
-  durable rule names the cause.
+  This holds before and after a gateway restart, for every session of a
+  generation that is not open, the next generation before its Resume
+  included. `SESSION_STALE` is for the fenced session only: the session of
+  the sealed generation itself, whose token the barrier removed inside the
+  gateway process.
 - A seal at highwater 0 is accepted for a run that never created a batch:
   the contract fixes zero as the empty frontier. This diverges from the
   reference engine in `core/delivery/maintenance`, which rejects a zero
