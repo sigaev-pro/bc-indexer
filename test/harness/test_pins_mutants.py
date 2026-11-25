@@ -14,7 +14,7 @@ import pins
 import pins_mutants as driver
 
 ROOT = Path(__file__).resolve().parents[2]
-TABLE = ROOT / "test/harness/pins.mutants.json"
+TABLE = ROOT / "test/harness/pins_native.mutants.json"
 
 
 class TableTests(unittest.TestCase):
