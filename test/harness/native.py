@@ -24,7 +24,7 @@ class Native:
         self.nonce = uuid.uuid4().hex
         (output / "logs").mkdir()
 
-    def command(self, image, argv, mounts, cap=120, memory="768m", environment=None, cwd=None):
+    def command(self, image, argv, mounts, cap=120, memory="768m", environment=None, cwd=None, entrypoint=None):
         require(not self.failed, "No dispatch after a failed command")
         # Reserve bounded owned cleanup inside the one overall deadline.
         deadline = min(self.deadline, time.monotonic() + cap) - 35
@@ -43,6 +43,9 @@ class Native:
             args += ["--env", f"{key}={value}"]
         if cwd:
             args += ["--workdir", cwd]
+        if entrypoint:
+            # An image with a fixed entry point (a client image) can still run a shell script.
+            args += ["--entrypoint", entrypoint]
         args += [image, *argv]
         prefix = self.output / "logs" / f"{index:03d}"
         request_path = prefix.with_suffix(".request.json")
