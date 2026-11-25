@@ -19,8 +19,10 @@ itself is later work; the procedure only carries, records and applies it.
 
 `smoke` starts the image offline on a throwaway home with a minimal capture
 config (EXTRACTOR_BSC_CONFIG) and the Chapel genesis, stops it after a short
-time, and runs the refusal controls that show the extractor hooks in the
-start path. The commands are in README.md next to this file.
+time, and runs the refusal controls that show the extractor rules in the
+start path: snap sync, another store ID, the flags of the pruned Chapel
+snapshot, and a home in the path state scheme. The commands are in README.md
+next to this file.
 
 The candidate lock keeps `patched-native-images` PENDING_IMPLEMENTATION:
 this is the first capture-enabled client image, not the accepted output of
@@ -71,6 +73,11 @@ BINARY = "geth"
 PROFILE = ("--state.scheme", "hash", "--gcmode", "full", "--syncmode", "full")
 # No peer, no listener and no IPC: the smoke start never reaches a network.
 OFFLINE = ("--maxpeers", "0", "--nodiscover", "--port", "0", "--ipcdisable")
+# The flags of the pruned Chapel snapshot, a fast node. Its block history limit
+# is outside the capture profile.
+FAST_NODE = ("--syncmode=full", "--history.transactions=600000", "--history.blocks=600000",
+             "--history.logs=600000", "--tries-verify-mode=local")
+PATH_HOME = "/home-path"
 # The effective config of the profile flags in the [Eth] section of dumpconfig.
 CONFIG_VALUES = {"StateScheme": "hash", "SyncMode": "full", "NoPruning": False, "PruneAncientData": False}
 CHAPEL_CHAIN_ID = 97
@@ -388,10 +395,10 @@ def check_start(log, exit_code):
     require(not missing, "The node log lacks " + ", ".join(missing) + ": " + tail)
 
 
-def check_refusal(log, exit_code, marker):
+def check_refusal(log, exit_code, marker, name):
     """A control start was refused, and the refusal names the extractor rule."""
-    require(exit_code != 0, f"The start passed (exit 0): {log[-600:]}")
-    require(marker in log, f"The refusal does not name {marker!r}: {log[-600:]}")
+    require(exit_code != 0, f"{name}: the start passed (exit 0): {log[-600:]}")
+    require(marker in log, f"{name}: the refusal does not name {marker!r}: {log[-600:]}")
 
 
 def build_arguments(commit):
@@ -642,7 +649,7 @@ def smoke(image, output, seconds):
                 "The image is not a capture build made by this procedure")
         proof["variant"] = labels.get(LABEL + "variant")
         root = output / "smoke"
-        for name in ("config", "home", "work"):
+        for name in ("config", "home", "home-path", "work"):
             (root / name).mkdir(parents=True)
         # The genesis of the Chapel preset comes from the image itself: it is
         # the input of the init and the genesis file of the capture config.
@@ -653,7 +660,8 @@ def smoke(image, output, seconds):
         config = capture_config(SMOKE_STORE, commit)
         for name, value in (("capture.json", config), ("foreign.json", {**config, "store_id": FOREIGN_STORE})):
             (root / "config" / name).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
-        mounts = [(root / "config", "/config", True), (root / "home", "/home", False), (root / "work", "/work", False)]
+        mounts = [(root / "config", "/config", True), (root / "home", "/home", False), (root / "work", "/work", False),
+                  (root / "home-path", PATH_HOME, False)]
         home = ["--chapel", "--datadir", "/home"]
         # The native init of the deployment contract, with the explicit hash scheme.
         runner.command(image, [*home, "--state.scheme", "hash", "init", "/config/genesis.json"], mounts, cap=300,
@@ -663,22 +671,31 @@ def smoke(image, output, seconds):
         runner.command(image, ["-c", start_script([*home, *PROFILE, *OFFLINE], "start", seconds)], mounts,
                        cap=seconds + 240, memory="2g", environment={"EXTRACTOR_BSC_CONFIG": "/config/capture.json"},
                        entrypoint="/bin/sh")
-        # A control with the default sync mode (snap) and one with another store ID.
-        controls = {"snap-sync": (["--state.scheme", "hash", "--gcmode", "full", *OFFLINE], "capture.json", "bsc.snap-sync"),
-                    "foreign-store": ([*PROFILE, *OFFLINE], "foreign.json", "native store identity mismatch")}
-        for name, (flags, config_name, _) in controls.items():
-            runner.command(image, ["-c", start_script([*home, *flags], name)], mounts, cap=240, memory="2g",
+        # The controls show the extractor rules in the start path: the default sync
+        # mode (snap), another store ID, the flags of the pruned Chapel snapshot
+        # (a fast node), and a home in the path state scheme.
+        path_home = ["--chapel", "--datadir", PATH_HOME]
+        runner.command(image, [*path_home, "init", "/config/genesis.json"], mounts, cap=300, memory="1g")
+        controls = {
+            "snap-sync": (home, ["--state.scheme", "hash", "--gcmode", "full", *OFFLINE], "capture.json", "bsc.snap-sync"),
+            "foreign-store": (home, [*PROFILE, *OFFLINE], "foreign.json", "native store identity mismatch"),
+            "pruned-history": (home, ["--state.scheme", "hash", "--gcmode", "full", *FAST_NODE, *OFFLINE], "capture.json",
+                               "history.blocks 600000 deletes block data"),
+            "path-scheme": (path_home, ["--gcmode", "full", *FAST_NODE, *OFFLINE], "capture.json",
+                            'state scheme "", want "hash"')}
+        for name, (home_arguments, flags, config_name, _) in controls.items():
+            runner.command(image, ["-c", start_script([*home_arguments, *flags], name)], mounts, cap=240, memory="2g",
                            environment={"EXTRACTOR_BSC_CONFIG": "/config/" + config_name}, entrypoint="/bin/sh")
         runs = {name: (int(read_bytes(root / "work" / (name + ".exit"), 64, deadline).decode().strip()),
                        read_bytes(root / "work" / (name + ".out"), LOG_LIMIT, deadline).decode(errors="replace"))
                 for name in ("start", *controls)}
         check_start(runs["start"][1], runs["start"][0])
-        for name, (_, _, marker) in controls.items():
-            check_refusal(runs[name][1], runs[name][0], marker)
+        for name, (_, _, _, marker) in controls.items():
+            check_refusal(runs[name][1], runs[name][0], marker, name)
         proof["start"] = {"exit_code": runs["start"][0], "output": reference(root / "work" / "start.out", deadline=deadline)}
         proof["controls"] = {name: {"exit_code": runs[name][0], "marker": marker,
                                     "output": reference(root / "work" / (name + ".out"), deadline=deadline)}
-                             for name, (_, _, marker) in controls.items()}
+                             for name, (_, _, _, marker) in controls.items()}
         proof.update(config=config, genesis=reference(root / "config" / "genesis.json", deadline=deadline), labels=labels)
         sources_unchanged(origins, deadline)
 

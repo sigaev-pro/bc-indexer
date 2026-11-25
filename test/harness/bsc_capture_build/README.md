@@ -72,18 +72,20 @@ docker run --rm --mount type=tmpfs,destination=/work \
 The `[Eth]` section then shows `StateScheme = "hash"`, `SyncMode = "full"`,
 `NoPruning = false` and `PruneAncientData = false`.
 
-`smoke` starts the image offline on a throwaway home. It takes the Chapel
+`smoke` starts the image offline on throwaway homes. It takes the Chapel
 genesis from the image itself, runs the init, starts the node with a minimal
 capture config for `--seconds` after its start, stops it with SIGINT, and
-runs two controls on the same home. The node log names the Chapel network,
-the chain configuration, full sync and the clean stop. The controls show
-the extractor hooks in the start path: the default sync mode (snap) is
-refused with `bsc.snap-sync`, and another `store_id` is refused with
-`native store identity mismatch`. A first start stays in BOOTSTRAP, so the
-log line `Extractor lifecycle is live` needs a real sync and is not part of
-the smoke. The image entry point is `geth`, so the start and the controls
-run their shell scripts through the `entrypoint` option of the owned command
-boundary (`native.py`).
+runs four refusal controls that show the extractor rules in the start path:
+the default sync mode (snap) is refused with `bsc.snap-sync`; another
+`store_id` is refused with `native store identity mismatch`; the flags of
+the pruned Chapel snapshot are refused with `history.blocks 600000 deletes
+block data`; and a home in the path state scheme is refused with
+`state scheme "", want "hash"`. The node log names the Chapel network, the
+chain configuration, full sync and the clean stop. A first start stays in
+BOOTSTRAP, so the log line `Extractor lifecycle is live` needs a real sync
+and is not part of the smoke. The image entry point is `geth`, so the start
+and the controls run their shell scripts through the `entrypoint` option of
+the owned command boundary (`native.py`).
 
 ```sh
 python3 -I test/harness/bsc_capture_build/bsc_capture_build.py smoke \
@@ -141,6 +143,10 @@ between static and dynamic linking. The build compiles with the accepted
 that adds a Go module needs an extended module input first.
 
 ## Run on Chapel for capture
+
+This is the run for a directory that holds the hash state scheme and no
+pruned block data. The pruned Chapel snapshot does not; see the last
+section.
 
 Capture is switched on by the environment variable `EXTRACTOR_BSC_CONFIG`,
 which names a JSON file with `store_id` (32 lowercase hex characters),
@@ -203,42 +209,70 @@ natively and uncaptured until the initial sync ends, then logs
 `store_id`, `producer_id`, `run_id` and the genesis with the home: another
 binding is a foreign store.
 
-## Full sync, and a data directory of a vanilla node
+## Full sync and the pruned Chapel snapshot directory
 
 `.project/docs/DEPLOYMENT_BOOTSTRAP_CONTRACT.md` lists
 `--state.scheme hash --gcmode full` for Geth and BSC; `syncmode="full"`
-stands there for Bor. The BSC capture node is stricter than that line:
-BSC selects snap sync by default, and the capture node refuses it.
+stands there for Bor. The BSC capture node is stricter than that line: BSC
+selects snap sync by default, and `CheckProfile` in
+`adapters/bsc/lifecycle/native/go/node.go` returns `sync mode snap
+(bsc.snap-sync)` for every sync mode but full, before the store is opened.
+The reason is patch 08: it refuses the writers a snap sync needs
+(`SnapSyncStart`, `SnapSyncComplete`, `InsertReceiptChain`,
+`InsertHeaderChain` and `InsertHeadersBeforeCutoff` in `core/blockchain.go`)
+as the caller `bsc.snap-sync` in every phase of the gate (`Gate.Enter` in
+`adapters/bsc/lifecycle/lifecycle.go` returns `ErrRefused` for a refused
+caller without looking at the phase). Without `--syncmode full` a capture
+node stops with `Failed to register the Ethereum service`.
 
-- `CheckProfile` in `adapters/bsc/lifecycle/native/go/node.go` returns
-  `sync mode snap (bsc.snap-sync)` for every sync mode but full, before the
-  store is opened. Without `--syncmode full` a capture node stops with
-  `Failed to register the Ethereum service`.
-- The reason is patch 08: it refuses the writers a snap sync needs
-  (`SnapSyncStart`, `SnapSyncComplete`, `InsertReceiptChain`,
-  `InsertHeaderChain`, `InsertHeadersBeforeCutoff` in `core/blockchain.go`)
-  as the caller `bsc.snap-sync`, in every phase of the gate
-  (`Gate.Enter` in `adapters/bsc/lifecycle/lifecycle.go` returns `ErrRefused`
-  for a refused caller without looking at the phase).
+The fast-node target is the pruned Chapel snapshot
+`testnet-geth-pbss-20260917-pruneancient` (block 131042908, path-scheme
+state, PBSS), run with `--syncmode=full --history.transactions=600000
+--history.blocks=600000 --history.logs=600000 --tries-verify-mode=local`.
+As coded today, the capture image does not capture on that directory. With
+`$DATA` holding the extracted snapshot and `$CONFIG` as above:
 
-The rule is about the start configuration, not about the history of the data
-directory. Nothing in the capture path needs a locally executed history:
+```sh
+docker run --rm \
+  --mount type=bind,source="$DATA",target=/data/node/client \
+  --mount type=bind,source="$CONFIG",target=/config,readonly \
+  --env EXTRACTOR_BSC_CONFIG=/config/extractor-bsc.json \
+  bc-indexer/bsc-capture:1.8.2-capture \
+  --chapel --datadir /data/node/client \
+  --syncmode=full --history.transactions=600000 --history.blocks=600000 \
+  --history.logs=600000 --tries-verify-mode=local
+```
 
-- A first start is BOOTSTRAP. Its passes do not observe (`Pass.Observe`), so
-  imports run natively and uncaptured.
-- The recovery drivers (`recover` in
-  `adapters/bsc/lifecycle/native/go/recover.go` and `Hook.Recover` in
-  `adapters/bsc/decision/native/go/recover.go`) read extractor records only.
-  A directory of a vanilla node has none.
-- H is the native head when `eth.Synced()` turns true; `GoLive` flushes that
-  head's state root and writes the view.
+What refuses, in the order a start meets it:
 
-So the capture node can open a directory that a vanilla node snap-synced,
-with `--syncmode full`, when that directory holds the same genesis, the hash
-state scheme and no pruned block data. The node runs a full sync of the
-remaining gap uncaptured and goes live at the tip. Blocks before H are
-never captured, whichever way the directory was synced.
+1. With `EXTRACTOR_BSC_CONFIG` unset, the binary is the plain node: it runs
+   on that directory with those flags and captures nothing.
+2. With the variable set, the node stops at once with
+   `Failed to register the Ethereum service: native profile violates
+   capture constraints: state scheme "", want "hash"; history.blocks 600000
+   deletes block data`. Both refusals come from one function,
+   `stateprovider.CheckProfile` in `adapters/bsc/state_provider/family.go`:
+   the path scheme at lines 178 to 180, and the pruned history at lines 187
+   to 189 (`--history.blocks`; `--history.transactions` and
+   `--history.logs` are not checked). `bsclifecycle.CheckProfile` calls it
+   before the store is opened, so nothing is written to the directory.
+3. With `--state.scheme hash --gcmode full` added, only the history refusal
+   remains. Without `--history.blocks` too, the native parser refuses the
+   store: `incompatible state scheme, stored: path, user provided: hash`
+   (`rawdb.ParseStateScheme` in `core/rawdb/accessors_trie.go`, called when
+   `eth.New` opens the chain database).
+4. Two more checks would refuse a path-scheme trie database and are never
+   reached: `stateprovider.New` (`provider.go`, `trie database is not the
+   hash provider`) and `Attach` (`node.go`, `the lifecycle needs the hash
+   state scheme`).
+5. Nothing in the start path inspects the stored history itself. The checks
+   on stored pruning state (`statebloom.*` in `checkLayout` and the legacy
+   pruned-block offset in `openReadOnly`, both in `family.go`) belong to
+   `stateprovider.Preflight`, which the shipped node does not call.
 
-This follows from the code. The capture node was not run on a directory
-that a snap sync produced, and no directory of another node was opened.
-Reuse a directory with one writer only: stop the vanilla node first.
+These are the results of 2026-11-25 from short offline starts of the image
+on small stand-in stores, genesis-only homes in both state schemes, not on
+the snapshot itself: its volume was still being written and was not read.
+The refused start left the home byte-for-byte unchanged. A home in the hash
+scheme started with the snapshot flags without `--history.blocks`, and the
+plain node started on the path-scheme home with all the snapshot flags.

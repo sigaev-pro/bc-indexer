@@ -30,7 +30,15 @@ CONFIG = ('[Eth]\nNetworkId = 97\nSyncMode = "full"\nNoPruning = false\nStateSch
           'Enabled = false\n')
 START_LOG = "\n".join("INFO [11-25|03:10:32.206] " + line for line in build.START_MARKERS) + "\n"
 REFUSALS = {"snap-sync": (1, "Fatal: Failed to register the Ethereum service: sync mode snap (bsc.snap-sync)"),
-            "foreign-store": (1, "Fatal: native store identity mismatch: store is bound to x")}
+            "foreign-store": (1, "Fatal: native store identity mismatch: store is bound to x"),
+            "pruned-history": (1, "Fatal: Failed to register the Ethereum service: native profile violates capture "
+                                    "constraints: history.blocks 600000 deletes block data"),
+            "path-scheme": (1, "Fatal: Failed to register the Ethereum service: native profile violates capture "
+                                  "constraints: state scheme \"\", want \"hash\"; history.blocks 600000 deletes block data")}
+FAST = ["--syncmode=full", "--history.transactions=600000", "--history.blocks=600000", "--history.logs=600000",
+        "--tries-verify-mode=local"]
+SMOKE_MARKERS = {"snap-sync": "bsc.snap-sync", "foreign-store": "native store identity mismatch",
+                 "pruned-history": "history.blocks 600000 deletes block data", "path-scheme": 'state scheme "", want "hash"'}
 LIBRARIES = ("\tlinux-vdso.so.1 (0x00007ffc1a1b1000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f0b5e000000)\n"
              "\t/lib64/ld-linux-x86-64.so.2 (0x00007f0b5e400000)\n")
 MISSING = LIBRARIES + "\tlibrocksdb.so.10 => not found\n"
@@ -227,11 +235,12 @@ class StartTest(unittest.TestCase):
             build.check_start(START_LOG, 1)
 
     def test_refusal(self):
-        self.assertIsNone(build.check_refusal(REFUSALS["snap-sync"][1], 1, "bsc.snap-sync"))
-        with self.assertRaisesRegex(Rejected, "passed"):
-            build.check_refusal(REFUSALS["snap-sync"][1], 0, "bsc.snap-sync")
-        with self.assertRaisesRegex(Rejected, "does not name"):
-            build.check_refusal("Fatal: other error", 1, "bsc.snap-sync")
+        for name, (code, log) in REFUSALS.items():
+            self.assertIsNone(build.check_refusal(log, code, SMOKE_MARKERS[name], name))
+        with self.assertRaisesRegex(Rejected, "snap-sync: the start passed"):
+            build.check_refusal(REFUSALS["snap-sync"][1], 0, "bsc.snap-sync", "snap-sync")
+        with self.assertRaisesRegex(Rejected, "path-scheme: the refusal does not name"):
+            build.check_refusal("Fatal: other error", 1, 'state scheme "", want "hash"', "path-scheme")
 
     def test_start_scripts(self):
         script = build.start_script(["--chapel", "--datadir", "/home"], "start", 20)
@@ -244,6 +253,8 @@ class StartTest(unittest.TestCase):
 
     def test_profile_and_commands(self):
         self.assertEqual(build.PROFILE, ("--state.scheme", "hash", "--gcmode", "full", "--syncmode", "full"))
+        self.assertEqual(build.FAST_NODE, ("--syncmode=full", "--history.transactions=600000", "--history.blocks=600000",
+                                           "--history.logs=600000", "--tries-verify-mode=local"))
         self.assertEqual(build.OFFLINE, ("--maxpeers", "0", "--nodiscover", "--port", "0", "--ipcdisable"))
         arguments = build.build_arguments(COMMIT)
         self.assertEqual(arguments[:4], [build.GO, "build", "-trimpath", "-buildvcs=false"])
@@ -725,7 +736,7 @@ class SmokeTest(ProcedureFixture):
         self.assertEqual((proof["result"], proof["error"]), ("PASS", None))
         self.assertEqual(proof["start"]["exit_code"], 0)
         self.assertEqual({name: row["exit_code"] for name, row in proof["controls"].items()},
-                         {"snap-sync": 1, "foreign-store": 1})
+                         {"snap-sync": 1, "foreign-store": 1, "pruned-history": 1, "path-scheme": 1})
         self.assertEqual(proof["config"]["store_id"], build.SMOKE_STORE)
         self.assertEqual(proof["config"]["native_commit"], COMMIT)
         self.assertIsNone(proof["variant"])
@@ -734,16 +745,25 @@ class SmokeTest(ProcedureFixture):
         self.assertEqual(foreign["store_id"], build.FOREIGN_STORE)
         self.assertEqual(json.loads(Path(proof["genesis"]["path"]).read_text())["config"]["chainId"], 97)
         home = ["--chapel", "--datadir", "/home"]
+        path_home = ["--chapel", "--datadir", "/home-path"]
+        capture = {"EXTRACTOR_BSC_CONFIG": "/config/capture.json"}
         self.assertEqual([row["argv"] for row in self.native], [
             ["--chapel", "dumpgenesis"], [*home, "--state.scheme", "hash", "init", "/config/genesis.json"],
             ["-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "start", 20)],
+            [*path_home, "init", "/config/genesis.json"],
             ["-c", build.start_script([*home, "--state.scheme", "hash", "--gcmode", "full", *build.OFFLINE], "snap-sync")],
-            ["-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "foreign-store")]])
+            ["-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "foreign-store")],
+            ["-c", build.start_script([*home, "--state.scheme", "hash", "--gcmode", "full", *build.FAST_NODE, *build.OFFLINE],
+                                      "pruned-history")],
+            ["-c", build.start_script([*path_home, "--gcmode", "full", *build.FAST_NODE, *build.OFFLINE], "path-scheme")]])
+        self.assertNotIn("--state.scheme", self.native[-1]["argv"][-1].split("> /work/")[0])
         self.assertEqual([row["environment"] for row in self.native],
-                         [None, None, {"EXTRACTOR_BSC_CONFIG": "/config/capture.json"},
-                          {"EXTRACTOR_BSC_CONFIG": "/config/capture.json"},
-                          {"EXTRACTOR_BSC_CONFIG": "/config/foreign.json"}])
-        self.assertEqual([row["entrypoint"] for row in self.native], [None, None, "/bin/sh", "/bin/sh", "/bin/sh"])
+                         [None, None, capture, None, capture, {"EXTRACTOR_BSC_CONFIG": "/config/foreign.json"},
+                          capture, capture])
+        self.assertEqual([row["entrypoint"] for row in self.native],
+                         [None, None, "/bin/sh", None, "/bin/sh", "/bin/sh", "/bin/sh", "/bin/sh"])
+        self.assertIn((self.output / "smoke" / "home-path", "/home-path", False), self.native[-1]["mounts"])
+        self.assertEqual(len(self.native[-1]["mounts"]), 4)
         self.assertTrue(all(row["image"] == TAG for row in self.native))
         scripts = [row["argv"][1] for row in self.native if row["entrypoint"] == "/bin/sh"]
         self.assertIn("--syncmode full", scripts[0])
@@ -756,10 +776,16 @@ class SmokeTest(ProcedureFixture):
         self.assertEqual((proof["result"], proof["variant"]), ("PASS", "collector"))
 
     def test_a_control_that_passes_fails_the_smoke(self):
-        FakeNative.control = {**FakeNative.control, "snap-sync": (0, START_LOG)}
-        proof = build.smoke(TAG, self.output, 20)
-        self.assertEqual(proof["result"], "FAIL")
-        self.assertIn("passed", proof["error"])
+        controls = dict(FakeNative.control)
+        for name in ("snap-sync", "foreign-store", "pruned-history", "path-scheme"):
+            FakeNative.instances = []
+            FakeNative.control = {**controls, name: (0, START_LOG)}
+            self.output = self.root / ("pass-" + name)
+            with self.subTest(name=name):
+                proof = build.smoke(TAG, self.output, 20)
+                self.assertEqual(proof["result"], "FAIL")
+                self.assertIn("passed", proof["error"])
+                self.assertIn(name, proof["error"])
 
     def test_a_control_refused_by_another_rule_fails_the_smoke(self):
         FakeNative.control = {**FakeNative.control,
