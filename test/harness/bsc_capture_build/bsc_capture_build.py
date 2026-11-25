@@ -685,6 +685,18 @@ def smoke(image, output, seconds):
     return pins.owned_attempt(output, started, deadline, proof, "smoke.json", body)
 
 
+def command_line(argv=None):
+    """The command line with each `--cgo-link FLAG` in its equal form. argparse
+    reads a value that starts with a dash as an option, and linker flags do."""
+    words = list(sys.argv[1:] if argv is None else argv)
+    index = 0
+    while index + 1 < len(words):
+        if words[index] == "--cgo-link":
+            words[index:index + 2] = ["--cgo-link=" + words[index + 1]]
+        index += 1
+    return words
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -709,7 +721,7 @@ def main(argv=None):
     checker.add_argument("--image", required=True)
     checker.add_argument("--output", type=Path, required=True, help="new absolute directory owned by this smoke")
     checker.add_argument("--seconds", type=int, default=20, help="time the node runs after its start")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(command_line(argv))
 
     def interrupt(number, _frame):
         raise InterruptedError("Interrupted by " + signal.Signals(number).name)

@@ -404,8 +404,8 @@ class VariantTest(unittest.TestCase):
         effective = build.dockerfile(variant)
         self.assertEqual(effective, text.replace("COPY --chmod=0755 geth /usr/local/bin/geth\n",
                                                  "COPY --chmod=0755 geth /usr/local/bin/geth\n" + build.LIBRARIES))
-        self.assertLess(effective.index("geth /usr/local/bin/geth"), effective.index("ldconfig"))
-        self.assertLess(effective.index("ldconfig"), effective.index("ENTRYPOINT"))
+        self.assertLess(effective.index("geth /usr/local/bin/geth"), effective.index("RUN ldconfig"))
+        self.assertLess(effective.index("RUN ldconfig"), effective.index("ENTRYPOINT"))
         variant["runtime_libraries"] = []
         self.assertEqual(build.dockerfile(variant), text)
 
@@ -654,6 +654,24 @@ class BuildTest(ProcedureFixture):
         self.assertEqual((proof["result"], self.docker.removed), ("FAIL", [TAG + "-collector"]))
         self.assertIn("librocksdb.so.10", proof["error"])
         self.assertFalse((self.output / "provenance.json").exists())
+
+    def test_the_command_line_accepts_linker_flags(self):
+        header = self.root / "rocksdb" / "include"
+        header.mkdir(parents=True)
+        (header / "rocksdb.h").write_text("#include <stdint.h>\n")
+        base = ["build", "--build-manifest", str(self.accepted / "manifest.json"), "--sha256", self.sha]
+        output = self.root / "link"
+        self.assertEqual(build.main([*base, "--output", str(output), "--variant", "rocksdb", "--cgo-link", "-lrocksdb",
+                                     "--cgo-include", str(header)]), 0)
+        provenance = json.loads((output / "provenance.json").read_text())
+        self.assertEqual(provenance["variant"]["cgo"]["link"], ["-lrocksdb"])
+        self.assertEqual(provenance["build_environment"], {"CGO_CFLAGS": "-I/cgo/include/0", "CGO_LDFLAGS": "-lrocksdb"})
+        self.assertEqual(provenance["image"], TAG + "-rocksdb")
+        self.assertEqual(build.command_line(["--cgo-link", "-la", "--cgo-link=-lb", "x", "--cgo-link"]),
+                         ["--cgo-link=-la", "--cgo-link=-lb", "x", "--cgo-link"])
+        with mock.patch("builtins.print"):
+            self.assertEqual(build.main([*base, "--output", str(self.root / "none"), "--cgo-link", "-lrocksdb"]), 2)
+        self.assertFalse((self.root / "none").exists())
 
     def test_a_changed_variant_input_fails_before_an_image_exists(self):
         variant = overlay(self.root)
