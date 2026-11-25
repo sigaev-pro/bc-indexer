@@ -1,7 +1,8 @@
 package stateprovider
 
-// Bor-specific parts of the state provider: read-only store opening, the
-// guarded native pruner and the effective-profile check of `bor server`.
+// Bor-specific parts of the state provider: the retention floor and the
+// state profile, read-only store opening, the guarded native pruner and the
+// effective-profile check of `bor server`.
 
 import (
 	"errors"
@@ -21,6 +22,35 @@ import (
 
 // Family names the native client family of this package.
 const Family = "bor"
+
+// retentionFloor is N of D108: the least number of blocks that a Bor capture
+// node keeps behind its head. It is the native immutability threshold
+// (params.FullImmutabilityThreshold), which the default `--history.state`
+// uses. `bor server` keeps every block at this commit; the floor bounds the
+// state history and the retention of a store that `bor snapshot prune-block`
+// pruned.
+const retentionFloor uint64 = 90_000
+
+// stateProfile is the capture state profile of Bor on a store of the given
+// scheme, or empty for a scheme this build does not support. The scheme
+// decides how a pin makes a state durable, so pins of one store never mix
+// the two profiles.
+func stateProfile(scheme string) string {
+	switch scheme {
+	case rawdb.HashScheme:
+		return "state.scheme=hash;gcmode=full;syncmode=full"
+	case rawdb.PathScheme:
+		return "state.scheme=path;gcmode=full;syncmode=full;history.state>=90000"
+	}
+	return ""
+}
+
+// legacyOffset is the offset that `bor snapshot prune-block` leaves in the
+// key-value store: the first block it kept.
+func legacyOffset(db ethdb.KeyValueReader) uint64 { return rawdb.ReadOffsetOfCurrentAncientFreezer(db) }
+
+// ancientTail is the first block that the ancient store still holds.
+func ancientTail(db ethdb.Database) (uint64, error) { return db.Tail() }
 
 // Preflight checks a stopped native instance directory (the directory that
 // holds `chaindata`) before capture starts. It opens the store read-only and
@@ -99,11 +129,13 @@ func openReadOnly(chaindata string) (ethdb.Database, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	// The native `bor snapshot prune-block` command deletes old block data,
-	// headers included, and leaves this offset behind.
-	if rawdb.ReadOffsetOfCurrentAncientFreezer(kv) > 0 {
-		kv.Close()
-		return nil, "", fmt.Errorf("%w: pruned-block offset", ErrForbiddenPruning)
+	// `bor snapshot prune-block` deletes old block data, headers included,
+	// and leaves this offset behind. Native Open would rewrite it into the
+	// freezer metadata and delete it, even read-only, so the store is opened
+	// without its ancient part and the preflight measures the offset as the
+	// oldest block of the store.
+	if legacyOffset(kv) > 0 {
+		return rawdb.NewDatabase(kv), engine, nil
 	}
 	ancient := filepath.Join(chaindata, "ancient")
 	if info, statErr := os.Stat(ancient); statErr != nil || !info.IsDir() {
@@ -119,9 +151,10 @@ func openReadOnly(chaindata string) (ethdb.Database, string, error) {
 
 // EffectiveProfile reports the capture-relevant effective native values.
 type EffectiveProfile struct {
-	StateScheme string `json:"state_scheme"`
-	GCMode      string `json:"gcmode"`
-	SyncMode    string `json:"syncmode"`
+	StateScheme  string `json:"state_scheme"`
+	GCMode       string `json:"gcmode"`
+	SyncMode     string `json:"syncmode"`
+	StateHistory uint64 `json:"state_history"`
 }
 
 // EffectiveConfig returns the configuration that `bor server` builds from
@@ -130,24 +163,33 @@ func EffectiveConfig(args []string) (*server.Config, error) {
 	return server.ExtractorEffectiveConfig(args)
 }
 
-// CheckProfile enforces the first Bor capture profile on the effective
-// config: hash state scheme, full garbage collection, full sync, and the
-// ordinary sequential import path. Pipelined state-root import, parallel
-// stateless import, witness sync, preconfirmations, the sequencer stream and
-// the parallel EVM (BlockSTM, D60) are rejected. Other values stay as the
-// operator set them.
+// CheckProfile enforces the fast-node capture profile (D108) on the effective
+// config: hash or path state scheme (the `bor server` default is path), full
+// garbage collection, full sync, and the ordinary sequential import path.
+// Pipelined state-root import, parallel stateless import, witness sync,
+// preconfirmations, the sequencer stream and the parallel EVM (BlockSTM, D60)
+// are rejected. Under the path scheme, a nonzero `--history.state` below N is
+// refused. Other values stay as the operator set them.
 func CheckProfile(cfg *server.Config) (EffectiveProfile, error) {
 	if cfg == nil {
 		return EffectiveProfile{}, errors.New("missing effective config")
 	}
-	profile := EffectiveProfile{StateScheme: cfg.StateScheme, GCMode: cfg.GcMode, SyncMode: cfg.SyncMode}
+	var history uint64
+	if cfg.History != nil {
+		history = cfg.History.StateHistory
+	}
+	profile := EffectiveProfile{StateScheme: cfg.StateScheme, GCMode: cfg.GcMode, SyncMode: cfg.SyncMode,
+		StateHistory: history}
 	var problems []string
 	want := func(ok bool, problem string) {
 		if !ok {
 			problems = append(problems, problem)
 		}
 	}
-	want(cfg.StateScheme == rawdb.HashScheme, fmt.Sprintf("state.scheme %q, want %q", cfg.StateScheme, rawdb.HashScheme))
+	if cfg.StateScheme != rawdb.HashScheme && cfg.StateScheme != rawdb.PathScheme {
+		problems = append(problems, fmt.Sprintf("state.scheme %q, want %q or %q", cfg.StateScheme, rawdb.HashScheme,
+			rawdb.PathScheme))
+	}
 	want(cfg.GcMode == "full", fmt.Sprintf("gcmode %q, want full", cfg.GcMode))
 	want(cfg.SyncMode == "full", fmt.Sprintf("syncmode %q, want full", cfg.SyncMode))
 	want(cfg.ParallelEVM != nil && !cfg.ParallelEVM.Enable, "parallelevm.enable")
@@ -158,6 +200,36 @@ func CheckProfile(cfg *server.Config) (EffectiveProfile, error) {
 	want(cfg.Relay != nil && !cfg.Relay.EnablePreconfs, "relay.enable-preconfs")
 	want(cfg.JsonRPC != nil && !cfg.JsonRPC.AcceptPreconfTx, "accept-preconf-tx")
 	want(cfg.Sequencer != nil && !cfg.Sequencer.Enabled, "sequencer.enabled")
+	if cfg.History == nil {
+		problems = append(problems, "history.state is unknown: no history config")
+	} else if cfg.StateScheme == rawdb.PathScheme && history != 0 && history < retentionFloor {
+		problems = append(problems, fmt.Sprintf("history.state %d keeps fewer than %d blocks", history, retentionFloor))
+	}
+	if len(problems) != 0 {
+		return profile, fmt.Errorf("%w: %s", ErrProfile, strings.Join(problems, "; "))
+	}
+	return profile, nil
+}
+
+// CheckStoreProfile completes CheckProfile with the scheme of the opened
+// store. `bor server` names its scheme, so the store must be of that scheme
+// and of a supported one. The returned profile names the scheme of the store.
+func CheckStoreProfile(cfg *server.Config, scheme string) (EffectiveProfile, error) {
+	profile, err := CheckProfile(cfg)
+	if err != nil {
+		return profile, err
+	}
+	var problems []string
+	if profileOf(scheme) == "" {
+		problems = append(problems, fmt.Sprintf("state scheme %q, want %q or %q", scheme, rawdb.HashScheme,
+			rawdb.PathScheme))
+	} else {
+		if cfg != nil && cfg.StateScheme != scheme {
+			problems = append(problems, fmt.Sprintf("state.scheme %q is not the %q scheme of the store",
+				cfg.StateScheme, scheme))
+		}
+		profile.StateScheme = scheme
+	}
 	if len(problems) != 0 {
 		return profile, fmt.Errorf("%w: %s", ErrProfile, strings.Join(problems, "; "))
 	}

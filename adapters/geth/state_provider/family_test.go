@@ -6,8 +6,10 @@ package stateprovider
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"os"
@@ -15,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -25,8 +28,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/pathdb"
@@ -93,6 +98,48 @@ func newMemoryStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Head
 func newPathTrieDB(_ ethdb.Database) *triedb.Database {
 	return triedb.NewDatabase(rawdb.NewMemoryDatabase(), &triedb.Config{PathDB: pathdb.Defaults})
 }
+
+// newPathStore is newMemoryStore on a path store: the fixture genesis
+// committed through the path trie database. The native path store writes the
+// genesis state to the key-value store in the background, so it waits until
+// the store carries it; only then does the native reader name the scheme.
+func newPathStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Header) {
+	t.Helper()
+	db := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(db, &triedb.Config{PathDB: pathdb.Defaults})
+	block, err := familyGenesis(t).Commit(db, tdb, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { tdb.Close(); db.Close() })
+	for deadline := time.Now().Add(10 * time.Second); rawdb.ReadStateScheme(db) != rawdb.PathScheme; {
+		if time.Now().After(deadline) {
+			t.Fatal("the path store did not write its genesis state")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return db, tdb, block.Header()
+}
+
+// tailDB is a native database with a synthetic ancient tail. The chain tables
+// of Geth share no pruning group, so their tail is the one of the empty group.
+type tailDB struct {
+	ethdb.Database
+	tail uint64
+	err  error
+}
+
+func (db tailDB) Tail(group string) (uint64, error) { return db.tail, db.err }
+
+// withTail returns db with the given tail of its ancient store, or the error
+// that reading the tail returns.
+func withTail(db ethdb.Database, tail uint64, err error) ethdb.Database {
+	return tailDB{Database: db, tail: tail, err: err}
+}
+
+// legacyOffsetKey is the key-value key that holds the offset of a prune-block
+// option. Geth at this commit has no such option, so it has none.
+func legacyOffsetKey() []byte { return nil }
 
 // commitSideState writes a side-branch child of parent into the trie cache
 // only, with one account that has a balance, code and storage, and writes an
@@ -253,7 +300,10 @@ func dumpCase(name, reason string, args, env []string, config string, reflect fu
 	}}
 }
 
-const baseConfig = "[Eth]\nStateScheme = \"hash\"\nNoPruning = false\n"
+const (
+	baseConfig = "[Eth]\nStateScheme = \"hash\"\nNoPruning = false\n"
+	pathConfig = "[Eth]\nStateScheme = \"path\"\nNoPruning = false\n"
+)
 
 var baseArgs = []string{"--state.scheme=hash", "--gcmode=full"}
 
@@ -261,20 +311,46 @@ func profileCases(t testing.TB) []profileCase {
 	history := func(value uint64) func(*ethconfigView) bool {
 		return func(view *ethconfigView) bool { return view.TransactionHistory == value }
 	}
+	scheme := func(want string) func(*ethconfigView) bool {
+		return func(view *ethconfigView) bool { return view.StateScheme == want }
+	}
+	states := func(want uint64) func(*ethconfigView) bool {
+		return func(view *ethconfigView) bool { return view.StateHistory == want }
+	}
 	return []profileCase{
+		// The hash profile of E01 and the values that stay as the operator
+		// set them.
 		dumpCase("baseline_flags", "", baseArgs, nil, "", nil),
 		dumpCase("allowed_native_args", "", append(baseArgs, "--history.transactions=12345"), nil, "", history(12345)),
 		dumpCase("allowed_environment", "", baseArgs, []string{"GETH_HISTORY_TRANSACTIONS=23456"}, "", history(23456)),
 		dumpCase("allowed_config", "", nil, nil, baseConfig+"TransactionHistory = 34567\n", history(34567)),
-		dumpCase("wrong_hash_profile_default", `state scheme ""`, nil, nil, "", nil),
-		dumpCase("wrong_hash_profile_flag", `state scheme "path"`, []string{"--state.scheme=path"}, nil, "", nil),
-		dumpCase("wrong_hash_profile_environment", `state scheme "path"`, nil, []string{"GETH_STATE_SCHEME=path"}, "", nil),
-		dumpCase("wrong_hash_profile_config", `state scheme "path"`, nil, nil, "[Eth]\nStateScheme = \"path\"\n", nil),
-		dumpCase("environment_over_config_cannot_bypass", `state scheme "path"`, nil, []string{"GETH_STATE_SCHEME=path"}, baseConfig, nil),
+		// The fast-node profile of D108: the flags of a fast node pass no
+		// state scheme, and the store keeps its own.
+		dumpCase("fastnode_default_scheme", "", []string{"--syncmode=full"}, nil, "", scheme("")),
+		dumpCase("path_profile_flag", "", []string{"--state.scheme=path", "--gcmode=full"}, nil, "", scheme("path")),
+		dumpCase("path_profile_environment", "", []string{"--gcmode=full"}, []string{"GETH_STATE_SCHEME=path"}, "",
+			scheme("path")),
+		dumpCase("path_profile_config", "", nil, nil, pathConfig, scheme("path")),
+		// The state history matters under the path scheme only.
+		dumpCase("allowed_state_history_flag", "", []string{"--state.scheme=path", "--gcmode=full", "--history.state=90000"},
+			nil, "", states(90000)),
+		dumpCase("allowed_state_history_under_hash", "", []string{"--state.scheme=hash", "--gcmode=full", "--history.state=89999"},
+			nil, "", states(89999)),
+		// A source cannot override another.
+		dumpCase("environment_over_config_cannot_bypass", "gcmode archive", nil, []string{"GETH_GCMODE=archive"},
+			baseConfig, nil),
 		dumpCase("flag_over_config_cannot_bypass", "gcmode archive", []string{"--gcmode=archive"}, nil, baseConfig, nil),
-		dumpCase("wrong_gc_profile_archive_flag", "gcmode archive", []string{"--state.scheme=hash", "--gcmode=archive"}, nil, "", nil),
-		dumpCase("wrong_gc_profile_archive_environment", "gcmode archive", []string{"--state.scheme=hash"}, []string{"GETH_GCMODE=archive"}, "", nil),
-		dumpCase("wrong_gc_profile_archive_config", "gcmode archive", nil, nil, "[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", nil),
+		// The refusals of the profile.
+		dumpCase("wrong_gc_profile_archive_flag", "gcmode archive", []string{"--state.scheme=hash", "--gcmode=archive"}, nil,
+			"", nil),
+		dumpCase("wrong_gc_profile_archive_environment", "gcmode archive", []string{"--state.scheme=hash"},
+			[]string{"GETH_GCMODE=archive"}, "", nil),
+		dumpCase("wrong_gc_profile_archive_config", "gcmode archive", nil, nil,
+			"[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", nil),
+		dumpCase("forbidden_state_history_flag", "capture constraints: history.state 89999",
+			[]string{"--state.scheme=path", "--gcmode=full", "--history.state=89999"}, nil, "", nil),
+		dumpCase("forbidden_state_history_config", "capture constraints: history.state 89999", nil, nil,
+			pathConfig+"StateHistory = 89999\n", nil),
 	}
 }
 
@@ -282,43 +358,44 @@ func profileCases(t testing.TB) []profileCase {
 type ethconfigView struct {
 	StateScheme        string `json:"state_scheme"`
 	NoPruning          bool   `json:"no_pruning"`
+	StateHistory       uint64 `json:"state_history"`
 	TransactionHistory uint64 `json:"transaction_history"`
 }
 
-func viewOf(cfg interface{}) ethconfigView {
-	data, _ := json.Marshal(cfg)
-	var view struct {
-		StateScheme        string
-		NoPruning          bool
-		TransactionHistory uint64
-	}
-	_ = json.Unmarshal(data, &view)
-	return ethconfigView{StateScheme: view.StateScheme, NoPruning: view.NoPruning, TransactionHistory: view.TransactionHistory}
+func viewOf(cfg *ethconfig.Config) ethconfigView {
+	return ethconfigView{StateScheme: cfg.StateScheme, NoPruning: cfg.NoPruning, StateHistory: cfg.StateHistory,
+		TransactionHistory: cfg.TransactionHistory}
 }
 
 func TestUnitCheckProfileFields(t *testing.T) {
-	base := `[Eth]
-StateScheme = "hash"
-NoPruning = false
-`
-	cfg, err := DecodeEffectiveConfig([]byte(base))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := CheckProfile(cfg); err != nil {
-		t.Fatal(err)
-	}
-	for _, body := range []string{
-		strings.Replace(base, `"hash"`, `"path"`, 1),
-		strings.Replace(base, `"hash"`, `""`, 1),
-		strings.Replace(base, "false", "true", 1),
-	} {
+	decode := func(body string) *ethconfig.Config {
 		cfg, err := DecodeEffectiveConfig([]byte(body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := CheckProfile(cfg); !errors.Is(err, ErrProfile) {
-			t.Fatalf("%q accepted: %v", body, err)
+		return cfg
+	}
+	for name, body := range map[string]string{
+		"hash":                                 baseConfig,
+		"no scheme (the flags of a fast node)": "[Eth]\nNoPruning = false\n",
+		"path":                                 pathConfig,
+		"state history below N under hash":     baseConfig + "StateHistory = 89999\n",
+		"state history N under path":           pathConfig + "StateHistory = 90000\n",
+		"state history of the entire chain under path": pathConfig + "StateHistory = 0\n",
+	} {
+		profile, err := CheckProfile(decode(body))
+		if err != nil || profile.GCMode != "full" {
+			t.Fatalf("%s: %v (profile %v)", name, err, profile)
+		}
+	}
+	for name, c := range map[string]struct{ body, reason string }{
+		"archive":                          {"[Eth]\nStateScheme = \"hash\"\nNoPruning = true\n", "gcmode archive"},
+		"state history below N under path": {pathConfig + "StateHistory = 89999\n", "history.state 89999 keeps fewer than 90000 blocks"},
+		"unknown scheme":                   {"[Eth]\nStateScheme = \"bin\"\nNoPruning = false\n", `state scheme "bin"`},
+	} {
+		_, err := CheckProfile(decode(c.body))
+		if !errors.Is(err, ErrProfile) || !strings.Contains(err.Error(), c.reason) {
+			t.Fatalf("%s: %v, want %q", name, err, c.reason)
 		}
 	}
 	if _, err := DecodeEffectiveConfig([]byte("[Eth]\nUnknownField = 1\n")); err == nil {
@@ -326,5 +403,80 @@ NoPruning = false
 	}
 	if _, err := CheckProfile(nil); err == nil {
 		t.Fatal("missing config accepted")
+	}
+	// The profile records the values that the rules read.
+	profile, err := CheckProfile(decode(pathConfig + "StateHistory = 90000\n"))
+	if want := (EffectiveProfile{StateScheme: rawdb.PathScheme, GCMode: "full", StateHistory: 90000}); err != nil ||
+		profile != want {
+		t.Fatalf("profile %v %v, want %v", profile, err, want)
+	}
+}
+
+// TestUnitStoreProfile covers the rules that need the scheme of the opened
+// store: the flags of a fast node name no scheme, and the state history floor
+// holds under the scheme the store has.
+func TestUnitStoreProfile(t *testing.T) {
+	decode := func(body string) *ethconfig.Config {
+		cfg, err := DecodeEffectiveConfig([]byte(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	short := decode("[Eth]\nNoPruning = false\nStateHistory = 89999\n")
+	profile, err := CheckProfile(short)
+	if err != nil || profile.StateScheme != "" {
+		t.Fatalf("config without a scheme %v %v", profile, err)
+	}
+	if profile, err = CheckStoreProfile(short, rawdb.HashScheme); err != nil || profile.StateScheme != rawdb.HashScheme ||
+		profile.StateHistory != 89999 {
+		t.Fatalf("hash store %v %v", profile, err)
+	}
+	if _, err = CheckStoreProfile(short, rawdb.PathScheme); !errors.Is(err, ErrProfile) ||
+		!strings.Contains(err.Error(), "history.state 89999") {
+		t.Fatalf("path store with a short state history %v", err)
+	}
+	full := decode("[Eth]\nNoPruning = false\nStateHistory = 90000\n")
+	if profile, err = CheckStoreProfile(full, rawdb.PathScheme); err != nil || profile.StateScheme != rawdb.PathScheme {
+		t.Fatalf("path store %v %v", profile, err)
+	}
+	for _, scheme := range []string{"bin", ""} {
+		if _, err = CheckStoreProfile(full, scheme); !errors.Is(err, ErrProfile) ||
+			!strings.Contains(err.Error(), "state scheme") {
+			t.Fatalf("store of scheme %q %v", scheme, err)
+		}
+	}
+	named := decode("[Eth]\nStateScheme = \"hash\"\nNoPruning = false\n")
+	if _, err = CheckStoreProfile(named, rawdb.PathScheme); !errors.Is(err, ErrProfile) ||
+		!strings.Contains(err.Error(), "is not the") {
+		t.Fatalf("path store under a hash config %v", err)
+	}
+	if _, err = CheckStoreProfile(nil, rawdb.HashScheme); err == nil {
+		t.Fatal("missing config accepted")
+	}
+}
+
+// TestUnitFloorIsNative pins N to the values of the pinned client: the floor
+// is the immutability threshold and the default state history.
+func TestUnitFloorIsNative(t *testing.T) {
+	if retentionFloor != params.FullImmutabilityThreshold || retentionFloor != pathdb.Defaults.StateHistory ||
+		retentionFloor != ethconfig.Defaults.StateHistory {
+		t.Fatalf("retention floor %d is not the native immutability threshold %d or the default state history %d",
+			retentionFloor, params.FullImmutabilityThreshold, ethconfig.Defaults.StateHistory)
+	}
+}
+
+// TestUnitStateProfiles pins the state profile strings of this client. A
+// string binds the profile to every store of its scheme (D108): a changed
+// string refuses every bound store, so it changes only with a decision.
+func TestUnitStateProfiles(t *testing.T) {
+	want := map[string]string{rawdb.HashScheme: "state.scheme=hash;gcmode=full", rawdb.PathScheme: "state.scheme=path;gcmode=full;history.state>=90000"}
+	for scheme, profile := range want {
+		if stateProfile(scheme) != profile || profileOf(scheme) != fmt.Sprintf("%x", sha256.Sum256([]byte(profile))) {
+			t.Fatalf("state profile of the %s scheme is %q, want %q", scheme, stateProfile(scheme), profile)
+		}
+	}
+	if stateProfile("") != "" || stateProfile("bin") != "" {
+		t.Fatal("a scheme without a state profile has one")
 	}
 }

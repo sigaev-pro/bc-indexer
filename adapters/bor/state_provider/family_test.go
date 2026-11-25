@@ -6,8 +6,10 @@ package stateprovider
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"os"
@@ -32,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/pathdb"
@@ -97,6 +100,58 @@ func newMemoryStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Head
 
 func newPathTrieDB(_ ethdb.Database) *triedb.Database {
 	return triedb.NewDatabase(rawdb.NewMemoryDatabase(), &triedb.Config{PathDB: pathdb.Defaults})
+}
+
+// newPathStore is newMemoryStore on a path store: the fixture genesis
+// committed through the path trie database. The native path store writes the
+// genesis state to the key-value store in the background, so it waits until
+// the store carries it; only then does the native reader name the scheme.
+func newPathStore(t testing.TB) (ethdb.Database, *triedb.Database, *types.Header) {
+	t.Helper()
+	db := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(db, &triedb.Config{PathDB: pathdb.Defaults})
+	block, err := familyGenesis(t).Commit(db, tdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { tdb.Close(); db.Close() })
+	for deadline := time.Now().Add(10 * time.Second); rawdb.ReadStateScheme(db) != rawdb.PathScheme; {
+		if time.Now().After(deadline) {
+			t.Fatal("the path store did not write its genesis state")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return db, tdb, block.Header()
+}
+
+// tailDB is a native database with a synthetic ancient tail.
+type tailDB struct {
+	ethdb.Database
+	tail uint64
+	err  error
+}
+
+func (db tailDB) Tail() (uint64, error) { return db.tail, db.err }
+
+// withTail returns db with the given tail of its ancient store, or the error
+// that reading the tail returns.
+func withTail(db ethdb.Database, tail uint64, err error) ethdb.Database {
+	return tailDB{Database: db, tail: tail, err: err}
+}
+
+// legacyOffsetKey is the key-value key that holds the offset of `bor snapshot
+// prune-block` (the native schema keeps it unexported).
+func legacyOffsetKey() []byte { return []byte("offsetOfCurrentAncientFreezer") }
+
+// openChainData opens only the key-value part of a home, without the native
+// freezer: nothing moves to the ancient store while it is open.
+func openChainData(t testing.TB, instanceDir string) ethdb.Database {
+	t.Helper()
+	kv, err := pebble.New(filepath.Join(instanceDir, "chaindata"), 64, 64, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rawdb.NewDatabase(kv)
 }
 
 // commitSideState writes a side-branch child of parent into the trie cache
@@ -263,6 +318,16 @@ accept-preconf-tx = false
 enabled = false
 `
 
+// pathDefaultConfig leaves the scheme to the `bor server` default (path).
+var pathDefaultConfig = strings.Replace(baseConfig, `"state.scheme" = "hash"`+"\n", "", 1)
+
+// pathConfig names the path scheme in the config file; binConfig a scheme
+// that no profile supports.
+var (
+	pathConfig = strings.Replace(baseConfig, `"state.scheme" = "hash"`, `"state.scheme" = "path"`, 1)
+	binConfig  = strings.Replace(baseConfig, `"state.scheme" = "hash"`, `"state.scheme" = "bin"`, 1)
+)
+
 // effectiveCase checks one `bor server` argument set. It is accepted when
 // reason is empty; otherwise the rejection text must contain reason. The
 // config body, when present, is written to a file and passed with --config
@@ -303,30 +368,55 @@ func profileCases(t testing.TB) []profileCase {
 	cache := func(value uint64) func(*server.Config) bool {
 		return func(cfg *server.Config) bool { return cfg.Cache.Cache == value }
 	}
+	states := func(value uint64) func(*server.Config) bool {
+		return func(cfg *server.Config) bool { return cfg.History.StateHistory == value }
+	}
+	scheme := func(want string) func(*server.Config) bool {
+		return func(cfg *server.Config) bool { return cfg.StateScheme == want }
+	}
 	on := func(flag string) []string { return []string{"--" + flag + "=true"} }
 	return []profileCase{
 		effectiveCase("baseline_config", "", baseConfig, nil, nil, nil),
 		effectiveCase("allowed_config", "", baseConfig+"\n[cache]\ncache = 1234\n", nil, nil, cache(1234)),
-		effectiveCase("allowed_native_args", "", baseConfig+"\n[cache]\ncache = 1234\n", []string{"--cache=2345"}, nil, cache(2345)),
+		effectiveCase("allowed_native_args", "", baseConfig+"\n[cache]\ncache = 1234\n", []string{"--cache=2345"}, nil,
+			cache(2345)),
 		// The `bor server` parser reads no configuration environment
 		// variables at this commit (only BOR_GRPC_TOKEN), so environment
 		// cannot select a forbidden value.
 		effectiveCase("environment_is_not_a_config_source", "", baseConfig, nil,
-			map[string]string{"BOR_STATE_SCHEME": "path", "BOR_GCMODE": "archive", "BOR_PARALLELEVM_ENABLE": "true"}, nil),
-		effectiveCase("wrong_hash_profile_default", `state.scheme "path"`, strings.Replace(baseConfig, `"state.scheme" = "hash"`+"\n", "", 1), nil, nil, nil),
-		effectiveCase("wrong_hash_profile_config", `state.scheme "path"`, strings.Replace(baseConfig, `= "hash"`, `= "path"`, 1), nil, nil, nil),
-		effectiveCase("wrong_hash_profile_flag", `state.scheme "path"`, baseConfig, []string{"--state.scheme=path"}, nil, nil),
+			map[string]string{"BOR_STATE_SCHEME": "archive-scheme", "BOR_GCMODE": "archive",
+				"BOR_PARALLELEVM_ENABLE": "true", "BOR_HISTORY_STATE": "1"}, nil),
+		// The fast-node profile of D108: path is the default scheme of `bor server`.
+		effectiveCase("path_profile_default", "", pathDefaultConfig, nil, nil, scheme("path")),
+		effectiveCase("path_profile_config", "", pathConfig, nil, nil, scheme("path")),
+		effectiveCase("path_profile_flag", "", baseConfig, []string{"--state.scheme=path"}, nil, scheme("path")),
+		// The state history matters under the path scheme only.
+		effectiveCase("allowed_state_history_under_hash", "", baseConfig, []string{"--history.state=89999"}, nil,
+			states(89999)),
+		effectiveCase("allowed_state_history_under_path", "", pathDefaultConfig, []string{"--history.state=90000"}, nil,
+			states(90000)),
+		effectiveCase("forbidden_state_history_flag", "capture constraints: history.state 89999", pathDefaultConfig,
+			[]string{"--history.state=89999"}, nil, nil),
+		effectiveCase("forbidden_state_history_config", "capture constraints: history.state 89999",
+			pathDefaultConfig+"\n[history]\nstate = 89999\n", nil, nil, nil),
+		// Only the hash and the path schemes are supported.
+		effectiveCase("wrong_scheme_flag", "capture constraints: state.scheme", baseConfig, []string{"--state.scheme=bin"},
+			nil, nil),
+		effectiveCase("wrong_scheme_config", "capture constraints: state.scheme", binConfig, nil, nil, nil),
 		effectiveCase("wrong_gc_profile_archive_flag", `gcmode "archive"`, baseConfig, []string{"--gcmode=archive"}, nil, nil),
-		effectiveCase("wrong_gc_profile_archive_config", `gcmode "archive"`, strings.Replace(baseConfig, `gcmode = "full"`, `gcmode = "archive"`, 1), nil, nil, nil),
+		effectiveCase("wrong_gc_profile_archive_config", `gcmode "archive"`, strings.Replace(baseConfig, `gcmode = "full"`,
+			`gcmode = "archive"`, 1), nil, nil, nil),
 		effectiveCase("wrong_syncmode_flag", `syncmode "snap"`, baseConfig, []string{"--syncmode=snap"}, nil, nil),
 		effectiveCase("bor_pipelined_import", "pipeline.enable-import-src", baseConfig, on("pipeline.enable-import-src"), nil, nil),
-		effectiveCase("bor_parallel_stateless", "witness.parallelstatelessimport", baseConfig, on("witness.parallelstatelessimport"), nil, nil),
+		effectiveCase("bor_parallel_stateless", "witness.parallelstatelessimport", baseConfig, on("witness.parallelstatelessimport"),
+			nil, nil),
 		effectiveCase("bor_witness_sync", "witness.syncwithwitnesses", baseConfig, on("witness.syncwithwitnesses"), nil, nil),
 		effectiveCase("bor_preconfirmation_relay", "relay.enable-preconfs", baseConfig, on("relay.enable-preconfs"), nil, nil),
 		effectiveCase("bor_preconfirmation_rpc", "accept-preconf-tx", baseConfig, on("accept-preconf-tx"), nil, nil),
 		effectiveCase("bor_blockstm_enable", "parallelevm.enable", baseConfig, on("parallelevm.enable"), nil, nil),
 		effectiveCase("bor_blockstm_enforce", "parallelevm.enforce", baseConfig, on("parallelevm.enforce"), nil, nil),
-		effectiveCase("bor_blockstm_config", "parallelevm.enable", strings.Replace(baseConfig, "enable = false\nenforce", "enable = true\nenforce", 1), nil, nil, nil),
+		effectiveCase("bor_blockstm_config", "parallelevm.enable", strings.Replace(baseConfig, "enable = false\nenforce",
+			"enable = true\nenforce", 1), nil, nil, nil),
 		effectiveCase("bor_sequencer", "sequencer.enabled", baseConfig, on("sequencer.enabled"), nil, nil),
 	}
 }
@@ -345,8 +435,26 @@ func TestUnitCheckProfileFields(t *testing.T) {
 	if _, err := CheckProfile(compliantConfig()); err != nil {
 		t.Fatal(err)
 	}
+	path := compliantConfig()
+	path.StateScheme = rawdb.PathScheme
+	if profile, err := CheckProfile(path); err != nil || profile.StateScheme != rawdb.PathScheme ||
+		profile.StateHistory != retentionFloor {
+		t.Fatalf("path profile %v %v", profile, err)
+	}
+	// The state history matters under the path scheme only.
+	short := compliantConfig()
+	short.StateScheme, short.History.StateHistory = rawdb.PathScheme, retentionFloor-1
+	if _, err := CheckProfile(short); !errors.Is(err, ErrProfile) {
+		t.Fatalf("short state history under path %v", err)
+	}
+	underHash := short
+	underHash.StateScheme = rawdb.HashScheme
+	if _, err := CheckProfile(underHash); err != nil {
+		t.Fatalf("short state history under hash %v", err)
+	}
 	for name, change := range map[string]func(*server.Config){
-		"scheme":     func(c *server.Config) { c.StateScheme = rawdb.PathScheme },
+		"scheme":     func(c *server.Config) { c.StateScheme = "bin" },
+		"no scheme":  func(c *server.Config) { c.StateScheme = "" },
 		"gcmode":     func(c *server.Config) { c.GcMode = "archive" },
 		"syncmode":   func(c *server.Config) { c.SyncMode = "snap" },
 		"enable":     func(c *server.Config) { c.ParallelEVM.Enable = true },
@@ -363,6 +471,7 @@ func TestUnitCheckProfileFields(t *testing.T) {
 		"no-relay":   func(c *server.Config) { c.Relay = nil },
 		"no-rpc":     func(c *server.Config) { c.JsonRPC = nil },
 		"no-seq":     func(c *server.Config) { c.Sequencer = nil },
+		"no-history": func(c *server.Config) { c.History = nil },
 	} {
 		cfg := compliantConfig()
 		change(cfg)
@@ -375,26 +484,186 @@ func TestUnitCheckProfileFields(t *testing.T) {
 	}
 }
 
-// TestNativeLegacyPruneOffset covers the marker that the native
-// `bor snapshot prune-block` command leaves after deleting old block data:
-// preflight rejects the home and leaves it unchanged. The marker is written
-// by the test, not by a real prune-block run.
+// TestUnitStoreProfile covers the rules that need the scheme of the opened
+// store: `bor server` names its scheme, and the store must be of that scheme.
+func TestUnitStoreProfile(t *testing.T) {
+	cfg := compliantConfig()
+	if profile, err := CheckStoreProfile(cfg, rawdb.HashScheme); err != nil || profile.StateScheme != rawdb.HashScheme {
+		t.Fatalf("hash store %v %v", profile, err)
+	}
+	if _, err := CheckStoreProfile(cfg, rawdb.PathScheme); !errors.Is(err, ErrProfile) ||
+		!strings.Contains(err.Error(), "is not the") {
+		t.Fatalf("path store under a hash config %v", err)
+	}
+	for _, scheme := range []string{"bin", ""} {
+		if _, err := CheckStoreProfile(cfg, scheme); !errors.Is(err, ErrProfile) ||
+			!strings.Contains(err.Error(), "state scheme") {
+			t.Fatalf("store of scheme %q %v", scheme, err)
+		}
+	}
+	// A refused config stays refused.
+	short := compliantConfig()
+	short.StateScheme, short.History.StateHistory = rawdb.PathScheme, retentionFloor-1
+	if _, err := CheckStoreProfile(short, rawdb.PathScheme); !errors.Is(err, ErrProfile) {
+		t.Fatalf("path store with a short state history %v", err)
+	}
+	if _, err := CheckStoreProfile(nil, rawdb.HashScheme); err == nil {
+		t.Fatal("missing config accepted")
+	}
+}
+
+// TestUnitFloorIsNative pins N to the values of the pinned client: the floor
+// is the immutability threshold and the default state history.
+func TestUnitFloorIsNative(t *testing.T) {
+	if retentionFloor != params.FullImmutabilityThreshold || retentionFloor != pathdb.Defaults.StateHistory ||
+		retentionFloor != server.DefaultConfig().History.StateHistory {
+		t.Fatalf("retention floor %d is not the native immutability threshold %d or the default state history %d",
+			retentionFloor, params.FullImmutabilityThreshold, server.DefaultConfig().History.StateHistory)
+	}
+}
+
+// TestNativeLegacyPruneOffset covers the offset that `bor snapshot
+// prune-block` leaves behind. Native Open would rewrite it, so preflight opens
+// the store without its ancient part, measures the offset as the oldest block
+// and refuses a home that keeps fewer than N blocks behind its head; the home
+// is left unchanged. The offset is written by the test, not by a real
+// prune-block run.
 func TestNativeLegacyPruneOffset(t *testing.T) {
 	genesis := familyGenesis(t)
 	dir := workDir(t, "legacy-offset")
 	initStore(t, dir, genesis, false)
-	db, closeDB := openStore(t, dir)
-	if err := db.Put([]byte("offsetOfCurrentAncientFreezer"), big.NewInt(5).Bytes()); err != nil {
-		t.Fatal(err)
-	}
-	closeDB()
 	unbound := StoreIdentity{ChainID: genesis.Config.ChainID.String(), GenesisHash: genesis.ToBlock().Hash(),
 		StateScheme: rawdb.HashScheme}
-	before := inventory(t, dir)
-	_, err := Preflight(dir, unbound)
-	if !sameInventory(before, inventory(t, dir)) {
-		t.Fatal("preflight changed the home")
+	results := map[string]any{}
+	for _, item := range []struct {
+		name   string
+		offset uint64
+		head   uint64
+		refuse bool
+	}{
+		{"offset on a genesis-only home", 5, 0, true},
+		{"offset N blocks behind the head", 3, retentionFloor + 3, false},
+		{"offset N-1 blocks behind the head", 3, retentionFloor + 2, true},
+	} {
+		db := openChainData(t, dir)
+		first := rawdb.ReadHeader(db, genesis.ToBlock().Hash(), 0)
+		if item.head == 0 {
+			rawdb.WriteHeadHeaderHash(db, genesis.ToBlock().Hash())
+		} else {
+			setHead(t, db, first, item.head)
+		}
+		if err := db.Put(legacyOffsetKey(), new(big.Int).SetUint64(item.offset).Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		db.Close()
+		before := inventory(t, dir)
+		report, err := Preflight(dir, unbound)
+		if !sameInventory(before, inventory(t, dir)) {
+			t.Fatalf("%s: preflight changed the home", item.name)
+		}
+		if item.refuse {
+			if !errors.Is(err, ErrForbiddenPruning) {
+				t.Fatalf("%s: error %v, want the retention floor", item.name, err)
+			}
+			results[item.name] = err.Error()
+			continue
+		}
+		if err != nil || report.Coverage != (Coverage{Oldest: item.offset, Head: item.head, Floor: retentionFloor}) {
+			t.Fatalf("%s: %v %v", item.name, report.Coverage, err)
+		}
+		results[item.name] = "<nil>"
 	}
-	mustErr(t, err, ErrForbiddenPruning)
-	record(t, "legacy_offset", err.Error())
+	if refused, ok := results["offset on a genesis-only home"].(string); !ok ||
+		!strings.HasPrefix(refused, "forbidden pruning profile") {
+		t.Fatalf("the offset on a genesis-only home was not refused: %v", results)
+	}
+	record(t, "legacy_offset", results["offset on a genesis-only home"])
+	record(t, "legacy_offset_at_floor", results)
+}
+
+// TestNativeRetentionFloor covers the floor N of D108 on a home whose ancient
+// store a block-pruning run pruned: the native freezer moved its tail. A home
+// that keeps N blocks behind its head passes; one that keeps fewer is refused
+// and left byte for byte unchanged. The head above the stored blocks is
+// written by the test; it is not a consensus-valid chain.
+func TestNativeRetentionFloor(t *testing.T) {
+	genesis := familyGenesis(t)
+	dir := workDir(t, "pruned-home")
+	initStore(t, dir, genesis, false)
+	unbound := StoreIdentity{ChainID: genesis.Config.ChainID.String(), GenesisHash: genesis.ToBlock().Hash(),
+		StateScheme: rawdb.HashScheme}
+	const stored = 4
+	// The ancient store held blocks 0 to 3 and was pruned from its start;
+	// the key-value store continues at 4. The head is still the genesis, so
+	// the native freezer of the open store does not move anything.
+	func() {
+		db, closeDB := openStore(t, dir)
+		defer closeDB()
+		first := rawdb.ReadHeader(db, genesis.ToBlock().Hash(), 0)
+		blocks := []*types.Block{genesis.ToBlock()}
+		for number := uint64(1); number <= stored; number++ {
+			header := types.CopyHeader(first)
+			header.Number = new(big.Int).SetUint64(number)
+			if number == stored {
+				rawdb.WriteCanonicalHash(db, header.Hash(), number)
+				continue
+			}
+			blocks = append(blocks, types.NewBlockWithHeader(header))
+		}
+		empty := []rlp.RawValue{rlp.RawValue{0xc0}, rlp.RawValue{0xc0}, rlp.RawValue{0xc0}, rlp.RawValue{0xc0}}
+		if _, err := rawdb.WriteAncientBlocks(db, blocks, empty, empty, big.NewInt(0)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.TruncateTail(stored); err != nil {
+			t.Fatalf("prune the ancient store: %v", err)
+		}
+	}()
+	// The head stands N blocks above the tail of the ancient store, or one
+	// block less.
+	results := map[string]any{}
+	for _, item := range []struct {
+		name   string
+		head   uint64 // above N
+		refuse bool
+	}{
+		{"ancient tail N blocks behind the head", stored, false},
+		{"ancient tail N-1 blocks behind the head", stored - 1, true},
+	} {
+		kv := openChainData(t, dir)
+		setHead(t, kv, rawdb.ReadHeader(kv, genesis.ToBlock().Hash(), 0), retentionFloor+item.head)
+		kv.Close()
+		before := inventory(t, dir)
+		report, err := Preflight(dir, unbound)
+		if !sameInventory(before, inventory(t, dir)) {
+			t.Fatalf("%s: preflight changed the home", item.name)
+		}
+		if item.refuse {
+			if !errors.Is(err, ErrForbiddenPruning) {
+				t.Fatalf("%s: error %v, want the retention floor", item.name, err)
+			}
+			results[item.name] = err.Error()
+			continue
+		}
+		if err != nil || report.Coverage != (Coverage{Oldest: stored, Head: retentionFloor + item.head,
+			Floor: retentionFloor}) {
+			t.Fatalf("%s: %v %v", item.name, report.Coverage, err)
+		}
+		results[item.name] = report.Coverage
+	}
+	record(t, "ancient_tail", results)
+}
+
+// TestUnitStateProfiles pins the state profile strings of this client. A
+// string binds the profile to every store of its scheme (D108): a changed
+// string refuses every bound store, so it changes only with a decision.
+func TestUnitStateProfiles(t *testing.T) {
+	want := map[string]string{rawdb.HashScheme: "state.scheme=hash;gcmode=full;syncmode=full", rawdb.PathScheme: "state.scheme=path;gcmode=full;syncmode=full;history.state>=90000"}
+	for scheme, profile := range want {
+		if stateProfile(scheme) != profile || profileOf(scheme) != fmt.Sprintf("%x", sha256.Sum256([]byte(profile))) {
+			t.Fatalf("state profile of the %s scheme is %q, want %q", scheme, stateProfile(scheme), profile)
+		}
+	}
+	if stateProfile("") != "" || stateProfile("bin") != "" {
+		t.Fatal("a scheme without a state profile has one")
+	}
 }

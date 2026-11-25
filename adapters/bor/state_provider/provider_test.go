@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,6 +79,16 @@ func record(t testing.TB, name string, value any) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// setHead stores a header above genesis as the head of db. It stands for a
+// high head; it is not a consensus-valid chain.
+func setHead(t testing.TB, db ethdb.Database, genesis *types.Header, number uint64) {
+	t.Helper()
+	header := types.CopyHeader(genesis)
+	header.Number = new(big.Int).SetUint64(number)
+	rawdb.WriteHeader(db, header)
+	rawdb.WriteHeadHeaderHash(db, header.Hash())
 }
 
 func identityOf(t testing.TB, db ethdb.Database, store string) StoreIdentity {
@@ -218,49 +229,97 @@ func TestUnitBindIsDurableIdempotentAndExclusive(t *testing.T) {
 	_, err = Bind(db, "not-hex")
 	mustErr(t, err, ErrWrongStore)
 	bound, ok, err := BoundIdentity(db)
-	if err != nil || !ok || bound != first || bound.StateScheme != rawdb.HashScheme {
+	if err != nil || !ok || bound != first || bound.StateScheme != rawdb.HashScheme ||
+		bound.Profile != profileOf(rawdb.HashScheme) {
 		t.Fatalf("bound identity %v %v %v", bound, ok, err)
+	}
+	// A record written before the profile was bound (D108) names no profile.
+	// It is the profile of the hash scheme, and the store stays bound.
+	old, err := json.Marshal(StoreIdentity{StoreID: first.StoreID, ChainID: first.ChainID,
+		GenesisHash: first.GenesisHash, StateScheme: first.StateScheme})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Put([]byte(storeKey), old); err != nil {
+		t.Fatal(err)
+	}
+	restored, ok, err := BoundIdentity(db)
+	if err != nil || !ok || restored != first {
+		t.Fatalf("record without a profile %v %v %v, want %v", restored, ok, err, first)
+	}
+	if again, err := Bind(db, testStore); err != nil || again != first {
+		t.Fatalf("bind over a record without a profile %v %v", again, err)
+	}
+	// A store bound under another profile is refused.
+	other := first
+	other.Profile = strings.Repeat("2", 64)
+	foreign, err := json.Marshal(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Put([]byte(storeKey), foreign); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := BoundIdentity(db); ok || !errors.Is(err, ErrWrongStore) || !strings.Contains(err.Error(), "another profile") {
+		t.Fatalf("store bound under another profile %v %v", ok, err)
+	}
+	if _, err := Bind(db, testStore); !errors.Is(err, ErrWrongStore) {
+		t.Fatalf("bind on a store bound under another profile: %v", err)
+	}
+	// A profile that is not the one of its scheme makes a record malformed
+	// when anything else is wrong, or the scheme has no profile.
+	for name, change := range map[string]func(*StoreIdentity){
+		"unknown scheme": func(i *StoreIdentity) { i.StateScheme = "bin" },
+		"zero chain":     func(i *StoreIdentity) { i.ChainID = "0" },
+	} {
+		record := other
+		change(&record)
+		data, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Put([]byte(storeKey), data); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok, err := BoundIdentity(db); ok || !errors.Is(err, ErrWrongStore) ||
+			!strings.Contains(err.Error(), "malformed binding") {
+			t.Fatalf("record with %s and another profile %v %v", name, ok, err)
+		}
 	}
 }
 
-func TestUnitPinCommitsDirtyRootBeforeRecording(t *testing.T) {
+// TestUnitReadIdentityNamesTheScheme covers the schemes the identity reads:
+// the native reader derives the scheme from the state of the store, so a
+// store without state has none and is an unsupported backend, and a store of
+// a supported scheme reads back with the profile of that scheme.
+func TestUnitReadIdentityNamesTheScheme(t *testing.T) {
+	if _, err := ReadIdentity(rawdb.NewMemoryDatabase()); !errors.Is(err, ErrUnsupportedBackend) {
+		t.Fatalf("empty store %v", err)
+	}
+	if _, ok, err := BoundIdentity(rawdb.NewMemoryDatabase()); err != nil || ok {
+		t.Fatalf("binding of an empty store %v %v", ok, err)
+	}
+	if _, err := Bind(rawdb.NewMemoryDatabase(), testStore); !errors.Is(err, ErrUnsupportedBackend) {
+		t.Fatalf("bind on an empty store %v", err)
+	}
+	for _, item := range []struct {
+		name string
+		open func(testing.TB) (ethdb.Database, *triedb.Database, *types.Header)
+	}{{rawdb.HashScheme, newMemoryStore}, {rawdb.PathScheme, newPathStore}} {
+		db, _, genesis := item.open(t)
+		identity, err := ReadIdentity(db)
+		if err != nil || identity.StateScheme != item.name || identity.Profile != profileOf(item.name) ||
+			identity.StoreID != "" || identity.ChainID == "" || identity.GenesisHash != genesis.Hash() {
+			t.Fatalf("store of the %s scheme %v %v", item.name, identity, err)
+		}
+	}
+	// The genesis header stays and its trie nodes go: the store has no state.
 	db, tdb, genesis := newMemoryStore(t)
-	identity, err := Bind(db, testStore)
-	if err != nil {
-		t.Fatal(err)
+	tdb.Close()
+	rawdb.DeleteLegacyTrieNode(db, genesis.Root)
+	if _, err := ReadIdentity(db); !errors.Is(err, ErrUnsupportedBackend) {
+		t.Fatalf("store without state %v", err)
 	}
-	side, code := commitSideState(t, db, tdb, genesis, 1)
-	if rawdb.HasLegacyTrieNode(db, side.Root) {
-		t.Fatal("side root reached disk before the pin")
-	}
-	provider, err := New(db, tdb, identity)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pin := pinFor("obs-1", identity, side, code)
-	if err := provider.Pin(pin); err != nil {
-		t.Fatal(err)
-	}
-	if !rawdb.HasLegacyTrieNode(db, side.Root) {
-		t.Fatal("pin did not commit the root")
-	}
-	walk, err := walkState(db, side.Root)
-	if err != nil || walk.Codes == 0 || walk.Slots == 0 {
-		t.Fatalf("pinned state walk %v %v", walk, err)
-	}
-	pins, err := Pins(db)
-	if err != nil || len(pins) != 1 || !samePin(pins[0], pin) {
-		t.Fatalf("ledger %v %v", pins, err)
-	}
-	if err := provider.Pin(pin); err != nil {
-		t.Fatalf("repeated identical pin: %v", err)
-	}
-	// A repeated pin re-verifies its references: lose the pinned code.
-	rawdb.DeleteCode(db, code)
-	mustErr(t, provider.Pin(pin), ErrPinUnavailable)
-	changed := pin
-	changed.Profile = strings.Repeat("2", 64)
-	mustErr(t, provider.Pin(changed), ErrPinConflict)
 }
 
 func TestUnitPinFailureLeavesNoRecord(t *testing.T) {
@@ -305,9 +364,25 @@ func TestUnitPinFailureLeavesNoRecord(t *testing.T) {
 		}(), ErrInvalidPin},
 		{func() Pin { p := pinFor("zero-chain", identity, side); p.Store.ChainID = "0"; return p }(), ErrInvalidPin},
 		{func() Pin { p := pinFor("no-genesis", identity, side); p.Store.GenesisHash = common.Hash{}; return p }(), ErrInvalidPin},
+		// A pin of the path profile names another store on a hash store.
 		{func() Pin {
 			p := pinFor("path-store", identity, side)
-			p.Store.StateScheme = rawdb.PathScheme
+			p.Store.StateScheme, p.Store.Profile = rawdb.PathScheme, profileOf(rawdb.PathScheme)
+			return p
+		}(), ErrWrongStore},
+		{func() Pin {
+			p := pinFor("foreign-profile", identity, side)
+			p.Store.Profile = strings.Repeat("2", 64)
+			return p
+		}(), ErrInvalidPin},
+		{func() Pin {
+			p := pinFor("no-scheme", identity, side)
+			p.Store.StateScheme = ""
+			return p
+		}(), ErrInvalidPin},
+		{func() Pin {
+			p := pinFor("unknown-scheme", identity, side)
+			p.Store.StateScheme = "bin"
 			return p
 		}(), ErrInvalidPin},
 	}
@@ -581,6 +656,8 @@ func TestUnitStoreChecks(t *testing.T) {
 	}
 	for _, bad := range []func(*StoreIdentity){
 		func(i *StoreIdentity) { i.StateScheme = rawdb.PathScheme },
+		func(i *StoreIdentity) { i.StateScheme = "" },
+		func(i *StoreIdentity) { i.Profile = strings.Repeat("2", 64) },
 		func(i *StoreIdentity) { i.ChainID = "01" },
 		func(i *StoreIdentity) { i.ChainID = "0" },
 		func(i *StoreIdentity) { i.GenesisHash = common.Hash{} },
@@ -592,8 +669,125 @@ func TestUnitStoreChecks(t *testing.T) {
 	}
 	_, err = New(db, nil, identity)
 	mustErr(t, err, ErrUnsupportedBackend)
+	// The trie database must be the provider of the store's scheme.
 	_, err = New(db, newPathTrieDB(db), identity)
 	mustErr(t, err, ErrUnsupportedBackend)
+	pathStore := StoreIdentity{StoreID: identity.StoreID, ChainID: identity.ChainID,
+		GenesisHash: identity.GenesisHash, StateScheme: rawdb.PathScheme}
+	if _, err = New(db, tdb, pathStore); !errors.Is(err, ErrUnsupportedBackend) {
+		t.Fatalf("hash provider of a path store: %v", err)
+	}
+	// An identity of the path scheme is valid and names the path profile
+	// when it names none; the profile of another scheme, an empty scheme and
+	// an unknown scheme are not valid.
+	if validIdentity(pathStore) != nil {
+		t.Fatalf("path identity without a profile %v", validIdentity(pathStore))
+	}
+	pathStore = pathStore.withProfile()
+	if err := validIdentity(pathStore); err != nil || pathStore.Profile != profileOf(rawdb.PathScheme) ||
+		pathStore.Profile == identity.Profile {
+		t.Fatalf("path identity %v %v", pathStore, err)
+	}
+	for _, change := range []func(*StoreIdentity){
+		func(i *StoreIdentity) { i.Profile = identity.Profile },
+		func(i *StoreIdentity) { i.StateScheme = "" },
+		func(i *StoreIdentity) { i.StateScheme = "bin" },
+	} {
+		wrong := pathStore
+		change(&wrong)
+		mustErr(t, validIdentity(wrong), ErrWrongStore)
+	}
+	if stateProfile("bin") != "" || profileOf("bin") != "" {
+		t.Fatal("an unknown scheme has a state profile")
+	}
+}
+
+// TestUnitPathStoreOpensWithoutPins covers the path scheme of D108 up to the
+// provider: the binding and the provider accept a path store with the path
+// profile. A pin on a path store waits for its recovery proof, so it fails
+// closed and writes nothing.
+func TestUnitPathStoreOpensWithoutPins(t *testing.T) {
+	db, tdb, genesis := newPathStore(t)
+	identity, err := Bind(db, testStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.StateScheme != rawdb.PathScheme || identity.Profile != profileOf(rawdb.PathScheme) ||
+		identity.Profile == profileOf(rawdb.HashScheme) {
+		t.Fatalf("path store bound to %v", identity)
+	}
+	if again, err := Bind(db, testStore); err != nil || again != identity {
+		t.Fatalf("repeated bind on the path store %v %v", again, err)
+	}
+	provider, err := New(db, tdb, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashTrie := triedb.NewDatabase(rawdb.NewMemoryDatabase(), triedb.HashDefaults)
+	defer hashTrie.Close()
+	if _, err = New(db, hashTrie, identity); !errors.Is(err, ErrUnsupportedBackend) {
+		t.Fatalf("hash trie database on a path store: %v", err)
+	}
+	side, code := commitSideState(t, db, tdb, genesis, 1)
+	mustErr(t, provider.Pin(pinFor("obs-path", identity, side, code)), ErrUnsupportedBackend)
+	if pins, err := Pins(db); err != nil || len(pins) != 0 {
+		t.Fatalf("a refused pin left records %v %v", pins, err)
+	}
+}
+
+// TestUnitRetentionFloor covers the floor N of D108: a store keeps at least N
+// blocks behind its head. The tail of the ancient store is synthetic here;
+// TestNativeRetentionFloor prunes a real one.
+func TestUnitRetentionFloor(t *testing.T) {
+	db, _, genesis := newMemoryStore(t)
+	identity, err := Bind(db, testStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errNoAncientStore == nil {
+		t.Fatal("a native database without an ancient part answers no error for its tail")
+	}
+	if _, err := ancientTail(rawdb.NewMemoryDatabase()); !errors.Is(err, errNoAncientStore) {
+		t.Fatalf("tail of a store without an ancient part %v, want %v", err, errNoAncientStore)
+	}
+	setHead := func(number uint64) {
+		header := types.CopyHeader(genesis)
+		header.Number = new(big.Int).SetUint64(number)
+		rawdb.WriteHeader(db, header)
+		rawdb.WriteHeadHeaderHash(db, header.Hash())
+	}
+	floor := retentionFloor
+	for _, item := range []struct {
+		name       string
+		tail, head uint64
+		refused    bool
+	}{
+		{"a store without a head keeps its genesis", 0, 0, false},
+		{"a head below the floor keeps every block", 0, floor - 1, false},
+		{"a pruned head below the floor", 1, floor - 1, true},
+		{"a pruned head at the floor", 1, floor, true},
+		{"a tail at the floor", 7, floor + 7, false},
+		{"a tail one block above the floor", 8, floor + 7, true},
+		{"a tail at the head", floor + 7, floor + 7, true},
+	} {
+		setHead(item.head)
+		report, err := checkStore(withTail(db, item.tail, nil), identity)
+		if item.refused {
+			if !errors.Is(err, ErrForbiddenPruning) || !strings.Contains(err.Error(), "fewer than") {
+				t.Fatalf("%s: error %v, want the retention floor", item.name, err)
+			}
+			continue
+		}
+		want := Coverage{Oldest: item.tail, Head: item.head, Floor: floor}
+		if err != nil || report.Coverage != want {
+			t.Fatalf("%s: coverage %v %v, want %v", item.name, report.Coverage, err, want)
+		}
+	}
+	// An unreadable tail is an error, never an empty retention.
+	unreadable := errors.New("tail unreadable")
+	if _, err := checkStore(withTail(db, 0, unreadable), identity); !errors.Is(err, unreadable) {
+		t.Fatalf("unreadable tail %v", err)
+	}
 }
 
 // TestChildProcess is the subprocess half of TestNativeVolatileTrieLost. It
@@ -894,6 +1088,19 @@ func TestNativeStorePreflight(t *testing.T) {
 		initStore(t, dir, &other, false)
 	})
 	pathStore := prepare("path-store", func(dir string) { initStore(t, dir, genesis, true) })
+	// A home pruned by an older client: its head is N blocks above the
+	// offset that the prune command left, or one block less.
+	prunedHome := func(name string, oldest uint64, headAboveFloor uint64) string {
+		return prepare(name, func(dir string) {
+			initStore(t, dir, genesis, false)
+			db, closeDB := openStore(t, dir)
+			defer closeDB()
+			setHead(t, db, rawdb.ReadHeader(db, genesis.ToBlock().Hash(), 0), retentionFloor+headAboveFloor)
+			if err := db.Put(legacyOffsetKey(), new(big.Int).SetUint64(oldest).Bytes()); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 	interrupted := prepare("interrupted-prune", func(dir string) {
 		initStore(t, dir, genesis, false)
 		name := "statebloom." + genesis.ToBlock().Root().Hex() + ".bf.gz"
@@ -915,14 +1122,30 @@ func TestNativeStorePreflight(t *testing.T) {
 		{"bound_expectation_on_unbound_store", fresh, expected, ErrWrongStore},
 		{"foreign_genesis", foreignGenesis, expected, ErrWrongStore},
 		{"wrong_chain", fresh, func() StoreIdentity { i := unbound; i.ChainID = "1"; return i }(), ErrWrongStore},
-		{"path_initialized_store", pathStore, unbound, ErrUnsupportedBackend},
+		{"path_initialized_store", pathStore, func() StoreIdentity { i := unbound; i.StateScheme = rawdb.PathScheme; return i }(), nil},
 		{"forbidden_pruning_leftover", interrupted, unbound, ErrForbiddenPruning},
 		{"wrong_datadir_empty", empty, unbound, ErrWrongStore},
 	}
+	if legacyOffsetKey() != nil {
+		cases = append(cases,
+			struct {
+				name     string
+				dir      string
+				expected StoreIdentity
+				want     error
+			}{"pruned_store_at_floor", prunedHome("pruned-at-floor", 7, 7), unbound, nil},
+			struct {
+				name     string
+				dir      string
+				expected StoreIdentity
+				want     error
+			}{"pruned_store_below_floor", prunedHome("pruned-below-floor", 8, 7), unbound, ErrForbiddenPruning})
+	}
 	results := map[string]string{}
+	var coverage Coverage
 	for _, item := range cases {
 		before := inventory(t, item.dir)
-		_, err := Preflight(item.dir, item.expected)
+		report, err := Preflight(item.dir, item.expected)
 		if !sameInventory(before, inventory(t, item.dir)) {
 			t.Fatalf("%s: preflight changed the home", item.name)
 		}
@@ -930,7 +1153,18 @@ func TestNativeStorePreflight(t *testing.T) {
 			t.Fatalf("%s: error %v, want %v", item.name, err, item.want)
 		}
 		results[item.name] = fmt.Sprint(err)
+		if item.name == "path_initialized_store" {
+			results["path_initialized_scheme"] = report.Identity.StateScheme
+			results["path_initialized_profile"] = report.Identity.Profile
+		}
+		if item.name == "pruned_store_at_floor" {
+			coverage = report.Coverage
+			if coverage != (Coverage{Oldest: 7, Head: retentionFloor + 7, Floor: retentionFloor}) {
+				t.Fatalf("coverage of a home at the floor %v", coverage)
+			}
+		}
 	}
+	record(t, "coverage", coverage)
 	// The native parser also refuses to reinterpret the path store as hash,
 	// and selects path when an empty store has no explicit scheme.
 	db, closeDB := openStore(t, pathStore)
