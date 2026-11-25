@@ -157,11 +157,15 @@ func TestProducerJournalRestartKeepsIdenticalState(t *testing.T) {
 		IssuerEpoch:    [16]byte{3},
 	}
 	must(t, j.OnIngestAck(first.BatchSeq, ack))
-	for {
+	// Bounded: a Cleanup that never completes must fail the test, not hang it.
+	for step := 0; ; step++ {
 		done, err := j.Cleanup(first.BatchSeq, 2)
 		must(t, err)
 		if done {
 			break
+		}
+		if step >= 1000 {
+			t.Fatal("Cleanup did not complete in 1000 steps")
 		}
 	}
 	must(t, j.OnReleaseAck(first.BatchSeq))
