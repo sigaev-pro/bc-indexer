@@ -2830,12 +2830,14 @@
   "bsc.snap-sync": "native profile violates capture constraints: sync mode snap (bsc.snap-sync)"
  },
  "profile": {
+  "block_history_below_floor": "native profile violates capture constraints: history.blocks 599999 keeps fewer than 600000 blocks",
   "eth_new_snap_sync": "native profile violates capture constraints: sync mode snap (bsc.snap-sync)",
   "full_sync": null,
   "mev_builder": "native profile violates capture constraints: MEV builder role (bsc.sealing)",
-  "path_scheme": "native profile violates capture constraints: state scheme \"path\", want \"hash\"",
   "snap_sync": "native profile violates capture constraints: sync mode snap (bsc.snap-sync)",
   "start_without_eth_api": "consensus engine is not the patched Parlia: the engine has no ethAPI for system-contract calls",
+  "state_history_below_floor": "native profile violates capture constraints: history.state 599999 keeps fewer than 600000 blocks",
+  "tries_none": "native profile violates capture constraints: tries-verify-mode \"none\" keeps no verified trie, want local",
   "vote_enable": "native profile violates capture constraints: vote enabled (bsc.sealing)"
  },
  "routes": {

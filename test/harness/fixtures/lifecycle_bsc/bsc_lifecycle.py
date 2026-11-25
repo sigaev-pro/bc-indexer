@@ -397,7 +397,8 @@ def judge_profile(c, report):
     p = report["profile"]
     c.check("profile: full sync passes", p.get("full_sync") is None, p.get("full_sync"))
     for key, marker in (("snap_sync", "bsc.snap-sync"), ("vote_enable", "bsc.sealing"), ("mev_builder", "bsc.sealing"),
-                        ("path_scheme", "state scheme"), ("eth_new_snap_sync", "bsc.snap-sync"),
+                        ("tries_none", "tries-verify-mode"), ("block_history_below_floor", "history.blocks"),
+                        ("state_history_below_floor", "history.state"), ("eth_new_snap_sync", "bsc.snap-sync"),
                         ("start_without_eth_api", "ethAPI")):
         c.check(f"profile: {key} refused", isinstance(p.get(key), str) and marker in p[key], p.get(key))
 

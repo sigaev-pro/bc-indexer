@@ -239,10 +239,13 @@ fail with the same error.
 configured host with the process transport (`ExtractorCheckHeimdall`): a
 gRPC client, a failover client, a client with its own transport or a
 WebSocket client would let Heimdall reads bypass the router. The effective
-`bor server` profile check (`state_provider.CheckProfile`: hash scheme,
-archive, no parallel, pipelined, stateless or preconf paths) runs where the
-server configuration exists, in the caller that E01-02.lifecycle_seams adds;
-the probe starts native Bor with that profile.
+`bor server` profile check (`state_provider.CheckProfile`: hash or path
+scheme, no archive, a state history of N or of the entire chain under path,
+no parallel, pipelined, stateless or preconf paths; D108, PR #230) runs
+where the server configuration exists, in the caller that
+E01-02.lifecycle_seams adds; the probe starts native Bor with that profile.
+The Bor capture wiring opens hash stores only: its preflight names the hash
+scheme.
 
 `borimport.Preflight` refuses a stopped native store of another identity
 (`state_provider.Preflight`) before the node opens it. `Start` binds the store

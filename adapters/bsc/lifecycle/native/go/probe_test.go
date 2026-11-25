@@ -896,7 +896,13 @@ func TestBSCLifecycleProbe(t *testing.T) {
 	profile["vote_enable"] = errText(check(func(c *ethconfig.Config) { c.Miner.VoteEnable = true }))
 	enabled := true
 	profile["mev_builder"] = errText(check(func(c *ethconfig.Config) { c.Miner.Mev.Enabled = &enabled }))
-	profile["path_scheme"] = errText(check(func(c *ethconfig.Config) { c.StateScheme = rawdb.PathScheme }))
+	// The fast-node profile of D108 admits the path scheme and refuses a
+	// node without tries and a history below the floor.
+	profile["tries_none"] = errText(check(func(c *ethconfig.Config) { c.TriesVerifyMode = core.NoneVerify }))
+	profile["block_history_below_floor"] = errText(check(func(c *ethconfig.Config) { c.BlockHistory = 599999 }))
+	profile["state_history_below_floor"] = errText(check(func(c *ethconfig.Config) {
+		c.StateScheme, c.StateHistory = rawdb.PathScheme, 599999
+	}))
 	configPath := filepath.Join(work, "capture-config.json")
 	writeConfig(t, fx, configPath)
 	if err := os.Setenv(bsclifecycle.ConfigEnv, configPath); err != nil {
