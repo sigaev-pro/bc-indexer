@@ -245,49 +245,68 @@ func TestBuildBlockEventMatchesValidateEnvelope(t *testing.T) {
 // event is returned.
 func TestBuildBlockEventRejectsMissingFacts(t *testing.T) {
 	sameID := func(in Input) proto.EventID { return eventIDOf(in, 9) }
+	// A missing fact wraps block.ErrInvalidValue; a wrong event id wraps
+	// proto.ErrInvalidValue.
+	var fact, identity = block.ErrInvalidValue, proto.ErrInvalidValue
+	// The message of a rejection starts with its sentinel and the name of
+	// the fact; tail holds the rest of the message where the name is only
+	// its start.
+	tail := map[string]string{
+		"decided head differs from the header":                "differs from the header hash",
+		"zero block hash":                                     "differs from the header hash",
+		"header number differs from the decided block number": "differs from the header number",
+		"parent hash zero":                                    "has a zero parent hash",
+		"attestation digest uppercase":                        "not 64 lowercase hex digits",
+		"attestation digest long":                             "not 64 lowercase hex digits",
+		"attestation digest not hex":                          "not 64 lowercase hex digits",
+		"header source rlp empty":                             "source_rlp is mandatory",
+		"timestamp overflow":                                  "overflows the millisecond timestamp",
+	}
 	for _, tc := range []struct {
 		name, reason string
 		change       func(*Input)
 		id           func(Input) proto.EventID
-		wraps        []error
+		sentinel     error
 	}{
-		{"network family", `network family "BSC"`, func(in *Input) { in.Network.Family = "BSC" }, nil, nil},
-		{"network chain id zero", "network chain id is zero", func(in *Input) { in.Network.ChainID = block.UInt256{} }, nil, nil},
-		{"network genesis hash zero", "network genesis hash is zero", func(in *Input) { in.Network.GenesisHash = block.Hash32{} }, nil, nil},
-		{"node instance id zero", "node instance id is zero", func(in *Input) { in.NodeInstanceID = semantic.ID16{} }, nil, nil},
-		{"producer id zero", "producer id is zero", func(in *Input) { in.ProducerID = semantic.ID16{} }, nil, nil},
-		{"run id zero", "run id is zero", func(in *Input) { in.RunID = semantic.ID16{} }, nil, nil},
-		{"writer epoch zero", "writer epoch is zero", func(in *Input) { in.WriterEpoch = semantic.ID16{} }, nil, nil},
-		{"source sequence zero", "source sequence 0", func(in *Input) { in.SourceSequence = 0 }, nil, nil},
-		{"event id of another producer", "another producer", nil,
-			func(in Input) proto.EventID { return proto.NewEventID(proto.ID16(idOf(0x99)), proto.ID16(in.RunID), 9) }, nil},
-		{"event id of another run", "another run", nil,
+		{"network family", `network family "BSC"`, func(in *Input) { in.Network.Family = "BSC" }, nil, fact},
+		{"network chain id zero", "network chain id is zero", func(in *Input) { in.Network.ChainID = block.UInt256{} }, nil, fact},
+		{"network genesis hash zero", "network genesis hash is zero", func(in *Input) { in.Network.GenesisHash = block.Hash32{} }, nil, fact},
+		{"node instance id zero", "node instance id is zero", func(in *Input) { in.NodeInstanceID = semantic.ID16{} }, nil, fact},
+		{"producer id zero", "producer id is zero", func(in *Input) { in.ProducerID = semantic.ID16{} }, nil, fact},
+		{"run id zero", "run id is zero", func(in *Input) { in.RunID = semantic.ID16{} }, nil, fact},
+		{"writer epoch zero", "writer epoch is zero", func(in *Input) { in.WriterEpoch = semantic.ID16{} }, nil, fact},
+		{"source sequence zero", "source sequence 0", func(in *Input) { in.SourceSequence = 0 }, nil, fact},
+		{"event id of another producer", "event id carries another producer", nil,
+			func(in Input) proto.EventID { return proto.NewEventID(proto.ID16(idOf(0x99)), proto.ID16(in.RunID), 9) }, identity},
+		{"event id of another run", "event id carries another run", nil,
 			func(in Input) proto.EventID {
 				return proto.NewEventID(proto.ID16(in.ProducerID), proto.ID16(idOf(0x99)), 9)
-			}, nil},
+			}, identity},
 		{"event id without a producer", "event id producer is zero", nil,
-			func(in Input) proto.EventID { return proto.NewEventID(proto.ID16{}, proto.ID16(in.RunID), 9) }, nil},
-		{"old head hash zero", "old head hash is zero", func(in *Input) { in.OldHead.Hash = block.Hash32{} }, nil, nil},
-		{"new head hash zero", "new head hash is zero", func(in *Input) { in.NewHead.Hash = block.Hash32{} }, nil, nil},
-		{"justified hash zero", "justified hash is zero", func(in *Input) { in.Justified.Hash = block.Hash32{} }, nil, nil},
-		{"finalized hash zero", "finalized hash is zero", func(in *Input) { in.Finalized.Hash = block.Hash32{} }, nil, nil},
-		{"decided head differs from the header", "differs from the header hash",
-			func(in *Input) { in.Header.Hash = hashOf(0x77) }, nil, nil},
-		{"zero block hash", "differs from the header hash", func(in *Input) { in.Header.Hash = block.Hash32{} }, nil, nil},
-		{"header number differs from the decided block number", "differs from the header number",
-			func(in *Input) { in.Header.Number++ }, nil, nil},
-		{"attestation status unknown", `attestation status ""`, func(in *Input) { in.Attestation.Status = "" }, nil, nil},
+			func(in Input) proto.EventID { return proto.NewEventID(proto.ID16{}, proto.ID16(in.RunID), 9) }, identity},
+		{"old head hash zero", "old head hash is zero", func(in *Input) { in.OldHead.Hash = block.Hash32{} }, nil, fact},
+		{"new head hash zero", "new head hash is zero", func(in *Input) { in.NewHead.Hash = block.Hash32{} }, nil, fact},
+		{"justified hash zero", "justified hash is zero", func(in *Input) { in.Justified.Hash = block.Hash32{} }, nil, fact},
+		{"finalized hash zero", "finalized hash is zero", func(in *Input) { in.Finalized.Hash = block.Hash32{} }, nil, fact},
+		{"decided head differs from the header", "decided head ",
+			func(in *Input) { in.Header.Hash = hashOf(0x77) }, nil, fact},
+		{"zero block hash", "decided head ", func(in *Input) { in.Header.Hash = block.Hash32{} }, nil, fact},
+		{"header number differs from the decided block number", "decided head ",
+			func(in *Input) { in.Header.Number++ }, nil, fact},
+		{"attestation status unknown", `attestation status ""`, func(in *Input) { in.Attestation.Status = "" }, nil, fact},
 		{"attestation justified hash zero", "attestation justified hash is zero",
-			func(in *Input) { in.Attestation.Justified.Hash = block.Hash32{} }, nil, nil},
+			func(in *Input) { in.Attestation.Justified.Hash = block.Hash32{} }, nil, fact},
 		{"attestation finalized hash zero", "attestation finalized hash is zero",
-			func(in *Input) { in.Attestation.Finalized.Hash = block.Hash32{} }, nil, nil},
-		{"attestation digest empty", "attestation digest", func(in *Input) { in.Attestation.Digest = "" }, nil, nil},
-		{"attestation digest uppercase", "not 64 lowercase hex digits",
-			func(in *Input) { in.Attestation.Digest = strings.ToUpper(in.Attestation.Digest) }, nil, nil},
-		{"attestation digest short", "attestation digest", func(in *Input) { in.Attestation.Digest = in.Attestation.Digest[:63] }, nil, nil},
-		{"header source rlp empty", "block metadata", func(in *Input) { in.Header.SourceRLP = nil }, nil, nil},
-		{"timestamp overflow", "overflows the millisecond timestamp", func(in *Input) { in.Header.Time = ^uint64(0) }, nil, nil},
-		{"parent hash zero", "has a zero parent hash", func(in *Input) { in.Header.ParentHash = block.Hash32{} }, nil, nil},
+			func(in *Input) { in.Attestation.Finalized.Hash = block.Hash32{} }, nil, fact},
+		{"attestation digest empty", "attestation digest", func(in *Input) { in.Attestation.Digest = "" }, nil, fact},
+		{"attestation digest uppercase", "attestation digest ",
+			func(in *Input) { in.Attestation.Digest = strings.ToUpper(in.Attestation.Digest) }, nil, fact},
+		{"attestation digest short", "attestation digest", func(in *Input) { in.Attestation.Digest = in.Attestation.Digest[:63] }, nil, fact},
+		{"attestation digest long", "attestation digest", func(in *Input) { in.Attestation.Digest += "0" }, nil, fact},
+		{"attestation digest not hex", "attestation digest", func(in *Input) { in.Attestation.Digest = strings.Repeat("g", 64) }, nil, fact},
+		{"header source rlp empty", "block metadata: ", func(in *Input) { in.Header.SourceRLP = nil }, nil, fact},
+		{"timestamp overflow", "block metadata: ", func(in *Input) { in.Header.Time = ^uint64(0) }, nil, fact},
+		{"parent hash zero", "block metadata: ", func(in *Input) { in.Header.ParentHash = block.Hash32{} }, nil, fact},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := validInput()
@@ -308,13 +327,14 @@ func TestBuildBlockEventRejectsMissingFacts(t *testing.T) {
 			if !errors.Is(err, block.ErrInvalidValue) && !errors.Is(err, proto.ErrInvalidValue) {
 				t.Fatalf("error %v wraps neither block.ErrInvalidValue nor proto.ErrInvalidValue", err)
 			}
-			if !strings.Contains(err.Error(), tc.reason) {
-				t.Fatalf("error %q does not name %q", err, tc.reason)
+			if want := tc.sentinel.Error() + ": " + tc.reason; !strings.HasPrefix(err.Error(), want) {
+				t.Fatalf("error %q does not start with %q", err, want)
 			}
-			for _, want := range tc.wraps {
-				if !errors.Is(err, want) {
-					t.Fatalf("error %v does not wrap %v", err, want)
-				}
+			if !strings.Contains(err.Error(), tail[tc.name]) {
+				t.Fatalf("error %q does not name %q", err, tail[tc.name])
+			}
+			if !errors.Is(err, tc.sentinel) {
+				t.Fatalf("error %v does not wrap %v", err, tc.sentinel)
 			}
 		})
 	}
@@ -485,6 +505,31 @@ func TestBuildBlockEventAcceptsAnEmptyBlock(t *testing.T) {
 		blockPath + "activation.activation_id.decision_sequence":            "uint64:0",
 		blockPath + "admission.observation_sequence":                        "uint64:0",
 		blockPath + "initial_snapshot.markers.bsc.effective_finalized.kind": "enum:1",
+	} {
+		if got := render(paths[path]); got != want {
+			t.Fatalf("%s is %s, want %s", path, got, want)
+		}
+	}
+}
+
+// The sequences of the input reach the semantic descriptor and the tree as
+// they are.
+func TestBuildBlockEventCarriesTheSequences(t *testing.T) {
+	in := validInput()
+	in.SourceSequence, in.DecisionSequence, in.ObservationSequence = 9, 21, 5
+	built := mustBuild(t, in, 1)
+	d := built.Semantic
+	if d.Source.SourceSequence != 9 || d.Activation.ActivationID.DecisionSequence != 21 {
+		t.Fatalf("semantic descriptor carries source sequence %d and decision sequence %d, want 9 and 21",
+			d.Source.SourceSequence, d.Activation.ActivationID.DecisionSequence)
+	}
+	paths := readPaths(t, built)
+	for path, want := range map[string]string{
+		"Envelope.source.source_sequence":                                "uint64:9",
+		blockPath + "activation.activation_id.decision_sequence":         "uint64:21",
+		blockPath + "admission.observation_sequence":                     "uint64:5",
+		blockPath + "initial_snapshot.native_decision.decision_sequence": "uint64:21",
+		blockPath + "initial_snapshot.observed_execution_head.height":    "uint64:420",
 	} {
 		if got := render(paths[path]); got != want {
 			t.Fatalf("%s is %s, want %s", path, got, want)

@@ -171,6 +171,36 @@ func TestTreeWriterReferenceKinds(t *testing.T) {
 	}
 }
 
+// The BSC details carry the vote snapshot when the typed model has one. The
+// builder of the block event never sets it; the mapping is complete anyway.
+func TestTreeWriterBscDetails(t *testing.T) {
+	w := newTreeWriter(proto.LogicalSchemaV2(), proto.TypeFamilyDetails)
+	writeBscDetails(w, &block.BscBlockDetails{
+		ParliaSystemTransactionCount: block.Some(uint64(2)),
+		VoteSnapshot: block.Some(block.ParliaVoteSnapshot{Justified: block.AnchorRef{Height: 9, Hash: hashOf(1)},
+			Finalized: block.AnchorRef{Height: 8, Hash: hashOf(2)}}),
+	})
+	nodes, err := w.finish()
+	if err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	paths := builtPaths(t, nodes)
+	base := "FamilyDetails.bsc."
+	for path, expected := range map[string]string{
+		base + "parlia_system_transaction_count": "uint64:2",
+		base + "vote_snapshot.justified.height":  "uint64:9",
+		base + "vote_snapshot.justified.hash":    "bytes:" + hashOf(1).String(),
+		base + "vote_snapshot.finalized.height":  "uint64:8",
+	} {
+		if got := render(paths[path]); got != expected {
+			t.Fatalf("%s is %s, want %s", path, got, expected)
+		}
+	}
+	if len(nodes) != 10 {
+		t.Fatalf("%d nodes", len(nodes))
+	}
+}
+
 // Every field kind of the registry has its value kind of the tree.
 func TestValueKindFollowsTheFieldKinds(t *testing.T) {
 	for kind, want := range map[proto.FieldKind]codec.ValueKind{

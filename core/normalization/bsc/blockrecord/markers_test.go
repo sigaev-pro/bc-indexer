@@ -1,6 +1,7 @@
 package blockrecord
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -33,11 +34,16 @@ func TestMarkersAttestedSnapshot(t *testing.T) {
 	// The attested anchors come from the attestation read; the effective
 	// finalized anchor comes from the decision evidence.
 	in.Attestation.Finalized = Head{Number: 400, Hash: hashOf(0x31)}
+	in.Attestation.Justified = Head{Number: 401, Hash: hashOf(0x32)}
 	markers = bscMarkersOf(t, in)
 	snapshot, ok := markers.Attested.Get()
 	if !ok || snapshot.Finalized != (block.AnchorRef{Height: 400, Hash: hashOf(0x31)}) ||
-		snapshot.SnapshotHead != anchor(in.NewHead) || snapshot.Justified != anchor(in.Attestation.Justified) {
+		snapshot.Justified != (block.AnchorRef{Height: 401, Hash: hashOf(0x32)}) ||
+		snapshot.SnapshotHead != anchor(in.NewHead) {
 		t.Fatalf("attested snapshot %+v present %t", snapshot, ok)
+	}
+	if in.Justified == in.Attestation.Justified || in.Finalized == in.Attestation.Finalized {
+		t.Fatal("the test needs decision evidence heads that differ from the attestation read")
 	}
 	if markers.EffectiveFinalized != block.Known(anchor(in.Finalized), block.OriginNativeLive) {
 		t.Fatalf("effective finalized %+v", markers.EffectiveFinalized)
@@ -46,7 +52,7 @@ func TestMarkersAttestedSnapshot(t *testing.T) {
 	base := blockPath + "initial_snapshot.markers.bsc."
 	for path, expected := range map[string]string{
 		base + "attested.snapshot_head.height": "uint64:420",
-		base + "attested.justified.height":     "uint64:419",
+		base + "attested.justified.height":     "uint64:401",
 		base + "attested.finalized.height":     "uint64:400",
 		base + "effective_finalized.kind":      "enum:1",
 		base + "effective_finalized.origin":    "enum:1",
@@ -55,6 +61,11 @@ func TestMarkersAttestedSnapshot(t *testing.T) {
 		if got := render(paths[path]); got != expected {
 			t.Fatalf("%s is %s, want %s", path, got, expected)
 		}
+	}
+	// The effective finalized anchor is the finalized head of the decision
+	// evidence, also when it differs from the attested source.
+	if got := render(paths[base+"effective_finalized.anchor.height"]); got != "uint64:418" {
+		t.Fatalf("the effective finalized anchor is %s, want the decision evidence head 418", got)
 	}
 }
 
@@ -70,6 +81,14 @@ func TestMarkersGenesisFallback(t *testing.T) {
 	markers := bscMarkersOf(t, in)
 	if _, ok := markers.Attested.Get(); ok {
 		t.Fatalf("the fallback invented an attested snapshot: %+v", markers.Attested)
+	}
+	// The effective finalized anchor is the head of the decision evidence,
+	// not the anchor of the attestation read.
+	other := validInput()
+	other.Attestation = in.Attestation
+	other.Finalized = Head{Number: 0, Hash: hashOf(0x61)}
+	if got := bscMarkersOf(t, other).EffectiveFinalized; got.Anchor != anchor(other.Finalized) {
+		t.Fatalf("effective finalized %+v is not the decision evidence head", got)
 	}
 	if markers.EffectiveFinalized != block.Known(anchor(genesis), block.OriginNativeLive) ||
 		markers.EffectiveBasis != block.BscBasisGenesisFallback {
@@ -113,7 +132,7 @@ func TestMarkersRejectsAnUnknownStatus(t *testing.T) {
 		in := validInput()
 		in.Attestation.Status = status
 		_, err := BuildBlockEvent(in, eventIDOf(in, 1))
-		if err == nil || !strings.Contains(err.Error(), "attestation status") {
+		if err == nil || !errors.Is(err, block.ErrInvalidValue) || !strings.Contains(err.Error(), "attestation status") {
 			t.Fatalf("status %q: %v", status, err)
 		}
 	}
