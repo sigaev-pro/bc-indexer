@@ -88,22 +88,39 @@ docker run --rm --mount type=tmpfs,destination=/work \
 The `[Eth]` section then shows `StateScheme = "hash"`, `SyncMode = "full"`,
 `NoPruning = false` and `PruneAncientData = false`.
 
-`smoke` starts the image offline on throwaway homes. It takes the Chapel
-genesis from the image itself, runs the init, starts the node with a minimal
-capture config for `--seconds` after its start, stops it with SIGINT, and
-runs four refusal controls that show the extractor rules in the start path:
-the default sync mode (snap) is refused with `bsc.snap-sync`; another
-`store_id` is refused with `native store identity mismatch`; the flags of
-the pruned Chapel snapshot are refused with `history.blocks 600000 deletes
-block data`; and a home in the path state scheme is refused with
-`state scheme "", want "hash"`. The node log names the Chapel network, the
-chain configuration, full sync and the clean stop. A first start stays in
-BOOTSTRAP, so the log line `Extractor lifecycle is live` needs a real sync
-and is not part of the smoke. The image entry point is `geth`, so the start
-and the controls run their shell scripts through the `entrypoint` option of
-the owned command boundary (`native.py`). `smoke` accepts only an image
-with the labels of this procedure, and it hashes the binary in the image:
-the digest must equal the label `io.extractor.binary-sha256`.
+`smoke` starts the image offline on throwaway homes and proves that the
+image is a capture build:
+
+- The labels are the ones of this procedure, and the digest of the binary
+  in the image equals the label `io.extractor.binary-sha256`.
+- The binary holds the functions of the seams: `CheckProfile` and `Attach`
+  of `extractor/bsc/lifecycle`, `CheckProfile` of `extractor/state_provider`
+  and `Start` of `extractor/bsc/decision`. A start by itself proves
+  nothing: the vanilla node ignores the capture variable and starts the
+  same way, with every marker of a clean run.
+- The node starts with a minimal capture config, runs for `--seconds`
+  after its first `Started P2P networking`, and is still running when that
+  time is over. Only then does the smoke stop it with SIGINT and require a
+  clean exit. A node that stops by itself fails the smoke.
+- Four controls run under `timeout`, so a node that does not refuse is
+  stopped and fails as its own control. The default sync mode (snap) is
+  refused with `bsc.snap-sync`; another `store_id` with `native store
+  identity mismatch`; the flags of the pruned Chapel snapshot with
+  `history.blocks 600000 deletes block data`; and the profile flags on a
+  home in the path state scheme with `incompatible state scheme, stored:
+  path, user provided: hash`.
+
+A first start stays in BOOTSTRAP, so the log line `Extractor lifecycle
+is live` needs a real sync and is not part of the smoke. The image entry
+point is `geth`, so the shell scripts run through the `entrypoint` option
+of the owned command boundary (`native.py`); the runtime image must hold
+`grep`, `sha256sum` and `timeout`, as the pinned Debian image does.
+
+The homes are bind mounts of the output directory. BSC stops itself when
+the home has less than 2 GiB free, and warns below 4 GiB, so `smoke`
+refuses an output directory on a filesystem with less than 4 GiB free.
+On a 1 GiB tmpfs BSC stopped right after its start, and the first version
+of the smoke still passed.
 
 ```sh
 python3 -I test/harness/bsc_capture_build/bsc_capture_build.py smoke \

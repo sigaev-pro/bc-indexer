@@ -1,5 +1,6 @@
 """Portable checks for the capture-enabled BSC client image procedure. No native runtime claim."""
 
+import collections
 import hashlib
 import json
 from pathlib import Path
@@ -33,12 +34,14 @@ REFUSALS = {"snap-sync": (1, "Fatal: Failed to register the Ethereum service: sy
             "foreign-store": (1, "Fatal: native store identity mismatch: store is bound to x"),
             "pruned-history": (1, "Fatal: Failed to register the Ethereum service: native profile violates capture "
                                     "constraints: history.blocks 600000 deletes block data"),
-            "path-scheme": (1, "Fatal: Failed to register the Ethereum service: native profile violates capture "
-                                  "constraints: state scheme \"\", want \"hash\"; history.blocks 600000 deletes block data")}
+            "path-scheme": (1, "Fatal: Failed to register the Ethereum service: incompatible state scheme, stored: path, "
+                                  "user provided: hash")}
+STARTED = (1, 0, 1000, 1020)  # alive, exit code, clock at the ready marker, clock at the stop
 FAST = ["--syncmode=full", "--history.transactions=600000", "--history.blocks=600000", "--history.logs=600000",
         "--tries-verify-mode=local"]
 SMOKE_MARKERS = {"snap-sync": "bsc.snap-sync", "foreign-store": "native store identity mismatch",
-                 "pruned-history": "history.blocks 600000 deletes block data", "path-scheme": 'state scheme "", want "hash"'}
+                 "pruned-history": "history.blocks 600000 deletes block data",
+                 "path-scheme": "incompatible state scheme, stored: path, user provided: hash"}
 LIBRARIES = ("\tlinux-vdso.so.1 (0x00007ffc1a1b1000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f0b5e000000)\n"
              "\t/lib64/ld-linux-x86-64.so.2 (0x00007f0b5e400000)\n")
 MISSING = LIBRARIES + "\tlibrocksdb.so.10 => not found\n"
@@ -254,29 +257,70 @@ class VersionAndConfigTest(unittest.TestCase):
 
 class StartTest(unittest.TestCase):
     def test_clean_start(self):
-        self.assertIsNone(build.check_start(START_LOG, 0))
+        result = "1 0 1700000000 1700000021"
+        self.assertEqual(build.check_start(START_LOG, result, 20), {"alive": 1, "exit_code": 0, "ran_seconds": 21})
         for marker in build.START_MARKERS:
             with self.subTest(marker=marker), self.assertRaises(Rejected):
-                build.check_start(START_LOG.replace(marker, "x"), 0)
+                build.check_start(START_LOG.replace(marker, "x"), result, 20)
         with self.assertRaisesRegex(Rejected, "exited with 1"):
-            build.check_start(START_LOG, 1)
+            build.check_start(START_LOG, "1 1 1700000000 1700000020", 20)
+
+    def test_a_node_that_stops_by_itself_is_refused(self):
+        # BSC's low-disk guard stops the node with a clean exit; the markers are all there.
+        with self.assertRaisesRegex(Rejected, "stopped by itself before the interrupt"):
+            build.check_start(START_LOG, "0 0 1700000000 1700000005", 20)
+        # The node was alive when its time was over but ran less than the seconds.
+        with self.assertRaisesRegex(Rejected, "ran 10 s after its start, not 20 s"):
+            build.check_start(START_LOG, "1 0 1700000000 1700000010", 20)
+        for malformed in ("", "1 0 1700000000", "alive 0 1 2", "1 0 1700000000 1700000020 extra", "x 0 1 2"):
+            with self.subTest(malformed=malformed), self.assertRaisesRegex(Rejected, "Malformed start result"):
+                build.check_start(START_LOG, malformed, 20)
 
     def test_refusal(self):
         for name, (code, log) in REFUSALS.items():
-            self.assertIsNone(build.check_refusal(log, code, SMOKE_MARKERS[name], name))
+            self.assertIsNone(build.check_refusal(log, str(code), SMOKE_MARKERS[name], name))
         with self.assertRaisesRegex(Rejected, "snap-sync: the start passed"):
-            build.check_refusal(REFUSALS["snap-sync"][1], 0, "bsc.snap-sync", "snap-sync")
+            build.check_refusal(REFUSALS["snap-sync"][1], "0", "bsc.snap-sync", "snap-sync")
         with self.assertRaisesRegex(Rejected, "path-scheme: the refusal does not name"):
-            build.check_refusal("Fatal: other error", 1, 'state scheme "", want "hash"', "path-scheme")
+            build.check_refusal("Fatal: other error", "1", "incompatible state scheme, stored: path", "path-scheme")
+        # A node that does not refuse runs into timeout: exit 124, and no rule named.
+        with self.assertRaisesRegex(Rejected, r"snap-sync: the refusal does not name 'bsc.snap-sync' \(exit 124\)"):
+            build.check_refusal(START_LOG, "124", "bsc.snap-sync", "snap-sync")
+        with self.assertRaisesRegex(Rejected, "malformed exit code"):
+            build.check_refusal(START_LOG, "", "bsc.snap-sync", "snap-sync")
+
+    def test_the_capture_symbols(self):
+        present = "".join("present " + symbol + "\n" for symbol in build.CAPTURE_SYMBOLS)
+        self.assertIsNone(build.check_symbols(present))
+        vanilla = "".join("missing " + symbol + "\n" for symbol in build.CAPTURE_SYMBOLS)
+        for text in (vanilla, "", present.replace("present " + build.CAPTURE_SYMBOLS[2], "missing " + build.CAPTURE_SYMBOLS[2])):
+            with self.subTest(text=text[:60]), self.assertRaisesRegex(Rejected, "does not hold the capture symbols"):
+                build.check_symbols(text)
+        script = build.symbol_script()
+        for symbol in build.CAPTURE_SYMBOLS:
+            self.assertIn(f'grep -a -q -F -- "{symbol}" /usr/local/bin/geth && echo "present {symbol}"', script)
+        self.assertEqual(len(build.CAPTURE_SYMBOLS), 4)
 
     def test_start_scripts(self):
         script = build.start_script(["--chapel", "--datadir", "/home"], "start", 20)
         self.assertIn("geth --chapel --datadir /home > /work/start.out 2>&1 &", script)
         self.assertIn('until grep -q "' + build.READY_MARKER + '" /work/start.out', script)
-        self.assertIn("\nsleep 20\n", script)
-        self.assertIn('kill -INT "$pid" 2>/dev/null\nwait "$pid"\necho $? > /work/start.exit', script)
+        self.assertIn('if [ "$alive" = 1 ]; then kill -INT "$pid"; fi\nwait "$pid"\n', script)
+        # A control runs under timeout, so a node that does not refuse is stopped
+        # and reported by its own control.
         self.assertEqual(build.start_script(["--chapel"], "control"),
-                         "geth --chapel > /work/control.out 2>&1; echo $? > /work/control.exit")
+                         f"timeout -s INT {build.CONTROL_SECONDS} geth --chapel > /work/control.out 2>&1; "
+                         "echo $? > /work/control.exit")
+        # The start records whether the node was alive when its time was over.
+        self.assertIn(build.RUNNING, script.splitlines()[0])
+        self.assertIn('if running "$pid"; then sleep 20; fi', script)
+        self.assertIn('alive=$(running "$pid" && echo 1 || echo 0)', script)
+        self.assertIn('if [ "$alive" = 1 ]; then kill -INT "$pid"; fi', script)
+        self.assertTrue(script.endswith('echo "$alive $? $ready $now" > /work/start.exit'))
+        self.assertNotIn("kill -0", script)
+        self.assertLess(script.index('grep -q "' + build.READY_MARKER + '"'), script.index("ready=$(date +%s)"))
+        self.assertLess(script.index("ready=$(date +%s)"), script.index("sleep 20"))
+        self.assertLess(script.index("sleep 20"), script.index("now=$(date +%s)"))
 
     def test_profile_and_commands(self):
         self.assertEqual(build.PROFILE, ("--state.scheme", "hash", "--gcmode", "full", "--syncmode", "full"))
@@ -511,6 +555,8 @@ class FakeNative:
     # Answers a test makes wrong: the files gofmt names, the compiler's version
     # and the genesis dump.
     gofmt, go_version, genesis = (), GO_VERSION, GENESIS
+    # The capture symbols the binary holds, and the result line of a start.
+    symbols, start = frozenset(build.CAPTURE_SYMBOLS), STARTED
     during_build = None  # a test's hook, run while the compiler works
 
     def __init__(self, output, deadline):
@@ -521,7 +567,7 @@ class FakeNative:
 
     def command(self, image, argv, mounts, **kwargs):
         targets = {target: source for source, target, _ in mounts}
-        self.owned.append({"image": image, "argv": argv, "mounts": list(mounts),
+        self.owned.append({"image": image, "argv": argv, "mounts": list(mounts), "cap": kwargs.get("cap"),
                            "environment": kwargs.get("environment"), "entrypoint": kwargs.get("entrypoint")})
         self.commands.append({"owned": len(self.owned)})  # one record per owned command, as in native.py
         stdout = self.output / "logs" / f"{len(self.commands):03d}.stdout"
@@ -543,11 +589,17 @@ class FakeNative:
             stdout.write_text(self.libraries)
         elif argv[1].startswith("sha256sum "):
             stdout.write_text(hashlib.sha256(self.binary).hexdigest() + "  /usr/local/bin/geth\n")
+        elif argv[1].startswith("grep "):
+            stdout.write_text("".join(("present " if symbol in self.symbols else "missing ") + symbol + "\n"
+                                      for symbol in build.CAPTURE_SYMBOLS))
         elif argv[0] == "-c":
             name = argv[-1].split("/work/")[1].split(".out")[0]
             code, text = self.control[name]
-            (targets["/work"] / (name + ".exit")).write_text(f"{code}\n")
             (targets["/work"] / (name + ".out")).write_text(text)
+            if name == "start":
+                (targets["/work"] / "start.exit").write_text(" ".join(str(part) for part in self.start) + "\n")
+            else:
+                (targets["/work"] / (name + ".exit")).write_text(f"{code}\n")
         stdout.touch(exist_ok=True)
         return stdout
 
@@ -655,7 +707,8 @@ class ProcedureFixture(unittest.TestCase):
     def setUp(self):
         FakeNative.instances = []
         for name, value in (("libraries", LIBRARIES), ("gofmt", ()), ("go_version", GO_VERSION), ("genesis", GENESIS),
-                            ("during_build", None), ("config", CONFIG), ("version", VERSION), ("control", {})):
+                            ("during_build", None), ("config", CONFIG), ("version", VERSION), ("control", {}),
+                            ("symbols", frozenset(build.CAPTURE_SYMBOLS)), ("start", STARTED)):
             setattr(FakeNative, name, value)
         self.root = Path(tempfile.mkdtemp()).resolve()
         self.output, self.accepted = self.root / "out", self.root / "accepted"
@@ -802,14 +855,14 @@ class BuildTest(ProcedureFixture):
             [build.GO, "version"], build.build_arguments(COMMIT), [build.GO, "version", "-m", "/work/generated/geth"]])
         # The checks run on the image by its id, before the tag exists.
         self.assertEqual([(row["image"], row["argv"]) for row in native[4:]],
-                         [(IMAGE_ID, LDD), (IMAGE_ID, ["version"]),
+                         [(IMAGE_ID, LDD), (IMAGE_ID, ["-c", build.symbol_script()]), (IMAGE_ID, ["version"]),
                           (IMAGE_ID, ["--chapel", *build.PROFILE, "--datadir", "/work/dumpconfig", "dumpconfig"])])
         self.assertTrue(all(row["image"] == GOLANG for row in native[:4]))
-        self.assertEqual([row["entrypoint"] for row in native], [None] * 4 + ["/bin/sh", None, None])
+        self.assertEqual([row["entrypoint"] for row in native], [None] * 4 + ["/bin/sh", "/bin/sh", None, None])
         self.assertEqual([row["environment"] for row in native[:4]], [build.pins.environment()] * 4)
         record = json.loads((self.output / "build.json").read_text())
         self.assertEqual((record["result"], record["source_commit"], record["cleanup_complete"]), ("PASS", "b" * 40, True))
-        self.assertEqual(len(record["commands"]), 7 + 7)  # seven owned commands and seven host records
+        self.assertEqual(len(record["commands"]), 8 + 7)  # eight owned commands and seven host records
         steps = [Path(row["request"]["path"]).name.split("-", 2)[2].split(".")[0] if "request" in row else "owned"
                  for row in record["commands"]]
         self.assertEqual(steps[-4:], ["image-inspect", "owned", "owned", "owned"][:0] + steps[-4:])
@@ -959,10 +1012,10 @@ class BuildTest(ProcedureFixture):
         self.assertEqual((self.docker.tagged, self.docker.tags, self.docker.removed), ([(IMAGE_ID, TAG)], {TAG: IMAGE_ID}, []))
         record = json.loads((self.output / "build.json").read_text())
         steps = ["owned" if "owned" in row else Path(row["request"]["path"]).name for row in record["commands"]]
-        self.assertEqual(steps[-2:], ["host-012-tag-image.request.json", "host-013-tag-inspect.request.json"])
-        self.assertEqual(steps[-5:-2], ["owned"] * 3)  # ldd, version and dumpconfig came first
-        self.assertEqual(steps.count("owned"), 7)
-        self.assertEqual(len(steps), 14)
+        self.assertEqual(steps[-2:], ["host-013-tag-image.request.json", "host-014-tag-inspect.request.json"])
+        self.assertEqual(steps[-5:-2], ["owned"] * 3)  # the symbols, version and dumpconfig came first
+        self.assertEqual(steps.count("owned"), 8)
+        self.assertEqual(len(steps), 15)
         self.assertFalse((self.output / "image-id.txt").read_text().strip() != IMAGE_ID)
 
     def test_a_failed_check_keeps_the_previous_image_tagged(self):
@@ -1011,6 +1064,12 @@ class BuildTest(ProcedureFixture):
         self.docker.raw = b"[]"
         self.build_and_fail("exactly one image")
         self.assertEqual((self.docker.removed, self.docker.tagged), ([IMAGE_ID], []))
+
+    def test_a_binary_without_the_capture_symbols_fails_the_build(self):
+        FakeNative.symbols = frozenset(build.CAPTURE_SYMBOLS[1:])
+        self.build_and_fail("The binary does not hold the capture symbols: " + build.CAPTURE_SYMBOLS[0])
+        self.assertEqual([row["argv"] for row in self.native[4:6]],
+                         [LDD, ["-c", build.symbol_script()]])  # ldd, then the symbols, then nothing
 
     def test_the_lock_is_the_one_the_plan_names(self):
         sha = self.rewrite_manifest(lambda manifest: manifest["plan"].update(lock_sha256="0" * 64), bind=False)
@@ -1159,7 +1218,8 @@ class SmokeTest(ProcedureFixture):
     def test_smoke_passes(self):
         proof = build.smoke(TAG, self.output, 20)
         self.assertEqual((proof["result"], proof["error"]), ("PASS", None))
-        self.assertEqual(proof["start"]["exit_code"], 0)
+        self.assertEqual({key: proof["start"][key] for key in ("alive", "exit_code", "ran_seconds", "result")},
+                         {"alive": 1, "exit_code": 0, "ran_seconds": 20, "result": "1 0 1000 1020"})
         self.assertEqual({name: row["exit_code"] for name, row in proof["controls"].items()},
                          {"snap-sync": 1, "foreign-store": 1, "pruned-history": 1, "path-scheme": 1})
         self.assertEqual(proof["config"]["store_id"], build.SMOKE_STORE)
@@ -1173,7 +1233,7 @@ class SmokeTest(ProcedureFixture):
         path_home = ["--chapel", "--datadir", "/home-path"]
         capture = {"EXTRACTOR_BSC_CONFIG": "/config/capture.json"}
         self.assertEqual([row["argv"] for row in self.native], [
-            ["-c", "sha256sum /usr/local/bin/geth"], ["--chapel", "dumpgenesis"],
+            ["-c", "sha256sum /usr/local/bin/geth"], ["-c", build.symbol_script()], ["--chapel", "dumpgenesis"],
             [*home, "--state.scheme", "hash", "init", "/config/genesis.json"],
             ["-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "start", 20)],
             [*path_home, "init", "/config/genesis.json"],
@@ -1181,21 +1241,60 @@ class SmokeTest(ProcedureFixture):
             ["-c", build.start_script([*home, *build.PROFILE, *build.OFFLINE], "foreign-store")],
             ["-c", build.start_script([*home, "--state.scheme", "hash", "--gcmode", "full", *build.FAST_NODE, *build.OFFLINE],
                                       "pruned-history")],
-            ["-c", build.start_script([*path_home, "--gcmode", "full", *build.FAST_NODE, *build.OFFLINE], "path-scheme")]])
-        self.assertNotIn("--state.scheme", self.native[-1]["argv"][-1].split("> /work/")[0])
+            # The flags of the profile on the home that holds the path scheme.
+            ["-c", build.start_script([*path_home, *build.PROFILE, *build.OFFLINE], "path-scheme")]])
         self.assertEqual([row["environment"] for row in self.native],
-                         [None, None, None, capture, None, capture, {"EXTRACTOR_BSC_CONFIG": "/config/foreign.json"},
+                         [None, None, None, None, capture, None, capture, {"EXTRACTOR_BSC_CONFIG": "/config/foreign.json"},
                           capture, capture])
         self.assertEqual([row["entrypoint"] for row in self.native],
-                         ["/bin/sh", None, None, "/bin/sh", None, "/bin/sh", "/bin/sh", "/bin/sh", "/bin/sh"])
+                         ["/bin/sh", "/bin/sh", None, None, "/bin/sh", None, "/bin/sh", "/bin/sh", "/bin/sh", "/bin/sh"])
         self.assertIn((self.output / "smoke" / "home-path", "/home-path", False), self.native[-1]["mounts"])
         self.assertEqual(len(self.native[-1]["mounts"]), 4)
         self.assertTrue(all(row["image"] == TAG for row in self.native))
-        scripts = [row["argv"][1] for row in self.native
-                   if row["entrypoint"] == "/bin/sh" and row["argv"][1].startswith("geth ")]
-        self.assertIn("--syncmode full", scripts[0])
-        self.assertNotIn("--syncmode", scripts[1])
-        self.assertIn("--maxpeers 0", scripts[0])
+        start = self.native[4]["argv"][1]
+        self.assertIn("--syncmode full --maxpeers 0", start)
+        controls = [row["argv"][1] for row in self.native[6:]]
+        # Every control runs under timeout, so a node that does not refuse is stopped.
+        self.assertTrue(all(script.startswith(f"timeout -s INT {build.CONTROL_SECONDS} geth ") for script in controls))
+        self.assertNotIn("--syncmode", controls[0].split("> /work/")[0])
+        self.assertEqual(self.native[4]["cap"], 20 + 240)
+        self.assertEqual([row["cap"] for row in self.native[6:]], [build.CONTROL_SECONDS + 120] * 4)
+
+    def test_a_node_that_stops_by_itself_fails_the_smoke(self):
+        cases = {((0, 0, 1000, 1005), "stopped by itself before the interrupt"),
+                 ((1, 0, 1000, 1010), "ran 10 s after its start, not 20 s"),
+                 ((1, 3, 1000, 1020), "The node exited with 3"),
+                 ((0, 0, 1000, 1000), "stopped by itself before the interrupt")}
+        for index, (start, message) in enumerate(sorted(cases)):
+            with self.subTest(start=start):
+                FakeNative.instances = []
+                self.output = self.root / f"stopped-{index}"
+                FakeNative.start = start
+                proof = build.smoke(TAG, self.output, 20)
+                self.assertEqual(proof["result"], "FAIL")
+                self.assertIn(message, proof["error"])
+                # The start went first; nothing else ran afterwards.
+                self.assertEqual(len(self.native), 5)
+
+    def test_the_vanilla_binary_fails_the_smoke_before_any_start(self):
+        # It starts like a capture node, with every marker, and captures nothing.
+        FakeNative.symbols = frozenset()
+        proof = build.smoke(TAG, self.output, 20)
+        self.assertEqual((proof["result"], proof["error"]),
+                         ("FAIL", "Rejected: The binary does not hold the capture symbols: " +
+                          ", ".join(build.CAPTURE_SYMBOLS)))
+        self.assertEqual(len(self.native), 2)
+
+    def test_a_home_filesystem_without_space_is_refused(self):
+        space = collections.namedtuple("usage", "total used free")
+        for free, accepted in ((4 * 1024 ** 3 - 1, False), (4 * 1024 ** 3, True)):
+            with self.subTest(free=free), mock.patch.object(build.shutil, "disk_usage", return_value=space(1, 0, free)):
+                if accepted:
+                    self.assertEqual(build.smoke(TAG, self.output, 20)["result"], "PASS")
+                else:
+                    with self.assertRaisesRegex(Rejected, "The smoke needs 4096 MiB free for its homes"):
+                        build.smoke(TAG, self.root / "no-space", 20)
+                    self.assertFalse((self.root / "no-space").exists())
 
     def test_smoke_names_the_variant_of_the_image(self):
         self.docker.labels = {**self.docker.labels, "io.extractor.variant": "collector"}
@@ -1266,7 +1365,7 @@ class SmokeTest(ProcedureFixture):
         proof = build.smoke(TAG, self.output, 20)
         self.assertEqual((proof["result"], proof["error"]),
                          ("FAIL", "Rejected: The image does not dump the Chapel genesis"))
-        self.assertEqual(len(self.native), 2)  # the digest check, then the genesis dump
+        self.assertEqual(len(self.native), 3)  # digest, symbols, then the genesis dump
 
     def test_arguments_are_checked(self):
         for image, seconds in (("latest", 20), ("a/b:tag", 5), ("a/b:tag", 121), ("a/b:tag", "20"), ("A/B:tag", 20)):

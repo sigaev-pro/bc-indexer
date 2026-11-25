@@ -68,6 +68,7 @@ MODULE_FILES = ("go.mod", "go.sum")
 GO = "/usr/local/go/bin/go"
 TARGET = "./cmd/geth"
 BINARY = "geth"
+BINARY_PATH = "/usr/local/bin/" + BINARY
 # The capture profile on the command line: adapters/README.md, "Interface",
 # and adapters/bsc/lifecycle/native/README.md, "Node wiring". BSC selects
 # snap sync by default, and the capture profile refuses every sync mode but
@@ -87,6 +88,20 @@ CHAPEL_CHAIN_ID = 97
 START_MARKERS = ("Starting BSC on Chapel testnet", "Initialised chain configuration", "Enabled full-sync",
                  "Started P2P networking", "Got interrupt, shutting down", "Blockchain stopped")
 READY_MARKER = "Started P2P networking"
+# A control start runs under timeout, which stops a node that does not refuse
+# with SIGINT; timeout then exits with 124.
+CONTROL_SECONDS = 45
+# Function names that only the capture binary holds: the profile check and the
+# attach of the node wiring, the state profile check and the start of the
+# decision bridge. The vanilla binary holds none of them.
+CAPTURE_SYMBOLS = ("github.com/ethereum/go-ethereum/extractor/bsc/lifecycle.CheckProfile",
+                   "github.com/ethereum/go-ethereum/extractor/bsc/lifecycle.Attach",
+                   "github.com/ethereum/go-ethereum/extractor/state_provider.CheckProfile",
+                   "github.com/ethereum/go-ethereum/extractor/bsc/decision.Start")
+# BSC stops itself when the home has less than 2 GiB free (twice the default dirty
+# cache of 1024 MB, cmd/utils/cmd.go), and warns below 4 GiB. The homes of the
+# smoke are bind mounts, so their filesystem needs more than that.
+HOME_FREE_BYTES = 4 * 1024 ** 3
 LABEL, OCI = "io.extractor.", "org.opencontainers.image."
 HARNESS_FILES = bsc_lifecycle.HARNESS_FILES
 OWN_FILES = (HERE / "bsc_capture_build.py", DOCKERFILE)
@@ -448,18 +463,48 @@ def check_libraries(rows):
     require(rows and not missing, "Runtime image lacks shared libraries of the binary: " + ", ".join(missing))
 
 
-def check_start(log, exit_code):
-    """A smoke start reached the networking stack and stopped cleanly."""
+def symbol_script():
+    """A shell command that reports which capture symbols the binary holds."""
+    return "; ".join(f'grep -a -q -F -- "{symbol}" {BINARY_PATH} && echo "present {symbol}" '
+                     f'|| echo "missing {symbol}"' for symbol in CAPTURE_SYMBOLS)
+
+
+def check_symbols(text):
+    """The binary holds every capture symbol. The vanilla binary holds none, and
+    a start by itself cannot tell the two apart: the vanilla node ignores
+    EXTRACTOR_BSC_CONFIG and starts the same way."""
+    present = {line.strip().removeprefix("present ") for line in text.splitlines() if line.startswith("present ")}
+    missing = [symbol for symbol in CAPTURE_SYMBOLS if symbol not in present]
+    require(not missing, "The binary does not hold the capture symbols: " + ", ".join(missing))
+
+
+def check_start(log, result, seconds):
+    """A smoke start reached the networking stack, was still running when its time
+    was over, stopped cleanly on the interrupt, and ran for that whole time.
+
+    `result` is the last line of the start: `alive code ready now`. A node that
+    stops by itself, as BSC does on a home with little free space, leaves `alive`
+    0: a clean exit alone does not prove that the interrupt stopped it."""
     tail = log[-600:]
-    require(exit_code == 0, f"The node exited with {exit_code}: {tail}")
+    fields = result.split()
+    require(len(fields) == 4 and all(field.isdecimal() for field in fields),
+            f"Malformed start result: {result!r}")
+    alive, code, ready, now = (int(field) for field in fields)
+    require(alive == 1, "The node stopped by itself before the interrupt: " + tail)
+    require(code == 0, f"The node exited with {code}: {tail}")
+    ran = now - ready
+    require(ran >= seconds, f"The node ran {ran} s after its start, not {seconds} s")
     missing = [marker for marker in START_MARKERS if marker not in log]
     require(not missing, "The node log lacks " + ", ".join(missing) + ": " + tail)
+    return {"alive": alive, "exit_code": code, "ran_seconds": ran}
 
 
 def check_refusal(log, exit_code, marker, name):
-    """A control start was refused, and the refusal names the extractor rule."""
-    require(exit_code != 0, f"{name}: the start passed (exit 0): {log[-600:]}")
-    require(marker in log, f"{name}: the refusal does not name {marker!r}: {log[-600:]}")
+    """A control start was refused, and the refusal names the extractor rule. A
+    node that does not refuse runs into timeout and exits with 124."""
+    require(exit_code.isdecimal(), f"{name}: malformed exit code {exit_code!r}")
+    require(int(exit_code) != 0, f"{name}: the start passed (exit 0): {log[-600:]}")
+    require(marker in log, f"{name}: the refusal does not name {marker!r} (exit {exit_code}): {log[-600:]}")
 
 
 def build_arguments(commit):
@@ -468,19 +513,36 @@ def build_arguments(commit):
             "/work/generated/" + BINARY, TARGET]
 
 
+# running tells a live process from one that has exited and waits to be reaped:
+# kill -0 succeeds for both, and a node that stopped by itself is reaped only by
+# the final wait.
+RUNNING = 'running() { read -r _ _ state _ < /proc/$1/stat 2>/dev/null && [ "$state" != Z ]; }'
+
+
 def start_script(arguments, output, seconds=None):
-    """A shell script that runs geth with its output in /work/<output>.out. With
-    seconds, it waits for the ready marker, lets the node run that time, stops it
-    with SIGINT and leaves its exit code in /work/<output>.exit; without, it
-    leaves the exit code at once."""
+    """A shell script that runs geth with its output in /work/<output>.out.
+
+    With seconds, the node runs in the background. The script waits for the
+    ready marker, lets the node run that time, and stops it with SIGINT only if
+    it still runs. /work/<output>.exit then holds `alive code ready now`: whether
+    the node was alive when its time was over, its exit code, and the clock at
+    the ready marker and at the stop.
+
+    Without seconds, the command runs in the foreground under timeout, which
+    stops it with SIGINT after CONTROL_SECONDS. A node that does not refuse
+    then exits with 124 instead of running into the command's deadline. The exit
+    code is left in /work/<output>.exit."""
     command = " ".join([BINARY, *arguments]) + f" > /work/{output}.out 2>&1"
     if seconds is None:
-        return command + f"; echo $? > /work/{output}.exit"
-    return "\n".join([command + " &", "pid=$!", "waited=0",
-                      f'until grep -q "{READY_MARKER}" /work/{output}.out || ! kill -0 "$pid" 2>/dev/null || '
+        return f"timeout -s INT {CONTROL_SECONDS} {command}; echo $? > /work/{output}.exit"
+    return "\n".join([RUNNING, command + " &", "pid=$!", "waited=0",
+                      f'until grep -q "{READY_MARKER}" /work/{output}.out || ! running "$pid" || '
                       '[ "$waited" -ge 90 ]; do sleep 1; waited=$((waited + 1)); done',
-                      f"sleep {seconds}", 'kill -INT "$pid" 2>/dev/null', 'wait "$pid"',
-                      f'echo $? > /work/{output}.exit'])
+                      "ready=$(date +%s)",
+                      f'if running "$pid"; then sleep {seconds}; fi',
+                      "now=$(date +%s)", 'alive=$(running "$pid" && echo 1 || echo 0)',
+                      'if [ "$alive" = 1 ]; then kill -INT "$pid"; fi', 'wait "$pid"',
+                      f'echo "$alive $? $ready $now" > /work/{output}.exit'])
 
 
 def host(runner, name, argv, timeout, check=True):
@@ -673,17 +735,21 @@ def build(manifest_path, expected_sha, output, variant=None):
             require(image["Id"] == image_id and image["Architecture"] == "amd64" and image["Os"] == "linux",
                     "Built image identity differs from its record")
             check_labels(image["Config"].get("Labels", {}), facts)
-            require(image["Config"]["Entrypoint"] == ["/usr/local/bin/" + BINARY], "Image entrypoint differs")
+            require(image["Config"]["Entrypoint"] == [BINARY_PATH], "Image entrypoint differs")
             layers, base_layers = image["RootFS"]["Layers"], base["RootFS"]["Layers"]
             require(layers[:len(base_layers)] == base_layers and len(layers) == len(base_layers) + added,
                     "Image is not the pinned runtime image with the layers of this build")
             # The checks run in the new image, by its id and in owned offline
             # containers. The first one comes first so that a missing shared
             # library is named: without it the binary cannot even start.
-            loader = runner.command(image_id, ["-c", f"ldd /usr/local/bin/{BINARY} || true"], [], cap=120,
+            loader = runner.command(image_id, ["-c", f"ldd {BINARY_PATH} || true"], [], cap=120,
                                     memory="512m", entrypoint="/bin/sh")
             libraries = dynamic_libraries(read_bytes(loader, 64 * 1024, deadline).decode())
             check_libraries(libraries)
+            # The binary of a capture image holds the functions of the seams.
+            symbols = runner.command(image_id, ["-c", symbol_script()], [], cap=120, memory="256m",
+                                     entrypoint="/bin/sh")
+            check_symbols(read_bytes(symbols, 64 * 1024, deadline).decode())
             version = runner.command(image_id, ["version"], [], cap=120, memory="512m")
             fields = version_fields(read_bytes(version, 64 * 1024, deadline).decode())
             check_version(fields, selected)
@@ -713,7 +779,7 @@ def build(manifest_path, expected_sha, output, variant=None):
                       "go_build_info": reference(info, deadline=deadline), "source_archive": copied,
                       "build_command": arguments, "build_environment": variant_environment(variant),
                       "version_output": fields, "effective_config": config_values(text, "Eth", CONFIG_VALUES),
-                      "dynamic_libraries": libraries}
+                      "dynamic_libraries": libraries, "capture_symbols": list(CAPTURE_SYMBOLS)}
         pins.save(output / "provenance.json", provenance)
         proof["provenance"] = reference(output / "provenance.json", deadline=deadline)
 
@@ -730,6 +796,10 @@ def smoke(image, output, seconds):
     started = time.monotonic()
     deadline = started + SMOKE_SECONDS
     check_output(output)
+    # The homes are bind mounts of the output: BSC stops itself on a nearly full one.
+    free = shutil.disk_usage(output.parent).free
+    require(free >= HOME_FREE_BYTES, f"The smoke needs {HOME_FREE_BYTES // 1024 ** 2} MiB free for its homes, "
+                                     f"and {output.parent} has {free // 1024 ** 2} MiB")
     require(re.fullmatch(r"[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9_][A-Za-z0-9._-]*", image) is not None,
             "Invalid image reference")
     require(type(seconds) is int and 10 <= seconds <= 120, "Seconds must be between 10 and 120")
@@ -755,6 +825,10 @@ def smoke(image, output, seconds):
                                 entrypoint="/bin/sh")
         require(read_bytes(digest, 4096, deadline).decode().split()[0] == binary,
                 "The binary of the image is not the one its label records")
+        # The direct positive check. A start by itself proves nothing: the
+        # vanilla node ignores the capture variable and starts the same way.
+        symbols = runner.command(image, ["-c", symbol_script()], [], cap=120, memory="256m", entrypoint="/bin/sh")
+        check_symbols(read_bytes(symbols, 64 * 1024, deadline).decode())
         root = output / "smoke"
         for name in ("config", "home", "home-path", "work"):
             (root / name).mkdir(parents=True)
@@ -775,9 +849,19 @@ def smoke(image, output, seconds):
                        memory="1g")
         # The image entry point is geth; the scripts run through a shell that
         # replaces it, so the command is only the shell's own arguments.
+        def run(name):
+            """The exit record and the log of the start or the control `name`."""
+            return (read_bytes(root / "work" / (name + ".exit"), 64, deadline).decode().strip(),
+                    read_bytes(root / "work" / (name + ".out"), LOG_LIMIT, deadline).decode(errors="replace"))
+
         runner.command(image, ["-c", start_script([*home, *PROFILE, *OFFLINE], "start", seconds)], mounts,
                        cap=seconds + 240, memory="2g", environment={"EXTRACTOR_BSC_CONFIG": "/config/capture.json"},
                        entrypoint="/bin/sh")
+        # The start is checked at once: on a home where the node does not run,
+        # the controls would say nothing.
+        result, log = run("start")
+        started = check_start(log, result, seconds)
+        proof["start"] = {**started, "result": result, "output": reference(root / "work" / "start.out", deadline=deadline)}
         # The controls show the extractor rules in the start path: the default sync
         # mode (snap), another store ID, the flags of the pruned Chapel snapshot
         # (a fast node), and a home in the path state scheme.
@@ -788,21 +872,21 @@ def smoke(image, output, seconds):
             "foreign-store": (home, [*PROFILE, *OFFLINE], "foreign.json", "native store identity mismatch"),
             "pruned-history": (home, ["--state.scheme", "hash", "--gcmode", "full", *FAST_NODE, *OFFLINE], "capture.json",
                                "history.blocks 600000 deletes block data"),
-            "path-scheme": (path_home, ["--gcmode", "full", *FAST_NODE, *OFFLINE], "capture.json",
-                            'state scheme "", want "hash"')}
-        for name, (home_arguments, flags, config_name, _) in controls.items():
-            runner.command(image, ["-c", start_script([*home_arguments, *flags], name)], mounts, cap=240, memory="2g",
+            # The home decides this one: the flags are the profile, and the store
+            # they open holds the path state scheme.
+            "path-scheme": (path_home, [*PROFILE, *OFFLINE], "capture.json",
+                            "incompatible state scheme, stored: path, user provided: hash")}
+        proof["controls"] = {}
+        for name, (home_arguments, flags, config_name, marker) in controls.items():
+            # The control runs under timeout: a node that does not refuse is stopped
+            # and reported by its own name, not by the deadline of the command.
+            runner.command(image, ["-c", start_script([*home_arguments, *flags], name)], mounts,
+                           cap=CONTROL_SECONDS + 120, memory="2g",
                            environment={"EXTRACTOR_BSC_CONFIG": "/config/" + config_name}, entrypoint="/bin/sh")
-        runs = {name: (int(read_bytes(root / "work" / (name + ".exit"), 64, deadline).decode().strip()),
-                       read_bytes(root / "work" / (name + ".out"), LOG_LIMIT, deadline).decode(errors="replace"))
-                for name in ("start", *controls)}
-        check_start(runs["start"][1], runs["start"][0])
-        for name, (_, _, _, marker) in controls.items():
-            check_refusal(runs[name][1], runs[name][0], marker, name)
-        proof["start"] = {"exit_code": runs["start"][0], "output": reference(root / "work" / "start.out", deadline=deadline)}
-        proof["controls"] = {name: {"exit_code": runs[name][0], "marker": marker,
-                                    "output": reference(root / "work" / (name + ".out"), deadline=deadline)}
-                             for name, (_, _, _, marker) in controls.items()}
+            code, log = run(name)
+            check_refusal(log, code, marker, name)
+            proof["controls"][name] = {"exit_code": int(code), "marker": marker,
+                                       "output": reference(root / "work" / (name + ".out"), deadline=deadline)}
         proof.update(config=config, genesis=reference(root / "config" / "genesis.json", deadline=deadline), labels=labels)
         sources_unchanged(origins, deadline)
 
