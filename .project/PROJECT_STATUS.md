@@ -1,5 +1,67 @@
 # Состояние проекта
 
+## D108 — Fast-node capture profile for the live-verification stage (2026-11-25)
+
+Status: RECORDED, documents updated; code not started. Block S0.1 of
+stream S0 of the live capture plan, an owner-directed milestone outside
+the numbered backlog, on branch `feature/s0-decision-record` (worktree
+`.worktrees/s0-decision-record`, base `01b92ce`, PR #230). The owner's
+answer and what it holds are in [DECISIONS](docs/DECISIONS.md), entry
+D108. The independent review of the pull request returned
+REQUEST_CHANGES with twelve findings; all are fixed. The record and the
+specification travel in one commit, `51846c4`; this status record
+follows.
+
+What changed, documents only:
+
+- The working specification carries the fast-node capture profile: two
+  supported state backends (hash and path; the path backend starts no
+  capture before its separate recovery proof), the retention floor N
+  (600,000 blocks on BSC, 90,000 on Geth and Bor), the flags of each
+  client, and the refused and the allowed settings. The floor refuses a
+  store whose oldest available block is above the greater of genesis and
+  head minus N, so a fresh store is not refused. The topical documents
+  and `TZ_EXECUTOR.md` are derived from the root with the inverse of the
+  transform that `check_docs.py` verifies; no mirrored body was edited
+  by hand.
+- Reworded: REQ-CAP-03, REQ-OPS-01, REQ-OPS-03, AC-CAP-03-01,
+  AC-CAP-03-02, AC-OPS-01-02, AC-OPS-03-02, the PIN-01 fixture and TC01.
+  A BSC path store started with a hash override is refused without wipe
+  or reinitialization; started without one, it is an accepted home. The
+  D90 corpus keeps its variant set; its binding `ac_rows_sha256` moves
+  with the four reworded acceptance rows, from `c7158e29…` on main to
+  `2839a228…`. Six of its variants take a new meaning; D108 lists them.
+- Older statements of this file are read through D108 at the three places
+  marked "D108 (2026-11-25)" below.
+
+Checks on `51846c4`: `python3 .project/automation/check_docs.py` PASS
+(250 documents, 63 requirements, 217 cases, 68 product tasks, 84 catalog
+issues, 16 normative mirrors, original v2 unchanged);
+`python3 .project/testing/corpus/verify.py` VALID with its 49 tests
+passing; the digest recomputes from the committed rows; the synchronizer
+reports no difference in the sixteen mirrors and `TZ_EXECUTOR.md`. Three
+local full `ci.py` runs were made. The one under a low host load passed
+(1,943 tests, on the tree before the review fixes). The two under a host
+load average above 50 failed two and four timing-sensitive harness tests
+of files this block does not touch; the second of them was stopped for
+that reason. The full run of this head is left to the GitHub check
+`bootstrap/ci` of the pull request. The logs are kept locally, not
+tracked, in `.project/runtime/s0-decision-record/`. This status record is
+the only change after those checks.
+
+Not done here: the code. It still refuses the path scheme and every
+pruning setting; S0.2 and S0.3 on `feature/s0-fast-node-profile` change
+it. Not edited by rule: TASK_DECOMPOSITION (a normative mirror; its
+E01-02.pins and E01-02.admission cards are read through D108), the Go
+module READMEs under `adapters/` and the README of
+`test/harness/bsc_capture_build`, which describe the code and change with
+it. No measured run, no Docker container and no host port was touched.
+Every public cell stays NOT_RUN.
+
+Next: coordinator review and merge of D108; then S0.2 (profile, three
+clients) and S0.3 (path scheme on BSC). The evidence the project owes for
+D108 is listed in the decision.
+
 ## Real-network Sepolia demonstration — 2026-11-24
 
 Status: DONE on branch `feature/real-testnet` (owner-directed task, outside
@@ -763,7 +825,7 @@ D99). `python3 test/harness/lifecycle.py table` prints the full map.
 | BSC side branches and reorgs: the seam admits only blocks on the head today, so a side branch fails closed at `Begin` | NATIVE_CAPTURE_PROTOCOL known branch | BSC (`bsc.side-chain`) |
 | BSC finality evidence of the import decision (`SetFinalized` in `writeBlockAndSetHead`, from `GetJustifiedNumberAndHash` and `GetFinalizedHeader`) read through `ReadAttestation`; AC-LIF-06-04 and 06-05 on native Parlia snapshots | ACCEPTANCE_CASES | BSC (`bsc.import`, `bsc.attestation-read`); qa verdict BSC |
 | BSC `NotifyFinalized` from VotePool writes no native state (no batch for a marker); it is early evidence | D100 | Not lifecycle_seams: E05-01.bsc_finality (`bsc.notify-finalized`, READ_ONLY) |
-| BSC hash-scheme `Stop` head rewrite; `debug_executionWitness` reading the observation without `chainmu` | source review | BSC (`bsc.shutdown`, `bsc.execution-witness`) |
+| BSC hash-scheme `Stop` head rewrite; `debug_executionWitness` reading the observation without `chainmu`. D108 (2026-11-25): on a path-scheme store `Stop` journals the trie and does not rewrite the head block hash, so the `bsc.shutdown` decision does not occur there; that path has no evidence yet | source review | BSC (`bsc.shutdown`, `bsc.execution-witness`) |
 | Bor `bor server` profile check (`state_provider.CheckProfile`) after `buildEth`, before `eth.New`; `Start` after `eth.New`, before `node.Start` | D100 | Bor |
 | Bor self-sealed blocks (`WriteBlockAndSetHead` from the miner) refused on a capture node | D101 | Bor (`bor.seal-write`) |
 | Bor milestone reorganization (`reorgToFinalized`: rewind, `insertFinalized`, `SetCanonical`, each with its own `chainmu`) as one decision or fail closed; milestone and checkpoint whitelist changes as FINALITY decisions, the guard taken before the whitelist lock | NATIVE_CAPTURE_PROTOCOL; source review | Bor |
@@ -1304,7 +1366,10 @@ design: [adapters/geth/decision/native/README.md](../adapters/geth/decision/nati
   - Review 003 (`ca88680`): Spec PASS and Standards PASS.
 - Limits (README): the hash scheme only; decided state is kept on disk; no
   mirror before E05-01.registry; head changes without a new block wait for
-  E01-02.lifecycle_seams.
+  E01-02.lifecycle_seams. D108 (2026-11-25) accepts the path scheme as a
+  capture backend for the live-verification stage, on BSC for the pruned
+  Chapel snapshot; that work and its recovery proof are stream S0, with
+  no evidence yet, so this limit stands.
 
 PR #162 final head `7803e0d`: Spec and Standards PASS; hosted CI passed.
 Merged at `2684a23`.
@@ -2359,7 +2424,9 @@ path) adds the patch set; this changes accepted-task sequencing, so it is the
 owner's call. Until then AC-CAP-03-01 `pinned_state_pruning_attempt` is proven
 in-process only, and the unpatched native `snapshot prune-state`, a manual
 `debug_setHead` and side-branch pins older than the freezer threshold remain
-hazards outside this block's evidence.
+hazards outside this block's evidence. D108 (2026-11-25) keeps this rule: the
+specification names two supported schemes, hash and path, and the retention
+patches stay required, because the scheme alone does not protect a live pin.
 
 ## E01-02.owned_capture — Owned capture seam with bounded memory (issue #15)
 

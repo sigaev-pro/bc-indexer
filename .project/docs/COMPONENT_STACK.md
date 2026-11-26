@@ -4,7 +4,7 @@ D83: перечисленные ниже pins — исходная исслед�
 
 D82: правила семейства применяются отдельно к каждому mainnet/testnet профилю из [TESTING_CONTRACT](TESTING_CONTRACT.md). Active fork/types, native/supporting compatibility и identity закрепляются ProfileManifest; mainnet source evidence не доказывает testnet runtime. Указанные версии остаются кандидатами.
 
-D58–D63: Heimdall 0.13.2; hash state profiles; Bor без BlockSTM/ускоренных import/preconfirmation paths. Точные source refs — [bootstrap contract](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Immutable image/dependency locks и совместные runtime proofs — будущие E01/E06.
+D58–D63, D108: Heimdall 0.13.2; hash and path state profiles; for the live-verification stage a fast node that keeps the last N blocks (D108 defers the full and archive profiles); Bor без BlockSTM/ускоренных import/preconfirmation paths. Точные source refs — [bootstrap contract](DEPLOYMENT_BOOTSTRAP_CONTRACT.md). Immutable image/dependency locks и совместные runtime proofs — будущие E01/E06.
 
 Тематическое представление [единого ТЗ v3](../evm-transaction-extractor-tz-v3-codex.md); изменения нормативного содержания синхронизируются с root в том же commit.
 

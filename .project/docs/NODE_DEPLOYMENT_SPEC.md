@@ -147,7 +147,7 @@ P2P-ключ/идентичность сохраняется в persistent nativ
 - [x] DEP-03.2b.2b.2 D50: [таблица P2P/native endpoints](NETWORK_PORTS.md), Compose port mappings и Kubernetes NodePort; LoadBalancer опционален. Решение принято агентом по поручению пользователя.
 - [x] DEP-03.2b.2b.3 SPECIFIED: native flags/config/mount mappings и оставшиеся artifact gates записаны.
 - [x] DEP-03.2b.2b.3a D51: готовые заменяемые native configs, init-шаг окружения, создание недостающих native файлов при первом старте, сохранение state/ключей при рестарте, read-only `/config` и writable файлы в `/data/node`.
-- [x] DEP-03.2b.2b.3b SPECIFIED: DEPLOYMENT_BOOTSTRAP_CONTRACT, включая partial init, config generations, hash scheme при BSC init, mainnet genesis gate, role/network trust и source pins.
+- [x] DEP-03.2b.2b.3b SPECIFIED: DEPLOYMENT_BOOTSTRAP_CONTRACT, включая partial init, config generations, fast-node capture profile при BSC init (D108: the node keeps the scheme of its store, hash or path, and its oldest available block is genesis or head minus N, whichever is later), mainnet genesis gate, role/network trust и source pins.
 - [x] DEP-03.3 D46/D52: независимость готовности и pending сохранена; операционная готовность по логам, управление средствами окружения. Детальная probe/shutdown спецификация не требуется.
 - [x] DEP-03.3a D46: принята независимая готовность и продолжение capture в WAL при недоступности Gateway/NATS.
 - [x] DEP-03.3b D52: синхронизация/готовность/ошибки видны в логах; native адаптер сообщает зафиксированную границу H/hash и старт H+1. Стандартное управление Docker/Kubernetes. Детализация probe-команд и собственных shutdown таймаутов снята пользователем; требования сохранности pending не отменены.
