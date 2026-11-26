@@ -361,6 +361,9 @@ func TestUnitPinCommitsDirtyRootBeforeRecording(t *testing.T) {
 	if err := provider.Pin(pinFor("obs-bare", bare, side, code)); err != nil {
 		t.Fatalf("pin whose store identity names no profile: %v", err)
 	}
+	if err := provider.Release("obs-bare"); err != nil {
+		t.Fatal(err)
+	}
 	// A record written before the profile was bound (D108) names no profile
 	// in its store identity. It is the pin of this store: it is listed with
 	// the profile and pins again without a conflict.
@@ -376,7 +379,7 @@ func TestUnitPinCommitsDirtyRootBeforeRecording(t *testing.T) {
 	if listed, err := Pins(db); err != nil || len(listed) != 1 || !samePin(listed[0], pin) {
 		t.Fatalf("record without a profile listed %v %v", listed, err)
 	}
-	if _, err := checkStore(db, nil, identity); err != nil {
+	if _, err := checkStore(db, identity); err != nil {
 		t.Fatalf("store check over a record without a profile: %v", err)
 	}
 	if err := provider.Pin(pin); err != nil {
