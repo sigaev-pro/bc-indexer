@@ -310,7 +310,7 @@ class RunTestsTests(unittest.TestCase):
                                         runner, None)
                 call = runner.calls[0]
                 self.assertEqual(stdout, runner.stdout)
-                self.assertEqual((call["image"], call["cwd"], call["argv"][:2]), ("compiler-image", "/scratch",
+                self.assertEqual((call["image"], call["cwd"], call["argv"][0]), ("compiler-image", "/scratch",
                                                                                  "/tool/pins.test"))
                 self.assertIn(((binary.parent if isinstance(form, Path) else binary.parent), "/tool", True),
                               [(Path(a), b, c) for a, b, c in call["mounts"]])
