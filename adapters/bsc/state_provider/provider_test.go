@@ -322,6 +322,74 @@ func TestUnitReadIdentityNamesTheScheme(t *testing.T) {
 	}
 }
 
+func TestUnitPinCommitsDirtyRootBeforeRecording(t *testing.T) {
+	db, tdb, genesis := newMemoryStore(t)
+	identity, err := Bind(db, testStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, code := commitSideState(t, db, tdb, genesis, 1)
+	if rawdb.HasLegacyTrieNode(db, side.Root) {
+		t.Fatal("side root reached disk before the pin")
+	}
+	provider, err := New(db, tdb, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := pinFor("obs-1", identity, side, code)
+	if err := provider.Pin(pin); err != nil {
+		t.Fatal(err)
+	}
+	if !rawdb.HasLegacyTrieNode(db, side.Root) {
+		t.Fatal("pin did not commit the root")
+	}
+	walk, err := walkState(db, side.Root)
+	if err != nil || walk.Codes == 0 || walk.Slots == 0 {
+		t.Fatalf("pinned state walk %v %v", walk, err)
+	}
+	pins, err := Pins(db)
+	if err != nil || len(pins) != 1 || !samePin(pins[0], pin) {
+		t.Fatalf("ledger %v %v", pins, err)
+	}
+	if err := provider.Pin(pin); err != nil {
+		t.Fatalf("repeated identical pin: %v", err)
+	}
+	// A caller may name no profile in the store identity of its pin: it is
+	// the profile of this build.
+	bare := identity
+	bare.Profile = ""
+	if err := provider.Pin(pinFor("obs-bare", bare, side, code)); err != nil {
+		t.Fatalf("pin whose store identity names no profile: %v", err)
+	}
+	// A record written before the profile was bound (D108) names no profile
+	// in its store identity. It is the pin of this store: it is listed with
+	// the profile and pins again without a conflict.
+	old := pin
+	old.Store.Profile = ""
+	data, err := json.Marshal(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Put(pinKey(pin.ID), data); err != nil {
+		t.Fatal(err)
+	}
+	if listed, err := Pins(db); err != nil || len(listed) != 1 || !samePin(listed[0], pin) {
+		t.Fatalf("record without a profile listed %v %v", listed, err)
+	}
+	if _, err := checkStore(db, nil, identity); err != nil {
+		t.Fatalf("store check over a record without a profile: %v", err)
+	}
+	if err := provider.Pin(pin); err != nil {
+		t.Fatalf("pin again over a record without a profile: %v", err)
+	}
+	// A repeated pin re-verifies its references: lose the pinned code.
+	rawdb.DeleteCode(db, code)
+	mustErr(t, provider.Pin(pin), ErrPinUnavailable)
+	changed := pin
+	changed.Profile = strings.Repeat("2", 64)
+	mustErr(t, provider.Pin(changed), ErrPinConflict)
+}
+
 func TestUnitPinFailureLeavesNoRecord(t *testing.T) {
 	db, tdb, genesis := newMemoryStore(t)
 	identity, err := Bind(db, testStore)

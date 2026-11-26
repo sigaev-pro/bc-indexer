@@ -46,7 +46,8 @@ COMMON_TESTS = (
     "TestUnitCheckProfileFields", "TestNativeVolatileTrieLost", "TestNativePinnedStatePruning",
     "TestNativeRewindDeletesPinnedHeader", "TestNativeStorePreflight", "TestNativeEffectiveProfile",
     "TestUnitLedgerPinOfAnotherStoreRejects", "TestUnitGuardedPrunerPaths", "TestUnitFreezeLimit",
-    "TestUnitRetentionFloor", "TestUnitPathStoreOpensWithoutPins", "TestUnitStoreProfile", "TestUnitFloorIsNative")
+    "TestUnitRetentionFloor", "TestUnitPathStoreOpensWithoutPins", "TestUnitStoreProfile", "TestUnitFloorIsNative",
+    "TestUnitStateProfiles", "TestUnitReadIdentityNamesTheScheme")
 # TestNativeRetentionFloor prunes a real ancient store; Geth keeps every block at its commit.
 FAMILY_TESTS = {"geth": (), "bsc": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor"),
                 "bor": ("TestNativeLegacyPruneOffset", "TestNativeRetentionFloor")}

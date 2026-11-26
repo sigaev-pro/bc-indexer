@@ -5,6 +5,8 @@
   "description": "Single-check mutants of the checks that the E01-02.pins driver adds for the fast-node profile of D108: the accepted path store, the retention of pruned homes and the effective values of the accepted flags.",
   "copy": [
     "test/harness/*.py",
+    "test/evidence/*.py",
+    "test/evidence/*.json",
     "adapters/*/state_provider/*.go",
     "adapters/*/state_provider/native_overlay/**/*"
   ],
@@ -103,7 +105,7 @@
       "name": "client without block pruning keeps pruned homes",
       "file": "test/harness/pins.py",
       "original": "        require(\"pruned_store_at_floor\" not in preflight and \"pruned_store_below_floor\" not in preflight,\n                f\"{family} has no pruned homes to check\")\n",
-      "replacement": ""
+      "replacement": "        pass\n"
     },
     {
       "name": "effective values: any",

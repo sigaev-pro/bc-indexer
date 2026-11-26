@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import re
 import signal
 import subprocess
 import tempfile
@@ -325,6 +326,31 @@ class RunTestsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 pins.run_tests({"compiler": "i"}, None, {"build_root": directory}, directory,
                                {"path": str(binary), "sha256": "0" * 64, "size_bytes": 7}, self.Recorder(), None)
+
+
+class DeclaredTestsTests(unittest.TestCase):
+    def declared(self):
+        """Every test of the shared and the family sources that the run pattern selects."""
+        shared = re.findall(r"^func (Test\w+)\(", (pins.ROOT / "adapters/bsc/state_provider/provider_test.go").read_text(), re.M)
+        out = {}
+        for family in pins.FAMILIES:
+            own = re.findall(r"^func (Test\w+)\(",
+                             (pins.ROOT / "adapters" / family / "state_provider/family_test.go").read_text(), re.M)
+            out[family] = sorted(name for name in shared + own if re.match(pins.TEST_PATTERN, name))
+        return out
+
+    def test_the_expected_tests_are_the_tests_declared_by_the_sources(self):
+        """A test missing from the expected list fails the measured run, and the
+        driver expects no test that the sources do not declare."""
+        for family, declared in self.declared().items():
+            self.assertEqual(sorted(pins.COMMON_TESTS + pins.FAMILY_TESTS[family]), declared, family)
+
+    def test_a_test_missing_from_the_expected_list_is_seen(self):
+        with patch.object(pins, "COMMON_TESTS",
+                          tuple(name for name in pins.COMMON_TESTS if name != "TestUnitRetentionFloor")):
+            for family, declared in self.declared().items():
+                with self.subTest(family), self.assertRaises(AssertionError):
+                    self.assertEqual(sorted(pins.COMMON_TESTS + pins.FAMILY_TESTS[family]), declared, family)
 
 
 class GoOutputTests(unittest.TestCase):
