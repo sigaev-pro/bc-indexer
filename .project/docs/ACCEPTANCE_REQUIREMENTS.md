@@ -27,7 +27,7 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 |---|---|---|
 | REQ-CAP-01 | Отдельные pinned client builds и реальные paths | PROFILE-01: transfer/system/canonical callers реально проходят bridge; synthetic runner сопоставлен native import; E01 |
 | REQ-CAP-02 | Durable admission до принятого execution | CAPTURE-01: crash до/после ADMITTED; до него нет принятого obligation, после него replay не теряется; E01/E05 |
-| REQ-CAP-03 | Hash provider и persistent state/input pins | PIN-01: потерять RAM trie cache, pruning живого pin/wrong datadir/path backend; recovery либо preflight reject, не silent skip; E01/E05 |
+| REQ-CAP-03 | Hash or path provider и persistent state/input pins | PIN-01: потерять RAM trie cache (hash scheme) либо in-memory layers (path scheme), pruning живого pin/wrong datadir/unsupported backend; recovery либо preflight reject, не silent skip; E01/E05 |
 | REQ-CAP-04 | Static inputs + append-only consumed dependencies | CAPTURE: crash после ответа Heimdall до передачи; retry использует прежний ответ/sequence, final digest закрыт; E01/E05 |
 | REQ-CAP-05 | Owned snapshot без mutable alias | OWNED-01: overlapping CALL input/output, delayed worker, соседние tx одного key; исходные значения не изменились; E01/E04 |
 | REQ-CAP-06 | Bounded collector RAM, safe-point backpressure | OWNED/MEM: один field/tx/manifest больше буфера, slow disk/receiver; chunks/spool без потери, I/O/wait вне hooks; E01/E03/E04 |
@@ -87,9 +87,9 @@ DOC-FINAL-01 · 2026-11-05. Реестр покрывает обязательн
 
 | ID | Требование | Проверка и ожидаемый результат / этап |
 |---|---|---|
-| REQ-OPS-01 | Strict role YAML и effective native validation | CONFIG: unknown/duplicate keys; relative storage paths от каталога YAML, sources_file Polygon absolute-only; native overrides/profile/pruning/Bor parallel flags, check без mutation; E01/E06 |
+| REQ-OPS-01 | Strict role YAML и effective native validation | CONFIG: unknown/duplicate keys; relative storage paths от каталога YAML, sources_file Polygon absolute-only; native overrides/profile/retention below N/Bor parallel flags, check без mutation; E01/E06 |
 | REQ-OPS-02 | 11 services/14 volumes, самостоятельные owners | MOUNT: actual backing volume identities, permissions/UID, separate Polygon L1 и JWT; одинаковый container path не означает shared DB; E06 |
-| REQ-OPS-03 | Partial init не разрушает keys/state | BOOT: crash каждой phase, existing nonempty home/wrong genesis/missing ENV_READY, BSC hash init; safe resume/reject; E01/E06 |
+| REQ-OPS-03 | Partial init не разрушает keys/state | BOOT: crash каждой phase, existing nonempty home/wrong genesis/missing ENV_READY, BSC init with and without the explicit hash flag (D108); safe resume/reject; E01/E06 |
 | REQ-OPS-04 | Config generation заменяет только allowlist | CONFIG: изменённый native config применён после restart, ключи/genesis/state сохранены, невозможный mix отвергнут; E06 |
 | REQ-OPS-05 | mTLS/SAN/EKU/network/role admission | TRUST: чужой CA/SAN/role/network/deployment, credential rotation и UDS ownership; reject до store mutation; E03/E06 |
 | REQ-OPS-06 | Минимальные NATS ACL, bootstrap identity и проверка account | NATS: runtime publish/INFO/UserInfo/reply allowed, admin denied; D77 atomic config CREATE/read-back, existing metadata mismatch blocked, compatible UPDATE сохраняет посторонние keys; без retag/PURGE/reset; E03/E06 |
