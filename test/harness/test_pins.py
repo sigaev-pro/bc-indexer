@@ -299,8 +299,8 @@ class RunTestsTests(unittest.TestCase):
             runner = self.Recorder()
             runner.stdout = directory / "stdout"
             runner.stdout.write_text("PASS\n")
-            fixture = {"inputs": {"genesis.json": {"path": str(directory / "genesis.json"), "sha256": "0" * 64,
-                                                   "size_bytes": 0}}}
+            fixture = {"inputs": {"genesis.json": {"path": str(directory / "genesis.json"),
+                                                   "sha256": hashlib.sha256(b"").hexdigest(), "size_bytes": 0}}}
             (directory / "genesis.json").write_bytes(b"")
             for form in (binary, {"path": str(binary), "sha256": hashlib.sha256(b"binary").hexdigest(), "size_bytes": 6}):
                 root = directory / ("root-path" if isinstance(form, Path) else "root-reference")
