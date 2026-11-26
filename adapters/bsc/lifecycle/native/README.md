@@ -27,7 +27,7 @@ development sample are in
   `EXTRACTOR_BSC_CONFIG`: store ID, producer and run, native commit, genesis
   file): before the store is opened, `CheckProfile` refuses what the capture
   profile forbids. It runs the fast-node state profile check of E01-02.pins
-  (D108, PR #230: the hash, the path or no state scheme, full garbage
+  (D108: the hash, the path or no state scheme, full garbage
   collection, tries kept and verified locally, a block history of N = 600,000
   blocks or of the entire chain), then refuses any sync mode but full
   (`bsc.snap-sync`), voting and the MEV builder role (`bsc.sealing`).

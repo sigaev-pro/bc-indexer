@@ -22,7 +22,7 @@ same effective configuration as `bor server`; it never replaces a native file.
 - `Bind(db, storeID)` records the producer binding (store ID, chain ID, genesis
   hash, state scheme and the digest of the state profile) once and syncs it.
   A different binding is a foreign store, including one made under another
-  profile (D108, PR #230). A record without a profile was written before D108
+  profile (D108). A record without a profile was written before D108
   and is the profile of the hash scheme.
 - `New(db, triedb, identity)` opens the provider only on a bound store of the
   hash or the path scheme, with the trie database of that scheme.
@@ -43,7 +43,7 @@ same effective configuration as `bor server`; it never replaces a native file.
   ID admits only an unbound store without pins. A rejected home is never wiped
   or reinitialized. The report names the oldest block the store still holds,
   its head and N (`Coverage`).
-- `CheckProfile` enforces the fast-node capture profile of D108 (PR #230) on
+- `CheckProfile` enforces the fast-node capture profile of D108 on
   the effective native config; the rules are in the next section. Geth and
   BSC read the effective config from the native `dumpconfig` output
   (`DecodeEffectiveConfig`), after native config file, environment and flag
@@ -61,7 +61,7 @@ Neither key has the 32-byte length or the code prefix that the native offline
 pruner deletes. Consensus inputs that live outside the native store are copied
 into the input capsule by E01-02.inputs; a pin retains native references only.
 
-### Fast-node capture profile (D108, PR #230)
+### Fast-node capture profile (D108)
 
 For the live-verification stage every capture node is a fast node that keeps
 the last N blocks. N is the immutability threshold of the client, which is

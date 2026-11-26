@@ -221,7 +221,7 @@ class RefusalTests(unittest.TestCase):
         self.refused(change)
 
     def test_profile_accepts_a_refusal_of_the_fast_node_profile(self):
-        # Tries disabled and a history below the floor N (D108, PR #230).
+        # Tries disabled and a history below the floor N (D108).
         for key in ("tries_none", "block_history_below_floor", "state_history_below_floor"):
             def change(report, trace, raw, key=key):
                 report["profile"][key] = None

@@ -241,7 +241,7 @@ gRPC client, a failover client, a client with its own transport or a
 WebSocket client would let Heimdall reads bypass the router. The effective
 `bor server` profile check (`state_provider.CheckProfile`: hash or path
 scheme, no archive, a state history of N or of the entire chain under path,
-no parallel, pipelined, stateless or preconf paths; D108, PR #230) runs
+no parallel, pipelined, stateless or preconf paths; D108) runs
 where the server configuration exists, in the caller that
 E01-02.lifecycle_seams adds; the probe starts native Bor with that profile.
 The Bor capture wiring opens hash stores only: its preflight names the hash

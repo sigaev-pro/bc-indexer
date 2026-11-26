@@ -172,8 +172,8 @@ import without an admission seam, so commands that open the chain without
 either. The retention guards stay active in both cases. The Geth capture
 wiring opens hash stores only (`--state.scheme hash`, E01-02.pins): its
 preflight names the hash scheme and `Attach` refuses a store of another
-scheme. The profile check itself follows the fast-node profile of D108 (PR
-#230; `adapters/README.md` states its rules). With the config:
+scheme. The profile check itself follows the fast-node profile of D108
+(`adapters/README.md` states its rules). With the config:
 
 - Before native code opens the store, `Preflight` runs the read-only
   `stateprovider.Preflight` of E01-02.pins: a store of another identity, an
