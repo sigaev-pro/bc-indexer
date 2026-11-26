@@ -7,7 +7,7 @@
 // DELIVERY_STATE_MACHINE unless noted):
 //
 //   - The module never imports the gateway's ingest module. It carries
-//     byte-identical copies of the two generated files in its nested module
+//     byte-identical copies of the two generated files in its package
 //     ingest, and requires the third-party versions of the accepted BSC
 //     graph, because it compiles into the node's dependency graph.
 //   - Every mutating request carries the session header of the contract:

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -31,19 +30,18 @@ var accepted = map[string]string{
 const repository = "github.com/sigaev-pro/bc-indexer/"
 
 func TestModuleRequiresNoVersionAboveTheAcceptedGraph(t *testing.T) {
-	// What both modules declare.
-	for _, mod := range []string{"go.mod", filepath.Join("ingest", "go.mod")} {
-		declared := 0
-		for path, version := range requirements(t, mod) {
-			if strings.HasPrefix(path, repository) {
-				continue
-			}
-			checkVersion(t, mod+" requires "+path, version)
-			declared++
+	// What the module declares: the client and the generated package ingest
+	// are one module.
+	declared := 0
+	for path, version := range requirements(t, "go.mod") {
+		if strings.HasPrefix(path, repository) {
+			continue
 		}
-		if declared == 0 {
-			t.Fatalf("%s declares no third-party requirement", mod)
-		}
+		checkVersion(t, "go.mod requires "+path, version)
+		declared++
+	}
+	if declared == 0 {
+		t.Fatal("go.mod declares no third-party requirement")
 	}
 	// What the build of this module resolves, offline: the module cache
 	// holds exactly what a build needs, as the cache of the node does.

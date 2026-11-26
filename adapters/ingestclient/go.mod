@@ -5,7 +5,6 @@ module github.com/sigaev-pro/bc-indexer/adapters/ingestclient
 go 1.25.0
 
 require (
-	github.com/sigaev-pro/bc-indexer/adapters/ingestclient/ingest v0.0.0
 	github.com/sigaev-pro/bc-indexer/config v0.0.0
 	github.com/sigaev-pro/bc-indexer/core/journal/producer v0.0.0
 	github.com/sigaev-pro/bc-indexer/core/journal/storage v0.0.0
@@ -13,6 +12,7 @@ require (
 	github.com/sigaev-pro/bc-indexer/protocol/codec v0.0.0
 	github.com/sigaev-pro/bc-indexer/protocol/proto v0.0.0
 	google.golang.org/grpc v1.80.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -25,14 +25,11 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 // The repository-local modules are not published, so the local modules are
 // the only source.
-replace github.com/sigaev-pro/bc-indexer/adapters/ingestclient/ingest => ./ingest
-
 replace github.com/sigaev-pro/bc-indexer/config => ../../config
 
 replace github.com/sigaev-pro/bc-indexer/core/journal/producer => ../../core/journal/producer
