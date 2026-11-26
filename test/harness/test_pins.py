@@ -280,6 +280,53 @@ class ReportTests(unittest.TestCase):
                     pins.read_report(path, None)
 
 
+class RunTestsTests(unittest.TestCase):
+    """One run of a compiled test binary: its mounts, its environment and the two forms of the binary."""
+
+    class Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def command(self, image, argv, mounts, cap, memory, cwd, environment):
+            self.calls.append({"image": image, "argv": argv, "mounts": mounts, "environment": environment, "cwd": cwd})
+            return self.stdout
+
+    def test_binary_as_a_path_and_as_a_reference(self):
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw).resolve()
+            binary = directory / "pins.test"
+            binary.write_bytes(b"binary")
+            runner = self.Recorder()
+            runner.stdout = directory / "stdout"
+            runner.stdout.write_text("PASS\n")
+            fixture = {"inputs": {"genesis.json": {"path": str(directory / "genesis.json"), "sha256": "0" * 64,
+                                                   "size_bytes": 0}}}
+            (directory / "genesis.json").write_bytes(b"")
+            for form in (binary, {"path": str(binary), "sha256": hashlib.sha256(b"binary").hexdigest(), "size_bytes": 6}):
+                root = directory / ("root-path" if isinstance(form, Path) else "root-reference")
+                pins.prepare_inputs("geth", fixture, root, None)
+                runner.calls.clear()
+                stdout = pins.run_tests({"compiler": "compiler-image"}, None, {"build_root": directory}, root, form,
+                                        runner, None)
+                call = runner.calls[0]
+                self.assertEqual(stdout, runner.stdout)
+                self.assertEqual((call["image"], call["cwd"], call["argv"][:2]), ("compiler-image", "/scratch",
+                                                                                 "/tool/pins.test"))
+                self.assertIn(((binary.parent if isinstance(form, Path) else binary.parent), "/tool", True),
+                              [(Path(a), b, c) for a, b, c in call["mounts"]])
+                self.assertEqual(call["environment"]["EXTRACTOR_PINS_INPUTS"], "/inputs")
+                self.assertNotIn("EXTRACTOR_NATIVE_BINARY", call["environment"])
+
+    def test_a_changed_binary_reference_is_refused(self):
+        with tempfile.TemporaryDirectory() as raw:
+            directory = Path(raw).resolve()
+            binary = directory / "pins.test"
+            binary.write_bytes(b"changed")
+            with self.assertRaises(ValueError):
+                pins.run_tests({"compiler": "i"}, None, {"build_root": directory}, directory,
+                               {"path": str(binary), "sha256": "0" * 64, "size_bytes": 7}, self.Recorder(), None)
+
+
 class GoOutputTests(unittest.TestCase):
     def test_complete_output_passes(self):
         self.assertEqual(pins.parse_go_test(go_output(pins.COMMON_TESTS), pins.COMMON_TESTS), sorted(pins.COMMON_TESTS))

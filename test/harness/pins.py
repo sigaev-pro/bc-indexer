@@ -502,8 +502,10 @@ def prepare_inputs(family, fixture, root, deadline):
 
 def run_tests(entry, native_binary, fixture, root, binary, runner, deadline):
     """Run a compiled state-provider test binary once on the fixture inputs
-    under root and return the path of its standard output."""
-    binary = artifact(binary, 1024 * 1024 * 1024, deadline=deadline)
+    under root and return the path of its standard output. binary is the
+    binary as a retained reference or as the path of a binary of this run."""
+    if isinstance(binary, dict):
+        binary = artifact(binary, 1024 * 1024 * 1024, deadline=deadline)
     mounts = [(binary.parent, "/tool", True), (root / "inputs", "/inputs", True), (root / "work", "/work", False),
               (root / "temp", "/scratch", False)]
     env = {"EXTRACTOR_PINS_INPUTS": "/inputs", "EXTRACTOR_PINS_WORK": "/work",
