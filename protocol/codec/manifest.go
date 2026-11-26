@@ -17,6 +17,7 @@
 package codec
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -235,6 +236,140 @@ func (c *ManifestChunker) Next() (ManifestChunk, bool, error) {
 	chunk.SHA256 = sha256Of(chunk.Bytes)
 	c.offset = end
 	return chunk, true, nil
+}
+
+// ManifestHeaderBytes is the fixed part of the manifest stream before the
+// first descriptor: domain, zero byte, event count. The domain holds 21
+// bytes, so the header holds 30. The descriptor bytes total of a manifest
+// is its length minus this value.
+const ManifestHeaderBytes = uint64(len(ManifestDomain) + 1 + 8)
+
+// ManifestEvent is one event of a decoded manifest: its event descriptor
+// and, in fragment index order, its fragment descriptors (encoded length
+// and SHA-256 per fragment).
+type ManifestEvent struct {
+	Ordinal      uint64
+	EventID      proto.EventID
+	Family, Kind uint16
+	RecordLength uint64
+	RecordDigest proto.Hash32
+	Fragments    []proto.FragmentDescriptor
+}
+
+// DecodeManifest parses the bytes of ManifestBuilder.Bytes() back into its
+// events, in ordinal order. It accepts only what the builder produces:
+//
+//   - the domain, the zero byte and an event count of at least one: an
+//     empty public batch produces no manifest;
+//   - for each event, its event descriptor and exactly its fragment_count
+//     fragment descriptors, each passing the descriptor rules of
+//     protocol/proto, with indices continuous from zero and lengths that
+//     sum to record_length;
+//   - ordinals continuous from zero and event ids unique in the batch;
+//   - no byte after the last descriptor.
+//
+// Every rejection wraps one named sentinel: ErrInvalidValue for a wrong
+// domain or a bad descriptor, ErrMalformed for a missing zero byte or for
+// bytes after the last event that form no event, ErrTruncated for a stream
+// that ends inside the header or a descriptor, and ErrFragments when the
+// event count does not match the events the stream holds or a manifest
+// rule is broken.
+func DecodeManifest(data []byte) ([]ManifestEvent, error) {
+	if uint64(len(data)) < uint64(len(ManifestDomain)) {
+		return nil, fmt.Errorf("%w: manifest of %d bytes is shorter than the %d-byte domain",
+			ErrTruncated, len(data), len(ManifestDomain))
+	}
+	if !bytes.HasPrefix(data, []byte(ManifestDomain)) {
+		return nil, fmt.Errorf("%w: manifest domain %q, want %q", ErrInvalidValue,
+			data[:len(ManifestDomain)], ManifestDomain)
+	}
+	if uint64(len(data)) < ManifestHeaderBytes {
+		return nil, fmt.Errorf("%w: manifest of %d bytes ends inside the %d-byte header",
+			ErrTruncated, len(data), ManifestHeaderBytes)
+	}
+	if data[len(ManifestDomain)] != 0 {
+		return nil, fmt.Errorf("%w: byte after the manifest domain is %d, want 0",
+			ErrMalformed, data[len(ManifestDomain)])
+	}
+	count := binary.BigEndian.Uint64(data[ManifestHeaderBytes-8 : ManifestHeaderBytes])
+	if count == 0 {
+		return nil, fmt.Errorf("%w: manifest of %d bytes declares zero events; an empty public batch produces no manifest",
+			ErrFragments, len(data))
+	}
+	// An event takes at least its descriptor, so the stream length bounds
+	// the events it can hold; the declared count is not trusted with an
+	// allocation.
+	events := make([]ManifestEvent, 0, uint64(len(data)/proto.EventDescriptorSize))
+	seen := make(map[proto.EventID]struct{}, cap(events))
+	pos := ManifestHeaderBytes
+	for uint64(len(events)) < count {
+		event, next, err := readManifestEvent(data, pos, uint64(len(events)))
+		if err != nil {
+			return nil, err
+		}
+		if event.Ordinal != uint64(len(events)) {
+			return nil, fmt.Errorf("%w: event %d carries ordinal %d", ErrFragments, len(events), event.Ordinal)
+		}
+		if _, dup := seen[event.EventID]; dup {
+			return nil, fmt.Errorf("%w: event id repeats in the batch at ordinal %d", ErrFragments, event.Ordinal)
+		}
+		seen[event.EventID] = struct{}{}
+		events = append(events, event)
+		pos = next
+	}
+	if pos != uint64(len(data)) {
+		// Bytes after the declared events are one more event the count
+		// does not name, or bytes that form no event.
+		if _, _, err := readManifestEvent(data, pos, count); err == nil {
+			return nil, fmt.Errorf("%w: manifest declares %d events and holds more", ErrFragments, count)
+		}
+		return nil, fmt.Errorf("%w: %d bytes after the last descriptor of %d events",
+			ErrMalformed, uint64(len(data))-pos, count)
+	}
+	return events, nil
+}
+
+// readManifestEvent parses the event at pos, its event descriptor and then
+// its fragment descriptors, and returns the position after them. index is
+// the position of the event in the stream; it only names the event in an
+// error.
+func readManifestEvent(data []byte, pos, index uint64) (ManifestEvent, uint64, error) {
+	end := uint64(len(data))
+	if end-pos < uint64(proto.EventDescriptorSize) {
+		if end == pos {
+			return ManifestEvent{}, 0, fmt.Errorf("%w: manifest ends after %d events", ErrFragments, index)
+		}
+		return ManifestEvent{}, 0, fmt.Errorf("%w: event descriptor %d holds %d bytes, want %d",
+			ErrTruncated, index, end-pos, proto.EventDescriptorSize)
+	}
+	descriptor, err := proto.DecodeEventDescriptor(data[pos : pos+uint64(proto.EventDescriptorSize)])
+	if err != nil {
+		return ManifestEvent{}, 0, fmt.Errorf("%w: event descriptor %d: %w", ErrInvalidValue, index, err)
+	}
+	pos += uint64(proto.EventDescriptorSize)
+	// The fragment count is compared with the bytes left before anything
+	// is allocated for it.
+	if descriptor.FragmentCount > (end-pos)/uint64(proto.FragmentDescriptorSize) {
+		return ManifestEvent{}, 0, fmt.Errorf("%w: event %d declares %d fragment descriptors and the manifest holds bytes for %d",
+			ErrTruncated, index, descriptor.FragmentCount, (end-pos)/uint64(proto.FragmentDescriptorSize))
+	}
+	frags := make([]proto.FragmentDescriptor, descriptor.FragmentCount)
+	for i := range frags {
+		frag, err := proto.DecodeFragmentDescriptor(data[pos : pos+uint64(proto.FragmentDescriptorSize)])
+		if err != nil {
+			return ManifestEvent{}, 0, fmt.Errorf("%w: fragment descriptor %d of event %d: %w",
+				ErrInvalidValue, i, index, err)
+		}
+		frags[i] = frag
+		pos += uint64(proto.FragmentDescriptorSize)
+	}
+	if err := proto.ValidateFragments(descriptor, frags); err != nil {
+		return ManifestEvent{}, 0, fmt.Errorf("%w: fragments of event %d: %w", ErrInvalidValue, index, err)
+	}
+	return ManifestEvent{Ordinal: descriptor.Ordinal, EventID: descriptor.EventID,
+		Family: uint16(descriptor.Family), Kind: uint16(descriptor.Kind),
+		RecordLength: descriptor.RecordLength, RecordDigest: descriptor.RecordDigest,
+		Fragments: frags}, pos, nil
 }
 
 // LayoutRequest fills a proto.LayoutRequest for this batch: base supplies

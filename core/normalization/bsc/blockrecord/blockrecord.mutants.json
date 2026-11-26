@@ -1,0 +1,699 @@
+{
+  "schema_version": 1,
+  "language": "go",
+  "root": "../../../..",
+  "go_module": "github.com/sigaev-pro/bc-indexer",
+  "copy": [
+    "core/normalization/bsc/blockrecord/*.go",
+    "core/normalization/bsc/block/*.go",
+    "protocol/proto/*.go",
+    "protocol/codec/*.go",
+    "protocol/block/*.go",
+    "protocol/profiles/*.go",
+    "protocol/semantic/*.go",
+    "protocol/balance/*.go",
+    "test/harness/fixtures/blockrecord/expected.json"
+  ],
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "./core/normalization/bsc/blockrecord/"
+  ],
+  "timeout_seconds": 300,
+  "description": "Single-check mutants of the BSC block event builder: every mandatory fact validate rejects, the finality markers, the record and descriptor assembly, and the mapping of the typed model onto the Envelope tree through the registry. Mutants labeled equivalent ignore an error that no input reaches. The copy holds the sources without their go.mod files and one module is initialized at its root, as the registry table does.",
+  "mutants": [
+    {
+      "name": "accepted: node instance id zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.NodeInstanceID.IsZero() {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: producer id zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.ProducerID.IsZero() {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: run id zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.RunID.IsZero() {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: writer epoch zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.WriterEpoch.IsZero() {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: source sequence zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.SourceSequence == 0 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: old head hash zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.OldHead.Hash == ([32]byte{}) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: new head hash zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.NewHead.Hash == ([32]byte{}) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: justified hash zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.Justified.Hash == ([32]byte{}) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: finalized hash zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.Finalized.Hash == ([32]byte{}) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: decided head bound to the header hash",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.NewHead.Hash != in.Header.Hash {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: decided head bound to the header number",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if in.NewHead.Number != in.Header.Number {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: attestation justified hash zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if a.Justified.Hash == ([32]byte{}) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: attestation finalized hash zero",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if a.Finalized.Hash == ([32]byte{}) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: invalid network",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if err := in.Network.Validate(); err != nil {",
+      "replacement": "if err := in.Network.Validate(); err != nil && false {"
+    },
+    {
+      "name": "accepted: invalid event id",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if err := eventID.Validate(); err != nil {",
+      "replacement": "if err := eventID.Validate(); err != nil && false {"
+    },
+    {
+      "name": "accepted: event id of another producer",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if eventID.ProducerID() != proto.ID16(in.ProducerID) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: event id of another run",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if eventID.RunID() != proto.ID16(in.RunID) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "accepted: attestation digest of another form",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if !isDigest(a.Digest) {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "digest length not checked",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if len(s) != 64 || strings.ToLower(s) != s {",
+      "replacement": "if strings.ToLower(s) != s {"
+    },
+    {
+      "name": "digest case not checked",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "if len(s) != 64 || strings.ToLower(s) != s {",
+      "replacement": "if len(s) != 64 || strings.ToLower(s) != s && false {"
+    },
+    {
+      "name": "digest digits not checked",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\t_, err := hex.DecodeString(s)\n\treturn err == nil",
+      "replacement": "\t_, err := hex.DecodeString(s)\n\treturn err == nil || true"
+    },
+    {
+      "name": "network without a profile accepted",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\tif !ok {\n\t\treturn BuiltEvent{}, fmt.Errorf(\"%w: %w: no profile is registered for chain id %x\",",
+      "replacement": "\tif !ok && false {\n\t\treturn BuiltEvent{}, fmt.Errorf(\"%w: %w: no profile is registered for chain id %x\","
+    },
+    {
+      "name": "profile rejection loses the value sentinel",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "proto.ErrInvalidValue, proto.ErrClosedRegistry, in.Network.ChainID)",
+      "replacement": "proto.ErrClosedRegistry, proto.ErrClosedRegistry, in.Network.ChainID)"
+    },
+    {
+      "name": "profile rejection loses the registry sentinel",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "proto.ErrInvalidValue, proto.ErrClosedRegistry, in.Network.ChainID)",
+      "replacement": "proto.ErrInvalidValue, proto.ErrInvalidValue, in.Network.ChainID)"
+    },
+    {
+      "name": "metadata error ignored",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\tif err != nil {\n\t\treturn BuiltEvent{}, fmt.Errorf(\"%w: block metadata: %w\", block.ErrInvalidValue, err)",
+      "replacement": "\tif err != nil && false {\n\t\treturn BuiltEvent{}, fmt.Errorf(\"%w: block metadata: %w\", block.ErrInvalidValue, err)"
+    },
+    {
+      "name": "metadata rejection wraps the other sentinel",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "fmt.Errorf(\"%w: block metadata: %w\", block.ErrInvalidValue, err)",
+      "replacement": "fmt.Errorf(\"%w: block metadata: %w\", proto.ErrInvalidValue, err)"
+    },
+    {
+      "name": "markers error ignored",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\tif err != nil {\n\t\treturn BuiltEvent{}, err\n\t}\n\trecord := block.BlockRecord{",
+      "replacement": "\tif err != nil && false {\n\t\treturn BuiltEvent{}, err\n\t}\n\trecord := block.BlockRecord{"
+    },
+    {
+      "name": "system transaction count dropped",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "bscblock.ParliaFacts{SystemTransactionCount: in.SystemTxCount})",
+      "replacement": "bscblock.ParliaFacts{})"
+    },
+    {
+      "name": "transaction count dropped",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "bscblock.Project(in.Header, in.TxCount,",
+      "replacement": "bscblock.Project(in.Header, 0,"
+    },
+    {
+      "name": "activation entity ordinal",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "ActivationID: block.ActivationID{DecisionSequence: in.DecisionSequence, EntityOrdinal: 0},",
+      "replacement": "ActivationID: block.ActivationID{DecisionSequence: in.DecisionSequence, EntityOrdinal: 1},"
+    },
+    {
+      "name": "activation decision sequence",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "ActivationID: block.ActivationID{DecisionSequence: in.DecisionSequence, EntityOrdinal: 0},",
+      "replacement": "ActivationID: block.ActivationID{DecisionSequence: 0, EntityOrdinal: 0},"
+    },
+    {
+      "name": "activation block hash",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\t\t\tBlockHash:    in.Header.Hash,",
+      "replacement": "\t\t\tBlockHash:    in.OldHead.Hash,"
+    },
+    {
+      "name": "admission observation sequence",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "RunID: block.Id16(in.RunID), ObservationSequence: in.ObservationSequence},",
+      "replacement": "RunID: block.Id16(in.RunID), ObservationSequence: 0},"
+    },
+    {
+      "name": "observed execution head",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "ObservedExecutionHead: anchor(in.NewHead),",
+      "replacement": "ObservedExecutionHead: anchor(in.OldHead),"
+    },
+    {
+      "name": "native decision sequence",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "RunID: block.Id16(in.RunID),\n\t\t\t\tDecisionSequence: in.DecisionSequence},",
+      "replacement": "RunID: block.Id16(in.RunID),\n\t\t\t\tDecisionSequence: 0},"
+    },
+    {
+      "name": "semantic source sequence",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\t\t\tSourceSequence: in.SourceSequence})",
+      "replacement": "\t\t\tSourceSequence: 1})"
+    },
+    {
+      "name": "semantic genesis hash",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "GenesisHash: semantic.Hash32(in.Network.GenesisHash)},",
+      "replacement": "GenesisHash: semantic.Hash32(block.Hash32{})},"
+    },
+    {
+      "name": "semantic decision sequence",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "in.ProducerID, in.RunID, in.DecisionSequence, semantic.Hash32(in.Header.Hash), 0,",
+      "replacement": "in.ProducerID, in.RunID, 0, semantic.Hash32(in.Header.Hash), 0,"
+    },
+    {
+      "name": "semantic node instance",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "semantic.SourceRef{NodeInstanceID: in.NodeInstanceID,",
+      "replacement": "semantic.SourceRef{NodeInstanceID: semantic.ID16{},"
+    },
+    {
+      "name": "record family",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "codec.BuildRecord(eventID, network, proto.FamilyBlock, proto.KindApplied, proto.TypeEnvelope,",
+      "replacement": "codec.BuildRecord(eventID, network, proto.FamilyTx, proto.KindApplied, proto.TypeEnvelope,"
+    },
+    {
+      "name": "record kind",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "codec.BuildRecord(eventID, network, proto.FamilyBlock, proto.KindApplied, proto.TypeEnvelope,",
+      "replacement": "codec.BuildRecord(eventID, network, proto.FamilyBlock, proto.KindStatus, proto.TypeEnvelope,"
+    },
+    {
+      "name": "frame network family",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "network := proto.NetworkIdentity{Family: proto.NetworkFamilyEVM,",
+      "replacement": "network := proto.NetworkIdentity{Family: proto.NetworkFamily(2),"
+    },
+    {
+      "name": "event ordinal",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "proto.BuildEventDescriptor(0, eventID, proto.FamilyBlock, proto.KindApplied, fragments)",
+      "replacement": "proto.BuildEventDescriptor(1, eventID, proto.FamilyBlock, proto.KindApplied, fragments)"
+    },
+    {
+      "name": "event kind",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "proto.BuildEventDescriptor(0, eventID, proto.FamilyBlock, proto.KindApplied, fragments)",
+      "replacement": "proto.BuildEventDescriptor(0, eventID, proto.FamilyBlock, proto.KindStatus, fragments)"
+    },
+    {
+      "name": "event family",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "proto.BuildEventDescriptor(0, eventID, proto.FamilyBlock, proto.KindApplied, fragments)",
+      "replacement": "proto.BuildEventDescriptor(0, eventID, proto.FamilyTx, proto.KindApplied, fragments)"
+    },
+    {
+      "name": "fragment descriptors left empty",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "return BuiltEvent{Semantic: descriptor, Record: record, Fragments: fragments, Event: event, Frags: frags},",
+      "replacement": "return BuiltEvent{Semantic: descriptor, Record: record, Fragments: fragments, Event: event, Frags: frags[:0]},"
+    },
+    {
+      "name": "record root type",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "proto.KindApplied, proto.TypeEnvelope,\n\t\tnodes,",
+      "replacement": "proto.KindApplied, proto.TypeBlockApplied,\n\t\tnodes,"
+    },
+    {
+      "name": "record validation ignored",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\tif err := record.Validate(); err != nil {",
+      "replacement": "\tif err := record.Validate(); err != nil && false {",
+      "equivalent": "record.Validate repeats the checks of validate, validateAttestation and Project; no input reaches this error."
+    },
+    {
+      "name": "descriptor builder error ignored",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\tif err != nil {\n\t\treturn BuiltEvent{}, fmt.Errorf(\"%w: semantic descriptor: %w\", proto.ErrInvalidValue, err)",
+      "replacement": "\tif err != nil && false {\n\t\treturn BuiltEvent{}, fmt.Errorf(\"%w: semantic descriptor: %w\", proto.ErrInvalidValue, err)",
+      "equivalent": "NewBlockDescriptor validates identities that validate checked; no input reaches this error."
+    },
+    {
+      "name": "record tree error ignored",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\tif err != nil {\n\t\treturn BuiltEvent{}, err\n\t}\n\tnetwork := proto.NetworkIdentity{",
+      "replacement": "\tif err != nil && false {\n\t\treturn BuiltEvent{}, err\n\t}\n\tnetwork := proto.NetworkIdentity{",
+      "equivalent": "envelopeTree fails only on a mapping the registry refuses, and the mapping tests cover each refusal."
+    },
+    {
+      "name": "record codec error ignored",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\t}); err != nil {\n\t\treturn BuiltEvent{}, err\n\t}",
+      "replacement": "\t}); err != nil && false {\n\t\treturn BuiltEvent{}, err\n\t}",
+      "equivalent": "BuildRecord receives a tree the writer validated; no input reaches this error."
+    },
+    {
+      "name": "descriptor error ignored",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "\tevent, frags, err := proto.BuildEventDescriptor(0, eventID, proto.FamilyBlock, proto.KindApplied, fragments)\n\tif err != nil {",
+      "replacement": "\tevent, frags, err := proto.BuildEventDescriptor(0, eventID, proto.FamilyBlock, proto.KindApplied, fragments)\n\tif err != nil && false {",
+      "equivalent": "BuildEventDescriptor receives the fragments the codec just built; no input reaches this error."
+    },
+    {
+      "name": "fragment not copied",
+      "file": "core/normalization/bsc/blockrecord/blockrecord.go",
+      "original": "fragments = append(fragments, bytes.Clone(fragment))",
+      "replacement": "fragments = append(fragments, fragment)\n\t\t\t_ = bytes.Clone",
+      "equivalent": "the codec allocates a new buffer for every fragment; the copy only honors its sink contract."
+    },
+    {
+      "name": "attested status not recognized",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\tcase StatusAttested:",
+      "replacement": "\tcase \"never\":"
+    },
+    {
+      "name": "fallback status not recognized",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\tcase StatusGenesisFallback:",
+      "replacement": "\tcase \"never\":"
+    },
+    {
+      "name": "unknown status loses its sentinel",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "return block.BscMarkers{}, fmt.Errorf(\"%w: attestation status %q\", block.ErrInvalidValue, in.Attestation.Status)",
+      "replacement": "return block.BscMarkers{}, fmt.Errorf(\"%s: attestation status %q\", block.ErrInvalidValue, in.Attestation.Status)"
+    },
+    {
+      "name": "attested snapshot head",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\t\tSnapshotHead: anchor(in.NewHead),",
+      "replacement": "\t\t\t\tSnapshotHead: anchor(in.OldHead),"
+    },
+    {
+      "name": "attested justified anchor from the decision evidence",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\t\tJustified:    anchor(in.Attestation.Justified),",
+      "replacement": "\t\t\t\tJustified:    anchor(in.Justified),"
+    },
+    {
+      "name": "attested finalized anchor from the decision evidence",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\t\tFinalized:    anchor(in.Attestation.Finalized),",
+      "replacement": "\t\t\t\tFinalized:    anchor(in.Finalized),"
+    },
+    {
+      "name": "attested snapshot left absent",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\tAttested: block.Some(block.AttestedSnapshot{\n\t\t\t\tSnapshotHead: anchor(in.NewHead),\n\t\t\t\tJustified:    anchor(in.Attestation.Justified),\n\t\t\t\tFinalized:    anchor(in.Attestation.Finalized),\n\t\t\t}),\n",
+      "replacement": ""
+    },
+    {
+      "name": "effective finalized from the attestation read (attested)",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\t}),\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Finalized), block.OriginNativeLive),\n\t\t\tEffectiveBasis:     block.BscBasisHeaderSnapshot,",
+      "replacement": "\t\t\t}),\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Attestation.Finalized), block.OriginNativeLive),\n\t\t\tEffectiveBasis:     block.BscBasisHeaderSnapshot,"
+    },
+    {
+      "name": "effective finalized origin (attested)",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\t}),\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Finalized), block.OriginNativeLive),\n\t\t\tEffectiveBasis:     block.BscBasisHeaderSnapshot,",
+      "replacement": "\t\t\t}),\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Finalized), block.OriginNativeRestart),\n\t\t\tEffectiveBasis:     block.BscBasisHeaderSnapshot,"
+    },
+    {
+      "name": "effective finalized reference kind (attested)",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\t}),\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Finalized), block.OriginNativeLive),\n\t\t\tEffectiveBasis:     block.BscBasisHeaderSnapshot,",
+      "replacement": "\t\t\t}),\n\t\t\tEffectiveFinalized: block.NotObserved(),\n\t\t\tEffectiveBasis:     block.BscBasisHeaderSnapshot,"
+    },
+    {
+      "name": "attested basis",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\tEffectiveBasis:     block.BscBasisHeaderSnapshot,",
+      "replacement": "\t\t\tEffectiveBasis:     block.BscBasisVotePoolQuorum,"
+    },
+    {
+      "name": "effective finalized from the attestation read (fallback)",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\treturn block.BscMarkers{\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Finalized), block.OriginNativeLive),\n\t\t\tEffectiveBasis:     block.BscBasisGenesisFallback,",
+      "replacement": "\t\treturn block.BscMarkers{\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Attestation.Finalized), block.OriginNativeLive),\n\t\t\tEffectiveBasis:     block.BscBasisGenesisFallback,"
+    },
+    {
+      "name": "effective finalized origin (fallback)",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\treturn block.BscMarkers{\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Finalized), block.OriginNativeLive),\n\t\t\tEffectiveBasis:     block.BscBasisGenesisFallback,",
+      "replacement": "\t\treturn block.BscMarkers{\n\t\t\tEffectiveFinalized: block.Known(anchor(in.Finalized), block.OriginRetainedDurable),\n\t\t\tEffectiveBasis:     block.BscBasisGenesisFallback,"
+    },
+    {
+      "name": "fallback basis",
+      "file": "core/normalization/bsc/blockrecord/markers.go",
+      "original": "\t\t\tEffectiveBasis:     block.BscBasisGenesisFallback,",
+      "replacement": "\t\t\tEffectiveBasis:     block.BscBasisUnset,"
+    },
+    {
+      "name": "tree writer error not returned",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif w.err != nil {\n\t\treturn nil, w.err",
+      "replacement": "\tif false {\n\t\treturn nil, w.err"
+    },
+    {
+      "name": "unclosed message accepted",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif len(w.open) != 1 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "mapping continues after a failure",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif w.err != nil {\n\t\treturn proto.FieldType{}, false",
+      "replacement": "\tif false {\n\t\treturn proto.FieldType{}, false"
+    },
+    {
+      "name": "unknown field accepted",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif !ok {\n\t\tmessage, _ := w.schema.MessageType(parent.typeKey)",
+      "replacement": "\tif !ok && false {\n\t\tmessage, _ := w.schema.MessageType(parent.typeKey)"
+    },
+    {
+      "name": "field of another kind accepted",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif valueKind(f.Kind) != kind {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "fixed bytes length not enforced",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif f.ByteLen != 0 && uint64(len(value)) != uint64(f.ByteLen) {",
+      "replacement": "\tif uint64(len(value)) != uint64(f.ByteLen) {"
+    },
+    {
+      "name": "every bytes field treated as fixed",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif f.ByteLen != 0 && uint64(len(value)) != uint64(f.ByteLen) {",
+      "replacement": "\tif f.ByteLen != 0 {"
+    },
+    {
+      "name": "unregistered enum value accepted",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif _, ok := w.schema.EnumValue(f.Enum, value); !ok {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "value kind of KindMessage",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tcase proto.KindMessage:\n\t\treturn codec.ValueMessage",
+      "replacement": "\tcase proto.KindMessage:\n\t\treturn codec.ValueList"
+    },
+    {
+      "name": "value kind of KindList",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tcase proto.KindList:\n\t\treturn codec.ValueList",
+      "replacement": "\tcase proto.KindList:\n\t\treturn codec.ValueMessage"
+    },
+    {
+      "name": "value kind of KindBool",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tcase proto.KindBool:\n\t\treturn codec.ValueBool",
+      "replacement": "\tcase proto.KindBool:\n\t\treturn codec.ValueUint32"
+    },
+    {
+      "name": "value kind of KindUint32",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tcase proto.KindUint32:\n\t\treturn codec.ValueUint32",
+      "replacement": "\tcase proto.KindUint32:\n\t\treturn codec.ValueUint64"
+    },
+    {
+      "name": "value kind of KindUint64",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tcase proto.KindUint64:\n\t\treturn codec.ValueUint64",
+      "replacement": "\tcase proto.KindUint64:\n\t\treturn codec.ValueUint32"
+    },
+    {
+      "name": "value kind of KindEnum",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tcase proto.KindEnum:\n\t\treturn codec.ValueEnum",
+      "replacement": "\tcase proto.KindEnum:\n\t\treturn codec.ValueUint32"
+    },
+    {
+      "name": "value kind of KindBytes",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tcase proto.KindBytes:\n\t\treturn codec.ValueBytes",
+      "replacement": "\tcase proto.KindBytes:\n\t\treturn codec.ValueUTF8"
+    },
+    {
+      "name": "value kind of an unknown field kind",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tdefault:\n\t\treturn codec.ValueUTF8",
+      "replacement": "\tdefault:\n\t\treturn codec.ValueBytes"
+    },
+    {
+      "name": "known reference without anchor and origin",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif ref.Kind == block.ReferenceKnown {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "unavailable reference without reason",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tif ref.Kind == block.ReferenceUnavailable {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "optional header field BaseFee never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := header.BaseFee.Get(); ok {",
+      "replacement": "if v, ok := header.BaseFee.Get(); ok && false {"
+    },
+    {
+      "name": "optional header field WithdrawalsRoot never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := header.WithdrawalsRoot.Get(); ok {",
+      "replacement": "if v, ok := header.WithdrawalsRoot.Get(); ok && false {"
+    },
+    {
+      "name": "optional header field BlobGasUsed never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := header.BlobGasUsed.Get(); ok {",
+      "replacement": "if v, ok := header.BlobGasUsed.Get(); ok && false {"
+    },
+    {
+      "name": "optional header field ExcessBlobGas never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := header.ExcessBlobGas.Get(); ok {",
+      "replacement": "if v, ok := header.ExcessBlobGas.Get(); ok && false {"
+    },
+    {
+      "name": "optional header field ParentBeaconBlockRoot never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := header.ParentBeaconBlockRoot.Get(); ok {",
+      "replacement": "if v, ok := header.ParentBeaconBlockRoot.Get(); ok && false {"
+    },
+    {
+      "name": "optional header field RequestsHash never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := header.RequestsHash.Get(); ok {",
+      "replacement": "if v, ok := header.RequestsHash.Get(); ok && false {"
+    },
+    {
+      "name": "system transaction count never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := details.ParliaSystemTransactionCount.Get(); ok {",
+      "replacement": "if v, ok := details.ParliaSystemTransactionCount.Get(); ok && false {"
+    },
+    {
+      "name": "vote snapshot never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := details.VoteSnapshot.Get(); ok {",
+      "replacement": "if v, ok := details.VoteSnapshot.Get(); ok && false {"
+    },
+    {
+      "name": "attested snapshot never written",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "if v, ok := markers.Attested.Get(); ok {",
+      "replacement": "if v, ok := markers.Attested.Get(); ok && false {"
+    },
+    {
+      "name": "tree root",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tw := newTreeWriter(proto.LogicalSchemaV2(), proto.TypeEnvelope)",
+      "replacement": "\tw := newTreeWriter(proto.LogicalSchemaV2(), proto.TypeBlockApplied)"
+    },
+    {
+      "name": "schema version of the envelope",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.uint32(\"schema_version\", proto.SchemaVersion)",
+      "replacement": "w.uint32(\"schema_version\", 1)"
+    },
+    {
+      "name": "capture mode of the envelope",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.enum(\"capture_mode\", proto.CaptureModeLive)",
+      "replacement": "w.enum(\"capture_mode\", 2)"
+    },
+    {
+      "name": "network family of the envelope",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.enum(\"family\", uint32(proto.NetworkFamilyEVM))",
+      "replacement": "w.enum(\"family\", uint32(proto.NetworkFamily(2)))"
+    },
+    {
+      "name": "payload variant",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "\tw.push(proto.PayloadBlockApplied)",
+      "replacement": "\tw.push(\"block_removed\")"
+    },
+    {
+      "name": "source sequence of the envelope",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.uint64(\"source_sequence\", in.SourceSequence)",
+      "replacement": "w.uint64(\"source_sequence\", 1)"
+    },
+    {
+      "name": "producer of the envelope",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.bytes(\"producer_id\", in.ProducerID[:])",
+      "replacement": "w.bytes(\"producer_id\", in.RunID[:])"
+    },
+    {
+      "name": "event id of the envelope",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.bytes(\"event_id\", eventID[:])",
+      "replacement": "w.bytes(\"event_id\", in.RunID[:])"
+    },
+    {
+      "name": "message node type key",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.appendNode(codec.TreeNode{FieldTag: f.Tag, HasFieldTag: true, Kind: codec.ValueMessage, TypeKey: f.Type})",
+      "replacement": "w.appendNode(codec.TreeNode{FieldTag: f.Tag, HasFieldTag: true, Kind: codec.ValueMessage, TypeKey: 0})"
+    },
+    {
+      "name": "leaf field tag",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.appendNode(codec.TreeNode{FieldTag: f.Tag, HasFieldTag: true, Kind: codec.ValueUint64, Uint64: value})",
+      "replacement": "w.appendNode(codec.TreeNode{FieldTag: f.Tag, HasFieldTag: true, Kind: codec.ValueUint64, Uint64: 0})"
+    },
+    {
+      "name": "anchor height",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.uint64(\"height\", ref.Height)",
+      "replacement": "w.uint64(\"height\", 0)"
+    },
+    {
+      "name": "anchor hash",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.bytes(\"hash\", ref.Hash[:])",
+      "replacement": "w.bytes(\"hash\", make([]byte, 32))"
+    },
+    {
+      "name": "profile string network_profile",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.utf8(\"network_profile\", profile.NetworkProfile)",
+      "replacement": "w.utf8(\"network_profile\", profile.AdapterVersion)"
+    },
+    {
+      "name": "profile string client_commit",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.utf8(\"client_commit\", profile.ClientCommit)",
+      "replacement": "w.utf8(\"client_commit\", profile.AdapterVersion)"
+    },
+    {
+      "name": "profile string adapter_version",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.utf8(\"adapter_version\", profile.AdapterVersion)",
+      "replacement": "w.utf8(\"adapter_version\", profile.ForkRulesVersion)"
+    },
+    {
+      "name": "profile string fork_rules_version",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.utf8(\"fork_rules_version\", profile.ForkRulesVersion)",
+      "replacement": "w.utf8(\"fork_rules_version\", profile.NormalizationVersion)"
+    },
+    {
+      "name": "profile string normalization_version",
+      "file": "core/normalization/bsc/blockrecord/tree.go",
+      "original": "w.utf8(\"normalization_version\", profile.NormalizationVersion)",
+      "replacement": "w.utf8(\"normalization_version\", profile.NetworkProfile)"
+    }
+  ]
+}

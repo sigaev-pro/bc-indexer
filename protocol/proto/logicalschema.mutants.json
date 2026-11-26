@@ -1,0 +1,935 @@
+{
+  "schema_version": 1,
+  "language": "go",
+  "root": "../..",
+  "go_module": "github.com/sigaev-pro/bc-indexer",
+  "copy": [
+    "protocol/proto/*.go",
+    "protocol/block/*.go",
+    "protocol/profiles/*.go",
+    "protocol/semantic/*.go",
+    "protocol/balance/*.go"
+  ],
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "./protocol/proto/"
+  ],
+  "timeout_seconds": 300,
+  "description": "Single-check mutants of the logical schema registry: the lookups, the refusal of an invalid table, the field constructors, and the wire numbers (type keys, tags, byte lengths, enum entries, profile strings) that the tests pin. The copy holds the sources without their go.mod files and one module is initialized at its root, as the lifecycle_registry table does.",
+  "mutants": [
+    {
+      "name": "field kind accepts zero",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return k >= KindMessage && k <= KindUTF8",
+      "replacement": "return k <= KindUTF8"
+    },
+    {
+      "name": "field kind accepts values above utf8",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return k >= KindMessage && k <= KindUTF8",
+      "replacement": "return k >= KindMessage"
+    },
+    {
+      "name": "field kind fallback name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return fmt.Sprintf(\"FieldKind(%d)\", uint8(k))",
+      "replacement": "return \"none\""
+    },
+    {
+      "name": "field kind name of message",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindMessage:\n\t\treturn \"message\"",
+      "replacement": "\tcase KindMessage:\n\t\treturn \"list\""
+    },
+    {
+      "name": "field kind name of list",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindList:\n\t\treturn \"list\"",
+      "replacement": "\tcase KindList:\n\t\treturn \"bool\""
+    },
+    {
+      "name": "field kind name of bool",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindBool:\n\t\treturn \"bool\"",
+      "replacement": "\tcase KindBool:\n\t\treturn \"uint32\""
+    },
+    {
+      "name": "field kind name of uint32",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindUint32:\n\t\treturn \"uint32\"",
+      "replacement": "\tcase KindUint32:\n\t\treturn \"uint64\""
+    },
+    {
+      "name": "field kind name of uint64",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindUint64:\n\t\treturn \"uint64\"",
+      "replacement": "\tcase KindUint64:\n\t\treturn \"enum\""
+    },
+    {
+      "name": "field kind name of enum",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindEnum:\n\t\treturn \"enum\"",
+      "replacement": "\tcase KindEnum:\n\t\treturn \"bytes\""
+    },
+    {
+      "name": "field kind name of bytes",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindBytes:\n\t\treturn \"bytes\"",
+      "replacement": "\tcase KindBytes:\n\t\treturn \"utf8\""
+    },
+    {
+      "name": "field kind name of utf8",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tcase KindUTF8:\n\t\treturn \"utf8\"",
+      "replacement": "\tcase KindUTF8:\n\t\treturn \"message\""
+    },
+    {
+      "name": "message type of an unknown key",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tm, ok := s.messages[key]\n\tif !ok {\n\t\treturn MessageType{}, false",
+      "replacement": "\tm, ok := s.messages[key]\n\tif !ok && false {\n\t\treturn MessageType{}, false"
+    },
+    {
+      "name": "message type key echo",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return MessageType{Key: key, Name: m.name,",
+      "replacement": "return MessageType{Key: 0, Name: m.name,"
+    },
+    {
+      "name": "message type name echo",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return MessageType{Key: key, Name: m.name,",
+      "replacement": "return MessageType{Key: key, Name: \"\","
+    },
+    {
+      "name": "message type fields alias the registry",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "Fields: slices.Clone(m.fields)",
+      "replacement": "Fields: m.fields"
+    },
+    {
+      "name": "field by tag always present",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tf, ok := s.messages[typeKey].byTag[tag]\n\treturn f, ok",
+      "replacement": "\tf, ok := s.messages[typeKey].byTag[tag]\n\treturn f, ok || true"
+    },
+    {
+      "name": "field by name accepts an unknown name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\ttag, ok := s.messages[typeKey].byName[name]\n\tif !ok {",
+      "replacement": "\ttag, ok := s.messages[typeKey].byName[name]\n\tif !ok && false {"
+    },
+    {
+      "name": "field by name returns no field",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\treturn s.messages[typeKey].byTag[tag], true",
+      "replacement": "\treturn FieldType{Tag: tag}, true"
+    },
+    {
+      "name": "enum value accepts any value",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tname, ok = s.enums[enum].names[value]\n\treturn name, ok",
+      "replacement": "\tname, ok = s.enums[enum].names[value]\n\treturn name, true"
+    },
+    {
+      "name": "enum value returns no name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tname, ok = s.enums[enum].names[value]\n\treturn name, ok",
+      "replacement": "\tname, ok = s.enums[enum].names[value]\n\treturn \"\", ok"
+    },
+    {
+      "name": "profile accepts any network",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tref, ok := s.profiles[chainID]\n\treturn ref, ok",
+      "replacement": "\tref, ok := s.profiles[chainID]\n\treturn ref, ok || true"
+    },
+    {
+      "name": "registry is rebuilt on every call",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "func LogicalSchemaV2() *LogicalSchema { return schemaV2() }",
+      "replacement": "func LogicalSchemaV2() *LogicalSchema { return buildSchemaV2() }"
+    },
+    {
+      "name": "profile accepts an empty network profile",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if ref.NetworkProfile == \"\" || ref.ClientCommit == \"\" || ref.AdapterVersion == \"\" ||",
+      "replacement": "if ref.ClientCommit == \"\" || ref.AdapterVersion == \"\" ||"
+    },
+    {
+      "name": "profile accepts an empty client commit",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if ref.NetworkProfile == \"\" || ref.ClientCommit == \"\" || ref.AdapterVersion == \"\" ||",
+      "replacement": "if ref.NetworkProfile == \"\" || ref.AdapterVersion == \"\" ||"
+    },
+    {
+      "name": "profile accepts an empty adapter version",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if ref.NetworkProfile == \"\" || ref.ClientCommit == \"\" || ref.AdapterVersion == \"\" ||",
+      "replacement": "if ref.NetworkProfile == \"\" || ref.ClientCommit == \"\" ||"
+    },
+    {
+      "name": "profile accepts an empty fork rules version",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "ref.ForkRulesVersion == \"\" || ref.NormalizationVersion == \"\" {",
+      "replacement": "ref.NormalizationVersion == \"\" {"
+    },
+    {
+      "name": "profile accepts an empty normalization version",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "ref.ForkRulesVersion == \"\" || ref.NormalizationVersion == \"\" {",
+      "replacement": "ref.ForkRulesVersion == \"\" {"
+    },
+    {
+      "name": "profile accepts chain id zero",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tif chainID == 0 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "profile registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if _, seen := t.schema.profiles[key]; seen {",
+      "replacement": "if _, seen := t.schema.profiles[key]; seen && false {"
+    },
+    {
+      "name": "enum without a name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tif name == \"\" {\n\t\tinvalid(\"enum without a name\")",
+      "replacement": "\tif false {\n\t\tinvalid(\"enum without a name\")"
+    },
+    {
+      "name": "enum without values",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tif len(entries) == 0 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "enum registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if _, seen := t.schema.enums[name]; seen {",
+      "replacement": "if _, seen := t.schema.enums[name]; seen && false {"
+    },
+    {
+      "name": "enum value zero",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\tif e.value == 0 {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "enum value without a name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\tif e.name == \"\" {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "enum name registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if other, dup := seen[e.name]; dup {",
+      "replacement": "if other, dup := seen[e.name]; dup && false {"
+    },
+    {
+      "name": "enum value registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if _, dup := stored.names[e.value]; dup {",
+      "replacement": "if _, dup := stored.names[e.value]; dup && false {"
+    },
+    {
+      "name": "message with type key zero",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tif key == 0 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "message without a name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tif name == \"\" {\n\t\tinvalid(\"message %d has no name\", key)",
+      "replacement": "\tif false {\n\t\tinvalid(\"message %d has no name\", key)"
+    },
+    {
+      "name": "message without fields",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tif len(fields) == 0 {",
+      "replacement": "\tif false {"
+    },
+    {
+      "name": "message name registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\tif m.name == name {",
+      "replacement": "\t\tif m.name == name && false {"
+    },
+    {
+      "name": "type key registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if _, seen := t.schema.messages[key]; seen {",
+      "replacement": "if _, seen := t.schema.messages[key]; seen && false {"
+    },
+    {
+      "name": "field with tag zero",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\tif f.Tag == 0 {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "field without a name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\tif f.Name == \"\" {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "field without a valid kind",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\tif !f.Kind.Valid() {",
+      "replacement": "\t\tif false {"
+    },
+    {
+      "name": "field tag registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if _, dup := m.byTag[f.Tag]; dup {",
+      "replacement": "if _, dup := m.byTag[f.Tag]; dup && false {"
+    },
+    {
+      "name": "field name registered twice",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if other, dup := m.byName[f.Name]; dup {",
+      "replacement": "if other, dup := m.byName[f.Name]; dup && false {"
+    },
+    {
+      "name": "optional oneof variant accepted",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if f.Oneof != \"\" && f.Optional {",
+      "replacement": "if f.Optional {"
+    },
+    {
+      "name": "plain oneof variant refused",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if f.Oneof != \"\" && f.Optional {",
+      "replacement": "if f.Oneof != \"\" {"
+    },
+    {
+      "name": "list element type key is not resolved",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\t\tcase KindMessage, KindList:",
+      "replacement": "\t\t\tcase KindMessage:"
+    },
+    {
+      "name": "message type key is not resolved",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if _, ok := t.schema.messages[f.Type]; !ok {",
+      "replacement": "if _, ok := t.schema.messages[f.Type]; !ok && false {"
+    },
+    {
+      "name": "scalar field carries a type key",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\t\t\tif f.Type != 0 {",
+      "replacement": "\t\t\t\tif false {"
+    },
+    {
+      "name": "enum type name is not resolved",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\t\tif f.Kind == KindEnum {",
+      "replacement": "\t\t\tif false {"
+    },
+    {
+      "name": "field of another kind carries an enum",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\t\t\t} else if f.Enum != \"\" {",
+      "replacement": "\t\t\t} else if false {"
+    },
+    {
+      "name": "scalar field carries a byte length",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if f.Kind != KindBytes && f.ByteLen != 0 {",
+      "replacement": "if f.ByteLen != 0 {"
+    },
+    {
+      "name": "bytes field carries a byte length",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "if f.Kind != KindBytes && f.ByteLen != 0 {",
+      "replacement": "if f.Kind != KindBytes {"
+    },
+    {
+      "name": "fields keep their declared order",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "slices.SortFunc(fields, func(a, b FieldType) int { return cmp.Compare(a.Tag, b.Tag) })",
+      "replacement": "slices.SortFunc(fields, func(a, b FieldType) int { return cmp.Compare(b.Tag, a.Tag) })"
+    },
+    {
+      "name": "chain id loses its top byte",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tfor i := 0; i < 8; i++ {",
+      "replacement": "\tfor i := 0; i < 7; i++ {"
+    },
+    {
+      "name": "chain id shift",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "out[31-i] = byte(chainID >> (8 * i))",
+      "replacement": "out[31-i] = byte(chainID >> i)"
+    },
+    {
+      "name": "chain id byte order",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "out[31-i] = byte(chainID >> (8 * i))",
+      "replacement": "out[i] = byte(chainID >> (8 * i))"
+    },
+    {
+      "name": "schema version",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "const SchemaVersion uint32 = 2",
+      "replacement": "const SchemaVersion uint32 = 3"
+    },
+    {
+      "name": "payload tag base",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "const PayloadTagBase uint32 = 100",
+      "replacement": "const PayloadTagBase uint32 = 101"
+    },
+    {
+      "name": "payload tag of block_applied",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "const PayloadTagBlockApplied uint32 = PayloadTagBase + uint32(profiles.VariantBlockApplied)",
+      "replacement": "const PayloadTagBlockApplied uint32 = PayloadTagBase + uint32(profiles.VariantBlockApplied) + 1"
+    },
+    {
+      "name": "payload variant name",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "const PayloadBlockApplied = \"block_applied\"",
+      "replacement": "const PayloadBlockApplied = \"blockApplied\""
+    },
+    {
+      "name": "capture mode live",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "const CaptureModeLive uint32 = 1",
+      "replacement": "const CaptureModeLive uint32 = 2"
+    },
+    {
+      "name": "byte length of EventID",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tsizeEventID   uint32 = 40\n",
+      "replacement": "\tsizeEventID uint32 = 41\n"
+    },
+    {
+      "name": "byte length of ID16",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tsizeID16      uint32 = 16\n",
+      "replacement": "\tsizeID16 uint32 = 17\n"
+    },
+    {
+      "name": "byte length of Hash32",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tsizeHash32    uint32 = 32\n",
+      "replacement": "\tsizeHash32 uint32 = 33\n"
+    },
+    {
+      "name": "byte length of Address20",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tsizeAddress20 uint32 = 20\n",
+      "replacement": "\tsizeAddress20 uint32 = 21\n"
+    },
+    {
+      "name": "byte length of UInt256",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tsizeUInt256   uint32 = 32\n",
+      "replacement": "\tsizeUInt256 uint32 = 33\n"
+    },
+    {
+      "name": "byte length of Bloom",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tsizeBloom     uint32 = 256\n",
+      "replacement": "\tsizeBloom uint32 = 257\n"
+    },
+    {
+      "name": "byte length of Nonce",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tsizeNonce     uint32 = 8\n",
+      "replacement": "\tsizeNonce uint32 = 9\n"
+    },
+    {
+      "name": "profile string NetworkBscTestnet",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tProfileNetworkBscTestnet = \"bsc-testnet\"",
+      "replacement": "\tProfileNetworkBscTestnet = \"bsc-testnet-2\""
+    },
+    {
+      "name": "profile string ClientCommitBsc",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tProfileClientCommitBsc = \"54afaff4da31ac9e49ba646a4f65104edac5a2f3\"",
+      "replacement": "\tProfileClientCommitBsc = \"54afaff4da31ac9e49ba646a4f65104edac5a2f3-2\""
+    },
+    {
+      "name": "profile string AdapterVersionBsc",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tProfileAdapterVersionBsc = \"bsc-adapter-v1\"",
+      "replacement": "\tProfileAdapterVersionBsc = \"bsc-adapter-v1-2\""
+    },
+    {
+      "name": "profile string ForkRulesVersionBsc",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tProfileForkRulesVersionBsc = \"bsc-fork-rules-v1\"",
+      "replacement": "\tProfileForkRulesVersionBsc = \"bsc-fork-rules-v1-2\""
+    },
+    {
+      "name": "profile string NormalizationVersionBsc",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tProfileNormalizationVersionBsc = \"bsc-normalization-v1\"",
+      "replacement": "\tProfileNormalizationVersionBsc = \"bsc-normalization-v1-2\""
+    },
+    {
+      "name": "profile chain id",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tchainIDBscTestnet uint64 = 97",
+      "replacement": "\tchainIDBscTestnet uint64 = 56"
+    },
+    {
+      "name": "type key of Envelope",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeEnvelope        uint32 = 1\n",
+      "replacement": "\tTypeEnvelope uint32 = 41\n"
+    },
+    {
+      "name": "type key of NetworkIdentity",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeNetworkIdentity uint32 = 2\n",
+      "replacement": "\tTypeNetworkIdentity uint32 = 42\n"
+    },
+    {
+      "name": "type key of ProfileRef",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeProfileRef      uint32 = 3\n",
+      "replacement": "\tTypeProfileRef uint32 = 43\n"
+    },
+    {
+      "name": "type key of SourceRef",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeSourceRef       uint32 = 4\n",
+      "replacement": "\tTypeSourceRef uint32 = 44\n"
+    },
+    {
+      "name": "type key of BlockApplied",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeBlockApplied          uint32 = 10\n",
+      "replacement": "\tTypeBlockApplied uint32 = 50\n"
+    },
+    {
+      "name": "type key of BlockActivationRef",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeBlockActivationRef    uint32 = 11\n",
+      "replacement": "\tTypeBlockActivationRef uint32 = 51\n"
+    },
+    {
+      "name": "type key of ActivationID",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeActivationID          uint32 = 12\n",
+      "replacement": "\tTypeActivationID uint32 = 52\n"
+    },
+    {
+      "name": "type key of ObservationRef",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeObservationRef        uint32 = 13\n",
+      "replacement": "\tTypeObservationRef uint32 = 53\n"
+    },
+    {
+      "name": "type key of BlockMetadata",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeBlockMetadata         uint32 = 14\n",
+      "replacement": "\tTypeBlockMetadata uint32 = 54\n"
+    },
+    {
+      "name": "type key of Timestamp",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeTimestamp             uint32 = 15\n",
+      "replacement": "\tTypeTimestamp uint32 = 55\n"
+    },
+    {
+      "name": "type key of BlockHeader",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeBlockHeader           uint32 = 16\n",
+      "replacement": "\tTypeBlockHeader uint32 = 56\n"
+    },
+    {
+      "name": "type key of FamilyDetails",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeFamilyDetails         uint32 = 17\n",
+      "replacement": "\tTypeFamilyDetails uint32 = 57\n"
+    },
+    {
+      "name": "type key of EthBlockDetails",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeEthBlockDetails       uint32 = 18\n",
+      "replacement": "\tTypeEthBlockDetails uint32 = 58\n"
+    },
+    {
+      "name": "type key of BscBlockDetails",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeBscBlockDetails       uint32 = 19\n",
+      "replacement": "\tTypeBscBlockDetails uint32 = 59\n"
+    },
+    {
+      "name": "type key of ParliaVoteSnapshot",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeParliaVoteSnapshot    uint32 = 20\n",
+      "replacement": "\tTypeParliaVoteSnapshot uint32 = 60\n"
+    },
+    {
+      "name": "type key of BorBlockDetails",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeBorBlockDetails       uint32 = 21\n",
+      "replacement": "\tTypeBorBlockDetails uint32 = 61\n"
+    },
+    {
+      "name": "type key of HeimdallCheckpointRef",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeHeimdallCheckpointRef uint32 = 22\n",
+      "replacement": "\tTypeHeimdallCheckpointRef uint32 = 62\n"
+    },
+    {
+      "name": "type key of LifecycleSnapshot",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeLifecycleSnapshot     uint32 = 23\n",
+      "replacement": "\tTypeLifecycleSnapshot uint32 = 63\n"
+    },
+    {
+      "name": "type key of NativeDecisionRef",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeNativeDecisionRef     uint32 = 24\n",
+      "replacement": "\tTypeNativeDecisionRef uint32 = 64\n"
+    },
+    {
+      "name": "type key of AnchorRef",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeAnchorRef             uint32 = 25\n",
+      "replacement": "\tTypeAnchorRef uint32 = 65\n"
+    },
+    {
+      "name": "type key of FinalityMarkers",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeFinalityMarkers       uint32 = 26\n",
+      "replacement": "\tTypeFinalityMarkers uint32 = 66\n"
+    },
+    {
+      "name": "type key of EthereumMarkers",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeEthereumMarkers       uint32 = 27\n",
+      "replacement": "\tTypeEthereumMarkers uint32 = 67\n"
+    },
+    {
+      "name": "type key of BscMarkers",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeBscMarkers            uint32 = 28\n",
+      "replacement": "\tTypeBscMarkers uint32 = 68\n"
+    },
+    {
+      "name": "type key of AttestedSnapshot",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeAttestedSnapshot      uint32 = 29\n",
+      "replacement": "\tTypeAttestedSnapshot uint32 = 69\n"
+    },
+    {
+      "name": "type key of PolygonMarkers",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypePolygonMarkers        uint32 = 30\n",
+      "replacement": "\tTypePolygonMarkers uint32 = 70\n"
+    },
+    {
+      "name": "type key of ReferenceObservation",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tTypeReferenceObservation  uint32 = 31\n",
+      "replacement": "\tTypeReferenceObservation uint32 = 71\n"
+    },
+    {
+      "name": "field constructor uint32",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindUint32}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindUint64}"
+    },
+    {
+      "name": "field constructor uint64",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindUint64}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindUint32}"
+    },
+    {
+      "name": "field constructor bool",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindBool}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindUint32}"
+    },
+    {
+      "name": "field constructor message",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindMessage, Type: typeKey}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindMessage}"
+    },
+    {
+      "name": "field constructor list",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindList, Type: elementKey}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindList}"
+    },
+    {
+      "name": "field constructor bytes",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindBytes, ByteLen: length}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindBytes}"
+    },
+    {
+      "name": "field constructor utf8",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindUTF8}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindBytes}"
+    },
+    {
+      "name": "field constructor enum",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "return FieldType{Tag: tag, Name: name, Kind: KindEnum, Enum: enum}",
+      "replacement": "return FieldType{Tag: tag, Name: name, Kind: KindEnum}"
+    },
+    {
+      "name": "field constructor optional",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tf.Optional = true",
+      "replacement": "\tf.Optional = false"
+    },
+    {
+      "name": "field constructor variant",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "\tf.Oneof = group",
+      "replacement": "\tf.Oneof = \"\""
+    },
+    {
+      "name": "optional flag of base_fee",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.bytes(16, \"base_fee\", sizeUInt256))",
+      "replacement": "t.bytes(16, \"base_fee\", sizeUInt256)"
+    },
+    {
+      "name": "optional flag of withdrawals_root",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.bytes(17, \"withdrawals_root\", sizeHash32))",
+      "replacement": "t.bytes(17, \"withdrawals_root\", sizeHash32)"
+    },
+    {
+      "name": "optional flag of parent_beacon_block_root",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.bytes(20, \"parent_beacon_block_root\", sizeHash32))",
+      "replacement": "t.bytes(20, \"parent_beacon_block_root\", sizeHash32)"
+    },
+    {
+      "name": "optional flag of requests_hash",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.bytes(21, \"requests_hash\", sizeHash32))",
+      "replacement": "t.bytes(21, \"requests_hash\", sizeHash32)"
+    },
+    {
+      "name": "optional flag of block_access_list_hash",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.bytes(1, \"block_access_list_hash\", sizeHash32))",
+      "replacement": "t.bytes(1, \"block_access_list_hash\", sizeHash32)"
+    },
+    {
+      "name": "optional flag of vote_snapshot",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.msg(2, \"vote_snapshot\", TypeParliaVoteSnapshot))",
+      "replacement": "t.msg(2, \"vote_snapshot\", TypeParliaVoteSnapshot)"
+    },
+    {
+      "name": "optional flag of sprint_end",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.boolean(2, \"sprint_end\"))",
+      "replacement": "t.boolean(2, \"sprint_end\")"
+    },
+    {
+      "name": "optional flag of side_chain_block",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.boolean(3, \"side_chain_block\"))",
+      "replacement": "t.boolean(3, \"side_chain_block\")"
+    },
+    {
+      "name": "optional flag of attested",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.msg(1, \"attested\", TypeAttestedSnapshot))",
+      "replacement": "t.msg(1, \"attested\", TypeAttestedSnapshot)"
+    },
+    {
+      "name": "optional flag of anchor",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.optional(t.msg(2, \"anchor\", TypeAnchorRef))",
+      "replacement": "t.msg(2, \"anchor\", TypeAnchorRef)"
+    },
+    {
+      "name": "payload oneof group",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "TypeBlockApplied), \"payload\"),",
+      "replacement": "TypeBlockApplied), \"load\"),"
+    },
+    {
+      "name": "family details oneof group",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.variant(t.msg(1, \"eth\", TypeEthBlockDetails), \"family\"),",
+      "replacement": "t.variant(t.msg(1, \"eth\", TypeEthBlockDetails), \"details\"),"
+    },
+    {
+      "name": "finality markers oneof group",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "t.variant(t.msg(2, \"bsc\", TypeBscMarkers), \"family\"),",
+      "replacement": "t.variant(t.msg(2, \"bsc\", TypeBscMarkers), \"markers\"),"
+    },
+    {
+      "name": "enum entry 1 EVM",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"EVM\"}",
+      "replacement": "enumEntry{1, \"EVM_\"}"
+    },
+    {
+      "name": "enum entry 1 SECONDS",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"SECONDS\"}",
+      "replacement": "enumEntry{1, \"SECONDS_\"}"
+    },
+    {
+      "name": "enum entry 2 MILLISECONDS",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"MILLISECONDS\"}",
+      "replacement": "enumEntry{2, \"MILLISECONDS_\"}"
+    },
+    {
+      "name": "enum entry 3 NANOSECONDS",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{3, \"NANOSECONDS\"}",
+      "replacement": "enumEntry{3, \"NANOSECONDS_\"}"
+    },
+    {
+      "name": "enum entry 1 END_OF_BLOCK_COMMIT",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"END_OF_BLOCK_COMMIT\"}",
+      "replacement": "enumEntry{1, \"END_OF_BLOCK_COMMIT_\"}"
+    },
+    {
+      "name": "enum entry 2 BODY_TRANSACTION",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"BODY_TRANSACTION\"}",
+      "replacement": "enumEntry{2, \"BODY_TRANSACTION_\"}"
+    },
+    {
+      "name": "enum entry 1 MILESTONE",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"MILESTONE\"}",
+      "replacement": "enumEntry{1, \"MILESTONE_\"}"
+    },
+    {
+      "name": "enum entry 2 CHECKPOINT",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"CHECKPOINT\"}",
+      "replacement": "enumEntry{2, \"CHECKPOINT_\"}"
+    },
+    {
+      "name": "enum entry 1 NATIVE_LIVE",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"NATIVE_LIVE\"}",
+      "replacement": "enumEntry{1, \"NATIVE_LIVE_\"}"
+    },
+    {
+      "name": "enum entry 2 NATIVE_RESTART",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"NATIVE_RESTART\"}",
+      "replacement": "enumEntry{2, \"NATIVE_RESTART_\"}"
+    },
+    {
+      "name": "enum entry 3 RETAINED_DURABLE",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{3, \"RETAINED_DURABLE\"}",
+      "replacement": "enumEntry{3, \"RETAINED_DURABLE_\"}"
+    },
+    {
+      "name": "enum entry 1 SOURCE_OFFLINE",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"SOURCE_OFFLINE\"}",
+      "replacement": "enumEntry{1, \"SOURCE_OFFLINE_\"}"
+    },
+    {
+      "name": "enum entry 2 SOURCE_SYNCING",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"SOURCE_SYNCING\"}",
+      "replacement": "enumEntry{2, \"SOURCE_SYNCING_\"}"
+    },
+    {
+      "name": "enum entry 3 STATE_UNAVAILABLE",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{3, \"STATE_UNAVAILABLE\"}",
+      "replacement": "enumEntry{3, \"STATE_UNAVAILABLE_\"}"
+    },
+    {
+      "name": "enum entry 4 CHECKPOINT_PENDING",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{4, \"CHECKPOINT_PENDING\"}",
+      "replacement": "enumEntry{4, \"CHECKPOINT_PENDING_\"}"
+    },
+    {
+      "name": "enum entry 1 KNOWN",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"KNOWN\"}",
+      "replacement": "enumEntry{1, \"KNOWN_\"}"
+    },
+    {
+      "name": "enum entry 2 NOT_OBSERVED",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"NOT_OBSERVED\"}",
+      "replacement": "enumEntry{2, \"NOT_OBSERVED_\"}"
+    },
+    {
+      "name": "enum entry 3 NATIVE_REFERENCE_UNSET",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{3, \"NATIVE_REFERENCE_UNSET\"}",
+      "replacement": "enumEntry{3, \"NATIVE_REFERENCE_UNSET_\"}"
+    },
+    {
+      "name": "enum entry 4 UNAVAILABLE",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{4, \"UNAVAILABLE\"}",
+      "replacement": "enumEntry{4, \"UNAVAILABLE_\"}"
+    },
+    {
+      "name": "enum entry 1 CONSENSUS_SETTER",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"CONSENSUS_SETTER\"}",
+      "replacement": "enumEntry{1, \"CONSENSUS_SETTER_\"}"
+    },
+    {
+      "name": "enum entry 2 STARTUP_FINALIZED_FALLBACK",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"STARTUP_FINALIZED_FALLBACK\"}",
+      "replacement": "enumEntry{2, \"STARTUP_FINALIZED_FALLBACK_\"}"
+    },
+    {
+      "name": "enum entry 3 UNSET",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{3, \"UNSET\"}",
+      "replacement": "enumEntry{3, \"UNSET_\"}"
+    },
+    {
+      "name": "enum entry 1 HEADER_SNAPSHOT",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{1, \"HEADER_SNAPSHOT\"}",
+      "replacement": "enumEntry{1, \"HEADER_SNAPSHOT_\"}"
+    },
+    {
+      "name": "enum entry 2 VOTE_POOL_QUORUM",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{2, \"VOTE_POOL_QUORUM\"}",
+      "replacement": "enumEntry{2, \"VOTE_POOL_QUORUM_\"}"
+    },
+    {
+      "name": "enum entry 3 GENESIS_FALLBACK",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{3, \"GENESIS_FALLBACK\"}",
+      "replacement": "enumEntry{3, \"GENESIS_FALLBACK_\"}"
+    },
+    {
+      "name": "enum entry 4 UNSET",
+      "file": "protocol/proto/logicalschema.go",
+      "original": "enumEntry{4, \"UNSET\"}",
+      "replacement": "enumEntry{4, \"UNSET_\"}"
+    }
+  ]
+}

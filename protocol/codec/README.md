@@ -149,7 +149,8 @@ cases pass, 87.8% statement coverage, gofmt and go vet clean.
    tables have not merged yet. This codec validates structure (positivity,
    ordering, counts) and treats membership as the schema layer's check. When
    the registry lands, its validation belongs behind the proto seam, not
-   here.
+   here. The registry has landed: see "Manifest reader and logical schema
+   registry" below.
 2. **Reader is layout-agnostic.** The FragmentReader verifies a
    self-consistent frame stream — identity, order, digests, totals — but not
    that each fragment's form matches a saved plan entry (a COMPLETE delivery
@@ -174,3 +175,72 @@ cases pass, 87.8% statement coverage, gofmt and go vet clean.
    fragment. Nothing in the merged contracts bounds a single field's size,
    and this codec does not invent a bound; the spool-backed producer of E04
    is the intended home of any operational limit.
+
+## Manifest reader and logical schema registry
+
+### Manifest reader
+
+`manifest.go` also reads what `ManifestBuilder.Bytes()` writes.
+`DecodeManifest(data)` parses the bytes back into `[]ManifestEvent`, in
+ordinal order: per event its ordinal, event id, family, kind, record
+length, record digest and its fragment descriptors (encoded length and
+SHA-256 per fragment index). The driver of the producer side and the
+publisher of the gateway use it to lay out and publish a batch they did
+not build.
+
+`ManifestHeaderBytes` is the fixed part of the stream before the first
+descriptor: the 21-byte domain, the zero byte and the 8-byte event count.
+It holds **30 bytes**. The live capture plan writes "32" in the comments
+of contracts C1, C2 and C4 (`ManifestLength - 32`); that number is wrong
+by two. The descriptor byte total of a manifest is its length minus
+`codec.ManifestHeaderBytes`, never a literal.
+
+The reader accepts only what the builder produces:
+
+| Condition | Sentinel |
+|---|---|
+| The stream is shorter than the domain or ends inside the header | `ErrTruncated` |
+| The domain differs | `ErrInvalidValue` |
+| The byte after the domain is not zero | `ErrMalformed` |
+| The event count is zero, with or without descriptors | `ErrFragments` |
+| The stream ends inside an event descriptor or a fragment descriptor | `ErrTruncated` |
+| An event descriptor or a fragment descriptor breaks a rule of protocol/proto (bad length, unknown family, unset event id, index gap, lengths that do not sum to the record length) | `ErrInvalidValue`, wrapping the error of protocol/proto |
+| The stream ends at an event boundary before the declared count, or holds one more complete event after it | `ErrFragments` |
+| Ordinals are not continuous from zero, or an event id repeats | `ErrFragments` |
+| Bytes after the last event form no event | `ErrMalformed` |
+
+On a rejection the result is nil, never a partial list. The declared event
+count and fragment counts are compared with the bytes of the stream before
+anything is allocated for them.
+
+Decisions on points the plan leaves open:
+
+1. An event count of zero is always rejected. The contract says an empty
+   public batch produces no manifest, so no valid manifest declares zero
+   events.
+2. The reader also enforces the two batch rules the builder enforces:
+   ordinals continuous from zero and unique event ids. A manifest that
+   breaks them was not produced by the builder, and the layout planner
+   rejects it as well.
+3. Bytes after the declared events are one more event when they parse as
+   one (the count does not match, `ErrFragments`); otherwise they are
+   trailing bytes (`ErrMalformed`).
+
+### Logical schema registry
+
+The logical schema registry of schema_version 2 lives in
+`logicalschema.go` of protocol/proto: the message type keys, field tags
+and enum values a typed tree may name, the presence rules of a field, and
+the registered profile reference. This codec still verifies structure
+only. `BuildRecord` takes the root type key from the caller. A producer
+that maps a typed model by field name resolves each tag through `FieldOf`
+of the registry; a reader names nodes through `MessageType`, `Field` and
+`EnumValue` and treats every miss as an error.
+
+### Checks
+
+The reader is covered in `manifest_test.go`: the bytes of the builder for
+1, 2 and 50 events decode to the same descriptors and rebuild the same
+bytes, chunks of every allowed size reassemble and decode, and each
+rejection of the table above has a case that checks its sentinel and its
+reason.
